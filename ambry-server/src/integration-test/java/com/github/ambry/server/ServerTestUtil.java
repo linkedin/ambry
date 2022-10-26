@@ -80,6 +80,8 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.ReplicateBlobRequest;
+import com.github.ambry.protocol.ReplicateBlobResponse;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
@@ -2436,6 +2438,578 @@ final class ServerTestUtil {
     }
   }
 
+  /**
+   * Test ReplicateBlob under different conditions.
+   * 1. test the data correctness of the on-demand replication on the target DataNode.
+   * 2. test the interaction between the regular replication and on-demand replication.
+   */
+  static void replicateBlobCaseTest(MockCluster cluster, SSLConfig clientSSLConfig, Properties routerProps,
+      boolean testEncryption, MockNotificationSystem notificationSystem) {
+    List<MockDataNodeId> allNodes = cluster.getAllDataNodes();
+    MockClusterMap clusterMap = cluster.getClusterMap();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    PartitionId partitionId = partitionIds.get(0);
+
+    ArrayList<String> dataCenterList = new ArrayList<>(Arrays.asList("DC1", "DC2", "DC3"));
+    List<DataNodeId> dataNodes = cluster.getOneDataNodeFromEachDatacenter(dataCenterList);
+    /*
+     * sourceDataNode is the data node we send PutBlob, TtlUpdate, Delete requests.
+     * targetDataNode is the data node we run ReplicateBlob. targetDataNode replicates Blobs from the sourceDataNode.
+     * comparisonDataNode uses the regular replication thread to replicate the Blobs from peer replicas.
+     */
+    DataNodeId sourceDataNode = dataNodes.get(0);
+    DataNodeId targetDataNode = dataNodes.get(1);
+    DataNodeId comparisonDataNode = dataNodes.get(2);
+
+    try {
+      // Stop replication for this partition on all the servers.
+      controlReplicationForPartition(allNodes, partitionId, clientSSLConfig, null, false);
+
+      BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
+      short dataSize = 31870;
+      byte[] userMetadata = new byte[1000];
+      byte[] data = new byte[dataSize];
+      byte[] encryptionKey = new byte[100];
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      TestUtils.RANDOM.nextBytes(userMetadata);
+      TestUtils.RANDOM.nextBytes(data);
+      TestUtils.RANDOM.nextBytes(encryptionKey);
+
+      // property with 7days expiration
+      BlobProperties propertiesWithTtl =
+          new BlobProperties(dataSize, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS,
+              cluster.time.milliseconds(), accountId, containerId, testEncryption, null, null, null);
+      long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesWithTtl);
+      // property of expired blob
+      BlobProperties propertiesExpired =
+          new BlobProperties(dataSize, "serviceid1", "ownerid", "jpeg", false, 0, cluster.time.milliseconds(),
+              accountId, containerId, testEncryption, null, null, null);
+      // property of blob with the infinite TTL
+      BlobProperties properties = new BlobProperties(dataSize, "serviceid1", accountId, containerId, testEncryption,
+          cluster.time.milliseconds());
+
+      short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+      BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId4 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId5 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId6 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId7 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId8 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId9 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId10 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId11 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId12 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId13 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId14 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId15 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+
+      Port sourcePort = new Port(sourceDataNode.getHttp2Port(), PortType.HTTP2);
+      Port targetPort = new Port(targetDataNode.getHttp2Port(), PortType.HTTP2);
+      Port comparisonPort = new Port(comparisonDataNode.getHttp2Port(), PortType.HTTP2);
+      ConnectedChannel sourceChannel =
+          getBlockingChannelBasedOnPortType(sourcePort, "localhost", null, clientSSLConfig);
+      ConnectedChannel targetChannel =
+          getBlockingChannelBasedOnPortType(targetPort, "localhost", null, clientSSLConfig);
+      ConnectedChannel comparisonChannel =
+          getBlockingChannelBasedOnPortType(comparisonPort, "localhost", null, clientSSLConfig);
+      sourceChannel.connect();
+      targetChannel.connect();
+      comparisonChannel.connect();
+
+      /*
+       * Stage 1: Test the correctness of the ReplicateBlob. Replicate blobs from sourceDataNode to the targetDataNode
+       * On the sourceDataNode and the targetDataNode, the blob is under different states.
+       */
+      // 1. On the sourceDataNode, putBlob. On the targetDataNode, blob doesn't exist.
+      // ReplicateBlob replicates the blob to the target.
+      BlobId blobId = blobId1;
+      PutRequest putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 2. On the sourceDataNode, putBlob. On the targetDataNode, the blob already exists.
+      // ReplicateBlob to both the sourceDataNode and the targetDataNode. All succeed.
+      blobId = blobId2;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      replicateBlob(sourceChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 3, On the sourceDataNode, putBlob. On the targetDataNode, the blob is ttlUpdated.
+      // ReplicateBlob still succeeds
+      blobId = blobId3;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      updateBlobTtl(targetChannel, blobId, cluster.time.milliseconds());
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+
+      // 4. On the sourceDataNode, putBlob. On the targetDataNode, the blob is deleted.
+      // ReplicateBlob still succeeds
+      blobId = blobId4;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      deleteBlob(targetChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 5. On the sourceDatanode, the blob is ttlUpdated. On the targetDataNode, it doesn't exist.
+      // ReplicateBlob will replicate both the putBlob and the TtlUpdate
+      blobId = blobId5;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, false, ttlUpdateBlobExpiryTimeMs);
+      updateBlobTtl(sourceChannel, blobId, cluster.time.milliseconds());
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      // replicate to the targetDataNode
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+
+      // 6. On the sourceDatanode blob is ttlUpdated. On the targetDataNode, putBlob.
+      // ReplicateBlob replicates the ttlUpdate.
+      blobId = blobId6;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      updateBlobTtl(sourceChannel, blobId, cluster.time.milliseconds());
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+
+      // 7. On the sourceDatanode blob is ttlUpdated. On the targetDataNode, the blob is also ttlUpdated already.
+      // ReplicateBlob still succeeds.
+      blobId = blobId7;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      updateBlobTtl(sourceChannel, blobId, cluster.time.milliseconds());
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      updateBlobTtl(targetChannel, blobId, cluster.time.milliseconds());
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+
+      // 8. On the sourceDatanode blob is ttlUpdated. On the targetDataNode, the blob is deleted
+      // ReplicateBlob still succeeds. Nothing is changed on the local store.
+      blobId = blobId8;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      updateBlobTtl(sourceChannel, blobId, cluster.time.milliseconds());
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      deleteBlob(targetChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 9. On the sourceDataNode, the blob is deleted. On the targetDataNode, it doesn't exist.
+      // ReplicateBlob replicates both the putBlob and the deleteBlob.
+      blobId = blobId9;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      deleteBlob(sourceChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 10. On the sourceDataNode, the blob is deleted. On the targetDataNode, it exists.
+      // ReplicateBlob replicates the deleteBlob
+      blobId = blobId10;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      deleteBlob(sourceChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 11. On the sourceDataNode, the blob is deleted. On the targetDataNode, it's ttlUpdated.
+      // ReplicateBlob replicates the deleteBlob.
+      blobId = blobId11;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      deleteBlob(sourceChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      updateBlobTtl(targetChannel, blobId, cluster.time.milliseconds());
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, properties, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 12. On the sourceDataNode, the blob is deleted. On the targetDataNode, it's also deleted.
+      // ReplicateBlob still succeeds
+      blobId = blobId12;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      deleteBlob(sourceChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      deleteBlob(targetChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, properties, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 13. On the sourceDataNode, the blob is expired. On the targetDataNode, it doesn't exist.
+      // ReplicateBlob replicate the Blob even it's expired.
+      blobId = blobId13;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesExpired, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      cluster.time.sleep(10000);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Expired, propertiesExpired, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 14. On the sourceDataNode, the blob is expired. On the targetDataNode, it's deleted.
+      // ReplicateBlob succeeds but nothing is changed on the local store.
+      blobId = blobId14;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesExpired, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      cluster.time.sleep(10000);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesExpired, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      deleteBlob(targetChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesExpired, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+
+      // 15. On the sourceDataNode, the blob doesn't exist.
+      // ReplicateBlob fails with Blob_Not_Found status
+      blobId = blobId15;
+      replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.Blob_Not_Found);
+
+      /*
+       * Stage 2: Update the blobs on either the sourceDataNode or the targetDataNode.
+       * Enable regular replication. sourceDataNode and targetDataNode should be synced up after the regular replication.
+       * Other replicas should catch up as well.
+                     sourceDataNode      targetDataNode    target_after_ReplicateBlob     extra_operation        after_replication
+        blob1           putBlob             not_exist           putBlob                   ttlUpdate_on_source       ttlUpdated
+        blob2           putBlob             putBlob             putBlob                   ttlUpdate_on_target       ttlUpdated
+        blob3           putBlob             ttlUpdated          ttlUpdated                deleteBlob_on_source      deleted, can be not_found
+        blob4           putBlob             deleted             deleted                                             deleted, can be not_found
+        blob5           ttlUpdated          not_exist           ttlUpdated                                          ttlUpdated
+        blob6           ttlUpdated          putBlob             ttlUpdated                deleteBlob_on_target      deleted, can be not_found
+        blob7           ttlUpdated          ttlUpdated          ttlUpdated                                          ttlUpdated
+        blob8           ttlUpdated          deleted             deleted                                             deleted, can be not_found
+        blob9           deleted             not_exist           deleted                   undeleteBlob_on_source    undeleted
+        blob10          deleted             exist               deleted                   undeleteBlob_on_target    undeleted
+        blob11          deleted             ttlUpdated          deleted                                             deleted/not_found
+        blob12          deleted             deleted             deleted                                             deleted/not_found
+        blob13          expired             not_exist           expired                                             expired, can be not_found
+        blob14          expired             deleted             deleted                                             deleted, can be expired/not_found
+        blob15          not_exist           not_exist           error: Blob_Not_Found                               Not_Found
+        blob16                                                                           putBlob_on_source          putBlob
+        blob17                                                                           purBlob_on_target          putBob
+       */
+
+      // TtlUpdate blob1 on the sourceDataNode
+      updateBlobTtl(sourceChannel, blobId1, cluster.time.milliseconds());
+      // TtlUpdate blob2 on the targetDataNode
+      updateBlobTtl(targetChannel, blobId2, cluster.time.milliseconds());
+      // Delete blob3 on the sourceDataNode
+      deleteBlob(sourceChannel, blobId3, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      // Delete blob6 on the targetDataNode
+      deleteBlob(targetChannel, blobId6, cluster.time.milliseconds(), ServerErrorCode.No_Error);
+      // Undelete blob9 on the sourceDataNode
+      undeleteBlob(sourceChannel, blobId9, cluster.time.milliseconds(), (short) 1);
+      // Undelete blob10 on the sourceDataNode
+      undeleteBlob(targetChannel, blobId10, cluster.time.milliseconds(), (short) 1);
+      // create blob16 on the sourceDataNode
+      BlobId blobId16 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      putRequest = new PutRequest(1, "client1", blobId16, properties, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      // create blob17 on the targetDataNode
+      BlobId blobId17 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+      putRequest = new PutRequest(1, "client1", blobId17, properties, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+
+      // Now start the replication on all the replicas
+      controlReplicationForPartition(allNodes, partitionId, clientSSLConfig, null, true);
+
+      // wait for the replication to catch up
+      notificationSystem.awaitBlobCreations(blobId16.getID());
+      notificationSystem.awaitBlobCreations(blobId17.getID());
+
+      // verify the status. sourceDataNode and targetDataNode are synced up.
+      // the comparisonDataNode replicated the blobs from the peers.
+      for (int i = 0; i < 3; i++) {
+        ConnectedChannel channel;
+        if (i == 0) {
+          channel = sourceChannel;
+        } else if (i == 1) {
+          channel = targetChannel;
+        } else {
+          channel = comparisonChannel;
+        }
+        // blob1: TtlUpdate with Infinite
+        checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId1, data, true, Utils.Infinite_Time);
+        getBlobAndVerify(blobId1, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        // blob2: TtlUpdate with Infinite
+        checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId2, data, true, Utils.Infinite_Time);
+        getBlobAndVerify(blobId2, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        // blob3: deleted. For the comparisonDataNode, regular replication won't replicate deleted blob. It can be either NOT_FOUND or DELETED.
+        if (channel == comparisonChannel) {
+          ArrayList<BlobId> ids = new ArrayList<>();
+          ids.add(blobId3);
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
+          GetRequest getRequest =
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+          DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+          GetResponse resp = GetResponse.readFrom(stream, clusterMap);
+          ServerErrorCode error = resp.getPartitionResponseInfoList().get(0).getErrorCode();
+          assertTrue(error == ServerErrorCode.Blob_Deleted || error == ServerErrorCode.Blob_Not_Found);
+          releaseNettyBufUnderneathStream(stream);
+        } else {
+          getBlobAndVerify(blobId3, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        }
+        // blob4: deleted. ComparisonChannel can be NOT_FOUND
+        if (channel == comparisonChannel) {
+          ArrayList<BlobId> ids = new ArrayList<>();
+          ids.add(blobId4);
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
+          GetRequest getRequest =
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+          DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+          GetResponse resp = GetResponse.readFrom(stream, clusterMap);
+          ServerErrorCode error = resp.getPartitionResponseInfoList().get(0).getErrorCode();
+          assertTrue(error == ServerErrorCode.Blob_Deleted || error == ServerErrorCode.Blob_Not_Found);
+          releaseNettyBufUnderneathStream(stream);
+        } else {
+          getBlobAndVerify(blobId4, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        }
+        // blob5: TtlUpdate with Infinite
+        checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId5, data, true, Utils.Infinite_Time);
+        getBlobAndVerify(blobId5, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        // blob6: deleted. For the comparisonDataNode, regular replication won't replicate deleted blob. It can be either NOT_FOUND or DELETED.
+        if (channel == comparisonChannel) {
+          ArrayList<BlobId> ids = new ArrayList<>();
+          ids.add(blobId6);
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
+          GetRequest getRequest =
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+          DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+          GetResponse resp = GetResponse.readFrom(stream, clusterMap);
+          ServerErrorCode error = resp.getPartitionResponseInfoList().get(0).getErrorCode();
+          assertTrue(error == ServerErrorCode.Blob_Deleted || error == ServerErrorCode.Blob_Not_Found);
+          releaseNettyBufUnderneathStream(stream);
+        } else {
+          getBlobAndVerify(blobId6, channel, ServerErrorCode.Blob_Deleted, propertiesExpired, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        }
+        // blob7: TtlUpdate with Infinite
+        checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId7, data, true, Utils.Infinite_Time);
+        getBlobAndVerify(blobId7, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        // blob8: deleted.
+        if (channel == comparisonChannel) {
+          ArrayList<BlobId> ids = new ArrayList<>();
+          ids.add(blobId8);
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
+          GetRequest getRequest =
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+          DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+          GetResponse resp = GetResponse.readFrom(stream, clusterMap);
+          ServerErrorCode error = resp.getPartitionResponseInfoList().get(0).getErrorCode();
+          assertTrue(error == ServerErrorCode.Blob_Deleted || error == ServerErrorCode.Blob_Not_Found);
+          releaseNettyBufUnderneathStream(stream);
+        } else {
+          getBlobAndVerify(blobId8, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        }
+        // blob9: undeleted
+        getBlobAndVerify(blobId9, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        // blob10: undeleted
+        getBlobAndVerify(blobId10, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        // blob11: deleted or not_found
+        if (channel == comparisonChannel) {
+          getBlobAndVerify(blobId11, channel, ServerErrorCode.Blob_Not_Found, propertiesExpired, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        } else {
+          getBlobAndVerify(blobId11, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        }
+        // blob12: deleted
+        if (channel == comparisonChannel) {
+          getBlobAndVerify(blobId12, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        } else {
+          getBlobAndVerify(blobId12, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        }
+        // blob13: expired
+        if (channel == comparisonChannel) {
+          ArrayList<BlobId> ids = new ArrayList<>();
+          ids.add(blobId13);
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
+          GetRequest getRequest =
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+          DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+          GetResponse resp = GetResponse.readFrom(stream, clusterMap);
+          ServerErrorCode error = resp.getPartitionResponseInfoList().get(0).getErrorCode();
+          assertTrue(error == ServerErrorCode.Blob_Expired || error == ServerErrorCode.Blob_Not_Found);
+          releaseNettyBufUnderneathStream(stream);
+        } else {
+          getBlobAndVerify(blobId13, channel, ServerErrorCode.Blob_Expired, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        }
+        // blob14: deleted
+        if (channel == comparisonChannel) {
+          ArrayList<BlobId> ids = new ArrayList<>();
+          ids.add(blobId14);
+          ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+          PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
+          partitionRequestInfoList.add(partitionRequestInfo);
+          GetRequest getRequest =
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+          DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+          GetResponse resp = GetResponse.readFrom(stream, clusterMap);
+          ServerErrorCode error = resp.getPartitionResponseInfoList().get(0).getErrorCode();
+          assertTrue(error == ServerErrorCode.Blob_Deleted || error == ServerErrorCode.Blob_Expired
+              || error == ServerErrorCode.Blob_Not_Found);
+          releaseNettyBufUnderneathStream(stream);
+        } else {
+          getBlobAndVerify(blobId14, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        }
+        // blob15: not found
+        getBlobAndVerify(blobId15, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        // blob16: newly created with infinite ttl
+        getBlobAndVerify(blobId16, channel, ServerErrorCode.No_Error, properties, userMetadata, data, encryptionKey,
+            clusterMap, blobIdFactory, testEncryption);
+        // blob17: newly created with infinite ttl
+        getBlobAndVerify(blobId17, channel, ServerErrorCode.No_Error, properties, userMetadata, data, encryptionKey,
+            clusterMap, blobIdFactory, testEncryption);
+
+        channel.disconnect();
+      } // for loop to verify the three DataNode
+    } catch (Exception e) {
+      e.printStackTrace();
+      assertNull(e);
+    } finally {
+      List<? extends ReplicaId> replicaIds = cluster.getClusterMap()
+          .getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
+          .get(0)
+          .getReplicaIds();
+      for (ReplicaId replicaId : replicaIds) {
+        MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
+        ((MockDiskId) mockReplicaId.getDiskId()).setDiskState(HardwareState.AVAILABLE, true);
+      }
+    }
+  }
+
   private static void controlReplicationForPartition(List<ConnectedChannel> channels, PartitionId partitionId,
       boolean enable) throws Exception {
     for (ConnectedChannel connectedChannel : channels) {
@@ -2447,6 +3021,31 @@ final class ServerTestUtil {
       AdminResponse adminResponse = AdminResponse.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
       assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
+    }
+  }
+
+  /**
+   * Enable or disable replication on the replicas
+   * @param allNodes the nodes to send the replication control requests.
+   * @param partitionId the partition that the control request is targeting.
+   * @param clientSSLConfig the client {@link SSLConfig}
+   * @param clientSSLSocketFactory the {@link SSLSocketFactory}
+   * @param enable if true, enable the replication. If false, disable the replication
+   * @throws Exception any exception
+   */
+  public static void controlReplicationForPartition(List<MockDataNodeId> allNodes, PartitionId partitionId,
+      SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory, boolean enable) throws Exception {
+    List<ConnectedChannel> channels = new ArrayList<>();
+    for (DataNodeId node : allNodes) {
+      Port port = new Port(node.getHttp2Port(), PortType.HTTP2);
+      ConnectedChannel channel =
+          getBlockingChannelBasedOnPortType(port, "localhost", clientSSLSocketFactory, clientSSLConfig);
+      channel.connect();
+      channels.add(channel);
+    }
+    controlReplicationForPartition(channels, partitionId, enable);
+    for (ConnectedChannel channel : channels) {
+      channel.disconnect();
     }
   }
 
@@ -2637,6 +3236,54 @@ final class ServerTestUtil {
   }
 
   /**
+   * get the Blob and verify the BlobProperties, userMetadata and content.
+   */
+  private static void getBlobAndVerify(BlobId blobId, ConnectedChannel channel, ServerErrorCode expectedErrorCode,
+      BlobProperties expectedProperties, byte[] expectedUserMetadata, byte[] expectedData, byte[] expectedEncryptionKey,
+      MockClusterMap clusterMap, BlobIdFactory blobIdFactory, boolean testEncryption) throws Exception {
+    ArrayList<BlobId> listIds = new ArrayList<>();
+    listIds.add(blobId);
+    ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+    PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), listIds);
+    partitionRequestInfoList.add(partitionRequestInfo);
+
+    // get blob all
+    GetRequest getRequest =
+        new GetRequest(1, "clientid2", MessageFormatFlags.All, partitionRequestInfoList, GetOption.None);
+    DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+    GetResponse response = GetResponse.readFrom(stream, clusterMap);
+
+    assertEquals(ServerErrorCode.No_Error, response.getError());
+    assertEquals(expectedErrorCode, response.getPartitionResponseInfoList().get(0).getErrorCode());
+    if (expectedErrorCode != ServerErrorCode.No_Error) {
+      releaseNettyBufUnderneathStream(stream);
+      return;
+    }
+
+    InputStream responseStream = response.getInputStream();
+    BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
+
+    // verify the BlobProperties
+    BlobProperties propertyOutput = blobAll.getBlobInfo().getBlobProperties();
+    assertTrue(expectedProperties.contentEquals(propertyOutput));
+
+    // verify the user metadata
+    byte[] userMetadataOutput = blobAll.getBlobInfo().getUserMetadata();
+    assertArrayEquals(expectedUserMetadata, userMetadataOutput);
+
+    // verify the content
+    byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+    assertArrayEquals("Content mismatch.", expectedData, actualBlobData);
+    if (testEncryption) {
+      assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
+      assertArrayEquals("EncryptionKey mismatch", expectedEncryptionKey, blobAll.getBlobEncryptionKey().array());
+    } else {
+      assertNull("EncryptionKey should have been null", blobAll.getBlobEncryptionKey());
+    }
+    releaseNettyBufUnderneathStream(stream);
+  }
+
+  /**
    * Generate and return {@link Properties} to instantiate {@link Router}
    * @param routerDatacenter Router's datacentre
    * @return the {@link Properties} thus constructed
@@ -2666,6 +3313,21 @@ final class ServerTestUtil {
     if (deleteParentFolder) {
       folder.delete();
     }
+  }
+
+  /**
+   * putBlob and verify the return status
+   * @param putRequest the {@link PutRequest}
+   * @param channel the {@link ConnectedChannel} to send the request and receive the response
+   * @param expectedErrorCode expected server error code.
+   * @throws IOException
+   */
+  static void putBlob(PutRequest putRequest, ConnectedChannel channel, ServerErrorCode expectedErrorCode)
+      throws IOException {
+    DataInputStream putResponseStream = channel.sendAndReceive(putRequest).getInputStream();
+    PutResponse response = PutResponse.readFrom(putResponseStream);
+    releaseNettyBufUnderneathStream(putResponseStream);
+    assertEquals(expectedErrorCode, response.getError());
   }
 
   /**
@@ -2712,6 +3374,25 @@ final class ServerTestUtil {
         || undeleteResponse.getError() == ServerErrorCode.Blob_Already_Undeleted) {
       assertEquals(lifeVersion, undeleteResponse.getLifeVersion());
     }
+  }
+
+  /**
+   * replicate the blob and verify the return status
+   * @param channel the {@link ConnectedChannel} to send the request and receive the response
+   * @param blobId the blob id
+   * @param sourceDataNode the source {@link DataNodeId} to replicate the blob from
+   * @param expectedErrorCode the expected server error code
+   * @throws IOException any IO exception
+   */
+  static void replicateBlob(ConnectedChannel channel, BlobId blobId, DataNodeId sourceDataNode,
+      ServerErrorCode expectedErrorCode) throws IOException {
+    ReplicateBlobRequest replicateBlobRequest =
+        new ReplicateBlobRequest(1, "replicateBlobClient", blobId, sourceDataNode.getHostname(),
+            sourceDataNode.getPort());
+    DataInputStream replicateBlobResponseStream = channel.sendAndReceive(replicateBlobRequest).getInputStream();
+    ReplicateBlobResponse replicateBlobResponse = ReplicateBlobResponse.readFrom(replicateBlobResponseStream);
+    releaseNettyBufUnderneathStream(replicateBlobResponseStream);
+    assertEquals(expectedErrorCode, replicateBlobResponse.getError());
   }
 
   /**
