@@ -149,13 +149,14 @@ class GetBlobOperation extends GetOperation {
    * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
    * @param blobMetadataCache A cache to save blob metadata for composite blobs
    * @param nonBlockingRouter The non-blocking router object
+   * @param compressionService The compression service to use.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResult> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
       boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache,
-      NonBlockingRouter nonBlockingRouter) {
+      NonBlockingRouter nonBlockingRouter, CompressionService compressionService) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -166,9 +167,7 @@ class GetBlobOperation extends GetOperation {
         shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
     firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
     this.nonBlockingRouter = nonBlockingRouter;
-    // TODO - use dependency injection.
-    decompressionService = new CompressionService(routerConfig.getCompressionConfig(),
-        routerMetrics.compressionMetrics);
+    this.decompressionService = compressionService;
   }
 
   /**
@@ -888,8 +887,9 @@ class GetBlobOperation extends GetOperation {
      * If the buffer is not compressed, based on blobCompressed property, then return the input buffer.
      *
      * @param sourceBuffer The source buffer to decompress.
-     * @return New buffer if decompressed successfully and the source buffer is released.
-     *         Original buffer is blob not compressed.  NULL if failed and source buffer is released.
+     * @return A new buffer if decompressed successfully and the source buffer is released.
+     *         The source buffer if it is not compressed.
+     *         NULL if decompression failed and the source buffer is released.
      */
     protected ByteBuf decompressContent(ByteBuf sourceBuffer) {
       if (!isChunkCompressed) {
@@ -897,17 +897,18 @@ class GetBlobOperation extends GetOperation {
         return sourceBuffer;
       }
 
-      // Note: decompress() already emit metrics to for decompress() failure.
       try {
-        ByteBuf result = decompressionService.decompress(sourceBuffer, routerConfig.routerMaxPutChunkSizeBytes);
-        sourceBuffer.release();
-        return result;
+        return decompressionService.decompress(sourceBuffer, routerConfig.routerMaxPutChunkSizeBytes);
       } catch (Exception ex) {
+        // Note: No need to emit metrics here because decompress() already emits failure metrics.
         logger.error("Failed to decompress chunk data for chunkBlobId " + chunkBlobId + " due to exception.", ex);
         setOperationException(buildChunkException("Exception thrown on decompressing the data chunk", ex,
             RouterErrorCode.UnexpectedInternalError));
-        sourceBuffer.release();
+        setOperationCompleted();
         return null;
+      }
+      finally {
+        sourceBuffer.release();
       }
     }
 

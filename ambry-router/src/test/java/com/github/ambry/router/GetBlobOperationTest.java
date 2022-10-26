@@ -31,6 +31,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.compression.ZstdCompression;
+import com.github.ambry.config.CompressionConfig;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.QuotaConfig;
@@ -149,6 +150,7 @@ public class GetBlobOperationTest {
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
   private String localDcName;
+  private CompressionService compressionService;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
@@ -254,6 +256,7 @@ public class GetBlobOperationTest {
     replicasCount =
         mockClusterMap.getRandomWritablePartition(MockClusterMap.DEFAULT_PARTITION_CLASS, null).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);
+    compressionService = new CompressionService(routerConfig.getCompressionConfig(), routerMetrics.compressionMetrics);
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
@@ -364,7 +367,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
         new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
         getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-        quotaChargeCallback, null, router);
+        quotaChargeCallback, null, router, compressionService);
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
 
@@ -376,7 +379,7 @@ public class GetBlobOperationTest {
       new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
           new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
           getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-          quotaChargeCallback, null, router);
+          quotaChargeCallback, null, router, compressionService);
       Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -1455,7 +1458,7 @@ public class GetBlobOperationTest {
     // Create GetBlobOperation instance and get the FirstChunk instance.
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
         options, null, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-        quotaChargeCallback, this.blobMetadataCache, router);
+        quotaChargeCallback, this.blobMetadataCache, router, compressionService);
     Object firstChunk = FieldUtils.readField(op, "firstChunk", true);
     FieldUtils.writeField(firstChunk, "isChunkCompressed", true, true);
 
@@ -1874,7 +1877,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
             routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback,
-            this.blobMetadataCache, router);
+            this.blobMetadataCache, router, compressionService);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     return op;
   }

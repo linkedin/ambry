@@ -205,6 +205,7 @@ class PutOperation {
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
    * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
+   * @param compressionService The compression service use to compress data chunks.
    * @return the {@link PutOperation}.
    */
   static PutOperation forUpload(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
@@ -213,10 +214,10 @@ class PutOperation {
       Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeCallback quotaChargeCallback) {
+      String partitionClass, QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         channel, null, options, futureResult, callback, routerCallback, writableChannelEventListener, kms,
-        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
+        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
   }
 
   /**
@@ -242,6 +243,7 @@ class PutOperation {
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
    * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
+   * @param compressionService The compression service use to compress data chunks.
    * @return the {@link PutOperation}.
    */
   static PutOperation forStitching(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
@@ -249,10 +251,10 @@ class PutOperation {
       List<ChunkInfo> chunksToStitch, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, KeyManagementService kms, CryptoService cryptoService,
       CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties, String partitionClass,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         null, chunksToStitch, PutBlobOptions.DEFAULT, futureResult, callback, routerCallback, null, kms, cryptoService,
-        cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
+        cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
   }
 
   /**
@@ -278,6 +280,7 @@ class PutOperation {
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
    * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
+   * @param compressionService The compression service use to compress data chunks.
    */
   private PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
@@ -285,7 +288,7 @@ class PutOperation {
       FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeCallback quotaChargeCallback) {
+      String partitionClass, QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -306,6 +309,7 @@ class PutOperation {
     this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     this.quotaChargeCallback = quotaChargeCallback;
+    this.compressionService = compressionService;
     bytesFilledSoFar = 0;
     chunkCounter = -1;
     putChunks = new ConcurrentLinkedQueue<>();
@@ -314,9 +318,6 @@ class PutOperation {
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
     restRequest = options.getRestRequest();
     loggingContext = makeLoggingContext();
-
-    // TODO - use dependency injection when available.
-    compressionService = new CompressionService(routerConfig.getCompressionConfig(), routerMetrics.compressionMetrics);
   }
 
   /**
@@ -1093,6 +1094,7 @@ class PutOperation {
       state = ChunkState.Free;
       operationQuotaCharger =
           new OperationQuotaCharger(quotaChargeCallback, PutOperation.class.getSimpleName(), routerMetrics);
+      isChunkCompressed = false;
     }
 
     /**
