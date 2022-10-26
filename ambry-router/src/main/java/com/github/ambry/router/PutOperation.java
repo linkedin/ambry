@@ -124,9 +124,9 @@ class PutOperation {
   // The value is set based on blobProperties and compression service configuration.
   // For example, if BlobProperties.ContentEncoding specified, then the entire blob will
   // not be compressed by setting this field to FALSE.
-  // This field is set once when inserting the first chunk based on blob properties.
+  // This field is set once a PutOperation constructor based on blob properties.
   // All chunk compression will check this field and skip compression if this value FALSE.
-  private Boolean isBlobCompressible;
+  private boolean isBlobCompressible;
 
   // Parameters associated with the state.
 
@@ -310,6 +310,7 @@ class PutOperation {
     this.time = time;
     this.quotaChargeCallback = quotaChargeCallback;
     this.compressionService = compressionService;
+    this.isBlobCompressible = compressionService.isBlobCompressible(blobProperties);
     bytesFilledSoFar = 0;
     chunkCounter = -1;
     putChunks = new ConcurrentLinkedQueue<>();
@@ -1316,15 +1317,7 @@ class PutOperation {
      */
     private void compressChunk() {
       // Do not compress metadata chunk or already compressed chunk.
-      if (isMetadataChunk() || isChunkCompressed) {
-        return;
-      }
-
-      // Check whether the blob is compressible, if not already done so.
-      if (isBlobCompressible == null) {
-        isBlobCompressible = compressionService.isBlobCompressible(passedInBlobProperties);
-      }
-      if (!isBlobCompressible) {
+      if (isMetadataChunk() || isChunkCompressed || !isBlobCompressible) {
         return;
       }
 
