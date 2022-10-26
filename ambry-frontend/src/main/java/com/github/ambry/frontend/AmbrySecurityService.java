@@ -221,6 +221,7 @@ class AmbrySecurityService implements SecurityService {
               RestUtils.SubResource subResource = RestUtils.getRequestPath(restRequest).getSubResource();
               responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                   new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+              Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
               if (subResource == null) {
                 Long ifModifiedSinceMs = getIfModifiedSinceMs(restRequest);
                 if (ifModifiedSinceMs != null
@@ -234,7 +235,7 @@ class AmbrySecurityService implements SecurityService {
                   setGetBlobResponseHeaders(blobInfo, options, responseChannel);
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
-                  setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel);
+                  setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel, container.getUserMetadataKeysToNotPrefixInResponse());
                   responseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
                 }
                 setCacheHeaders(restRequest, responseChannel);
@@ -249,7 +250,7 @@ class AmbrySecurityService implements SecurityService {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                 }
-                if (!setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel)) {
+                if (!setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel, container.getUserMetadataKeysToNotPrefixInResponse())) {
                   restRequest.setArg(InternalKeys.SEND_USER_METADATA_AS_RESPONSE_BODY, true);
                 }
               }
@@ -378,9 +379,11 @@ class AmbrySecurityService implements SecurityService {
       throws RestServiceException {
     Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
     if (container.isCacheable()) {
+      long cacheTtl = container.getCacheTtlInSecond() != null ? container.getCacheTtlInSecond().longValue()
+          : frontendConfig.cacheValiditySeconds;
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
-          new Date(System.currentTimeMillis() + frontendConfig.cacheValiditySeconds * Time.MsPerSec));
-      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + frontendConfig.cacheValiditySeconds);
+          new Date(System.currentTimeMillis() + cacheTtl * Time.MsPerSec));
+      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + cacheTtl);
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, restResponseChannel.getHeader(RestUtils.Headers.DATE));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "private, no-cache, no-store, proxy-revalidate");
