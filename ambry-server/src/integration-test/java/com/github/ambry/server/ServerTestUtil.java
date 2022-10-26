@@ -14,6 +14,8 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.CloudBlobMetadata;
@@ -70,6 +72,8 @@ import com.github.ambry.notification.UpdateType;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.AdminResponseWithContent;
+import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.DeleteRequest;
@@ -99,9 +103,11 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MockId;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.HelixControllerManager;
@@ -116,6 +122,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -129,6 +137,7 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -146,8 +155,7 @@ import static org.junit.Assert.*;
 
 
 final class ServerTestUtil {
-  private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER =
-      QuotaTestUtils.createTestQuotaChargeCallback();
+  private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER = QuotaTestUtils.createTestQuotaChargeCallback();
 
   static byte[] getBlobDataAndRelease(BlobData blobData) {
     byte[] actualBlobData = new byte[(int) blobData.getSize()];
@@ -408,6 +416,69 @@ final class ServerTestUtil {
       updateBlobTtl(channel, blobId2, cluster.time.milliseconds());
       checkTtlUpdateStatus(channel, clusterMap, blobIdFactory, blobId2, data, true, Utils.Infinite_Time);
 
+      // Now get the blob index values
+      BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId2,
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      AdminResponseWithContent adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.No_Error,
+          adminResponseWithContent.getError());
+      byte[] jsonBytes = adminResponseWithContent.getContent();
+      ObjectMapper objectMapper = new ObjectMapper();
+      StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
+      Map<String, MessageInfo> messages =
+          objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
+          });
+      // We should have two message infos
+      // first one is the creation of the blob id2 and second one if the ttl update for the blob id2
+      assertEquals(2, messages.size());
+      TreeMap<Long, MessageInfo> sortedMessages = new TreeMap<>();
+      for (String key : messages.keySet()) {
+        // Key is offset
+        sortedMessages.put(Long.parseLong(key.split("_")[2]), messages.get(key));
+      }
+      List<MessageInfo> sortedMessageList = new ArrayList<>(sortedMessages.values());
+      // First one should be PUT
+      assertEquals(false, sortedMessageList.get(0).isDeleted());
+      assertEquals(new String(jsonBytes), false, sortedMessageList.get(0).isTtlUpdated());
+      assertEquals(false, sortedMessageList.get(0).isUndeleted());
+      // Second one should be ttlupdate
+      assertEquals(false, sortedMessageList.get(1).isDeleted());
+      assertEquals(new String(jsonBytes), true, sortedMessageList.get(1).isTtlUpdated());
+      assertEquals(false, sortedMessageList.get(1).isUndeleted());
+
+      // Do this test for blob id 5, which is not uploaded yet. we should be getting empty list, without error
+      blobIndexAdminRequest = new BlobIndexAdminRequest(blobId5,
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      jsonBytes = adminResponseWithContent.getContent();
+      objectMapper = new ObjectMapper();
+      messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
+      });
+      assertEquals(0, messages.size());
+
+      // Do this test for a fake partition
+      MockPartitionId fakePartition = new MockPartitionId(123456, "FAKE");
+      BlobId fakeBlobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), fakePartition, false, BlobId.BlobDataType.DATACHUNK);
+      blobIndexAdminRequest = new BlobIndexAdminRequest(fakeBlobId,
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, fakePartition, 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Bad_Request, adminResponseWithContent.getError());
+
+      // Do this test for a mal-formatted blobid
+      blobIndexAdminRequest = new BlobIndexAdminRequest(new MockId("malformat-id"),
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Bad_Request, adminResponseWithContent.getError());
+
       // fetch blob that does not exist
       // get blob properties
       ids = new ArrayList<>();
@@ -465,6 +536,13 @@ final class ServerTestUtil {
       releaseNettyBufUnderneathStream(stream);
       assertEquals("Delete blob on stopped store should fail", ServerErrorCode.Replica_Unavailable,
           deleteResponse.getError());
+      // get the blobIndex from a stopped
+      blobIndexAdminRequest = new BlobIndexAdminRequest(blobId2,
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, blobId2.getPartition(), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Replica_Unavailable, adminResponseWithContent.getError());
 
       // start the store via AdminRequest
       System.out.println("Begin to restart the BlobStore");
@@ -563,8 +641,10 @@ final class ServerTestUtil {
       releaseNettyBufUnderneathStream(stream);
       channel.disconnect();
     } catch (Exception e) {
-      e.printStackTrace();
-      assertNull(e);
+      StringWriter sw = new StringWriter();
+      PrintWriter pw = new PrintWriter(sw);
+      e.printStackTrace(pw);
+      assertNull(e.getMessage() + "\n" + sw, e);
     } finally {
       List<? extends ReplicaId> replicaIds = cluster.getClusterMap()
           .getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
@@ -3069,9 +3149,9 @@ final class ServerTestUtil {
           + blobId.sizeInBytes() + (blobEncryptionKey != null
           ? MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(blobEncryptionKey) : 0)
           + MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties)
-          + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
-          + (PutMessageFormatInputStream.useBlobFormatV3 ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(data.length)
-             : MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length));
+          + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata) + (
+          PutMessageFormatInputStream.useBlobFormatV3 ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(
+              data.length) : MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length));
     } catch (Exception e) {
       fail("Unexpected exception" + e);
     }
@@ -3194,8 +3274,7 @@ final class ServerTestUtil {
 
   private static void checkBlobId(Router router, BlobId blobId, byte[] data) throws Exception {
     GetBlobResult result =
-        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build())
-            .get(20, TimeUnit.SECONDS);
+        router.getBlob(blobId.getID(), new GetBlobOptionsBuilder().build()).get(20, TimeUnit.SECONDS);
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,
         result.getBlobInfo().getBlobProperties().getBlobSize());
