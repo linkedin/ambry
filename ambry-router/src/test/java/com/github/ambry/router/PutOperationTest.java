@@ -82,6 +82,9 @@ public class PutOperationTest {
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.compression.enabled", "true");
+    properties.setProperty("router.compression.minimal.ratio", "1.0");
+    properties.setProperty("router.compression.minimal.content.size", "1");
     VerifiableProperties vProps = new VerifiableProperties(properties);
     routerConfig = new RouterConfig(vProps);
     time = new MockTime();
@@ -556,9 +559,6 @@ public class PutOperationTest {
     properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
     properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.compression.enabled", "true");
-    properties.setProperty("router.compression.minimal.ratio", "1.0");
-    properties.setProperty("router.compression.minimal.content.size", "1");
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
 
     // Create the blob properties for testing.
