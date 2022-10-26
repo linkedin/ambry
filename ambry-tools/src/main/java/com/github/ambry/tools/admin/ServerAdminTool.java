@@ -666,7 +666,7 @@ public class ServerAdminTool implements Closeable {
   public Pair<ServerErrorCode, String> getBlobIndex(DataNodeId dataNodeId, BlobId blobId) throws Exception {
     AdminRequest adminRequest =
         new AdminRequest(AdminRequestOrResponseType.BlobIndex, null, correlationId.incrementAndGet(), CLIENT_ID);
-    BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId.getID(), adminRequest);
+    BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId, adminRequest);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, blobId.getPartition(), blobIndexAdminRequest);
     AdminResponseWithContent adminResponse =
         AdminResponseWithContent.readFrom(new NettyByteBufDataInputStream(response.content()));
