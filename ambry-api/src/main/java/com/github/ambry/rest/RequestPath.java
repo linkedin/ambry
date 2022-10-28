@@ -130,6 +130,10 @@ public class RequestPath {
           throw new RestServiceException("Segment index given is not an integer", RestServiceErrorCode.BadRequest);
         }
         //otherwise, nothing to do
+      } catch (ArrayIndexOutOfBoundsException e) {
+        // For eg., errorMessage = "java.lang.ArrayIndexOutOfBoundsException: -1"
+        String errorMessage = e.getClass().getCanonicalName() + ": " + e.getMessage();
+        throw new RestServiceException(errorMessage, RestServiceErrorCode.BadRequest);
       }
     }
 
