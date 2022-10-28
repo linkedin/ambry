@@ -69,6 +69,7 @@ class GetManager {
   private final RequestRegistrationCallback<GetOperation> requestRegistrationCallback;
   private final AmbryCache blobMetadataCache;
   private final NonBlockingRouter nonBlockingRouter;
+  private final CompressionService compressionService;
 
   /**
    * Create a GetManager
@@ -103,6 +104,9 @@ class GetManager {
     requestRegistrationCallback = new RequestRegistrationCallback<>(correlationIdToGetOperation);
     this.blobMetadataCache = blobMetadataCache;
     this.nonBlockingRouter = nonBlockingRouter;
+
+    // TODO - use dependency injection.
+    this.compressionService = new CompressionService(routerConfig.getCompressionConfig(), routerMetrics.compressionMetrics);
   }
 
   /**
@@ -138,7 +142,7 @@ class GetManager {
       getOperation =
           new GetBlobOperation(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback,
               routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, isEncrypted,
-              quotaChargeCallback, blobMetadataCache, nonBlockingRouter);
+              quotaChargeCallback, blobMetadataCache, nonBlockingRouter, compressionService);
     }
     getOperations.add(getOperation);
   }

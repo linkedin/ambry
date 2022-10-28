@@ -128,6 +128,8 @@ class GetBlobOperation extends GetOperation {
   // A cache for blob metadata of composite blobs
   private AmbryCache blobMetadataCache;
   private NonBlockingRouter nonBlockingRouter;
+  // A shared instance of decompression service.
+  private final CompressionService decompressionService;
 
   /**
    * Construct a GetBlobOperation
@@ -147,13 +149,14 @@ class GetBlobOperation extends GetOperation {
    * @param isEncrypted if the encrypted bit is set based on the original blobId string of a {@link BlobId}.
    * @param blobMetadataCache A cache to save blob metadata for composite blobs
    * @param nonBlockingRouter The non-blocking router object
+   * @param compressionService The compression service to use.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResult> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
       boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache,
-      NonBlockingRouter nonBlockingRouter) {
+      NonBlockingRouter nonBlockingRouter, CompressionService compressionService) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -164,6 +167,7 @@ class GetBlobOperation extends GetOperation {
         shouldLookupMetadataCache() ? (BlobMetadata) blobMetadataCache.getObject(blobId.toString()) : null;
     firstChunk = (blobMetadata == null) ? new FirstGetChunk() : new CachedFirstChunk(blobMetadata);
     this.nonBlockingRouter = nonBlockingRouter;
+    this.decompressionService = compressionService;
   }
 
   /**
@@ -714,6 +718,7 @@ class GetBlobOperation extends GetOperation {
     // Tracks quota charging for this chunk.
     private OperationQuotaCharger operationQuotaCharger;
     protected long initializedTimeMs;
+    protected boolean isChunkCompressed;
 
     /**
      * Construct a GetChunk
@@ -852,8 +857,12 @@ class GetBlobOperation extends GetOperation {
               routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
             }
             routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
-            chunkIndexToBuf.put(chunkIndex, filterChunkToRange(result.getDecryptedBlobContent()));
-            numChunksRetrieved.incrementAndGet();
+            ByteBuf decryptedContent = result.getDecryptedBlobContent();
+            ByteBuf decompressedContent = decompressContent(decryptedContent);
+            if (decompressedContent != null) {
+              chunkIndexToBuf.put(chunkIndex, filterChunkToRange(decompressedContent));
+              numChunksRetrieved.incrementAndGet();
+            }
           } else {
             // only in maybeReleaseDecryptionResultBuffer() will result be set to null, this means the bytebuf has been
             // released, don't have to release it again here.
@@ -870,6 +879,36 @@ class GetBlobOperation extends GetOperation {
         }
         decryptJobMetricsTracker.onJobResultProcessingComplete();
         logger.trace("Marking blob content available to process for data chunk {}", chunkBlobId);
+      }
+    }
+
+    /**
+     * Decompress the compressed buffer specified.
+     * If the buffer is not compressed, based on blobCompressed property, then return the input buffer.
+     *
+     * @param sourceBuffer The source buffer to decompress.
+     * @return A new buffer if decompressed successfully and the source buffer is released.
+     *         The source buffer if it is not compressed.
+     *         NULL if decompression failed and the source buffer is released.
+     */
+    protected ByteBuf decompressContent(ByteBuf sourceBuffer) {
+      if (!isChunkCompressed) {
+        // Blob is not compressed.  Return source buffer.
+        return sourceBuffer;
+      }
+
+      try {
+        return decompressionService.decompress(sourceBuffer, routerConfig.routerMaxPutChunkSizeBytes);
+      } catch (Exception ex) {
+        // Note: No need to emit metrics here because decompress() already emits failure metrics.
+        logger.error("Failed to decompress chunk data for chunkBlobId " + chunkBlobId + " due to exception.", ex);
+        setOperationException(buildChunkException("Exception thrown on decompressing the data chunk", ex,
+            RouterErrorCode.UnexpectedInternalError));
+        setOperationCompleted();
+        return null;
+      }
+      finally {
+        sourceBuffer.release();
       }
     }
 
@@ -1014,17 +1053,20 @@ class GetBlobOperation extends GetOperation {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         ByteBuffer encryptionKey = messageMetadata == null ? null : messageMetadata.getEncryptionKey();
         ByteBuf chunkBuf = blobData.content();
+        this.isChunkCompressed = blobData.isCompressed();
 
         try {
           boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, null, encryptionKey, chunkBlobId);
           if (!launchedJob) {
-            chunkBuf = filterChunkToRange(chunkBuf);
             if (chunkIndex == 0) {
               routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
             }
             routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
-            chunkIndexToBuf.put(chunkIndex, chunkBuf.retainedDuplicate());
-            numChunksRetrieved.incrementAndGet();
+            ByteBuf decompressedContent = decompressContent(chunkBuf.retainedDuplicate());
+            if (decompressedContent != null) {
+              chunkIndexToBuf.put(chunkIndex, filterChunkToRange(decompressedContent));
+              numChunksRetrieved.incrementAndGet();
+            }
           }
 
           successfullyDeserialized = true;
@@ -1482,8 +1524,11 @@ class GetBlobOperation extends GetOperation {
               if (!resolveRange(totalSize)) {
                 routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
                 routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
-                chunkIndexToBuf.put(0, filterChunkToRange(decryptedBlobContent));
-                numChunksRetrieved.set(1);
+                ByteBuf decompressedContent = decompressContent(decryptedBlobContent);
+                if (decompressedContent != null) {
+                  chunkIndexToBuf.put(0, filterChunkToRange(decompressedContent));
+                  numChunksRetrieved.set(1);
+                }
                 progressTracker.setCryptoJobSuccess();
                 logger.trace("BlobContent available to process for simple blob {}", blobId);
               } else {
@@ -1555,6 +1600,8 @@ class GetBlobOperation extends GetOperation {
           }
         }
         blobType = blobData.getBlobType();
+        isChunkCompressed = blobData.isCompressed();
+        logger.trace("In FirstGetChunk.handleBody(), is Chunk compressed = " + isChunkCompressed + " for blob ID = " + blobId);
         chunkIndexToBuf = new ConcurrentHashMap<>();
         chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
         if (rawMode) {
@@ -1568,8 +1615,11 @@ class GetBlobOperation extends GetOperation {
             dataChunks = null;
             chunkIndex = 0;
             numChunksTotal = 1;
-            chunkIndexToBuf.put(0, Unpooled.wrappedBuffer(rawPayloadBuffer));
-            numChunksRetrieved.set(1);
+            ByteBuf decompressedBuffer = decompressContent(Unpooled.wrappedBuffer(rawPayloadBuffer));
+            if (decompressedBuffer != null) {
+              chunkIndexToBuf.put(0, decompressedBuffer);
+              numChunksRetrieved.set(1);
+            }
           } else {
             setOperationException(new IllegalStateException("Only encrypted blobs supported in raw mode"));
           }
@@ -1751,11 +1801,14 @@ class GetBlobOperation extends GetOperation {
             numChunksTotal = 1;
             boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, userMetadata, encryptionKey, blobId);
             if (!launchedJob) {
-              chunkBuf = filterChunkToRange(chunkBuf);
               routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
               routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
-              chunkIndexToBuf.put(0, chunkBuf.retainedDuplicate());
-              numChunksRetrieved.set(1);
+
+              ByteBuf decompressedContent = decompressContent(chunkBuf.retainedDuplicate());
+              if (decompressedContent != null) {
+                chunkIndexToBuf.put(0, filterChunkToRange(decompressedContent));
+                numChunksRetrieved.set(1);
+              }
             }
           }
         }
