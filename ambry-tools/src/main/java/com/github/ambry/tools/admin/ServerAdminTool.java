@@ -41,6 +41,8 @@ import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.AdminResponseWithContent;
+import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
@@ -106,6 +108,7 @@ public class ServerAdminTool implements Closeable {
     GetBlobProperties,
     GetUserMetadata,
     GetBlob,
+    BlobIndex,
     TriggerCompaction,
     RequestControl,
     ReplicationControl,
@@ -120,7 +123,7 @@ public class ServerAdminTool implements Closeable {
 
     /**
      * The type of operation.
-     * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,TriggerCompaction,RequestControl,ReplicationControl,
+     * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,BlobIndex,TriggerCompaction,RequestControl,ReplicationControl,
      * CatchupStatus,BlobStoreControl
      */
     @Config("type.of.operation")
@@ -327,6 +330,16 @@ public class ServerAdminTool implements Closeable {
         } else {
           LOGGER.error("Failed to get blob data for {} from {} with option {}. Error code is {}", blobId, dataNodeId,
               config.getOption, bResponse.getFirst());
+        }
+        break;
+      case BlobIndex:
+        blobId = new BlobId(config.blobId, clusterMap);
+        Pair<ServerErrorCode, String> biResponse = serverAdminTool.getBlobIndex(dataNodeId, blobId);
+        if (biResponse.getFirst() == ServerErrorCode.No_Error) {
+          LOGGER.info("Blob index values of {} from {} is {}", blobId, dataNodeId, biResponse.getSecond());
+        } else {
+          LOGGER.error("Failed to get blob index values for {} from {}. Error code is {}", blobId, dataNodeId,
+              biResponse.getFirst());
         }
         break;
       case TriggerCompaction:
@@ -641,6 +654,29 @@ public class ServerAdminTool implements Closeable {
     InputStream stream = response.getSecond();
     BlobAll blobAll = stream != null ? MessageFormatRecord.deserializeBlobAll(stream, storeKeyFactory) : null;
     return new Pair<>(response.getFirst(), blobAll);
+  }
+
+  /**
+   * Get the blob index values for {@code blobId}
+   * @param dataNodeId the {@link DataNodeId} to contact.
+   * @param blobId the {@link BlobId} to operate on.
+   * @return the {@link ServerErrorCode} and the json serialized content of blob index values.
+   * @throws Exception
+   */
+  public Pair<ServerErrorCode, String> getBlobIndex(DataNodeId dataNodeId, BlobId blobId) throws Exception {
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobIndex, null, correlationId.incrementAndGet(), CLIENT_ID);
+    BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId, adminRequest);
+    ResponseInfo response = sendRequestGetResponse(dataNodeId, blobId.getPartition(), blobIndexAdminRequest);
+    AdminResponseWithContent adminResponse =
+        AdminResponseWithContent.readFrom(new NettyByteBufDataInputStream(response.content()));
+    response.release();
+    ServerErrorCode errorCode = adminResponse.getError();
+    String content = "";
+    if (errorCode == ServerErrorCode.No_Error) {
+      content = new String(adminResponse.getContent());
+    }
+    return new Pair<>(errorCode, content);
   }
 
   /**
