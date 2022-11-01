@@ -161,9 +161,21 @@ public class MessageSievingInputStream extends InputStream {
       return msg;
     }
 
+    List<MessageInfo> messageInfos = new ArrayList<>();
+    messageInfos.add(msgInfo);
+
     logger.trace("transferInputStream for message {}", msgInfo);
     TransformationOutput output = null;
     for (Transformer transformer : transformers) {
+      // Warms up transformer with message infos representing messages it will transform later.
+      // It may convert the key with transformer.converter and cache them.
+      try {
+        transformer.warmup(messageInfos, true);
+      } catch (Exception e) {
+        throw new IOException("Encountered exception during transformer.warmup", e);
+      }
+
+      // transform the message. It may use the converted key in the warmup stage.
       output = transformer.transform(msg);
       if (output.getException() != null || output.getMsg() == null) {
         break;

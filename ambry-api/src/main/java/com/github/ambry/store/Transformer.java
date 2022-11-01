@@ -36,9 +36,11 @@ public interface Transformer {
    * @param messageInfos message infos that will be used to warmup transformer,
    *                     each message info corresponds to a message the transformer
    *                     is expected to convert in the immediate future
+   * @param includeAll if true, will warmup transformer with all the messages.
+   *                   if false, will ignore the deleted or expired messages.
    * @throws Exception
    */
-  void warmup(List<MessageInfo> messageInfos) throws Exception;
+  void warmup(List<MessageInfo> messageInfos, boolean includeAll) throws Exception;
 }
 
 

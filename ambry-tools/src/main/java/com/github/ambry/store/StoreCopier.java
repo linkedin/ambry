@@ -207,7 +207,7 @@ public class StoreCopier implements Closeable {
       FindInfo findInfo = src.findEntriesSince(lastToken, fetchSizeInBytes, null, null);
       List<MessageInfo> messageInfos = findInfo.getMessageEntries();
       for (Transformer transformer : transformers) {
-        transformer.warmup(messageInfos);
+        transformer.warmup(messageInfos, false);
       }
       for (MessageInfo messageInfo : messageInfos) {
         logger.trace("Processing {} - isDeleted: {}, isExpired {}", messageInfo.getStoreKey(), messageInfo.isDeleted(),
