@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.ListIterator;
@@ -164,6 +165,15 @@ public class MessageSievingInputStream extends InputStream {
     logger.trace("transferInputStream for message {}", msgInfo);
     TransformationOutput output = null;
     for (Transformer transformer : transformers) {
+      // Warms up transformer with message infos representing messages it will transform later.
+      // It may convert the key with transformer.converter and cache them.
+      try {
+        transformer.warmup(Collections.singletonList(msgInfo), true);
+      } catch (Exception e) {
+        throw new IOException("Encountered exception during transformer.warmup", e);
+      }
+
+      // transform the message. It may use the converted key in the warmup stage.
       output = transformer.transform(msg);
       if (output.getException() != null || output.getMsg() == null) {
         break;
