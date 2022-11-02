@@ -87,10 +87,12 @@ public class BlobIdTransformer implements Transformer {
   }
 
   @Override
-  public void warmup(List<MessageInfo> messageInfos) throws Exception {
+  public void warmup(List<MessageInfo> messageInfos, boolean includeAll) throws Exception {
     List<StoreKey> storeKeys = new ArrayList<>();
     for (MessageInfo messageInfo : messageInfos) {
-      if (!messageInfo.isExpired() && !messageInfo.isDeleted()) {
+      // if includeAll is true, add this key.
+      // otherwise, only add the key if the message is not deleted or expired.
+      if (includeAll || (!messageInfo.isExpired() && !messageInfo.isDeleted())) {
         storeKeys.add(messageInfo.getStoreKey());
       }
     }

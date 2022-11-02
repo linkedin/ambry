@@ -201,4 +201,21 @@ public class RequestPathTest {
       throw new RuntimeException(e);
     }
   }
+
+  /**
+   * Tests for invalid request path
+   */
+  @Test
+  public void testInvalidBlobId() {
+    try {
+      String requestPath = "../";
+      RestRequest restRequest = RestUtilsTest.createRestRequest(RestMethod.GET, requestPath, null);
+      RequestPath.parse(restRequest, null, null);
+    } catch (RestServiceException e) {
+      assertEquals(RestServiceErrorCode.BadRequest, e.getErrorCode());
+      assert(e.getMessage().startsWith("java.lang.ArrayIndexOutOfBoundsException"));
+    }  catch (UnsupportedEncodingException | URISyntaxException e) {
+      throw new RuntimeException(e);
+    }
+  }
 }

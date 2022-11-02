@@ -61,6 +61,8 @@ class ReplicateBlobOperation {
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
+  // Quota charger for this operation.
+  private final OperationQuotaCharger operationQuotaCharger;
 
   /**
    * Instantiates a {@link ReplicateBlobOperation}.
@@ -92,6 +94,8 @@ class ReplicateBlobOperation {
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.ReplicateBlobOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics, blobId);
+    this.operationQuotaCharger =
+        new OperationQuotaCharger(null, blobId, this.getClass().getSimpleName(), routerMetrics);
   }
 
   /**
@@ -119,7 +123,7 @@ class ReplicateBlobOperation {
       Port port = RouterUtils.getPortToConnectTo(replica, routerConfig.routerEnableHttp2NetworkClient);
       ReplicateBlobRequest replicateBlobRequest = createReplicateBlobRequest();
       RequestInfo requestInfo =
-          new RequestInfo(hostname, port, replicateBlobRequest, replica, null, time.milliseconds(),
+          new RequestInfo(hostname, port, replicateBlobRequest, replica, operationQuotaCharger, time.milliseconds(),
               routerConfig.routerRequestNetworkTimeoutMs, routerConfig.routerRequestTimeoutMs);
       replicateBlobRequestInfos.put(replicateBlobRequest.getCorrelationId(), requestInfo);
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);

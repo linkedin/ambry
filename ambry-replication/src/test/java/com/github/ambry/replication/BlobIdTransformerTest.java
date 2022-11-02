@@ -341,7 +341,7 @@ public class BlobIdTransformerTest {
     BlobIdTransformer transformer = new BlobIdTransformer(blobIdFactory, factory.getStoreKeyConverter());
     TransformationOutput output = transformer.transform(inputAndExpected.getInput());
     Assert.assertTrue("Should lead to IllegalStateException", output.getException() instanceof IllegalStateException);
-    transformer.warmup(Collections.singletonList(inputAndExpected.getInput().getMessageInfo()));
+    transformer.warmup(Collections.singletonList(inputAndExpected.getInput().getMessageInfo()), false);
     output = transformer.transform(inputAndExpected.getInput());
     assertNull(output.getException());
     verifyOutput(output.getMsg(), inputAndExpected.getExpected());

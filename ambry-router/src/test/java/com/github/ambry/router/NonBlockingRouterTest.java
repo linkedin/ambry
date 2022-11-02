@@ -118,6 +118,19 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
+   * the {@link QuotaAwareOperationController}.
+   * @return the created VerifiableProperties instance.
+   */
+  @Override
+  protected Properties getNonBlockingRouterProperties(String routerDataCenter) {
+    Properties properties = super.getNonBlockingRouterProperties(routerDataCenter, PUT_REQUEST_PARALLELISM, DELETE_REQUEST_PARALLELISM);
+    properties.setProperty("router.operation.controller", "com.github.ambry.router.QuotaAwareOperationController");
+
+    return properties;
+  }
+
+  /**
    * Test the {@link NonBlockingRouterFactory}
    */
   @Test

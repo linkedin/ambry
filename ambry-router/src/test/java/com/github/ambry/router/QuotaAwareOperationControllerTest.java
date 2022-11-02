@@ -68,6 +68,7 @@ public class QuotaAwareOperationControllerTest {
   private final DeleteManager deleteManager = Mockito.mock(DeleteManager.class);
   private final TtlUpdateManager ttlUpdateManager = Mockito.mock(TtlUpdateManager.class);
   private final UndeleteManager undeleteManager = Mockito.mock(UndeleteManager.class);
+  private final ReplicateBlobManager replicateBlobManager = Mockito.mock(ReplicateBlobManager.class);
   private final List<RequestInfo> requestsToSend = new LinkedList<>();
   private final Set<Integer> requestsToDrop = new HashSet<>();
   private final QuotaMethod quotaMethod;
@@ -121,9 +122,13 @@ public class QuotaAwareOperationControllerTest {
     FieldSetter.setField(quotaAwareOperationController,
         quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("ttlUpdateManager"),
         ttlUpdateManager);
+    FieldSetter.setField(quotaAwareOperationController,
+        quotaAwareOperationController.getClass().getSuperclass().getDeclaredField("replicateBlobManager"),
+        replicateBlobManager);
     doNothing().when(getManager).poll(requestsToSend, requestsToDrop);
     doNothing().when(deleteManager).poll(requestsToSend, requestsToDrop);
     doNothing().when(ttlUpdateManager).poll(requestsToSend, requestsToDrop);
+    doNothing().when(replicateBlobManager).poll(requestsToSend, requestsToDrop);
     doNothing().when(nonBlockingRouter).initiateBackgroundDeletes(anyList());
   }
 

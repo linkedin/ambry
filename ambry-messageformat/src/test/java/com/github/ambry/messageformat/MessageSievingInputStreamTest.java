@@ -1197,7 +1197,7 @@ class ValidatingKeyConvertingTransformer implements Transformer {
   }
 
   @Override
-  public void warmup(List<MessageInfo> messageInfos) throws Exception {
+  public void warmup(List<MessageInfo> messageInfos, boolean includeAll) throws Exception {
     //no-op
   }
 }

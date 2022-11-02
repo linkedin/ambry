@@ -120,6 +120,7 @@ public class QuotaAwareOperationController extends OperationController {
     deleteManager.poll(requestsToSend, requestsToDrop);
     ttlUpdateManager.poll(requestsToSend, requestsToDrop);
     undeleteManager.poll(requestsToSend, requestsToDrop);
+    replicateBlobManager.poll(requestsToSend, requestsToDrop);
   }
 
   /**
