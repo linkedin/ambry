@@ -190,10 +190,10 @@ public abstract class BaseCompression implements Compression {
     }
 
     // Read the original source size.
-    return (compressedBuffer[offset] & 0xFF) +
-        ((compressedBuffer[offset + 1] & 0xFF) << 8) +
-        ((compressedBuffer[offset + 2] & 0xFF) << 16) +
-        (compressedBuffer[offset + 3] << 24);
+    return (compressedBuffer[offset] << 24) +
+          ((compressedBuffer[offset + 1] & 0xFF) << 16) +
+          ((compressedBuffer[offset + 2] & 0xFF) << 8) +
+           (compressedBuffer[offset + 3] & 0xFF);
   }
 
   /**
@@ -245,10 +245,10 @@ public abstract class BaseCompression implements Compression {
 
     // Write original source data size.
     int sourceSize = sourceBuffer.length;
-    compressedBuffer[offset] = (byte) (sourceSize & 0xFF);
-    compressedBuffer[offset + 1] = (byte)(sourceSize >> 8 & 0xFF);
-    compressedBuffer[offset + 2] = (byte)(sourceSize >> 16 & 0xFF);
-    compressedBuffer[offset + 3] = (byte)(sourceSize >> 24);
+    compressedBuffer[offset] = (byte)(sourceSize >> 24);
+    compressedBuffer[offset + 1] = (byte)(sourceSize >> 16 & 0xFF);
+    compressedBuffer[offset + 2] = (byte)(sourceSize >> 8 & 0xFF);
+    compressedBuffer[offset + 3] = (byte) (sourceSize & 0xFF);
     offset += 4;
 
     // Apply compression and store the output in the remaining buffer.
