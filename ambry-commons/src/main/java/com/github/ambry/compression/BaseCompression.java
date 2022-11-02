@@ -46,7 +46,6 @@ public abstract class BaseCompression implements Compression {
   private static final int SIZE_OF_VERSION_AND_ORIGINAL_SIZE = 5;
   static final int MINIMUM_OVERHEAD_SIZE = SIZE_OF_VERSION_AND_ORIGINAL_SIZE + 1;
 
-
   /**
    * The binary representation of the algorithm name.
    * Since this binary is written to every compressed buffer, it caches the binary form for performance purpose.
@@ -226,7 +225,8 @@ public abstract class BaseCompression implements Compression {
     verifySourceData(sourceBuffer, sourceBufferOffset, sourceDataSize);
     verifyCompressedBuffer(compressedBuffer, compressedBufferOffset, compressedDataSize);
 
-    int overheadSize = SIZE_OF_VERSION_AND_ORIGINAL_SIZE + ALGORITHM_NAME_LENGTH_SIZE + getAlgorithmNameBinary().length;
+    byte[] algorithmNameBinary = getAlgorithmNameBinary();
+    int overheadSize = SIZE_OF_VERSION_AND_ORIGINAL_SIZE + ALGORITHM_NAME_LENGTH_SIZE + algorithmNameBinary.length;
     if (compressedDataSize < overheadSize) {
       throw new IllegalArgumentException("compressedDataSize " + compressedDataSize + " is too small.");
     }
@@ -240,7 +240,6 @@ public abstract class BaseCompression implements Compression {
     offset++;
 
     // Write algorithm name.
-    byte[] algorithmNameBinary = getAlgorithmNameBinary();
     System.arraycopy(algorithmNameBinary, 0, compressedBuffer, offset, algorithmNameBinary.length);
     offset += algorithmNameBinary.length;
 

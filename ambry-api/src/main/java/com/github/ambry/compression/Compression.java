@@ -20,41 +20,31 @@ import java.nio.ByteBuffer;
 
 /**
  * Compression interface that provides compression and decompression feature.
- * It supports composite/shared memory where caller manages the buffer allocation.
- * It also supports simple APIs that lets the implementation allocate memory from Java heap.
  *
  * <pre>
- * Shared buffer APIs (caller management memory).
  *   Compression example:
  *   {@code
  *     ByteBuffer originalData = ...;
+ *     ByteBuffer compressedBuffer = Compression.compress(originalData, true);
+ *
+ *     // Same as
+ *     ByteBuffer originalData = ...;
  *     int compressedBufferSize = Compression.getCompressBufferSize(originalData.remaining());
  *     ByteBuffer compressedBuffer = ByteBuffer.allocateDirect(compressedBufferSize);
- *     int compressedSize = Compression.compress(originalData, 0, originalData.length,
- *                                   compressedBuffer, 0, compressedBuffer.capacity());
+ *     int compressedSize = Compression.compress(originalData, compressedBuffer);
  *   }
  *
  *   Decompression example:
  *   {@code
  *     ByteBuffer compressedBuffer = ...;
- *     int originalDataSize = Compression.getDecompressBufferSize(compressedBuffer, compressedBuffer.position(), compressedBuffer.remaining());
- *     byte[] originalData = new byte[originalDataSize];
- *     int decompressedSize = Compression.decompress(compressedBuffer, 0, compressedBuffer.length,
- *                                   originalData, 0, originalData.length);
+ *     ByteBuffer originalData = Compression.decompress(compressedBuffer, true);
+ *
+ *     // Same as
+ *     ByteBuffer compressedBuffer = ...;
+ *     int originalDataSize = Compression.getDecompressBufferSize(compressedBuffer);
+ *     ByteBuffer originalData = ByteBuffer.allocateDirect(originalDataSize);
+ *     int decompressedSize = Compression.decompress(compressedBuffer, originalData);
  *    }
- *
- * Dedicated buffer APIs (implementation allocate memory).
- *   Compression example:
- *   {@code
- *     byte[] originalData = ...;
- *     Pair&lt;Integer, byte[]&gt; compressedBuffer = Compression.compress(originalData);
- *   }
- *
- *   Decompression example:
- *   {@code
- *     byte[] compressedBuffer = ...;
- *     byte[] originalData = Compression.decompress(compressedBuffer);
- *   }
  * </pre>
  */
 public interface Compression {
