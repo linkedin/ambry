@@ -195,7 +195,6 @@ public class NonBlockingRouterTestBase {
     properties.setProperty("router.not.found.cache.ttl.in.ms", String.valueOf(NOT_FOUND_CACHE_TTL_MS));
     properties.setProperty("router.get.eligible.replicas.by.state.enabled", "true");
     properties.setProperty("router.repair.with.replicate.blob.enabled", "true");
-    properties.setProperty("router.operation.controller", "com.github.ambry.router.QuotaAwareOperationController");
 
     return properties;
   }
