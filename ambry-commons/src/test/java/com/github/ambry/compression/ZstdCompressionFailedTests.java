@@ -15,6 +15,7 @@ package com.github.ambry.compression;
 
 import com.github.ambry.utils.TestUtils;
 import com.github.luben.zstd.Zstd;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import org.junit.Assert;
 import org.junit.Test;
@@ -37,8 +38,8 @@ public class ZstdCompressionFailedTests {
 
     ZstdCompression zstd = new ZstdCompression();
     Exception ex = TestUtils.getException(() ->
-        zstd.compressNative("ABC".getBytes(StandardCharsets.UTF_8), 0, 3,
-            new byte[10], 0, 10));
+        zstd.compressNative(ByteBuffer.wrap("ABC".getBytes(StandardCharsets.UTF_8)), 0, 3,
+            ByteBuffer.wrap(new byte[10]), 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
   }
 
@@ -53,7 +54,7 @@ public class ZstdCompressionFailedTests {
 
     ZstdCompression zstd = new ZstdCompression();
     Exception ex = TestUtils.getException(() ->
-        zstd.decompressNative(new byte[10], 0, 10, new byte[10], 0, 10));
+        zstd.decompressNative(ByteBuffer.wrap(new byte[10]), 0, 10, ByteBuffer.wrap(new byte[10]), 0, 10));
     Assert.assertTrue(ex instanceof CompressionException);
   }
 }

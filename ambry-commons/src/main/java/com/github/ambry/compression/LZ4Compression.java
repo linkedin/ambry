@@ -13,6 +13,7 @@
  */
 package com.github.ambry.compression;
 
+import java.nio.ByteBuffer;
 import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
@@ -119,6 +120,22 @@ public class LZ4Compression extends BaseCompressionWithLevel {
    * @return The size of the compressed data in bytes.
    */
   @Override
+  protected int compressNative(ByteBuffer sourceData, int sourceDataOffset, int sourceDataSize,
+      ByteBuffer compressedBuffer, int compressedBufferOffset, int compressedBufferSize) throws CompressionException {
+    try {
+      return getCompressor().compress(sourceData, sourceDataOffset, sourceDataSize,
+          compressedBuffer, compressedBufferOffset, compressedBufferSize);
+    } catch (Exception ex) {
+      throw new CompressionException(String.format("LZ4 compression failed. sourceData.limit=%d, sourceDataOffset=%d, "
+          + "sourceDataSize=%d, compressedBuffer.capacity=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
+          sourceData.limit(), sourceDataOffset, sourceDataSize,
+          compressedBuffer.capacity(), compressedBufferOffset, compressedBufferSize),
+          ex);
+    }
+  }
+
+  // TODO - This method will be deleted after ByteBuffer API has been pushed.
+  @Override
   protected int compressNative(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
       byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) throws CompressionException {
     try {
@@ -126,7 +143,7 @@ public class LZ4Compression extends BaseCompressionWithLevel {
           compressedBuffer, compressedBufferOffset, compressedBufferSize);
     } catch (Exception ex) {
       throw new CompressionException(String.format("LZ4 compression failed. sourceData.length=%d, sourceDataOffset=%d, "
-          + "sourceDataSize=%d, compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
+              + "sourceDataSize=%d, compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
           sourceData.length, sourceDataOffset, sourceDataSize,
           compressedBuffer.length, compressedBufferOffset, compressedBufferSize),
           ex);
@@ -143,8 +160,25 @@ public class LZ4Compression extends BaseCompressionWithLevel {
    * @param compressedBufferSize Size of the compressed buffer returned from compressNative().
    * @param sourceDataBuffer The buffer to store decompression output (the original source data).
    * @param sourceDataOffset Offset where to write the decompressed data.
-   * @param sourceDataSize Size of the buffer to hold the decompressed data.  It should be size of original data.
+   * @param sourceDataSize Size of the buffer to hold the decompressed data.  It must be size of original data.
    */
+  @Override
+  protected void decompressNative(ByteBuffer compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
+      ByteBuffer sourceDataBuffer, int sourceDataOffset, int sourceDataSize) throws CompressionException {
+    // This decompressor supports all compressors, LZ4 and LZ4 HC.
+    try {
+      getDecompressor().decompress(compressedBuffer, compressedBufferOffset,
+          sourceDataBuffer, sourceDataOffset, sourceDataSize);
+    } catch (Exception ex) {
+      throw new CompressionException(String.format("LZ4 decompression failed. "
+              + "compressedBuffer.limit=%d, compressedBufferOffset=%d, compressedBufferSize=%d, "
+              + "sourceData.capacity=%d, sourceDataOffset=%d, sourceDataSize=%d",
+          compressedBuffer.limit(), compressedBufferOffset, compressedBufferSize,
+          sourceDataBuffer.capacity(), sourceDataOffset, sourceDataSize), ex);
+    }
+  }
+
+  // TODO - This method will be deleted after ByteBuffer API has been pushed.
   @Override
   protected void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
       byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize) throws CompressionException {
