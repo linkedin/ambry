@@ -1349,6 +1349,18 @@ public class Utils {
   }
 
   /**
+   * Check whether the given byte buffer is null or empty.  If so, throw IllegalArgumentException.
+   *
+   * @param buffer The buffer to check.
+   * @param exceptionMessage The IllegalArgumentException message to use if null or empty.
+   */
+  public static void checkNotNullOrEmpty(ByteBuffer buffer, String exceptionMessage) {
+    if (buffer == null || !buffer.hasRemaining()) {
+      throw new IllegalArgumentException(exceptionMessage);
+    }
+  }
+
+  /**
    * Check the given value is in the specific range (min and max).
    * If outside the range, through IllegalArgumentException using the provided message.
    * @param value The value to check.
