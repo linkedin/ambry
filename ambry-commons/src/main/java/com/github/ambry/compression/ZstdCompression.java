@@ -125,8 +125,7 @@ public class ZstdCompression extends BaseCompressionWithLevel {
 
     // If sourceByteBuffer is a copy, free it.
     if (newSourceBuffer != sourceBuffer && newSourceBuffer.isDirect()) {
-      ByteBuf tempByteBuf = Unpooled.wrappedBuffer(newSourceBuffer);
-      tempByteBuf.release();
+      Unpooled.wrappedBuffer(newSourceBuffer).release();
     }
 
     // Check for error.
@@ -200,8 +199,7 @@ public class ZstdCompression extends BaseCompressionWithLevel {
 
     // If sourceByteBuffer is a copy, free it.
     if (newCompressedBuffer != compressedBuffer && newCompressedBuffer.isDirect()) {
-      ByteBuf tempByteBuf = Unpooled.wrappedBuffer(newCompressedBuffer);
-      tempByteBuf.release();
+      Unpooled.wrappedBuffer(newCompressedBuffer).release();
     }
 
     // Check for error.

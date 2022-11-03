@@ -55,15 +55,20 @@ public class LZ4CompressionTest {
   }
 
   @Test
-  public void testCompressAndDecompress_MinimumLevel() throws CompressionException {
+  public void testCompressAndDecompressNative_MinimumLevel() throws CompressionException {
     LZ4Compression compression = new LZ4Compression();
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
-    compressAndDecompressNativeTest(compression, "Test my minimum compression message using minimum level.", 0 , 0);
+    compressAndDecompressNativeTest(compression, "Test my minimum compression message using minimum level.", 0, 0);
 
     // Test mid-buffer (with extra bytes on left and right of buffer.)
-    compressAndDecompressNativeTest(compression, "Test my minimum compression message using minimum level.", 2 , 3);
+    compressAndDecompressNativeTest(compression, "Test my minimum compression message using minimum level.", 2, 3);
+  }
 
+  @Test
+  public void testCompressAndDecompress_MinimumLevel() throws CompressionException {
+    LZ4Compression compression = new LZ4Compression();
+    compression.setCompressionLevel(compression.getMinimumCompressionLevel());
     // Test compression API with dedicated buffer (without extra bytes on left or right of buffer).
     compressAndDecompressTest(compression, "Test my minimum compression message using minimum level.", 0 , 0);
 
@@ -72,7 +77,7 @@ public class LZ4CompressionTest {
   }
 
   @Test
-  public void testCompressAndDecompress_MaximumLevel() throws CompressionException {
+  public void testCompressAndDecompressNative_MaximumLevel() throws CompressionException {
     LZ4Compression compression = new LZ4Compression();
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
@@ -80,7 +85,12 @@ public class LZ4CompressionTest {
 
     // Test mid-buffer (with extra bytes on left and right of buffer.)
     compressAndDecompressNativeTest(compression, "Test my maximum compression message using maximum level.", 2, 1);
+  }
 
+  @Test
+  public void testCompressAndDecompress_MaximumLevel() throws CompressionException {
+    LZ4Compression compression = new LZ4Compression();
+    compression.setCompressionLevel(compression.getMaximumCompressionLevel());
     // Test compression API with dedicated buffer (without extra bytes on left or right of buffer).
     compressAndDecompressTest(compression, "Test my maximum compression message using maximum level.", 0, 0);
 
