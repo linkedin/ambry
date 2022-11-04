@@ -39,6 +39,7 @@ public abstract class BaseCompression implements Compression {
    * - N bytes compressed data.
    * Excluding the name chars, the minimal size is 6 bytes.
    */
+  private static final int VERSION_SIZE = 1;
   private static final int VERSION_AND_ORIGINAL_SIZE_SIZE = 5;
   private static final int ALGORITHM_NAME_LENGTH_SIZE = 1;
 
@@ -244,36 +245,35 @@ public abstract class BaseCompression implements Compression {
     Utils.checkNotNullOrEmpty(compressedBuffer, "compressedBuffer cannot be null or empty.");
     Utils.checkNotNullOrEmpty(decompressedBuffer, "decompressedBuffer cannot be null or empty.");
 
+    // Check compressed buffer size - must be bigger than header size without algorithm name.
     if (compressedBuffer.remaining() < VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE) {
       throw new IllegalArgumentException("compressedBuffer size of " + compressedBuffer.remaining() + " bytes is too small.");
     }
 
-    // Save the position.  Use position instead of mark just in case decompressNative() uses mark().
+    // Check compressed buffer size - must be bigger than header size with algorithm name.
     int compressedBufferPosition = compressedBuffer.position();
+    int algorithmNameLength = compressedBuffer.get(compressedBufferPosition + VERSION_SIZE);
+    int headerSize = VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE + algorithmNameLength;
+    if (compressedBuffer.remaining() < headerSize) {
+      throw new IllegalArgumentException("compressedBuffer is too small and does not contain original data size.");
+    }
+
+    // Get the original size from the compressed buffer.  It also verifies compressed buffer parameters.
+    int originalSize = compressedBuffer.getInt(compressedBufferPosition + VERSION_SIZE + ALGORITHM_NAME_LENGTH_SIZE + algorithmNameLength);
+    int decompressedBufferSize = decompressedBuffer.capacity() - decompressedBuffer.position();
+    if (decompressedBufferSize < originalSize) {
+      throw new IllegalArgumentException(
+          "decompressedBuffer size " + decompressedBufferSize + " is too small to hold decompressed data size " + originalSize);
+    }
+
+    // Save the position.  Use position instead of mark just in case decompressNative() uses mark().
     int decompressedBufferPosition = decompressedBuffer.position();
     try {
-      // Get the algorithm name and advance compressedBuffer position to the source data size.
-      compressedBuffer.get();  // skip the version.
-      int algorithmNameLength = compressedBuffer.get();  // Get the data source size.
-      compressedBuffer.position(compressedBuffer.position() + algorithmNameLength);
-
-      if (compressedBuffer.remaining() < 4) {
-        throw new IllegalArgumentException("compressedBuffer is too small and does not contain original data size.");
-      }
-
-      // Get the original size from the compressed buffer.  It also verifies compressed buffer parameters.
-      int originalSize = compressedBuffer.getInt();
-      int decompressedBufferSize = decompressedBuffer.capacity() - decompressedBuffer.position();
-      if (decompressedBufferSize < originalSize) {
-        throw new IllegalArgumentException(
-            "decompressedBuffer size " + decompressedBufferSize + " is too small to hold decompressed data size " + originalSize);
-      }
-
       // Invoke native decompress method and advance the index positions.
       int compressedBufferLimit = compressedBuffer.limit();
       int newDecompressionBufferPosition = decompressedBuffer.position() + originalSize;
-      decompressNative(compressedBuffer, compressedBuffer.position(), compressedBuffer.remaining(), decompressedBuffer,
-          decompressedBuffer.position(), originalSize);
+      decompressNative(compressedBuffer, compressedBuffer.position() + headerSize,
+          compressedBuffer.remaining() - headerSize, decompressedBuffer, decompressedBuffer.position(), originalSize);
       compressedBuffer.position(compressedBufferLimit);
       decompressedBuffer.position(newDecompressionBufferPosition);
       return originalSize;
