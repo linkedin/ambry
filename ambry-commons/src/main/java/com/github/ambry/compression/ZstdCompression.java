@@ -14,8 +14,6 @@
 package com.github.ambry.compression;
 
 import com.github.luben.zstd.Zstd;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 
 
