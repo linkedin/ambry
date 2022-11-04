@@ -123,11 +123,6 @@ public class ZstdCompression extends BaseCompressionWithLevel {
           newSourceBuffer.array(), sourceBufferOffset, sourceDataSize, getCompressionLevel());
     }
 
-    // If sourceByteBuffer is a copy, free it.
-    if (newSourceBuffer != sourceBuffer && newSourceBuffer.isDirect()) {
-      Unpooled.wrappedBuffer(newSourceBuffer).release();
-    }
-
     // Check for error.
     if (Zstd.isError(compressedSize)) {
       throw new CompressionException(String.format("Zstd compression failed with error code: %d, name: %s. "
@@ -195,11 +190,6 @@ public class ZstdCompression extends BaseCompressionWithLevel {
     } else {
       decompressedSize = Zstd.decompressByteArray(decompressedBuffer.array(), decompressedBufferOffset,
           decompressedDataSize, newCompressedBuffer.array(), compressedBufferOffset, compressedDataSize);
-    }
-
-    // If sourceByteBuffer is a copy, free it.
-    if (newCompressedBuffer != compressedBuffer && newCompressedBuffer.isDirect()) {
-      Unpooled.wrappedBuffer(newCompressedBuffer).release();
     }
 
     // Check for error.
