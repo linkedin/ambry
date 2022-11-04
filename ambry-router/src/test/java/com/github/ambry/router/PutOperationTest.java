@@ -587,7 +587,7 @@ public class PutOperationTest {
     putChunk.buf = sourceByteBuf;
 
     // Invoke the PutChunk.compressChunk() method.
-    MethodUtils.invokeMethod(putChunk, true, "compressChunk");
+    MethodUtils.invokeMethod(putChunk, true, "compressChunk", false);
 
     // Verify the isCompressed is set.
     Assert.assertTrue((boolean) FieldUtils.readField(putChunk, "isChunkCompressed", true));

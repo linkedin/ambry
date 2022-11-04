@@ -898,7 +898,7 @@ class GetBlobOperation extends GetOperation {
       }
 
       try {
-        return decompressionService.decompress(sourceBuffer, routerConfig.routerMaxPutChunkSizeBytes);
+        return decompressionService.decompress(sourceBuffer, routerConfig.routerMaxPutChunkSizeBytes, true);
       } catch (Exception ex) {
         // Note: No need to emit metrics here because decompress() already emits failure metrics.
         logger.error("Failed to decompress chunk data for chunkBlobId " + chunkBlobId + " due to exception.", ex);

@@ -13,8 +13,8 @@
  */
 package com.github.ambry.compression;
 
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import org.junit.Assert;
 import org.junit.Test;
@@ -44,7 +44,7 @@ public class CompressionMapTest {
   }
 
   @Test
-  public void testGetAlgorithmName() throws CompressionException {
+  public void testGetAlgorithmName() {
     Compression lz4 = new LZ4Compression();
     Compression zstd = new ZstdCompression();
     CompressionMap map = CompressionMap.of(lz4, zstd);
@@ -70,25 +70,26 @@ public class CompressionMapTest {
 
     // Test: Compress the string using LZ4 and decompress using factory.
     String testMessage = "Ambry rocks.  Ambry again.  Ambry again.";
-    byte[] testMessageBinary = testMessage.getBytes(StandardCharsets.UTF_8);
-    Pair<Integer, byte[]> compressionResult = lz4.compress(testMessageBinary);
-    byte[] decompressedData = decompressUsingFactory(map, compressionResult);
-    Assert.assertEquals(testMessage, new String(decompressedData, StandardCharsets.UTF_8));
+    ByteBuffer testMessageBuffer = ByteBuffer.wrap(testMessage.getBytes(StandardCharsets.UTF_8));
+    ByteBuffer compressedBuffer = lz4.compress(testMessageBuffer, false);
+    byte[] decompressedBuffer = decompressUsingFactory(map, compressedBuffer);
+    Assert.assertEquals(testMessage, new String(decompressedBuffer, StandardCharsets.UTF_8));
 
     // Test: Compress the string using ZStd and decompress using factory.
-    compressionResult = zstd.compress(testMessageBinary);
-    decompressedData = decompressUsingFactory(map, compressionResult);
-    Assert.assertEquals(testMessage, new String(decompressedData, StandardCharsets.UTF_8));
+    testMessageBuffer.position(0);
+    compressedBuffer = zstd.compress(testMessageBuffer, false);
+    decompressedBuffer = decompressUsingFactory(map, compressedBuffer);
+    Assert.assertEquals(testMessage, new String(decompressedBuffer, StandardCharsets.UTF_8));
   }
 
-  private byte[] decompressUsingFactory(CompressionMap factory, Pair<Integer, byte[]> compressionResult)
+  private byte[] decompressUsingFactory(CompressionMap factory, ByteBuffer compressedBuffer)
       throws CompressionException {
-    int bufferSize = compressionResult.getFirst();
-    byte[] compressedBuffer = new byte[bufferSize];
-    System.arraycopy(compressionResult.getSecond(), 0, compressedBuffer, 0, compressedBuffer.length);
-
-    String algorithmName = factory.getAlgorithmName(compressedBuffer, 0, compressedBuffer.length);
+    String algorithmName = factory.getAlgorithmName(compressedBuffer);
     Compression decompressor = factory.getByName(algorithmName);
-    return decompressor.decompress(compressedBuffer);
+    ByteBuffer decompressedBuffer = decompressor.decompress(compressedBuffer, false);
+
+    byte[] sourceBinary = new byte[decompressedBuffer.remaining()];
+    decompressedBuffer.get(sourceBinary);
+    return sourceBinary;
   }
 }
