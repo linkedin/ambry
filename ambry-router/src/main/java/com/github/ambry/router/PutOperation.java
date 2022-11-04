@@ -1561,10 +1561,9 @@ class PutOperation {
      * @return the crated {@link PutRequest}.
      */
     protected PutRequest createPutRequest() {
-      return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(),
-          routerConfig.routerHostname, chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata),
-          buf.retainedDuplicate(), buf.readableBytes(), BlobType.DataBlob,
-          encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
+      return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
+          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
+          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
           routerConfig.routerPutRequestUseJavaNativeCrc32 ? Crc32Impl.getJavaNativeInstance()
               : Crc32Impl.getAmbryInstance(), isChunkCompressed);
     }

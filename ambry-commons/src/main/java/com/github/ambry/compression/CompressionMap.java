@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Objects;
 
+
 /**
  * CompressionMap is a compression algorithm registration keyed by the algorithm name to compression instance.
  * <p>
@@ -60,7 +61,7 @@ public class CompressionMap extends HashMap<String, Compression> {
    * @return Name of the compression algorithm.
    */
   public String getAlgorithmName(ByteBuf compressedBuffer) {
-    if(compressedBuffer == null || compressedBuffer.readableBytes() == 0) {
+    if (compressedBuffer == null || compressedBuffer.readableBytes() == 0) {
       throw new IllegalArgumentException("compressedBuffer cannot be null or empty.");
     }
 

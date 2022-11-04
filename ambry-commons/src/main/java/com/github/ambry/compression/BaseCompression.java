@@ -17,6 +17,7 @@ import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
+
 /**
  * The base compression algorithm implementation.
  * It contains common algorithm implementation methods.
@@ -42,6 +43,8 @@ public abstract class BaseCompression implements Compression {
   private static final int VERSION_SIZE = 1;
   private static final int VERSION_AND_ORIGINAL_SIZE_SIZE = 5;
   private static final int ALGORITHM_NAME_LENGTH_SIZE = 1;
+  private static final int VERSION_AND_NAME_LENGTH_AND_ORIGINAL_SIZE_SIZE =
+      VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE;
 
   /**
    * The binary representation of the algorithm name.
@@ -91,8 +94,9 @@ public abstract class BaseCompression implements Compression {
    * @param decompressedDataSize Size of the buffer to hold the decompressed data in decompressedBuffer.
    *                           It should be same as the original data size.
    */
-  protected abstract void decompressNative(ByteBuffer compressedBuffer, int compressedBufferOffset, int compressedDataSize,
-      ByteBuffer decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize) throws CompressionException;
+  protected abstract void decompressNative(ByteBuffer compressedBuffer, int compressedBufferOffset,
+      int compressedDataSize, ByteBuffer decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize)
+      throws CompressionException;
 
   /**
    * Get the algorithm name in binary format.
@@ -103,9 +107,11 @@ public abstract class BaseCompression implements Compression {
    * @return Binary presentation of algorithm name.  Its length cannot exceed MAX_ALGORITHM_NAME_LENGTH bytes.
    */
   private byte[] getAlgorithmNameBinary() {
-    if (algorithmNameBinary != null) return algorithmNameBinary;
+    if (algorithmNameBinary != null) {
+      return algorithmNameBinary;
+    }
 
-    synchronized(this) {
+    synchronized (this) {
       if (algorithmNameBinary == null) {
         String algorithmName = getAlgorithmName();
         if (algorithmName == null || algorithmName.length() == 0) {
@@ -115,8 +121,8 @@ public abstract class BaseCompression implements Compression {
         // Convert name to binary.
         byte[] binary = algorithmName.getBytes(StandardCharsets.UTF_8);
         if (binary.length > MAX_ALGORITHM_NAME_LENGTH) {
-          throw new IllegalArgumentException("algorithmName " + algorithmName + " exceeds the size of " +
-                  MAX_ALGORITHM_NAME_LENGTH + " bytes.");
+          throw new IllegalArgumentException(
+              "algorithmName " + algorithmName + " exceeds the size of " + MAX_ALGORITHM_NAME_LENGTH + " bytes.");
         }
         algorithmNameBinary = binary;
       }
@@ -134,8 +140,8 @@ public abstract class BaseCompression implements Compression {
    * @return The estimated buffer size required to hold the compressed data.
    */
   public int getCompressBufferSize(int sourceDataSize) {
-    return VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE + getAlgorithmNameBinary().length +
-        estimateMaxCompressedDataSize(sourceDataSize);
+    return VERSION_AND_NAME_LENGTH_AND_ORIGINAL_SIZE_SIZE + getAlgorithmNameBinary().length
+        + estimateMaxCompressedDataSize(sourceDataSize);
   }
 
   /**
@@ -146,8 +152,9 @@ public abstract class BaseCompression implements Compression {
    */
   public int getDecompressBufferSize(ByteBuffer compressedBuffer) throws CompressionException {
     Utils.checkNotNullOrEmpty(compressedBuffer, "compressedBuffer cannot be null or empty.");
-    if (compressedBuffer.remaining() < VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE) {
-      throw new IllegalArgumentException("compressedDataSize of " + compressedBuffer.remaining() + " bytes is too small.");
+    if (compressedBuffer.remaining() < VERSION_AND_NAME_LENGTH_AND_ORIGINAL_SIZE_SIZE) {
+      throw new IllegalArgumentException(
+          "compressedDataSize of " + compressedBuffer.remaining() + " bytes is too small.");
     }
 
     // Check version.  For now, only version 1 is supported.  Modify this code when more version added.
@@ -193,7 +200,7 @@ public abstract class BaseCompression implements Compression {
     Utils.checkNotNullOrEmpty(sourceBuffer, "sourceBuffer cannot be null or empty.");
     Utils.checkNotNullOrEmpty(compressedBuffer, "compressedBuffer cannot be null or empty.");
 
-    int overheadSize = VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE + getAlgorithmNameBinary().length;
+    int overheadSize = VERSION_AND_NAME_LENGTH_AND_ORIGINAL_SIZE_SIZE + getAlgorithmNameBinary().length;
     if (compressedBuffer.remaining() < overheadSize) {
       throw new IllegalArgumentException("compressedBuffer " + compressedBuffer.remaining() + " is too small.");
     }
@@ -246,24 +253,27 @@ public abstract class BaseCompression implements Compression {
     Utils.checkNotNullOrEmpty(decompressedBuffer, "decompressedBuffer cannot be null or empty.");
 
     // Check compressed buffer size - must be bigger than header size without algorithm name.
-    if (compressedBuffer.remaining() < VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE) {
-      throw new IllegalArgumentException("compressedBuffer size of " + compressedBuffer.remaining() + " bytes is too small.");
+    if (compressedBuffer.remaining() < VERSION_AND_NAME_LENGTH_AND_ORIGINAL_SIZE_SIZE) {
+      throw new IllegalArgumentException(
+          "compressedBuffer size of " + compressedBuffer.remaining() + " bytes is too small.");
     }
 
     // Check compressed buffer size - must be bigger than header size with algorithm name.
     int compressedBufferPosition = compressedBuffer.position();
     int algorithmNameLength = compressedBuffer.get(compressedBufferPosition + VERSION_SIZE);
-    int headerSize = VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE + algorithmNameLength;
+    int headerSize = VERSION_AND_NAME_LENGTH_AND_ORIGINAL_SIZE_SIZE + algorithmNameLength;
     if (compressedBuffer.remaining() < headerSize) {
       throw new IllegalArgumentException("compressedBuffer is too small and does not contain original data size.");
     }
 
     // Get the original size from the compressed buffer.  It also verifies compressed buffer parameters.
-    int originalSize = compressedBuffer.getInt(compressedBufferPosition + VERSION_SIZE + ALGORITHM_NAME_LENGTH_SIZE + algorithmNameLength);
+    int originalSize = compressedBuffer.getInt(
+        compressedBufferPosition + VERSION_SIZE + ALGORITHM_NAME_LENGTH_SIZE + algorithmNameLength);
     int decompressedBufferSize = decompressedBuffer.capacity() - decompressedBuffer.position();
     if (decompressedBufferSize < originalSize) {
       throw new IllegalArgumentException(
-          "decompressedBuffer size " + decompressedBufferSize + " is too small to hold decompressed data size " + originalSize);
+          "decompressedBuffer size " + decompressedBufferSize + " is too small to hold decompressed data size "
+              + originalSize);
     }
 
     // Save the position.  Use position instead of mark just in case decompressNative() uses mark().

@@ -18,6 +18,7 @@ import net.jpountz.lz4.LZ4Compressor;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
 
+
 /**
  * The LZ4 compression algorithm.  LZ4 has very fast decompression speed.
  * More info about LZ4  <a href="https://github.com/lz4/lz4">GitHub</a>.
@@ -53,7 +54,9 @@ public class LZ4Compression extends BaseCompressionWithLevel {
    * @return Name of this algorithm.
    */
   @Override
-  public String getAlgorithmName() { return ALGORITHM_NAME; }
+  public String getAlgorithmName() {
+    return ALGORITHM_NAME;
+  }
 
   /**
    * Some compression algorithms like ZStd are picky on the source and destination buffer types.
@@ -69,28 +72,36 @@ public class LZ4Compression extends BaseCompressionWithLevel {
    * @return The minimum compression level.
    */
   @Override
-  public int getMinimumCompressionLevel() { return 0; }
+  public int getMinimumCompressionLevel() {
+    return 0;
+  }
 
   /**
    * Get the maximum compression level.
    * @return The maximum compression level.
    */
   @Override
-  public int getMaximumCompressionLevel() { return 17; }
+  public int getMaximumCompressionLevel() {
+    return 17;
+  }
 
   /**
    * Get the default compression level if not set.  Level 0 is the fastest compressor with lower compression ratio.
    * @return The default compression level.
    */
   @Override
-  public int getDefaultCompressionLevel() { return 0; }
+  public int getDefaultCompressionLevel() {
+    return 0;
+  }
 
   /**
    * Get the compressor based on the compressor level.
    * @return The LZ4 compressor.
    */
   private LZ4Compressor getCompressor() {
-    if (getCompressionLevel() == 0) return LZ4_FACTORY.fastCompressor();
+    if (getCompressionLevel() == 0) {
+      return LZ4_FACTORY.fastCompressor();
+    }
     return LZ4_FACTORY.highCompressor(getCompressionLevel());
   }
 
@@ -132,14 +143,13 @@ public class LZ4Compression extends BaseCompressionWithLevel {
   protected int compressNative(ByteBuffer sourceData, int sourceDataOffset, int sourceDataSize,
       ByteBuffer compressedBuffer, int compressedBufferOffset, int compressedBufferSize) throws CompressionException {
     try {
-      return getCompressor().compress(sourceData, sourceDataOffset, sourceDataSize,
-          compressedBuffer, compressedBufferOffset, compressedBufferSize);
+      return getCompressor().compress(sourceData, sourceDataOffset, sourceDataSize, compressedBuffer,
+          compressedBufferOffset, compressedBufferSize);
     } catch (Exception ex) {
       throw new CompressionException(String.format("LZ4 compression failed. sourceData.limit=%d, sourceDataOffset=%d, "
-          + "sourceDataSize=%d, compressedBuffer.capacity=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
-          sourceData.limit(), sourceDataOffset, sourceDataSize,
-          compressedBuffer.capacity(), compressedBufferOffset, compressedBufferSize),
-          ex);
+              + "sourceDataSize=%d, compressedBuffer.capacity=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
+          sourceData.limit(), sourceDataOffset, sourceDataSize, compressedBuffer.capacity(), compressedBufferOffset,
+          compressedBufferSize), ex);
     }
   }
 
@@ -160,14 +170,14 @@ public class LZ4Compression extends BaseCompressionWithLevel {
       ByteBuffer sourceDataBuffer, int sourceDataOffset, int sourceDataSize) throws CompressionException {
     // This decompressor supports all compressors, LZ4 and LZ4 HC.
     try {
-      getDecompressor().decompress(compressedBuffer, compressedBufferOffset,
-          sourceDataBuffer, sourceDataOffset, sourceDataSize);
+      getDecompressor().decompress(compressedBuffer, compressedBufferOffset, sourceDataBuffer, sourceDataOffset,
+          sourceDataSize);
     } catch (Exception ex) {
       throw new CompressionException(String.format("LZ4 decompression failed. "
               + "compressedBuffer.limit=%d, compressedBufferOffset=%d, compressedBufferSize=%d, "
-              + "sourceData.capacity=%d, sourceDataOffset=%d, sourceDataSize=%d",
-          compressedBuffer.limit(), compressedBufferOffset, compressedBufferSize,
-          sourceDataBuffer.capacity(), sourceDataOffset, sourceDataSize), ex);
+              + "sourceData.capacity=%d, sourceDataOffset=%d, sourceDataSize=%d", compressedBuffer.limit(),
+          compressedBufferOffset, compressedBufferSize, sourceDataBuffer.capacity(), sourceDataOffset, sourceDataSize),
+          ex);
     }
   }
 }

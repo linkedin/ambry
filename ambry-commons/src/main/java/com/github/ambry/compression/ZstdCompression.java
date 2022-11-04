@@ -111,17 +111,21 @@ public class ZstdCompression extends BaseCompressionWithLevel {
 
     // Zstd requires both buffers type be the same (either both direct memory or both heap), no mixed.
     if (sourceBuffer.isDirect() != compressedBuffer.isDirect()) {
-      throw new IllegalArgumentException("Cannot compress due to mismatch sourceBuffer type and compressedBuffer buffer type.");
+      throw new IllegalArgumentException(
+          "Cannot compress due to mismatch sourceBuffer type and compressedBuffer buffer type.");
     }
 
     // Invoke compress byte array or direct buffer based on buffer type.
     long compressedSize;
     if (sourceBuffer.isDirect()) {
-      compressedSize = Zstd.compressDirectByteBuffer(compressedBuffer, compressedBufferOffset, compressedDataSize,
-          sourceBuffer, sourceBufferOffset, sourceDataSize, getCompressionLevel());
+      compressedSize =
+          Zstd.compressDirectByteBuffer(compressedBuffer, compressedBufferOffset, compressedDataSize, sourceBuffer,
+              sourceBufferOffset, sourceDataSize, getCompressionLevel());
     } else {
-      compressedSize = Zstd.compressByteArray(compressedBuffer.array(), compressedBuffer.arrayOffset() + compressedBufferOffset, compressedDataSize,
-          sourceBuffer.array(), sourceBuffer.arrayOffset() + sourceBufferOffset, sourceDataSize, getCompressionLevel());
+      compressedSize =
+          Zstd.compressByteArray(compressedBuffer.array(), compressedBuffer.arrayOffset() + compressedBufferOffset,
+              compressedDataSize, sourceBuffer.array(), sourceBuffer.arrayOffset() + sourceBufferOffset, sourceDataSize,
+              getCompressionLevel());
     }
 
     // Check for error.
@@ -129,8 +133,7 @@ public class ZstdCompression extends BaseCompressionWithLevel {
       throw new CompressionException(String.format("Zstd compression failed with error code: %d, name: %s. "
               + "sourceBuffer.limit=%d, sourceBufferOffset=%d, sourceDataSize=%d, "
               + "compressedBuffer.capacity=%d, compressedBufferOffset=%d, compressedDataSize=%d, compressionLevel=%d",
-          compressedSize, Zstd.getErrorName(compressedSize),
-          sourceBuffer.limit(), sourceBufferOffset, sourceDataSize,
+          compressedSize, Zstd.getErrorName(compressedSize), sourceBuffer.limit(), sourceBufferOffset, sourceDataSize,
           compressedBuffer.capacity(), compressedBufferOffset, compressedDataSize, getCompressionLevel()));
     }
 
@@ -151,31 +154,33 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    */
   @Override
   protected void decompressNative(ByteBuffer compressedBuffer, int compressedBufferOffset, int compressedDataSize,
-      ByteBuffer decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize) throws CompressionException {
+      ByteBuffer decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize)
+      throws CompressionException {
 
     // Zstd requires both buffers type be the same (either both direct memory or both heap), no mixed.
     if (compressedBuffer.isDirect() != decompressedBuffer.isDirect()) {
-      throw new IllegalArgumentException("Cannot decompress due to mismatch sourceBuffer type and compressedBuffer buffer type.");
+      throw new IllegalArgumentException(
+          "Cannot decompress due to mismatch sourceBuffer type and compressedBuffer buffer type.");
     }
 
     // Decompress the buffer either as both direct memory buffer or both heap buffers.
     long decompressedSize;
     if (compressedBuffer.isDirect()) {
-      decompressedSize = Zstd.decompressDirectByteBuffer(decompressedBuffer, decompressedBufferOffset,
-          decompressedDataSize, compressedBuffer, compressedBufferOffset, compressedDataSize);
+      decompressedSize =
+          Zstd.decompressDirectByteBuffer(decompressedBuffer, decompressedBufferOffset, decompressedDataSize,
+              compressedBuffer, compressedBufferOffset, compressedDataSize);
     } else {
-      decompressedSize = Zstd.decompressByteArray(
-          decompressedBuffer.array(), decompressedBuffer.arrayOffset() + decompressedBufferOffset, decompressedDataSize,
-          compressedBuffer.array(), compressedBuffer.arrayOffset() + compressedBufferOffset, compressedDataSize);
+      decompressedSize = Zstd.decompressByteArray(decompressedBuffer.array(),
+          decompressedBuffer.arrayOffset() + decompressedBufferOffset, decompressedDataSize, compressedBuffer.array(),
+          compressedBuffer.arrayOffset() + compressedBufferOffset, compressedDataSize);
     }
 
     // Check for error.
     if (Zstd.isError(decompressedSize)) {
       throw new CompressionException(String.format("Zstd decompression failed with error code: %d, name: %s. "
               + "compressedBuffer.limit=%d, compressedBufferOffset=%d, compressedDataSize=%d, "
-              + "decompressedBuffer.capacity=%d, decompressedBufferOffset=%d, decompressedDataSize=%d",
-          decompressedSize, Zstd.getErrorName(decompressedSize),
-          compressedBuffer.limit(), compressedBufferOffset, compressedDataSize,
+              + "decompressedBuffer.capacity=%d, decompressedBufferOffset=%d, decompressedDataSize=%d", decompressedSize,
+          Zstd.getErrorName(decompressedSize), compressedBuffer.limit(), compressedBufferOffset, compressedDataSize,
           decompressedBuffer.capacity(), decompressedBufferOffset, decompressedDataSize));
     }
   }

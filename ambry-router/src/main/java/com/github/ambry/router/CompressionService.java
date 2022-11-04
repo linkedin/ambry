@@ -265,7 +265,7 @@ public class CompressionService {
 
       // Compressed buffer allocated, run compression.
       long startTime = System.nanoTime();
-      ByteBuffer compressedByteBuffer = compressedBuffer.nioBuffer(compressedBuffer.writerIndex(), compressedBufferSize);
+      ByteBuffer compressedByteBuffer = compressedBuffer.nioBuffer(compressedBuffer.readerIndex(), compressedBufferSize);
       actualCompressedBufferSize = defaultCompressor.compress(sourceBuffer, compressedByteBuffer);
       compressedBuffer.writerIndex(compressedBuffer.writerIndex() + actualCompressedBufferSize);
       long durationMicroseconds = (System.nanoTime() - startTime)/1000;
@@ -292,8 +292,7 @@ public class CompressionService {
         compressedBuffer.release();
       }
       return null;
-    }
-    finally {
+    } finally {
       newChunkBuffer.release();
     }
 
@@ -365,7 +364,7 @@ public class CompressionService {
           byteBufAllocator.heapBuffer(decompressedBufferSize);
 
       // Buffer allocated, run decompression.
-      ByteBuffer decompressedByteBuffer = decompressedBuffer.nioBuffer(decompressedBuffer.writerIndex(), decompressedBufferSize);
+      ByteBuffer decompressedByteBuffer = decompressedBuffer.nioBuffer(decompressedBuffer.readerIndex(), decompressedBufferSize);
       long startTime = System.nanoTime();
       decompressor.decompress(compressedByteBuffer, decompressedByteBuffer);
       decompressedBuffer.writerIndex(decompressedBuffer.writerIndex() + decompressedBufferSize);
@@ -433,7 +432,7 @@ public class CompressionService {
     // Copy the buffer out without changing index.
     ByteBuf newBuffer = outputDirectBuffer ? byteBufAllocator.directBuffer(byteBuf.readableBytes()):
         byteBufAllocator.heapBuffer(byteBuf.readableBytes());
-    byteBuf.getBytes(newBuffer.writerIndex(), newBuffer);
+    byteBuf.getBytes(newBuffer.readerIndex(), newBuffer);
     return newBuffer;
   }
 }
