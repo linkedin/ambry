@@ -126,12 +126,14 @@ public class BaseCompressionTest {
     ByteBuffer testSourceData = ByteBuffer.wrap(new byte[] { 100, 101, 102 });
     ByteBuffer compressedBuffer = ByteBuffer.allocate(compressor.getCompressBufferSize(testSourceData.remaining()));
     compressor.compress(testSourceData, compressedBuffer);
+
     // Make sure the format is
     // - 1 byte version.
     // - 1 byte name size
     // - N bytes for name (4 bytes in this case)
     // - 4 bytes original size (testSourceData size)
     // - X bytes of compressed data (3 bytes in this case).
+    compressedBuffer.flip();
     Assert.assertEquals(13, compressedBuffer.remaining());
     Assert.assertEquals(110, compressedBuffer.capacity());  //100 + 6 bytes overhead + 4 bytes name.
     Assert.assertEquals(1, compressedBuffer.get(0));
@@ -196,9 +198,9 @@ public class BaseCompressionTest {
     }).when(decompressor).decompressNative(Mockito.any(ByteBuffer.class), Mockito.anyInt(), Mockito.anyInt(),
         Mockito.any(ByteBuffer.class), Mockito.anyInt(), Mockito.anyInt());
 
-
     ByteBuffer originalData = ByteBuffer.allocate(3);
     decompressor.decompress(testCompressedBuffer, originalData);
+    originalData.flip();
     Assert.assertEquals(3, originalData.remaining());
     Assert.assertEquals(100, originalData.get(0));
     Assert.assertEquals(101, originalData.get(1));

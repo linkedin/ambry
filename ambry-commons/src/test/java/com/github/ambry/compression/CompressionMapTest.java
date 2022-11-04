@@ -74,6 +74,7 @@ public class CompressionMapTest {
     ByteBuffer testMessageBuffer = ByteBuffer.wrap(testMessage.getBytes(StandardCharsets.UTF_8));
     ByteBuffer compressedBuffer = ByteBuffer.allocate(lz4.getCompressBufferSize(testMessageBuffer.remaining()));
     lz4.compress(testMessageBuffer, compressedBuffer);
+    compressedBuffer.flip();
     byte[] decompressedBuffer = decompressUsingFactory(map, compressedBuffer);
     Assert.assertEquals(testMessage, new String(decompressedBuffer, StandardCharsets.UTF_8));
 
@@ -81,6 +82,7 @@ public class CompressionMapTest {
     testMessageBuffer.position(0);
     compressedBuffer = ByteBuffer.allocate(zstd.getCompressBufferSize(testMessageBuffer.remaining()));
     zstd.compress(testMessageBuffer, compressedBuffer);
+    compressedBuffer.flip();
     decompressedBuffer = decompressUsingFactory(map, compressedBuffer);
     Assert.assertEquals(testMessage, new String(decompressedBuffer, StandardCharsets.UTF_8));
   }
@@ -91,6 +93,7 @@ public class CompressionMapTest {
     Compression decompressor = factory.getByName(algorithmName);
     ByteBuffer decompressedBuffer = ByteBuffer.allocate(decompressor.getDecompressBufferSize(compressedBuffer));
     decompressor.decompress(compressedBuffer, decompressedBuffer);
+    decompressedBuffer.flip();
 
     byte[] sourceBinary = new byte[decompressedBuffer.remaining()];
     decompressedBuffer.get(sourceBinary);

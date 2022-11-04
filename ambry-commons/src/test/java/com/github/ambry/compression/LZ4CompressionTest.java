@@ -147,6 +147,7 @@ public class LZ4CompressionTest {
     // + bytes[compressUnusedSpace] + bytes[bufferRightPadSize]
     ByteBuffer sourceBuffer = ByteBuffer.wrap(testMessage.getBytes(StandardCharsets.UTF_8));
     int sourceBufferSize = sourceBuffer.remaining();
+
     int compressedBufferSize = compression.estimateMaxCompressedDataSize(sourceBufferSize);
     ByteBuffer compressedBuffer = ByteBuffer.wrap(new byte[bufferLeftPadSize + compressedBufferSize + bufferRightPadSize]);
     int actualCompressedSize = compression.compressNative(sourceBuffer, 0, sourceBufferSize,
@@ -180,7 +181,8 @@ public class LZ4CompressionTest {
     // Apply compression to testMessage using Heap and Direct memory.
     // compressedBuffer consists of bytes[bufferLeftPadSize] + bytes[actualCompressedSize] + bytes[bufferRightPadSize]
     ByteBuffer sourceBufferHeap = ByteBuffer.wrap(testMessageBinary);
-    ByteBuffer sourceBufferDirect = ByteBuffer.wrap(testMessageBinary);
+    ByteBuffer sourceBufferDirect = ByteBuffer.allocateDirect(testMessageBinary.length);
+    sourceBufferDirect.put(testMessageBinary);
     ByteBuffer compressedBufferHeap = ByteBuffer.allocate(paddedCompressedBufferSize);
     ByteBuffer compressedBufferDirect = ByteBuffer.allocateDirect(paddedCompressedBufferSize);
 
@@ -193,25 +195,28 @@ public class LZ4CompressionTest {
     Assert.assertEquals(testMessageSize, sourceBufferHeap.position());
     Assert.assertEquals(actualCompressedSize, compressedBufferHeap.position() - bufferLeftPadSize);
 
-    // Compress Heap source to Direct output.
-    sourceBufferHeap.position(0);
-    compressedBufferDirect.position(bufferLeftPadSize);
-    int nextActualCompressedSize = compression.compress(sourceBufferHeap, compressedBufferDirect);
-    Assert.assertEquals(actualCompressedSize, nextActualCompressedSize);
-    Assert.assertTrue(nextActualCompressedSize > 0);
-    Assert.assertEquals(0, sourceBufferHeap.remaining());
-    Assert.assertEquals(testMessageSize, sourceBufferHeap.position());
-    Assert.assertEquals(nextActualCompressedSize, compressedBufferDirect.position() - bufferLeftPadSize);
+    int nextActualCompressedSize;
+    if (!compression.requireMatchingBufferType()) {
+      // Compress Heap source to Direct output.
+      sourceBufferHeap.position(0);
+      compressedBufferDirect.position(bufferLeftPadSize);
+      nextActualCompressedSize = compression.compress(sourceBufferHeap, compressedBufferDirect);
+      Assert.assertEquals(actualCompressedSize, nextActualCompressedSize);
+      Assert.assertTrue(nextActualCompressedSize > 0);
+      Assert.assertEquals(0, sourceBufferHeap.remaining());
+      Assert.assertEquals(testMessageSize, sourceBufferHeap.position());
+      Assert.assertEquals(nextActualCompressedSize, compressedBufferDirect.position() - bufferLeftPadSize);
 
-    // Compress Direct source to Heap output.
-    sourceBufferDirect.position(0);
-    compressedBufferHeap.position(bufferLeftPadSize);
-    nextActualCompressedSize = compression.compress(sourceBufferDirect, compressedBufferHeap);
-    Assert.assertEquals(actualCompressedSize, nextActualCompressedSize);
-    Assert.assertTrue(nextActualCompressedSize > 0);
-    Assert.assertEquals(0, sourceBufferDirect.remaining());
-    Assert.assertEquals(testMessageSize, sourceBufferDirect.position());
-    Assert.assertEquals(actualCompressedSize, compressedBufferHeap.position() - bufferLeftPadSize);
+      // Compress Direct source to Heap output.
+      sourceBufferDirect.position(0);
+      compressedBufferHeap.position(bufferLeftPadSize);
+      nextActualCompressedSize = compression.compress(sourceBufferDirect, compressedBufferHeap);
+      Assert.assertEquals(actualCompressedSize, nextActualCompressedSize);
+      Assert.assertTrue(nextActualCompressedSize > 0);
+      Assert.assertEquals(0, sourceBufferDirect.remaining());
+      Assert.assertEquals(testMessageSize, sourceBufferDirect.position());
+      Assert.assertEquals(actualCompressedSize, compressedBufferHeap.position() - bufferLeftPadSize);
+    }
 
     // Compress Direct source to Direct output.
     sourceBufferDirect.position(0);
@@ -242,24 +247,26 @@ public class LZ4CompressionTest {
     Assert.assertEquals(0, compressedBufferHeap.remaining());
     Assert.assertEquals(testMessage, new String(decompressedBufferHeap.array(), bufferLeftPadSize, testMessageSize, StandardCharsets.UTF_8));
 
-    // Decompress Heap to Direct.
-    compressedBufferHeap.position(bufferLeftPadSize);
-    decompressedBufferDirect.position(bufferLeftPadSize);
-    decompressedSize = compression.decompress(compressedBufferHeap, decompressedBufferDirect);
-    Assert.assertEquals(testMessageSize, decompressedSize);
-    Assert.assertEquals(testMessageSize, decompressedBufferDirect.position() - bufferLeftPadSize);
-    Assert.assertEquals(0, compressedBufferHeap.remaining());
-    decompressedBufferDirect.position(bufferLeftPadSize).get(decompressedMessage);
-    Assert.assertEquals(testMessage, new String(decompressedMessage, StandardCharsets.UTF_8));
+    if (!compression.requireMatchingBufferType()) {
+      // Decompress Heap to Direct.
+      compressedBufferHeap.position(bufferLeftPadSize);
+      decompressedBufferDirect.position(bufferLeftPadSize);
+      decompressedSize = compression.decompress(compressedBufferHeap, decompressedBufferDirect);
+      Assert.assertEquals(testMessageSize, decompressedSize);
+      Assert.assertEquals(testMessageSize, decompressedBufferDirect.position() - bufferLeftPadSize);
+      Assert.assertEquals(0, compressedBufferHeap.remaining());
+      decompressedBufferDirect.position(bufferLeftPadSize).get(decompressedMessage);
+      Assert.assertEquals(testMessage, new String(decompressedMessage, StandardCharsets.UTF_8));
 
-    // Decompress Direct to Heap.
-    compressedBufferDirect.position(bufferLeftPadSize);
-    decompressedBufferHeap.position(bufferLeftPadSize);
-    decompressedSize = compression.decompress(compressedBufferDirect, decompressedBufferHeap);
-    Assert.assertEquals(testMessageSize, decompressedSize);
-    Assert.assertEquals(testMessageSize, decompressedBufferHeap.position() - bufferLeftPadSize);
-    Assert.assertEquals(0, compressedBufferDirect.remaining());
-    Assert.assertEquals(testMessage, new String(decompressedBufferHeap.array(), bufferLeftPadSize, testMessageSize, StandardCharsets.UTF_8));
+      // Decompress Direct to Heap.
+      compressedBufferDirect.position(bufferLeftPadSize);
+      decompressedBufferHeap.position(bufferLeftPadSize);
+      decompressedSize = compression.decompress(compressedBufferDirect, decompressedBufferHeap);
+      Assert.assertEquals(testMessageSize, decompressedSize);
+      Assert.assertEquals(testMessageSize, decompressedBufferHeap.position() - bufferLeftPadSize);
+      Assert.assertEquals(0, compressedBufferDirect.remaining());
+      Assert.assertEquals(testMessage, new String(decompressedBufferHeap.array(), bufferLeftPadSize, testMessageSize, StandardCharsets.UTF_8));
+    }
 
     // Decompress Direct to Direct.
     compressedBufferDirect.position(bufferLeftPadSize);

@@ -244,6 +244,10 @@ public abstract class BaseCompression implements Compression {
     Utils.checkNotNullOrEmpty(compressedBuffer, "compressedBuffer cannot be null or empty.");
     Utils.checkNotNullOrEmpty(decompressedBuffer, "decompressedBuffer cannot be null or empty.");
 
+    if (compressedBuffer.remaining() < VERSION_AND_ORIGINAL_SIZE_SIZE + ALGORITHM_NAME_LENGTH_SIZE) {
+      throw new IllegalArgumentException("compressedBuffer size of " + compressedBuffer.remaining() + " bytes is too small.");
+    }
+
     // Save the position.  Use position instead of mark just in case decompressNative() uses mark().
     int compressedBufferPosition = compressedBuffer.position();
     int decompressedBufferPosition = decompressedBuffer.position();
@@ -252,6 +256,10 @@ public abstract class BaseCompression implements Compression {
       compressedBuffer.get();  // skip the version.
       int algorithmNameLength = compressedBuffer.get();  // Get the data source size.
       compressedBuffer.position(compressedBuffer.position() + algorithmNameLength);
+
+      if (compressedBuffer.remaining() < 4) {
+        throw new IllegalArgumentException("compressedBuffer is too small and does not contain original data size.");
+      }
 
       // Get the original size from the compressed buffer.  It also verifies compressed buffer parameters.
       int originalSize = compressedBuffer.getInt();
