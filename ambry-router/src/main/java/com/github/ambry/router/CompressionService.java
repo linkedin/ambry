@@ -432,7 +432,7 @@ public class CompressionService {
     // Copy the buffer out without changing index.
     ByteBuf newBuffer = outputDirectBuffer ? byteBufAllocator.directBuffer(byteBuf.readableBytes()):
         byteBufAllocator.heapBuffer(byteBuf.readableBytes());
-    byteBuf.getBytes(newBuffer.readerIndex(), newBuffer);
+    byteBuf.getBytes(byteBuf.readerIndex(), newBuffer);
     return newBuffer;
   }
 }
