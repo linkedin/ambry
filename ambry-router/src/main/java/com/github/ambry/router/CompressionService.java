@@ -230,16 +230,16 @@ public class CompressionService {
    * the compressed data is accepted and return compressed data; otherwise, compression is discarded.
    * This method emits metrics along the process.  It returns null if failed instead of throwing exceptions.
    *
-   * @param chunkBuffer The PutChunk buffer to compress.  The chunkBuffer index will not be updated.
+   * @param chunkByteBuf The PutChunk buffer to compress.  The chunkBuffer index will not be updated.
    * @param isFullChunk Whether this is a full size chunk (4MB) or smaller.
    * @param outputDirectBuffer Whether to output in direct buffer (True) or heap buffer (False).
    * @return Returns a new compressed buffer.  It returns null is no compression is applied.
    */
-  public ByteBuf compressChunk(ByteBuf chunkBuffer, boolean isFullChunk, boolean outputDirectBuffer) {
-    Objects.requireNonNull(chunkBuffer, "blobProperties cannot be null.");
+  public ByteBuf compressChunk(ByteBuf chunkByteBuf, boolean isFullChunk, boolean outputDirectBuffer) {
+    Objects.requireNonNull(chunkByteBuf, "chunkByteBuf cannot be null.");
 
     // Check the blob size.  If it's too small, do not compress.
-    int sourceDataSize = chunkBuffer.readableBytes();
+    int sourceDataSize = chunkByteBuf.readableBytes();
     if (sourceDataSize < minimalSourceDataSizeInBytes) {
       logger.trace("No compression applied because source data size " + sourceDataSize + " is smaller than minimal size "
           + minimalSourceDataSizeInBytes);
@@ -251,23 +251,24 @@ public class CompressionService {
 
     // Apply compression.
     CompressionMetrics.AlgorithmMetrics algorithmMetrics = compressionMetrics.getAlgorithmMetrics(defaultCompressor.getAlgorithmName());
-    ByteBuf newChunkBuffer = combineBuffer(chunkBuffer, outputDirectBuffer, defaultCompressor.requireMatchingBufferType());
-    ByteBuf compressedBuffer = null;
-    int actualCompressedBufferSize;
+    ByteBuf newChunkByteBuf = combineBuffer(chunkByteBuf, outputDirectBuffer, defaultCompressor.requireMatchingBufferType());
+    ByteBuf compressedByteBuf = null;
+    int actualCompressedByteBufferSize;
     try {
       algorithmMetrics.compressRate.mark();
 
       // Allocate compression buffer.
-      ByteBuffer sourceBuffer = newChunkBuffer.nioBuffer();
-      int compressedBufferSize = defaultCompressor.getCompressBufferSize(sourceBuffer.remaining());
-      compressedBuffer = outputDirectBuffer ? byteBufAllocator.directBuffer(compressedBufferSize) :
-          byteBufAllocator.heapBuffer(compressedBufferSize);
+      ByteBuffer sourceByteBuffer = newChunkByteBuf.nioBuffer();
+      int compressedByteBufSize = defaultCompressor.getCompressBufferSize(sourceByteBuffer.remaining());
+      compressedByteBuf = outputDirectBuffer ? byteBufAllocator.directBuffer(compressedByteBufSize) :
+          byteBufAllocator.heapBuffer(compressedByteBufSize);
 
       // Compressed buffer allocated, run compression.
       long startTime = System.nanoTime();
-      ByteBuffer compressedByteBuffer = compressedBuffer.nioBuffer(compressedBuffer.readerIndex(), compressedBufferSize);
-      actualCompressedBufferSize = defaultCompressor.compress(sourceBuffer, compressedByteBuffer);
-      compressedBuffer.writerIndex(compressedBuffer.writerIndex() + actualCompressedBufferSize);
+      ByteBuffer compressedByteBuffer = compressedByteBuf.nioBuffer(compressedByteBuf.readerIndex(),
+          compressedByteBufSize);
+      actualCompressedByteBufferSize = defaultCompressor.compress(sourceByteBuffer, compressedByteBuffer);
+      compressedByteBuf.writerIndex(compressedByteBuf.writerIndex() + actualCompressedByteBufferSize);
       long durationMicroseconds = (System.nanoTime() - startTime)/1000;
 
       // Compress succeeded, emit metrics. MB/sec = (#bytes/#microseconds) x BytesPerMicroSecondsToMBToSec
@@ -279,59 +280,59 @@ public class CompressionService {
         algorithmMetrics.smallSizeCompressTimeInMicroseconds.update(durationMicroseconds);
         algorithmMetrics.smallSizeCompressSpeedMBPerSec.update(speedInMBPerSec);
       }
-      algorithmMetrics.compressRatioPercent.update((long) (100.0 * sourceDataSize / compressedBufferSize));
+      algorithmMetrics.compressRatioPercent.update((long) (100.0 * sourceDataSize / compressedByteBufSize));
     } catch (Exception ex) {
       logger.error(String.format("Compress failed.  sourceBuffer.capacity = %d, offset = %d, size = %d.",
-          newChunkBuffer.capacity(), newChunkBuffer.readerIndex(), sourceDataSize), ex);
+          newChunkByteBuf.capacity(), newChunkByteBuf.readerIndex(), sourceDataSize), ex);
 
       // Emit metrics to count how many compressions skipped due to compression internal failure.
       algorithmMetrics.compressError.inc();
       compressionMetrics.compressErrorRate.mark();
       compressionMetrics.compressErrorCompressFailed.inc();
-      if (compressedBuffer != null) {
-        compressedBuffer.release();
+      if (compressedByteBuf != null) {
+        compressedByteBuf.release();
       }
       return null;
     } finally {
-      newChunkBuffer.release();
+      newChunkByteBuf.release();
     }
 
     // Check whether the compression ratio is greater than threshold.
-    double compressionRatio = sourceDataSize / (double) actualCompressedBufferSize;
+    double compressionRatio = sourceDataSize / (double) actualCompressedByteBufferSize;
     if (compressionRatio < minimalCompressRatio) {
       logger.trace("Compression discarded because compression ratio " + compressionRatio
           + " is smaller than config's minimal ratio " + minimalCompressRatio
-          + ".  Source content size is " + sourceDataSize + " and compressed data size is " + actualCompressedBufferSize);
+          + ".  Source content size is " + sourceDataSize + " and compressed data size is " + actualCompressedByteBufferSize);
 
       // Emit metrics to count how many compressions skipped due to compression ratio too small.
       compressionMetrics.compressSkipRate.mark();
       compressionMetrics.compressSkipRatioTooSmall.inc();
-      compressedBuffer.release();
+      compressedByteBuf.release();
       return null;
     }
 
     // Compression is accepted, emit metrics.
     compressionMetrics.compressAcceptRate.mark();
-    compressionMetrics.compressReduceSizeBytes.inc(sourceDataSize - actualCompressedBufferSize);
-    return compressedBuffer;
+    compressionMetrics.compressReduceSizeBytes.inc(sourceDataSize - actualCompressedByteBufferSize);
+    return compressedByteBuf;
   }
 
   /**
    * Decompress the specified compressed buffer.  compressedBuffer index will not be updated.
    *
-   * @param compressedBuffer The compressed buffer.
+   * @param compressedByteBuf The compressed buffer.
    * @param fullChunkSize The size of a full chunk.  It is used to select metrics to emit.
    * @param outputDirectBuffer Whether to output in direct buffer (True) or heap buffer (False).
    * @return The decompressor used and the decompressed buffer.
    * @throws CompressionException This exception is thrown when internal compression error or cannot find decompressor.
    */
-  public ByteBuf decompress(ByteBuf compressedBuffer, int fullChunkSize, boolean outputDirectBuffer) throws CompressionException {
-    Objects.requireNonNull(compressedBuffer, "compressedBuffer");
+  public ByteBuf decompress(ByteBuf compressedByteBuf, int fullChunkSize, boolean outputDirectBuffer) throws CompressionException {
+    Objects.requireNonNull(compressedByteBuf, "compressedByteBuf");
 
     // Get name of compression algorithm.
     String algorithmName;
     try {
-      algorithmName = allCompressions.getAlgorithmName(compressedBuffer);
+      algorithmName = allCompressions.getAlgorithmName(compressedByteBuf);
     } catch (Exception ex) {
       logger.error("Cannot decompress buffer.  Unable to convert get compression algorithm name in buffer.", ex);
       compressionMetrics.decompressErrorRate.mark();
@@ -353,27 +354,28 @@ public class CompressionService {
     CompressionMetrics.AlgorithmMetrics algorithmMetrics = compressionMetrics.getAlgorithmMetrics(algorithmName);
       algorithmMetrics.decompressRate.mark();
 
-    ByteBuf decompressedBuffer = null;
-    int decompressedBufferSize;
-    ByteBuf newCompressedBuffer = combineBuffer(compressedBuffer, outputDirectBuffer, decompressor.requireMatchingBufferType());
+    ByteBuf decompressedByteBuf = null;
+    int decompressedByteBufSize;
+    ByteBuf newCompressedByteBuf = combineBuffer(compressedByteBuf, outputDirectBuffer, decompressor.requireMatchingBufferType());
     try {
       // Allocate decompression buffer.
-      ByteBuffer compressedByteBuffer = newCompressedBuffer.nioBuffer();
-      decompressedBufferSize = decompressor.getDecompressBufferSize(compressedByteBuffer);
-      decompressedBuffer = outputDirectBuffer ? byteBufAllocator.directBuffer(decompressedBufferSize) :
-          byteBufAllocator.heapBuffer(decompressedBufferSize);
+      ByteBuffer compressedByteBuffer = newCompressedByteBuf.nioBuffer();
+      decompressedByteBufSize = decompressor.getDecompressBufferSize(compressedByteBuffer);
+      decompressedByteBuf = outputDirectBuffer ? byteBufAllocator.directBuffer(decompressedByteBufSize) :
+          byteBufAllocator.heapBuffer(decompressedByteBufSize);
 
       // Buffer allocated, run decompression.
-      ByteBuffer decompressedByteBuffer = decompressedBuffer.nioBuffer(decompressedBuffer.readerIndex(), decompressedBufferSize);
+      ByteBuffer decompressedByteBuffer = decompressedByteBuf.nioBuffer(decompressedByteBuf.readerIndex(),
+          decompressedByteBufSize);
       long startTime = System.nanoTime();
       decompressor.decompress(compressedByteBuffer, decompressedByteBuffer);
-      decompressedBuffer.writerIndex(decompressedBuffer.writerIndex() + decompressedBufferSize);
+      decompressedByteBuf.writerIndex(decompressedByteBuf.writerIndex() + decompressedByteBufSize);
       long durationMicroseconds = (System.nanoTime() - startTime) / 1000;
 
       // Emit metrics related to this decompression.
       long speedInMBPerSec = durationMicroseconds == 0 ? 0
-          : (long) (BytePerMicrosecondToMBPerSec * decompressedBufferSize / (double) durationMicroseconds);
-      if (decompressedBufferSize == fullChunkSize) {
+          : (long) (BytePerMicrosecondToMBPerSec * decompressedByteBufSize / (double) durationMicroseconds);
+      if (decompressedByteBufSize == fullChunkSize) {
         algorithmMetrics.fullSizeDecompressTimeInMicroseconds.update(durationMicroseconds);
         algorithmMetrics.fullSizeDecompressSpeedMBPerSec.update(speedInMBPerSec);
       } else {
@@ -382,7 +384,7 @@ public class CompressionService {
       }
     } catch (Exception ex) {
       logger.error("Decompression failed.  Algorithm name " + algorithmName + ", compressed size = " +
-          compressedBuffer.readableBytes(), ex);
+          compressedByteBuf.readableBytes(), ex);
       compressionMetrics.decompressErrorRate.mark();
       compressionMetrics.decompressErrorDecompressFailed.inc();
       algorithmMetrics.decompressError.inc();
@@ -392,20 +394,20 @@ public class CompressionService {
       if (!(ex instanceof CompressionException)) {
         rethrowException = new CompressionException(
             "Decompress failed with an exception.  Algorithm name " + algorithmName + ", compressed size = "
-                + compressedBuffer.readableBytes(), ex);
+                + compressedByteBuf.readableBytes(), ex);
       }
-      if (decompressedBuffer != null) {
-        decompressedBuffer.release();
+      if (decompressedByteBuf != null) {
+        decompressedByteBuf.release();
       }
       throw (CompressionException) rethrowException;
     } finally {
-      newCompressedBuffer.release();
+      newCompressedByteBuf.release();
     }
 
     // Decompress succeeded, emit metrics.
     compressionMetrics.decompressSuccessRate.mark();
-    compressionMetrics.decompressExpandSizeBytes.inc(decompressedBufferSize - compressedBuffer.readableBytes());
-    return decompressedBuffer;
+    compressionMetrics.decompressExpandSizeBytes.inc(decompressedByteBufSize - compressedByteBuf.readableBytes());
+    return decompressedByteBuf;
   }
 
   /**
