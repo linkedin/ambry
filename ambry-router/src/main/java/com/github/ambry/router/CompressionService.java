@@ -252,7 +252,7 @@ public class CompressionService {
     // Apply compression.
     CompressionMetrics.AlgorithmMetrics algorithmMetrics = compressionMetrics.getAlgorithmMetrics(defaultCompressor.getAlgorithmName());
     ByteBuf newChunkBuffer = combineBuffer(chunkBuffer, outputDirectBuffer, defaultCompressor.requireMatchingBufferType());
-    ByteBuf compressedBuffer;
+    ByteBuf compressedBuffer = null;
     int actualCompressedBufferSize;
     try {
       algorithmMetrics.compressRate.mark();
@@ -288,6 +288,9 @@ public class CompressionService {
       algorithmMetrics.compressError.inc();
       compressionMetrics.compressErrorRate.mark();
       compressionMetrics.compressErrorCompressFailed.inc();
+      if (compressedBuffer != null) {
+        compressedBuffer.release();
+      }
       return null;
     }
     finally {
@@ -304,6 +307,7 @@ public class CompressionService {
       // Emit metrics to count how many compressions skipped due to compression ratio too small.
       compressionMetrics.compressSkipRate.mark();
       compressionMetrics.compressSkipRatioTooSmall.inc();
+      compressedBuffer.release();
       return null;
     }
 
@@ -346,11 +350,11 @@ public class CompressionService {
       throw new CompressionException("Decompression failed due to unknown algorithm name " + algorithmName);
     }
 
-    // Apply decompression, then wrap result in ByteBuf.
+    // Apply decompression.
     CompressionMetrics.AlgorithmMetrics algorithmMetrics = compressionMetrics.getAlgorithmMetrics(algorithmName);
       algorithmMetrics.decompressRate.mark();
 
-    ByteBuf decompressedBuffer;
+    ByteBuf decompressedBuffer = null;
     int decompressedBufferSize;
     ByteBuf newCompressedBuffer = combineBuffer(compressedBuffer, outputDirectBuffer, decompressor.requireMatchingBufferType());
     try {
@@ -390,6 +394,9 @@ public class CompressionService {
         rethrowException = new CompressionException(
             "Decompress failed with an exception.  Algorithm name " + algorithmName + ", compressed size = "
                 + compressedBuffer.readableBytes(), ex);
+      }
+      if (decompressedBuffer != null) {
+        decompressedBuffer.release();
       }
       throw (CompressionException) rethrowException;
     } finally {
