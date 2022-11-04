@@ -22,6 +22,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.util.Properties;
@@ -114,7 +115,7 @@ public class CompressionServiceTest {
 
     // Test: Compression skipped because compression ratio is too low.
     LZ4Compression mockCompression = Mockito.mock(LZ4Compression.class);
-    Mockito.when(mockCompression.compress(Mockito.any(ByteBuffer.class), Mockito.anyBoolean())).thenReturn(ByteBuffer.wrap(sourceBuffer));
+    Mockito.when(mockCompression.compress(Mockito.any(ByteBuffer.class), Mockito.any(ByteBuffer.class))).thenReturn(10);
     compressionService.allCompressions.put(LZ4Compression.ALGORITHM_NAME, mockCompression);
     ByteBuf compressedBuffer = compressionService.compressChunk(sourceByteBuf, true, false);
     Assert.assertNull(compressedBuffer);
@@ -139,6 +140,7 @@ public class CompressionServiceTest {
     ByteBuf compressedBuffer = service.compressChunk(sourceByteBuf, false, false);
     Assert.assertNotEquals(sourceByteBuf.readableBytes(), compressedBuffer.readableBytes());
     Assert.assertEquals(1, metrics.compressAcceptRate.getCount());
+    compressedBuffer.release();
 
     CompressionMetrics.AlgorithmMetrics algorithmMetrics = metrics.getAlgorithmMetrics(ZstdCompression.ALGORITHM_NAME);
     Assert.assertTrue(algorithmMetrics.compressRatioPercent.getCount() > 0);
@@ -152,12 +154,15 @@ public class CompressionServiceTest {
     compressedBuffer = service.compressChunk(sourceByteBuf, true, false);
     Assert.assertNotEquals(sourceByteBuf.readableBytes(), compressedBuffer.readableBytes());
     Assert.assertEquals(2, metrics.compressAcceptRate.getCount());
+    compressedBuffer.release();
 
     algorithmMetrics = metrics.getAlgorithmMetrics(LZ4Compression.ALGORITHM_NAME);
     Assert.assertTrue(algorithmMetrics.compressRatioPercent.getCount() > 0);
     Assert.assertEquals(1, algorithmMetrics.compressRate.getCount());
     Assert.assertTrue(algorithmMetrics.fullSizeCompressTimeInMicroseconds.getCount() > 0);
     Assert.assertTrue(algorithmMetrics.fullSizeCompressSpeedMBPerSec.getCount() > 0);
+
+    sourceByteBuf.release();
   }
 
   @Test
@@ -188,8 +193,10 @@ public class CompressionServiceTest {
     byte[] sourceBuffer = ("Test Message for testing purpose.  The Message is part of the testing message."
         + "Test Message for testing purpose.  The Message is part of the testing message."
         + "Test Message for testing purpose.  The Message is part of the testing message.").getBytes();
-    ByteBuffer compressedByteBuffer = new LZ4Compression().compress(ByteBuffer.wrap(sourceBuffer), false);
-    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedByteBuffer);
+    LZ4Compression lz4 = new LZ4Compression();
+    ByteBuffer compressedByteBuffer = ByteBuffer.allocate(lz4.getCompressBufferSize(sourceBuffer.length));
+    lz4.compress(ByteBuffer.wrap(sourceBuffer), compressedByteBuffer);
+    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedByteBuffer.flip());
 
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
     CompressionService service = new CompressionService(config, metrics);
@@ -211,8 +218,10 @@ public class CompressionServiceTest {
     byte[] sourceBuffer = ("Test Message for testing purpose.  The Message is part of the testing message."
         + "Test Message for testing purpose.  The Message is part of the testing message."
         + "Test Message for testing purpose.  The Message is part of the testing message.").getBytes();
-    ByteBuffer compressedByteBuffer = new LZ4Compression().compress(ByteBuffer.wrap(sourceBuffer), false);
-    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedByteBuffer);
+    LZ4Compression lz4 = new LZ4Compression();
+    ByteBuffer compressedByteBuffer = ByteBuffer.allocate(lz4.getCompressBufferSize(sourceBuffer.length));
+    lz4.compress(ByteBuffer.wrap(sourceBuffer), compressedByteBuffer);
+    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedByteBuffer.flip());
 
     // Decompressed full chunk.
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
@@ -243,6 +252,34 @@ public class CompressionServiceTest {
         + "Test Message for testing purpose.  The Message is part of the testing message."
         + "Test Message for testing purpose.  The Message is part of the testing message.").getBytes();
 
+    ByteBuf sourceBufferHeap = PooledByteBufAllocator.DEFAULT.buffer(sourceBuffer.length);
+    ByteBuf sourceBufferDirect = PooledByteBufAllocator.DEFAULT.directBuffer(sourceBuffer.length);
+    try {
+      sourceBufferHeap.writeBytes(sourceBuffer);
+      sourceBufferDirect.writeBytes(sourceBuffer);
+
+      // Source is a Heap, test compressed and decompress using various combination of memory types.
+      runCompressedThenDecompress(sourceBufferHeap, false, false);
+      runCompressedThenDecompress(sourceBufferHeap, false, true);
+      runCompressedThenDecompress(sourceBufferHeap, true, false);
+      runCompressedThenDecompress(sourceBufferHeap, true, true);
+
+      // Source is a Direct, test compressed and decompress using various combination of memory types.
+      runCompressedThenDecompress(sourceBufferDirect, false, false);
+      runCompressedThenDecompress(sourceBufferDirect, false, true);
+      runCompressedThenDecompress(sourceBufferDirect, true, false);
+      runCompressedThenDecompress(sourceBufferDirect, true, true);
+    } finally {
+      sourceBufferHeap.release();
+      sourceBufferDirect.release();
+    }
+  }
+
+  private void runCompressedThenDecompress(ByteBuf sourceBuffer, boolean isCompressedBufferDirect,
+      boolean isDecompressedBufferDirect) throws CompressionException {
+    byte[] sourceBufferArray = new byte[sourceBuffer.readableBytes()];
+    sourceBuffer.getBytes(0, sourceBufferArray);
+
     // Decompressed full chunk.  Note: algorithm is not specified in config.  It would use the Zstd as default.
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
     CompressionService service = new CompressionService(config, metrics);
@@ -250,16 +287,30 @@ public class CompressionServiceTest {
     service.minimalCompressRatio = 1.0;
 
     // Compress the source buffer.
-    ByteBuf compressedBuffer = service.compressChunk(Unpooled.wrappedBuffer(sourceBuffer), false, false);
-    Assert.assertNotEquals(sourceBuffer.length, compressedBuffer.readableBytes());
-    Assert.assertEquals(1, metrics.compressAcceptRate.getCount());
+    int sourceBufferLength = sourceBuffer.readableBytes();
+    ByteBuf compressedBuffer = service.compressChunk(sourceBuffer, false, isCompressedBufferDirect);
+    try {
+      Assert.assertNotEquals(sourceBufferLength, compressedBuffer.readableBytes());
+      Assert.assertEquals(1, metrics.compressAcceptRate.getCount());
 
-    // Decompress the source buffer.
-    ByteBuf decompressedBuffer = service.decompress(compressedBuffer, sourceBuffer.length, false);
-    Assert.assertEquals(sourceBuffer.length, decompressedBuffer.readableBytes());
-    Assert.assertEquals(1, metrics.decompressSuccessRate.getCount());
-    Assert.assertTrue(metrics.decompressExpandSizeBytes.getCount() > 0);
-    Assert.assertArrayEquals(decompressedBuffer.array(), sourceBuffer);
+      // Decompress the source buffer.
+      ByteBuf decompressedBuffer = service.decompress(compressedBuffer, sourceBufferLength, isDecompressedBufferDirect);
+      try {
+        Assert.assertEquals(sourceBufferLength, decompressedBuffer.readableBytes());
+        Assert.assertEquals(1, metrics.decompressSuccessRate.getCount());
+        Assert.assertTrue(metrics.decompressExpandSizeBytes.getCount() > 0);
+        Assert.assertEquals(decompressedBuffer.readableBytes(), sourceBufferLength);
+
+        // Read the decompressed content and compare with original source array.
+        byte[] decompressedArray = new byte[decompressedBuffer.readableBytes()];
+        decompressedBuffer.readBytes(decompressedArray);
+        Assert.assertArrayEquals(decompressedArray, sourceBufferArray);
+      } finally {
+        decompressedBuffer.release();
+      }
+    } finally {
+      compressedBuffer.release();
+    }
 
     // Zstd is the default compression algorithm.
     CompressionMetrics.AlgorithmMetrics algorithmMetrics = metrics.getAlgorithmMetrics(ZstdCompression.ALGORITHM_NAME);

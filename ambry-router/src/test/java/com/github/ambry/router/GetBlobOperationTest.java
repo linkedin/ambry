@@ -1464,10 +1464,12 @@ public class GetBlobOperationTest {
 
     // Generate the test compressed buffer.
     ByteBuffer sourceBuffer = ByteBuffer.wrap("Compression unit test to test compression.".getBytes(StandardCharsets.UTF_8));
-    ByteBuffer compressedBuffer = new ZstdCompression().compress(sourceBuffer, false);
+    ZstdCompression zstd = new ZstdCompression();
+    ByteBuffer compressedBuffer = ByteBuffer.allocate(zstd.getCompressBufferSize(sourceBuffer.remaining()));
+    zstd.compress(sourceBuffer, compressedBuffer);
 
     // Invoke the decompressContent method on the compressed buffer.
-    ByteBuf compressedByteBuf = Unpooled.wrappedBuffer(compressedBuffer);
+    ByteBuf compressedByteBuf = Unpooled.wrappedBuffer(compressedBuffer.flip());
     ByteBuf decompressedByteBuf = (ByteBuf) MethodUtils.invokeMethod(firstChunk, true, "decompressContent", compressedByteBuf);
     byte[] decompressedData = new byte[decompressedByteBuf.readableBytes()];
     decompressedByteBuf.readBytes(decompressedData);

@@ -56,6 +56,15 @@ public class LZ4Compression extends BaseCompressionWithLevel {
   public String getAlgorithmName() { return ALGORITHM_NAME; }
 
   /**
+   * Some compression algorithms like ZStd are picky on the source and destination buffer types.
+   * In LZ4, any combination of Heap and Direct memory are acceptable, so return false.
+   */
+  @Override
+  public boolean requireMatchingBufferType() {
+    return false;
+  }
+
+  /**
    * Get the minimum compression level.
    * @return The minimum compression level.
    */
@@ -134,22 +143,6 @@ public class LZ4Compression extends BaseCompressionWithLevel {
     }
   }
 
-  // TODO - This method will be deleted after ByteBuffer API has been pushed.
-  @Override
-  protected int compressNative(byte[] sourceData, int sourceDataOffset, int sourceDataSize,
-      byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize) throws CompressionException {
-    try {
-      return getCompressor().compress(sourceData, sourceDataOffset, sourceDataSize,
-          compressedBuffer, compressedBufferOffset, compressedBufferSize);
-    } catch (Exception ex) {
-      throw new CompressionException(String.format("LZ4 compression failed. sourceData.length=%d, sourceDataOffset=%d, "
-              + "sourceDataSize=%d, compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d",
-          sourceData.length, sourceDataOffset, sourceDataSize,
-          compressedBuffer.length, compressedBufferOffset, compressedBufferSize),
-          ex);
-    }
-  }
-
   /**
    * Invoke the LZ4 decompression algorithm given the compressedBuffer, its offset, and size.
    * The original data is written to the sourceDataBuffer at the specified offset and size.
@@ -175,23 +168,6 @@ public class LZ4Compression extends BaseCompressionWithLevel {
               + "sourceData.capacity=%d, sourceDataOffset=%d, sourceDataSize=%d",
           compressedBuffer.limit(), compressedBufferOffset, compressedBufferSize,
           sourceDataBuffer.capacity(), sourceDataOffset, sourceDataSize), ex);
-    }
-  }
-
-  // TODO - This method will be deleted after ByteBuffer API has been pushed.
-  @Override
-  protected void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedBufferSize,
-      byte[] sourceDataBuffer, int sourceDataOffset, int sourceDataSize) throws CompressionException {
-    // This decompressor supports all compressors, LZ4 and LZ4 HC.
-    try {
-      getDecompressor().decompress(compressedBuffer, compressedBufferOffset,
-          sourceDataBuffer, sourceDataOffset, sourceDataSize);
-    } catch (Exception ex) {
-      throw new CompressionException(String.format("LZ4 decompression failed. "
-              + "compressedBuffer.length=%d, compressedBufferOffset=%d, compressedBufferSize=%d, "
-              + "sourceData.length=%d, sourceDataOffset=%d, sourceDataSize=%d",
-          compressedBuffer.length, compressedBufferOffset, compressedBufferSize,
-          sourceDataBuffer.length, sourceDataOffset, sourceDataSize), ex);
     }
   }
 }

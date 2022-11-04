@@ -14,6 +14,7 @@
 package com.github.ambry.compression;
 
 import com.github.ambry.utils.TestUtils;
+import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import org.junit.Assert;
@@ -71,22 +72,25 @@ public class CompressionMapTest {
     // Test: Compress the string using LZ4 and decompress using factory.
     String testMessage = "Ambry rocks.  Ambry again.  Ambry again.";
     ByteBuffer testMessageBuffer = ByteBuffer.wrap(testMessage.getBytes(StandardCharsets.UTF_8));
-    ByteBuffer compressedBuffer = lz4.compress(testMessageBuffer, false);
+    ByteBuffer compressedBuffer = ByteBuffer.allocate(lz4.getCompressBufferSize(testMessageBuffer.remaining()));
+    lz4.compress(testMessageBuffer, compressedBuffer);
     byte[] decompressedBuffer = decompressUsingFactory(map, compressedBuffer);
     Assert.assertEquals(testMessage, new String(decompressedBuffer, StandardCharsets.UTF_8));
 
     // Test: Compress the string using ZStd and decompress using factory.
     testMessageBuffer.position(0);
-    compressedBuffer = zstd.compress(testMessageBuffer, false);
+    compressedBuffer = ByteBuffer.allocate(zstd.getCompressBufferSize(testMessageBuffer.remaining()));
+    zstd.compress(testMessageBuffer, compressedBuffer);
     decompressedBuffer = decompressUsingFactory(map, compressedBuffer);
     Assert.assertEquals(testMessage, new String(decompressedBuffer, StandardCharsets.UTF_8));
   }
 
   private byte[] decompressUsingFactory(CompressionMap factory, ByteBuffer compressedBuffer)
       throws CompressionException {
-    String algorithmName = factory.getAlgorithmName(compressedBuffer);
+    String algorithmName = factory.getAlgorithmName(Unpooled.wrappedBuffer(compressedBuffer));
     Compression decompressor = factory.getByName(algorithmName);
-    ByteBuffer decompressedBuffer = decompressor.decompress(compressedBuffer, false);
+    ByteBuffer decompressedBuffer = ByteBuffer.allocate(decompressor.getDecompressBufferSize(compressedBuffer));
+    decompressor.decompress(compressedBuffer, decompressedBuffer);
 
     byte[] sourceBinary = new byte[decompressedBuffer.remaining()];
     decompressedBuffer.get(sourceBinary);
