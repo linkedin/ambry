@@ -254,6 +254,22 @@ class RouterTestHelpers {
   }
 
   /**
+   * Asserts that {@code blobId} is deleted.
+   * @param router the {@link Router} to use
+   * @param blobId the blob id to query
+   * @throws Exception
+   */
+  static void assertDeleted(Router router, String blobId) throws InterruptedException {
+    try {
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+      fail("Get blob should fail");
+    } catch (ExecutionException e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+    }
+  }
+
+  /**
    * @param totalSize the total size of the composite blob.
    * @param maxChunkSize the size to use for intermediate data chunks.
    * @return a {@link LongStream} that returns valid chunk sizes that conform to {@code totalSize} and

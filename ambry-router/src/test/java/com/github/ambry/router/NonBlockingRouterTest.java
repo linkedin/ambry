@@ -2700,4 +2700,341 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
     }
   }
+
+  /**
+   * Test DeleteBlob first hits 503. Then run ReplicateBlob and Retry. It is successful.
+   * @throws Exception
+   */
+  @Test
+  public void testDeleteBlob503AndThenRetrySuccess() throws Exception {
+    try {
+      String deleteServiceId = "delete-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // set two replicas Replica_Unavailable.
+      DataNodeId sourceDataNode = null;
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          // local DC, return NO_ERROR for one replica,
+          if (sourceDataNode == null) {
+            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+          } else {
+            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          }
+        }
+      }
+      router.deleteBlob(blobId, deleteServiceId).get();
+
+      // simulate Replica_Unavailable for all local replicas. Then verify it from the remote replica
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      }
+      assertDeleted(router, blobId);
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * CompositeBlob DeleteBlob first hits 503. Then run ReplicateBlob and Retry. It is successful.
+   * @throws Exception
+   */
+  @Test
+  public void testCompositeBlobDelete503AndThenRetrySuccess() throws Exception {
+    try {
+      // CompositeBlob with four chunks.
+      maxPutChunkSize = PUT_CONTENT_SIZE / 4;
+      String deleteServiceId = "delete-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String compositeBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // set two replicas Replica_Unavailable. Leave one local replica available as the source of the ReplicationBlob
+      DataNodeId sourceDataNode = null;
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          // local DC, return NO_ERROR for one replica,
+          if (sourceDataNode == null) {
+            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+          } else {
+            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          }
+        }
+      }
+      router.deleteBlob(compositeBlobId, deleteServiceId).get();
+
+      // simulate Replica_Unavailable for all local replicas. Then verify it from the remote replica
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      }
+      assertDeleted(router, compositeBlobId);
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * CompositeBlob DeleteBlob first hits 503. Then run ReplicateBlob and Retry.
+   * ReplicateBlob fails and then DeleteBlob fails.
+   * @throws Exception
+   */
+  @Test
+  public void testCompositeBlobDelete503AndThenRetryFailure() throws Exception {
+    try {
+      // CompositeBlob with four chunks.
+      maxPutChunkSize = PUT_CONTENT_SIZE / 4;
+      String deleteServiceId = "delete-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String compositeBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // set two replicas Replica_Unavailable. Leave one local replica available as the source of the ReplicationBlob
+      // But all remote replicas fail the ReplicateBlob.
+      DataNodeId sourceDataNode = null;
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          // local DC, return NO_ERROR for one replica,
+          if (sourceDataNode == null) {
+            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+          } else {
+            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+          }
+        } else {
+          server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+        }
+      }
+      try {
+        router.deleteBlob(compositeBlobId, deleteServiceId).get();
+      } catch (Exception e) {
+        assertTrue(e.getCause() instanceof RouterException);
+        assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
+      }
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * Test DeleteBlob first hits Not_FOUND. Then run ReplicateBlob and Retry. It is successful.
+   * @throws Exception
+   */
+  @Test
+  public void testDeleteBlob404AndThenRetrySuccess() throws Exception {
+    try {
+      String deleteServiceId = "delete-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // for the three local replicas, two replicas return Blob_Not_Found due to host swap.
+      DataNodeId sourceDataNode = null;
+      List<ServerErrorCode> serverErrors = new ArrayList<>();
+      serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          // local DC, return NO_ERROR for one replica,
+          if (sourceDataNode == null) {
+            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+          } else {
+            server.setServerErrors(serverErrors);
+          }
+        }
+      }
+      router.deleteBlob(blobId, deleteServiceId).get();
+
+      // simulate Replica_Unavailable for the source host node. Read from the other two.
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getHostName().equals(sourceDataNode.getHostname()) && server.getHostPort()
+            .equals(sourceDataNode.getPort())) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      }
+      assertDeleted(router, blobId);
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * Test DeleteBlob first hits 503. The following ReplicateBlob failed.
+   * @throws Exception
+   */
+  @Test
+  public void testDeleteBlob503ReplicateBlobFailure() throws Exception {
+    try {
+      String deleteServiceId = "delete-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // set error status for all the replicas except one local replica
+      boolean oneSuccess = false;
+      List<ServerErrorCode> serverErrors = new ArrayList<>();
+      serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+      serverErrors.add(ServerErrorCode.Unknown_Error); // return Unknown_Error for the ReplicateBlob Request
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          // local DC, return NO_ERROR for one replica,
+          if (!oneSuccess) {
+            oneSuccess = true;
+          } else {
+            server.setServerErrors(serverErrors);
+          }
+        } else {
+          server.setServerErrors(serverErrors);
+        }
+      }
+
+      TestCallback<Void> testCallback = new TestCallback<>();
+      Future<Void> future = router.deleteBlob(blobId, deleteServiceId, testCallback, null);
+      // It should return the error code of the Delete which is AmbryUnavailable,
+      // shouldn't return the error code of the ReplicateBlob which is Unknown_Error.
+      assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * Test DeleteBlob first hits 503. The following ReplicateBlob is successful but retry fails.
+   * @throws Exception
+   */
+  @Test
+  public void testDeleteBlob503ReplicateBlobSuccessRetryFailure() throws Exception {
+    try {
+      String deleteServiceId = "delete-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      // set error status for all the replicas except one local replica
+      boolean oneSuccess = false;
+      List<ServerErrorCode> serverErrors = new ArrayList<>();
+      serverErrors.add(ServerErrorCode.Blob_Not_Found); // for the first Delete request
+      serverErrors.add(ServerErrorCode.No_Error); // for the ReplicateBlob request
+      serverErrors.add(ServerErrorCode.Replica_Unavailable); // for the Delete retry
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          // local DC, return NO_ERROR for one replica,
+          if (!oneSuccess) {
+            oneSuccess = true;
+          } else {
+            server.setServerErrors(serverErrors);
+          }
+        }
+      }
+
+      TestCallback<Void> testCallback = new TestCallback<>();
+      Future<Void> future = router.deleteBlob(blobId, deleteServiceId, testCallback, null);
+      assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
+
+  /**
+   * Test DeleteBlob hits 503. But since there is no single replica is successful, won't do ReplicateBlob or retry
+   * @throws Exception
+   */
+  @Test
+  public void testDeleteBlob503NoRetrySinceNoSuccessReplica() throws Exception {
+    try {
+      String deleteServiceId = "delete-service";
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC1";
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setOperationParams();
+      String blobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+      for (MockServer server : layout.getMockServers()) {
+        if (server.getDataCenter().equals(localDcName)) {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      }
+
+      TestCallback<Void> testCallback = new TestCallback<>();
+      Future<Void> future = router.deleteBlob(blobId, deleteServiceId, testCallback, null);
+      assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.AmbryUnavailable);
+
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    } finally {
+      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
 }

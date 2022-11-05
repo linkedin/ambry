@@ -442,12 +442,12 @@ class MockServer {
    * @param deleteError the {@link ServerErrorCode} that was encountered.
    * @return the constructed {@link DeleteResponse}
    */
-  DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) {
+  private DeleteResponse makeDeleteResponse(DeleteRequest deleteRequest, ServerErrorCode deleteError) {
     if (deleteError == ServerErrorCode.No_Error) {
       deleteError = errorCodeForBlobs.getOrDefault(deleteRequest.getBlobId().getID(), ServerErrorCode.No_Error);
     }
     if (deleteError == ServerErrorCode.No_Error) {
-      updateBlobMap(deleteRequest);
+      deleteError = updateBlobMap(deleteRequest);
     }
     return new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), deleteError);
   }
@@ -552,10 +552,13 @@ class MockServer {
    * Updates the map of the blobs to indicate that the blob in question has been deleted
    * @param deleteRequest the {@link DeleteRequest} that describes what needs to be done
    */
-  private void updateBlobMap(DeleteRequest deleteRequest) {
+  private ServerErrorCode updateBlobMap(DeleteRequest deleteRequest) {
     StoredBlob blob = blobs.get(deleteRequest.getBlobId().getID());
     if (blob != null) {
       blob.markAsDeleted(deleteRequest.getDeletionTimeInMs());
+      return ServerErrorCode.No_Error;
+    } else {
+      return ServerErrorCode.Blob_Not_Found;
     }
   }
 
