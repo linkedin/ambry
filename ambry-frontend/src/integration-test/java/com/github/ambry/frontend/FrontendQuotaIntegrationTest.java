@@ -61,7 +61,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
@@ -120,8 +119,8 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
    * @param throttleRequest flag to indicate if the {@link com.github.ambry.quota.QuotaManager} should throttle request.
    * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile,
-      boolean isRequestQuotaEnabled, QuotaMode quotaMode, Account account, boolean throttleRequest) throws IOException, GeneralSecurityException {
+  private static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, boolean isRequestQuotaEnabled,
+      QuotaMode quotaMode, Account account, boolean throttleRequest) throws IOException, GeneralSecurityException {
     Properties properties = buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT);
     // By default the usage and limit of quota will be 0 in the default JsonCUQuotaSource, and hence the default
     // JsonCUQuotaEnforcer will reject requests. So for cases where we don't want requests to be rejected, we set a
@@ -129,16 +128,17 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
     JSONObject cuResourceQuotaJson = new JSONObject();
     JSONObject quotaJson = new JSONObject();
     quotaJson.put("rcu", throttleRequest ? 0 : 10737418240L);
-    quotaJson.put("wcu", throttleRequest ? 0: 10737418240L);
+    quotaJson.put("wcu", throttleRequest ? 0 : 10737418240L);
     cuResourceQuotaJson.put(Integer.toString(account.getId()), quotaJson);
     properties.setProperty(QuotaConfig.RESOURCE_CU_QUOTA_IN_JSON, cuResourceQuotaJson.toString());
     properties.setProperty(QuotaConfig.THROTTLING_MODE, quotaMode.name());
     properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, String.valueOf(isRequestQuotaEnabled));
-    properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON, "{\n" + "  \"rcu\": 1024,\n"
-        + "  \"wcu\": 1024\n" + "}");
+    properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON,
+        "{\n" + "  \"rcu\": 1024,\n" + "  \"wcu\": 1024\n" + "}");
     long quotaValue = throttleRequest ? DEFAULT_REJECT_QUOTA : DEFAULT_ACCEPT_QUOTA;
     properties.setProperty(QuotaConfig.RESOURCE_CU_QUOTA_IN_JSON,
-        String.format("{\n" + "  \"%s\": {\n" + "    \"rcu\": %d,\n" + "    \"wcu\": %d\n" + "  }\n" + "}", account.getId(), quotaValue, quotaValue));
+        String.format("{\n" + "  \"%s\": {\n" + "    \"rcu\": %d,\n" + "    \"wcu\": %d\n" + "  }\n" + "}",
+            account.getId(), quotaValue, quotaValue));
     return new VerifiableProperties(properties);
   }
 
@@ -325,10 +325,10 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
   @Override
   void verifyGetBlobResponse(NettyClient.ResponseParts responseParts, ByteRange range, boolean resolveRangeOnEmptyBlob,
       HttpHeaders expectedHeaders, boolean isPrivate, ByteBuffer expectedContent, String accountName,
-      String containerName) throws RestServiceException {
+      String containerName, Container container) throws RestServiceException {
     if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetBlobResponse(responseParts, range, resolveRangeOnEmptyBlob, expectedHeaders, isPrivate,
-          expectedContent, accountName, containerName);
+          expectedContent, accountName, containerName, container);
     } else {
       HttpResponse response = getHttpResponse(responseParts);
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());
@@ -383,9 +383,9 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
 
   @Override
   void verifyGetNotModifiedBlobResponse(HttpResponse response, boolean isPrivate,
-      NettyClient.ResponseParts responseParts) {
+      NettyClient.ResponseParts responseParts, Container container) {
     if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
-      super.verifyGetNotModifiedBlobResponse(response, isPrivate, responseParts);
+      super.verifyGetNotModifiedBlobResponse(response, isPrivate, responseParts, container);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());
       assertTrue("Date header should be present", response.headers().contains(HttpHeaderNames.DATE));
@@ -404,9 +404,9 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
 
   @Override
   void verifyUserMetadataResponse(HttpResponse response, HttpHeaders expectedHeaders, byte[] usermetadata,
-      NettyClient.ResponseParts responseParts) {
+      NettyClient.ResponseParts responseParts, Container container) {
     if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
-      super.verifyUserMetadataResponse(response, expectedHeaders, usermetadata, responseParts);
+      super.verifyUserMetadataResponse(response, expectedHeaders, usermetadata, responseParts, container);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());
       verifyTrackingHeaders(response);
@@ -425,10 +425,11 @@ public class FrontendQuotaIntegrationTest extends FrontendIntegrationTestBase {
 
   @Override
   void verifyGetBlobInfoResponse(HttpResponse response, HttpHeaders expectedHeaders, boolean isPrivate,
-      String accountName, String containerName, byte[] usermetadata, NettyClient.ResponseParts responseParts) {
+      String accountName, String containerName, byte[] usermetadata, NettyClient.ResponseParts responseParts,
+      Container container) {
     if (!throttleRequest || quotaMode == QuotaMode.TRACKING) {
       super.verifyGetBlobInfoResponse(response, expectedHeaders, isPrivate, accountName, containerName, usermetadata,
-          responseParts);
+          responseParts, container);
     } else {
       assertEquals("Unexpected response status", HttpResponseStatus.TOO_MANY_REQUESTS, response.status());
       assertTrue("Date header should be present", response.headers().contains(HttpHeaderNames.DATE));

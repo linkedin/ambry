@@ -15,44 +15,36 @@ package com.github.ambry.compression;
 
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.nio.ByteBuffer;
+
 
 /**
  * Compression interface that provides compression and decompression feature.
- * It supports composite/shared memory where caller manages the buffer allocation.
- * It also supports simple APIs that lets the implementation allocate memory from Java heap.
  *
  * <pre>
- * Shared buffer APIs (caller management memory).
  *   Compression example:
  *   {@code
- *     byte[] originalData = ...;
- *     int compressedBufferSize = Compression.getCompressBufferSize(originalData.length);
- *     byte[] compressedBuffer = new byte[compressedBufferSize];
- *     int compressedSize = Compression.compress(originalData, 0, originalData.length,
- *                                   compressedBuffer, 0, compressedBuffer.length);
+ *     ByteBuffer originalData = ...;
+ *     ByteBuffer compressedBuffer = Compression.compress(originalData, true);
+ *
+ *     // Same as
+ *     ByteBuffer originalData = ...;
+ *     int compressedBufferSize = Compression.getCompressBufferSize(originalData.remaining());
+ *     ByteBuffer compressedBuffer = ByteBuffer.allocateDirect(compressedBufferSize);
+ *     int compressedSize = Compression.compress(originalData, compressedBuffer);
  *   }
  *
  *   Decompression example:
  *   {@code
- *     byte[] compressedBuffer = ...;
- *     int originalDataSize = Compression.getDecompressBufferSize(compressedBuffer, 0, compressedBuffer.length);
- *     byte[] originalData = new byte[originalDataSize];
- *     int decompressedSize = Compression.decompress(compressedBuffer, 0, compressedBuffer.length,
- *                                   originalData, 0, originalData.length);
+ *     ByteBuffer compressedBuffer = ...;
+ *     ByteBuffer originalData = Compression.decompress(compressedBuffer, true);
+ *
+ *     // Same as
+ *     ByteBuffer compressedBuffer = ...;
+ *     int originalDataSize = Compression.getDecompressBufferSize(compressedBuffer);
+ *     ByteBuffer originalData = ByteBuffer.allocateDirect(originalDataSize);
+ *     int decompressedSize = Compression.decompress(compressedBuffer, originalData);
  *    }
- *
- * Dedicated buffer APIs (implementation allocate memory).
- *   Compression example:
- *   {@code
- *     byte[] originalData = ...;
- *     Pair&lt;Integer, byte[]&gt; compressedBuffer = Compression.compress(originalData);
- *   }
- *
- *   Decompression example:
- *   {@code
- *     byte[] compressedBuffer = ...;
- *     byte[] originalData = Compression.decompress(compressedBuffer);
- *   }
  * </pre>
  */
 public interface Compression {
@@ -224,6 +216,88 @@ public interface Compression {
     byte[] originalData = new byte[originalDataSize];
     decompress(compressedBuffer, compressedBufferOffset, compressedDataSize,
         originalData, 0, originalData.length);
+    return originalData;
+  }
+
+  /**
+   * Get the original data size stored inside the shared/composite compressed buffer.  The compressed buffer
+   * contains version, algorithm name, original data size, and compressed data.  This method helps to determine
+   * the decompressed buffer size before calling decompress().
+   * This method does not change the index of compressedBuffer.
+   *
+   * @param compressedBuffer The compressed buffer.  The buffer must be position to the beginning of buffer.
+   *                         The indexes are not affected and remain unchanged.
+   * @return The size of original data.
+   * @throws CompressionException Throws this exception if compression has internal failure.
+   */
+  int getDecompressBufferSize(ByteBuffer compressedBuffer) throws CompressionException;
+
+  /**
+   * Compress the buffer specified in {@code sourceData}.  The entire sourceBuffer will be read,
+   * so set the position and limit to the range of data to read in sourceBuffer before calling this method.
+   * After calling this method, sourceBuffer position will be advanced to the buffer limit,
+   * and the compressedBuffer position will be advanced to the end of the compressed binary.
+   *
+   * @param sourceBuffer The source/uncompressed data to compress.  It cannot be null or empty.
+   * @param compressedBuffer The compressed buffer where the compressed data will be written to.  Its size must be
+   *                       at least the size return from getCompressBufferSize() or it may fail due to buffer size.
+   * @return The actual compressed data size in bytes.
+   * @throws CompressionException Throws this exception if compression has internal failure.
+   */
+  int compress(ByteBuffer sourceBuffer, ByteBuffer compressedBuffer) throws CompressionException;
+
+  /**
+   * Compress the buffer specified in {@code sourceBuffer}.  This method allocates either direct memory or heap memory,
+   * based on the allocateDirectBuffer parameter, to store the compressed data.  The output compressed buffer capacity
+   * may be bigger than necessary in case sourceBuffer is incompressible.  The index of sourceBuffer will be updated
+   * and flipped, so it's ready for reading.
+   *
+   * @param sourceBuffer The source uncompressed data to compress.  It cannot be null or empty.
+   * @param allocateDirectBuffer Whether to allocate direct buffer or heap buffer to store compressed data.
+   * @return The compressed buffer.
+   * @throws CompressionException Throws this exception if compression has internal failure.
+   */
+  default ByteBuffer compress(ByteBuffer sourceBuffer, boolean allocateDirectBuffer) throws CompressionException {
+    Utils.checkNotNullOrEmpty(sourceBuffer, "sourceBuffer cannot be null or empty.");
+    int compressedBufferSize = getCompressBufferSize(sourceBuffer.remaining());
+    ByteBuffer compressedBuffer = allocateDirectBuffer ? ByteBuffer.allocateDirect(compressedBufferSize) :
+        ByteBuffer.allocate(compressedBufferSize);
+    compress(sourceBuffer, compressedBuffer);
+    compressedBuffer.flip();
+    return compressedBuffer;
+  }
+
+  /**
+   * Decompress the buffer specified in {@code compressedBuffer}.  Since compressedBuffer structure contains the
+   * original data size, it reads only the portion required to decompress.
+   * After calling, compressedBuffer position will be advanced to right after the compressed binary, and the
+   * decompressedBuffer position will be advanced to the end of the decompressed binary.
+   *
+   * @param compressedBuffer The buffer that contains compressed data generated by the compress() method.
+   * @param decompressedBuffer The buffer to hold the decompressed/original data.  The size should be at least the
+   *                           size returned by getDecompressBufferSize().
+   * @return The original data size which is same as number of bytes written to sourceData buffer.
+   * @throws CompressionException Throws this exception if decompression has internal failure.
+   */
+  int decompress(ByteBuffer compressedBuffer, ByteBuffer decompressedBuffer) throws CompressionException;
+
+  /**
+   * Decompress the compressed buffer.  The compressedBuffer index will be updated after reading.
+   * This method allocates either direct memory or heap memory, based on the allocateDirectBuffer parameter,
+   * to hold the output of decompression.  The output buffer is flipped so that it is ready for reading.
+   *
+   * @param compressedBuffer The compressed buffer generated by the compress() method.
+   * @param allocateDirectBuffer Whether to allocate direct buffer or heap buffer to store decompressed data.
+   * @return The original/decompressed data.
+   * @throws CompressionException Throws this exception if decompression has internal failure.
+   */
+  default ByteBuffer decompress(ByteBuffer compressedBuffer, boolean allocateDirectBuffer) throws CompressionException {
+    Utils.checkNotNullOrEmpty (compressedBuffer, "compressedBuffer cannot be null or empty.");
+    int originalDataSize = getDecompressBufferSize(compressedBuffer);
+    ByteBuffer originalData = allocateDirectBuffer ? ByteBuffer.allocateDirect(originalDataSize) :
+        ByteBuffer.allocate(originalDataSize);
+    decompress(compressedBuffer, originalData);
+    originalData.flip();
     return originalData;
   }
 }

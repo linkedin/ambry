@@ -56,25 +56,9 @@ public class Container {
   static final String JSON_VERSION_KEY = "version";
   static final String CONTAINER_NAME_KEY = "containerName";
   static final String CONTAINER_ID_KEY = "containerId";
-  static final String STATUS_KEY = "status";
-  static final String CONTAINER_DELETE_TRIGGER_TIME_KEY = "deleteTriggerTime";
-  static final String DESCRIPTION_KEY = "description";
-  static final String IS_PRIVATE_KEY = "isPrivate";
-  static final String BACKUP_ENABLED_KEY = "backupEnabled";
-  static final String ENCRYPTED_KEY = "encrypted";
   static final String PREVIOUSLY_ENCRYPTED_KEY = "previouslyEncrypted";
-  static final String CACHEABLE_KEY = "cacheable";
-  static final String MEDIA_SCAN_DISABLED_KEY = "mediaScanDisabled";
-  static final String REPLICATION_POLICY_KEY = "replicationPolicy";
-  static final String TTL_REQUIRED_KEY = "ttlRequired";
-  static final String SECURE_PATH_REQUIRED_KEY = "securePathRequired";
   static final String OVERRIDE_ACCOUNT_ACL_KEY = "overrideAccountAcl";
-  static final String NAMED_BLOB_MODE_KEY = "namedBlobMode";
-  static final String ACCESS_CONTROL_ALLOW_ORIGIN_KEY = "accessControlAllowOrigin";
-  static final String CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD = "contentTypeWhitelistForFilenamesOnDownload";
-  static final String PARENT_ACCOUNT_ID_KEY = "parentAccountId";
-  static final String LAST_MODIFIED_TIME_KEY = "lastModifiedTime";
-  static final String SNAPSHOT_VERSION_KEY = "snapshotVersion";
+
   static final boolean BACKUP_ENABLED_DEFAULT_VALUE = false;
   static final boolean ENCRYPTED_DEFAULT_VALUE = false;
   static final boolean PREVIOUSLY_ENCRYPTED_DEFAULT_VALUE = ENCRYPTED_DEFAULT_VALUE;
@@ -89,6 +73,8 @@ public class Container {
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
   static final int SNAPSHOT_VERSION_DEFAULT_VALUE = 0;
   static final String ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE = "";
+  static final Long CACHE_TTL_IN_SECOND_DEFAULT_VALUE = null;
+  static final Set<String> USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE = Collections.emptySet();
 
   public static final short JSON_VERSION_1 = 1;
   public static final short JSON_VERSION_2 = 2;
@@ -299,7 +285,8 @@ public class Container {
           SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
           BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID, UNKNOWN_CONTAINER_DELETE_TRIGGER_TIME, LAST_MODIFIED_TIME_DEFAULT_VALUE,
-          SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
+          SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE, CACHE_TTL_IN_SECOND_DEFAULT_VALUE,
+          USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -316,7 +303,8 @@ public class Container {
           SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
           BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           DEFAULT_PUBLIC_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PRIVATE_CONTAINER_DELETE_TRIGGER_TIME,
-          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
+          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE,
+          CACHE_TTL_IN_SECOND_DEFAULT_VALUE, USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
 
   /**
    * A container defined specifically for the blobs put without specifying target container but isPrivate flag is
@@ -333,7 +321,8 @@ public class Container {
           SECURE_PATH_REQUIRED_DEFAULT_VALUE, CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE,
           BACKUP_ENABLED_DEFAULT_VALUE, OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE, NAMED_BLOB_MODE_DEFAULT_VALUE,
           DEFAULT_PRIVATE_CONTAINER_PARENT_ACCOUNT_ID, DEFAULT_PUBLIC_CONTAINER_DELETE_TRIGGER_TIME,
-          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE);
+          LAST_MODIFIED_TIME_DEFAULT_VALUE, SNAPSHOT_VERSION_DEFAULT_VALUE, ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE,
+          CACHE_TTL_IN_SECOND_DEFAULT_VALUE, USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE);
 
   // container field variables
   @JsonProperty(CONTAINER_ID_KEY)
@@ -360,6 +349,8 @@ public class Container {
   private final short parentAccountId;
   private final long lastModifiedTime;
   private final int snapshotVersion;
+  private final Long cacheTtlInSecond;
+  private final Set<String> userMetadataKeysToNotPrefixInResponse;
   @JsonProperty(JSON_VERSION_KEY)
   private final int version = JSON_VERSION_2; // the default version is 2
 
@@ -391,7 +382,8 @@ public class Container {
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
       boolean ttlRequired, boolean securePathRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload,
       boolean backupEnabled, boolean overrideAccountAcl, NamedBlobMode namedBlobMode, short parentAccountId,
-      long deleteTriggerTime, long lastModifiedTime, int snapshotVersion, String accessControlAllowOrigin) {
+      long deleteTriggerTime, long lastModifiedTime, int snapshotVersion, String accessControlAllowOrigin,
+      Long cacheTtlInSecond, Set<String> userMetadataKeysToNotPrefixInResponse) {
     checkPreconditions(name, status, encrypted, previouslyEncrypted);
     this.id = id;
     this.name = name;
@@ -416,6 +408,8 @@ public class Container {
         this.overrideAccountAcl = OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE;
         this.namedBlobMode = NAMED_BLOB_MODE_DEFAULT_VALUE;
         this.accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
+        this.cacheTtlInSecond = CACHE_TTL_IN_SECOND_DEFAULT_VALUE;
+        this.userMetadataKeysToNotPrefixInResponse = USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE;
         break;
       case JSON_VERSION_2:
         this.backupEnabled = backupEnabled;
@@ -432,6 +426,10 @@ public class Container {
         this.overrideAccountAcl = overrideAccountAcl;
         this.namedBlobMode = namedBlobMode;
         this.accessControlAllowOrigin = accessControlAllowOrigin;
+        this.cacheTtlInSecond = cacheTtlInSecond;
+        this.userMetadataKeysToNotPrefixInResponse =
+            userMetadataKeysToNotPrefixInResponse == null ? Collections.emptySet()
+                : userMetadataKeysToNotPrefixInResponse;
         break;
       default:
         throw new IllegalStateException("Unsupported container json version=" + currentJsonVersion);
@@ -469,8 +467,7 @@ public class Container {
         && Objects.equals(this.getReplicationPolicy(), containerToCompare.getReplicationPolicy())
         && Objects.equals(this.isSecurePathRequired(), containerToCompare.isSecurePathRequired())
         && Objects.equals(this.isBackupEnabled(), containerToCompare.isBackupEnabled())
-        && Objects.equals(this.getContentTypeWhitelistForFilenamesOnDownload(),
-                          containerToCompare.getContentTypeWhitelistForFilenamesOnDownload())
+        && Objects.equals(this.getContentTypeWhitelistForFilenamesOnDownload(), containerToCompare.getContentTypeWhitelistForFilenamesOnDownload())
         && Objects.equals(this.isAccountAclOverridden(), containerToCompare.isAccountAclOverridden());
     //@formatter:on
   }
@@ -583,6 +580,7 @@ public class Container {
   /**
    * @return {@code true} if current container overrides parent account's ACL.
    */
+  @JsonIgnore
   public boolean isAccountAclOverridden() {
     return overrideAccountAcl;
   }
@@ -599,6 +597,21 @@ public class Container {
    */
   public String getAccessControlAllowOrigin() {
     return accessControlAllowOrigin;
+  }
+
+  /**
+   * @return The ttl in second for cache settings. If the returned value is null, then caller is free to use whatever
+   * value caller deems reasonable.
+   */
+  public Long getCacheTtlInSecond() {
+    return cacheTtlInSecond;
+  }
+
+  /**
+   * @return A set of user metadata keys to not prefix with usermetadata prefix in response header.
+   */
+  public Set<String> getUserMetadataKeysToNotPrefixInResponse() {
+    return userMetadataKeysToNotPrefixInResponse;
   }
 
   /**
@@ -648,16 +661,27 @@ public class Container {
     }
     Container container = (Container) o;
     // Note: do not under any circumstances compare snapshotVersion!
-    return id == container.id && encrypted == container.encrypted
-        && previouslyEncrypted == container.previouslyEncrypted && cacheable == container.cacheable
-        && mediaScanDisabled == container.mediaScanDisabled && parentAccountId == container.parentAccountId
-        && Objects.equals(name, container.name) && status == container.status
-        && deleteTriggerTime == container.deleteTriggerTime && Objects.equals(description, container.description)
-        && Objects.equals(replicationPolicy, container.replicationPolicy) && ttlRequired == container.ttlRequired
-        && securePathRequired == container.securePathRequired && overrideAccountAcl == container.overrideAccountAcl
-        && namedBlobMode == container.namedBlobMode && Objects.equals(accessControlAllowOrigin,
-        container.accessControlAllowOrigin) && Objects.equals(contentTypeWhitelistForFilenamesOnDownload,
-        container.contentTypeWhitelistForFilenamesOnDownload);
+    //@formatter:off
+    return id == container.id
+        && encrypted == container.encrypted
+        && previouslyEncrypted == container.previouslyEncrypted
+        && cacheable == container.cacheable
+        && mediaScanDisabled == container.mediaScanDisabled
+        && parentAccountId == container.parentAccountId
+        && Objects.equals(name, container.name)
+        && status == container.status
+        && deleteTriggerTime == container.deleteTriggerTime
+        && Objects.equals(description, container.description)
+        && Objects.equals(replicationPolicy, container.replicationPolicy)
+        && ttlRequired == container.ttlRequired
+        && securePathRequired == container.securePathRequired
+        && overrideAccountAcl == container.overrideAccountAcl
+        && namedBlobMode == container.namedBlobMode
+        && Objects.equals(accessControlAllowOrigin, container.accessControlAllowOrigin)
+        && Objects.equals(contentTypeWhitelistForFilenamesOnDownload, container.contentTypeWhitelistForFilenamesOnDownload)
+        && Objects.equals(cacheTtlInSecond, container.cacheTtlInSecond)
+        && Objects.equals(userMetadataKeysToNotPrefixInResponse, container.userMetadataKeysToNotPrefixInResponse);
+    //@formatter:on
   }
 
   @Override

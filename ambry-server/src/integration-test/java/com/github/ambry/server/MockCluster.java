@@ -216,6 +216,13 @@ public class MockCluster {
   }
 
   /**
+   * Get all the {@link MockDataNodeId} in the cluster.
+   */
+  public List<MockDataNodeId> getAllDataNodes() {
+    return clusterMap.getDataNodes();
+  }
+
+  /**
    * @return the {@link ClusterMap}.
    */
   public MockClusterMap getClusterMap() {

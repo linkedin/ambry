@@ -33,11 +33,13 @@ import org.mockito.Mockito;
 
 public class CompressionServiceTest {
 
+  private CompressionConfig config = new CompressionConfig(new VerifiableProperties(new Properties()));
+
   @Test
   public void testIsBlobCompressible() {
     BlobProperties blobProperties = new BlobProperties(1234L, "testServiceID", (short) 2222, (short) 3333, true);
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
 
     // Test: compression disabled.  Compression does nothing.
     service.isCompressionEnabled = false;
@@ -70,7 +72,7 @@ public class CompressionServiceTest {
   @Test
   public void testCompressBuffer() {
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
     byte[] sourceBuffer = "Test Message for testing purpose.  The Message is part of the testing message.".getBytes();
     ByteBuf sourceByteBuf = Unpooled.wrappedBuffer(sourceBuffer);
 
@@ -100,7 +102,7 @@ public class CompressionServiceTest {
 
     // Test: Disable compression due to compression failed.
     // Create a test CompressionService and replace the compressor with a mock.
-    CompressionService compressionService = new CompressionService(null, metrics);
+    CompressionService compressionService = new CompressionService(config, metrics);
     compressionService.minimalSourceDataSizeInBytes = 1;
     LZ4Compression mockCompression = Mockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
     Mockito.doThrow(new RuntimeException("Compress failed.")).when(mockCompression).compress(
@@ -117,7 +119,7 @@ public class CompressionServiceTest {
     byte[] sourceBuffer = "Test Message for testing purpose.  The Message is part of the testing message.".getBytes();
     ByteBuf sourceByteBuf = Unpooled.wrappedBuffer(sourceBuffer);
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService compressionService = new CompressionService(null, metrics);
+    CompressionService compressionService = new CompressionService(config, metrics);
     compressionService.minimalSourceDataSizeInBytes = 1;
 
     // Test: Compression skipped because compression ratio is too low.
@@ -139,7 +141,7 @@ public class CompressionServiceTest {
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
 
     // Test: Happy case - compression succeed partial full.
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
     service.isCompressionEnabled = true;
     service.minimalCompressRatio = 1.0;
     service.minimalSourceDataSizeInBytes = 1;
@@ -176,7 +178,7 @@ public class CompressionServiceTest {
         + "Test Message for testing purpose.  The Message is part of the testing message.").getBytes();
 
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
     ByteBuf sourceByteBuf = Unpooled.wrappedBuffer(sourceBuffer);
 
     // Test: Invalid parameter
@@ -197,7 +199,7 @@ public class CompressionServiceTest {
   public void testDecompressWithInvalidBuffer() {
     // Test: Decompress failed due to byte conversion throws.
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
 
     // Test: buffer does not contain algorithm name. (name size is 100);
     final byte[] badCompressedBuffer = new byte[]{1, 100, 1, 2, 3, 4, 5};
@@ -225,7 +227,7 @@ public class CompressionServiceTest {
     ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedInfo.getSecond());
 
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
 
     // Test: decompress() throws exception.
     // Create a test CompressionService and replace the compressor with a mock.
@@ -249,7 +251,7 @@ public class CompressionServiceTest {
 
     // Decompressed full chunk.
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
     ByteBuf decompressedBuffer = service.decompress(compressedBuffer, sourceBuffer.length);
     Assert.assertEquals(decompressedBuffer.readableBytes(), sourceBuffer.length);
     Assert.assertEquals(1, metrics.decompressSuccessRate.getCount());
@@ -273,7 +275,7 @@ public class CompressionServiceTest {
   @Test
   public void testConvertByteBufToByteArray() {
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
 
     // Test: Convert wrapped byte[] buffer to byte[]
     byte[] arrayBuffer = new byte[] { -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
@@ -308,7 +310,7 @@ public class CompressionServiceTest {
 
     // Decompressed full chunk.  Note: algorithm is not specified in config.  It would use the Zstd as default.
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
-    CompressionService service = new CompressionService(null, metrics);
+    CompressionService service = new CompressionService(config, metrics);
     service.minimalSourceDataSizeInBytes = 1;
     service.minimalCompressRatio = 1.0;
 

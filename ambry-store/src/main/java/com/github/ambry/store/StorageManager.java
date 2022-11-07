@@ -478,17 +478,28 @@ public class StorageManager implements StoreManager {
     // However, we need to make sure the internal state of store is only updated by primary cluster participant since
     // Replication Manager which only listens to primary participant also updates the internal store states. For such
     // needs, use this boolean.
-    private final boolean isPrimaryClusterParticipantListener;
+
+    /**
+     * Indicates whether it's a listener object for primary helix cluster-manager. Used to respond to state transition
+     * messages from primary helix cluster, which is simply the first string in zkConnectStr separated by commas.
+     * The word "participant" is being used to refer to both ambry-server node and helix at some places in the
+     * code which is wrong. We don't want to fix all usages retroactively at this point,
+     * but going forward please follow this convention below.
+     * <p>
+     * participant = ambry-server node that _participates_ in cluster management done by helix cluster-manager service
+     * participant = _NOT_ helix cluster-manager service
+     * <p>
+     */
+    private final boolean isPrimaryClusterManagerListener;
     PartitionStateChangeListener replicationManagerListener = null;
     PartitionStateChangeListener statsManagerListener = null;
 
     /**
      * Constructor
-     * @param isPrimaryClusterParticipantListener true if this is a listener for state changes coming for primary ZK
-     *                                            cluster participant.
+     * @param isPrimaryClusterManagerListener Indicates whether it's a listener object for primary helix cluster-manager
      */
-    PartitionStateChangeListenerImpl(boolean isPrimaryClusterParticipantListener) {
-      this.isPrimaryClusterParticipantListener = isPrimaryClusterParticipantListener;
+    PartitionStateChangeListenerImpl(boolean isPrimaryClusterManagerListener) {
+      this.isPrimaryClusterManagerListener = isPrimaryClusterManagerListener;
     }
 
     @Override
@@ -567,7 +578,7 @@ public class StorageManager implements StoreManager {
           }
         }
       }
-      if (isPrimaryClusterParticipantListener) {
+      if (isPrimaryClusterManagerListener) {
         // Only update store state if this is a state transition for primary participant. Since replication Manager
         // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
         // stuck in BOOTSTRAP if this is updated by second participant listener too
@@ -624,7 +635,7 @@ public class StorageManager implements StoreManager {
         }
         if (localStore.isStarted()) {
           // 1. set state to INACTIVE
-          if (isPrimaryClusterParticipantListener) {
+          if (isPrimaryClusterManagerListener) {
             localStore.setCurrentState(ReplicaState.INACTIVE);
             logger.info("Store {} is set to INACTIVE", partitionName);
           }

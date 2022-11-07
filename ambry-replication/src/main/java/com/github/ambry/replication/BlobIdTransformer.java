@@ -87,10 +87,12 @@ public class BlobIdTransformer implements Transformer {
   }
 
   @Override
-  public void warmup(List<MessageInfo> messageInfos) throws Exception {
+  public void warmup(List<MessageInfo> messageInfos, boolean includeAll) throws Exception {
     List<StoreKey> storeKeys = new ArrayList<>();
     for (MessageInfo messageInfo : messageInfos) {
-      if (!messageInfo.isExpired() && !messageInfo.isDeleted()) {
+      // if includeAll is true, add this key.
+      // otherwise, only add the key if the message is not deleted or expired.
+      if (includeAll || (!messageInfo.isExpired() && !messageInfo.isDeleted())) {
         storeKeys.add(messageInfo.getStoreKey());
       }
     }
@@ -257,7 +259,7 @@ public class BlobIdTransformer implements Transformer {
       PutMessageFormatInputStream putMessageFormatInputStream =
           new PutMessageFormatInputStream(newKey, blobEncryptionKey, newProperties, userMetaData,
               new ByteBufInputStream(blobDataBytes, true), blobData.getSize(), blobData.getBlobType(),
-              oldMessageInfo.getLifeVersion());
+              oldMessageInfo.getLifeVersion(), blobData.isCompressed());
       // Reuse the original CRC if present in the oldMessageInfo. This is important to ensure that messages that are
       // received via replication are sent to the store with proper CRCs (which the store needs to detect duplicate
       // messages). As an additional guard, here the original CRC is only reused if the key's ID in string form is the

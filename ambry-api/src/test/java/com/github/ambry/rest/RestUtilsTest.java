@@ -775,7 +775,7 @@ public class RestUtilsTest {
     userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
     responseChannel = new MockRestResponseChannel();
     assertTrue("Should report that headers are set", RestUtils.setUserMetadataHeaders(userMetadata, responseChannel));
-    Map<String, Object> responseHeaders = responseChannel.getResponseHeaders();
+    final Map<String, Object> responseHeaders = responseChannel.getResponseHeaders();
     assertEquals("There is a mismatch in the numebr of headers", usermetadataMap.size(), responseHeaders.size());
     usermetadataMap.forEach((k, v) -> assertEquals("Value of " + k + " not as expected", v, responseHeaders.get(k)));
 
@@ -803,10 +803,42 @@ public class RestUtilsTest {
     Object encodedValue = encodedHeaders.get(RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX + umHeader);
     assertNotNull("Expected encoded header", encodedValue);
     assertNotSame("Expected different value", filenameValue, encodedValue);
+
+    // user metadata, but with a set of keys that shouldn't be prefixed
+    usermetadataMap = new HashMap<>();
+    Set<String> keysNotToPrefix = new HashSet<>();
+    for (int i = 0; i < 10; i++) {
+      String key = "key" + i;
+      usermetadataMap.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + key, "value" + i);
+      if (i % 2 == 0) {
+        keysNotToPrefix.add(key);
+      }
+    }
+    headers = new JSONObject();
+    setUserMetadataHeaders(headers, usermetadataMap);
+    restRequest = createRestRequest(RestMethod.POST, "/", headers);
+    userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
+    responseChannel = new MockRestResponseChannel();
+    assertTrue("Should report that headers are set",
+        RestUtils.setUserMetadataHeaders(userMetadata, responseChannel, keysNotToPrefix));
+    responseHeaders.clear();
+    responseHeaders.putAll(responseChannel.getResponseHeaders());
+    assertEquals("There is a mismatch in the numebr of headers", usermetadataMap.size(), responseHeaders.size());
+    for (int i = 0; i < 10; i++) {
+      String keyWithoutPrefix = "key" + i;
+      String keyWithPrefix = RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + keyWithoutPrefix;
+      if (i % 2 == 0) {
+        assertTrue(responseHeaders.containsKey(keyWithoutPrefix));
+        assertEquals("Value mismatch", usermetadataMap.get(keyWithPrefix), responseHeaders.get(keyWithoutPrefix));
+      } else {
+        assertTrue(responseHeaders.containsKey(keyWithPrefix));
+        assertEquals("Value mismatch", usermetadataMap.get(keyWithPrefix), responseHeaders.get(keyWithPrefix));
+      }
+    }
   }
 
   /**
-   * Tests for {@link RestUtils#setUserMetadataHeaders(Map<String, String>, RestResponseChannel)}
+   * Tests for {@link RestUtils#setUserMetadataHeaders(Map, RestResponseChannel)}}
    */
   @Test
   public void setUserMetadataHeadersMapTest() throws UnsupportedEncodingException {
@@ -982,14 +1014,13 @@ public class RestUtilsTest {
     Container container = Container.UNKNOWN_CONTAINER;
 
     // Test with no null values.
-    RestRequest restRequest = createRestRequest(method, "/", InMemAccountService.UNKNOWN_ACCOUNT,
-        Container.UNKNOWN_CONTAINER);
+    RestRequest restRequest =
+        createRestRequest(method, "/", InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
     String s = RestUtils.convertToStr(restRequest);
     assertEquals(String.format(template, method, uri, uri, account.toString(), container.toString()), s);
 
     // Test with null method.
-    restRequest = createRestRequest(null, "/", InMemAccountService.UNKNOWN_ACCOUNT,
-        Container.UNKNOWN_CONTAINER);
+    restRequest = createRestRequest(null, "/", InMemAccountService.UNKNOWN_ACCOUNT, Container.UNKNOWN_CONTAINER);
     s = RestUtils.convertToStr(restRequest);
     assertEquals(String.format(template, "null", uri, uri, account.toString(), container.toString()), s);
 

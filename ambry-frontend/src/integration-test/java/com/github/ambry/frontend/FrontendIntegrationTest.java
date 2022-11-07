@@ -410,9 +410,9 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     headers.add(RestUtils.Headers.BLOB_SIZE, content.capacity());
     headers.add(RestUtils.Headers.LIFE_VERSION, "0");
     getBlobAndVerify(blobId, null, GetOption.None, false, headers, !container.isCacheable(), content, account.getName(),
-        container.getName());
+        container.getName(), container);
     getBlobInfoAndVerify(blobId, GetOption.None, headers, !container.isCacheable(), account.getName(),
-        container.getName(), null);
+        container.getName(), null, container);
 
     // GET
     // Get signed URL
@@ -433,7 +433,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     httpRequest = buildRequest(HttpMethod.GET, uri.getPath() + "?" + uri.getQuery(), null, null);
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     verifyGetBlobResponse(responseParts, null, false, headers, !container.isCacheable(), content, account.getName(),
-        container.getName());
+        container.getName(), container);
   }
 
   /**
@@ -518,7 +518,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
 
     // Should get a 206 if the header is set.
     getBlobAndVerify(blobId, range, null, true, headers, !refContainer.isCacheable(), content, refAccount.getName(),
-        refContainer.getName());
+        refContainer.getName(), refContainer);
   }
 
   @Test
@@ -655,9 +655,9 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
       expectedGetHeaders.set(RestUtils.Headers.LIFE_VERSION, "0");
       for (String id : new String[]{signedId, idAndMetadata.getFirst()}) {
         getBlobAndVerify(id, null, GetOption.None, false, expectedGetHeaders, !container.isCacheable(), content,
-            account.getName(), container.getName());
+            account.getName(), container.getName(), container);
         getBlobInfoAndVerify(id, GetOption.None, expectedGetHeaders, !container.isCacheable(), account.getName(),
-            container.getName(), null);
+            container.getName(), null, container);
       }
       signedChunkIds.add(addClusterPrefix ? "/" + CLUSTER_NAME + signedId : signedId);
       fullContentStream.write(contentArray);
@@ -689,7 +689,7 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     expectedGetHeaders.add(RestUtils.Headers.BLOB_SIZE, fullContentArray.length);
     expectedGetHeaders.set(RestUtils.Headers.LIFE_VERSION, "0");
     getBlobInfoAndVerify(stitchedBlobId, GetOption.None, expectedGetHeaders, !container.isCacheable(),
-        account.getName(), container.getName(), null);
+        account.getName(), container.getName(), null, container);
     List<ByteRange> ranges = new ArrayList<>();
     ranges.add(null);
     ranges.add(ByteRanges.fromLastNBytes(ThreadLocalRandom.current().nextLong(fullContentArray.length + 1)));
@@ -699,16 +699,16 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     ranges.add(ByteRanges.fromOffsetRange(Math.min(random1, random2), Math.max(random1, random2)));
     for (ByteRange range : ranges) {
       getBlobAndVerify(stitchedBlobId, range, GetOption.None, false, expectedGetHeaders, !container.isCacheable(),
-          ByteBuffer.wrap(fullContentArray), account.getName(), container.getName());
+          ByteBuffer.wrap(fullContentArray), account.getName(), container.getName(), container);
       getHeadAndVerify(stitchedBlobId, range, GetOption.None, expectedGetHeaders, !container.isCacheable(),
           account.getName(), container.getName());
     }
     updateBlobTtlAndVerify(stitchedBlobId, expectedGetHeaders, !container.isCacheable(), account.getName(),
-        container.getName(), null);
+        container.getName(), null, container);
     // Delete stitched blob.
     deleteBlobAndVerify(stitchedBlobId);
     verifyOperationsAfterDelete(stitchedBlobId, expectedGetHeaders, !container.isCacheable(), account.getName(),
-        container.getName(), ByteBuffer.wrap(fullContentArray), null, false);
+        container.getName(), ByteBuffer.wrap(fullContentArray), null, false, container);
   }
 
   // accountApiTest() helpers

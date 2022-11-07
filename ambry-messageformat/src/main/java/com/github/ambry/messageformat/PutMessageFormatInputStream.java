@@ -40,25 +40,35 @@ import java.nio.ByteBuffer;
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
+  // Temporary config for deployment control.  It will be removed after successfully deployed.
+  public static boolean useBlobFormatV3 = false;
+
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType)
       throws MessageFormatException {
-    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, blobType, (short) 0);
+    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, blobType, (short) 0, false);
   }
 
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize) throws MessageFormatException {
-    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob, (short) 0);
+    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, BlobType.DataBlob, (short) 0, false);
   }
 
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType, short lifeVersion)
       throws MessageFormatException {
+    this(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize, blobType, lifeVersion, false);
+  }
+
+  public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
+      ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType, short lifeVersion,
+      boolean isCompressed)
+      throws MessageFormatException {
     if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1) {
-      createStreamWithMessageHeaderV1(key, blobProperties, userMetadata, blobStream, streamSize, blobType);
+      createStreamWithMessageHeaderV1(key, blobProperties, userMetadata, blobStream, streamSize, blobType, isCompressed);
     } else {
       createStreamWithMessageHeader(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize,
-          blobType, lifeVersion);
+          blobType, lifeVersion, isCompressed);
     }
   }
 
@@ -67,7 +77,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
    * understand reading messages with encryption key record.
    */
   private void createStreamWithMessageHeader(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
-      ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType, short lifeVersion)
+      ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType, short lifeVersion,
+      boolean isCompressed)
       throws MessageFormatException {
     int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     int blobEncryptionKeySize = blobEncryptionKey == null ? 0
@@ -75,7 +86,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     int blobPropertiesRecordSize =
         MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
     int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
-    long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
+    long blobSize = useBlobFormatV3 ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(streamSize) :
+        MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
 
     buffer = ByteBuffer.allocate(
         headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize + (int) (
@@ -106,7 +118,11 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(buffer, blobProperties);
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
     int bufferBlobStart = buffer.position();
-    MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
+    if (useBlobFormatV3) {
+      MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
+    } else {
+      MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
+    }
     Crc32 crc = new Crc32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);
@@ -119,14 +135,18 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
    * Helper method to create a stream without encryption key record. This is the default currently, but once all nodes
    * once all nodes in a cluster understand reading messages with encryption key record, and writing in the new format
    * is enabled, this method can be removed.
+   *
+   * TODO - remove Header Message V1 since V3 is already deployed.
    */
+  @Deprecated
   private void createStreamWithMessageHeaderV1(StoreKey key, BlobProperties blobProperties, ByteBuffer userMetadata,
-      InputStream blobStream, long streamSize, BlobType blobType) throws MessageFormatException {
+      InputStream blobStream, long streamSize, BlobType blobType, boolean isCompressed) throws MessageFormatException {
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int blobPropertiesRecordSize =
         MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
     int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
-    long blobSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
+    long blobSize = useBlobFormatV3 ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(streamSize) :
+        MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
 
     buffer = ByteBuffer.allocate(
         headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize + (int) (blobSize - streamSize
@@ -141,7 +161,12 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(buffer, blobProperties);
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
     int bufferBlobStart = buffer.position();
-    MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
+
+    if (useBlobFormatV3) {
+      MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
+    } else {
+      MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
+    }
     Crc32 crc = new Crc32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);

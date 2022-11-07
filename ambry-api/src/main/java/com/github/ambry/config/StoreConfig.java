@@ -509,6 +509,15 @@ public class StoreConfig {
   public static final String storeRebuildTokenBasedOnCompactionHistoryName =
       "store.rebuild.token.based.on.compaction.history";
 
+  /**
+   * Temporary store configuration to determine whether to use blob data using format V3.
+   * V3 introduced the "isCompressed" field.  Default value is FALSE so it remains in V2.
+   * This config will be removed once compression has been tested and deployed.
+   */
+  @Config(storeUseBlobFormatV3Name)
+  public final boolean storeUseBlobFormatV3;
+  public static final String storeUseBlobFormatV3Name = "store.use.blob.format.v3";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -635,5 +644,7 @@ public class StoreConfig {
       storePartitionsToRebuildTokenBasedOnCompactionHistory =
           Stream.of(partitions.split(",")).map(Long::parseLong).collect(Collectors.toList());
     }
+
+    storeUseBlobFormatV3 = verifiableProperties.getBoolean(storeUseBlobFormatV3Name, false);
   }
 }

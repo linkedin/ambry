@@ -30,6 +30,8 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.compression.ZstdCompression;
+import com.github.ambry.config.CompressionConfig;
 import com.github.ambry.config.CryptoServiceConfig;
 import com.github.ambry.config.KMSConfig;
 import com.github.ambry.config.QuotaConfig;
@@ -44,6 +46,8 @@ import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.NetworkClientErrorCode;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SocketNetworkClient;
@@ -62,14 +66,17 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -89,6 +96,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.apache.commons.lang3.reflect.FieldUtils;
+import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -141,6 +150,7 @@ public class GetBlobOperationTest {
   private MockCryptoService cryptoService = null;
   private CryptoJobHandler cryptoJobHandler = null;
   private String localDcName;
+  private CompressionService compressionService;
 
   // Certain tests recreate the routerConfig with different properties.
   private RouterConfig routerConfig;
@@ -246,6 +256,7 @@ public class GetBlobOperationTest {
     replicasCount =
         mockClusterMap.getRandomWritablePartition(MockClusterMap.DEFAULT_PARTITION_CLASS, null).getReplicaIds().size();
     responseHandler = new ResponseHandler(mockClusterMap);
+    compressionService = new CompressionService(routerConfig.getCompressionConfig(), routerMetrics.compressionMetrics);
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vprops, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, time);
@@ -356,7 +367,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
         new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
         getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-        quotaChargeCallback, null, router);
+        quotaChargeCallback, null, router, compressionService);
     Assert.assertEquals("Callbacks must match", getRouterCallback, op.getCallback());
     Assert.assertEquals("Blob ids must match", blobIdStr, op.getBlobIdStr());
 
@@ -368,7 +379,7 @@ public class GetBlobOperationTest {
       new GetBlobOperation(badConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
           new GetBlobOptionsInternal(new GetBlobOptionsBuilder().build(), false, routerMetrics.ageAtGet),
           getRouterCallback, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-          quotaChargeCallback, null, router);
+          quotaChargeCallback, null, router, compressionService);
       Assert.fail("Instantiation of GetBlobOperation with an invalid tracker type must fail");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -1433,6 +1444,37 @@ public class GetBlobOperationTest {
     Assert.assertEquals(((RouterException) op.operationException.get()).getErrorCode(), RouterErrorCode.BlobDeleted);
   }
 
+  @Test
+  public void testDecompressContent() throws Exception {
+    // Prepare the requirement settings to create GetBlobOperation instance.
+    MockDataNodeId dn1 = new MockDataNodeId("dn1", Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+        Collections.singletonList("/tmp"), "DC1");
+    MockDataNodeId dn2 = new MockDataNodeId("dn2", Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
+        Collections.singletonList("/tmp"), "DC2");
+    MockPartitionId partitionId = new MockPartitionId(1, "default", Arrays.asList(dn1, dn2), 0);
+    BlobId blobId = new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.CRAFTED,
+        (byte) 1, (short) 2, (short) 3, partitionId, false, BlobId.BlobDataType.DATACHUNK);
+
+    // Create GetBlobOperation instance and get the FirstChunk instance.
+    GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
+        options, null, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
+        quotaChargeCallback, this.blobMetadataCache, router, compressionService);
+    Object firstChunk = FieldUtils.readField(op, "firstChunk", true);
+    FieldUtils.writeField(firstChunk, "isChunkCompressed", true, true);
+
+    // Generate the test compressed buffer.
+    byte[] sourceData = "Compression unit test to test compression.".getBytes(StandardCharsets.UTF_8);
+    Pair<Integer, byte[]> bufferInfo = new ZstdCompression().compress(sourceData);
+    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(bufferInfo.getSecond(), 0, bufferInfo.getFirst());
+
+    // Invoke the decompressContent method on the compressed buffer.
+    ByteBuf decompressedBuffer = (ByteBuf) MethodUtils.invokeMethod(firstChunk, true, "decompressContent", compressedBuffer);
+    byte[] decompressedData = new byte[decompressedBuffer.readableBytes()];
+    decompressedBuffer.readBytes(decompressedData);
+
+    Assert.assertArrayEquals(sourceData, decompressedData);
+  }
+
   /**
    * Test that the operation is completed and an exception with the error code {@link RouterErrorCode#ChannelClosed} is
    * set when the {@link ReadableStreamChannel} is closed before all chunks are read for a specific blob size and
@@ -1835,7 +1877,7 @@ public class GetBlobOperationTest {
     GetBlobOperation op =
         new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, callback,
             routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback,
-            this.blobMetadataCache, router);
+            this.blobMetadataCache, router, compressionService);
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     return op;
   }

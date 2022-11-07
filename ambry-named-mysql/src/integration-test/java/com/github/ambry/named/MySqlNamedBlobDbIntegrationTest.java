@@ -240,7 +240,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     for (DataSource dataSource : namedBlobDb.getDataSources().values()) {
       try (Connection connection = dataSource.getConnection()) {
         try (Statement statement = connection.createStatement()) {
-          statement.executeUpdate("DELETE FROM named_blobs");
+          statement.executeUpdate("DELETE FROM named_blobs_v2");
         }
       }
     }

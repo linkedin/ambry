@@ -82,7 +82,9 @@ public class HelixClusterManager implements ClusterMap {
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
   private final Map<String, ConcurrentHashMap<String, String>> partitionToResourceNameByDc = new ConcurrentHashMap<>();
-  private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef = new ConcurrentHashMap<>();
+  private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef =
+      new ConcurrentHashMap<>();
+  private final AtomicReference<RoutingTableSnapshot> globalRoutingTableSnapshotRef = new AtomicReference<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   private final AtomicLong errorCount = new AtomicLong(0);
   private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
@@ -100,6 +102,7 @@ public class HelixClusterManager implements ClusterMap {
   // reflects the current value.
   private final AtomicLong currentXid;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
+  private HelixAggregatedViewClusterInfo helixAggregatedViewClusterInfo = null;
 
   /**
    * Instantiate a HelixClusterManager.
@@ -131,23 +134,40 @@ public class HelixClusterManager implements ClusterMap {
       initializationFailureMap.putIfAbsent(clusterMapConfig.clusterMapDatacenterName, e);
     }
     if (initializationFailureMap.get(clusterMapConfig.clusterMapDatacenterName) == null) {
-      List<DatacenterInitializer> initializers = new ArrayList<>();
       DataNodeConfigSourceMetrics dataNodeConfigSourceMetrics = new DataNodeConfigSourceMetrics(metricRegistry);
-      for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
-        // Initialize from every remote datacenter in a separate thread to speed things up.
-        DatacenterInitializer initializer =
-            new DatacenterInitializer(clusterMapConfig, localManager, helixFactory, dcZkInfo, selfInstanceName,
-                dataNodeConfigSourceMetrics, this);
-        initializer.start();
-        initializers.add(initializer);
-      }
-      for (DatacenterInitializer initializer : initializers) {
+      if (clusterMapConfig.clusterMapUseAggregatedView) {
         try {
-          DcInfo dcInfo = initializer.join();
-          dcToDcInfo.put(dcInfo.dcName, dcInfo);
-          dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcInfo.dcName);
+          HelixAggregatedViewClusterInitializer helixAggregatedViewClusterInitializer =
+              new HelixAggregatedViewClusterInitializer(clusterMapConfig, dataCenterToZkAddress, helixFactory,
+                  selfInstanceName, dataNodeConfigSourceMetrics, this);
+          helixAggregatedViewClusterInfo = helixAggregatedViewClusterInitializer.start();
+          // Populate dcToDCInfo and dcIdToDcName maps for all DCs if cluster initialization succeeds. The only thing to
+          // note is DcInfo would have empty clusterChangeHandler associated with it.
+          for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
+            dcToDcInfo.put(dcZkInfo.getDcName(), new DcInfo(dcZkInfo.getDcName(), dcZkInfo, null));
+            dcIdToDcName.put(dcZkInfo.getDcId(), dcZkInfo.getDcName());
+          }
         } catch (Exception e) {
-          initializationFailureMap.putIfAbsent(initializer.getDcName(), e);
+          initializationFailureMap.putIfAbsent(clusterMapConfig.clusterMapDatacenterName, e);
+        }
+      } else {
+        List<HelixDatacenterInitializer> helixDatacenterInitializers = new ArrayList<>();
+        for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
+          // Initialize from every remote datacenter in a separate thread to speed things up.
+          HelixDatacenterInitializer helixDatacenterInitializer =
+              new HelixDatacenterInitializer(clusterMapConfig, localManager, helixFactory, dcZkInfo, selfInstanceName,
+                  dataNodeConfigSourceMetrics, this);
+          helixDatacenterInitializer.start();
+          helixDatacenterInitializers.add(helixDatacenterInitializer);
+        }
+        for (HelixDatacenterInitializer helixDatacenterInitializer : helixDatacenterInitializers) {
+          try {
+            DcInfo dcInfo = helixDatacenterInitializer.join();
+            dcToDcInfo.put(dcInfo.dcName, dcInfo);
+            dcIdToDcName.put(dcInfo.dcZkInfo.getDcId(), dcInfo.dcName);
+          } catch (Exception e) {
+            initializationFailureMap.putIfAbsent(helixDatacenterInitializer.getDcName(), e);
+          }
         }
       }
     }
@@ -451,8 +471,12 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      dcInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
+    if (clusterMapConfig.clusterMapUseAggregatedView) {
+      helixAggregatedViewClusterInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
+    } else {
+      for (DcInfo helixDcInfo : dcToDcInfo.values()) {
+        helixDcInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
+      }
     }
   }
 
@@ -465,6 +489,10 @@ public class HelixClusterManager implements ClusterMap {
       dcInfo.close();
     }
     dcToDcInfo.clear();
+
+    if (clusterMapConfig.clusterMapUseAggregatedView) {
+      helixAggregatedViewClusterInfo.close();
+    }
   }
 
   /**
@@ -515,8 +543,12 @@ public class HelixClusterManager implements ClusterMap {
    */
   Map<String, RoutingTableSnapshot> getRoutingTableSnapshots() {
     Map<String, RoutingTableSnapshot> dcToRoutingTableSnapshot = new ConcurrentHashMap<>();
-    for (DcInfo dcInfo : dcToDcInfo.values()) {
-      dcToRoutingTableSnapshot.put(dcInfo.dcName, dcToRoutingTableSnapshotRef.get(dcInfo.dcName).get());
+    if (clusterMapConfig.clusterMapUseAggregatedView) {
+      dcToRoutingTableSnapshot.put(clusterMapConfig.clusterMapDatacenterName, globalRoutingTableSnapshotRef.get());
+    } else {
+      for (DcInfo dcInfo : dcToDcInfo.values()) {
+        dcToRoutingTableSnapshot.put(dcInfo.dcName, dcToRoutingTableSnapshotRef.get(dcInfo.dcName).get());
+      }
     }
     return Collections.unmodifiableMap(dcToRoutingTableSnapshot);
   }
@@ -646,19 +678,47 @@ public class HelixClusterManager implements ClusterMap {
 
     /**
      * {@inheritDoc}
-     * If dcName is null, then get replicas by given state from all datacenters.
+     * If dcOrClusterName is null, then get replicas by given state from all datacenters.
      * If no routing table snapshot is found for dc name, or no resource name found for given partition, return empty list.
      */
     @Override
     public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
-      List<AmbryReplica> replicas = new ArrayList<>();
+      Set<AmbryReplica> replicas = new HashSet<>();
       for (DcInfo dcInfo : dcToDcInfo.values()) {
         String dc = dcInfo.dcName;
         if (dcName == null || dcName.equals(dc)) {
           String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
-          dcToRoutingTableSnapshotRef.get(dcInfo.dcName)
-              .get()
-              .getInstancesForResource(resourceName, partition.toPathString(), state.name())
+          RoutingTableSnapshot routingTableSnapshot =
+              clusterMapConfig.clusterMapUseAggregatedView ? globalRoutingTableSnapshotRef.get()
+                  : dcToRoutingTableSnapshotRef.get(dc).get();
+
+          // Note:
+          // Even when we are using helix aggregated view, we still need the 'for' loop to get the list of
+          // all replicas belonging to a partition. This is because the resource -> partition mapping can be different
+          // in each DC. So, helix API routingTableSnapshot.getInstancesForResource(resourceName, partitionName, replicaState)
+          // doesn't give complete list of replica hosts when queried with single resource name.
+
+          // For example, consider below example of resource to partition mapping in each DC.
+          // DC1:
+          // Resource 1 -> {Partition 1, Partition 2, Partition 3...}
+          // Resource 2 -> {Partition 4, ... }
+          // DC2:
+          // Resource 1 -> {Partition 2, Partition 3,...}
+          // Resource 2 -> {Partition 1, Partition 4, ...}
+          // DC3:
+          // Resource 1 -> {Partition 1, Partition 2, Partition 3...}
+          // Resource 2 -> {Partition 4, ... }
+
+          // Then, the resource to partition mapping in Aggregated view would be:
+          // Resource 1 -> {Partition 1 (contains replicas of DC1 and DC3) , Partition 2, Partition 3...}
+          // Resource 2 -> {Partition 1 (contains replicas of DC2), Partition 4, Partition 5,...}
+
+          // Due to above, for aggregation view:
+          // routingTableSnapshot.getInstancesForResource(resource1, partition1, standby) would give replicas of DC1 and DC3
+          // routingTableSnapshot.getInstancesForResource(resource2, partition1, standby) would give replicas of DC2
+
+          String partitionPath = partition.toPathString();
+          routingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
               .stream()
               .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
               .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
@@ -666,27 +726,15 @@ public class HelixClusterManager implements ClusterMap {
               .forEach(replicas::add);
         }
       }
-      return replicas;
+      return new ArrayList<>(replicas);
     }
 
     @Override
     public void getReplicaIdsByStates(Map<ReplicaState, List<AmbryReplica>> replicasByState, AmbryPartition partition,
         Set<ReplicaState> states, String dcName) {
-      for (DcInfo dcInfo : dcToDcInfo.values()) {
-        String dc = dcInfo.dcName;
-        if (dcName == null || dcName.equals(dc)) {
-          String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
-          RoutingTableSnapshot snapshot = dcToRoutingTableSnapshotRef.get(dc).get();
-          for (ReplicaState state : states) {
-            List<AmbryReplica> list = replicasByState.computeIfAbsent(state, k -> new ArrayList<>());
-            snapshot.getInstancesForResource(resourceName, partition.toPathString(), state.name())
-                .stream()
-                .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-                .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-                .filter(Objects::nonNull)
-                .forEach(list::add);
-          }
-        }
+      for (ReplicaState state : states) {
+        List<AmbryReplica> replicas = getReplicaIdsByState(partition, state, dcName);
+        replicasByState.put(state, replicas);
       }
     }
 
@@ -839,7 +887,9 @@ public class HelixClusterManager implements ClusterMap {
   class HelixClusterChangeHandler
       implements DataNodeConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
                  RoutingTableChangeListener {
-    private final String dcName;
+    // When using Helix aggregated view, this variable contains to the cluster name (like ambry-prod, ambry-video, etc).
+    // Otherwise, it contains the actual data center name like prod-lor1, prod-ltx1, etc.
+    private final String dcOrClusterName;
     private final Object notificationLock = new Object();
     private final Consumer<Exception> onInitializationFailure;
     private final CountDownLatch routingTableInitLatch = new CountDownLatch(1);
@@ -847,16 +897,22 @@ public class HelixClusterManager implements ClusterMap {
     private volatile boolean instanceConfigInitialized = false;
     private volatile boolean liveStateInitialized = false;
     private volatile boolean idealStateInitialized = false;
-
     final Set<String> allInstances = ConcurrentHashMap.newKeySet();
+    // Tells if this clusterChangeHandler is a listener for changes in the entire cluster via helix aggregated view
+    // instead of for a particular data center.
+    private final boolean isAggregatedViewHandler;
 
     /**
-     * @param dcName the name of data center this handler is associated with.
+     * @param dcOrClusterName the name of data center or the cluster this handler is associated with.
      * @param onInitializationFailure callback to be called if initialization fails in a listener call.
+     * @param isAggregatedViewHandler indicates if this clusterChangeHandler is a listener for changes in the entire
+     *                                cluster via helix aggregated view.
      */
-    HelixClusterChangeHandler(String dcName, Consumer<Exception> onInitializationFailure) {
-      this.dcName = dcName;
+    HelixClusterChangeHandler(String dcOrClusterName, Consumer<Exception> onInitializationFailure,
+        boolean isAggregatedViewHandler) {
+      this.dcOrClusterName = dcOrClusterName;
       this.onInitializationFailure = onInitializationFailure;
+      this.isAggregatedViewHandler = isAggregatedViewHandler;
     }
 
     /**
@@ -873,21 +929,22 @@ public class HelixClusterManager implements ClusterMap {
       try {
         synchronized (notificationLock) {
           if (!instanceConfigInitialized) {
-            logger.info("Received initial notification for instance config change from {}", dcName);
+            logger.info("Received initial notification for instance config change from {}", dcOrClusterName);
           } else {
-            logger.info("Instance config change triggered from {}", dcName);
+            logger.info("Instance config change triggered from {}", dcOrClusterName);
           }
           if (logger.isDebugEnabled()) {
-            configs.forEach(config -> logger.debug("Detailed data node config in {} is: {}", dcName, config));
+            configs.forEach(config -> logger.debug("Detailed data node config in {} is: {}", dcOrClusterName, config));
           }
           try {
             addOrUpdateInstanceInfos(configs);
           } catch (Exception e) {
             if (!instanceConfigInitialized) {
-              logger.error("Exception occurred when initializing instances in {}: ", dcName, e);
+              logger.error("Exception occurred when initializing instances in {}: ", dcOrClusterName, e);
               onInitializationFailure.accept(e);
             } else {
-              logger.error("Exception occurred at runtime when handling instance config changes in {}: ", dcName, e);
+              logger.error("Exception occurred at runtime when handling instance config changes in {}: ",
+                  dcOrClusterName, e);
               helixClusterManagerMetrics.instanceConfigChangeErrorCount.inc();
             }
           } finally {
@@ -911,17 +968,30 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext) {
       if (!idealStateInitialized) {
-        logger.info("Received initial notification for IdealState change from {}", dcName);
+        logger.info("Received initial notification for IdealState change from {}", dcOrClusterName);
         idealStateInitialized = true;
       } else {
-        logger.info("IdealState change triggered from {}", dcName);
+        logger.info("IdealState change triggered from {}", dcOrClusterName);
       }
-      logger.debug("Detailed ideal states in {} are: {}", dcName, idealState);
+      logger.debug("Detailed ideal states in {} are: {}", dcOrClusterName, idealState);
       // rebuild the entire partition-to-resource map in current dc
       ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
       for (IdealState state : idealState) {
         String resourceName = state.getResourceName();
         state.getPartitionSet().forEach(partitionName -> partitionToResourceMap.put(partitionName, resourceName));
+      }
+      String dcName;
+      if (isAggregatedViewHandler) {
+        // Since helix aggregated view service doesn't aggregate ideal states across colos, we register ideal state
+        // change listener with helix service in each colo separately. So, this callback would be invoked for each
+        // data center separately. In order to know which data center, this callback corresponds to, we try to get one
+        // of the host names from Ideal state and get its data center name.
+        IdealState state = idealState.iterator().next();
+        String partition = state.getPartitionSet().iterator().next();
+        String instanceName = state.getInstanceSet(partition).iterator().next();
+        dcName = instanceNameToAmbryDataNode.get(instanceName).getDatacenterName();
+      } else {
+        dcName = dcOrClusterName;
       }
       partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
       helixClusterManagerMetrics.idealStateChangeTriggerCount.inc();
@@ -936,12 +1006,12 @@ public class HelixClusterManager implements ClusterMap {
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       try {
         if (!liveStateInitialized) {
-          logger.info("Received initial notification for live instance change from {}", dcName);
+          logger.info("Received initial notification for live instance change from {}", dcOrClusterName);
           liveStateInitialized = true;
         } else {
-          logger.info("Live instance change triggered from {}", dcName);
+          logger.info("Live instance change triggered from {}", dcOrClusterName);
         }
-        logger.debug("Detailed live instances in {} are: {}", dcName, liveInstances);
+        logger.debug("Detailed live instances in {} are: {}", dcOrClusterName, liveInstances);
         synchronized (notificationLock) {
           updateInstanceLiveness(liveInstances);
           helixClusterManagerMetrics.liveInstanceChangeTriggerCount.inc();
@@ -960,12 +1030,17 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public void onRoutingTableChange(RoutingTableSnapshot routingTableSnapshot, Object context) {
-      dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>()).getAndSet(routingTableSnapshot);
+      if (isAggregatedViewHandler) {
+        globalRoutingTableSnapshotRef.getAndSet(routingTableSnapshot);
+      } else {
+        dcToRoutingTableSnapshotRef.computeIfAbsent(dcOrClusterName, k -> new AtomicReference<>())
+            .getAndSet(routingTableSnapshot);
+      }
       if (routingTableInitLatch.getCount() == 1) {
-        logger.info("Received initial notification for routing table change from {}", dcName);
+        logger.info("Received initial notification for routing table change from {}", dcOrClusterName);
         routingTableInitLatch.countDown();
       } else {
-        logger.info("Routing table change triggered from {}", dcName);
+        logger.info("Routing table change triggered from {}", dcOrClusterName);
       }
 
       // We should notify routing table change indication to different cluster map change listeners like replication
@@ -982,7 +1057,12 @@ public class HelixClusterManager implements ClusterMap {
      * @param routingTableSnapshot snapshot of cluster mappings.
      */
     public void setRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot) {
-      dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>()).getAndSet(routingTableSnapshot);
+      if (isAggregatedViewHandler) {
+        globalRoutingTableSnapshotRef.getAndSet(routingTableSnapshot);
+      } else {
+        dcToRoutingTableSnapshotRef.computeIfAbsent(dcOrClusterName, k -> new AtomicReference<>())
+            .getAndSet(routingTableSnapshot);
+      }
     }
 
     /**
@@ -991,13 +1071,20 @@ public class HelixClusterManager implements ClusterMap {
      * @return the helix {@link RoutingTableSnapshot} for a given data center.
      */
     public RoutingTableSnapshot getRoutingTableSnapshot(String dcName) {
-      return dcToRoutingTableSnapshotRef.get(dcName).get();
+      RoutingTableSnapshot result;
+      if (dcName == null || isAggregatedViewHandler) {
+        result = globalRoutingTableSnapshotRef.get();
+      } else {
+        result = dcToRoutingTableSnapshotRef.get(dcName).get();
+      }
+      return result;
     }
 
     public void waitForInitNotification() throws InterruptedException {
       // wait slightly more than 5 mins to ensure routerUpdater refreshes the snapshot.
       if (!routingTableInitLatch.await(320, TimeUnit.SECONDS)) {
-        throw new IllegalStateException("Initial routing table change from " + dcName + " didn't come within 5 mins");
+        throw new IllegalStateException(
+            "Initial routing table change from " + dcOrClusterName + " didn't come within 5 mins");
       }
     }
 
@@ -1086,7 +1173,8 @@ public class HelixClusterManager implements ClusterMap {
             updateReplicaStateAndOverrideIfNeeded(existingReplica, sealedReplicas, stoppedReplicas);
           } else {
             // if this is a new replica and doesn't exist on node
-            logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName, dcName);
+            logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName,
+                dcOrClusterName);
             // this can be a brand new partition that is added to an existing node
             AmbryPartition mappedPartition =
                 new AmbryPartition(Long.parseLong(partitionName), replicaConfig.getPartitionClass(),
@@ -1171,7 +1259,7 @@ public class HelixClusterManager implements ClusterMap {
      */
     private List<ReplicaId> createNewInstance(DataNodeConfig dataNodeConfig) throws Exception {
       String instanceName = dataNodeConfig.getInstanceName();
-      logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcName);
+      logger.info("Adding node {} and its disks and replicas in {}", instanceName, dcOrClusterName);
       AmbryDataNode datanode =
           new AmbryServerDataNode(dataNodeConfig.getDatacenterName(), clusterMapConfig, dataNodeConfig.getHostName(),
               dataNodeConfig.getPort(), dataNodeConfig.getRackId(), dataNodeConfig.getSslPort(),

@@ -20,6 +20,8 @@ import com.github.ambry.compression.LZ4Compression;
 import com.github.ambry.compression.ZstdCompression;
 import com.github.ambry.config.CompressionConfig;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -98,9 +100,9 @@ public class CompressionService {
      * @param metrics Compression metrics.  Cannot be null.
      */
   public CompressionService(CompressionConfig config, CompressionMetrics metrics) {
+    Objects.requireNonNull(config, "config");
     Objects.requireNonNull(metrics, "metrics");
     compressionMetrics = metrics;
-    if (config == null) config = new CompressionConfig();
 
     // Initialize the properties using the config.
     isCompressionEnabled = config.isCompressionEnabled;
@@ -124,6 +126,11 @@ public class CompressionService {
           + ", specified in config does not exist.  This default has changed to " + compressor.getAlgorithmName());
     }
     defaultCompressor = compressor;
+
+    // TODO - Temporary deployment control code that will be removed after testing and deployment.
+    if (config.isCompressionEnabled) {
+      PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
+    }
   }
 
   /**

@@ -42,6 +42,7 @@ public class StoreMetrics {
   public final Timer findEntriesSinceResponse;
   public final Timer findMissingKeysResponse;
   public final Timer findKeyResponse;
+  public final Timer findAllMessageInfosResponse;
   public final Timer isKeyDeletedResponse;
   public final Timer storeStartTime;
   public final Histogram storeShutdownTimeInMs;
@@ -140,6 +141,8 @@ public class StoreMetrics {
     findMissingKeysResponse =
         registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindMissingKeyResponse"));
     findKeyResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindKeyResponse"));
+    findAllMessageInfosResponse =
+        registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreFindAllMessageInfosResponse"));
     isKeyDeletedResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "IsKeyDeletedResponse"));
     storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreStartTime"));
     storeShutdownTimeInMs = registry.histogram(MetricRegistry.name(BlobStore.class, name + "StoreShutdownTimeInMs"));
@@ -274,17 +277,9 @@ public class StoreMetrics {
     }
     if (enableStoreIndexDirectMemoryUsageMetric) {
       indexes.putIfAbsent(storeId, index);
-      Gauge<Long> indexDirectMemoryUsage = () -> {
-        long start = System.nanoTime();
-        long usage = indexes.values().stream().mapToLong(PersistentIndex::getDirectMemoryUsage).sum();
-        if (logger.isTraceEnabled()) {
-          logger.trace("Time to get direct memory usage from persistent index is: {} nano seconds",
-              System.nanoTime() - start);
-        }
-        return usage;
-      };
-      registry.gauge(MetricRegistry.name(BlobStore.class, prefix + "IndexDirectMemoryUsage"),
-          () -> indexDirectMemoryUsage);
+      Gauge<Long> indexDirectMemoryUsage =
+          () -> indexes.values().stream().mapToLong(PersistentIndex::getDirectMemoryUsage).sum();
+      registry.gauge(MetricRegistry.name(BlobStore.class, "IndexDirectMemoryUsage"), () -> indexDirectMemoryUsage);
     }
   }
 

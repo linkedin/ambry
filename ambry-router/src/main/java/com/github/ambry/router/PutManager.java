@@ -80,6 +80,8 @@ class PutManager {
   // appropriate before the callback is passed on to the PutOperations, every time.
   private final RequestRegistrationCallback<PutOperation> requestRegistrationCallback;
   private final NonBlockingRouter nonBlockingRouter;
+  private final CompressionService compressionService;
+
   /**
    * Create a PutManager
    * @param clusterMap The {@link ClusterMap} of the cluster.
@@ -132,6 +134,9 @@ class PutManager {
     chunkFillerThread.start();
     routerMetrics.initializePutManagerMetrics(chunkFillerThread);
     this.nonBlockingRouter = nonBlockingRouter;
+
+    // TODO - use dependency injection when available.
+    compressionService = new CompressionService(routerConfig.getCompressionConfig(), routerMetrics.compressionMetrics);
   }
 
   /**
@@ -151,7 +156,7 @@ class PutManager {
     PutOperation putOperation =
         PutOperation.forUpload(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
             userMetaData, channel, options, futureResult, callback, routerCallback, chunkArrivalListener, kms,
-            cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
+            cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
     // TODO: netty send this request
     putOperations.add(putOperation);
     putOperation.startOperation();
@@ -172,7 +177,7 @@ class PutManager {
     PutOperation putOperation =
         PutOperation.forStitching(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
             userMetaData, chunksToStitch, futureResult, callback, routerCallback, kms, cryptoService, cryptoJobHandler,
-            time, blobProperties, partitionClass, quotaChargeCallback);
+            time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
     putOperations.add(putOperation);
     putOperation.startOperation();
   }

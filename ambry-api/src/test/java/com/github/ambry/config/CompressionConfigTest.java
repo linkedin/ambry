@@ -20,12 +20,6 @@ import org.junit.Test;
 public class CompressionConfigTest {
 
   @Test
-  public void emptyConstructorTest() {
-    CompressionConfig config = new CompressionConfig();
-    Assert.assertFalse(config.isCompressionEnabled);
-  }
-
-  @Test
   public void constructorTest() {
     // Boolean whether compression is enabled in PUT operation.
     Properties properties = new Properties();

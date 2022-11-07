@@ -54,6 +54,9 @@ public class ContainerBuilder {
   private long lastModifiedTime = LAST_MODIFIED_TIME_DEFAULT_VALUE;
   private int snapshotVersion = SNAPSHOT_VERSION_DEFAULT_VALUE;
   private String accessControlAllowOrigin = ACCESS_CONTROL_ALLOW_ORIGIN_DEFAULT_VALUE;
+  private Long cacheTtlInSecond = CACHE_TTL_IN_SECOND_DEFAULT_VALUE;
+  private Set<String> userMetadataKeysToNotPrefixInResponse =
+      USER_METADATA_KEYS_TO_NOT_PREFIX_IN_RESPONSE_DEFAULT_VALUE;
 
   /**
    * Constructor. This will allow building a new {@link Container} from an existing {@link Container}. The builder will
@@ -85,6 +88,8 @@ public class ContainerBuilder {
     backupEnabled = origin.isBackupEnabled();
     lastModifiedTime = origin.getLastModifiedTime();
     snapshotVersion = origin.getSnapshotVersion();
+    cacheTtlInSecond = origin.getCacheTtlInSecond();
+    userMetadataKeysToNotPrefixInResponse = origin.getUserMetadataKeysToNotPrefixInResponse();
   }
 
   /**
@@ -312,6 +317,26 @@ public class ContainerBuilder {
   }
 
   /**
+   * Sets the cacheTtlInSecond of the {@link Container} to build.
+   * @param cacheTtlInSecond The value to set.
+   * @return This builder.
+   */
+  public ContainerBuilder setCacheTtlInSecond(Long cacheTtlInSecond) {
+    this.cacheTtlInSecond = cacheTtlInSecond;
+    return this;
+  }
+
+  /**
+   * Sets the set of user metadata keys to not prefix in response of the {@link Container} to build.
+   * @param userMetadataKeys The value to set
+   * @return This builder.
+   */
+  public ContainerBuilder setUserMetadataKeysToNotPrefixInResponse(Set<String> userMetadataKeys) {
+    this.userMetadataKeysToNotPrefixInResponse = userMetadataKeys;
+    return this;
+  }
+
+  /**
    * Builds a {@link Container} object. {@code id}, {@code name}, {@code status}, {@code isPrivate}, and
    * {@code parentAccountId} are required before build.
    * @return A {@link Container} object.
@@ -325,6 +350,7 @@ public class ContainerBuilder {
         mediaScanDisabled, replicationPolicy, ttlRequired, securePathRequired,
         contentTypeWhitelistForFilenamesOnDownload, backupEnabled, overrideAccountAcl, namedBlobMode,
         parentAccountId == null ? UNKNOWN_CONTAINER_PARENT_ACCOUNT_ID : parentAccountId.shortValue(), deleteTriggerTime,
-        lastModifiedTime, snapshotVersion, accessControlAllowOrigin);
+        lastModifiedTime, snapshotVersion, accessControlAllowOrigin, cacheTtlInSecond,
+        userMetadataKeysToNotPrefixInResponse);
   }
 }

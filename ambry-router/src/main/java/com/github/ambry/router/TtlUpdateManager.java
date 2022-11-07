@@ -120,7 +120,7 @@ class TtlUpdateManager {
       // If there are no chunkIds, then its a simple blob, and we have to update only blob's ttl.
       TtlUpdateOperation ttlUpdateOperation =
           new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, blobId, serviceId, expiresAtMs,
-              time.milliseconds(), callback, time, futureResult, quotaChargeCallback);
+              time.milliseconds(), callback, time, futureResult, quotaChargeCallback, nonBlockingRouter);
       ttlUpdateOperations.add(ttlUpdateOperation);
       return;
     }
@@ -132,7 +132,7 @@ class TtlUpdateManager {
               TtlUpdateOperation ttlUpdateOperation =
                   new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, finalBlobId, serviceId, expiresAtMs,
                       time.milliseconds(), callBack, time, BatchOperationCallbackTracker.DUMMY_FUTURE,
-                      quotaChargeCallback);
+                      quotaChargeCallback, nonBlockingRouter);
               ttlUpdateOperations.add(ttlUpdateOperation);
             }, nonBlockingRouter);
     long operationTimeMs = time.milliseconds();
@@ -140,7 +140,7 @@ class TtlUpdateManager {
       TtlUpdateOperation ttlUpdateOperation =
           new TtlUpdateOperation(clusterMap, routerConfig, routerMetrics, chunkId, serviceId, expiresAtMs,
               operationTimeMs, tracker.getCallback(chunkId), time, BatchOperationCallbackTracker.DUMMY_FUTURE,
-              quotaChargeCallback);
+              quotaChargeCallback, nonBlockingRouter);
       ttlUpdateOperations.add(ttlUpdateOperation);
     }
   }

@@ -120,6 +120,14 @@ class PutOperation {
   private boolean isEncryptionEnabled;
   private final QuotaChargeCallback quotaChargeCallback;
 
+  // Whether the entire blob (all chunks) are compressible.  Default is null for undecided.
+  // The value is set based on blobProperties and compression service configuration.
+  // For example, if BlobProperties.ContentEncoding specified, then the entire blob will
+  // not be compressed by setting this field to FALSE.
+  // This field is set once a PutOperation constructor based on blob properties.
+  // All chunk compression will check this field and skip compression if this value FALSE.
+  private boolean isBlobCompressible;
+
   // Parameters associated with the state.
 
   // the list of PutChunks that will be used to hold chunks that are sent out. A PutChunk will only hold one chunk at
@@ -168,6 +176,7 @@ class PutOperation {
   // Variables to keep track of netty chunks
   private final RestRequest restRequest;
   private final String loggingContext;
+  private final CompressionService compressionService;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -196,6 +205,7 @@ class PutOperation {
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
    * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
+   * @param compressionService The compression service use to compress data chunks.
    * @return the {@link PutOperation}.
    */
   static PutOperation forUpload(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
@@ -204,10 +214,10 @@ class PutOperation {
       Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeCallback quotaChargeCallback) {
+      String partitionClass, QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         channel, null, options, futureResult, callback, routerCallback, writableChannelEventListener, kms,
-        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
+        cryptoService, cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
   }
 
   /**
@@ -233,6 +243,7 @@ class PutOperation {
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
    * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
+   * @param compressionService The compression service use to compress data chunks.
    * @return the {@link PutOperation}.
    */
   static PutOperation forStitching(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
@@ -240,10 +251,10 @@ class PutOperation {
       List<ChunkInfo> chunksToStitch, FutureResult<String> futureResult, Callback<String> callback,
       RouterCallback routerCallback, KeyManagementService kms, CryptoService cryptoService,
       CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties, String partitionClass,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
         null, chunksToStitch, PutBlobOptions.DEFAULT, futureResult, callback, routerCallback, null, kms, cryptoService,
-        cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback);
+        cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
   }
 
   /**
@@ -269,6 +280,7 @@ class PutOperation {
    * @param blobProperties the BlobProperties associated with the put operation.
    * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
    * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
+   * @param compressionService The compression service use to compress data chunks.
    */
   private PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
@@ -276,7 +288,7 @@ class PutOperation {
       FutureResult<String> futureResult, Callback<String> callback, RouterCallback routerCallback,
       ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties,
-      String partitionClass, QuotaChargeCallback quotaChargeCallback) {
+      String partitionClass, QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
     submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -297,6 +309,8 @@ class PutOperation {
     this.cryptoJobHandler = cryptoJobHandler;
     this.time = time;
     this.quotaChargeCallback = quotaChargeCallback;
+    this.compressionService = compressionService;
+    this.isBlobCompressible = compressionService.isBlobCompressible(blobProperties);
     bytesFilledSoFar = 0;
     chunkCounter = -1;
     putChunks = new ConcurrentLinkedQueue<>();
@@ -1049,6 +1063,10 @@ class PutOperation {
     // Tracks quota charging for this chunk.
     private OperationQuotaCharger operationQuotaCharger;
 
+    // Whether this chunk is compressed.  Default is false for not compressed.
+    // This value is set after compression has completed.  It is used to create PutRequest.
+    private boolean isChunkCompressed;
+
     /**
      * Construct a PutChunk
      */
@@ -1077,6 +1095,7 @@ class PutOperation {
       state = ChunkState.Free;
       operationQuotaCharger =
           new OperationQuotaCharger(quotaChargeCallback, PutOperation.class.getSimpleName(), routerMetrics);
+      isChunkCompressed = false;
     }
 
     /**
@@ -1292,6 +1311,27 @@ class PutOperation {
     }
 
     /**
+     * Compress the buffer in "buf" field for data chunks.  It does not compress metadata chunks.
+     * It also applies rules specified in config.
+     * After compression, it replaces "buf" field and update isCompressed field in blob properties.
+     */
+    private void compressChunk() {
+      // Do not compress metadata chunk or already compressed chunk.
+      if (isMetadataChunk() || isChunkCompressed || !isBlobCompressible) {
+        return;
+      }
+
+      // Note: compress() returns null if it failed.
+      boolean isFullChunk = (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes);
+      ByteBuf newBuffer = compressionService.compressChunk(buf, isFullChunk);
+      if (newBuffer != null) {
+        buf.release();
+        buf = newBuffer;
+        isChunkCompressed = true;
+      }
+    }
+
+    /**
      * Submits encrypt job for the given {@link PutChunk} and processes the callback for the same
      */
     private void encryptChunk() {
@@ -1325,6 +1365,9 @@ class PutOperation {
       if (updateMetric) {
         routerMetrics.chunkFillTimeMs.update(time.milliseconds() - chunkFreeAtMs);
       }
+
+      // Attempt to apply compression on data chunk.
+      compressChunk();
 
       if (!passedInBlobProperties.isEncrypted()) {
         prepareForSending();
@@ -1513,11 +1556,12 @@ class PutOperation {
      * @return the crated {@link PutRequest}.
      */
     protected PutRequest createPutRequest() {
-      return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname,
-          chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
-          buf.readableBytes(), BlobType.DataBlob, encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
+      return new PutRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(),
+          routerConfig.routerHostname, chunkBlobId, chunkBlobProperties, ByteBuffer.wrap(chunkUserMetadata),
+          buf.retainedDuplicate(), buf.readableBytes(), BlobType.DataBlob,
+          encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null,
           routerConfig.routerPutRequestUseJavaNativeCrc32 ? Crc32Impl.getJavaNativeInstance()
-              : Crc32Impl.getAmbryInstance());
+              : Crc32Impl.getAmbryInstance(), isChunkCompressed);
     }
 
     /**

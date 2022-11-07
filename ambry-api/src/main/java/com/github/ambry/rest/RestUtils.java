@@ -1012,13 +1012,7 @@ public class RestUtils {
    * @throws RestServiceException if there are any problems setting the header.
    */
   public static boolean setUserMetadataHeaders(byte[] userMetadata, RestResponseChannel restResponseChannel) {
-    Map<String, String> userMetadataMap = buildUserMetadata(userMetadata);
-    if (userMetadataMap != null) {
-      setUserMetadataHeaders(userMetadataMap, restResponseChannel);
-      return true;
-    } else {
-      return false;
-    }
+    return setUserMetadataHeaders(userMetadata, restResponseChannel, Collections.emptySet());
   }
 
   /**
@@ -1029,13 +1023,49 @@ public class RestUtils {
    */
   public static void setUserMetadataHeaders(Map<String, String> userMetadataMap,
       RestResponseChannel restResponseChannel) {
+    setUserMetadataHeaders(userMetadataMap, restResponseChannel, Collections.emptySet());
+  }
+
+  /**
+   * Sets the user metadata in the headers of the response.
+   * @param userMetadata byte array containing user metadata that needs to be sent.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @param keysToNotPrefix a set of user metadata keys to not add user metadata prefix in the response header
+   * @return {@code true} if the user metadata was successfully deserialized into headers, {@code false} if not.
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  public static boolean setUserMetadataHeaders(byte[] userMetadata, RestResponseChannel restResponseChannel,
+      Set<String> keysToNotPrefix) {
+    Map<String, String> userMetadataMap = buildUserMetadata(userMetadata);
+    if (userMetadataMap != null) {
+      setUserMetadataHeaders(userMetadataMap, restResponseChannel, keysToNotPrefix);
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  /**
+   * Sets the user metadata in the headers of the response.
+   * @param userMetadataMap map of user metadata that needs to be sent.
+   * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
+   * @param keysToNotPrefix a set of user metadata keys to not add user metadata prefix in the response header
+   * @throws RestServiceException if there are any problems setting the header.
+   */
+  public static void setUserMetadataHeaders(Map<String, String> userMetadataMap,
+      RestResponseChannel restResponseChannel, Set<String> keysToNotPrefix) {
     Objects.requireNonNull(userMetadataMap, "user metadata must be supplied");
+    Objects.requireNonNull(keysToNotPrefix, "keys to not prefix must be supplied");
     for (Map.Entry<String, String> entry : userMetadataMap.entrySet()) {
       String headerName = entry.getKey();
       String headerValue = entry.getValue();
       // Ensure um prefix is prepended to header name
       if (!headerName.startsWith(Headers.USER_META_DATA_HEADER_PREFIX)) {
         headerName = Headers.USER_META_DATA_HEADER_PREFIX + headerName;
+      }
+      String headerNameWithoutPrefix = headerName.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
+      if (keysToNotPrefix.contains(headerNameWithoutPrefix)) {
+        headerName = headerNameWithoutPrefix;
       }
       if (StandardCharsets.US_ASCII.newEncoder().canEncode(headerValue)) {
         try {
