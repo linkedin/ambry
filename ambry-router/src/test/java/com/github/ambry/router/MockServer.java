@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -33,6 +34,8 @@ import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.ReplicateBlobRequest;
+import com.github.ambry.protocol.ReplicateBlobResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.TtlUpdateRequest;
@@ -74,12 +77,32 @@ class MockServer {
   private boolean getErrorOnDataBlobOnly = false;
   private final ClusterMap clusterMap;
   private final String dataCenter;
+  // hostName and hostPort are used to identify this Mock Server.
+  private final String hostName;
+  private final Integer hostPort;
+  // With layout, can communicate with other MockServers.
+  private final MockServerLayout layout;
   private final ConcurrentHashMap<RequestOrResponseType, LongAdder> requestCounts = new ConcurrentHashMap<>();
   private final Map<String, ServerErrorCode> errorCodeForBlobs = new HashMap<>();
 
   MockServer(ClusterMap clusterMap, String dataCenter) {
+    this(clusterMap, dataCenter, null, null, null);
+  }
+
+  MockServer(ClusterMap clusterMap, String dataCenter, String hostName, Integer port, MockServerLayout layout) {
     this.clusterMap = clusterMap;
     this.dataCenter = dataCenter;
+    this.hostName = hostName;
+    this.hostPort = port;
+    this.layout = layout;
+  }
+
+  public String getHostName() {
+    return hostName;
+  }
+
+  public Integer getHostPort() {
+    return hostPort;
   }
 
   /**
@@ -113,6 +136,9 @@ class MockServer {
         break;
       case UndeleteRequest:
         response = makeUndeleteResponse((UndeleteRequest) send, serverError);
+        break;
+      case ReplicateBlobRequest:
+        response = makeReplicateBlobResponse((ReplicateBlobRequest) send, serverError);
         break;
       default:
         throw new IOException("Unknown request type received");
@@ -446,6 +472,25 @@ class MockServer {
   }
 
   /**
+   * Make a {@link ReplicateBlobResponse} for the given {@link ReplicateBlobRequest} for which the given {@link ServerErrorCode} was
+   * encountered.
+   * *
+   * @return the constructed {@link ReplicateBlobResponse}
+   */
+  ReplicateBlobResponse makeReplicateBlobResponse(ReplicateBlobRequest replicateBlobRequest,
+      ServerErrorCode replicateBlobError) {
+    if (replicateBlobError == ServerErrorCode.No_Error) {
+      replicateBlobError =
+          errorCodeForBlobs.getOrDefault(replicateBlobRequest.getBlobId().getID(), ServerErrorCode.No_Error);
+    }
+    if (replicateBlobError == ServerErrorCode.No_Error) {
+      updateBlobMap(replicateBlobRequest);
+    }
+    return new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+        replicateBlobError);
+  }
+
+  /**
    * Serialize contents of the PutRequest and update the blob map with the serialized content.
    * @param putRequest the PutRequest
    * @throws IOException if there was an error reading the contents of the given PutRequest.
@@ -453,6 +498,33 @@ class MockServer {
   private void updateBlobMap(PutRequest putRequest) throws IOException {
     StoredBlob blob = new StoredBlob(putRequest, clusterMap);
     blobs.put(blob.id, blob);
+  }
+
+  /**
+   * Serialize contents of the ReplicateBlobRequest and update the blob map with the serialized content.
+   * @param replicateBlobRequest the ReplicateBlobRequest
+   */
+  private void updateBlobMap(ReplicateBlobRequest replicateBlobRequest) {
+    String sourceHostName = replicateBlobRequest.getSourceHostName();
+    int sourceHostPort = replicateBlobRequest.getSourceHostPort();
+    BlobId blobId = replicateBlobRequest.getBlobId();
+    // local store has the Blob already
+    if (blobs.containsKey(blobId.getID())) {
+      return;
+    }
+
+    // replicating the Blob from the source Data node.
+    for (MockServer server : layout.getMockServers()) {
+      // find the source Data node.
+      if (server.getHostName().equals(sourceHostName) && server.getHostPort().equals(sourceHostPort)) {
+        Map<String, StoredBlob> remoteBlobs = server.getBlobs();
+        if (remoteBlobs.containsKey(blobId.getID())) {
+          // write to the local store
+          this.blobs.put(blobId.getID(), remoteBlobs.get(blobId.getID()));
+        }
+        break;
+      }
+    }
   }
 
   /**

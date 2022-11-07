@@ -508,7 +508,7 @@ public class ClusterMapUtils {
   static class PartitionSelectionHelper implements ClusterMapChangeListener {
     private final int minimumLocalReplicaCount;
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-    private final ClusterManagerCallback<?, ?, ?, ?> clusterManagerCallback;
+    private final ClusterManagerQueryHelper<?, ?, ?, ?> clusterManagerQueryHelper;
     private final String localDatacenterName;
     private final String defaultPartitionClass;
     private Collection<? extends PartitionId> allPartitions;
@@ -516,18 +516,18 @@ public class ClusterMapUtils {
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
 
     /**
-     * @param clusterManagerCallback the {@link ClusterManagerCallback} to query current cluster info
+     * @param clusterManagerQueryHelper the {@link ClusterManagerQueryHelper} to query current cluster info
      * @param localDatacenterName the name of the local datacenter. Can be null if datacenter specific replica counts
      * @param minimumLocalReplicaCount the minimum number of replicas in local datacenter. This is used when selecting
      * @param defaultPartitionClass the default partition class to use if a partition class is not found
      */
-    PartitionSelectionHelper(ClusterManagerCallback<?, ?, ?, ?> clusterManagerCallback, String localDatacenterName,
+    PartitionSelectionHelper(ClusterManagerQueryHelper<?, ?, ?, ?> clusterManagerQueryHelper, String localDatacenterName,
         int minimumLocalReplicaCount, String defaultPartitionClass) {
       this.localDatacenterName = localDatacenterName;
       this.minimumLocalReplicaCount = minimumLocalReplicaCount;
-      this.clusterManagerCallback = clusterManagerCallback;
+      this.clusterManagerQueryHelper = clusterManagerQueryHelper;
       this.defaultPartitionClass = defaultPartitionClass;
-      updatePartitions(clusterManagerCallback.getPartitions(), localDatacenterName);
+      updatePartitions(clusterManagerQueryHelper.getPartitions(), localDatacenterName);
     }
 
     /**
@@ -735,7 +735,7 @@ public class ClusterMapUtils {
           : addedReplicas.get(0).getDataNodeId().getDatacenterName();
       logger.info("Re-populating partition-selection related maps because replicas are added or removed in {}", dcName);
       // condition here, remember this method can be invoked by multiple threads (synchronize this method?)
-      Collection<? extends PartitionId> partitionsInCluster = clusterManagerCallback.getPartitions();
+      Collection<? extends PartitionId> partitionsInCluster = clusterManagerQueryHelper.getPartitions();
       Map<String, SortedMap<Integer, List<PartitionId>>> partitionSortedByReplicaCount =
           new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
       Map<PartitionId, List<ReplicaId>> partitionAndLocalReplicas = new HashMap<>();

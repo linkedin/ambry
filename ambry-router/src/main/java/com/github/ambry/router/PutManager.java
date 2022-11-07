@@ -79,7 +79,7 @@ class PutManager {
   // A single callback as this will never get called concurrently. The list of request to fill will be set as
   // appropriate before the callback is passed on to the PutOperations, every time.
   private final RequestRegistrationCallback<PutOperation> requestRegistrationCallback;
-
+  private final NonBlockingRouter nonBlockingRouter;
   /**
    * Create a PutManager
    * @param clusterMap The {@link ClusterMap} of the cluster.
@@ -97,11 +97,12 @@ class PutManager {
    *                              container config). Can be {@code null} if no affinity is required for the puts for
    *                              which the container contains no partition class hints.
    * @param time The {@link Time} instance to use.
+   * @param nonBlockingRouter The non-blocking router object
    */
   PutManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
       RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, RouterCallback routerCallback, String suffix,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      AccountService accountService, Time time, String defaultPartitionClass) {
+      AccountService accountService, Time time, String defaultPartitionClass, NonBlockingRouter nonBlockingRouter) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
@@ -130,6 +131,7 @@ class PutManager {
     chunkFillerThread = Utils.newThread("ChunkFillerThread-" + suffix, new ChunkFiller(), true);
     chunkFillerThread.start();
     routerMetrics.initializePutManagerMetrics(chunkFillerThread);
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -294,7 +296,7 @@ class PutManager {
     // puts.
     routerCallback.scheduleDeletes(Lists.newArrayList(op.getSlippedPutBlobIds()), op.getServiceId(),
         op.getQuotaChargeCallback());
-    NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
+    nonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), blobId, e);
   }
 
   /**
@@ -370,7 +372,7 @@ class PutManager {
         routerMetrics.operationDequeuingRate.mark();
         routerMetrics.operationAbortCount.inc();
         routerMetrics.onPutBlobError(e, op.isEncryptionEnabled(), op.isStitchOperation());
-        NonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null, e);
+        nonBlockingRouter.completeOperation(op.getFuture(), op.getCallback(), null, e);
       }
     }
   }

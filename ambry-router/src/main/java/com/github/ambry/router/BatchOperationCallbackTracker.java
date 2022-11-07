@@ -45,6 +45,7 @@ class BatchOperationCallbackTracker {
   private final ConcurrentMap<BlobId, Boolean> blobIdToAck = new ConcurrentHashMap<>();
   private final AtomicLong ackedCount = new AtomicLong(0);
   private final AtomicBoolean completed = new AtomicBoolean(false);
+  private final NonBlockingRouter nonBlockingRouter;
 
   /**
    * Constructor
@@ -54,9 +55,11 @@ class BatchOperationCallbackTracker {
    * @param callback the {@link Callback} to be triggered once acks are received for all blobs
    * @param quotaChargeCallback The {@link QuotaChargeCallback} to be triggered to account for quota usage.
    * @param finalOperation The operation to call on the {@code finalBlobId}.
+   * @param nonBlockingRouter The non-blocking router object
    */
   BatchOperationCallbackTracker(List<BlobId> blobIds, BlobId finalBlobId, FutureResult<Void> futureResult,
-      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback, BiConsumer<BlobId, Callback> finalOperation) {
+      Callback<Void> callback, QuotaChargeCallback quotaChargeCallback, BiConsumer<BlobId, Callback> finalOperation,
+      NonBlockingRouter nonBlockingRouter) {
     numBlobIds = blobIds.size();
     blobIds.forEach(blobId -> blobIdToAck.put(blobId, false));
     if (blobIdToAck.size() != numBlobIds) {
@@ -67,6 +70,7 @@ class BatchOperationCallbackTracker {
     this.quotaChargeCallback = quotaChargeCallback;
     this.finalOperation = finalOperation;
     this.finalBlobId = finalBlobId;
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   /**
@@ -89,7 +93,7 @@ class BatchOperationCallbackTracker {
           if(finalOperationReadyToDo.compareAndSet(false, true)) {
             // if final operation hasn't been started yet, then start it.
             blobIdToAck.put(finalBlobId, false);
-            NonBlockingRouter.currentOperationsCount.incrementAndGet();
+            nonBlockingRouter.currentOperationsCount.incrementAndGet();
             finalOperation.accept(finalBlobId, getCallback(finalBlobId));
           }
 
@@ -123,7 +127,7 @@ class BatchOperationCallbackTracker {
           LOGGER.info("Exception {} while charging quota for ttl operation", quotaException.toString());
         }
       }
-      NonBlockingRouter.completeOperation(futureResult, callback, null, e, false);
+      nonBlockingRouter.completeOperation(futureResult, callback, null, e, false);
     }
   }
 }

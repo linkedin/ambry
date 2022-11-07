@@ -15,9 +15,11 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
@@ -36,6 +38,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -49,7 +52,6 @@ import org.slf4j.LoggerFactory;
  * Streaming, non-blocking router implementation for Ambry.
  */
 class NonBlockingRouter implements Router {
-  static final AtomicInteger currentOperationsCount = new AtomicInteger(0);
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
   static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
@@ -69,6 +71,8 @@ class NonBlockingRouter implements Router {
   // Cache to store blob IDs which were not found in servers recently.
   private final Cache<String, Boolean> notFoundCache;
   private final AmbryCache blobMetadataCache;
+
+  public final AtomicInteger currentOperationsCount = new AtomicInteger(0);
 
   /**
    * Constructs a NonBlockingRouter.
@@ -155,7 +159,7 @@ class NonBlockingRouter implements Router {
    * @param operationResult the result of the operation (if any).
    * @param exception {@link Exception} encountered while performing the operation (if any).
    */
-  static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
+  <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
       Exception exception) {
     completeOperation(futureResult, callback, operationResult, exception, true);
   }
@@ -170,10 +174,10 @@ class NonBlockingRouter implements Router {
    * @param exception {@link Exception} encountered while performing the operation (if any).
    * @param decrementOperationsCount if {@code true}, decrements current outstanding operations count.
    */
-  static <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
+  <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
       Exception exception, boolean decrementOperationsCount) {
     if (decrementOperationsCount) {
-      NonBlockingRouter.currentOperationsCount.decrementAndGet();
+      currentOperationsCount.decrementAndGet();
     }
     try {
       if (futureResult != null) {
@@ -316,6 +320,50 @@ class NonBlockingRouter implements Router {
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
       routerMetrics.operationDequeuingRate.mark();
       routerMetrics.onPutBlobError(routerException, blobProperties.isEncrypted(), false);
+      completeOperation(futureResult, callback, null, routerException);
+    }
+    return futureResult;
+  }
+
+  /**
+   * Requests for a blob to be replicated asynchronously and returns a future that will eventually contain information
+   * about whether the request succeeded or not.
+   * @param blobId The ID of the blob to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
+   * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
+   */
+  public CompletableFuture<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode) {
+    CompletableFuture<Void> future = new CompletableFuture<>();
+    replicateBlob(blobId, serviceId, sourceDataNode, CallbackUtils.fromCompletableFuture(future));
+    return future;
+  }
+
+  /**
+   * Requests for a new blob to be replicated on-demand asynchronously and invokes the {@link Callback} when the request completes.
+   * @param blobId The ID of the blob to be replicated.
+   * @param serviceId The service ID of the service replicating the blob. This can be null if unknown.
+   * @param sourceDataNode The source {@link DataNodeId} to get the blob from.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request.
+   * @return A future that would contain information about whether the replicateBlob succeeded or not, eventually.
+   */
+  public Future<Void> replicateBlob(String blobId, String serviceId, DataNodeId sourceDataNode,
+      Callback<Void> callback) {
+    if (blobId == null || sourceDataNode == null) {
+      throw new IllegalArgumentException("blobId or sourceHost must not be null");
+    }
+
+    currentOperationsCount.incrementAndGet();
+    routerMetrics.replicateBlobOperationRate.mark();
+    routerMetrics.operationQueuingRate.mark();
+
+    FutureResult<Void> futureResult = new FutureResult<>();
+    if (isOpen.get()) {
+      getOperationController().replicateBlob(blobId, serviceId, sourceDataNode, futureResult, callback);
+    } else {
+      RouterException routerException =
+          new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);
+      routerMetrics.operationDequeuingRate.mark();
       completeOperation(futureResult, callback, null, routerException);
     }
     return futureResult;

@@ -439,18 +439,6 @@ public class StoreConfig {
   public static final String storeEnableIndexDirectMemoryUsageMetricName =
       "store.enable.index.direct.memory.usage.metric";
 
-  @Config(storeAlwaysEnableTargetIndexDuplicateCheckingName)
-  @Default("false")
-  public final boolean storeAlwaysEnableTargetIndexDuplicateChecking;
-  public static final String storeAlwaysEnableTargetIndexDuplicateCheckingName =
-      "store.always.enable.target.index.duplicate.checking";
-
-  @Config(storeCompactionEnableBasicInfoOnMissingDuplicateName)
-  @Default("false")
-  public final boolean storeCompactionEnableBasicInfoOnMissingDuplicate;
-  public static final String storeCompactionEnableBasicInfoOnMissingDuplicateName =
-      "store.compaction.enable.basic.info.on.missing.duplicate";
-
   /**
    * A normalized disk IO read latency threshold(per MB). If actual normalized disk read latency is higher than the
    * threshold, we need to decrease compaction speed.
@@ -503,23 +491,23 @@ public class StoreConfig {
   public static final String storeCompactionHistoryInDayName = "store.compaction.history.in.day";
 
   /**
-   * True to enable rebuilding replication token based on compaction history.
-   */
-  @Config(storeRebuildTokenBasedOnCompactionHistoryName)
-  @Default("false")
-  public final boolean storeRebuildTokenBasedOnCompactionHistory;
-  public static final String storeRebuildTokenBasedOnCompactionHistoryName =
-      "store.rebuild.token.based.on.compaction.history";
-
-  /**
-   * Partition id to enable rebuild token based on compaction history. In order to enable this feature, we have to enable
-   * the storeRebuildTokenBasedOnCompactionHistory and add partition id here. This is a comma separated list.
+   * Partition id to enable rebuild token based on compaction history. To enable this feature for all partitions in
+   * this host, use {@link #storeRebuildTokenBasedOnCompactionHistory}.
    */
   @Config(storePartitionsToRebuildTokenBasedOnCompactionHistoryName)
   @Default("")
   public List<Long> storePartitionsToRebuildTokenBasedOnCompactionHistory;
   public static final String storePartitionsToRebuildTokenBasedOnCompactionHistoryName =
       "store.partitions.to.rebuild.token.based.on.compaction.history";
+
+  /**
+   * True to enable rebuilding replication token based on compaction history for all partitions in this host.
+   */
+  @Config(storeRebuildTokenBasedOnCompactionHistoryName)
+  @Default("false")
+  public final boolean storeRebuildTokenBasedOnCompactionHistory;
+  public static final String storeRebuildTokenBasedOnCompactionHistoryName =
+      "store.rebuild.token.based.on.compaction.history";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -621,11 +609,7 @@ public class StoreConfig {
         verifiableProperties.getBoolean("store.enable.current.invalid.size.metric", false);
     storeEnableIndexDirectMemoryUsageMetric =
         verifiableProperties.getBoolean(storeEnableIndexDirectMemoryUsageMetricName, false);
-    storeAlwaysEnableTargetIndexDuplicateChecking =
-        verifiableProperties.getBoolean(storeAlwaysEnableTargetIndexDuplicateCheckingName, false);
     storeRebuildTokenBasedOnResetKey = verifiableProperties.getBoolean("store.rebuild.token.based.on.reset.key", false);
-    storeCompactionEnableBasicInfoOnMissingDuplicate =
-        verifiableProperties.getBoolean(storeCompactionEnableBasicInfoOnMissingDuplicateName, false);
     storeCompactionIoPerMbReadLatencyThresholdMs =
         verifiableProperties.getIntInRange("store.compaction.io.per.mb.read.latency.threshold.ms", 20, 0,
             Integer.MAX_VALUE);

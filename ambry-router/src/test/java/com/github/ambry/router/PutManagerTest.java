@@ -748,7 +748,7 @@ public class PutManagerTest {
     PutManager manager = new PutManager(mockClusterMap, new ResponseHandler(mockClusterMap), notificationSystem,
         new RouterConfig(vProps), new NonBlockingRouterMetrics(mockClusterMap, null),
         new RouterCallback(networkClient, null), "0", kms, cryptoService, cryptoJobHandler, accountService, mockTime,
-        MockClusterMap.DEFAULT_PARTITION_CLASS);
+        MockClusterMap.DEFAULT_PARTITION_CLASS, getNonBlockingRouter());
     BlobProperties blobProperties =
         new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
             Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
@@ -783,7 +783,7 @@ public class PutManagerTest {
     manager.poll(new ArrayList<>(), new HashSet<>());
     Assert.assertTrue(putChunk.isDataReleased());
     Assert.assertEquals(0, manager.getPutOperations().size());
-    NonBlockingRouter.currentOperationsCount.incrementAndGet(); // Make sure this static field's value stay the same
+    router.currentOperationsCount.incrementAndGet(); // Make sure this static field's value stay the same
     manager.close();
   }
 

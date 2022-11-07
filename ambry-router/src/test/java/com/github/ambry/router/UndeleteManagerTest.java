@@ -126,7 +126,7 @@ public class UndeleteManagerTest {
       }
     }
     undeleteManager = new UndeleteManager(clusterMap, new ResponseHandler(clusterMap), new LoggingNotificationSystem(),
-        accountService, routerConfig, metrics, time);
+        accountService, routerConfig, metrics, time, router);
     networkClient = networkClientFactory.getNetworkClient();
   }
 
@@ -413,7 +413,7 @@ public class UndeleteManagerTest {
   private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime)
       throws Exception {
     FutureResult<Void> future = new FutureResult<>();
-    NonBlockingRouter.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
+    router.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
     List<String> chunkIds = new ArrayList<>(ids);
     undeleteManager.submitUndeleteOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UNDELETE_SERVICE_ID,
         future, future::done, quotaChargeCallback);
@@ -438,7 +438,7 @@ public class UndeleteManagerTest {
   private void executeOpAndVerifyQuotaRejected(Collection<String> ids, RouterErrorCode expectedErrorCode)
       throws Exception {
     FutureResult<Void> future = new FutureResult<>();
-    NonBlockingRouter.currentOperationsCount.addAndGet(ids.size());
+    router.currentOperationsCount.addAndGet(ids.size());
     List<String> chunkIds = new ArrayList<>(ids);
     undeleteManager.submitUndeleteOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UNDELETE_SERVICE_ID,
         future, future::done, quotaChargeCallback);

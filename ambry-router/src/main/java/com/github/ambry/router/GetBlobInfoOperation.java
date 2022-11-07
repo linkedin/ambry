@@ -74,6 +74,7 @@ class GetBlobInfoOperation extends GetOperation {
   private final Map<Integer, RequestInfo> correlationIdToGetRequestInfo = new LinkedHashMap<>();
 
   private static final Logger logger = LoggerFactory.getLogger(GetBlobInfoOperation.class);
+  private final NonBlockingRouter nonBlockingRouter;
 
   /**
    * Construct a GetBlobInfoOperation
@@ -90,12 +91,13 @@ class GetBlobInfoOperation extends GetOperation {
    * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
    * @param time the Time instance to use.
    * @param isEncrypted if encrypted bit set based on original string of a {@link BlobId}
+   * @param nonBlockingRouter The non-blocking router object
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
       ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
       Callback<GetBlobResult> callback, RouterCallback routerCallback, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted,
-      QuotaChargeCallback quotaChargeCallback) {
+      QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -106,12 +108,13 @@ class GetBlobInfoOperation extends GetOperation {
     progressTracker = new ProgressTracker(operationTracker);
     operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
+    this.nonBlockingRouter = nonBlockingRouter;
   }
 
   @Override
   void abort(Exception abortCause) {
     if (operationCallbackInvoked.compareAndSet(false, true)) {
-      NonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
+      nonBlockingRouter.completeOperation(null, getOperationCallback, null, abortCause);
       operationCompleted = true;
     }
   }
@@ -520,7 +523,7 @@ class GetBlobInfoOperation extends GetOperation {
       } else {
         routerMetrics.getBlobInfoOperationLatencyMs.update(operationLatencyMs);
       }
-      NonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
+      nonBlockingRouter.completeOperation(null, getOperationCallback, operationResult, e);
     }
   }
 

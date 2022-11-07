@@ -87,15 +87,15 @@ public class AdminResponseWithContent extends AdminResponse {
   @Override
   public void prepareBuffer() {
     super.prepareBuffer();
-    bufferToSend.writeInt(content == null? 0: content.length);
-    if (content != null) {
+    bufferToSend.writeInt(content == null ? 0 : content.length);
+    if (content != null && content.length != 0) {
       bufferToSend.writeBytes(content);
     }
   }
 
   @Override
   public String toString() {
-    return "AdminResponse[ClientId=" + clientId + ", CorrelationId=" + correlationId + ", Type=" + type
+    return "AdminResponseWithContent[ClientId=" + clientId + ", CorrelationId=" + correlationId + ", Type=" + type
         + ", ServerError=" + getError() + ", ContentLength=" + (content == null ? 0 : content.length) + "]";
   }
 }

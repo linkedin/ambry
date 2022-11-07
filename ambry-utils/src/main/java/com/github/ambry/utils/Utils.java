@@ -1085,6 +1085,31 @@ public class Utils {
         .collect(Collectors.toCollection(collectionFactory));
   }
 
+
+  /**
+   * Split the input string by the specified delimiter, and then apply filter per item.
+   *
+   * @param combinedString The combined string, such as comma-separated string.
+   * @param delimiter The separator in the combinedString
+   * @param filter The filter to apply per string item, such as apply lower case.  Pass in null if there is no filter.
+   *               The filter function should return null to exclude the item.
+   * @param items The item store where each string will be added.
+   */
+  public static void splitString(String combinedString, String delimiter, Function<String, String> filter,
+      Collection<String> items) {
+    checkNotNullOrEmpty(delimiter, "separator is required.");
+    if (combinedString != null && combinedString.length() > 0) {
+      for (String item : combinedString.split(delimiter)) {
+        if (filter != null) {
+          item = filter.apply(item);
+        }
+        if (item != null) {
+          items.add(item);
+        }
+      }
+    }
+  }
+
   /**
    * Partition the input list into a List of smaller sublists, each one limited to the specified batch size. This method
    * copy elements, so changes to the so changes to the original list will be reflected in the returned list.
@@ -1440,10 +1465,8 @@ public class Utils {
   public static void ignoreException(RunnableThatThrow<Exception> function) {
     try {
       function.run();
-    }
-    catch (Exception ex) {
+    } catch (Exception ex) {
       // Exception is intentionally ignored.
     }
   }
-
 }

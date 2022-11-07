@@ -14,5 +14,11 @@
 package com.github.ambry.router;
 
 public enum RouterOperation {
-  GetBlobOperation, GetBlobInfoOperation, PutOperation, DeleteOperation, TtlUpdateOperation, UndeleteOperation
+  GetBlobOperation,
+  GetBlobInfoOperation,
+  PutOperation,
+  DeleteOperation,
+  TtlUpdateOperation,
+  UndeleteOperation,
+  ReplicateBlobOperation
 }

@@ -114,6 +114,12 @@ public class ServerMetrics {
   public final Histogram updateBlobTtlSendTimeInMs;
   public final Histogram updateBlobTtlTotalTimeInMs;
 
+  public final Histogram replicateBlobRequestQueueTimeInMs;
+  public final Histogram replicateBlobProcessingTimeInMs;
+  public final Histogram replicateBlobResponseQueueTimeInMs;
+  public final Histogram replicateBlobSendTimeInMs;
+  public final Histogram replicateBlobTotalTimeInMs;
+
   public final Histogram replicaMetadataRequestQueueTimeInMs;
   public final Histogram replicaMetadataRequestProcessingTimeInMs;
   public final Histogram replicaMetadataResponseQueueTimeInMs;
@@ -176,6 +182,7 @@ public class ServerMetrics {
   public final Meter getBlobAllByReplicaRequestRate;
   public final Meter getBlobInfoRequestRate;
   public final Meter deleteBlobRequestRate;
+  public final Meter replicateBlobRequestRate;
   public final Meter undeleteBlobRequestRate;
   public final Meter updateBlobTtlRequestRate;
   public final Meter replicaMetadataRequestRate;
@@ -364,6 +371,15 @@ public class ServerMetrics {
     updateBlobTtlSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "UpdateBlobTtlSendTime"));
     updateBlobTtlTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "UpdateBlobTtlTotalTime"));
 
+    replicateBlobRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ReplicateBlobRequestQueueTime"));
+    replicateBlobProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ReplicateBlobProcessingTime"));
+    replicateBlobResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ReplicateBlobResponseQueueTime"));
+    replicateBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "ReplicateBlobSendTime"));
+    replicateBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "ReplicateBlobTotalTime"));
+
     replicaMetadataRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "ReplicaMetadataRequestQueueTime"));
     replicaMetadataRequestProcessingTimeInMs =
@@ -470,6 +486,7 @@ public class ServerMetrics {
     deleteBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "DeleteBlobRequestRate"));
     undeleteBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "UndeleteBlobRequestRate"));
     updateBlobTtlRequestRate = registry.meter(MetricRegistry.name(requestClass, "UpdateBlobTtlRequestRate"));
+    replicateBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicateBlobRequestRate"));
     replicaMetadataRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicaMetadataRequestRate"));
     triggerCompactionRequestRate = registry.meter(MetricRegistry.name(requestClass, "TriggerCompactionRequestRate"));
     requestControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "RequestControlRequestRate"));

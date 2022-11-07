@@ -115,7 +115,7 @@ class CompactionLog implements Closeable {
     File[] files =
         storeDir.listFiles((fileDir, name) -> name.startsWith(storeId + COMPACTION_LOG_SUFFIX + BlobStore.SEPARATOR));
     List<File> sortedFiles = Stream.of(files)
-        .sorted((file1, file2) -> (int) (getStartTimeFromFile(file2) - getStartTimeFromFile(file1)))
+        .sorted((file1, file2) -> getStartTimeFromFile(file2) - getStartTimeFromFile(file1) > 0 ? 1 : -1)
         .collect(Collectors.toList());
     File inProgressCompactionLog = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (inProgressCompactionLog.exists()) {

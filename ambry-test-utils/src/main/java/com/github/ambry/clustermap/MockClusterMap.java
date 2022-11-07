@@ -73,7 +73,7 @@ public class MockClusterMap implements ClusterMap {
 
   private final MockPartitionId specialPartition;
   private ClusterMapChangeListener clusterMapChangeListener = null;
-  private ClusterManagerCallback mockClusterManagerCallback = Mockito.mock(ClusterManagerCallback.class);
+  private ClusterManagerQueryHelper mockClusterManagerQueryHelper = Mockito.mock(ClusterManagerQueryHelper.class);
 
   private RuntimeException exceptionOnSnapshot = null;
 
@@ -202,9 +202,9 @@ public class MockClusterMap implements ClusterMap {
         .filter(p -> p.getPartitionClass().equals(DEFAULT_PARTITION_CLASS))
         .findFirst()
         .get();
-    doReturn(partitions.values()).when(mockClusterManagerCallback).getPartitions();
+    doReturn(partitions.values()).when(mockClusterManagerQueryHelper).getPartitions();
     partitionSelectionHelper =
-        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, localDatacenterName,
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, localDatacenterName,
             Math.min(defaultPartition.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS);
   }
 
@@ -224,9 +224,9 @@ public class MockClusterMap implements ClusterMap {
     partitions = new HashMap<>();
     partitionIdList.forEach(p -> partitions.put(Long.valueOf(p.toPathString()), p));
     this.localDatacenterName = localDatacenterName;
-    doReturn(partitions.values()).when(mockClusterManagerCallback).getPartitions();
+    doReturn(partitions.values()).when(mockClusterManagerQueryHelper).getPartitions();
     partitionSelectionHelper =
-        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, localDatacenterName,
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, localDatacenterName,
             Math.min(partitionIdList.get(0).getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS);
     Set<String> dcNames = new HashSet<>();
     datanodes.forEach(node -> dcNames.add(node.getDatacenterName()));
@@ -266,9 +266,9 @@ public class MockClusterMap implements ClusterMap {
     // Set only vcrReplica as peer of recovery replica.
     recoveryReplica.setPeerReplicas(Collections.singletonList(vcrReplica));
     partitions.put(mockPartitionId.partition, mockPartitionId);
-    doReturn(partitions.values()).when(mockClusterManagerCallback).getPartitions();
+    doReturn(partitions.values()).when(mockClusterManagerQueryHelper).getPartitions();
     partitionSelectionHelper =
-        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerCallback, localDatacenterName,
+        new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, localDatacenterName,
             Math.min(mockPartitionId.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS);
     specialPartition = null;
   }
