@@ -287,7 +287,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
-        if (RestUtils.isUpsert(restRequest.getArgs()) &&
+        if (RestUtils.isUpsertForNamedBlob(restRequest.getArgs()) &&
             blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());

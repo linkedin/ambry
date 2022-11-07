@@ -103,15 +103,15 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   // @formatter:off
   private static final String LIST_QUERY_V2 = String.format(""
-      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
-      + "FROM named_blobs_v2 t1 "
-      + "INNER JOIN "
-      + "(SELECT account_id, container_id, blob_name, max(version) as version "
-      + "FROM named_blobs_v2 "
-      + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-      + "        GROUP BY account_id, container_id, blob_name) t2 "
-      + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-      + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH);
+          + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
+          + "FROM named_blobs_v2 t1 "
+          + "INNER JOIN "
+          + "(SELECT account_id, container_id, blob_name, max(version) as version "
+          + "FROM named_blobs_v2 "
+          + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+          + "        GROUP BY account_id, container_id, blob_name) t2 "
+          + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+          + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH);
   // @formatter:on
 
   /**

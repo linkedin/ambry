@@ -126,9 +126,9 @@ public class RestUtils {
     public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
     /**
      * Header to be set by clients during a Put blob call to clearly specify that the client is aware of the
-     * UPDATE feature of named blob, and client wants to update when the named blob already exist.
+     * UPDATE feature of named blob, and client does NOT wants to update when the named blob already exist.
      */
-    public static final String PUT_UPDATE = "x-ambry-update";
+    public static final String NAMED_NOT_UPSERT = "x-ambry-named-not-upsert";
     /**
      * Header that is set in the response of OPTIONS request that specifies the allowed methods.
      */
@@ -812,13 +812,13 @@ public class RestUtils {
   }
 
   /**
-   * Determine if {@link Headers#PUT_UPDATE} is set in the request args.
+   * Determine if {@link Headers#NAMED_NOT_UPSERT} is set in the request args.
    * @param args The request arguments.
-   * @return {@code true} if {@link Headers#PUT_UPDATE} is set.
+   * @return {@code false} if {@link Headers#NAMED_NOT_UPSERT} is set to true else return true.
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
-  public static boolean isUpsert(Map<String, Object> args) throws RestServiceException {
-    return getBooleanHeader(args, Headers.PUT_UPDATE, false);
+  public static boolean isUpsertForNamedBlob(Map<String, Object> args) throws RestServiceException {
+    return !getBooleanHeader(args, Headers.NAMED_NOT_UPSERT, false);
   }
 
   /**

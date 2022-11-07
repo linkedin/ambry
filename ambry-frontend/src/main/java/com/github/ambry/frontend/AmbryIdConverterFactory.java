@@ -177,7 +177,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
         NamedBlobState state;
-        if (RestUtils.isUpsert(restRequest.getArgs()) && properties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+        if (RestUtils.isUpsertForNamedBlob(restRequest.getArgs()) && properties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           state = NamedBlobState.IN_PROGRESS;
         } else {
           state = NamedBlobState.READY;
