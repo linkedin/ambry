@@ -720,7 +720,8 @@ public class AmbryRequests implements RequestAPI {
    * @param replicateBlobRequest the {@link ReplicateBlobRequest}
    * @return true if replicates from this node or the local store has the key
    */
-  private boolean replicateBlobLocalStoreHasTheKey(ReplicateBlobRequest replicateBlobRequest) {
+  private boolean localStoreHasTheKey(ReplicateBlobRequest replicateBlobRequest) {
+    BlobId blobId = replicateBlobRequest.getBlobId();
     final String remoteHostName = replicateBlobRequest.getSourceHostName();
     final int remoteHostPort = replicateBlobRequest.getSourceHostPort();
     final DataNodeId remoteDataNode = clusterMap.getDataNodeId(remoteHostName, remoteHostPort);
@@ -729,9 +730,24 @@ public class AmbryRequests implements RequestAPI {
       return true;
     }
 
-    // ON_DEMAND_REPLICATION_TODO: check if local store has the key already
+    // ReplicateBlob has two modes:
+    // 1. write repair mode:
+    //   Even the local store has the Blob, we still run the ReplicateBlob.
+    //   Depending on the final state of the source and local replica, we may applyTtlUpdate or applyDelete to the local store.
+    // 2. non write repair mode:
+    //   If the local store has the Blob, do nothing.
 
-    return false;
+    // Currently we don't enable the write repair. As long as the local store has the Blob, return success immediately.
+    // check if local store has the key already
+    // we don't use the keyConverter to convert the key here since it's a valid Blob ID coming from the frontend.
+    Store store = storeManager.getStore(blobId.getPartition());
+    try {
+      store.findKey(blobId);
+      return true;
+    } catch (StoreException e) {
+      // it throws e.getErrorCode() == StoreErrorCodes.ID_Not_Found if it doesn't exist.
+      return false;
+    }
   }
 
   @Override
@@ -761,7 +777,7 @@ public class AmbryRequests implements RequestAPI {
     GetResponse getResponse = null;
     ServerErrorCode errorCode;
     try {
-      if (replicateBlobLocalStoreHasTheKey(replicateBlobRequest)) {
+      if (localStoreHasTheKey(replicateBlobRequest)) {
         logger.info("ReplicateBlobRequest replicated Blob {}, local Store has the Key already, do nothing", blobId);
         errorCode = ServerErrorCode.No_Error;
       } else {

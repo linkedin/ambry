@@ -124,8 +124,11 @@ public class ServerHttp2Test {
 
   @Test
   public void replicateBlobCaseTest() {
+    // ReplicateBlob has two modes: write-repair-mode and non-write-repair mode.
+    // Refer to handleReplicateBlobRequest.localStoreHasTheKey
+    boolean writeRepair = false;
     ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, routerProps, testEncryption,
-        notificationSystem);
+        notificationSystem, writeRepair);
   }
 
   @Test

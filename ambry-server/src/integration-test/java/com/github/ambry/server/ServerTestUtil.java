@@ -2522,9 +2522,11 @@ final class ServerTestUtil {
    * Test ReplicateBlob under different conditions.
    * 1. test the data correctness of the on-demand replication on the target DataNode.
    * 2. test the interaction between the regular replication and on-demand replication.
+   * If writeRepair is true, even the local store has the BlobID, ReplicateBlob is still executed and will repair the final state.
+   * If writeRepair is false, if the local store has the BlobID, ReplicateBlob does nothing and returns success status.
    */
   static void replicateBlobCaseTest(MockCluster cluster, SSLConfig clientSSLConfig, Properties routerProps,
-      boolean testEncryption, MockNotificationSystem notificationSystem) {
+      boolean testEncryption, MockNotificationSystem notificationSystem, boolean writeRepair) {
     List<MockDataNodeId> allNodes = cluster.getAllDataNodes();
     MockClusterMap clusterMap = cluster.getClusterMap();
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -2711,7 +2713,11 @@ final class ServerTestUtil {
       replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
       getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
-      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      if (writeRepair) {
+        checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      } else {
+        checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, false, ttlUpdateBlobExpiryTimeMs);
+      }
 
       // 7. On the sourceDatanode blob is ttlUpdated. On the targetDataNode, the blob is also ttlUpdated already.
       // ReplicateBlob still succeeds.
@@ -2775,8 +2781,13 @@ final class ServerTestUtil {
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
       replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
-      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
-          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      if (writeRepair) {
+        getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      } else {
+        getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      }
 
       // 11. On the sourceDataNode, the blob is deleted. On the targetDataNode, it's ttlUpdated.
       // ReplicateBlob replicates the deleteBlob.
@@ -2793,8 +2804,14 @@ final class ServerTestUtil {
       updateBlobTtl(targetChannel, blobId, cluster.time.milliseconds());
       checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
       replicateBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.No_Error);
-      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, properties, userMetadata, data,
-          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      if (writeRepair) {
+        getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      } else {
+        getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption);
+        checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      }
 
       // 12. On the sourceDataNode, the blob is deleted. On the targetDataNode, it's also deleted.
       // ReplicateBlob still succeeds
@@ -2851,24 +2868,25 @@ final class ServerTestUtil {
        * Stage 2: Update the blobs on either the sourceDataNode or the targetDataNode.
        * Enable regular replication. sourceDataNode and targetDataNode should be synced up after the regular replication.
        * Other replicas should catch up as well.
-                     sourceDataNode      targetDataNode    target_after_ReplicateBlob     extra_operation        after_replication
-        blob1           putBlob             not_exist           putBlob                   ttlUpdate_on_source       ttlUpdated
-        blob2           putBlob             putBlob             putBlob                   ttlUpdate_on_target       ttlUpdated
-        blob3           putBlob             ttlUpdated          ttlUpdated                deleteBlob_on_source      deleted, can be not_found
-        blob4           putBlob             deleted             deleted                                             deleted, can be not_found
-        blob5           ttlUpdated          not_exist           ttlUpdated                                          ttlUpdated
-        blob6           ttlUpdated          putBlob             ttlUpdated                deleteBlob_on_target      deleted, can be not_found
-        blob7           ttlUpdated          ttlUpdated          ttlUpdated                                          ttlUpdated
-        blob8           ttlUpdated          deleted             deleted                                             deleted, can be not_found
-        blob9           deleted             not_exist           deleted                   undeleteBlob_on_source    undeleted
-        blob10          deleted             exist               deleted                   undeleteBlob_on_target    undeleted
-        blob11          deleted             ttlUpdated          deleted                                             deleted/not_found
-        blob12          deleted             deleted             deleted                                             deleted/not_found
-        blob13          expired             not_exist           expired                                             expired, can be not_found
-        blob14          expired             deleted             deleted                                             deleted, can be expired/not_found
-        blob15          not_exist           not_exist           error: Blob_Not_Found                               Not_Found
-        blob16                                                                           putBlob_on_source          putBlob
-        blob17                                                                           purBlob_on_target          putBob
+               sourceDataNode  targetDataNode  target_after_ReplicateBlob     extra_operation        after_replication
+                                               write_repair/non_write_repair
+        blob1     putBlob         not_exist       putBlob                   ttlUpdate_on_source       ttlUpdated
+        blob2     putBlob         putBlob         putBlob                   ttlUpdate_on_target       ttlUpdated
+        blob3     putBlob         ttlUpdated      ttlUpdated                deleteBlob_on_source      deleted, can be not_found
+        blob4     putBlob         deleted         deleted                                             deleted, can be not_found
+        blob5     ttlUpdated      not_exist       ttlUpdated                                          ttlUpdated
+        blob6     ttlUpdated      putBlob         ttlUpdated/putBlob        deleteBlob_on_target      deleted, can be not_found
+        blob7     ttlUpdated      ttlUpdated      ttlUpdated                                          ttlUpdated
+        blob8     ttlUpdated      deleted         deleted                                             deleted, can be not_found
+        blob9     deleted         not_exist       deleted                   undeleteBlob_on_target    undeleted
+        blob10    deleted         putBlob         deleted/putBlob           undeleteBlob_on_source    undeleted
+        blob11    deleted         ttlUpdated      deleted/ttlUpdated                                  deleted/not_found
+        blob12    deleted         deleted         deleted                                             deleted/not_found
+        blob13    expired         not_exist       expired                                             expired, can be not_found
+        blob14    expired         deleted         deleted                                             deleted, can be expired/not_found
+        blob15    not_exist       not_exist       error: Blob_Not_Found                               Not_Found
+        blob16                                                              putBlob_on_source         putBlob
+        blob17                                                              purBlob_on_target         putBob
        */
 
       // TtlUpdate blob1 on the sourceDataNode
@@ -2879,10 +2897,10 @@ final class ServerTestUtil {
       deleteBlob(sourceChannel, blobId3, cluster.time.milliseconds(), ServerErrorCode.No_Error);
       // Delete blob6 on the targetDataNode
       deleteBlob(targetChannel, blobId6, cluster.time.milliseconds(), ServerErrorCode.No_Error);
-      // Undelete blob9 on the sourceDataNode
-      undeleteBlob(sourceChannel, blobId9, cluster.time.milliseconds(), (short) 1);
+      // Undelete blob9 on the targetDataNode
+      undeleteBlob(targetChannel, blobId9, cluster.time.milliseconds(), (short) 1);
       // Undelete blob10 on the sourceDataNode
-      undeleteBlob(targetChannel, blobId10, cluster.time.milliseconds(), (short) 1);
+      undeleteBlob(sourceChannel, blobId10, cluster.time.milliseconds(), (short) 1);
       // create blob16 on the sourceDataNode
       BlobId blobId16 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
@@ -3012,8 +3030,23 @@ final class ServerTestUtil {
             encryptionKey, clusterMap, blobIdFactory, testEncryption);
         // blob11: deleted or not_found
         if (channel == comparisonChannel) {
-          getBlobAndVerify(blobId11, channel, ServerErrorCode.Blob_Not_Found, propertiesExpired, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption);
+          if (writeRepair) {
+            getBlobAndVerify(blobId11, channel, ServerErrorCode.Blob_Not_Found, propertiesExpired, userMetadata, data,
+                encryptionKey, clusterMap, blobIdFactory, testEncryption);
+          } else {
+            ArrayList<BlobId> ids = new ArrayList<>();
+            ids.add(blobId11);
+            ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<>();
+            PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partitionId, ids);
+            partitionRequestInfoList.add(partitionRequestInfo);
+            GetRequest getRequest =
+                new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+            DataInputStream stream = channel.sendAndReceive(getRequest).getInputStream();
+            GetResponse resp = GetResponse.readFrom(stream, clusterMap);
+            ServerErrorCode error = resp.getPartitionResponseInfoList().get(0).getErrorCode();
+            assertTrue(error == ServerErrorCode.Blob_Deleted || error == ServerErrorCode.Blob_Not_Found);
+            releaseNettyBufUnderneathStream(stream);
+          }
         } else {
           getBlobAndVerify(blobId11, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
               encryptionKey, clusterMap, blobIdFactory, testEncryption);
