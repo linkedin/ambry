@@ -252,9 +252,8 @@ class SimpleOperationTracker implements OperationTracker {
       case ReplicateBlobOperation:
         // Replicate one blob. Unlike PutBlob, crossColoEnabled is true.
         // ON_DEMAND_REPLICATION_TODO: may tune the order of the replica pool. Currently still local first and then remote.
-        // a. right now source HostNode is included. Probably will exclude it.
-        // b. right now we pick local replicas first for simplicity.
-        // c. Among the remote replicas, we randomly pick one. We don't pick the replication leader.
+        // a. right now we pick local replicas first for simplicity.
+        // b. Among the remote replicas, we randomly pick one. We don't pick the replication leader.
         eligibleReplicas =
             getEligibleReplicas(null, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.BOOTSTRAP));
         replicaSuccessTarget = routerConfig.routerReplicateBlobSuccessTarget;
