@@ -812,16 +812,6 @@ public class RestUtils {
   }
 
   /**
-   * Determine if {@link Headers#NAMED_UPSERT} is set in the request args.
-   * @param args The request arguments.
-   * @return {@code false} if {@link Headers#NAMED_UPSERT} is set to false else return true.
-   * @throws RestServiceException if exception occurs during parsing the arg.
-   */
-  public static boolean isUpsertForNamedBlob(final Map<String, Object> args) throws RestServiceException {
-    return getBooleanHeader(args, Headers.NAMED_UPSERT, false, true);
-  }
-
-  /**
    * Determine if the request is for permanent named blob upsert.
    * @param args The request arguments.
    * @param ttlInSeconds The TimeToLive In Seconds.
@@ -830,7 +820,7 @@ public class RestUtils {
    */
   public static boolean isUpsertForPermNamedBlob(final Map<String, Object> args, final long ttlInSeconds)
       throws RestServiceException {
-    return isUpsertForNamedBlob(args) && ttlInSeconds == Utils.Infinite_Time;
+    return getBooleanHeader(args, Headers.NAMED_UPSERT, false, true) && ttlInSeconds == Utils.Infinite_Time;
   }
 
   /**
