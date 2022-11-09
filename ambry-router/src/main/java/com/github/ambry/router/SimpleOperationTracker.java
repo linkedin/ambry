@@ -382,7 +382,7 @@ class SimpleOperationTracker implements OperationTracker {
       originatingDcNotFoundFailureThreshold = 0;
     }
     this.otIterator = new OpTrackerIterator();
-    logger.debug(
+    logger.error(
         "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}, originatingDC = {}",
         routerOperation, replicaSuccessTarget, replicaParallelism, originatingDcNotFoundFailureThreshold, replicaPool,
         originatingDcName);
@@ -483,8 +483,12 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
-  public boolean hasNotFound() {
-    return totalNotFoundCount > 0;
+  public int getNotFoundCount() {
+    return totalNotFoundCount;
+  }
+  @Override
+  public int getAllReplicaCount() {
+    return allReplicaCount;
   }
 
   @Override
@@ -632,8 +636,17 @@ class SimpleOperationTracker implements OperationTracker {
     } else {
       // if there is no possible way to use the remaining replicas to meet the success target,
       // deem the operation a failure.
-      if (replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget) {
-        return true;
+      if (routerOperation == RouterOperation.DeleteOperation) {
+        if (replicaInPoolOrFlightCount == 0 && replicaSuccessCount < replicaSuccessTarget) {
+        //if (replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget) {
+          return true;
+        } else {
+          return false;
+        }
+      } else {
+        if (replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget) {
+          return true;
+        }
       }
       return maybeFailedDueToOfflineReplicas() || hasFailedOnNotFound();
     }

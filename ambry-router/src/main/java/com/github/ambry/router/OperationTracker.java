@@ -76,7 +76,9 @@ interface OperationTracker {
    *
    * Return {@code true} if any replica returned NOT_FOUND
    */
-  boolean hasNotFound();
+  int getNotFoundCount();
+
+  int getAllReplicaCount();
 
   /**
    * Get the list of replicas which returned successful response

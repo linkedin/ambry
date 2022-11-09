@@ -366,7 +366,7 @@ class DeleteOperation {
     // 3. and at least one replica returned successful status.
     // 4. and error code precedence is over AmbryUnavailable. If we have one success and one delete, shouldn't do retry.
     RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
-    return (routerConfig.routerRepairWithReplicateBlobEnabled && operationTracker.hasNotFound()
+    return (routerConfig.routerRepairWithReplicateBlobEnabled && operationTracker.getNotFoundCount() > 0
         && operationTracker.getSuccessCount() > 0 && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(
         RouterErrorCode.AmbryUnavailable));
   }
@@ -406,11 +406,13 @@ class DeleteOperation {
             operationException.set(
                 new RouterException("DeleteOperation failed possibly because of unavailable replicas",
                     RouterErrorCode.AmbryUnavailable));
+          } else if (operationTracker.getNotFoundCount() + operationTracker.getSuccessCount() == operationTracker.getAllReplicaCount()) {
+            operationException.set(null);
           } else {
-            //TODO: Temporarily return 404 when delete operation returns two NOT_FOUND.
-            //TODO: Will check all local replicas and return succeed if one replica return succeed in this case.
-            operationException.set(new RouterException("DeleteOperation failed because of BlobNotFound",
-                RouterErrorCode.BlobDoesNotExist));
+              //TODO: Temporarily return 404 when delete operation returns two NOT_FOUND.
+              //TODO: Will check all local replicas and return succeed if one replica return succeed in this case.
+              operationException.set(new RouterException("DeleteOperation failed because of BlobNotFound",
+                  RouterErrorCode.BlobDoesNotExist));
           }
         }
       }
