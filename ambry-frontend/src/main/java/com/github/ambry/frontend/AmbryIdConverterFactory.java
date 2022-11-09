@@ -177,10 +177,10 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
         NamedBlobState state = NamedBlobState.READY;
-        if (RestUtils.isUpsertForPermNamedBlob(restRequest.getArgs(), properties.getTimeToLiveInSeconds())) {
+        if (properties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           state = NamedBlobState.IN_PROGRESS;
         }
-        conversionFuture = getNamedBlobDb().put(record, state).thenApply(result -> result.getInsertedRecord().getBlobId());
+        conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(result -> result.getInsertedRecord().getBlobId());
       } else {
         String decryptedInput =
             parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);

@@ -29,6 +29,7 @@ import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -287,13 +288,12 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
-        if (RestUtils.isUpsertForPermNamedBlob(restRequest.getArgs(), blobInfo.getBlobProperties().getTimeToLiveInSeconds())) {
-          String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
-          NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
-          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time);
-          namedBlobDb.put(record, NamedBlobState.READY).get();
-        }
+        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time);
+        namedBlobDb.put(record, NamedBlobState.READY, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).get();
+
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }

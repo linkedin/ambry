@@ -653,7 +653,7 @@ public class RestUtils {
       throw new RestServiceException("Ranges not supported for sub-resources that aren't Segment.",
           RestServiceErrorCode.InvalidArgs);
     }
-    boolean resolveRangeOnEmptyBlob = getBooleanHeader(args, Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, false, false);
+    boolean resolveRangeOnEmptyBlob = getBooleanHeader(args, Headers.RESOLVE_RANGE_ON_EMPTY_BLOB, false);
     return new GetBlobOptionsBuilder().operationType(getBlobOptionsOperationType(subResource))
         .getOption(getOption)
         .blobSegment(blobSegmentIdx)
@@ -798,7 +798,7 @@ public class RestUtils {
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
   public static boolean isPrivate(Map<String, Object> args) throws RestServiceException {
-    return getBooleanHeader(args, Headers.PRIVATE, false, false);
+    return getBooleanHeader(args, Headers.PRIVATE, false);
   }
 
   /**
@@ -808,19 +808,17 @@ public class RestUtils {
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
-    return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false, false);
+    return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false);
   }
 
   /**
-   * Determine if the request is for permanent named blob upsert.
+   * Determine if {@link Headers#NAMED_UPSERT} is set in the request args.
    * @param args The request arguments.
-   * @param ttlInSeconds The TimeToLive In Seconds.
-   * @return {@code false} if this request is not for permanent named blob upsert else return true.
+   * @return {@code false} if {@link Headers#NAMED_UPSERT} is set to false else return true.
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
-  public static boolean isUpsertForPermNamedBlob(final Map<String, Object> args, final long ttlInSeconds)
-      throws RestServiceException {
-    return getBooleanHeader(args, Headers.NAMED_UPSERT, false, true) && ttlInSeconds == Utils.Infinite_Time;
+  public static boolean isUpsertForNamedBlob(final Map<String, Object> args) throws RestServiceException {
+    return getBooleanHeaderWithDefaultValue(args, Headers.NAMED_UPSERT, false, true);
   }
 
   /**
@@ -914,6 +912,34 @@ public class RestUtils {
    * @param header the name of the header.
    * @param required if {@code true}, {@link RestServiceException} will be thrown if {@code header} is not present
    *                 in {@code args}.
+   * @return {@code true} if the header's value is {@code "true"} (case-insensitive), or {@code false} if the header's
+   *         value is {@code "false} (case-insensitive) or the header is not present and {@code required} is
+   *         {@code false}.
+   * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
+   *                              converted to a {@code boolean}.
+   */
+  public static boolean getBooleanHeader(Map<String, Object> args, String header, boolean required)
+      throws RestServiceException {
+    boolean booleanValue;
+    String stringValue = getHeader(args, header, required);
+    if (stringValue == null || "false".equalsIgnoreCase(stringValue)) {
+      booleanValue = false;
+    } else if ("true".equalsIgnoreCase(stringValue)) {
+      booleanValue = true;
+    } else {
+      throw new RestServiceException(
+          header + "[" + stringValue + "] has an invalid value (allowed values: true, false)",
+          RestServiceErrorCode.InvalidArgs);
+    }
+    return booleanValue;
+  }
+
+  /**
+   * Gets the value of a header as a {@code boolean}.
+   * @param args a map of arguments to be used to look for {@code header}.
+   * @param header the name of the header.
+   * @param required if {@code true}, {@link RestServiceException} will be thrown if {@code header} is not present
+   *                 in {@code args}.
    * @param defaultVal the default value for this header
    * @return {@code true} if the header's value is {@code "true"} (case-insensitive), or {@code false} if the header's
    *         value is {@code "false} (case-insensitive) or the header is not present and {@code required} is
@@ -921,7 +947,7 @@ public class RestUtils {
    * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
    *                              converted to a {@code boolean}.
    */
-  public static boolean getBooleanHeader(Map<String, Object> args, String header, boolean required, boolean defaultVal)
+  public static boolean getBooleanHeaderWithDefaultValue(Map<String, Object> args, String header, boolean required, boolean defaultVal)
       throws RestServiceException {
     boolean booleanValue;
     String stringValue = getHeader(args, header, required);

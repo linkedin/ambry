@@ -125,7 +125,7 @@ public class AmbryUrlSigningService implements UrlSigningService {
             maxUploadSize = RestUtils.getLongHeader(args, RestUtils.Headers.MAX_UPLOAD_SIZE, true);
             break;
           case RestUtils.Headers.CHUNK_UPLOAD:
-            chunkUpload = RestUtils.getBooleanHeader(args, RestUtils.Headers.CHUNK_UPLOAD, true, false);
+            chunkUpload = RestUtils.getBooleanHeader(args, RestUtils.Headers.CHUNK_UPLOAD, true);
             break;
           default:
             argsForUrl.put(name, value);
