@@ -736,6 +736,7 @@ public class AmbryRequests implements RequestAPI {
     //   Depending on the final state of the source and local replica, we may applyTtlUpdate or applyDelete to the local store.
     // 2. non write repair mode:
     //   If the local store has the Blob, do nothing.
+    // ON_DEMAND_REPLICATION_TODO: add one configuration to switch between write repair mode and non-write repair mode.
 
     // Currently we don't enable the write repair. As long as the local store has the Blob, return success immediately.
     // check if local store has the key already
