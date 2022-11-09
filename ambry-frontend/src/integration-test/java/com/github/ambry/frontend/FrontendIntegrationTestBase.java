@@ -508,7 +508,7 @@ public class FrontendIntegrationTestBase {
       }
       httpHeaders.add(RestUtils.Headers.SERVICE_ID, serviceId);
       httpHeaders.add(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
-      httpHeaders.add(RestUtils.Headers.NAMED_NOT_UPSERT, false);
+      httpHeaders.add(RestUtils.Headers.NAMED_UPSERT, true);
       if (targetAccountName != null) {
         httpHeaders.add(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
       }

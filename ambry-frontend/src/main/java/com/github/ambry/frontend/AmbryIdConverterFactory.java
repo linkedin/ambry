@@ -176,11 +176,9 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
-        NamedBlobState state;
-        if (RestUtils.isUpsertForNamedBlob(restRequest.getArgs()) && properties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+        NamedBlobState state = NamedBlobState.READY;
+        if (RestUtils.isUpsertForPermNamedBlob(restRequest.getArgs(), properties.getTimeToLiveInSeconds())) {
           state = NamedBlobState.IN_PROGRESS;
-        } else {
-          state = NamedBlobState.READY;
         }
         conversionFuture = getNamedBlobDb().put(record, state).thenApply(result -> result.getInsertedRecord().getBlobId());
       } else {
