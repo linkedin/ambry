@@ -55,6 +55,17 @@ public class ZstdCompressionTest {
     ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getMinimumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).
+    LZ4CompressionTest.compressAndDecompressTest(compression, "Test minimum compression using minimum level.", 0, 0);
+
+    // Test mid-buffer (with extra bytes on left and right of buffer.)
+    LZ4CompressionTest.compressAndDecompressTest(compression, "Test minimum compression using minimum level.", 2, 2);
+  }
+
+  @Test
+  public void testCompressAndDecompressNative_MinimumLevel() throws CompressionException {
+    ZstdCompression compression = new ZstdCompression();
+    compression.setCompressionLevel(compression.getMinimumCompressionLevel());
+    // Test dedicated buffer (without extra bytes on left or right of buffer).
     LZ4CompressionTest.compressAndDecompressNativeTest(compression, "Test minimum compression using minimum level.", 0, 0);
 
     // Test mid-buffer (with extra bytes on left and right of buffer.)
@@ -63,6 +74,17 @@ public class ZstdCompressionTest {
 
   @Test
   public void testCompressAndDecompress_MaximumLevel() throws CompressionException {
+    ZstdCompression compression = new ZstdCompression();
+    compression.setCompressionLevel(compression.getMaximumCompressionLevel());
+    // Test dedicated buffer (without extra bytes on left or right of buffer).
+    LZ4CompressionTest.compressAndDecompressTest(compression, "Test maximum compression using maximum level.", 0, 0);
+
+    // Test mid-buffer (with extra bytes on left and right of buffer.)
+    LZ4CompressionTest.compressAndDecompressTest(compression, "Test maximum compression using maximum level.", 3, 0);
+  }
+
+  @Test
+  public void testCompressAndDecompressNative_MaximumLevel() throws CompressionException {
     ZstdCompression compression = new ZstdCompression();
     compression.setCompressionLevel(compression.getMaximumCompressionLevel());
     // Test dedicated buffer (without extra bytes on left or right of buffer).

@@ -14,6 +14,8 @@
 package com.github.ambry.compression;
 
 import com.github.luben.zstd.Zstd;
+import java.nio.ByteBuffer;
+
 
 /**
  * Zstandard compression algorithm using Zstandard native and JNI.
@@ -95,6 +97,45 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    * @return The size of the compressed data in bytes.
    */
   @Override
+  protected int compressNative(ByteBuffer sourceBuffer, int sourceBufferOffset, int sourceDataSize,
+      ByteBuffer compressedBuffer, int compressedBufferOffset, int compressedDataSize) throws CompressionException {
+
+    // Zstd requires both buffers type be the same (either both direct memory or both heap), no mixed.
+    ByteBuffer newSourceBuffer = sourceBuffer;
+    if (sourceBuffer.isDirect() != compressedBuffer.isDirect()) {
+      // We have a mixture of heap and direct buffer, change source to match the output buffer type.
+      newSourceBuffer = compressedBuffer.isDirect() ? ByteBuffer.allocateDirect(sourceDataSize) :
+          ByteBuffer.allocate(sourceDataSize);
+      newSourceBuffer.put(sourceBuffer);
+      newSourceBuffer.flip();
+      sourceBufferOffset = 0;
+    }
+
+    // Invoke compress byte array or direct buffer based on buffer type.
+    long compressedSize;
+    if (newSourceBuffer.isDirect()) {
+      compressedSize = Zstd.compressDirectByteBuffer(compressedBuffer, compressedBufferOffset, compressedDataSize,
+          newSourceBuffer, sourceBufferOffset, sourceDataSize, getCompressionLevel());
+    } else {
+      compressedSize = Zstd.compressByteArray(compressedBuffer.array(), compressedBufferOffset, compressedDataSize,
+          newSourceBuffer.array(), sourceBufferOffset, sourceDataSize, getCompressionLevel());
+    }
+
+    // Check for error.
+    if (Zstd.isError(compressedSize)) {
+      throw new CompressionException(String.format("Zstd compression failed with error code: %d, name: %s. "
+              + "sourceBuffer.limit=%d, sourceBufferOffset=%d, sourceDataSize=%d, "
+              + "compressedBuffer.capacity=%d, compressedBufferOffset=%d, compressedDataSize=%d, compressionLevel=%d",
+          compressedSize, Zstd.getErrorName(compressedSize),
+          sourceBuffer.limit(), sourceBufferOffset, sourceDataSize,
+          compressedBuffer.capacity(), compressedBufferOffset, compressedDataSize, getCompressionLevel()));
+    }
+
+    return (int) compressedSize;
+  }
+
+  // TODO - This method will be deleted after ByteBuffer API has been pushed.
+  @Override
   protected int compressNative(byte[] sourceBuffer, int sourceBufferOffset, int sourceDataSize,
       byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize) throws CompressionException {
 
@@ -124,6 +165,43 @@ public class ZstdCompression extends BaseCompressionWithLevel {
    * @param decompressedBufferOffset Offset where to write the decompressed data.
    * @param decompressedDataSize Size of the buffer to hold the decompressed data.  It should be size of original data.
    */
+  @Override
+  protected void decompressNative(ByteBuffer compressedBuffer, int compressedBufferOffset, int compressedDataSize,
+      ByteBuffer decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize) throws CompressionException {
+
+    // Zstd requires both buffers type be the same (either both direct memory or both heap), no mixed.
+    ByteBuffer newCompressedBuffer = compressedBuffer;
+    if (compressedBuffer.isDirect() != decompressedBuffer.isDirect()) {
+        // We have a mixture of heap and direct buffer, change source buffer to match the output buffer type.
+      newCompressedBuffer = decompressedBuffer.isDirect() ? ByteBuffer.allocateDirect(compressedDataSize) :
+            ByteBuffer.allocate(compressedDataSize);
+      newCompressedBuffer.put(compressedBuffer);
+      newCompressedBuffer.flip();
+      compressedBufferOffset = 0;
+    }
+
+    // Decompress the buffer either as both direct memory buffer or both heap buffers.
+    long decompressedSize;
+    if (newCompressedBuffer.isDirect()) {
+      decompressedSize = Zstd.decompressDirectByteBuffer(decompressedBuffer, decompressedBufferOffset,
+          decompressedDataSize, newCompressedBuffer, compressedBufferOffset, compressedDataSize);
+    } else {
+      decompressedSize = Zstd.decompressByteArray(decompressedBuffer.array(), decompressedBufferOffset,
+          decompressedDataSize, newCompressedBuffer.array(), compressedBufferOffset, compressedDataSize);
+    }
+
+    // Check for error.
+    if (Zstd.isError(decompressedSize)) {
+      throw new CompressionException(String.format("Zstd decompression failed with error code: %d, name: %s. "
+              + "compressedBuffer.limit=%d, compressedBufferOffset=%d, compressedDataSize=%d, "
+              + "decompressedBuffer.capacity=%d, decompressedBufferOffset=%d, decompressedDataSize=%d",
+          decompressedSize, Zstd.getErrorName(decompressedSize),
+          compressedBuffer.limit(), compressedBufferOffset, compressedDataSize,
+          decompressedBuffer.capacity(), decompressedBufferOffset, decompressedDataSize));
+    }
+  }
+
+  // TODO - This method will be deleted after ByteBuffer API has been pushed.
   @Override
   protected void decompressNative(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize,
       byte[] decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize) throws CompressionException {
