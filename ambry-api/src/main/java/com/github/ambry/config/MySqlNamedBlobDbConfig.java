@@ -56,7 +56,6 @@ public class MySqlNamedBlobDbConfig {
    * A flag on whether to turn on DB Transition run
    */
   @Config(DB_TRANSITION)
-  @Default("false")
   public final boolean dbTransition;
 
   /**

@@ -23,9 +23,13 @@ import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -77,6 +81,7 @@ public class NamedBlobPutHandler {
    */
   static final String EXPIRATION_TIME_MS_KEY = "et";
   private final SecurityService securityService;
+  private final NamedBlobDb namedBlobDb;
   private final IdConverter idConverter;
   private final IdSigningService idSigningService;
   private final Router router;
@@ -93,6 +98,7 @@ public class NamedBlobPutHandler {
   /**
    * Constructs a handler for handling requests for uploading or stitching blobs.
    * @param securityService the {@link SecurityService} to use.
+   * @param namedBlobDb the {@link NamedBlobDb} to use.
    * @param idConverter the {@link IdConverter} to use.
    * @param idSigningService the {@link IdSigningService} to use.
    * @param router the {@link Router} to use.
@@ -102,10 +108,11 @@ public class NamedBlobPutHandler {
    * @param clusterName the name of the storage cluster that the router communicates with
    * @param quotaManager The {@link QuotaManager} class to account for quota usage in serving requests.
    */
-  NamedBlobPutHandler(SecurityService securityService, IdConverter idConverter, IdSigningService idSigningService,
+  NamedBlobPutHandler(SecurityService securityService, NamedBlobDb namedBlobDb, IdConverter idConverter, IdSigningService idSigningService,
       Router router, AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig,
       FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager) {
     this.securityService = securityService;
+    this.namedBlobDb = namedBlobDb;
     this.idConverter = idConverter;
     this.idSigningService = idSigningService;
     this.router = router;
@@ -255,7 +262,7 @@ public class NamedBlobPutHandler {
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
-              routerTtlUpdateCallback(blobInfo));
+              routerTtlUpdateCallback(blobInfo, blobId));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());
@@ -276,10 +283,18 @@ public class NamedBlobPutHandler {
      * After TTL update finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @param blobId the {@link String} to use for blob id.
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
      */
-    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, blobId -> {
+    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
+      return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        // Set the named blob state to be 'READY' after the Ttl update succeed
+        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+        NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time);
+        namedBlobDb.put(record, NamedBlobState.READY, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).get();
+
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }

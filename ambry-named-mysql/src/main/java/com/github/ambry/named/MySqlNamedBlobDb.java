@@ -241,21 +241,24 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = System.currentTimeMillis();
-          NamedBlobRecord recordCurrent = null;
-          try {
-            recordCurrent = run_get_v2(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-                GetOption.None, accountId, containerId, connection);
-          } catch (RestServiceException e) {
-            logger.trace("Skip exception in pulling data from db: accountId='{}', containerId='{}', blobName='{}': {}",
-                accountId, containerId, record.getBlobName(), e);
-          }
-          if (recordCurrent != null) {
-            throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
-                record.getContainerName(), record.getBlobName());
+          // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
+          if (!(config.dbRelyOnNewTable && isUpsert)) {
+            NamedBlobRecord recordCurrent = null;
+            try {
+              recordCurrent = run_get_v2(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+                  GetOption.None, accountId, containerId, connection);
+            } catch (RestServiceException e) {
+              logger.trace("Skip exception in pulling data from db: accountId='{}', containerId='{}', blobName='{}': {}",
+                  accountId, containerId, record.getBlobName(), e);
+            }
+            if (recordCurrent != null) {
+              throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
+                  record.getContainerName(), record.getBlobName());
+            }
           }
           PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
           metricsRecoder.namedBlobPutTimeInMs.update(System.currentTimeMillis() - startTime);

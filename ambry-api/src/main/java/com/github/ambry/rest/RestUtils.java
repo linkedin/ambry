@@ -125,6 +125,11 @@ public class RestUtils {
      */
     public static final String IF_MODIFIED_SINCE = "If-Modified-Since";
     /**
+     * Header to be set by clients during a Put blob call to clearly specify that the client is aware of the
+     * UPDATE feature of named blob, and client wants to update when the named blob already exist.
+     */
+    public static final String NAMED_UPSERT = "x-ambry-named-upsert";
+    /**
      * Header that is set in the response of OPTIONS request that specifies the allowed methods.
      */
     public static final String ACCESS_CONTROL_ALLOW_METHODS = "Access-Control-Allow-Methods";
@@ -807,6 +812,16 @@ public class RestUtils {
   }
 
   /**
+   * Determine if {@link Headers#NAMED_UPSERT} is set in the request args.
+   * @param args The request arguments.
+   * @return {@code false} if {@link Headers#NAMED_UPSERT} is set to false else return true.
+   * @throws RestServiceException if exception occurs during parsing the arg.
+   */
+  public static boolean isUpsertForNamedBlob(final Map<String, Object> args) throws RestServiceException {
+    return getOptionalBooleanHeader(args, Headers.NAMED_UPSERT, true);
+  }
+
+  /**
    * Ensures the required headers are present.
    * @param restRequest The {@link RestRequest} to ensure header presence. Cannot be {@code null}.
    * @param requiredHeaders A set of headers to check presence. Cannot be {@code null}.
@@ -908,6 +923,35 @@ public class RestUtils {
     boolean booleanValue;
     String stringValue = getHeader(args, header, required);
     if (stringValue == null || "false".equalsIgnoreCase(stringValue)) {
+      booleanValue = false;
+    } else if ("true".equalsIgnoreCase(stringValue)) {
+      booleanValue = true;
+    } else {
+      throw new RestServiceException(
+          header + "[" + stringValue + "] has an invalid value (allowed values: true, false)",
+          RestServiceErrorCode.InvalidArgs);
+    }
+    return booleanValue;
+  }
+
+  /**
+   * Gets the value of a header as a {@code boolean}.
+   * @param args a map of arguments to be used to look for {@code header}.
+   * @param header the name of the header.
+   * @param defaultVal the default value for this header
+   * @return {@code true} if the header's value is {@code "true"} (case-insensitive), or {@code false} if the header's
+   *         value is {@code "false} (case-insensitive) or the header is not present and {@code required} is
+   *         {@code false}.
+   * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
+   *                              converted to a {@code boolean}.
+   */
+  public static boolean getOptionalBooleanHeader(Map<String, Object> args, String header, boolean defaultVal)
+      throws RestServiceException {
+    boolean booleanValue;
+    String stringValue = getHeader(args, header, false);
+    if (stringValue == null) {
+      booleanValue = defaultVal;
+    } else if ("false".equalsIgnoreCase(stringValue)) {
       booleanValue = false;
     } else if ("true".equalsIgnoreCase(stringValue)) {
       booleanValue = true;

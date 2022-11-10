@@ -24,6 +24,7 @@ import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -175,7 +176,12 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
             Utils.addSecondsToEpochTime(properties.getCreationTimeInMs(), properties.getTimeToLiveInSeconds());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
-        conversionFuture = getNamedBlobDb().put(record).thenApply(result -> result.getInsertedRecord().getBlobId());
+        NamedBlobState state = NamedBlobState.READY;
+        if (properties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+          // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
+          state = NamedBlobState.IN_PROGRESS;
+        }
+        conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(result -> result.getInsertedRecord().getBlobId());
       } else {
         String decryptedInput =
             parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);

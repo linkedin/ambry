@@ -214,11 +214,11 @@ public class AmbryIdConverterFactoryTest {
     for (String id : idList) {
       reset(idSigningService);
       reset(namedBlobDb);
-      when(namedBlobDb.put(any())).thenReturn(
+      when(namedBlobDb.put(any(), any(), any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(new NamedBlobRecord("", "", "", id, Utils.Infinite_Time))));
       testConversionForNamedBlob(idConverter, RestMethod.PUT, null, id, id);
       verify(idSigningService, never()).getSignedId(any(), any());
-      verify(namedBlobDb).put(any());
+      verify(namedBlobDb).put(any(), any(), any());
     }
   }
 
