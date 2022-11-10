@@ -245,6 +245,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = System.currentTimeMillis();
+          // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
           if (!(config.dbRelyOnNewTable && isUpsert)) {
             NamedBlobRecord recordCurrent = null;
             try {

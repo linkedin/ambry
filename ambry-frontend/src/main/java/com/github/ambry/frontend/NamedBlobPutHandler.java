@@ -288,6 +288,7 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        // Set the named blob state to be 'READY' after the Ttl update succeed
         String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
