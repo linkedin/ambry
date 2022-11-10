@@ -1102,6 +1102,50 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         ServerErrorCode.Blob_Not_Found);
   }
 
+  /**
+   * Test the source data node is the server itself
+   * Should return successful status but do nothing
+   */
+  @Test
+  public void testReplicateBlobToItself() throws Exception {
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockHost remoteHost = null;
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
+      // set remoteHost to itself
+      if (dataNodeId == host.dataNodeId) {
+        remoteHost = host;
+      }
+      hosts.put(host.dataNodeId, host);
+    }
+    StoreKey storeKey = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(remoteHost), 1).get(0);
+
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = (BlobId) storeKey;
+
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, remoteHost.dataNodeId.getHostname(),
+            remoteHost.dataNodeId.getPort());
+
+    storageManager.resetStore();
+    Response response = sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    // shouldn't receive any request
+    assertEquals("Operation received at the store not as expected", null, MockStorageManager.operationReceived);
+    ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
+  }
+
   @Test
   public void testReplicateBlobWhenTargetConditions() throws Exception {
     // Besides the above test cases to test the different conditions on the source host, need verify the different cases on the local store.

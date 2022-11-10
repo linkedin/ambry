@@ -715,6 +715,42 @@ public class AmbryRequests implements RequestAPI {
             metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent));
   }
 
+  /**
+   * If the replicateBlob is replicating from this node or the local store has the key already, return true.
+   * @param replicateBlobRequest the {@link ReplicateBlobRequest}
+   * @return true if replicates from this node or the local store has the key
+   */
+  private boolean localStoreHasTheKey(ReplicateBlobRequest replicateBlobRequest) {
+    BlobId blobId = replicateBlobRequest.getBlobId();
+    final String remoteHostName = replicateBlobRequest.getSourceHostName();
+    final int remoteHostPort = replicateBlobRequest.getSourceHostPort();
+    final DataNodeId remoteDataNode = clusterMap.getDataNodeId(remoteHostName, remoteHostPort);
+    // the source replica happens to be this node.
+    if (remoteDataNode.equals(currentNode)) {
+      return true;
+    }
+
+    // ReplicateBlob has two modes:
+    // 1. write repair mode:
+    //   Even the local store has the Blob, we still run the ReplicateBlob.
+    //   Depending on the final state of the source and local replica, we may applyTtlUpdate or applyDelete to the local store.
+    // 2. non write repair mode:
+    //   If the local store has the Blob, do nothing.
+    // ON_DEMAND_REPLICATION_TODO: add one configuration to switch between write repair mode and non-write repair mode.
+
+    // Currently we don't enable the write repair. As long as the local store has the Blob, return success immediately.
+    // check if local store has the key already
+    // we don't use the keyConverter to convert the key here since it's a valid Blob ID coming from the frontend.
+    Store store = storeManager.getStore(blobId.getPartition());
+    try {
+      store.findKey(blobId);
+      return true;
+    } catch (StoreException e) {
+      // it throws e.getErrorCode() == StoreErrorCodes.ID_Not_Found if it doesn't exist.
+      return false;
+    }
+  }
+
   @Override
   public void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException {
     if (connectionPool == null || transformer == null) {
@@ -735,50 +771,56 @@ public class AmbryRequests implements RequestAPI {
     metrics.replicateBlobRequestQueueTimeInMs.update(totalTimeSpent);
     metrics.replicateBlobRequestRate.mark();
 
-    // Get the two parameters from the replicateBlobRequest: the blobId and the remoteHostName
+    // Get the parameters from the replicateBlobRequest: the blobId, the remoteHostName and the remoteHostPort.
     BlobId blobId = replicateBlobRequest.getBlobId();
     String remoteHostName = replicateBlobRequest.getSourceHostName();
     int remoteHostPort = replicateBlobRequest.getSourceHostPort();
     GetResponse getResponse = null;
     ServerErrorCode errorCode;
     try {
-      // get the Blob from the remote replica.
-      Pair<ServerErrorCode, GetResponse> getResult = getBlobFromRemoteReplica(replicateBlobRequest);
-      errorCode = getResult.getFirst();
-      getResponse = getResult.getSecond();
+      if (localStoreHasTheKey(replicateBlobRequest)) {
+        logger.info("ReplicateBlobRequest replicated Blob {}, local Store has the Key already, do nothing", blobId);
+        errorCode = ServerErrorCode.No_Error;
+      } else {
+        // get the Blob from the remote replica.
+        Pair<ServerErrorCode, GetResponse> getResult = getBlobFromRemoteReplica(replicateBlobRequest);
+        errorCode = getResult.getFirst();
+        getResponse = getResult.getSecond();
 
-      if (errorCode == ServerErrorCode.No_Error) {
-        // getBlobFromRemoteReplicate has checked partitionResponseInfoList's size is 1 and it has one MessageInfo.
-        PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
-        List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
-        MessageInfo orgMsgInfo = messageInfoList.get(0);
+        if (errorCode == ServerErrorCode.No_Error) {
+          // getBlobFromRemoteReplicate has checked partitionResponseInfoList's size is 1 and it has one MessageInfo.
+          PartitionResponseInfo partitionResponseInfo = getResponse.getPartitionResponseInfoList().get(0);
+          List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
+          MessageInfo orgMsgInfo = messageInfoList.get(0);
 
-        // Transfer the input stream with transformer
-        Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer),
-            getResponse.getInputStream(), orgMsgInfo);
-        if (output == null) {
-          logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", orgMsgInfo,
-              remoteHostName, remoteHostPort, blobId);
-          errorCode = ServerErrorCode.Unknown_Error;
-        } else {
-          // write the message to the local store
-          MessageFormatWriteSet writeset =
-              new MessageFormatWriteSet(output.getStream(), Collections.singletonList(output.getMessageInfo()), false);
-          Store store = storeManager.getStore(blobId.getPartition());
-          store.put(writeset);
+          // Transfer the input stream with transformer
+          Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer),
+              getResponse.getInputStream(), orgMsgInfo);
+          if (output == null) {
+            logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", orgMsgInfo,
+                remoteHostName, remoteHostPort, blobId);
+            errorCode = ServerErrorCode.Unknown_Error;
+          } else {
+            // write the message to the local store
+            MessageFormatWriteSet writeset =
+                new MessageFormatWriteSet(output.getStream(), Collections.singletonList(output.getMessageInfo()),
+                    false);
+            Store store = storeManager.getStore(blobId.getPartition());
+            store.put(writeset);
 
-          // also applyTtlUpdate and applyDelete if needed.
-          if (orgMsgInfo.isTtlUpdated()) {
-            applyTtlUpdate(orgMsgInfo, replicateBlobRequest);
-          }
-          if (orgMsgInfo.isDeleted()) {
-            applyDelete(orgMsgInfo, replicateBlobRequest);
-          }
-          logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName,
-              remoteHostPort);
-          errorCode = ServerErrorCode.No_Error;
-        } // if (output == null) {
-      }
+            // also applyTtlUpdate and applyDelete if needed.
+            if (orgMsgInfo.isTtlUpdated()) {
+              applyTtlUpdate(orgMsgInfo, replicateBlobRequest);
+            }
+            if (orgMsgInfo.isDeleted()) {
+              applyDelete(orgMsgInfo, replicateBlobRequest);
+            }
+            logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", blobId, remoteHostName,
+                remoteHostPort);
+            errorCode = ServerErrorCode.No_Error;
+          } // if (output == null)
+        } // if (errorCode == ServerErrorCode.No_Error)
+      } // if (remoteDataNode.equals(currentNode))
     } catch (StoreException e) { // catch the store write exception
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         logger.info("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);

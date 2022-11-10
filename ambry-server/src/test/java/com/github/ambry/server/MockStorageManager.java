@@ -251,7 +251,7 @@ class MockStorageManager extends StorageManager {
 
     @Override
     public MessageInfo findKey(StoreKey key) throws StoreException {
-      return new MessageInfo(key, 1, Utils.Infinite_Time, (short) 0, (short) 0, 0);
+      throw new StoreException("doesn't exist", StoreErrorCodes.ID_Not_Found);
     }
 
     @Override

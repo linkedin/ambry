@@ -264,11 +264,12 @@ public class BlobIdTransformer implements Transformer {
       // received via replication are sent to the store with proper CRCs (which the store needs to detect duplicate
       // messages). As an additional guard, here the original CRC is only reused if the key's ID in string form is the
       // same after conversion.
+      // set isDeleted same as the oldMessageInfo
       Long originalCrc = oldMessageInfo.getStoreKey().getID().equals(newKey.getID()) ? oldMessageInfo.getCrc() : null;
       MessageInfo info =
           new MessageInfo.Builder(newKey, putMessageFormatInputStream.getSize(), newProperties.getAccountId(),
               newProperties.getContainerId(), oldMessageInfo.getOperationTimeMs()).isTtlUpdated(
-              oldMessageInfo.isTtlUpdated())
+              oldMessageInfo.isTtlUpdated()).isDeleted(oldMessageInfo.isDeleted())
               .expirationTimeInMs(oldMessageInfo.getExpirationTimeInMs())
               .crc(originalCrc)
               .lifeVersion(oldMessageInfo.getLifeVersion())
