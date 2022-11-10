@@ -112,7 +112,6 @@ public class CompressionMetrics {
   public final Counter compressReduceSizeBytes;  // For accepted, bytes reduce = OriginalSize - CompressedSize.
 
   // Compression error metrics.  These metrics must be monitored and raise alarm if as soon as they occurred.
-  public final Counter compressErrorBufferConversion;
   public final Counter compressErrorConfigInvalidCompressorName;
   public final Counter compressErrorCompressFailed;
 
@@ -126,7 +125,6 @@ public class CompressionMetrics {
   public final Meter decompressSuccessRate;
   public final Meter decompressErrorRate;
   public final Counter decompressExpandSizeBytes;  // Bytes expand  = OriginalSize - CompressedSize
-  public final Counter decompressErrorBufferConversion;
   public final Counter decompressErrorBufferTooSmall;
   public final Counter decompressErrorUnknownAlgorithmName;
   public final Counter decompressErrorDecompressFailed;
@@ -144,7 +142,6 @@ public class CompressionMetrics {
     compressErrorRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"CompressErrorRate"));
     compressAcceptRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"CompressAcceptRate"));
     compressReduceSizeBytes = registry.counter(MetricRegistry.name(MetricNamePrefix, "CompressReduceSizeBytes"));
-    compressErrorBufferConversion = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressErrorBufferConversion"));
     compressErrorConfigInvalidCompressorName = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressErrorInvalidCompressorName"));
     compressErrorCompressFailed = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressErrorCompressFailed"));
     compressSkipContentEncoding = registry.counter(MetricRegistry.name(MetricNamePrefix,"CompressSkipContentEncoding"));
@@ -156,8 +153,6 @@ public class CompressionMetrics {
     decompressSuccessRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"DecompressSuccessRate"));
     decompressErrorRate = registry.meter(MetricRegistry.name(MetricNamePrefix,"DecompressErrorRate"));
     decompressExpandSizeBytes = registry.counter(MetricRegistry.name(MetricNamePrefix,"DecompressExpandSizeBytes"));
-    decompressErrorBufferConversion = registry.counter(MetricRegistry.name(MetricNamePrefix,
-        "DecompressErrorBufferConversion"));
     decompressErrorBufferTooSmall = registry.counter(MetricRegistry.name(MetricNamePrefix,
         "DecompressErrorBufferTooSmall"));
     decompressErrorUnknownAlgorithmName = registry.counter(MetricRegistry.name(MetricNamePrefix,

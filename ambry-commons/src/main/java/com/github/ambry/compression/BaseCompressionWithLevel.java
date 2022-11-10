@@ -42,8 +42,9 @@ public abstract class BaseCompressionWithLevel extends BaseCompression implement
   @Override
   public void setCompressionLevel(int newCompressionLevel) {
     if (newCompressionLevel < getMinimumCompressionLevel() || newCompressionLevel > getMaximumCompressionLevel()) {
-      throw new IllegalArgumentException("Invalid new compression level " + newCompressionLevel +
-          ".  Level must be between " + getMinimumCompressionLevel() + " and " + getMaximumCompressionLevel());
+      throw new IllegalArgumentException(
+          "Invalid new compression level " + newCompressionLevel + ".  Level must be between "
+              + getMinimumCompressionLevel() + " and " + getMaximumCompressionLevel());
     }
 
     compressionLevel = newCompressionLevel;

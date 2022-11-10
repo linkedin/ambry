@@ -586,12 +586,14 @@ public class PutOperationTest {
     PutOperation.PutChunk putChunk = op.new PutChunk();
     putChunk.buf = sourceByteBuf;
 
-    // Invoke the PutChunk.compressChunk() method.
-    MethodUtils.invokeMethod(putChunk, true, "compressChunk");
+    // Invoke the PutChunk.compressChunk() method.  The new buffer is stored in "buf" field.
+    MethodUtils.invokeMethod(putChunk, true, "compressChunk", false);
 
-    // Verify the isCompressed is set.
+    // Verify the chunk is compressed.
     Assert.assertTrue((boolean) FieldUtils.readField(putChunk, "isChunkCompressed", true));
-    PutRequest putRequest = putChunk.createPutRequest();
-    Assert.assertTrue(putRequest.isCompressed());
+
+    // Release the buf field.
+    ByteBuf buf = (ByteBuf) FieldUtils.readField(putChunk, "buf", true);
+    buf.release();
   }
 }

@@ -94,7 +94,7 @@ public class BaseCompressionTest {
     Mockito.when(compressor.getAlgorithmName()).thenReturn("ABCD");
 
     // Test: Compress empty buffer should throw.
-    Throwable ex = TestUtils.getException(() -> compressor.compress(null));
+    Throwable ex = TestUtils.getException(() -> compressor.compress(null, null));
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     ex = TestUtils.getException(() -> compressor.compress(ByteBuffer.wrap(new byte[1]), null));
@@ -124,13 +124,16 @@ public class BaseCompressionTest {
         });
 
     ByteBuffer testSourceData = ByteBuffer.wrap(new byte[] { 100, 101, 102 });
-    ByteBuffer compressedBuffer = compressor.compress(testSourceData, false);
+    ByteBuffer compressedBuffer = ByteBuffer.allocate(compressor.getCompressBufferSize(testSourceData.remaining()));
+    compressor.compress(testSourceData, compressedBuffer);
+
     // Make sure the format is
     // - 1 byte version.
     // - 1 byte name size
     // - N bytes for name (4 bytes in this case)
     // - 4 bytes original size (testSourceData size)
     // - X bytes of compressed data (3 bytes in this case).
+    compressedBuffer.flip();
     Assert.assertEquals(13, compressedBuffer.remaining());
     Assert.assertEquals(110, compressedBuffer.capacity());  //100 + 6 bytes overhead + 4 bytes name.
     Assert.assertEquals(1, compressedBuffer.get(0));
@@ -149,10 +152,10 @@ public class BaseCompressionTest {
     BaseCompression decompressor = Mockito.mock(BaseCompression.class, Mockito.CALLS_REAL_METHODS);
 
     // Test: decompress empty buffer.
-    Throwable ex = TestUtils.getException(() -> decompressor.decompress(null));
+    Throwable ex = TestUtils.getException(() -> decompressor.decompress(null, null));
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
-    ex = TestUtils.getException(() -> decompressor.decompress(ByteBuffer.wrap(new byte[0]), false));
+    ex = TestUtils.getException(() -> decompressor.decompress(ByteBuffer.wrap(new byte[0]), ByteBuffer.wrap(new byte[10])));
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     //  Note the compressed buffer format is:
@@ -163,11 +166,12 @@ public class BaseCompressionTest {
     // - X bytes of compressed data (6 bytes in this case).
 
     // Test: decompress an invalid buffer that is too small.  Version is 1, Name size is 10, but only 2 bytes long.
-    ex = TestUtils.getException(() -> decompressor.decompress(ByteBuffer.wrap(new byte[] { 1, 10, 66 }), false));
+    ByteBuffer tempOutputBuffer = ByteBuffer.allocate(100);
+    ex = TestUtils.getException(() -> decompressor.decompress(ByteBuffer.wrap(new byte[] { 1, 10, 66 }), tempOutputBuffer));
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     // Test: Another invalid buffer case - Version is 1, Name size is 2, 2-char name, but original size incomplete.
-    ex = TestUtils.getException(() -> decompressor.decompress(ByteBuffer.wrap(new byte[] { 1, 2, 66, 67, 3, 0 , 0}), false));
+    ex = TestUtils.getException(() -> decompressor.decompress(ByteBuffer.wrap(new byte[] { 1, 2, 66, 67, 3, 0 , 0}), tempOutputBuffer));
     Assert.assertTrue(ex instanceof IllegalArgumentException);
 
     // Test: decompress a valid compressed buffer, but source data buffer size (2) is too small.  Original size = 3.
@@ -194,7 +198,9 @@ public class BaseCompressionTest {
     }).when(decompressor).decompressNative(Mockito.any(ByteBuffer.class), Mockito.anyInt(), Mockito.anyInt(),
         Mockito.any(ByteBuffer.class), Mockito.anyInt(), Mockito.anyInt());
 
-    ByteBuffer originalData = decompressor.decompress(testCompressedBuffer, false);
+    ByteBuffer originalData = ByteBuffer.allocate(3);
+    decompressor.decompress(testCompressedBuffer, originalData);
+    originalData.flip();
     Assert.assertEquals(3, originalData.remaining());
     Assert.assertEquals(100, originalData.get(0));
     Assert.assertEquals(101, originalData.get(1));

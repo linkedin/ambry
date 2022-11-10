@@ -1463,16 +1463,19 @@ public class GetBlobOperationTest {
     FieldUtils.writeField(firstChunk, "isChunkCompressed", true, true);
 
     // Generate the test compressed buffer.
-    byte[] sourceData = "Compression unit test to test compression.".getBytes(StandardCharsets.UTF_8);
-    Pair<Integer, byte[]> bufferInfo = new ZstdCompression().compress(sourceData);
-    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(bufferInfo.getSecond(), 0, bufferInfo.getFirst());
+    ByteBuffer sourceBuffer = ByteBuffer.wrap("Compression unit test to test compression.".getBytes(StandardCharsets.UTF_8));
+    ZstdCompression zstd = new ZstdCompression();
+    ByteBuffer compressedBuffer = ByteBuffer.allocate(zstd.getCompressBufferSize(sourceBuffer.remaining()));
+    zstd.compress(sourceBuffer, compressedBuffer);
 
     // Invoke the decompressContent method on the compressed buffer.
-    ByteBuf decompressedBuffer = (ByteBuf) MethodUtils.invokeMethod(firstChunk, true, "decompressContent", compressedBuffer);
-    byte[] decompressedData = new byte[decompressedBuffer.readableBytes()];
-    decompressedBuffer.readBytes(decompressedData);
+    ByteBuf compressedByteBuf = Unpooled.wrappedBuffer(compressedBuffer.flip());
+    ByteBuf decompressedByteBuf = (ByteBuf) MethodUtils.invokeMethod(firstChunk, true, "decompressContent", compressedByteBuf);
+    byte[] decompressedData = new byte[decompressedByteBuf.readableBytes()];
+    decompressedByteBuf.readBytes(decompressedData);
+    decompressedByteBuf.release();
 
-    Assert.assertArrayEquals(sourceData, decompressedData);
+    Assert.assertArrayEquals(sourceBuffer.array(), decompressedData);
   }
 
   /**
