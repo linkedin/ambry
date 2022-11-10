@@ -818,7 +818,7 @@ public class RestUtils {
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
   public static boolean isUpsertForNamedBlob(final Map<String, Object> args) throws RestServiceException {
-    return getBooleanHeaderWithDefaultValue(args, Headers.NAMED_UPSERT, false, true);
+    return getOptionalBooleanHeader(args, Headers.NAMED_UPSERT, true);
   }
 
   /**
@@ -938,8 +938,6 @@ public class RestUtils {
    * Gets the value of a header as a {@code boolean}.
    * @param args a map of arguments to be used to look for {@code header}.
    * @param header the name of the header.
-   * @param required if {@code true}, {@link RestServiceException} will be thrown if {@code header} is not present
-   *                 in {@code args}.
    * @param defaultVal the default value for this header
    * @return {@code true} if the header's value is {@code "true"} (case-insensitive), or {@code false} if the header's
    *         value is {@code "false} (case-insensitive) or the header is not present and {@code required} is
@@ -947,10 +945,10 @@ public class RestUtils {
    * @throws RestServiceException same as cases of {@link #getHeader(Map, String, boolean)} and if the value cannot be
    *                              converted to a {@code boolean}.
    */
-  public static boolean getBooleanHeaderWithDefaultValue(Map<String, Object> args, String header, boolean required, boolean defaultVal)
+  public static boolean getOptionalBooleanHeader(Map<String, Object> args, String header, boolean defaultVal)
       throws RestServiceException {
     boolean booleanValue;
-    String stringValue = getHeader(args, header, required);
+    String stringValue = getHeader(args, header, false);
     if (stringValue == null) {
       booleanValue = defaultVal;
     } else if ("false".equalsIgnoreCase(stringValue)) {
