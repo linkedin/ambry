@@ -246,6 +246,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         (accountId, containerId, connection) -> {
           long startTime = System.currentTimeMillis();
           // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
+          logger.trace("NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}', dbRelyOnNewTable='{}', isUpsert='{}'",
+              accountId, containerId, record.getBlobName(), config.dbRelyOnNewTable, isUpsert);
           if (!(config.dbRelyOnNewTable && isUpsert)) {
             NamedBlobRecord recordCurrent = null;
             try {
