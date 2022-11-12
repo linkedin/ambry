@@ -26,6 +26,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 
@@ -34,6 +36,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
  * {@link PartitionId} implementation to use within dynamic cluster managers.
  */
 public class AmbryPartition implements PartitionId {
+  private static final Logger LOGGER = LoggerFactory.getLogger(AmbryPartition.class);
   private final long id;
   private final String partitionClass;
   private final ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode>
@@ -195,6 +198,8 @@ public class AmbryPartition implements PartitionId {
         boolean isSealed = false;
         for (AmbryReplica replica : clusterManagerQueryHelper.getReplicaIdsForPartition(this)) {
           if (replica.isSealed()) {
+            LOGGER.trace("Partition {} is sealed because of replica {} is sealed at sealedStateChangeCounter {}", id,
+                replica.getDataNodeId().toString(), lastUpdatedSealedStateChangeCounter);
             isSealed = true;
             break;
           }
