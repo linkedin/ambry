@@ -433,9 +433,9 @@ class DeleteOperation {
    * @return true if it's under retry. return false if cannot do retry or retry is finished.
    */
   private boolean retryWithReplicateBlob() {
-    List<ReplicaId> successfulReplica = operationTracker.getSuccessReplica();
     // it's the first time we hit the 503
     if (replicateBlobCallback == null) {
+      List<ReplicaId> successfulReplica = operationTracker.getSuccessReplica();
       DataNodeId sourceDataNode = successfulReplica.get(0).getDataNodeId();
       replicateBlobCallback = new ReplicateBlobCallback(blobId, sourceDataNode);
 
