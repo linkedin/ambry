@@ -1473,6 +1473,7 @@ public class FrontendRestRequestServiceTest {
       }
       headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
       headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
+      headers.put(RestUtils.Headers.NAMED_UPSERT, true);
       if (targetAccountName != null) {
         headers.put(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
       }

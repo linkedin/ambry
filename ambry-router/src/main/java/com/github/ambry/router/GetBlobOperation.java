@@ -152,11 +152,10 @@ class GetBlobOperation extends GetOperation {
    * @param compressionService The compression service to use.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
-      Callback<GetBlobResult> callback, RouterCallback routerCallback, BlobIdFactory blobIdFactory,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
-      boolean isEncrypted, QuotaChargeCallback quotaChargeCallback, AmbryCache blobMetadataCache,
-      NonBlockingRouter nonBlockingRouter, CompressionService compressionService) {
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options, Callback<GetBlobResult> callback,
+      RouterCallback routerCallback, BlobIdFactory blobIdFactory, KeyManagementService kms, CryptoService cryptoService,
+      CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted, QuotaChargeCallback quotaChargeCallback,
+      AmbryCache blobMetadataCache, NonBlockingRouter nonBlockingRouter, CompressionService compressionService) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -898,7 +897,7 @@ class GetBlobOperation extends GetOperation {
       }
 
       try {
-        return decompressionService.decompress(sourceBuffer, routerConfig.routerMaxPutChunkSizeBytes);
+        return decompressionService.decompress(sourceBuffer, routerConfig.routerMaxPutChunkSizeBytes, true);
       } catch (Exception ex) {
         // Note: No need to emit metrics here because decompress() already emits failure metrics.
         logger.error("Failed to decompress chunk data for chunkBlobId " + chunkBlobId + " due to exception.", ex);
@@ -906,8 +905,7 @@ class GetBlobOperation extends GetOperation {
             RouterErrorCode.UnexpectedInternalError));
         setOperationCompleted();
         return null;
-      }
-      finally {
+      } finally {
         sourceBuffer.release();
       }
     }
@@ -1601,7 +1599,8 @@ class GetBlobOperation extends GetOperation {
         }
         blobType = blobData.getBlobType();
         isChunkCompressed = blobData.isCompressed();
-        logger.trace("In FirstGetChunk.handleBody(), is Chunk compressed = " + isChunkCompressed + " for blob ID = " + blobId);
+        logger.trace(
+            "In FirstGetChunk.handleBody(), is Chunk compressed = " + isChunkCompressed + " for blob ID = " + blobId);
         chunkIndexToBuf = new ConcurrentHashMap<>();
         chunkIndexToBufWaitingForRelease = new ConcurrentHashMap<>();
         if (rawMode) {

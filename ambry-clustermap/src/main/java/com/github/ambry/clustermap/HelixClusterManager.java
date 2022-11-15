@@ -950,7 +950,8 @@ public class HelixClusterManager implements ClusterMap {
           } finally {
             instanceConfigInitialized = true;
           }
-          sealedStateChangeCounter.incrementAndGet();
+          long counter = sealedStateChangeCounter.incrementAndGet();
+          logger.trace("SealedStateChangeCounter increase to {}", counter);
           helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
         }
       } catch (Throwable t) {

@@ -67,10 +67,11 @@ public interface NamedBlobDb {
    * Persist a {@link NamedBlobRecord} in the database.
    * @param record the {@link NamedBlobRecord}
    * @param state the {@link NamedBlobState}
+   * @param isUpsert the {@link Boolean}
    * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
    *         occurred.
    */
-  CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state);
+  CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert);
 
   /**
    * Persist a {@link NamedBlobRecord} in the database.
@@ -79,7 +80,7 @@ public interface NamedBlobDb {
    *         occurred.
    */
   default CompletableFuture<PutResult> put(NamedBlobRecord record) {
-    return put(record, NamedBlobState.READY);
+    return put(record, NamedBlobState.READY, false);
   }
 
   /**

@@ -13,8 +13,6 @@
  */
 package com.github.ambry.compression;
 
-import com.github.ambry.utils.Pair;
-import com.github.ambry.utils.Utils;
 import java.nio.ByteBuffer;
 
 
@@ -25,10 +23,6 @@ import java.nio.ByteBuffer;
  *   Compression example:
  *   {@code
  *     ByteBuffer originalData = ...;
- *     ByteBuffer compressedBuffer = Compression.compress(originalData, true);
- *
- *     // Same as
- *     ByteBuffer originalData = ...;
  *     int compressedBufferSize = Compression.getCompressBufferSize(originalData.remaining());
  *     ByteBuffer compressedBuffer = ByteBuffer.allocateDirect(compressedBufferSize);
  *     int compressedSize = Compression.compress(originalData, compressedBuffer);
@@ -36,10 +30,6 @@ import java.nio.ByteBuffer;
  *
  *   Decompression example:
  *   {@code
- *     ByteBuffer compressedBuffer = ...;
- *     ByteBuffer originalData = Compression.decompress(compressedBuffer, true);
- *
- *     // Same as
  *     ByteBuffer compressedBuffer = ...;
  *     int originalDataSize = Compression.getDecompressBufferSize(compressedBuffer);
  *     ByteBuffer originalData = ByteBuffer.allocateDirect(originalDataSize);
@@ -91,136 +81,6 @@ public interface Compression {
 
   /**
    * Get the original data size stored inside the shared/composite compressed buffer.  The compressed buffer
-   * contains version, algorithm name, original data size, and compressed data.
-   * The compressed buffer may be shared with other buffers, meaning only portion of this buffer was used by
-   * compression.  That is why it accepts the offset and size parameters.
-   * @param compressedBuffer The compressed buffer.
-   * @param compressedBufferOffset The offset in the compressed buffer where compression data is stored.
-   * @param compressedDataSize The size in compressedBuffer to read, may not be the size of compressedBuffer.
-   * @return The size of original data.
-   */
-  int getDecompressBufferSize(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize)
-      throws CompressionException;
-
-  /**
-   * Get the original data size stored in compressed buffer.  Compressed buffer is not shared and contains
-   * compressed data only.  The compressed buffer is the output of compress() that contains original/source data size.
-   * @param compressedBuffer The compressed buffer.  It cannot be null or empty.
-   * @return Size of the original data.
-   * @throws CompressionException Throws this exception if compression has internal failure.
-   */
-  default int getDecompressBufferSize(byte[] compressedBuffer) throws CompressionException {
-    Utils.checkNotNullOrEmpty(compressedBuffer, "compressedBuffer cannot be null or empty.");
-    return getDecompressBufferSize(compressedBuffer, 0, compressedBuffer.length);
-  }
-
-  /**
-   * Compress portion of the shared buffer specified in {@code sourceData}.  Both {@code sourceData}
-   * and {@code compressedBuffer} can be shared/composite buffers.  That's why both buffers need to provide
-   * their size and offset.  The caller is responsible for managing memory allocation.
-   *
-   * @param sourceBuffer The source/uncompressed data to compress.  It can be a shared buffer.  It cannot be null or
-   *                     empty.
-   * @param sourceBufferOffset Offset in the sourceBuffer to start reading.
-   * @param sourceDataSize The size in bytes in sourceBuffer to read/compress.
-   * @param compressedBuffer The compressed buffer where the compressed data is written to.  It can be a shared buffer.
-   * @param compressedBufferOffset Offset in compressedBuffer to write to.
-   * @param compressedDataSize The maximum size to write inside the compressedBuffer.  Since the compressed size is
-   *                           not known, call getCompressBufferSize() for the required size.
-   * @return The actual compressed data size in bytes.
-   * @throws CompressionException Throws this exception if compression has internal failure.
-   */
-  int compress(byte[] sourceBuffer, int sourceBufferOffset, int sourceDataSize,
-      byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize) throws CompressionException;
-
-  /**
-   * Compress the source data specified in {@code sourceBuffer}.  The source data is not a shared buffer.
-   * This method will allocate buffer to store the compressed data.
-   * The returned buffer may be bigger than sourceBuffer in case sourceBuffer is incompressible.
-   * The return value contains both the buffer and actual usage in the buffer.
-   *
-   * @param sourceBuffer The source uncompressed data to compress.  It cannot be null or empty.
-   * @return Pair that contains the compressed buffer and the buffer usage size in bytes.
-   * @throws CompressionException Throws this exception if compression has internal failure.
-   */
-  default Pair<Integer, byte[]> compress(byte[] sourceBuffer) throws CompressionException {
-    Utils.checkNotNullOrEmpty(sourceBuffer, "sourceBuffer cannot be null or empty.");
-    return compress(sourceBuffer, 0, sourceBuffer.length);
-  }
-
-  /**
-   * Compress the portion of the shared buffer specified in {@code sourceBuffer}.  This method will allocate buffer to
-   * store the compressed data.  The returned buffer may be bigger than sourceBuffer in case sourceBuffer is incompressible.
-   * The return value contains both the buffer and actual usage in the buffer.
-   *
-   * @param sourceBuffer The source uncompressed data to compress.  It cannot be null or empty.
-   * @param sourceBufferOffset Offset in sourceBuffer to start reading.
-   * @param sourceDataSize Size of source data to read in bytes, not the size of sourceBuffer.
-   * @return Pair that contains the compressed buffer and the buffer usage sourceDataSize in bytes.
-   * @throws CompressionException Throws this exception if compression has internal failure.
-   */
-  default Pair<Integer, byte[]> compress(byte[] sourceBuffer, int sourceBufferOffset, int sourceDataSize)
-      throws CompressionException {
-    Utils.checkNotNullOrEmpty(sourceBuffer, "sourceBuffer cannot be null or empty.");
-    int compressedBufferSize = getCompressBufferSize(sourceDataSize);
-    byte[] compressedBuffer = new byte[compressedBufferSize];
-    int compressedSize = compress(sourceBuffer, sourceBufferOffset, sourceDataSize, compressedBuffer, 0, compressedBuffer.length);
-    return new Pair<>(compressedSize, compressedBuffer);
-  }
-
-  /**
-   * Decompress portion of the shared buffer in {@code compressedBuffer}.  Both the {@code compressedBuffer} and
-   * {@code sourceData} may be shared buffers and that's why both provide their offset and size as parameters.
-   * The compressed buffer is the output from compress() that contains the version, algorithm name, original data size,
-   * and compressed binary.
-   *
-   * @param compressedBuffer The buffer that contains compressed data generated by the compress() method.
-   * @param compressedBufferOffset Offset in the compressedBuffer to start reading.
-   * @param compressedDataSize Number of bytes to read in compressedBuffer.
-   * @param decompressedBuffer The buffer to hold the decompressed/original data.  This buffer may be shared.
-   * @param decompressedBufferOffset Offset in the sourceData buffer to write.
-   * @param decompressedDataSize Size of the original data in bytes, not the size of decompressedBuffer.
-   * @return The original data size which is same as number of bytes written to sourceData buffer.
-   * @throws CompressionException Throws this exception if decompression has internal failure.
-   */
-  int decompress(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize,
-      byte[] decompressedBuffer, int decompressedBufferOffset, int decompressedDataSize) throws CompressionException;
-
-  /**
-   * Decompress the compressed buffer.  The compressedBuffer is not shared and contains compressed buffer only.
-   * This method allocates and returns the buffer to hold the decompressed data.
-   * @param compressedBuffer The compressed buffer generated in compress() method.
-   * @return The original/decompressed data.
-   * @throws CompressionException Throws this exception if decompression has internal failure.
-   */
-  default byte[] decompress(byte[] compressedBuffer) throws CompressionException {
-    Utils.checkNotNullOrEmpty (compressedBuffer, "compressedBuffer cannot be null or empty.");
-    return decompress(compressedBuffer, 0, compressedBuffer.length);
-  }
-
-  /**
-   * Decompress portion of the compressed buffer.  The compressedBuffer may be shared with other buffers and
-   * that's why the compressedBufferOffset and size are provided as parameters.
-   * This method allocates and returns the buffer to hold the decompressed data.
-   *
-   * @param compressedBuffer The compressed buffer generated in compress() method.
-   * @param compressedBufferOffset Offset in the compressedBuffer to start reading.
-   * @param compressedDataSize Number of bytes to read in compressedBuffer, not the size of compressedBuffer.
-   * @return The original/decompressed data.
-   * @throws CompressionException Throws this exception if decompression has internal failure.
-   */
-  default byte[] decompress(byte[] compressedBuffer, int compressedBufferOffset, int compressedDataSize)
-      throws CompressionException {
-    Utils.checkNotNullOrEmpty (compressedBuffer, "compressedBuffer cannot be null or empty.");
-    int originalDataSize = getDecompressBufferSize(compressedBuffer, compressedBufferOffset, compressedDataSize);
-    byte[] originalData = new byte[originalDataSize];
-    decompress(compressedBuffer, compressedBufferOffset, compressedDataSize,
-        originalData, 0, originalData.length);
-    return originalData;
-  }
-
-  /**
-   * Get the original data size stored inside the shared/composite compressed buffer.  The compressed buffer
    * contains version, algorithm name, original data size, and compressed data.  This method helps to determine
    * the decompressed buffer size before calling decompress().
    * This method does not change the index of compressedBuffer.
@@ -231,6 +91,14 @@ public interface Compression {
    * @throws CompressionException Throws this exception if compression has internal failure.
    */
   int getDecompressBufferSize(ByteBuffer compressedBuffer) throws CompressionException;
+
+  /**
+   * Some compression algorithms, such as ZStd, are picky on the source and destination buffer types.
+   * In Zstd, either both buffers are Heap or both are Direct memory.
+   * In LZ4, any combination of Heap and Direct memory are acceptable.
+   * This method indicate whether this compression algorithm requires both source and destination buffer type to match.
+   */
+  boolean requireMatchingBufferType();
 
   /**
    * Compress the buffer specified in {@code sourceData}.  The entire sourceBuffer will be read,
@@ -247,27 +115,6 @@ public interface Compression {
   int compress(ByteBuffer sourceBuffer, ByteBuffer compressedBuffer) throws CompressionException;
 
   /**
-   * Compress the buffer specified in {@code sourceBuffer}.  This method allocates either direct memory or heap memory,
-   * based on the allocateDirectBuffer parameter, to store the compressed data.  The output compressed buffer capacity
-   * may be bigger than necessary in case sourceBuffer is incompressible.  The index of sourceBuffer will be updated
-   * and flipped, so it's ready for reading.
-   *
-   * @param sourceBuffer The source uncompressed data to compress.  It cannot be null or empty.
-   * @param allocateDirectBuffer Whether to allocate direct buffer or heap buffer to store compressed data.
-   * @return The compressed buffer.
-   * @throws CompressionException Throws this exception if compression has internal failure.
-   */
-  default ByteBuffer compress(ByteBuffer sourceBuffer, boolean allocateDirectBuffer) throws CompressionException {
-    Utils.checkNotNullOrEmpty(sourceBuffer, "sourceBuffer cannot be null or empty.");
-    int compressedBufferSize = getCompressBufferSize(sourceBuffer.remaining());
-    ByteBuffer compressedBuffer = allocateDirectBuffer ? ByteBuffer.allocateDirect(compressedBufferSize) :
-        ByteBuffer.allocate(compressedBufferSize);
-    compress(sourceBuffer, compressedBuffer);
-    compressedBuffer.flip();
-    return compressedBuffer;
-  }
-
-  /**
    * Decompress the buffer specified in {@code compressedBuffer}.  Since compressedBuffer structure contains the
    * original data size, it reads only the portion required to decompress.
    * After calling, compressedBuffer position will be advanced to right after the compressed binary, and the
@@ -280,24 +127,4 @@ public interface Compression {
    * @throws CompressionException Throws this exception if decompression has internal failure.
    */
   int decompress(ByteBuffer compressedBuffer, ByteBuffer decompressedBuffer) throws CompressionException;
-
-  /**
-   * Decompress the compressed buffer.  The compressedBuffer index will be updated after reading.
-   * This method allocates either direct memory or heap memory, based on the allocateDirectBuffer parameter,
-   * to hold the output of decompression.  The output buffer is flipped so that it is ready for reading.
-   *
-   * @param compressedBuffer The compressed buffer generated by the compress() method.
-   * @param allocateDirectBuffer Whether to allocate direct buffer or heap buffer to store decompressed data.
-   * @return The original/decompressed data.
-   * @throws CompressionException Throws this exception if decompression has internal failure.
-   */
-  default ByteBuffer decompress(ByteBuffer compressedBuffer, boolean allocateDirectBuffer) throws CompressionException {
-    Utils.checkNotNullOrEmpty (compressedBuffer, "compressedBuffer cannot be null or empty.");
-    int originalDataSize = getDecompressBufferSize(compressedBuffer);
-    ByteBuffer originalData = allocateDirectBuffer ? ByteBuffer.allocateDirect(originalDataSize) :
-        ByteBuffer.allocate(originalDataSize);
-    decompress(compressedBuffer, originalData);
-    originalData.flip();
-    return originalData;
-  }
 }

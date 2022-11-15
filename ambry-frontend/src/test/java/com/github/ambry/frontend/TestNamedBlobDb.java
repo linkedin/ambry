@@ -122,7 +122,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert) {
     CompletableFuture<PutResult> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);

@@ -139,8 +139,7 @@ public class MessageSievingInputStreamTest {
       testValidBlobs(Blob_Version_V3, BlobType.MetadataBlob, Message_Header_Version_V2);
       testValidBlobs(Blob_Version_V3, BlobType.DataBlob, Message_Header_Version_V3);
       testValidBlobs(Blob_Version_V3, BlobType.MetadataBlob, Message_Header_Version_V3);
-    }
-    finally {
+    } finally {
       PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
     }
   }

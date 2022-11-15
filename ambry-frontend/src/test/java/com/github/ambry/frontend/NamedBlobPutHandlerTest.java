@@ -27,6 +27,9 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.MySqlNamedBlobDbFactory;
+import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.quota.QuotaTestUtils;
 import com.github.ambry.rest.MockRestResponseChannel;
 import com.github.ambry.rest.RequestPath;
@@ -67,6 +70,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 public class NamedBlobPutHandlerTest {
@@ -85,6 +89,8 @@ public class NamedBlobPutHandlerTest {
   private static final String NAMED_BLOB_PREFIX = "/named";
   private static final String SLASH = "/";
   private static final String BLOBNAME = "ambry_blob_name";
+
+  private final NamedBlobDb namedBlobDb;
 
   static {
     try {
@@ -113,7 +119,7 @@ public class NamedBlobPutHandlerTest {
   private NamedBlobPutHandler namedBlobPutHandler;
   private final String request_path;
 
-  public NamedBlobPutHandlerTest() {
+  public NamedBlobPutHandlerTest() throws Exception {
     idConverterFactory = new FrontendTestIdConverterFactory();
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     Properties props = new Properties();
@@ -125,6 +131,9 @@ public class NamedBlobPutHandlerTest {
     idSigningService = new AmbryIdSigningService();
     request_path =
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + BLOBNAME;
+    NamedBlobDbFactory namedBlobDbFactory =
+        new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
+    namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     initNamedBlobPutHandler(props);
   }
 
@@ -470,7 +479,7 @@ public class NamedBlobPutHandlerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     namedBlobPutHandler =
-        new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), idConverterFactory.getIdConverter(),
+        new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb, idConverterFactory.getIdConverter(),
             idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
             QuotaTestUtils.createDummyQuotaManager());
   }
