@@ -814,11 +814,11 @@ public class RestUtils {
   /**
    * Determine if {@link Headers#NAMED_UPSERT} is set in the request args.
    * @param args The request arguments.
-   * @return {@code false} if {@link Headers#NAMED_UPSERT} is set to false else return true.
+   * @return {@code true} if {@link Headers#NAMED_UPSERT} is set to true else return false (default to false).
    * @throws RestServiceException if exception occurs during parsing the arg.
    */
   public static boolean isUpsertForNamedBlob(final Map<String, Object> args) throws RestServiceException {
-    return getOptionalBooleanHeader(args, Headers.NAMED_UPSERT, true);
+    return getOptionalBooleanHeader(args, Headers.NAMED_UPSERT, false);
   }
 
   /**
