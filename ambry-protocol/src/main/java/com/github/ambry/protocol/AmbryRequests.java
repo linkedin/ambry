@@ -740,10 +740,10 @@ public class AmbryRequests implements RequestAPI {
 
     // Currently we don't enable the write repair. As long as the local store has the Blob, return success immediately.
     // check if local store has the key already
-    List<StoreKey> convertedStoreKeys = getConvertedStoreKeys(Collections.singletonList(blobId));
-    Store store = storeManager.getStore(blobId.getPartition());
+    StoreKey convertedKey = getConvertedStoreKeys(Collections.singletonList(blobId)).get(0);
+    Store store = storeManager.getStore(((BlobId)convertedKey).getPartition());
     try {
-      store.findKey(convertedStoreKeys.get(0));
+      store.findKey(convertedKey);
       return true;
     } catch (StoreException e) {
       // it throws e.getErrorCode() == StoreErrorCodes.ID_Not_Found if it doesn't exist.
