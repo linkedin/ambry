@@ -1167,6 +1167,8 @@ public class ReplicaThread implements Runnable {
                 if (messageInfo.isTtlUpdated()) {
                   applyTtlUpdate(messageInfo, remoteReplicaInfo);
                 }
+                replicationMetrics.updateReplicationLagInSecondsForBlob(datacenterName,
+                    (time.milliseconds() - messageInfo.getOperationTimeMs()) / Time.MsPerSec);
               }
               totalBlobsFixed += messageInfoList.size();
 
