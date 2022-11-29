@@ -67,4 +67,10 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
     messageLength = buffer.capacity();
     buffer.flip();
   }
+
+  public static long getDeleteMessageFormatInputStreamSize(StoreKey key) throws MessageFormatException {
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
+    int deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.DELETE);
+    return headerSize + key.sizeInBytes() + deleteRecordSize;
+  }
 }

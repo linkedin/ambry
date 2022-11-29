@@ -15,6 +15,7 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.Pair;
@@ -1825,25 +1826,34 @@ class PersistentIndex {
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
         StoreFindToken newToken;
-        //if index based token points to the last entry of last index segment, and journal size cleaned up after last log
-        //segment auto close, we should return the original index based token instead of getting from journal.
-        if (isJournalEmptyAfterAutoClose() && indexBasedTokenPointsToLastEntryOfLastIndexSegment(storeToken,
-            indexSegments)) {
-          newToken = storeToken;
-        } else {
-          newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-              new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
+        while (true) {
+          //if index based token points to the last entry of last index segment, and journal size cleaned up after last log
+          //segment auto close, we should return the original index based token instead of getting from journal.
+          if (isJournalEmptyAfterAutoClose() && indexBasedTokenPointsToLastEntryOfLastIndexSegment(storeToken,
+              indexSegments)) {
+            newToken = storeToken;
+          } else {
+            newToken =
+                findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
+                    new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
+          }
+          logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
+
+          startTimeInMs = time.milliseconds();
+          updateStateForMessages(messageEntries);
+          logger.trace("Segment based token, Time used to update state: {}", (time.milliseconds() - startTimeInMs));
+
+          startTimeInMs = time.milliseconds();
+          eliminateDuplicates(messageEntries);
+          logger.trace("Segment based token, Time used to eliminate duplicates: {}",
+              (time.milliseconds() - startTimeInMs));
+          if (shouldStopScanning(messageEntries, newToken, maxTotalSizeOfEntries)) {
+            break;
+          }
+          logger.trace("Index {}: keep scanning index segment since new token is {}, number of MessageEntries {}",
+              dataDir, newToken.getType(), messageEntries.size());
+          storeToken = newToken;
         }
-        logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
-
-        startTimeInMs = time.milliseconds();
-        updateStateForMessages(messageEntries);
-        logger.trace("Segment based token, Time used to update state: {}", (time.milliseconds() - startTimeInMs));
-
-        startTimeInMs = time.milliseconds();
-        eliminateDuplicates(messageEntries);
-        logger.trace("Segment based token, Time used to eliminate duplicates: {}",
-            (time.milliseconds() - startTimeInMs));
 
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind, indexSegments);
         newToken.setBytesRead(totalBytesRead);
@@ -1855,6 +1865,31 @@ class PersistentIndex {
       throw new StoreException("Unknown error when finding entries for index " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
     }
+  }
+
+  private boolean shouldStopScanning(List<MessageInfo> messageEntries, StoreFindToken newToken,
+      long maxTotalSizeOfEntries) {
+    if (!config.storeDeletedPutAsDeleteInFindEntries || messageEntries.isEmpty() || !newToken.getType()
+        .equals(FindTokenType.IndexBased)) {
+      return true;
+    }
+    long sizeSum = 0;
+    for (MessageInfo info : messageEntries) {
+      if (info.isDeleted()) {
+        long size = info.getSize();
+        try {
+          size = DeleteMessageFormatInputStream.getDeleteMessageFormatInputStreamSize(info.getStoreKey());
+          logger.trace("Index {}: scanned a ")
+        } catch (Exception e) {
+        }
+        sizeSum += size;
+      } else {
+        sizeSum += info.getSize();
+      }
+    }
+    logger.trace("Index {}: Check if keep scanning based on message size: {}, max total size: {}", dataDir, sizeSum,
+        maxTotalSizeOfEntries);
+    return sizeSum >= maxTotalSizeOfEntries;
   }
 
   /**
