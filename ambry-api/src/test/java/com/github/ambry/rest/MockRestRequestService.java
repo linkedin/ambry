@@ -29,6 +29,7 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -120,7 +121,7 @@ public class MockRestRequestService implements RestRequestService {
         byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
         router.putBlob(blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
             new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null);
-      } catch (RestServiceException e) {
+      } catch (RestServiceException | UnsupportedEncodingException e) {
         handleResponse(restRequest, restResponseChannel, null, e);
       }
     }

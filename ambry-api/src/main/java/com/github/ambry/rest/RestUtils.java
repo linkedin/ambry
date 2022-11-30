@@ -27,7 +27,9 @@ import com.github.ambry.server.StatsReportType;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -532,7 +534,8 @@ public class RestUtils {
    * @return the user metadata extracted from arguments.
    * @throws RestServiceException if usermetadata arguments have null values.
    */
-  public static byte[] buildUserMetadata(Map<String, Object> args) throws RestServiceException {
+  public static byte[] buildUserMetadata(Map<String, Object> args)
+      throws RestServiceException, UnsupportedEncodingException {
     ByteBuffer userMetadata;
     if (args.containsKey(MultipartPost.USER_METADATA_PART)) {
       userMetadata = (ByteBuffer) args.get(MultipartPost.USER_METADATA_PART);
@@ -547,6 +550,17 @@ public class RestUtils {
           String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
           sizeToAllocate += keyToStore.getBytes(CHARSET).length;
           String value = getHeader(args, key, true);
+          userMetadataMap.put(keyToStore, value);
+          // value size
+          sizeToAllocate += 4;
+          sizeToAllocate += value.getBytes(CHARSET).length;
+        } else if (key.toLowerCase().startsWith(Headers.USER_META_DATA_ENCODED_HEADER_PREFIX)) {
+          // key size
+          sizeToAllocate += 4;
+          String keyToStore = key.substring(Headers.USER_META_DATA_ENCODED_HEADER_PREFIX.length());
+          sizeToAllocate += keyToStore.getBytes(CHARSET).length;
+          String urlEncodedValue = getHeader(args, key, true);
+          String value = URLDecoder.decode(urlEncodedValue, CHARSET.name());
           userMetadataMap.put(keyToStore, value);
           // value size
           sizeToAllocate += 4;
