@@ -534,8 +534,7 @@ public class RestUtils {
    * @return the user metadata extracted from arguments.
    * @throws RestServiceException if usermetadata arguments have null values.
    */
-  public static byte[] buildUserMetadata(Map<String, Object> args)
-      throws RestServiceException, UnsupportedEncodingException {
+  public static byte[] buildUserMetadata(Map<String, Object> args) throws RestServiceException {
     ByteBuffer userMetadata;
     if (args.containsKey(MultipartPost.USER_METADATA_PART)) {
       userMetadata = (ByteBuffer) args.get(MultipartPost.USER_METADATA_PART);
@@ -560,7 +559,14 @@ public class RestUtils {
           String keyToStore = key.substring(Headers.USER_META_DATA_ENCODED_HEADER_PREFIX.length());
           sizeToAllocate += keyToStore.getBytes(CHARSET).length;
           String urlEncodedValue = getHeader(args, key, true);
-          String value = URLDecoder.decode(urlEncodedValue, CHARSET.name());
+          String value;
+          try {
+            value = URLDecoder.decode(urlEncodedValue, CHARSET.name());
+          } catch (UnsupportedEncodingException e) {
+            throw new RestServiceException(
+                "Fail to decode the header value: " + urlEncodedValue + " for header: " + keyToStore,
+                RestServiceErrorCode.UnsupportedEncoding);
+          }
           userMetadataMap.put(keyToStore, value);
           // value size
           sizeToAllocate += 4;

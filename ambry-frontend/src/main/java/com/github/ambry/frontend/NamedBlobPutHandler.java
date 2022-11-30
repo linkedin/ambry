@@ -43,7 +43,6 @@ import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
-import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -315,7 +314,7 @@ public class NamedBlobPutHandler {
      * @return the {@link BlobInfo} parsed from the request arguments.
      * @throws RestServiceException if there is an error while parsing the {@link BlobInfo} arguments.
      */
-    private BlobInfo getBlobInfoFromRequest() throws RestServiceException, UnsupportedEncodingException {
+    private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
       accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
           frontendMetrics.putBlobMetricsGroup);

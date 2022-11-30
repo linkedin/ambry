@@ -189,6 +189,7 @@ public enum ResponseStatus {
       case MalformedRequest:
       case MissingArgs:
       case UnsupportedHttpMethod:
+      case UnsupportedEncoding:
         return BadRequest;
       case ResourceDirty:
       case AccessDenied:
