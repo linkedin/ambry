@@ -31,18 +31,6 @@ import java.nio.ByteBuffer;
  *
  */
 public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
-  private static final int HEADER_SIZE;
-  private static final int DELETE_RECORD_SIZE;
-
-  static {
-    try {
-      HEADER_SIZE = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to get Header size for version " + MessageFormatRecord.headerVersionToUse, e);
-    }
-    DELETE_RECORD_SIZE = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.DELETE);
-  }
-
   public DeleteMessageFormatInputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs)
       throws MessageFormatException {
     this(key, accountId, containerId, deletionTimeMs, (short) 0);
@@ -50,23 +38,25 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
 
   public DeleteMessageFormatInputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs,
       short lifeVersion) throws MessageFormatException {
-    buffer = ByteBuffer.allocate(HEADER_SIZE + key.sizeInBytes() + DELETE_RECORD_SIZE);
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
+    int deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.DELETE);
+    buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
 
     if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V1) {
-      MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer, DELETE_RECORD_SIZE,
-          MessageFormatRecord.Message_Header_Invalid_Relative_Offset, HEADER_SIZE + key.sizeInBytes(),
+      MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer, deleteRecordSize,
+          MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
     } else if (MessageFormatRecord.headerVersionToUse == MessageFormatRecord.Message_Header_Version_V2) {
-      MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, DELETE_RECORD_SIZE,
+      MessageFormatRecord.MessageHeader_Format_V2.serializeHeader(buffer, deleteRecordSize,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-          MessageFormatRecord.Message_Header_Invalid_Relative_Offset, HEADER_SIZE + key.sizeInBytes(),
+          MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
     } else {
-      MessageFormatRecord.MessageHeader_Format_V3.serializeHeader(buffer, lifeVersion, DELETE_RECORD_SIZE,
+      MessageFormatRecord.MessageHeader_Format_V3.serializeHeader(buffer, lifeVersion, deleteRecordSize,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-          MessageFormatRecord.Message_Header_Invalid_Relative_Offset, HEADER_SIZE + key.sizeInBytes(),
+          MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
           MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
     }
@@ -84,6 +74,12 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
    * @return The size of {@link DeleteMessageFormatInputStream}
    */
   public static long getDeleteMessageFormatInputStreamSize(StoreKey key) {
-    return HEADER_SIZE + key.sizeInBytes() + DELETE_RECORD_SIZE;
+    try {
+      int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
+      int deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.DELETE);
+      return headerSize + key.sizeInBytes() + deleteRecordSize;
+    } catch (MessageFormatException e) {
+      throw new IllegalArgumentException("Failed to get DeleteMessageFormatInputStreamSize for key " + key, e);
+    }
   }
 }
