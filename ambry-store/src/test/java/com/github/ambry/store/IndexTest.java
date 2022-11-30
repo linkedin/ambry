@@ -1261,8 +1261,7 @@ public class IndexTest {
     long oldDeleteSize = DELETE_RECORD_SIZE;
     try {
       MockId id = state.getUniqueId();
-      long deleteSize = DeleteMessageFormatInputStream.getDeleteMessageFormatInputStreamSize(id);
-      DELETE_RECORD_SIZE = deleteSize;
+      DELETE_RECORD_SIZE = DeleteMessageFormatInputStream.getDeleteMessageFormatInputStreamSize(id);
       PUT_RECORD_SIZE = DEFAULT_MAX_IN_MEM_ELEMENTS * DELETE_RECORD_SIZE;
       state.properties.put("store.deleted.put.as.delete.in.find.entries", "true");
       state.reloadIndex(false, false);

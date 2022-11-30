@@ -1875,14 +1875,15 @@ class PersistentIndex {
    * 1. storeDeletedPutAsDeleteInFindEntries is false or
    * 2. No message entries was found in the last scan or
    * 3. new Token is not IndexBased anymore or
-   * 4. the total size of returned message infos are already larger than the max totals zie of entries.
+   * 4. the total size of returned message infos are already larger than the max total size of entries.
    *
    * If we are comparing the size of returned message infos, then we are treating a deleted Put Message
    * as a Delete message.
-   * @param messageEntries
-   * @param newToken
-   * @param maxTotalSizeOfEntries
-   * @param messageInfoSizeSum
+   * @param messageEntries the list of {@link MessageInfo} from scanning index segments
+   * @param newToken the new token after scanning
+   * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to
+   *                              return a list of entries whose total size is close to this value.
+   * @param messageInfoSizeSum the sum of message infos' sizes from the list.
    * @return
    */
   private boolean shouldStopScanning(List<MessageInfo> messageEntries, StoreFindToken newToken,
