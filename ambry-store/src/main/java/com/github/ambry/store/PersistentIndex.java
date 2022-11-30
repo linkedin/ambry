@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.Pair;
@@ -1826,6 +1825,7 @@ class PersistentIndex {
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
         StoreFindToken newToken;
+        long sizeSum = 0;
         while (true) {
           //if index based token points to the last entry of last index segment, and journal size cleaned up after last log
           //segment auto close, we should return the original index based token instead of getting from journal.
@@ -1835,7 +1835,8 @@ class PersistentIndex {
           } else {
             newToken =
                 findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-                    new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
+                    new FindEntriesCondition(maxTotalSizeOfEntries - sizeSum), indexSegments,
+                    storeToken.getInclusive());
           }
           logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
 
@@ -1847,7 +1848,8 @@ class PersistentIndex {
           eliminateDuplicates(messageEntries);
           logger.trace("Segment based token, Time used to eliminate duplicates: {}",
               (time.milliseconds() - startTimeInMs));
-          if (shouldStopScanning(messageEntries, newToken, maxTotalSizeOfEntries)) {
+          sizeSum = messageEntries.stream().mapToLong(MessageInfo::getSize).sum();
+          if (shouldStopScanning(messageEntries, newToken, maxTotalSizeOfEntries, sizeSum)) {
             break;
           }
           logger.trace("Index {}: keep scanning index segment since new token is {}, number of MessageEntries {}",
@@ -1867,29 +1869,30 @@ class PersistentIndex {
     }
   }
 
+  /**
+   * Return true to stop scanning the index segment files. We stop scanning when
+   * 1. storeDeletedPutAsDeleteInFindEntries is false or
+   * 2. No message entries was found in the last scan or
+   * 3. new Token is not IndexBased anymore or
+   * 4. the total size of returned message infos are already larger than the max totals zie of entries.
+   *
+   * If we are comparing the size of returned message infos, then we are treating a deleted Put Message
+   * as a Delete message.
+   * @param messageEntries
+   * @param newToken
+   * @param maxTotalSizeOfEntries
+   * @param messageInfoSizeSum
+   * @return
+   */
   private boolean shouldStopScanning(List<MessageInfo> messageEntries, StoreFindToken newToken,
-      long maxTotalSizeOfEntries) {
+      long maxTotalSizeOfEntries, long messageInfoSizeSum) {
     if (!config.storeDeletedPutAsDeleteInFindEntries || messageEntries.isEmpty() || !newToken.getType()
         .equals(FindTokenType.IndexBased)) {
       return true;
     }
-    long sizeSum = 0;
-    for (MessageInfo info : messageEntries) {
-      if (info.isDeleted()) {
-        long size = info.getSize();
-        try {
-          size = DeleteMessageFormatInputStream.getDeleteMessageFormatInputStreamSize(info.getStoreKey());
-          logger.trace("Index {}: scanned a ")
-        } catch (Exception e) {
-        }
-        sizeSum += size;
-      } else {
-        sizeSum += info.getSize();
-      }
-    }
-    logger.trace("Index {}: Check if keep scanning based on message size: {}, max total size: {}", dataDir, sizeSum,
-        maxTotalSizeOfEntries);
-    return sizeSum >= maxTotalSizeOfEntries;
+    logger.trace("Index {}: Check if keep scanning based on message size: {}, max total size: {}", dataDir,
+        messageInfoSizeSum, maxTotalSizeOfEntries);
+    return messageInfoSizeSum >= maxTotalSizeOfEntries;
   }
 
   /**
