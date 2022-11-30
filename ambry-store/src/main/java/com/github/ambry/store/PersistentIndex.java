@@ -1852,8 +1852,9 @@ class PersistentIndex {
           if (shouldStopScanning(messageEntries, newToken, maxTotalSizeOfEntries, sizeSum)) {
             break;
           }
-          logger.trace("Index {}: keep scanning index segment since new token is {}, number of MessageEntries {}",
-              dataDir, newToken.getType(), messageEntries.size());
+          logger.trace(
+              "Index {}: keep scanning index segment since new token is {}, number of MessageEntries {}, maxTotalSize {} and scanned total size {}",
+              dataDir, newToken, messageEntries.size(), maxTotalSizeOfEntries, sizeSum);
           storeToken = newToken;
         }
 
@@ -1886,13 +1887,12 @@ class PersistentIndex {
    */
   private boolean shouldStopScanning(List<MessageInfo> messageEntries, StoreFindToken newToken,
       long maxTotalSizeOfEntries, long messageInfoSizeSum) {
-    if (!config.storeDeletedPutAsDeleteInFindEntries || messageEntries.isEmpty() || !newToken.getType()
-        .equals(FindTokenType.IndexBased)) {
-      return true;
-    }
-    logger.trace("Index {}: Check if keep scanning based on message size: {}, max total size: {}", dataDir,
-        messageInfoSizeSum, maxTotalSizeOfEntries);
-    return messageInfoSizeSum >= maxTotalSizeOfEntries;
+    //@formatter:off
+    return !config.storeDeletedPutAsDeleteInFindEntries
+        || messageEntries.isEmpty()
+        || !newToken.getType().equals(FindTokenType.IndexBased)
+        || messageInfoSizeSum >= maxTotalSizeOfEntries;
+    //@formatter:on
   }
 
   /**
