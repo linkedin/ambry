@@ -69,7 +69,7 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
   }
 
   /**
-   * Return the {@link DeleteMessageFormatInputStream} size for the given {@code key}.
+   * Only used in test. Return the {@link DeleteMessageFormatInputStream} size for the given {@code key}.
    * @param key The {@link StoreKey}
    * @return The size of {@link DeleteMessageFormatInputStream}
    */

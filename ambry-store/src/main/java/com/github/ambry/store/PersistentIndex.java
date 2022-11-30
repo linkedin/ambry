@@ -1826,6 +1826,7 @@ class PersistentIndex {
         startTimeInMs = time.milliseconds();
         StoreFindToken newToken;
         long sizeSum = 0;
+        int messageEntryIndex = 0;
         while (true) {
           //if index based token points to the last entry of last index segment, and journal size cleaned up after last log
           //segment auto close, we should return the original index based token instead of getting from journal.
@@ -1841,7 +1842,8 @@ class PersistentIndex {
           logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
 
           startTimeInMs = time.milliseconds();
-          updateStateForMessages(messageEntries);
+          // UpdateState for the messageEntries that has not yet been updated
+          updateStateForMessages(messageEntries.subList(messageEntryIndex, messageEntries.size()));
           logger.trace("Segment based token, Time used to update state: {}", (time.milliseconds() - startTimeInMs));
 
           startTimeInMs = time.milliseconds();
@@ -1856,6 +1858,7 @@ class PersistentIndex {
               "Index {}: keep scanning index segment since new token is {}, number of MessageEntries {}, maxTotalSize {} and scanned total size {}",
               dataDir, newToken, messageEntries.size(), maxTotalSizeOfEntries, sizeSum);
           storeToken = newToken;
+          messageEntryIndex = messageEntries.size();
         }
 
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind, indexSegments);
