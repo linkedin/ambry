@@ -27,7 +27,9 @@ import com.github.ambry.server.StatsReportType;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -547,6 +549,24 @@ public class RestUtils {
           String keyToStore = key.substring(Headers.USER_META_DATA_HEADER_PREFIX.length());
           sizeToAllocate += keyToStore.getBytes(CHARSET).length;
           String value = getHeader(args, key, true);
+          userMetadataMap.put(keyToStore, value);
+          // value size
+          sizeToAllocate += 4;
+          sizeToAllocate += value.getBytes(CHARSET).length;
+        } else if (key.toLowerCase().startsWith(Headers.USER_META_DATA_ENCODED_HEADER_PREFIX)) {
+          // key size
+          sizeToAllocate += 4;
+          String keyToStore = key.substring(Headers.USER_META_DATA_ENCODED_HEADER_PREFIX.length());
+          sizeToAllocate += keyToStore.getBytes(CHARSET).length;
+          String urlEncodedValue = getHeader(args, key, true);
+          String value;
+          try {
+            value = URLDecoder.decode(urlEncodedValue, CHARSET.name());
+          } catch (UnsupportedEncodingException e) {
+            throw new RestServiceException(
+                "Fail to decode the header value: " + urlEncodedValue + " for header: " + keyToStore,
+                RestServiceErrorCode.UnsupportedEncoding);
+          }
           userMetadataMap.put(keyToStore, value);
           // value size
           sizeToAllocate += 4;

@@ -144,6 +144,9 @@ public class ReplicationMetrics {
   private final Map<String, Set<RemoteReplicaInfo>> remoteReplicaInfosByDc = new ConcurrentHashMap<>();
   private final Map<String, LongSummaryStatistics> dcToReplicaLagStats = new ConcurrentHashMap<>();
 
+  // A map from dcname to a histogram. This histogram records the replication lag in seconds for PUT records.
+  private final Map<String, Histogram> dcToReplicaLagInSecondsForBlob = new ConcurrentHashMap<>();
+
   // Metric to track number of cross colo replication get requests sent by standby replicas. This is applicable during
   // leader-based replication.
   // Use case: If leader-based replication is enabled, we should see ideally send cross colo gets only for leader replicas.
@@ -382,6 +385,9 @@ public class ReplicationMetrics {
             "Inter-" + datacenter + "-ReplicationFetchBytesRateForStandbyReplicas"));
     interColoReplicationFetchBytesRateForStandbyReplicas.put(datacenter,
         interColoReplicationFetchBytesRateForStandbyReplicasPerDC);
+    Histogram replicationLagInSecondsForBlob = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationLagInSecondsForBlob"));
+    dcToReplicaLagInSecondsForBlob.put(datacenter, replicationLagInSecondsForBlob);
   }
 
   /**
@@ -459,7 +465,7 @@ public class ReplicationMetrics {
       if (enableEmmitMetricForReplicaLag) {
         Gauge<Long> replicaLag = () -> getMaxLagForPartition(partitionId);
         registry.gauge(MetricRegistry.name(ReplicaThread.class,
-            String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())),
+                String.format(MAX_LAG_FROM_PEERS_IN_BYTE_METRIC_NAME_TEMPLATE, partitionId.toPathString())),
             () -> replicaLag);
       }
     }
@@ -789,6 +795,17 @@ public class ReplicationMetrics {
     }
     Map.Entry<DataNodeId, Long> maxEntry = perDataNodeLag.entrySet().stream().max(Map.Entry.comparingByValue()).get();
     return maxEntry.getValue();
+  }
+
+  /**
+   * Update the replication lag in seconds for Put Blob.
+   * @param datacenter The datacenter
+   * @param timeInSeconds The replication lag in seconds
+   */
+  public void updateReplicationLagInSecondsForBlob(String datacenter, long timeInSeconds) {
+    if (dcToReplicaLagInSecondsForBlob.containsKey(datacenter)) {
+      dcToReplicaLagInSecondsForBlob.get(datacenter).update(timeInSeconds);
+    }
   }
 
   /**

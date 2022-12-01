@@ -720,7 +720,7 @@ public class AmbryRequests implements RequestAPI {
    * @param replicateBlobRequest the {@link ReplicateBlobRequest}
    * @return true if replicates from this node or the local store has the key
    */
-  private boolean localStoreHasTheKey(ReplicateBlobRequest replicateBlobRequest) {
+  private boolean localStoreHasTheKey(ReplicateBlobRequest replicateBlobRequest) throws Exception {
     BlobId blobId = replicateBlobRequest.getBlobId();
     final String remoteHostName = replicateBlobRequest.getSourceHostName();
     final int remoteHostPort = replicateBlobRequest.getSourceHostPort();
@@ -740,10 +740,10 @@ public class AmbryRequests implements RequestAPI {
 
     // Currently we don't enable the write repair. As long as the local store has the Blob, return success immediately.
     // check if local store has the key already
-    // we don't use the keyConverter to convert the key here since it's a valid Blob ID coming from the frontend.
-    Store store = storeManager.getStore(blobId.getPartition());
+    StoreKey convertedKey = getConvertedStoreKeys(Collections.singletonList(blobId)).get(0);
+    Store store = storeManager.getStore(((BlobId)convertedKey).getPartition());
     try {
-      store.findKey(blobId);
+      store.findKey(convertedKey);
       return true;
     } catch (StoreException e) {
       // it throws e.getErrorCode() == StoreErrorCodes.ID_Not_Found if it doesn't exist.
@@ -829,6 +829,10 @@ public class AmbryRequests implements RequestAPI {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
         errorCode = ServerErrorCode.Unknown_Error;
       }
+    } catch (Exception e) {
+      // localStoreHasTheKey calls getConvertedStoreKeys which may throw Exception
+      logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
+      errorCode = ServerErrorCode.Unknown_Error;
     } finally {
       if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
         // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
