@@ -75,8 +75,8 @@ class CuratedLogIndexState {
   static final long DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS = 10 * Time.MsPerSec;
   static final StoreKeyFactory STORE_KEY_FACTORY;
   // deliberately do not divide the capacities perfectly.
-  static final long PUT_RECORD_SIZE = 53;
-  static final long DELETE_RECORD_SIZE = 29;
+  static long PUT_RECORD_SIZE = 53;
+  static long DELETE_RECORD_SIZE = 29;
   static final long TTL_UPDATE_RECORD_SIZE = 37;
   static final long UNDELETE_RECORD_SIZE = 29;
 
