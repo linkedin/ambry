@@ -814,6 +814,7 @@ public class NettyResponseChannelTest {
       case MalformedRequest:
       case MissingArgs:
       case UnsupportedHttpMethod:
+      case UnsupportedEncoding:
         return HttpResponseStatus.BAD_REQUEST;
       case ResourceDirty:
       case AccessDenied:

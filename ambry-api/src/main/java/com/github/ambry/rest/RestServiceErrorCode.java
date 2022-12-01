@@ -174,7 +174,12 @@ public enum RestServiceErrorCode {
   /**
    * Request conflicts with the current state of the server.
    */
-  Conflict;
+  Conflict,
+
+  /**
+   * Indicates the named character encoding is not supported.
+   */
+  UnsupportedEncoding;
 
   /**
    * Gets the RestServiceErrorCode that corresponds to the {@code routerErrorCode}.
