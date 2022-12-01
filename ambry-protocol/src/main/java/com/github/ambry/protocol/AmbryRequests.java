@@ -102,7 +102,7 @@ public class AmbryRequests implements RequestAPI {
   protected final ConnectionPool connectionPool;
   protected final MetricRegistry metricRegistry;
   protected final ServerConfig serverConfig;
-  protected Transformer transformer;
+  protected ThreadLocal<Transformer> transformer;
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
@@ -134,15 +134,20 @@ public class AmbryRequests implements RequestAPI {
     this.connectionPool = connectionPool;
     this.metricRegistry = registry;
     this.serverConfig = serverConfig;
-    transformer = null;
-    if (serverConfig != null) {
-      try {
-        StoreKeyConverter keyConverter = storeKeyConverterFactory.getStoreKeyConverter();
-        transformer = Utils.getObj(serverConfig.serverMessageTransformer, storeKeyFactory, keyConverter);
-      } catch (Exception e) {
-        logger.error("Failed to create transformer", e);
+    /* All the request handlers share one single AmbryRequests object.
+     * But the StoreKeyConverter of the Transformer has a cache which shouldn't be shared among handlers.
+     * So use ThreadLocal transformer. */
+    this.transformer = ThreadLocal.withInitial(() -> {
+      if (serverConfig != null) {
+        try {
+          StoreKeyConverter keyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+          return Utils.getObj(serverConfig.serverMessageTransformer, storeKeyFactory, keyConverter);
+        } catch (Exception e) {
+          logger.error("Failed to create transformer", e);
+        }
       }
-    }
+      return null;
+    });
   }
 
   @Override
@@ -753,7 +758,7 @@ public class AmbryRequests implements RequestAPI {
 
   @Override
   public void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException {
-    if (connectionPool == null || transformer == null) {
+    if (connectionPool == null || transformer == null || transformer.get() == null) {
       throw new UnsupportedOperationException("ReplicateBlobRequest is not supported on this node.");
     }
 
@@ -794,7 +799,7 @@ public class AmbryRequests implements RequestAPI {
           MessageInfo orgMsgInfo = messageInfoList.get(0);
 
           // Transfer the input stream with transformer
-          Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer),
+          Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer.get()),
               getResponse.getInputStream(), orgMsgInfo);
           if (output == null) {
             logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", orgMsgInfo,
