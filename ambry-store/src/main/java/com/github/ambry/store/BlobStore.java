@@ -197,12 +197,12 @@ public class BlobStore implements Store {
     this.hardDelete = hardDelete;
     this.accountService = accountService;
     if (config.storeReplicaStatusDelegateEnable && replicaStatusDelegates != null) {
+    if (config.storeReplicaStatusDelegateEnable && replicaStatusDelegates != null) {
       logger.info("ReplicaStatusDelegates is enabled with {} delegates", replicaStatusDelegates.size());
       this.replicaStatusDelegates = replicaStatusDelegates;
     } else {
       logger.info("ReplicaStatusDelegates is disabled");
       this.replicaStatusDelegates = null;
-
     }
     this.time = time;
     long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
