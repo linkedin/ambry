@@ -2573,35 +2573,35 @@ final class ServerTestUtil {
 
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId4 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId5 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId6 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId7 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId8 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId9 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId10 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId11 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId12 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId13 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId14 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       BlobId blobId15 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
 
       Port sourcePort = new Port(sourceDataNode.getHttp2Port(), PortType.HTTP2);
       Port targetPort = new Port(targetDataNode.getHttp2Port(), PortType.HTTP2);
@@ -2903,14 +2903,14 @@ final class ServerTestUtil {
       undeleteBlob(sourceChannel, blobId10, cluster.time.milliseconds(), (short) 1);
       // create blob16 on the sourceDataNode
       BlobId blobId16 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       putRequest = new PutRequest(1, "client1", blobId16, properties, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
       // create blob17 on the targetDataNode
       BlobId blobId17 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, false, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
       putRequest = new PutRequest(1, "client1", blobId17, properties, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);

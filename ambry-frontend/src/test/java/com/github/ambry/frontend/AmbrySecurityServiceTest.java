@@ -53,7 +53,10 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
@@ -99,6 +102,7 @@ public class AmbrySecurityServiceTest {
   private static final BlobInfo LIFEVERSION_INFO;
   private static final BlobInfo RANDOM_INFO;
   private static final short DEFAULT_LIFEVERSION = 3;
+  private static final Charset CHARSET = StandardCharsets.UTF_8;
   private static final BlobInfo UNKNOWN_INFO = new BlobInfo(
       new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, Account.UNKNOWN_ACCOUNT_ID,
           Container.UNKNOWN_CONTAINER_ID, false, null, null, null), new byte[0]);
@@ -435,6 +439,17 @@ public class AmbrySecurityServiceTest {
       testExceptionCasesProcessResponse(restMethod, new MockRestResponseChannel(), blobInfo,
           RestServiceErrorCode.ServiceUnavailable);
     }
+  }
+
+  @Test
+  public void buildMetadataTest() throws Exception {
+    String Chinese = "测试";
+    String urlEncodedChinese = URLEncoder.encode(Chinese, CHARSET.name());
+    USER_METADATA.put(RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX + "filename", urlEncodedChinese);
+    byte[] userMetadataArray = RestUtils.buildUserMetadata(USER_METADATA);
+    Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
+    Assert.assertEquals("Encoded user metadata mismatch", Chinese,
+        userMetadata.get(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "filename"));
   }
 
   /**

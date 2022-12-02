@@ -102,7 +102,7 @@ public class AmbryRequests implements RequestAPI {
   protected final ConnectionPool connectionPool;
   protected final MetricRegistry metricRegistry;
   protected final ServerConfig serverConfig;
-  protected Transformer transformer;
+  protected ThreadLocal<Transformer> transformer;
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
@@ -134,15 +134,20 @@ public class AmbryRequests implements RequestAPI {
     this.connectionPool = connectionPool;
     this.metricRegistry = registry;
     this.serverConfig = serverConfig;
-    transformer = null;
-    if (serverConfig != null) {
-      try {
-        StoreKeyConverter keyConverter = storeKeyConverterFactory.getStoreKeyConverter();
-        transformer = Utils.getObj(serverConfig.serverMessageTransformer, storeKeyFactory, keyConverter);
-      } catch (Exception e) {
-        logger.error("Failed to create transformer", e);
+    /* All the request handlers share one single AmbryRequests object.
+     * But the StoreKeyConverter of the Transformer has a cache which shouldn't be shared among handlers.
+     * So use ThreadLocal transformer. */
+    this.transformer = ThreadLocal.withInitial(() -> {
+      if (serverConfig != null) {
+        try {
+          StoreKeyConverter keyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+          return Utils.getObj(serverConfig.serverMessageTransformer, storeKeyFactory, keyConverter);
+        } catch (Exception e) {
+          logger.error("Failed to create transformer", e);
+        }
       }
-    }
+      return null;
+    });
   }
 
   @Override
@@ -720,7 +725,7 @@ public class AmbryRequests implements RequestAPI {
    * @param replicateBlobRequest the {@link ReplicateBlobRequest}
    * @return true if replicates from this node or the local store has the key
    */
-  private boolean localStoreHasTheKey(ReplicateBlobRequest replicateBlobRequest) {
+  private boolean localStoreHasTheKey(ReplicateBlobRequest replicateBlobRequest) throws Exception {
     BlobId blobId = replicateBlobRequest.getBlobId();
     final String remoteHostName = replicateBlobRequest.getSourceHostName();
     final int remoteHostPort = replicateBlobRequest.getSourceHostPort();
@@ -740,10 +745,10 @@ public class AmbryRequests implements RequestAPI {
 
     // Currently we don't enable the write repair. As long as the local store has the Blob, return success immediately.
     // check if local store has the key already
-    // we don't use the keyConverter to convert the key here since it's a valid Blob ID coming from the frontend.
-    Store store = storeManager.getStore(blobId.getPartition());
+    StoreKey convertedKey = getConvertedStoreKeys(Collections.singletonList(blobId)).get(0);
+    Store store = storeManager.getStore(((BlobId)convertedKey).getPartition());
     try {
-      store.findKey(blobId);
+      store.findKey(convertedKey);
       return true;
     } catch (StoreException e) {
       // it throws e.getErrorCode() == StoreErrorCodes.ID_Not_Found if it doesn't exist.
@@ -753,7 +758,7 @@ public class AmbryRequests implements RequestAPI {
 
   @Override
   public void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException {
-    if (connectionPool == null || transformer == null) {
+    if (connectionPool == null || transformer == null || transformer.get() == null) {
       throw new UnsupportedOperationException("ReplicateBlobRequest is not supported on this node.");
     }
 
@@ -794,7 +799,7 @@ public class AmbryRequests implements RequestAPI {
           MessageInfo orgMsgInfo = messageInfoList.get(0);
 
           // Transfer the input stream with transformer
-          Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer),
+          Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer.get()),
               getResponse.getInputStream(), orgMsgInfo);
           if (output == null) {
             logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", orgMsgInfo,
@@ -829,6 +834,10 @@ public class AmbryRequests implements RequestAPI {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
         errorCode = ServerErrorCode.Unknown_Error;
       }
+    } catch (Exception e) {
+      // localStoreHasTheKey calls getConvertedStoreKeys which may throw Exception
+      logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
+      errorCode = ServerErrorCode.Unknown_Error;
     } finally {
       if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
         // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
