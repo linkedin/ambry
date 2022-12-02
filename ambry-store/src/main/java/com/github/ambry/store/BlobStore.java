@@ -196,7 +196,14 @@ public class BlobStore implements Store {
     this.recovery = recovery;
     this.hardDelete = hardDelete;
     this.accountService = accountService;
-    this.replicaStatusDelegates = config.storeReplicaStatusDelegateEnable ? replicaStatusDelegates : null;
+    if (config.storeReplicaStatusDelegateEnable && replicaStatusDelegates != null) {
+      logger.info("ReplicaStatusDelegates is enabled with {} delegates", replicaStatusDelegates.size());
+      this.replicaStatusDelegates = replicaStatusDelegates;
+    } else {
+      logger.info("ReplicaStatusDelegates is disabled");
+      this.replicaStatusDelegates = null;
+
+    }
     this.time = time;
     long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
     long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
@@ -207,7 +214,7 @@ public class BlobStore implements Store {
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
     remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId);
-    logger.debug(
+    logger.info(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
     // if there is a decommission file in store dir, that means previous decommission didn't complete successfully.
@@ -268,7 +275,7 @@ public class BlobStore implements Store {
         metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats,
             config.storeEnableCurrentInvalidSizeMetric, config.storeEnableIndexDirectMemoryUsageMetric);
         checkCapacityAndUpdateReplicaStatusDelegate();
-        logger.trace("The store {} is successfully started", storeId);
+        logger.info("The store {} is successfully started", storeId);
         onSuccess("START");
         isDisabled.set(false);
         started = true;
@@ -447,8 +454,7 @@ public class BlobStore implements Store {
         }
       }
       // During startup, we also need to reconcile the replica state from both ZK clusters.
-      if (!started && replicaStatusDelegates.size() > 1 && thresholdBytesLow < index.getLogUsedCapacity()
-          && index.getLogUsedCapacity() <= thresholdBytesHigh) {
+      if (!started && replicaStatusDelegates.size() > 1) {
         // reconcile the state by reading sealing state from both clusters
         boolean sealed = false;
         String partitionName = replicaId.getPartitionId().toPathString();
