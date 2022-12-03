@@ -456,7 +456,8 @@ public class BlobStore implements Store {
         }
       }
       // During startup, we also need to reconcile the replica state from both ZK clusters.
-      if (shouldSyncPartitionReadWriteState()) {
+      if ((!started && replicaStatusDelegates.size() > 1 && thresholdBytesLow < index.getLogUsedCapacity()
+          && index.getLogUsedCapacity() <= thresholdBytesHigh) || shouldSyncPartitionReadWriteState()) {
         // reconcile the state by reading sealing state from both clusters
         boolean sealed = false;
         String partitionName = replicaId.getPartitionId().toPathString();
