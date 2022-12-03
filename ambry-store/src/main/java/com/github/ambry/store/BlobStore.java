@@ -412,6 +412,9 @@ public class BlobStore implements Store {
     }
   }
 
+  private boolean shouldSyncPartitionReadWriteState() {
+    return (!started && replicaStatusDelegates.size() > 1 && config.syncPartitionReadWriteState);
+  }
   /**
    * Checks the used capacity of the store against the configured percentage thresholds to see if the store
    * should be read-only or read-write
@@ -453,7 +456,7 @@ public class BlobStore implements Store {
         }
       }
       // During startup, we also need to reconcile the replica state from both ZK clusters.
-      if (!started && replicaStatusDelegates.size() > 1) {
+      if (shouldSyncPartitionReadWriteState()) {
         // reconcile the state by reading sealing state from both clusters
         boolean sealed = false;
         String partitionName = replicaId.getPartitionId().toPathString();

@@ -36,6 +36,10 @@ public class StoreConfig {
   @Default("com.github.ambry.commons.BlobIdFactory")
   public final String storeKeyFactory;
 
+  @Config("sync.partition.read.write.state")
+  @Default("false")
+  public final Boolean syncPartitionReadWriteState;
+
   /**
    * The frequency at which the data gets flushed to disk
    */
@@ -532,6 +536,7 @@ public class StoreConfig {
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
+    syncPartitionReadWriteState = verifiableProperties.getBoolean("sync.partition.read.write.state", false);
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);
