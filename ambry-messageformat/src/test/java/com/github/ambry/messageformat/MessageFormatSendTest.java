@@ -50,7 +50,6 @@ import org.junit.runners.Parameterized;
 public class MessageFormatSendTest {
   private final short blobFormatVersion;
   private static short messageFormatHeaderVersionSaved;
-  private static boolean useBlobVersionSaved;
 
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
@@ -67,25 +66,20 @@ public class MessageFormatSendTest {
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
     messageFormatHeaderVersionSaved = MessageFormatRecord.headerVersionToUse;
-    useBlobVersionSaved = PutMessageFormatInputStream.useBlobFormatV3;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
     MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
-    PutMessageFormatInputStream.useBlobFormatV3 = useBlobVersionSaved;
   }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{MessageFormatRecord.Blob_Version_V1},
-        {MessageFormatRecord.Blob_Version_V2},
-        {MessageFormatRecord.Blob_Version_V3}});
+    return Arrays.asList(new Object[][]{{MessageFormatRecord.Blob_Version_V3}});
   }
 
   public MessageFormatSendTest(short blobFormatVersion) {
     this.blobFormatVersion = blobFormatVersion;
-    PutMessageFormatInputStream.useBlobFormatV3 = (blobFormatVersion == MessageFormatRecord.Blob_Version_V3);
   }
 
   class MockMessageReadSet implements MessageReadSet {

@@ -204,11 +204,6 @@ public class AmbryServer {
       // verify the configs
       properties.verify();
 
-      // TODO - Temporary deploy code that will be removed after compression has been tested and deployed.
-      if (storeConfig.storeUseBlobFormatV3) {
-        PutMessageFormatInputStream.useBlobFormatV3 = true;
-      }
-
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       // if there are more than one participants on local node, we create a consistency checker to monitor and alert any
       // mismatch in sealed/stopped replica lists that maintained by each participant.
