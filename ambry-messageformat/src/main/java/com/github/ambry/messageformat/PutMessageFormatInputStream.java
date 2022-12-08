@@ -41,7 +41,7 @@ import java.nio.ByteBuffer;
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
 
   // Temporary config for deployment control.  It will be removed after successfully deployed.
-  public static boolean useBlobFormatV3 = false;
+  public static boolean useBlobFormatV3 = true;
 
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType)
