@@ -13,9 +13,9 @@
  */
 package com.github.ambry.messageformat;
 
-import com.github.ambry.utils.Crc32;
 import java.nio.ByteBuffer;
 import java.util.Random;
+import java.util.zip.CRC32;
 
 
 public class MessageFormatTestUtils {
@@ -38,7 +38,7 @@ public class MessageFormatTestUtils {
       MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(entireBlob, blobSize, BlobType.MetadataBlob);
     }
     entireBlob.put(blobContent);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(entireBlob.array(), 0, entireBlob.position());
     entireBlob.putLong(crc.getValue());
     entireBlob.flip();

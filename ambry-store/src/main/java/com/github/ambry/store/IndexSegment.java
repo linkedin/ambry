@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.FilterFactory;
@@ -57,6 +56,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1146,7 +1146,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   private void checkDataIntegrity() throws StoreException {
     serEntries.position(0);
     serEntries.limit(serEntries.capacity() - CRC_FIELD_LENGTH);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(serEntries.slice());
     // reset the limit
     serEntries.limit(serEntries.capacity());

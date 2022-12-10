@@ -14,10 +14,10 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.zip.CRC32;
 
 
 /**
@@ -123,7 +123,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     } else {
       MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
     }
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);
     streamLength = streamSize;
@@ -167,7 +167,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     } else {
       MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
     }
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);
     streamLength = streamSize;
