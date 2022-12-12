@@ -15,13 +15,14 @@ package com.github.ambry.utils;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.zip.CRC32;
 
 
 /**
  * An outputstream that calculates Crc on the fly
  */
 public class CrcOutputStream extends OutputStream {
-  private Crc32 crc;
+  private CRC32 crc;
   private OutputStream stream;
 
   /**
@@ -29,10 +30,10 @@ public class CrcOutputStream extends OutputStream {
    * @param out
    */
   public CrcOutputStream(OutputStream out) {
-    this(new Crc32(), out);
+    this(new CRC32(), out);
   }
 
-  public CrcOutputStream(Crc32 crc, OutputStream out) {
+  public CrcOutputStream(CRC32 crc, OutputStream out) {
     this.crc = crc;
     this.stream = out;
   }

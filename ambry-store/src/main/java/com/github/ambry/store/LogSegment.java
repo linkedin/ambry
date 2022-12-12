@@ -14,7 +14,6 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -31,6 +30,7 @@ import java.nio.file.Files;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.CRC32;
 import net.smacke.jaydio.DirectRandomAccessFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -543,7 +543,7 @@ class LogSegment implements Read, Write {
    * @throws StoreException if there is any store exception while writing to the file.
    */
   private void writeHeader(long capacityInBytes) throws StoreException {
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     ByteBuffer buffer = ByteBuffer.allocate(HEADER_SIZE);
     buffer.putShort(VERSION);
     buffer.putLong(capacityInBytes);

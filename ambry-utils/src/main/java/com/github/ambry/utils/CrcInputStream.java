@@ -16,6 +16,7 @@ package com.github.ambry.utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +25,7 @@ import org.slf4j.LoggerFactory;
  * An inputstream that calculates Crc on the fly
  */
 public class CrcInputStream extends InputStream {
-  private Crc32 crc;
+  private CRC32 crc;
   private InputStream stream;
   private static final Logger logger = LoggerFactory.getLogger(CrcInputStream.class);
 
@@ -33,10 +34,10 @@ public class CrcInputStream extends InputStream {
    * @param in
    */
   public CrcInputStream(InputStream in) {
-    this(new Crc32(), in);
+    this(new CRC32(), in);
   }
 
-  public CrcInputStream(Crc32 crc, InputStream in) {
+  public CrcInputStream(CRC32 crc, InputStream in) {
     this.crc = crc;
     this.stream = in;
   }
