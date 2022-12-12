@@ -14,10 +14,10 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.zip.CRC32;
 
 
 /**

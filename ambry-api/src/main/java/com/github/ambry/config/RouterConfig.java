@@ -560,13 +560,6 @@ public class RouterConfig {
   public final int routerBackgroundDeleterMaxConcurrentOperations;
 
   /**
-   * True to use java native crc32 implementation
-   */
-  @Config(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32)
-  @Default("false")
-  public final boolean routerPutRequestUseJavaNativeCrc32;
-
-  /**
    * Name of the operation controller class to use.
    */
   @Config(OPERATION_CONTROLLER)
@@ -794,8 +787,6 @@ public class RouterConfig {
     routerBackgroundDeleterMaxConcurrentOperations =
         verifiableProperties.getIntInRange(ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS, 0, 0,
             Integer.MAX_VALUE);
-    routerPutRequestUseJavaNativeCrc32 =
-        verifiableProperties.getBoolean(ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32, false);
     operationController =
         verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.OperationController");
     routerRequestHandlerNumOfThreads = verifiableProperties.getInt(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS, 7);

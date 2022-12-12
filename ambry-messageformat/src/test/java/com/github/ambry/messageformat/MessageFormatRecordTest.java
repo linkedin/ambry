@@ -20,7 +20,6 @@ import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -33,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.zip.CRC32;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -181,7 +181,7 @@ public class MessageFormatRecordTest {
     ByteBuffer sData = ByteBuffer.allocate((int) size);
     MessageFormatRecord.Blob_Format_V1.serializePartialBlobRecord(sData, 2000);
     sData.put(data);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(sData.array(), 0, sData.position());
     sData.putLong(crc.getValue());
     sData.flip();
@@ -291,7 +291,7 @@ public class MessageFormatRecordTest {
     int startOffset = outputBuffer.position();
     outputBuffer.putShort(BlobProperties_Version_V1);
     putBlobPropertiesToBufferV1(outputBuffer, properties);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV1RecordSize(properties) - Crc_Size);
     outputBuffer.putLong(crc.getValue());
   }
@@ -333,7 +333,7 @@ public class MessageFormatRecordTest {
     int startOffset = outputBuffer.position();
     outputBuffer.putShort(BlobProperties_Version_V1);
     putBlobPropertiesToBufferV2(outputBuffer, properties);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV2RecordSize(properties) - Crc_Size);
     outputBuffer.putLong(crc.getValue());
   }
@@ -378,7 +378,7 @@ public class MessageFormatRecordTest {
     int startOffset = outputBuffer.position();
     outputBuffer.putShort(BlobProperties_Version_V1);
     putBlobPropertiesToBufferV3(outputBuffer, properties);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(outputBuffer.array(), startOffset, getBlobPropertiesV3RecordSize(properties) - Crc_Size);
     outputBuffer.putLong(crc.getValue());
   }
@@ -741,7 +741,7 @@ public class MessageFormatRecordTest {
       throws IOException, MessageFormatException {
     MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(outputBuffer, blobSize, blobType);
     outputBuffer.put(blobContent);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(outputBuffer.array(), 0, outputBuffer.position());
     outputBuffer.putLong(crc.getValue());
     outputBuffer.flip();
@@ -763,7 +763,7 @@ public class MessageFormatRecordTest {
       throws IOException, MessageFormatException {
     MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(outputBuffer, blobSize, blobType, false);
     outputBuffer.put(blobContent);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(outputBuffer.array(), 0, outputBuffer.position());
     outputBuffer.putLong(crc.getValue());
     outputBuffer.flip();
@@ -815,7 +815,7 @@ public class MessageFormatRecordTest {
     new Random().nextBytes(blobContent.array());
     MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(entireBlob, blobSize, BlobType.DataBlob, true);
     entireBlob.put(blobContent);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(entireBlob.array(), 0, entireBlob.position());
     entireBlob.putLong(crc.getValue());
 

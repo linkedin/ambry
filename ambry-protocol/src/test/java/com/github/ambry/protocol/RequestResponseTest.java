@@ -382,14 +382,15 @@ public class RequestResponseTest {
     int correlationId = 1234;
     String clientId = "client";
     PartitionId partitionId = new MockPartitionId();
-    BlobId blobId = new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, (short) 1, (short) 1, partitionId, false,
-        BlobId.BlobDataType.DATACHUNK);
+    BlobId blobId =
+        new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, (short) 1, (short) 1, partitionId, false,
+            BlobId.BlobDataType.DATACHUNK);
     BlobProperties blobProperties = new BlobProperties(1234L, "testServiceID", (short) 2222, (short) 3333, true);
     ByteBuffer userMetadata = ByteBuffer.wrap("testMetadata".getBytes());
     ByteBuf blobData = Unpooled.wrappedBuffer("testBlobData".getBytes());
     long blobSize = blobData.readableBytes();
     BlobType blobType = BlobType.DataBlob;
-    byte[] encryptionKey = new byte[] { 1, 2, 3, 4, 5};
+    byte[] encryptionKey = new byte[]{1, 2, 3, 4, 5};
 
     ByteBuf content;
     short savedVersion = PutRequest.currentVersion;
@@ -398,7 +399,7 @@ public class RequestResponseTest {
       // Compose and serialize the PutRequest with V5 enabled.
       PutRequest request =
           new PutRequest(correlationId, clientId, blobId, blobProperties, userMetadata, blobData, blobSize, blobType,
-              ByteBuffer.wrap(encryptionKey), Crc32Impl.getAmbryInstance(), true);
+              ByteBuffer.wrap(encryptionKey), true);
       content = request.content();
     } finally {
       PutRequest.currentVersion = savedVersion;
@@ -417,8 +418,7 @@ public class RequestResponseTest {
       Assert.assertEquals(blobSize, newPutRequest.blobSize);
       Assert.assertTrue(newPutRequest.isCompressed());
       Assert.assertEquals("testServiceID", newPutRequest.getBlobProperties().getServiceId());
-    }
-    finally {
+    } finally {
       content.release();
     }
   }
