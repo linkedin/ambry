@@ -38,7 +38,7 @@ public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
 
   public DeleteMessageFormatInputStream(StoreKey key, short accountId, short containerId, long deletionTimeMs,
       short lifeVersion) throws MessageFormatException {
-    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.Message_Header_Version_V3);
+    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
     int deleteRecordSize = MessageFormatRecord.Update_Format_V3.getRecordSize(SubRecord.Type.DELETE);
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
 
