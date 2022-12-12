@@ -115,7 +115,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
     int bufferBlobStart = buffer.position();
     MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);
     streamLength = streamSize;
@@ -154,7 +154,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     int bufferBlobStart = buffer.position();
 
     MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);
     streamLength = streamSize;
