@@ -15,9 +15,9 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.router.CryptoService;
 import com.github.ambry.router.KeyManagementService;
-import com.github.ambry.utils.Crc32;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.util.zip.CRC32;
 
 
 /**
@@ -136,7 +136,7 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
       outputBuffer.putLong(encryptedDataSize);
       outputBuffer.put(encryptedDataPayload.encryptedKey);
       outputBuffer.put(encryptedDataPayload.encryptedData);
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, INITIAL_MESSAGE_LENGTH + encryptedKeySize + encryptedDataSize);
       outputBuffer.putLong(crc.getValue());
     }
@@ -149,7 +149,7 @@ public class CloudBlobCryptoAgentImpl implements CloudBlobCryptoAgent {
      */
     static EncryptedDataPayload deserialize(ByteBuffer inputBuffer) throws GeneralSecurityException {
       int startOffset = inputBuffer.position();
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       try {
         short version = inputBuffer.getShort();
         if (version != 1) {
