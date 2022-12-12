@@ -77,8 +77,7 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
-  public void handlePutRequest(NetworkRequest request) throws InterruptedException {
-
+  public void handlePutRequest(NetworkRequest request, boolean shouldDrop) throws InterruptedException {
     if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
       throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
     }
@@ -151,7 +150,7 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
-  public void handleGetRequest(NetworkRequest request) throws InterruptedException {
+  public void handleGetRequest(NetworkRequest request, boolean shouldDrop) throws InterruptedException {
 
     if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
       throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
@@ -229,7 +228,7 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
-  public void handleDeleteRequest(NetworkRequest request) throws InterruptedException {
+  public void handleDeleteRequest(NetworkRequest request, boolean shouldDrop) throws InterruptedException {
 
     if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
       throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
@@ -285,7 +284,7 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
-  public void handleTtlUpdateRequest(NetworkRequest request) throws InterruptedException {
+  public void handleTtlUpdateRequest(NetworkRequest request, boolean shouldDrop) throws InterruptedException {
 
     if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
       throw new IllegalArgumentException("The request must be of LocalChannelRequest type");
@@ -343,7 +342,7 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
-  public void handleUndeleteRequest(NetworkRequest request) {
+  public void handleUndeleteRequest(NetworkRequest request, boolean shouldDrop) {
 
     if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
       throw new IllegalArgumentException("The request must be of LocalChannelRequest type");

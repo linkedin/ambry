@@ -33,6 +33,7 @@ import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.DiskManagerConfig;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StatsManagerConfig;
@@ -70,6 +71,7 @@ import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.ReplicateBlobRequest;
 import com.github.ambry.protocol.ReplicateBlobResponse;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
+import com.github.ambry.protocol.RequestAPI;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
@@ -147,7 +149,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   private final DataNodeId dataNodeId;
   private final MockReplicationManager replicationManager;
   private final MockStatsManager statsManager;
-  private final MockRequestResponseChannel requestResponseChannel = new MockRequestResponseChannel();
+  private final MockRequestResponseChannel requestResponseChannel;
   private final Set<StoreKey> validKeysInStore = new HashSet<>();
   private final Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
   private final MockStoreKeyConverterFactory storeKeyConverterFactory;
@@ -195,6 +197,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         new MockStatsManager(storageManager, clusterMap.getReplicaIds(dataNodeId), clusterMap.getMetricRegistry(),
             statsManagerConfig, null);
     serverMetrics = new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
+    requestResponseChannel = new MockRequestResponseChannel(new NetworkConfig(verifiableProperties));
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
         clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
         serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
@@ -224,6 +227,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         Boolean.toString(validateRequestOnStoreState));
     properties.setProperty("server.handle.undelete.request.enabled", Boolean.toString(handleUndeleteRequestEnabled));
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    properties.setProperty("num.io.threads", "1");
+    properties.setProperty("queued.max.requests", "1");
     return properties;
   }
 
@@ -1306,7 +1311,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   // general
 
   /**
-   * Calls {@link AmbryRequests#handleRequests(NetworkRequest)} with {@code request} and returns the {@link Response} received.
+   * Calls {@link RequestAPI#handleRequests(NetworkRequest, boolean)} with {@code request} and returns the {@link Response} received.
    * @param request the {@link NetworkRequest} to process
    * @param expectedServerErrorCode the expected {@link ServerErrorCode} in the server response.
    * @return the {@link Response} received.
@@ -1316,7 +1321,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   private Response sendRequestGetResponse(RequestOrResponse request, ServerErrorCode expectedServerErrorCode)
       throws InterruptedException, IOException {
     NetworkRequest mockRequest = MockRequest.fromRequest(request);
-    ambryRequests.handleRequests(mockRequest);
+    ambryRequests.handleRequests(mockRequest, false);
     assertEquals("Request accompanying response does not match original request", mockRequest,
         requestResponseChannel.lastOriginalRequest);
     assertNotNull("Response not sent", requestResponseChannel.lastResponse);
@@ -1990,8 +1995,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
      */
     Send lastResponse = null;
 
-    MockRequestResponseChannel() {
-      super(1, 1);
+    MockRequestResponseChannel(NetworkConfig networkConfig) {
+      super(networkConfig);
     }
 
     @Override

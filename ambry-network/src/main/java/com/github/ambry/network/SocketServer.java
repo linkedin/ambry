@@ -73,7 +73,7 @@ public class SocketServer implements NetworkServer {
     this.sendBufferSize = config.socketSendBufferBytes;
     this.recvBufferSize = config.socketReceiveBufferBytes;
     processors = new ArrayList<>(numProcessorThreads);
-    requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
+    requestResponseChannel = new SocketRequestResponseChannel(config);
     metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors);
     this.acceptors = new ArrayList<>();
     this.ports = new HashMap<>();

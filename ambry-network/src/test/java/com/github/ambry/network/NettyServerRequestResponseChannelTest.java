@@ -14,11 +14,14 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.nio.ByteBuffer;
+import java.util.Properties;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -36,11 +39,14 @@ public class NettyServerRequestResponseChannelTest {
   @Test
   public void testSendAndReceiveRequest() throws Exception {
 
+    Properties properties = new Properties();
+    properties.put("queued.max.requests", QUEUE_SIZE);
     RequestResponseChannel channel =
-        new NettyServerRequestResponseChannel(QUEUE_SIZE, new Http2ServerMetrics(new MetricRegistry()));
+        new NettyServerRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)),
+            new Http2ServerMetrics(new MetricRegistry()));
 
     channel.sendRequest(createNettyServerRequest(13));
-    NetworkRequest request = channel.receiveRequest();
+    NetworkRequest request = channel.receiveRequest().getRequestToServe();
     Assert.assertTrue(request instanceof NettyServerRequest);
     Assert.assertEquals(13, ((NettyServerRequest) request).content().readableBytes());
 
@@ -48,16 +54,16 @@ public class NettyServerRequestResponseChannelTest {
     channel.sendRequest(createEmptyNettyServerRequest());
     channel.sendRequest(createNettyServerRequest(17));
 
-    request = channel.receiveRequest();
+    request = channel.receiveRequest().getRequestToServe();
     Assert.assertTrue(request instanceof NettyServerRequest);
     Assert.assertEquals(17, ((NettyServerRequest) request).content().readableBytes());
 
     channel.sendRequest(createNettyServerRequest(19));
     channel.sendRequest(createNettyServerRequest(23));
-    request = channel.receiveRequest();
+    request = channel.receiveRequest().getRequestToServe();
     Assert.assertTrue(request instanceof NettyServerRequest);
     Assert.assertEquals(19, ((NettyServerRequest) request).content().readableBytes());
-    request = channel.receiveRequest();
+    request = channel.receiveRequest().getRequestToServe();
     Assert.assertTrue(request instanceof NettyServerRequest);
     Assert.assertEquals(23, ((NettyServerRequest) request).content().readableBytes());
   }

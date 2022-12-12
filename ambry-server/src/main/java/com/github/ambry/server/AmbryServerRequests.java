@@ -77,6 +77,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.server.ServerErrorCode.*;
+
 
 /**
  * The main request implementation class. All requests to the server are
@@ -182,11 +184,12 @@ public class AmbryServerRequests extends AmbryRequests {
   /**
    * Handles an administration request. These requests can query for or change the internal state of the server.
    * @param request the request that needs to be handled.
+   * @param shouldDrop
    * @throws InterruptedException if response sending is interrupted.
    * @throws IOException if there are I/O errors carrying our the required operation.
    */
   @Override
-  public void handleAdminRequest(NetworkRequest request) throws InterruptedException, IOException {
+  public void handleAdminRequest(NetworkRequest request, boolean shouldDrop) throws InterruptedException, IOException {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
@@ -206,7 +209,12 @@ public class AmbryServerRequests extends AmbryRequests {
           responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
-          response = handleTriggerCompactionRequest(adminRequest);
+          if (shouldDrop) {
+            response =
+                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
+          } else {
+            response = handleTriggerCompactionRequest(adminRequest);
+          }
           break;
         case RequestControl:
           metrics.requestControlRequestQueueTimeInMs.update(requestQueueTime);
@@ -215,7 +223,12 @@ public class AmbryServerRequests extends AmbryRequests {
           responseQueueTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.requestControlResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
-          response = handleRequestControlRequest(requestStream, adminRequest);
+          if (shouldDrop) {
+            response =
+                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
+          } else{
+            response = handleRequestControlRequest(requestStream, adminRequest);
+          }
           break;
         case ReplicationControl:
           metrics.replicationControlRequestQueueTimeInMs.update(requestQueueTime);
@@ -224,7 +237,12 @@ public class AmbryServerRequests extends AmbryRequests {
           responseQueueTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.replicationControlResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.replicationControlRequestTotalTimeInMs;
-          response = handleReplicationControlRequest(requestStream, adminRequest);
+          if (shouldDrop) {
+            response =
+                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
+          } else{
+            response = handleReplicationControlRequest(requestStream, adminRequest);
+          }
           break;
         case CatchupStatus:
           metrics.catchupStatusRequestQueueTimeInMs.update(requestQueueTime);
@@ -233,7 +251,12 @@ public class AmbryServerRequests extends AmbryRequests {
           responseQueueTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.catchupStatusResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
-          response = handleCatchupStatusRequest(requestStream, adminRequest);
+          if (shouldDrop) {
+            response =
+                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
+          } else{
+            response = handleCatchupStatusRequest(requestStream, adminRequest);
+          }
           break;
         case BlobStoreControl:
           metrics.blobStoreControlRequestQueueTimeInMs.update(requestQueueTime);
@@ -242,7 +265,12 @@ public class AmbryServerRequests extends AmbryRequests {
           responseQueueTimeHistogram = metrics.blobStoreControlResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.blobStoreControlResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
-          response = handleBlobStoreControlRequest(requestStream, adminRequest);
+          if (shouldDrop) {
+            response =
+                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
+          } else{
+            response = handleBlobStoreControlRequest(requestStream, adminRequest);
+          }
           break;
         case HealthCheck:
           metrics.healthCheckRequestQueueTimeInMs.update(requestQueueTime);
@@ -251,7 +279,12 @@ public class AmbryServerRequests extends AmbryRequests {
           responseQueueTimeHistogram = metrics.healthCheckResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.healthCheckResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.healthCheckRequestTotalTimeInMs;
-          response = handleHealthCheckRequest(requestStream, adminRequest);
+          if (shouldDrop) {
+            response =
+                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
+          } else{
+            response = handleHealthCheckRequest(requestStream, adminRequest);
+          }
           break;
         case BlobIndex:
           metrics.blobIndexRequestQueueTimeInMs.update(requestQueueTime);
@@ -260,7 +293,12 @@ public class AmbryServerRequests extends AmbryRequests {
           responseQueueTimeHistogram = metrics.blobIndexResponseQueueTimeInMs;
           responseSendTimeHistogram = metrics.blobIndexResponseSendTimeInMs;
           requestTotalTimeHistogram = metrics.blobIndexRequestTotalTimeInMs;
-          response = handleBlobIndexRequest(requestStream, adminRequest);
+          if (shouldDrop) {
+            response =
+                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
+          } else{
+            response = handleBlobIndexRequest(requestStream, adminRequest);
+          }
           break;
       }
     } catch (Exception e) {
@@ -665,7 +703,7 @@ public class AmbryServerRequests extends AmbryRequests {
     }
     if (!isRemoteLagLesserOrEqual(partitionIds, 0, numReplicasCaughtUpPerPartition)) {
       logger.debug("Catchup not done on {}", partitionIds);
-      return ServerErrorCode.Retry_After_Backoff;
+      return Retry_After_Backoff;
     }
     controlRequestForPartitions(
         EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest), partitionIds,

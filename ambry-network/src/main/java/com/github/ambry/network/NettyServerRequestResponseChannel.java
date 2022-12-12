@@ -13,14 +13,20 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.server.EmptyRequest;
+import com.github.ambry.utils.SystemTime;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,18 +36,34 @@ import org.slf4j.LoggerFactory;
  */
 public class NettyServerRequestResponseChannel implements RequestResponseChannel {
   private static final Logger logger = LoggerFactory.getLogger(NettyServerRequestResponseChannel.class);
-  private final ArrayBlockingQueue<NetworkRequest> requestQueue;
   private final Http2ServerMetrics http2ServerMetrics;
+  private final NetworkRequestQueue networkRequestQueue;
+  private final Queue<NetworkRequest> unqueuedRequests = new ConcurrentLinkedQueue<>();
 
-  public NettyServerRequestResponseChannel(int queueSize, Http2ServerMetrics http2ServerMetrics) {
-    requestQueue = new ArrayBlockingQueue<>(queueSize);
+  public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics) {
+    switch (config.requestQueueType) {
+      case ADAPTIVE_LIFO_CO_DEL:
+        this.networkRequestQueue =
+            new AdaptiveLifoCoDelNetworkRequestQueue(config.queuedMaxRequests, config.adaptiveLifoQueueThreshold,
+                config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance());
+        break;
+      case BASIC_FIFO:
+        this.networkRequestQueue = new FifoNetworkRequestQueue(config.queuedMaxRequests, config.requestQueueTimeoutMs,
+            SystemTime.getInstance());
+        break;
+      default:
+        throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
+    }
     this.http2ServerMetrics = http2ServerMetrics;
   }
 
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    requestQueue.put(request);
+    if (!networkRequestQueue.offer(request)) {
+      logger.debug("Request queue is full, dropping incoming request: {}", request);
+      unqueuedRequests.add(request);
+    }
     http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
   }
 
@@ -80,30 +102,65 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     }
   }
 
-  /** Get the next request or block until there is one */
+  /** Get the next request or block until there is one
+   * @return*/
   @Override
-  public NetworkRequest receiveRequest() throws InterruptedException {
+  public NetworkRequestBundle receiveRequest() throws InterruptedException {
 
-    NetworkRequest request = null;
-    while (request == null) {
-      request = requestQueue.take();
-      http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
-      if (request.equals(EmptyRequest.getInstance())) {
-        logger.debug("Request handler {} received shut down command ", request);
-      } else {
-        DataInputStream stream = new DataInputStream(request.getInputStream());
-        try {
-          // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
-          // Here we just need to consume it.
-          stream.readLong();
-        } catch (IOException e) {
-          logger.error("Encountered an error while reading length out, close the connection", e);
-          closeConnection(request);
-          request = null;
+    NetworkRequestBundle networkRequestBundle;
+    NetworkRequest requestToServe;
+    Collection<NetworkRequest> requestsToDrop;
+    do {
+      networkRequestBundle = networkRequestQueue.take();
+      NetworkRequest unqueuedRequest;
+      while ((unqueuedRequest = unqueuedRequests.poll()) != null) {
+        networkRequestBundle.getRequestsToDrop().add(unqueuedRequest);
+      }
+      requestToServe = networkRequestBundle.getRequestToServe();
+      requestsToDrop = networkRequestBundle.getRequestsToDrop();
+
+      if (requestToServe != null) {
+        http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - requestToServe.getStartTimeInMs());
+        if (!consumeStream(requestToServe)) {
+          requestToServe = null;
         }
       }
+
+      Set<NetworkRequest> errorRequests = new HashSet<>();
+      for (NetworkRequest requestToDrop : requestsToDrop) {
+        http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - requestToDrop.getStartTimeInMs());
+        if (!consumeStream(requestToDrop)) {
+          errorRequests.add(requestToDrop);
+        }
+      }
+      requestsToDrop.removeAll(errorRequests);
+    } while (requestToServe == null && requestsToDrop.isEmpty());
+
+    return new NetworkRequestBundle(requestToServe, requestsToDrop);
+  }
+
+  /**
+   * Consumes the first 8 bytes of the input stream in the incoming request since TCP implementation uses this size to
+   * allocated Buffer.
+   * @param request incoming network request.
+   * @return false if there was any error while reading the first 8 bytes. Else, return true.
+   */
+  private boolean consumeStream(NetworkRequest request) throws InterruptedException {
+    if (request.equals(EmptyRequest.getInstance())) {
+      logger.debug("Request handler {} received shut down command ", request);
+    } else {
+      DataInputStream stream = new DataInputStream(request.getInputStream());
+      try {
+        // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
+        // Here we just need to consume it.
+        stream.readLong();
+      } catch (IOException e) {
+        logger.error("Encountered an error while reading length out, close the connection", e);
+        closeConnection(request);
+        return false;
+      }
     }
-    return request;
+    return true;
   }
 
   /**

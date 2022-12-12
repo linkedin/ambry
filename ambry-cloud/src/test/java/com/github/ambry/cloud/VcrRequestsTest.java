@@ -104,7 +104,7 @@ public class VcrRequestsTest {
   @Test
   public void handlePutRequestTest() throws IOException, InterruptedException {
     try {
-      vcrRequests.handlePutRequest(request);
+      vcrRequests.handlePutRequest(request, false);
       Assert.fail("handlePutRequest should throw UnsupportedOperationException");
     } catch (UnsupportedOperationException ex) {
     }
@@ -118,7 +118,7 @@ public class VcrRequestsTest {
   @Test
   public void handleDeleteRequest() throws IOException, InterruptedException {
     try {
-      vcrRequests.handleDeleteRequest(request);
+      vcrRequests.handleDeleteRequest(request, false);
       Assert.fail("handleDeleteRequest should throw UnsupportedOperationException");
     } catch (UnsupportedOperationException ex) {
     }
@@ -132,7 +132,7 @@ public class VcrRequestsTest {
   @Test
   public void handleTtlUpdateRequest() throws IOException, InterruptedException {
     try {
-      vcrRequests.handleTtlUpdateRequest(request);
+      vcrRequests.handleTtlUpdateRequest(request, false);
       Assert.fail("handleTtlUpdateRequest should throw UnsupportedOperationException");
     } catch (UnsupportedOperationException ex) {
     }

@@ -13,6 +13,9 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.network.RequestQueueType;
+
+
 /**
  * The configs for network layer
  */
@@ -119,6 +122,35 @@ public class NetworkConfig {
   @Default("false")
   public final boolean selectorUseDirectBuffers;
 
+  /**
+   * The type of queue to use to hold requests waiting to be processed.
+   * TODO: Do tests to tune controlled delay queue parameters before switching the request queue type to {@link RequestQueueType#ADAPTIVE_LIFO_CO_DEL}
+   */
+  @Config("request.queue.type")
+  @Default("BASIC_FIFO")
+  public final RequestQueueType requestQueueType;
+
+  /**
+   * The maximum time in milliseconds a request is allowed to spend in the queue waiting to be processed.
+   */
+  @Config("request.queue.timeout.ms")
+  @Default("2000")
+  public final int requestQueueTimeoutMs;
+
+  /**
+   * The maximum queue delay that is allowed for a request when using Controlled delay algorithm.
+   */
+  @Config("adaptive.lifo.queue.codel.target.delay.ms")
+  @Default("100")
+  public final int adaptiveLifoQueueCodelTargetDelayMs;
+
+  /**
+   * The threshold over which we switch the request queue from FIFO to LIFO mode.
+   */
+  @Config("adaptive.lifo.queue.threshold")
+  @Default("0.7")
+  public final double adaptiveLifoQueueThreshold;
+
   public NetworkConfig(VerifiableProperties verifiableProperties) {
     numIoThreads = verifiableProperties.getIntInRange(NUM_IO_THREADS, 8, 1, Integer.MAX_VALUE);
     queuedMaxRequests = verifiableProperties.getIntInRange(QUEUED_MAX_REQUESTS, 500, 1, Integer.MAX_VALUE);
@@ -137,5 +169,11 @@ public class NetworkConfig {
     selectorMaxKeyToProcess =
         verifiableProperties.getIntInRange(SELECTOR_MAX_KEY_TO_PROCESS, -1, -1, Integer.MAX_VALUE);
     selectorUseDirectBuffers = verifiableProperties.getBoolean(SELECTOR_USE_DIRECT_BUFFERS, false);
+    requestQueueType =
+        verifiableProperties.getEnum("request.queue.type", RequestQueueType.class, RequestQueueType.BASIC_FIFO);
+    requestQueueTimeoutMs = verifiableProperties.getIntInRange("request.queue.timeout.ms", 2000, 0, Integer.MAX_VALUE);
+    adaptiveLifoQueueCodelTargetDelayMs =
+        verifiableProperties.getIntInRange("adaptive.lifo.queue.codel.target.delay.ms", 100, 0, Integer.MAX_VALUE);
+    adaptiveLifoQueueThreshold = verifiableProperties.getDoubleInRange("adaptive.queue.lifo.threshold", 0.7, 0.0, 1.0);
   }
 }

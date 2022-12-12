@@ -13,6 +13,8 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import io.netty.buffer.ByteBuf;
@@ -20,6 +22,7 @@ import io.netty.buffer.PooledByteBufAllocator;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.WritableByteChannel;
+import java.util.Properties;
 import java.util.Random;
 import org.junit.After;
 import org.junit.Assert;
@@ -82,8 +85,11 @@ public class SocketRequestResponseChannelTest {
   @Test
   public void testSocketRequestResponseChannelTest() {
     try {
-      SocketRequestResponseChannel channel = new SocketRequestResponseChannel(2, 10);
-      Integer key = new Integer(5);
+      Properties properties = new Properties();
+      properties.put("num.io.threads", 2);
+      properties.put("queued.max.requests", 10);
+      SocketRequestResponseChannel channel =
+          new SocketRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)));
       String connectionId = "test_connectionId";
       ByteBuf buffer = PooledByteBufAllocator.DEFAULT.heapBuffer(1000);
       byte[] content = new byte[1000];
@@ -91,7 +97,7 @@ public class SocketRequestResponseChannelTest {
       buffer.writeBytes(content);
       SocketServerRequest request = new SocketServerRequest(0, connectionId, buffer);
       channel.sendRequest(request);
-      request = (SocketServerRequest) channel.receiveRequest();
+      request = (SocketServerRequest) channel.receiveRequest().getRequestToServe();
       Assert.assertEquals(request.getProcessor(), 0);
       Assert.assertEquals(request.getConnectionId(), connectionId);
       InputStream stream = request.getInputStream();
@@ -108,7 +114,7 @@ public class SocketRequestResponseChannelTest {
       SocketServerResponse response = (SocketServerResponse) channel.receiveResponse(0);
       Assert.assertEquals(response.getProcessor(), 0);
     } catch (Exception e) {
-      Assert.assertEquals(true, false);
+      Assert.assertTrue(false);
     }
   }
 }

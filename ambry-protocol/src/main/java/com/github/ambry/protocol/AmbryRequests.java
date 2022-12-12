@@ -151,7 +151,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleRequests(NetworkRequest networkRequest) throws InterruptedException {
+  public void handleRequests(NetworkRequest networkRequest, boolean shouldDrop) throws InterruptedException {
     try {
       RequestOrResponseType type;
       if (networkRequest instanceof LocalChannelRequest) {
@@ -164,28 +164,28 @@ public class AmbryRequests implements RequestAPI {
       }
       switch (type) {
         case PutRequest:
-          handlePutRequest(networkRequest);
+          handlePutRequest(networkRequest, shouldDrop);
           break;
         case GetRequest:
-          handleGetRequest(networkRequest);
+          handleGetRequest(networkRequest, shouldDrop);
           break;
         case DeleteRequest:
-          handleDeleteRequest(networkRequest);
+          handleDeleteRequest(networkRequest, shouldDrop);
           break;
         case TtlUpdateRequest:
-          handleTtlUpdateRequest(networkRequest);
+          handleTtlUpdateRequest(networkRequest, shouldDrop);
           break;
         case ReplicaMetadataRequest:
-          handleReplicaMetadataRequest(networkRequest);
+          handleReplicaMetadataRequest(networkRequest, shouldDrop);
           break;
         case AdminRequest:
-          handleAdminRequest(networkRequest);
+          handleAdminRequest(networkRequest, shouldDrop);
           break;
         case UndeleteRequest:
-          handleUndeleteRequest(networkRequest);
+          handleUndeleteRequest(networkRequest, shouldDrop);
           break;
         case ReplicateBlobRequest:
-          handleReplicateBlobRequest(networkRequest);
+          handleReplicateBlobRequest(networkRequest, shouldDrop);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -197,7 +197,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handlePutRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
     PutRequest receivedRequest;
     if (request instanceof LocalChannelRequest) {
       // This is a case where handlePutRequest is called when frontends are writing to Azure. In this case, this method
@@ -226,8 +226,16 @@ public class AmbryRequests implements RequestAPI {
     long totalTimeSpent = requestQueueTime;
     metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
     metrics.putBlobRequestRate.mark();
-    long startTime = SystemTime.getInstance().milliseconds();
     PutResponse response = null;
+    if (shouldDrop) {
+      response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
+          ServerErrorCode.Retry_After_Backoff);
+      requestResponseChannel.sendResponse(response, request,
+          new ServerNetworkResponseMetrics(metrics.putBlobResponseQueueTimeInMs, metrics.putBlobSendTimeInMs,
+              metrics.putBlobTotalTimeInMs, null, null, totalTimeSpent));
+      return;
+    }
+    long startTime = SystemTime.getInstance().milliseconds();
     try {
       ServerErrorCode error =
           validateRequest(receivedRequest.getBlobId().getPartition(), RequestOrResponseType.PutRequest, false);
@@ -275,7 +283,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleGetRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handleGetRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
     GetRequest getRequest;
     if (request instanceof LocalChannelRequest) {
       // This is a case where handleGetRequest is called when frontends are reading from Azure. In this case, this method
@@ -330,9 +338,16 @@ public class AmbryRequests implements RequestAPI {
         responseTotalTime = metrics.getBlobAllTotalTimeInMs;
       }
     }
-
-    long startTime = SystemTime.getInstance().milliseconds();
     GetResponse response = null;
+    if (shouldDrop) {
+      response =
+          new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(), ServerErrorCode.Retry_After_Backoff);
+      requestResponseChannel.sendResponse(response, request,
+          new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, responseTotalTime, null, null,
+              totalTimeSpent));
+      return;
+    }
+    long startTime = SystemTime.getInstance().milliseconds();
     try {
       List<Send> messagesToSendList = new ArrayList<>(getRequest.getPartitionInfoList().size());
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<>(getRequest.getPartitionInfoList().size());
@@ -443,7 +458,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handleDeleteRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
     DeleteRequest deleteRequest;
     if (request instanceof LocalChannelRequest) {
       // This is a case where handleDeleteRequest is called when frontends are talking to Azure. In this case, this method
@@ -459,6 +474,14 @@ public class AmbryRequests implements RequestAPI {
     metrics.deleteBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     DeleteResponse response = null;
+    if (shouldDrop) {
+      response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
+          ServerErrorCode.Retry_After_Backoff);
+      requestResponseChannel.sendResponse(response, request,
+          new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
+              metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+      return;
+    }
     try {
       StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(deleteRequest.getBlobId())).get(0);
       ServerErrorCode error =
@@ -521,7 +544,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handleTtlUpdateRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
     TtlUpdateRequest updateRequest;
     if (request instanceof LocalChannelRequest) {
       // This is a case where handleTtlUpdateRequest is called when frontends are talking to Azure. In this case, this method
@@ -537,6 +560,14 @@ public class AmbryRequests implements RequestAPI {
     metrics.updateBlobTtlRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     TtlUpdateResponse response = null;
+    if (shouldDrop) {
+      response = new TtlUpdateResponse(updateRequest.getCorrelationId(), updateRequest.getClientId(),
+          ServerErrorCode.Retry_After_Backoff);
+      requestResponseChannel.sendResponse(response, request,
+          new ServerNetworkResponseMetrics(metrics.updateBlobTtlResponseQueueTimeInMs,
+              metrics.updateBlobTtlSendTimeInMs, metrics.updateBlobTtlTotalTimeInMs, null, null, totalTimeSpent));
+      return;
+    }
     try {
       ServerErrorCode error =
           validateRequest(updateRequest.getBlobId().getPartition(), RequestOrResponseType.TtlUpdateRequest, false);
@@ -604,7 +635,8 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleReplicaMetadataRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handleReplicaMetadataRequest(NetworkRequest request, boolean shouldDrop)
+      throws IOException, InterruptedException {
     if (replicationEngine == null) {
       throw new UnsupportedOperationException("Replication not supported on this node.");
     }
@@ -620,6 +652,16 @@ public class AmbryRequests implements RequestAPI {
     int partitionCnt = replicaMetadataRequestInfoList.size();
     long startTimeInMs = SystemTime.getInstance().milliseconds();
     ReplicaMetadataResponse response = null;
+    if (shouldDrop) {
+      response =
+          new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(), replicaMetadataRequest.getClientId(),
+              ServerErrorCode.Retry_After_Backoff,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
+      requestResponseChannel.sendResponse(response, request,
+          new ServerNetworkResponseMetrics(metrics.replicaMetadataResponseQueueTimeInMs,
+              metrics.replicaMetadataSendTimeInMs, metrics.replicaMetadataTotalTimeInMs, null, null, totalTimeSpent));
+      return;
+    }
     try {
       List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<>(partitionCnt);
       for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : replicaMetadataRequestInfoList) {
@@ -746,7 +788,7 @@ public class AmbryRequests implements RequestAPI {
     // Currently we don't enable the write repair. As long as the local store has the Blob, return success immediately.
     // check if local store has the key already
     StoreKey convertedKey = getConvertedStoreKeys(Collections.singletonList(blobId)).get(0);
-    Store store = storeManager.getStore(((BlobId)convertedKey).getPartition());
+    Store store = storeManager.getStore(((BlobId) convertedKey).getPartition());
     try {
       store.findKey(convertedKey);
       return true;
@@ -757,7 +799,8 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handleReplicateBlobRequest(NetworkRequest request, boolean shouldDrop)
+      throws IOException, InterruptedException {
     if (connectionPool == null || transformer == null || transformer.get() == null) {
       throw new UnsupportedOperationException("ReplicateBlobRequest is not supported on this node.");
     }
@@ -775,6 +818,15 @@ public class AmbryRequests implements RequestAPI {
     long startTime = SystemTime.getInstance().milliseconds();
     metrics.replicateBlobRequestQueueTimeInMs.update(totalTimeSpent);
     metrics.replicateBlobRequestRate.mark();
+    if (shouldDrop) {
+      ReplicateBlobResponse response =
+          new ReplicateBlobResponse(replicateBlobRequest.getCorrelationId(), replicateBlobRequest.getClientId(),
+              ServerErrorCode.Retry_After_Backoff);
+      requestResponseChannel.sendResponse(response, request,
+          new ServerNetworkResponseMetrics(metrics.replicateBlobResponseQueueTimeInMs,
+              metrics.replicateBlobSendTimeInMs, metrics.replicateBlobTotalTimeInMs, null, null, totalTimeSpent));
+      return;
+    }
 
     // Get the parameters from the replicateBlobRequest: the blobId, the remoteHostName and the remoteHostPort.
     BlobId blobId = replicateBlobRequest.getBlobId();
@@ -931,7 +983,7 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void handleUndeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
+  public void handleUndeleteRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
     UndeleteRequest undeleteRequest;
     if (request instanceof LocalChannelRequest) {
       // This is a case where handleUndeleteRequest is called when frontends are talking to Azure. In this case, this method
@@ -947,6 +999,14 @@ public class AmbryRequests implements RequestAPI {
     metrics.undeleteBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     UndeleteResponse response = null;
+    if (shouldDrop) {
+      response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+          ServerErrorCode.Retry_After_Backoff);
+      requestResponseChannel.sendResponse(response, request,
+          new ServerNetworkResponseMetrics(metrics.undeleteBlobResponseQueueTimeInMs, metrics.undeleteBlobSendTimeInMs,
+              metrics.undeleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+      return;
+    }
     Store storeToUndelete;
     StoreKey convertedStoreKey;
     try {

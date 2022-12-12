@@ -25,77 +25,88 @@ public interface RequestAPI {
   /**
    * Handle a request.
    * @param request The request to handle.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleRequests(NetworkRequest request) throws InterruptedException;
+  void handleRequests(NetworkRequest request, boolean shouldDrop) throws InterruptedException;
 
   /**
    * Puts a blob into the store. It accepts a blob property, user metadata and the blob
    * as a stream and stores them.
    * @param request The request that contains the blob property, user metadata and blob as a stream.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException;
+  void handlePutRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException;
 
   /**
    * Gets blob property, user metadata or the blob from the specified partition.
    * @param request The request that contains the partition and id of the blob whose blob property, user metadata or
    *                blob needs to be returned.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleGetRequest(NetworkRequest request) throws IOException, InterruptedException;
+  void handleGetRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException;
 
   /**
    * Deletes the blob from the store.
    * @param request The request that contains the partition and id of the blob that needs to be deleted.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException;
+  void handleDeleteRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException;
 
   /**
    * Updates the TTL of a blob as required in {@code request}.
    * @param request The request that contains the partition and id of the blob that needs to be updated.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException;
+  void handleTtlUpdateRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException;
 
   /**
    * Gets the metadata required for replication.
    * @param request The request that contains the partition for which the metadata is needed.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleReplicaMetadataRequest(NetworkRequest request) throws IOException, InterruptedException;
+  void handleReplicaMetadataRequest(NetworkRequest request, boolean shouldDrop)
+      throws IOException, InterruptedException;
 
   /**
    * Replicate one specific Blob from a remote host to the local store.
    * @param request The request that contains the remote host information and the blob id to be replicated.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException;
+  void handleReplicateBlobRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException;
 
   /**
    * Handles an administration request. These requests can query for or change the internal state of the server.
    * @param request the request that needs to be handled.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  default void handleAdminRequest(NetworkRequest request) throws InterruptedException, IOException {
+  default void handleAdminRequest(NetworkRequest request, boolean shouldDrop) throws InterruptedException, IOException {
     throw new UnsupportedOperationException("Admin request not supported on this node");
   }
 
   /**
    * Undelete the blob from the store.
    * @param request the request that contains the partition and the id of the blob that needs to be undeleted.
+   * @param shouldDrop indicates if request should be dropped.
    * @throws IOException if there are I/O errors carrying our the required operation.
    * @throws InterruptedException if request processing is interrupted.
    */
-  default void handleUndeleteRequest(NetworkRequest request) throws InterruptedException, IOException {
+  default void handleUndeleteRequest(NetworkRequest request, boolean shouldDrop)
+      throws InterruptedException, IOException {
     throw new UnsupportedOperationException("Undelete request not supported on this node");
   }
 }
