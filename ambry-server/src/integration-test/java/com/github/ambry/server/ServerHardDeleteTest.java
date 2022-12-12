@@ -316,8 +316,9 @@ public class ServerHardDeleteTest {
     // a short to every record, which include 6 puts and 1 delete. (last delete is not included).
 
     // old value is 198732 + 14. Increased by 48 when adding two fields(4 BYTE CRC for each field) in blobProperty when putBlob.
-    // There are 6 * (4 + 4). 6 stands for the times for putBlob, 4 stands for 4 extra blobProperty Bytes for each field.
-    int expectedTokenValueT1 = 198732 + 14 + 48;
+    // There are 6 * (4 + 4 + 1). 6 stands for the times for putBlob, 4 stands for 4 extra blobProperty Bytes for each field,
+    // plus 1 byte for compression flag.
+    int expectedTokenValueT1 = 198732 + 14 + 54;
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,
         expectedTokenValueT1);
 
@@ -354,7 +355,7 @@ public class ServerHardDeleteTest {
 
     time.sleep(TimeUnit.DAYS.toMillis(1));
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
-    int expectedTokenValueT2 = 298416 + 98 + 28 + 72;
+    int expectedTokenValueT2 = 298416 + 98 + 28 + 81;
     // old value: 298400. Increased by 16 (4 * 4) to 298416 because the format for delete record went from 2 to 3 which
     // adds 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not added
     //
@@ -367,7 +368,8 @@ public class ServerHardDeleteTest {
     // record.
 
     // old value is 298416 + 98 + 28. Increased by 72 when adding two fields(4 BYTE CRC for each field) in blobProperty when putBlob.
-    // There are 9 * (4 + 4). 9 stands for the times for putBlob, 4 stands for 4 extra blobProperty Bytes.
+    // There are 9 * (4 + 4 + 1). 9 stands for the times for putBlob, 4 stands for 4 extra blobProperty Bytes, plus 1 byte
+    // for compression flag.
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,
         expectedTokenValueT2);
 
