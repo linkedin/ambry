@@ -61,7 +61,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
     if (!networkRequestQueue.offer(request)) {
-      logger.debug("Request queue is full, dropping incoming request: {}", request);
+      logger.warn("Request queue is full, dropping incoming request: {}", request);
       unqueuedRequests.add(request);
     }
     http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
@@ -131,6 +131,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
         http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - requestToDrop.getStartTimeInMs());
         if (!consumeStream(requestToDrop)) {
           errorRequests.add(requestToDrop);
+          logger.error("Error reading the stream, dropping the request: {}", requestToDrop);
         }
       }
       requestsToDrop.removeAll(errorRequests);

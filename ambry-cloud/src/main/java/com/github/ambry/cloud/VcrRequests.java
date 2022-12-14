@@ -52,22 +52,22 @@ public class VcrRequests extends AmbryRequests {
   }
 
   @Override
-  public void handlePutRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
+  public void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }
 
   @Override
-  public void handleDeleteRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
+  public void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }
 
   @Override
-  public void handleTtlUpdateRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
+  public void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }
 
   @Override
-  public void handleReplicateBlobRequest(NetworkRequest request, boolean shouldDrop) throws IOException, InterruptedException {
+  public void handleReplicateBlobRequest(NetworkRequest request) throws IOException, InterruptedException {
     throw new UnsupportedOperationException("Request type not supported");
   }
 

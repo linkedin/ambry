@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * Request Response for serialization and de-serialization
  */
 public abstract class RequestOrResponse extends AbstractByteBufHolder<RequestOrResponse>
-    implements SendWithCorrelationId {
+    implements SendWithCorrelationId, RequestTracker {
   protected final RequestOrResponseType type;
   protected final int correlationId;
   protected short versionId;
@@ -57,6 +57,11 @@ public abstract class RequestOrResponse extends AbstractByteBufHolder<RequestOrR
 
   public RequestOrResponseType getRequestType() {
     return type;
+  }
+
+  @Override
+  public void accept(RequestVisitor visitor) {
+    // Do nothing by default. Each request implementation passes its instance of object to Visitor.
   }
 
   @Override

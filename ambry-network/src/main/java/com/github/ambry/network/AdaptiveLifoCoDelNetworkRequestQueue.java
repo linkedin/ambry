@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -29,6 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @see <a href="https://github.com/apache/hbase/blob/master/hbase-server/src/main/java/org/apache/hadoop/hbase/ipc/AdaptiveLifoCoDelCallQueue.java">HBase implementation</a>
  */
 public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue {
+  private static final Logger logger = LoggerFactory.getLogger(AdaptiveLifoCoDelNetworkRequestQueue.class);
   private final Time time;
   private final LinkedBlockingDeque<NetworkRequest> deque;
 
@@ -48,6 +51,8 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   private final AtomicBoolean resetDelay = new AtomicBoolean(true);
   // if we're in this mode, "long" calls are getting dropped
   private final AtomicBoolean isOverloaded = new AtomicBoolean(false);
+  // Variable used to track changing of queue modes from FIFO to LIFO and vice versa.
+  private final AtomicBoolean lifoMode = new AtomicBoolean(false);
 
   /**
    *
@@ -91,6 +96,7 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
         break;
       }
       if (needToDrop(nextRequest)) {
+        logger.warn("Request timed out waiting in queue, dropping it: {}", nextRequest);
         requestsToDrop.add(nextRequest);
       } else {
         requestToServe = nextRequest;
@@ -132,7 +138,15 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
    */
   private boolean useLifoMode() {
     double loadFactor = (double) deque.size() / maxCapacity;
-    return loadFactor > lifoThreshold;
+    boolean localLifoMode = loadFactor > lifoThreshold;
+    if (localLifoMode && lifoMode.compareAndSet(false, true)) {
+      // Mode changed to LIFO
+      logger.info("Request queue operating is LIFO mode");
+    } else if (!localLifoMode && lifoMode.compareAndSet(true, false)) {
+      // Mode changed to FIFO
+      logger.info("Request queue operating is FIFO mode");
+    }
+    return localLifoMode;
   }
 
   /**

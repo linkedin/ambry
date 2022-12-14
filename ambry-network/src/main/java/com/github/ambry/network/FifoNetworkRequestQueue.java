@@ -18,9 +18,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class FifoNetworkRequestQueue implements NetworkRequestQueue {
+  private static final Logger logger = LoggerFactory.getLogger(FifoNetworkRequestQueue.class);
   private final int timeout;
   private final Time time;
   private final BlockingQueue<NetworkRequest> queue;
@@ -43,6 +46,7 @@ public class FifoNetworkRequestQueue implements NetworkRequestQueue {
     NetworkRequest nextRequest;
     while ((nextRequest = queue.poll()) != null) {
       if (needToDrop(nextRequest)) {
+        logger.warn("Request timed out waiting in queue, dropping it: {}", nextRequest);
         requestsToDrop.add(nextRequest);
       } else {
         requestToServe = nextRequest;

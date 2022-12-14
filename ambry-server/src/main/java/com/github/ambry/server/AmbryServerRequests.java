@@ -184,121 +184,42 @@ public class AmbryServerRequests extends AmbryRequests {
   /**
    * Handles an administration request. These requests can query for or change the internal state of the server.
    * @param request the request that needs to be handled.
-   * @param shouldDrop
    * @throws InterruptedException if response sending is interrupted.
    * @throws IOException if there are I/O errors carrying our the required operation.
    */
   @Override
-  public void handleAdminRequest(NetworkRequest request, boolean shouldDrop) throws InterruptedException, IOException {
+  public void handleAdminRequest(NetworkRequest request) throws InterruptedException, IOException {
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
     DataInputStream requestStream = new DataInputStream(request.getInputStream());
     AdminRequest adminRequest = AdminRequest.readFrom(requestStream, clusterMap);
-    Histogram processingTimeHistogram = null;
-    Histogram responseQueueTimeHistogram = null;
-    Histogram responseSendTimeHistogram = null;
-    Histogram requestTotalTimeHistogram = null;
+    Histogram responseQueueTimeHistogram;
+    Histogram responseSendTimeHistogram;
+    Histogram requestTotalTimeHistogram;
     AdminResponse response = null;
     try {
       switch (adminRequest.getType()) {
         case TriggerCompaction:
-          metrics.triggerCompactionRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.triggerCompactionRequestRate.mark();
-          processingTimeHistogram = metrics.triggerCompactionRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
-          if (shouldDrop) {
-            response =
-                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
-          } else {
-            response = handleTriggerCompactionRequest(adminRequest);
-          }
+          response = handleTriggerCompactionRequest(adminRequest);
           break;
         case RequestControl:
-          metrics.requestControlRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.requestControlRequestRate.mark();
-          processingTimeHistogram = metrics.requestControlRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.requestControlResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
-          if (shouldDrop) {
-            response =
-                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
-          } else{
-            response = handleRequestControlRequest(requestStream, adminRequest);
-          }
+          response = handleRequestControlRequest(requestStream, adminRequest);
           break;
         case ReplicationControl:
-          metrics.replicationControlRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.replicationControlRequestRate.mark();
-          processingTimeHistogram = metrics.replicationControlRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.replicationControlResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.replicationControlRequestTotalTimeInMs;
-          if (shouldDrop) {
-            response =
-                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
-          } else{
-            response = handleReplicationControlRequest(requestStream, adminRequest);
-          }
+          response = handleReplicationControlRequest(requestStream, adminRequest);
           break;
         case CatchupStatus:
-          metrics.catchupStatusRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.catchupStatusRequestRate.mark();
-          processingTimeHistogram = metrics.catchupStatusRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.catchupStatusResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
-          if (shouldDrop) {
-            response =
-                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
-          } else{
-            response = handleCatchupStatusRequest(requestStream, adminRequest);
-          }
+          response = handleCatchupStatusRequest(requestStream, adminRequest);
           break;
         case BlobStoreControl:
-          metrics.blobStoreControlRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.blobStoreControlRequestRate.mark();
-          processingTimeHistogram = metrics.blobStoreControlRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.blobStoreControlResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.blobStoreControlResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
-          if (shouldDrop) {
-            response =
-                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
-          } else{
-            response = handleBlobStoreControlRequest(requestStream, adminRequest);
-          }
+          response = handleBlobStoreControlRequest(requestStream, adminRequest);
           break;
         case HealthCheck:
-          metrics.healthCheckRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.healthCheckRequestRate.mark();
-          processingTimeHistogram = metrics.healthCheckRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.healthCheckResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.healthCheckResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.healthCheckRequestTotalTimeInMs;
-          if (shouldDrop) {
-            response =
-                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
-          } else{
-            response = handleHealthCheckRequest(requestStream, adminRequest);
-          }
+          response = handleHealthCheckRequest(requestStream, adminRequest);
           break;
         case BlobIndex:
-          metrics.blobIndexRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.blobIndexRequestRate.mark();
-          processingTimeHistogram = metrics.blobIndexRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.blobIndexResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.blobIndexResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.blobIndexRequestTotalTimeInMs;
-          if (shouldDrop) {
-            response =
-                new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(), Retry_After_Backoff);
-          } else{
-            response = handleBlobIndexRequest(requestStream, adminRequest);
-          }
+          response = handleBlobIndexRequest(requestStream, adminRequest);
           break;
       }
     } catch (Exception e) {
@@ -320,7 +241,12 @@ public class AmbryServerRequests extends AmbryRequests {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", adminRequest, response, processingTime);
-      processingTimeHistogram.update(processingTime);
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      adminRequest.accept(metricsUpdater);
+      responseQueueTimeHistogram = metricsUpdater.getResponseQueueTimeHistogram();
+      responseSendTimeHistogram = metricsUpdater.getResponseSendTimeHistogram();
+      requestTotalTimeHistogram = metricsUpdater.getRequestTotalTimeHistogram();
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(responseQueueTimeHistogram, responseSendTimeHistogram,

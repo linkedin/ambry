@@ -90,6 +90,11 @@ public class GetRequest extends RequestOrResponse {
   }
 
   @Override
+  public void accept(RequestVisitor visitor) {
+    visitor.visit(this);
+  }
+
+  @Override
   public void prepareBuffer() {
     super.prepareBuffer();
     bufferToSend.writeShort((short) flags.ordinal());

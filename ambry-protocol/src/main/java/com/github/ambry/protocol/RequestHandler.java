@@ -53,8 +53,8 @@ public class RequestHandler implements Runnable {
             logger.debug("Request handler {} received shut down command", id);
             return;
           }
-          requests.handleRequests(requestToDrop, true);
-          logger.trace("Request handler {} handling request {}", id, requestToDrop);
+          requests.dropRequest(requestToDrop);
+          logger.trace("Request handler {} dropping request {}", id, requestToDrop);
         }
 
         // Serve requests
@@ -63,10 +63,9 @@ public class RequestHandler implements Runnable {
             logger.debug("Request handler {} received shut down command", id);
             return;
           }
-          requests.handleRequests(requestToServe, false);
+          requests.handleRequests(requestToServe);
           logger.trace("Request handler {} handling request {}", id, requestToServe);
         }
-
       } catch (Throwable e) {
         // TODO add metric to track background threads
         logger.error("Exception when handling request", e);

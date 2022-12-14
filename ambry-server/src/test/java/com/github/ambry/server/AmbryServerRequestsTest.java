@@ -1311,7 +1311,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   // general
 
   /**
-   * Calls {@link RequestAPI#handleRequests(NetworkRequest, boolean)} with {@code request} and returns the {@link Response} received.
+   * Calls {@link RequestAPI#handleRequests(NetworkRequest)} with {@code request} and returns the {@link Response} received.
    * @param request the {@link NetworkRequest} to process
    * @param expectedServerErrorCode the expected {@link ServerErrorCode} in the server response.
    * @return the {@link Response} received.
@@ -1321,7 +1321,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   private Response sendRequestGetResponse(RequestOrResponse request, ServerErrorCode expectedServerErrorCode)
       throws InterruptedException, IOException {
     NetworkRequest mockRequest = MockRequest.fromRequest(request);
-    ambryRequests.handleRequests(mockRequest, false);
+    ambryRequests.handleRequests(mockRequest);
     assertEquals("Request accompanying response does not match original request", mockRequest,
         requestResponseChannel.lastOriginalRequest);
     assertNotNull("Response not sent", requestResponseChannel.lastResponse);
