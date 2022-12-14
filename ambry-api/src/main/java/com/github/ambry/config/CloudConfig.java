@@ -448,7 +448,7 @@ public class CloudConfig {
     vcrMinTtlDays = verifiableProperties.getInt(VCR_MIN_TTL_DAYS, DEFAULT_MIN_TTL_DAYS);
     cloudDeletedBlobRetentionDays =
         verifiableProperties.getInt(CLOUD_DELETED_BLOB_RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
-    cloudBlobCompactionEnabled = verifiableProperties.getBoolean(CLOUD_BLOB_COMPACTION_ENABLED, true);
+    cloudBlobCompactionEnabled = verifiableProperties.getBoolean(CLOUD_BLOB_COMPACTION_ENABLED, false);
     cloudContainerCompactionEnabled = verifiableProperties.getBoolean(CLOUD_CONTAINER_COMPACTION_ENABLED, false);
     cloudBlobCompactionIntervalHours = verifiableProperties.getInt(CLOUD_BLOB_COMPACTION_INTERVAL_HOURS, 24);
     cloudContainerCompactionIntervalHours = verifiableProperties.getInt(CLOUD_CONTAINER_COMPACTION_INTERVAL_HOURS, 24);

@@ -169,6 +169,7 @@ public class VcrServer {
         cloudDestinationFactory =
             Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap);
       }
+      logger.info("[snkt] Creating cloudDestination");
       cloudDestination = cloudDestinationFactory.getCloudDestination();
 
       // TODO Make sure that config.updaterPollingIntervalMs value is large (~one day) for VCR.

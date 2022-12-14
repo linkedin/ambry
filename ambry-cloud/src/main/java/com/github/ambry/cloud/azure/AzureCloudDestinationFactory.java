@@ -79,9 +79,11 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
     ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
     if (replicationConfig.replicationCloudTokenFactory.equals(
         CosmosChangeFeedFindTokenFactory.class.getCanonicalName())) {
+      logger.info("[snkt] L82 replicationCloudTokenFactory = " + replicationConfig.replicationCloudTokenFactory);
       return AzureReplicationFeed.FeedType.COSMOS_CHANGE_FEED;
     } else if (replicationConfig.replicationCloudTokenFactory.equals(
         CosmosUpdateTimeFindTokenFactory.class.getCanonicalName())) {
+      logger.info("[snkt] L86 replicationCloudTokenFactory = " + replicationConfig.replicationCloudTokenFactory);
       return AzureReplicationFeed.FeedType.COSMOS_UPDATE_TIME;
     }
     throw new IllegalArgumentException(String.format(

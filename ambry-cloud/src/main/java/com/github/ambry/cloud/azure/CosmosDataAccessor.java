@@ -641,7 +641,7 @@ public class CosmosDataAccessor {
     // Execute cosmos query
     CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse = executeCosmosQueryAsync(sqlQuerySpec, queryRequestOptions);
     pagedFluxResponse.byPage().subscribe(fluxResponse -> {
-      logger.debug("Got a page of query result with " + fluxResponse.getResults().size() + " items(s)"
+      logger.info("[snkt] Got a page of query result with " + fluxResponse.getResults().size() + " items(s)"
           + " and request charge of " + fluxResponse.getRequestCharge());
       requestCharge.updateAndGet(v -> v + fluxResponse.getRequestCharge());
       metadataList.addAll(fluxResponse.getResults());
@@ -656,7 +656,7 @@ public class CosmosDataAccessor {
     }, () -> {
       operationTime.stop();
       if (requestCharge.get() >= requestChargeThreshold) {
-        logger.info("Query partition {} request charge {} for {} records", partitionPath, requestCharge,
+        logger.info("[snkt] Query partition {} request charge {} for {} records", partitionPath, requestCharge,
             metadataList.size());
       }
       resultFuture.complete(metadataList);
@@ -683,14 +683,18 @@ public class CosmosDataAccessor {
 
     CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions;
     if (Utils.isNullOrEmpty(requestContinuationToken)) {
+      logger.info("[snkt] Requesting change feed from beginning");
       cosmosChangeFeedRequestOptions = CosmosChangeFeedRequestOptions.createForProcessingFromBeginning(
           FeedRange.forLogicalPartition(new PartitionKey(partitionPath)));
     } else {
+      logger.info("[snkt] Requesting change feed from where we left off");
       cosmosChangeFeedRequestOptions =
           CosmosChangeFeedRequestOptions.createForProcessingFromContinuation(requestContinuationToken);
     }
     // Set the maximum number of items to be returned in this change feed request.
     cosmosChangeFeedRequestOptions.setMaxItemCount(maxFeedSize);
+    logger.info("[snkt] maxFeedSize = " + maxFeedSize);
+    logger.info("[snkt] requestContinuationToken = " + requestContinuationToken);
     return queryChangeFeedAsync(cosmosChangeFeedRequestOptions, changeFeed, timer);
   }
 
@@ -718,7 +722,7 @@ public class CosmosDataAccessor {
 
     // Read the pages containing the cosmos change feed asynchronously and update the continuation token as we are reading.
     pagedFluxResponse.byPage().subscribe(fluxResponse -> {
-      logger.debug("Got a page of query result with " + fluxResponse.getResults().size() + " items(s)"
+      logger.info("[snkt] Got a page of query result with " + fluxResponse.getResults().size() + " items(s)"
           + " and request charge of " + fluxResponse.getRequestCharge());
       changeFeed.addAll(fluxResponse.getResults());
       continuationToken.set(fluxResponse.getContinuationToken());

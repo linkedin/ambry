@@ -198,8 +198,10 @@ class AzureCloudDestination implements CloudDestination {
       CosmosDataAccessor cosmosDataAccessor, AzureMetrics azureMetrics, int queryBatchSize) {
     switch (azureReplicationFeedType) {
       case COSMOS_CHANGE_FEED:
+        logger.info("[snkt] creating CosmosChangeFeedBasedReplicationFeed");
         return new CosmosChangeFeedBasedReplicationFeed(cosmosDataAccessor, azureMetrics, queryBatchSize);
       case COSMOS_UPDATE_TIME:
+        logger.info("[snkt] creating CosmosUpdateTimeBasedReplicationFeed");
         return new CosmosUpdateTimeBasedReplicationFeed(cosmosDataAccessor, azureMetrics, queryBatchSize);
       default:
         throw new IllegalArgumentException(

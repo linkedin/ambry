@@ -27,6 +27,8 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -34,6 +36,7 @@ import java.util.concurrent.TimeUnit;
  * using Cosmos change feed apis.
  */
 public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicationFeed {
+  private static final Logger logger = LoggerFactory.getLogger(CosmosChangeFeedBasedReplicationFeed.class);
 
   /**
    * Class representing change feed cache for each partition.
@@ -165,62 +168,25 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
       String partitionPath) throws CosmosException {
     Timer.Context operationTimer = azureMetrics.replicationFeedQueryTime.time();
     try {
-      List<CloudBlobMetadata> nextEntries = new ArrayList<>();
       CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) curFindToken;
-      int index = cosmosChangeFeedFindToken.getIndex();
-      ChangeFeedCacheEntry changeFeedCacheEntry = changeFeedCache.get(cosmosChangeFeedFindToken.getCacheSessionId());
-      boolean cacheHit = true;
-      if (changeFeedCacheEntry == null || !isCacheValid(partitionPath, cosmosChangeFeedFindToken,
-          changeFeedCacheEntry)) {
-        // the cache may not be valid. So we cannot use session id
-        azureMetrics.changeFeedCacheMissRate.mark();
-        cacheHit = false;
-        changeFeedCacheEntry = getNextChangeFeed(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
-        // invalidate the previous token's cache
-        changeFeedCache.remove(cosmosChangeFeedFindToken.getCacheSessionId());
-        index = 0;
-      }
-
+      logger.info("[snkt] curFindToken = " + curFindToken.toString());
+      ChangeFeedCacheEntry changeFeedCacheEntry = getNextChangeFeed(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
       long resultSize = 0;
-
+      int index = 0;
       List<CloudBlobMetadata> fetchedEntries = changeFeedCacheEntry.getFetchedEntries();
-      while (true) {
-        if (index < fetchedEntries.size()) {
-          if (cacheHit) {
-            azureMetrics.changeFeedCacheHitRate.mark();
-            cacheHit = false;
-          }
-          if (resultSize + fetchedEntries.get(index).getSize() < maxTotalSizeOfEntries || resultSize == 0) {
-            nextEntries.add(fetchedEntries.get(index));
-            resultSize = resultSize + fetchedEntries.get(index).getSize();
-            index++;
-          } else {
-            break;
-          }
-        } else {
-          // we can reuse the session id in this case, because we know that the cache ran out of new items.
-          changeFeedCacheEntry = getNextChangeFeed(partitionPath, changeFeedCacheEntry.getEndContinuationToken(),
-              changeFeedCacheEntry.getCacheSessionId());
-          fetchedEntries = changeFeedCacheEntry.getFetchedEntries();
-          if (fetchedEntries.isEmpty()) {
-            // This means that either there are no new changes, or change feed made progress in continuation token
-            // but no change feed results were returned (probably because this cosmos shard's change feed has other
-            // other partition feed too, and they were filtered out). In either case its appropriate to break here and
-            // return updated token. The source replication logic will retry replication with updated token.
-            break;
-          } else {
-            azureMetrics.changeFeedCacheRefreshRate.mark();
-          }
-          index = 0;
-        }
+      logger.info("[snkt] num fetchedEntries = " + fetchedEntries.size());
+      while (index < fetchedEntries.size()) {
+          resultSize += fetchedEntries.get(index).getSize();
+          index += 1;
       }
+      logger.info("[snkt] resultSize = " + resultSize);
 
       FindToken updatedToken = new CosmosChangeFeedFindToken(cosmosChangeFeedFindToken.getBytesRead() + resultSize,
           changeFeedCacheEntry.getStartContinuationToken(), changeFeedCacheEntry.getEndContinuationToken(), index,
           changeFeedCacheEntry.getFetchedEntries().size(), changeFeedCacheEntry.getCacheSessionId(),
           cosmosChangeFeedFindToken.getVersion());
-      changeFeedCache.put(changeFeedCacheEntry.getCacheSessionId(), new ChangeFeedCacheEntry(changeFeedCacheEntry));
-      return new FindResult(nextEntries, updatedToken);
+      logger.info("[snkt] updatedToken = " + updatedToken);
+      return new FindResult(fetchedEntries, updatedToken);
     } finally {
       operationTimer.stop();
     }
