@@ -123,25 +123,10 @@ public class MessageSievingInputStreamTest {
    */
   @Test
   public void testValidBlobsAgainstCorruption() throws Exception {
-    testValidBlobs(Blob_Version_V1, BlobType.DataBlob, Message_Header_Version_V1);
-    testValidBlobs(Blob_Version_V1, BlobType.DataBlob, Message_Header_Version_V2);
-
-    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
-    try {
-      PutMessageFormatInputStream.useBlobFormatV3 = false;
-      testValidBlobs(Blob_Version_V2, BlobType.DataBlob, Message_Header_Version_V2);
-      testValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, Message_Header_Version_V2);
-      testValidBlobs(Blob_Version_V2, BlobType.DataBlob, Message_Header_Version_V3);
-      testValidBlobs(Blob_Version_V2, BlobType.MetadataBlob, Message_Header_Version_V3);
-
-      PutMessageFormatInputStream.useBlobFormatV3 = true;
-      testValidBlobs(Blob_Version_V3, BlobType.DataBlob, Message_Header_Version_V2);
-      testValidBlobs(Blob_Version_V3, BlobType.MetadataBlob, Message_Header_Version_V2);
-      testValidBlobs(Blob_Version_V3, BlobType.DataBlob, Message_Header_Version_V3);
-      testValidBlobs(Blob_Version_V3, BlobType.MetadataBlob, Message_Header_Version_V3);
-    } finally {
-      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
-    }
+    testValidBlobs(Blob_Version_V3, BlobType.DataBlob, Message_Header_Version_V2);
+    testValidBlobs(Blob_Version_V3, BlobType.MetadataBlob, Message_Header_Version_V2);
+    testValidBlobs(Blob_Version_V3, BlobType.DataBlob, Message_Header_Version_V3);
+    testValidBlobs(Blob_Version_V3, BlobType.MetadataBlob, Message_Header_Version_V3);
   }
 
   private void testValidBlobs(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {
@@ -405,25 +390,10 @@ public class MessageSievingInputStreamTest {
    */
   @Test
   public void testInValidDeletedAndExpiredBlobsAgainstCorruption() throws Exception {
-    testInValidDeletedAndExpiredBlobs(Blob_Version_V1, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1);
-
-    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
-    try {
-      PutMessageFormatInputStream.useBlobFormatV3 = false;
-      testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
-      testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
-      testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
-      testInValidDeletedAndExpiredBlobs(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
-
-      // Test blob version V3.
-      PutMessageFormatInputStream.useBlobFormatV3 = true;
-      testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
-      testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
-      testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
-      testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
-    } finally {
-      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
-    }
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
+    testInValidDeletedAndExpiredBlobs(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
   }
 
   private void testInValidDeletedAndExpiredBlobs(short blobVersion, BlobType blobType, short headerVersionToUse)
@@ -715,19 +685,8 @@ public class MessageSievingInputStreamTest {
   @Test
   public void testDeletedRecordsAgainstCorruption() throws Exception {
     testDeletedRecords(Blob_Version_V1, BlobType.DataBlob);
-    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
-    try {
-      PutMessageFormatInputStream.useBlobFormatV3 = false;
-      testDeletedRecords(Blob_Version_V2, BlobType.DataBlob);
-      testDeletedRecords(Blob_Version_V2, BlobType.MetadataBlob);
-
-      // Test Blob format V3.
-      PutMessageFormatInputStream.useBlobFormatV3 = true;
-      testDeletedRecords(Blob_Version_V3, BlobType.DataBlob);
-      testDeletedRecords(Blob_Version_V3, BlobType.MetadataBlob);
-    } finally {
-      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
-    }
+    testDeletedRecords(Blob_Version_V3, BlobType.DataBlob);
+    testDeletedRecords(Blob_Version_V3, BlobType.MetadataBlob);
   }
 
   private void testDeletedRecords(short blobVersion, BlobType blobType) throws Exception {
@@ -846,23 +805,10 @@ public class MessageSievingInputStreamTest {
    */
   @Test
   public void testDeprecatedMsgTransformation() throws Exception {
-    testDeprecatedMsg(Blob_Version_V1, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1);
-    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
-    try {
-      PutMessageFormatInputStream.useBlobFormatV3 = false;
-      testDeprecatedMsg(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
-      testDeprecatedMsg(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
-      testDeprecatedMsg(Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
-      testDeprecatedMsg(Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
-
-      PutMessageFormatInputStream.useBlobFormatV3 = true;
-      testDeprecatedMsg(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
-      testDeprecatedMsg(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
-      testDeprecatedMsg(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
-      testDeprecatedMsg(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
-    } finally {
-      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
-    }
+    testDeprecatedMsg(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2);
+    testDeprecatedMsg(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2);
+    testDeprecatedMsg(Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3);
+    testDeprecatedMsg(Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3);
   }
 
   private void testDeprecatedMsg(short blobVersion, BlobType blobType, short headerVersionToUse) throws Exception {

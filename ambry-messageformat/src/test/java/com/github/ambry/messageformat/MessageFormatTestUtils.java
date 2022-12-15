@@ -28,15 +28,9 @@ public class MessageFormatTestUtils {
   public static ByteBuffer getBlobContentForMetadataBlob(int blobSize) {
     ByteBuffer blobContent = ByteBuffer.allocate(blobSize);
     new Random().nextBytes(blobContent.array());
-    int size = PutMessageFormatInputStream.useBlobFormatV3 ?
-        (int) MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blobSize) :
-        (int) MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobSize);
+    int size = (int) MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blobSize);
     ByteBuffer entireBlob = ByteBuffer.allocate(size);
-    if (PutMessageFormatInputStream.useBlobFormatV3) {
-      MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(entireBlob, blobSize, BlobType.MetadataBlob, false);
-    } else {
-      MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(entireBlob, blobSize, BlobType.MetadataBlob);
-    }
+    MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(entireBlob, blobSize, BlobType.MetadataBlob, false);
     entireBlob.put(blobContent);
     CRC32 crc = new CRC32();
     crc.update(entireBlob.array(), 0, entireBlob.position());

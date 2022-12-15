@@ -72,26 +72,12 @@ public class MessageFormatInputStreamTest {
     messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob,
         MessageFormatRecord.Message_Header_Version_V1, false);
 
-    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
-    try {
-      PutMessageFormatInputStream.useBlobFormatV3 = false;
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V1, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3, false);
-
-      PutMessageFormatInputStream.useBlobFormatV3 = true;
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V1, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3, true);
-    } finally {
-      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
-    }
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V1, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3, true);
   }
 
   private void messageFormatPutRecordsTest(short blobVersion, BlobType blobType, short headerVersion, boolean isCompressed)

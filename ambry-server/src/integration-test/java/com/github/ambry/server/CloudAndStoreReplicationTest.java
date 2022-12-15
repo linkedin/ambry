@@ -306,9 +306,8 @@ public class CloudAndStoreReplicationTest {
       assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
           partitionResponseInfo.getErrorCode());
       //old value is 272. Adding 9 Bytes due to the two fields added 4 + 4 Blob Property BYTE, +1 for compression.
-      int putMessageSize = PutMessageFormatInputStream.useBlobFormatV3 ? 281 : 280;
       for (MessageInfo messageInfo : partitionResponseInfo.getMessageInfoList()) {
-        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + putMessageSize, messageInfo.getSize());
+        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + 281, messageInfo.getSize());
       }
     }
   }
