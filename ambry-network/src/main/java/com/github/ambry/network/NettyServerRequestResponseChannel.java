@@ -22,11 +22,13 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.Queue;
+import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,7 +40,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   private static final Logger logger = LoggerFactory.getLogger(NettyServerRequestResponseChannel.class);
   private final Http2ServerMetrics http2ServerMetrics;
   private final NetworkRequestQueue networkRequestQueue;
-  private final Queue<NetworkRequest> unqueuedRequests = new ConcurrentLinkedQueue<>();
+  private final BlockingQueue<NetworkRequest> unqueuedRequests = new LinkedBlockingQueue<>();
 
   public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics) {
     switch (config.requestQueueType) {
@@ -57,12 +59,12 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     this.http2ServerMetrics = http2ServerMetrics;
   }
 
-  /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
+  /** Send a request to be handled */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
     if (!networkRequestQueue.offer(request)) {
       logger.warn("Request queue is full, dropping incoming request: {}", request);
-      unqueuedRequests.add(request);
+      unqueuedRequests.offer(request);
     }
     http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
   }
@@ -102,7 +104,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     }
   }
 
-  /** Get the next request or block until there is one
+  /** Get the next request or block until there is one.
    * @return*/
   @Override
   public NetworkRequestBundle receiveRequest() throws InterruptedException {
@@ -119,13 +121,13 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
       requestToServe = networkRequestBundle.getRequestToServe();
       requestsToDrop = networkRequestBundle.getRequestsToDrop();
 
+      // Consume the first 8 bytes of requests since TCP impl uses this size to allocate buffer.
       if (requestToServe != null) {
         http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - requestToServe.getStartTimeInMs());
         if (!consumeStream(requestToServe)) {
           requestToServe = null;
         }
       }
-
       Set<NetworkRequest> errorRequests = new HashSet<>();
       for (NetworkRequest requestToDrop : requestsToDrop) {
         http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - requestToDrop.getStartTimeInMs());
@@ -138,6 +140,31 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     } while (requestToServe == null && requestsToDrop.isEmpty());
 
     return new NetworkRequestBundle(requestToServe, requestsToDrop);
+  }
+
+  @Override
+  public List<NetworkRequest> getUnqueuedRequests() throws InterruptedException {
+    List<NetworkRequest> requestsToDrop = new ArrayList<>();
+    NetworkRequest unqueuedRequest;
+    do {
+      while ((unqueuedRequest = unqueuedRequests.poll()) != null) {
+        requestsToDrop.add(unqueuedRequest);
+      }
+      if (requestsToDrop.isEmpty()) {
+        // If there are no un-queued requests, wait on the queue.
+        unqueuedRequest = unqueuedRequests.take();
+        requestsToDrop.add(unqueuedRequest);
+      }
+      Set<NetworkRequest> errorRequests = new HashSet<>();
+      for (NetworkRequest requestToDrop : requestsToDrop) {
+        if (!consumeStream(requestToDrop)) {
+          errorRequests.add(requestToDrop);
+          logger.error("Error reading the stream, dropping the request: {}", requestToDrop);
+        }
+      }
+      requestsToDrop.removeAll(errorRequests);
+    }  while (requestsToDrop.isEmpty());
+    return requestsToDrop;
   }
 
   /**

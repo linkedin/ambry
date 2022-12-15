@@ -2004,5 +2004,10 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
       lastResponse = payloadToSend;
       lastOriginalRequest = originalRequest;
     }
+
+    @Override
+    public List<NetworkRequest> getUnqueuedRequests() {
+      return Collections.emptyList();
+    }
   }
 }

@@ -16,6 +16,8 @@ package com.github.ambry.network;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -85,8 +87,10 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   public NetworkRequestBundle take() throws InterruptedException {
     NetworkRequest requestToServe = null;
     List<NetworkRequest> requestsToDrop = new ArrayList<>();
+    // Dequeue next request. If the request timed out, continue to dequeue until we find a valid request to serve
+    // or queue is empty.
+    NetworkRequest nextRequest;
     while (true) {
-      NetworkRequest nextRequest;
       if (useLifoMode()) {
         nextRequest = deque.pollLast();
       } else {
@@ -96,7 +100,7 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
         break;
       }
       if (needToDrop(nextRequest)) {
-        logger.warn("Request timed out waiting in queue, dropping it: {}", nextRequest);
+        logger.warn("Request timed out waiting in queue, dropping it {}", nextRequest);
         requestsToDrop.add(nextRequest);
       } else {
         requestToServe = nextRequest;

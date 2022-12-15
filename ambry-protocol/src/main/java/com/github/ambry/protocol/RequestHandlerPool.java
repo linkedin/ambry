@@ -28,6 +28,8 @@ public class RequestHandlerPool implements Closeable {
 
   private Thread[] threads = null;
   private RequestHandler[] handlers = null;
+  private Thread requestDropperThread = null;
+  private RequestDropper requestDropper = null;
   private final RequestResponseChannel requestResponseChannel;
   private static final Logger logger = LoggerFactory.getLogger(RequestHandlerPool.class);
 
@@ -46,6 +48,11 @@ public class RequestHandlerPool implements Closeable {
       threads[i] = Utils.daemonThread("request-handler-" + i, handlers[i]);
       threads[i].start();
     }
+    // Also, start a thread for dropping any un-queued requests in requestResponceChannel to avoid un-queued requests
+    // growing in unbounded fashion.
+    requestDropper = new RequestDropper(requestResponseChannel, requests);
+    requestDropperThread = Utils.daemonThread("request-dropper", requestDropper);
+    requestDropperThread.start();
   }
 
   /**
@@ -67,9 +74,15 @@ public class RequestHandlerPool implements Closeable {
       for (Thread thread : threads) {
         thread.join();
       }
+      if (requestDropper != null) {
+        requestDropper.shutdown();
+      }
+      if (requestDropperThread != null) {
+        requestDropperThread.join();
+      }
       logger.info("shut down completely");
     } catch (Exception e) {
-      logger.error("error when shutting down request handler pool {}", e);
+      logger.error("error when shutting down request handler pool", e);
     }
   }
 

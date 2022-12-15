@@ -23,7 +23,7 @@ interface NetworkRequestQueue {
   boolean offer(NetworkRequest request);
 
   /**
-   * @return {@link NetworkRequestBundle} that contains collections of requests to be served or dropped.
+   * @return {@link NetworkRequestBundle} that contains collections of requests to be served or dropped due to time out.
    * @throws InterruptedException
    */
   NetworkRequestBundle take() throws InterruptedException;

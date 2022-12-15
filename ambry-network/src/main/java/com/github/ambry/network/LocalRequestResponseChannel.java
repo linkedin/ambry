@@ -15,7 +15,6 @@ package com.github.ambry.network;
 
 import com.github.ambry.utils.BatchBlockingQueue;
 import java.io.InputStream;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -53,7 +52,12 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
       LocalChannelRequest localRequest = (LocalChannelRequest) request;
       logger.debug("Removed request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
     }
-    return new NetworkRequestBundle(request, Collections.EMPTY_LIST);
+    return new NetworkRequestBundle(request, Collections.emptyList());
+  }
+
+  @Override
+  public List<NetworkRequest> getUnqueuedRequests() {
+    return Collections.emptyList();
   }
 
   @Override

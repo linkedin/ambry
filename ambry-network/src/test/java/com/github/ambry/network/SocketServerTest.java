@@ -100,7 +100,7 @@ public class SocketServerTest {
     channel.connect();
     channel.send(bufferToSend);
     RequestResponseChannel requestResponseChannel = server.getRequestResponseChannel();
-    NetworkRequest request = requestResponseChannel.receiveRequest();
+    NetworkRequest request = requestResponseChannel.receiveRequest().getRequestToServe();
     DataInputStream requestStream = new DataInputStream(request.getInputStream());
     byte[] outputBytes = new byte[1020];
     requestStream.readFully(outputBytes);

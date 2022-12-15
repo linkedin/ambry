@@ -21,8 +21,8 @@ import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -133,7 +133,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   private final ArrayList<ResponseListener> responseListeners;
   private final NetworkRequestQueue networkRequestQueue;
   private static final Logger LOGGER = LoggerFactory.getLogger(SocketRequestResponseChannel.class);
-  private final Queue<NetworkRequest> unqueuedRequests = new ConcurrentLinkedQueue<>();
+  private final BlockingQueue<NetworkRequest> unqueuedRequests = new LinkedBlockingQueue<>();
 
   public SocketRequestResponseChannel(NetworkConfig config) {
     this.numProcessors = config.numIoThreads;
@@ -201,6 +201,22 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
       networkRequestBundle.getRequestsToDrop().add(unqueuedRequest);
     }
     return networkRequestBundle;
+  }
+
+  @Override
+  public List<NetworkRequest> getUnqueuedRequests() throws InterruptedException {
+    List<NetworkRequest> requestsToDrop = new ArrayList<>();
+    NetworkRequest unqueuedRequest;
+    while ((unqueuedRequest = unqueuedRequests.poll()) != null) {
+      requestsToDrop.add(unqueuedRequest);
+    }
+    if (requestsToDrop.isEmpty()) {
+      // If there are no un-queued requests, wait on the queue to avoid the thread dequeing the requests going into
+      // continuous loop.
+      unqueuedRequest = unqueuedRequests.take();
+      requestsToDrop.add(unqueuedRequest);
+    }
+    return requestsToDrop;
   }
 
   /** Get a response for the given processor if there is one */

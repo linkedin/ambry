@@ -60,7 +60,6 @@ import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
-import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
