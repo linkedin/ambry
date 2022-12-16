@@ -17,6 +17,6 @@ package com.github.ambry.network;
  * Request queue type.
  */
 public enum RequestQueueType {
-  BASIC_FIFO,
-  ADAPTIVE_LIFO_CO_DEL
+  BASIC_QUEUE_WITH_FIFO,
+  ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL
 }

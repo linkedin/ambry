@@ -86,8 +86,8 @@ public class SocketRequestResponseChannelTest {
   public void testSocketRequestResponseChannelTest() {
     try {
       Properties properties = new Properties();
-      properties.put("num.io.threads", 2);
-      properties.put("queued.max.requests", 10);
+      properties.put("num.io.threads", String.valueOf(2));
+      properties.put("queued.max.requests", String.valueOf(10));
       SocketRequestResponseChannel channel =
           new SocketRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)));
       String connectionId = "test_connectionId";
@@ -97,7 +97,7 @@ public class SocketRequestResponseChannelTest {
       buffer.writeBytes(content);
       SocketServerRequest request = new SocketServerRequest(0, connectionId, buffer);
       channel.sendRequest(request);
-      request = (SocketServerRequest) channel.receiveRequest().getRequestToServe();
+      request = (SocketServerRequest) channel.receiveRequest();
       Assert.assertEquals(request.getProcessor(), 0);
       Assert.assertEquals(request.getConnectionId(), connectionId);
       InputStream stream = request.getInputStream();

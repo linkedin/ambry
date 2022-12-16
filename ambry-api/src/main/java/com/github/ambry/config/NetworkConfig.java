@@ -124,31 +124,27 @@ public class NetworkConfig {
 
   /**
    * The type of queue to use to hold requests waiting to be processed.
-   * TODO: Do tests to tune controlled delay queue parameters before switching the request queue type to {@link RequestQueueType#ADAPTIVE_LIFO_CO_DEL}
+   * TODO: Do tests to tune controlled delay queue parameters before switching the request queue type to {@link RequestQueueType#ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL}
    */
   @Config("request.queue.type")
-  @Default("BASIC_FIFO")
   public final RequestQueueType requestQueueType;
 
   /**
    * The maximum time in milliseconds a request is allowed to spend in the queue waiting to be processed.
    */
   @Config("request.queue.timeout.ms")
-  @Default("2000")
   public final int requestQueueTimeoutMs;
 
   /**
    * The maximum queue delay that is allowed for a request when using Controlled delay algorithm.
    */
   @Config("adaptive.lifo.queue.codel.target.delay.ms")
-  @Default("100")
   public final int adaptiveLifoQueueCodelTargetDelayMs;
 
   /**
    * The threshold over which we switch the request queue from FIFO to LIFO mode.
    */
   @Config("adaptive.lifo.queue.threshold")
-  @Default("0.7")
   public final double adaptiveLifoQueueThreshold;
 
   public NetworkConfig(VerifiableProperties verifiableProperties) {
@@ -170,7 +166,7 @@ public class NetworkConfig {
         verifiableProperties.getIntInRange(SELECTOR_MAX_KEY_TO_PROCESS, -1, -1, Integer.MAX_VALUE);
     selectorUseDirectBuffers = verifiableProperties.getBoolean(SELECTOR_USE_DIRECT_BUFFERS, false);
     requestQueueType =
-        verifiableProperties.getEnum("request.queue.type", RequestQueueType.class, RequestQueueType.BASIC_FIFO);
+        verifiableProperties.getEnum("request.queue.type", RequestQueueType.class, RequestQueueType.BASIC_QUEUE_WITH_FIFO);
     requestQueueTimeoutMs = verifiableProperties.getIntInRange("request.queue.timeout.ms", 2000, 0, Integer.MAX_VALUE);
     adaptiveLifoQueueCodelTargetDelayMs =
         verifiableProperties.getIntInRange("adaptive.lifo.queue.codel.target.delay.ms", 100, 0, Integer.MAX_VALUE);

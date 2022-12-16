@@ -48,8 +48,7 @@ public class RequestHandlerPool implements Closeable {
       threads[i] = Utils.daemonThread("request-handler-" + i, handlers[i]);
       threads[i].start();
     }
-    // Also, start a thread for dropping any un-queued requests in requestResponceChannel to avoid un-queued requests
-    // growing in unbounded fashion.
+    // Also, start a thread to drop any un-queued and expired requests in requestResponceChannel.
     requestDropper = new RequestDropper(requestResponseChannel, requests);
     requestDropperThread = Utils.daemonThread("request-dropper", requestDropper);
     requestDropperThread.start();

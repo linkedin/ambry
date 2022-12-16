@@ -14,10 +14,8 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.network.NetworkRequest;
-import com.github.ambry.network.NetworkRequestBundle;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.server.EmptyRequest;
-import java.util.Collection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,46 +36,25 @@ public class RequestHandler implements Runnable {
   }
 
   public void run() {
-    NetworkRequestBundle requestBundle;
-    NetworkRequest requestToServe = null;
-    Collection<NetworkRequest> requestsToDrop = null;
+    NetworkRequest req = null;
     while (true) {
       try {
-        requestBundle = requestChannel.receiveRequest();
-        requestToServe = requestBundle.getRequestToServe();
-        requestsToDrop = requestBundle.getRequestsToDrop();
-
-        // Drop requests
-        for (NetworkRequest requestToDrop : requestsToDrop) {
-          if (requestToDrop.equals(EmptyRequest.getInstance())) {
-            logger.debug("Request handler {} received shut down command", id);
-            return;
-          }
-          requests.dropRequest(requestToDrop);
-          logger.trace("Request handler {} dropping request {}", id, requestToDrop);
+        req = requestChannel.receiveRequest();
+        if (req.equals(EmptyRequest.getInstance())) {
+          logger.debug("Request handler {} received shut down command", id);
+          return;
         }
-
-        // Serve requests
-        if (requestToServe != null) {
-          if (requestToServe.equals(EmptyRequest.getInstance())) {
-            logger.debug("Request handler {} received shut down command", id);
-            return;
-          }
-          requests.handleRequests(requestToServe);
-          logger.trace("Request handler {} handling request {}", id, requestToServe);
-        }
+        requests.handleRequests(req);
+        logger.trace("Request handler {} handling request {}", id, req);
       } catch (Throwable e) {
         // TODO add metric to track background threads
         logger.error("Exception when handling request", e);
         // this is bad and we need to shutdown the app
         Runtime.getRuntime().halt(1);
       } finally {
-        // Release any resources associated with requests.
-        if (requestsToDrop != null) {
-          requestsToDrop.forEach(NetworkRequest::release);
-        }
-        if (requestToServe != null) {
-          requestToServe.release();
+        if (req != null) {
+          req.release();
+          req = null;
         }
       }
     }

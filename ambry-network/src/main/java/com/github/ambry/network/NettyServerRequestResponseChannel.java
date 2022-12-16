@@ -23,7 +23,6 @@ import io.netty.channel.ChannelHandlerContext;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -44,12 +43,12 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
 
   public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics) {
     switch (config.requestQueueType) {
-      case ADAPTIVE_LIFO_CO_DEL:
+      case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
         this.networkRequestQueue =
             new AdaptiveLifoCoDelNetworkRequestQueue(config.queuedMaxRequests, config.adaptiveLifoQueueThreshold,
                 config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance());
         break;
-      case BASIC_FIFO:
+      case BASIC_QUEUE_WITH_FIFO:
         this.networkRequestQueue = new FifoNetworkRequestQueue(config.queuedMaxRequests, config.requestQueueTimeoutMs,
             SystemTime.getInstance());
         break;
@@ -62,10 +61,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   /** Send a request to be handled */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    if (!networkRequestQueue.offer(request)) {
-      logger.warn("Request queue is full, dropping incoming request: {}", request);
-      unqueuedRequests.offer(request);
-    }
+    networkRequestQueue.put(request);
     http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
   }
 
@@ -104,67 +100,32 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     }
   }
 
-  /** Get the next request or block until there is one.
-   * @return*/
   @Override
-  public NetworkRequestBundle receiveRequest() throws InterruptedException {
-
-    NetworkRequestBundle networkRequestBundle;
-    NetworkRequest requestToServe;
-    Collection<NetworkRequest> requestsToDrop;
-    do {
-      networkRequestBundle = networkRequestQueue.take();
-      NetworkRequest unqueuedRequest;
-      while ((unqueuedRequest = unqueuedRequests.poll()) != null) {
-        networkRequestBundle.getRequestsToDrop().add(unqueuedRequest);
+  public NetworkRequest receiveRequest() throws InterruptedException {
+    NetworkRequest request;
+    while (true) {
+      request = networkRequestQueue.take();
+      http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
+      if (consumeStream(request)) {
+        return request;
       }
-      requestToServe = networkRequestBundle.getRequestToServe();
-      requestsToDrop = networkRequestBundle.getRequestsToDrop();
-
-      // Consume the first 8 bytes of requests since TCP impl uses this size to allocate buffer.
-      if (requestToServe != null) {
-        http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - requestToServe.getStartTimeInMs());
-        if (!consumeStream(requestToServe)) {
-          requestToServe = null;
-        }
-      }
-      Set<NetworkRequest> errorRequests = new HashSet<>();
-      for (NetworkRequest requestToDrop : requestsToDrop) {
-        http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - requestToDrop.getStartTimeInMs());
-        if (!consumeStream(requestToDrop)) {
-          errorRequests.add(requestToDrop);
-          logger.error("Error reading the stream, dropping the request: {}", requestToDrop);
-        }
-      }
-      requestsToDrop.removeAll(errorRequests);
-    } while (requestToServe == null && requestsToDrop.isEmpty());
-
-    return new NetworkRequestBundle(requestToServe, requestsToDrop);
+    }
   }
 
   @Override
-  public List<NetworkRequest> getUnqueuedRequests() throws InterruptedException {
-    List<NetworkRequest> requestsToDrop = new ArrayList<>();
-    NetworkRequest unqueuedRequest;
-    do {
-      while ((unqueuedRequest = unqueuedRequests.poll()) != null) {
-        requestsToDrop.add(unqueuedRequest);
-      }
-      if (requestsToDrop.isEmpty()) {
-        // If there are no un-queued requests, wait on the queue.
-        unqueuedRequest = unqueuedRequests.take();
-        requestsToDrop.add(unqueuedRequest);
-      }
-      Set<NetworkRequest> errorRequests = new HashSet<>();
-      for (NetworkRequest requestToDrop : requestsToDrop) {
-        if (!consumeStream(requestToDrop)) {
-          errorRequests.add(requestToDrop);
-          logger.error("Error reading the stream, dropping the request: {}", requestToDrop);
+  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
+    while (true) {
+      List<NetworkRequest> droppedRequests = networkRequestQueue.getDroppedRequests();
+      List<NetworkRequest> validDroppedRequests = new ArrayList<>();
+      for (NetworkRequest requestToDrop : droppedRequests) {
+        if (consumeStream(requestToDrop)) {
+          validDroppedRequests.add(requestToDrop);
         }
       }
-      requestsToDrop.removeAll(errorRequests);
-    }  while (requestsToDrop.isEmpty());
-    return requestsToDrop;
+      if (!validDroppedRequests.isEmpty()) {
+        return validDroppedRequests;
+      }
+    }
   }
 
   /**
@@ -183,7 +144,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
         // Here we just need to consume it.
         stream.readLong();
       } catch (IOException e) {
-        logger.error("Encountered an error while reading length out, close the connection", e);
+        logger.error("Encountered an error while reading length out of request {}, close the connection", request, e);
         closeConnection(request);
         return false;
       }

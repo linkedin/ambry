@@ -36,19 +36,19 @@ public interface RequestResponseChannel {
 
   /**
    * Receives the request from the channel
-   * @return A bundle of requests that were queued by the network layer into the channel. The bundle may include 0 or 1
-   *         requests to handle, and 0 or more requests that should be dropped.
-   * @throws InterruptedException if the thread was interrupted.
+   * @return The request that was queued by the network layer into the channel
+   * @throws InterruptedException
    */
-  NetworkRequestBundle receiveRequest() throws InterruptedException;
+  NetworkRequest receiveRequest() throws InterruptedException;
 
   /**
    * @return a list of overflow {@link NetworkRequest}s which couldn't be queued in the channel due to capacity bounds.
+   * @throws InterruptedException
    */
-  List<NetworkRequest> getUnqueuedRequests() throws InterruptedException;
+  List<NetworkRequest> getDroppedRequests() throws InterruptedException;
 
   /**
-   * Sends a request over the network. The request gets queued by the channel.
+   * Sends a request received from network over the channel. The request gets queued by the channel.
    * @param request The request to be queued by the channel
    * @throws InterruptedException
    */

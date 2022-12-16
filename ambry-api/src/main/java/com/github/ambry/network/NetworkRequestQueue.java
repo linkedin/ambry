@@ -13,20 +13,28 @@
  */
 package com.github.ambry.network;
 
+import java.util.List;
+
+
 interface NetworkRequestQueue {
 
   /**
-   * Inserts the element into queue.
-   * @param request element to be inserted.
-   * @return false if an element fails to be inserted.
+   * Inserts request into queue.
+   * @param request to be inserted.
    */
-  boolean offer(NetworkRequest request);
+  void put(NetworkRequest request) throws InterruptedException;
 
   /**
-   * @return {@link NetworkRequestBundle} that contains collections of requests to be served or dropped due to time out.
-   * @throws InterruptedException
+   * Get next request to serve (waiting if necessary).
+   * @return {@link NetworkRequest} to be served.
    */
-  NetworkRequestBundle take() throws InterruptedException;
+  NetworkRequest take() throws InterruptedException;
+
+  /**
+   * Get list of requests which have timed out in queue or couldn't be added to queue due to capacity.
+   * @return list of {@link NetworkRequest}s to be dropped.
+   */
+  List<NetworkRequest> getDroppedRequests() throws InterruptedException;
 
   /**
    * @return the size of the queue.

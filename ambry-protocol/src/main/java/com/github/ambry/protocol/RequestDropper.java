@@ -1,5 +1,5 @@
 /**
- * Copyright 2016 LinkedIn Corp. All rights reserved.
+ * Copyright 2022 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,7 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * This class is used to query request channel for overflow requests and drop them. This is to make sure we don't let
- * un-queued requests grow unbounded.
+ * This class is used to query request channel for overflow or expired requests and drop them.
  */
 public class RequestDropper implements Runnable {
   private final RequestResponseChannel requestChannel;
@@ -39,14 +38,14 @@ public class RequestDropper implements Runnable {
     Collection<NetworkRequest> requestsToDrop = null;
     while (true) {
       try {
-        requestsToDrop = requestChannel.getUnqueuedRequests();
+        requestsToDrop = requestChannel.getDroppedRequests();
         for (NetworkRequest requestToDrop : requestsToDrop) {
           if (requestToDrop.equals(EmptyRequest.getInstance())) {
             logger.debug("Request dropper received shut down command");
             return;
           }
           requests.dropRequest(requestToDrop);
-          logger.trace("Request dropper dropping request {}", requestToDrop);
+          logger.warn("Request dropper dropping request {}", requestToDrop);
         }
       } catch (Throwable e) {
         // TODO add metric to track background threads

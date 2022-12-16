@@ -46,17 +46,17 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   }
 
   @Override
-  public NetworkRequestBundle receiveRequest() throws InterruptedException {
+  public NetworkRequest receiveRequest() throws InterruptedException {
     NetworkRequest request = requestQueue.take();
     if (request instanceof LocalChannelRequest) {
       LocalChannelRequest localRequest = (LocalChannelRequest) request;
       logger.debug("Removed request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
     }
-    return new NetworkRequestBundle(request, Collections.emptyList());
+    return request;
   }
 
   @Override
-  public List<NetworkRequest> getUnqueuedRequests() {
+  public List<NetworkRequest> getDroppedRequests() {
     return Collections.emptyList();
   }
 

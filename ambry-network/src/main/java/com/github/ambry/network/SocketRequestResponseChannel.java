@@ -22,9 +22,7 @@ import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -139,12 +137,12 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
     this.numProcessors = config.numIoThreads;
     Time time = SystemTime.getInstance();
     switch (config.requestQueueType) {
-      case ADAPTIVE_LIFO_CO_DEL:
+      case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
         this.networkRequestQueue =
             new AdaptiveLifoCoDelNetworkRequestQueue(config.queuedMaxRequests, config.adaptiveLifoQueueThreshold,
                 config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, time);
         break;
-      case BASIC_FIFO:
+      case BASIC_QUEUE_WITH_FIFO:
         this.networkRequestQueue =
             new FifoNetworkRequestQueue(config.queuedMaxRequests, config.requestQueueTimeoutMs, time);
         break;
@@ -162,10 +160,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    if (!networkRequestQueue.offer(request)) {
-      LOGGER.debug("Request queue is full, dropping incoming request: {}", request);
-      unqueuedRequests.add(request);
-    }
+    networkRequestQueue.put(request);
   }
 
   /** Send a response back to the socket server to be sent over the network */
@@ -192,31 +187,14 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
     }
   }
 
-  /** Get the next request or block until there is one */
   @Override
-  public NetworkRequestBundle receiveRequest() throws InterruptedException {
-    NetworkRequestBundle networkRequestBundle = networkRequestQueue.take();
-    NetworkRequest unqueuedRequest;
-    while ((unqueuedRequest = unqueuedRequests.poll()) != null) {
-      networkRequestBundle.getRequestsToDrop().add(unqueuedRequest);
-    }
-    return networkRequestBundle;
+  public NetworkRequest receiveRequest() throws InterruptedException {
+    return networkRequestQueue.take();
   }
 
   @Override
-  public List<NetworkRequest> getUnqueuedRequests() throws InterruptedException {
-    List<NetworkRequest> requestsToDrop = new ArrayList<>();
-    NetworkRequest unqueuedRequest;
-    while ((unqueuedRequest = unqueuedRequests.poll()) != null) {
-      requestsToDrop.add(unqueuedRequest);
-    }
-    if (requestsToDrop.isEmpty()) {
-      // If there are no un-queued requests, wait on the queue to avoid the thread dequeing the requests going into
-      // continuous loop.
-      unqueuedRequest = unqueuedRequests.take();
-      requestsToDrop.add(unqueuedRequest);
-    }
-    return requestsToDrop;
+  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
+    return networkRequestQueue.getDroppedRequests();
   }
 
   /** Get a response for the given processor if there is one */

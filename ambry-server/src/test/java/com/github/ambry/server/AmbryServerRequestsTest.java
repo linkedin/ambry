@@ -2006,7 +2006,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     }
 
     @Override
-    public List<NetworkRequest> getUnqueuedRequests() {
+    public List<NetworkRequest> getDroppedRequests() {
       return Collections.emptyList();
     }
   }

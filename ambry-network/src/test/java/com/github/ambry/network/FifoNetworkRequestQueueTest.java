@@ -15,6 +15,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.utils.MockTime;
 import java.io.InputStream;
+import java.util.List;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -25,14 +26,16 @@ public class FifoNetworkRequestQueueTest {
   private final int timeout = 100;
 
   @Test
-  public void testOffer() {
+  public void testPut() throws InterruptedException {
     MockTime mockTime = new MockTime();
     FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(capacity, timeout, mockTime);
-    // Test that offer() returns false once queue is full.
-    for (int i = 0; i < capacity; i++) {
-      assertTrue("Unable to queue request", requestQueue.offer(new MockRequest(0)));
+    // Test that queue holds elements once it is full.
+    int overflow = 5;
+    for (int i = 0; i < capacity + overflow; i++) {
+      requestQueue.put(new MockRequest(0));
     }
-    assertFalse("Queue should have full", requestQueue.offer(new MockRequest(0)));
+    List<NetworkRequest> droppedRequests = requestQueue.getDroppedRequests();
+    assertEquals("Mismatch in number of dropped requests", overflow, droppedRequests.size());
   }
 
   @Test
@@ -41,43 +44,36 @@ public class FifoNetworkRequestQueueTest {
     FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(capacity, timeout, mockTime);
 
     // Test de-queuing a request
-    MockRequest mockRequest = new MockRequest(0);
-    requestQueue.offer(mockRequest);
-    NetworkRequestBundle requestBundle = requestQueue.take();
-    assertEquals("Mismatch in request queued", mockRequest, requestBundle.getRequestToServe());
+    MockRequest sentRequest = new MockRequest(0);
+    requestQueue.put(sentRequest);
+    NetworkRequest receivedRequest = requestQueue.take();
+    assertEquals("Mismatch in request queued", sentRequest, receivedRequest);
 
     // Test case where request is valid
-    requestQueue.offer(mockRequest);
+    requestQueue.put(sentRequest);
     mockTime.sleep(timeout - 1);
-    requestBundle = requestQueue.take();
-    assertEquals("Requests to serve must not be empty", mockRequest, requestBundle.getRequestToServe());
-
-    // Test case where request is expired
-    requestQueue.offer(new MockRequest(mockTime.milliseconds()));
-    mockTime.sleep(timeout + 1);
-    requestBundle = requestQueue.take();
-    assertNull("Requests to serve must be empty", requestBundle.getRequestToServe());
-    assertEquals("There should be one expired request", 1, requestBundle.getRequestsToDrop().size());
+    receivedRequest = requestQueue.take();
+    assertEquals("Requests to serve must not be empty", sentRequest, receivedRequest);
 
     // Test case where there is one expired request and one valid request
     MockRequest expiredRequest = new MockRequest(mockTime.milliseconds());
-    requestQueue.offer(expiredRequest);
+    requestQueue.put(expiredRequest);
     mockTime.sleep(timeout + 1);
     MockRequest validRequest = new MockRequest(mockTime.milliseconds());
     mockTime.sleep(timeout - 1);
-    requestQueue.offer(validRequest);
-    requestBundle = requestQueue.take();
-    assertEquals("There should be expired requests", expiredRequest,
-        requestBundle.getRequestsToDrop().iterator().next());
-    assertEquals("There should be valid requests", validRequest, requestBundle.getRequestToServe());
+    requestQueue.put(validRequest);
+    receivedRequest = requestQueue.take();
+    List<NetworkRequest> droppedRequests = requestQueue.getDroppedRequests();
+    assertEquals("Mismatch in dropped requests", expiredRequest, droppedRequests.iterator().next());
+    assertEquals("Mismatch in valid requests", validRequest, receivedRequest);
   }
 
   @Test
-  public void testSize() {
+  public void testSize() throws InterruptedException {
     int size = 5;
     FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(capacity, timeout, new MockTime());
     for (int i = 0; i < size; i++) {
-      assertTrue("Unable to queue request", requestQueue.offer(new MockRequest(0)));
+      requestQueue.put(new MockRequest(0));
     }
     assertEquals("Mismatch in size of queue", size, requestQueue.size());
   }
