@@ -19,7 +19,7 @@ ext {
     javaxVersion = "3.0.1"
     nettyVersion = "4.1.74.Final"
     nettyTcnativeVersion = "2.0.42.Final"
-    helixVersion = "1.0.4"
+    helixVersion = "1.1.0"
     jacksonVersion = "2.10.2"
     jaydioVersion = "0.1"
     azureStorageBlobVersion = "12.15.0"
