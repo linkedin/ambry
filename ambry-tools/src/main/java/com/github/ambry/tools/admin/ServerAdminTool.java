@@ -826,7 +826,6 @@ public class ServerAdminTool implements Closeable {
         new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, flags, partitionRequestInfos, getOption);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, getRequest);
     InputStream serverResponseStream = new NettyByteBufDataInputStream(response.content());
-//  response.release();
     GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
     ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
     ServerErrorCode errorCode =
