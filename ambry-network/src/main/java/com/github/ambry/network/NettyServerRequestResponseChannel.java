@@ -13,6 +13,7 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.server.EmptyRequest;
@@ -22,12 +23,9 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,29 +37,29 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   private static final Logger logger = LoggerFactory.getLogger(NettyServerRequestResponseChannel.class);
   private final Http2ServerMetrics http2ServerMetrics;
   private final NetworkRequestQueue networkRequestQueue;
-  private final BlockingQueue<NetworkRequest> unqueuedRequests = new LinkedBlockingQueue<>();
 
-  public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics) {
+  public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics,
+      ServerMetrics serverMetrics) {
     switch (config.requestQueueType) {
       case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
-        this.networkRequestQueue =
-            new AdaptiveLifoCoDelNetworkRequestQueue(config.queuedMaxRequests, config.adaptiveLifoQueueThreshold,
-                config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance());
+        this.networkRequestQueue = new AdaptiveLifoCoDelNetworkRequestQueue(config.adaptiveLifoQueueThreshold,
+            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance());
         break;
       case BASIC_QUEUE_WITH_FIFO:
-        this.networkRequestQueue = new FifoNetworkRequestQueue(config.queuedMaxRequests, config.requestQueueTimeoutMs,
-            SystemTime.getInstance());
+        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, SystemTime.getInstance());
         break;
       default:
         throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
     }
     this.http2ServerMetrics = http2ServerMetrics;
+    serverMetrics.registerRequestQueuesMetrics(networkRequestQueue::numActiveRequests,
+        networkRequestQueue::numDroppedRequests);
   }
 
   /** Send a request to be handled */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    networkRequestQueue.put(request);
+    networkRequestQueue.offer(request);
     http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
   }
 
@@ -106,7 +104,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     while (true) {
       request = networkRequestQueue.take();
       http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
-      if (consumeStream(request)) {
+      if (consumeSizeHeader(request)) {
         return request;
       }
     }
@@ -118,7 +116,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
       List<NetworkRequest> droppedRequests = networkRequestQueue.getDroppedRequests();
       List<NetworkRequest> validDroppedRequests = new ArrayList<>();
       for (NetworkRequest requestToDrop : droppedRequests) {
-        if (consumeStream(requestToDrop)) {
+        if (consumeSizeHeader(requestToDrop)) {
           validDroppedRequests.add(requestToDrop);
         }
       }
@@ -129,23 +127,26 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   }
 
   /**
-   * Consumes the first 8 bytes of the input stream in the incoming request since TCP implementation uses this size to
-   * allocated Buffer.
+   * Consume the first 8 bytes of the input stream which represents the size of the request. This is added to the
+   * request since Ambry's {@link SocketServer} stack needs to know the number of the bytes to read for a request
+   * (see {@link BoundedNettyByteBufReceive#readFrom(ReadableByteChannel)} method). This is not needed when using
+   * Netty HTTP2 server stack. We can remove this once {@link SocketServer} stack is retired. For now, we are
+   * consuming the bytes here so that rest of request handling in server is same.
    * @param request incoming network request.
    * @return false if there was any error while reading the first 8 bytes. Else, return true.
    */
-  private boolean consumeStream(NetworkRequest request) throws InterruptedException {
+  private boolean consumeSizeHeader(NetworkRequest request) throws InterruptedException {
     if (request.equals(EmptyRequest.getInstance())) {
       logger.debug("Request handler {} received shut down command ", request);
     } else {
       DataInputStream stream = new DataInputStream(request.getInputStream());
       try {
-        // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
-        // Here we just need to consume it.
         stream.readLong();
       } catch (IOException e) {
         logger.error("Encountered an error while reading length out of request {}, close the connection", request, e);
         closeConnection(request);
+        // Release the memory held by this request.
+        request.release();
         return false;
       }
     }

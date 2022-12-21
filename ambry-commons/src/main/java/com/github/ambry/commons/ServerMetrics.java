@@ -14,6 +14,7 @@
 package com.github.ambry.commons;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
@@ -275,6 +276,9 @@ public class ServerMetrics {
 
   private final MetricRegistry registry;
   private final Class<?> requestClass;
+
+  public Gauge<Integer> activeRequestsQueueSize;
+  public Gauge<Integer> droppedRequestsQueueSize;
 
   public ServerMetrics(MetricRegistry registry, Class<?> requestClass) {
     this(registry, requestClass, null);
@@ -611,6 +615,14 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionSuccess"));
     serverValidateConnectionFailure =
         registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionFailure"));
+  }
+
+  public void registerRequestQueuesMetrics(Gauge<Integer> activeRequestsQueueSize,
+      Gauge<Integer> droppedRequestsQueueSize) {
+    this.activeRequestsQueueSize = registry.gauge(MetricRegistry.name(ServerMetrics.class, "ActiveRequestsQueueSize"),
+        () -> activeRequestsQueueSize);
+    this.droppedRequestsQueueSize = registry.gauge(MetricRegistry.name(ServerMetrics.class, "DroppedRequestsQueueSize"),
+        () -> droppedRequestsQueueSize);
   }
 
   public void registerParticipantsMismatchMetrics() {

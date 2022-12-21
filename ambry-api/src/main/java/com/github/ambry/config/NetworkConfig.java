@@ -35,6 +35,10 @@ public class NetworkConfig {
   public static final String SELECTOR_EXECUTOR_POOL_SIZE = "selector.executor.pool.size";
   public static final String SELECTOR_MAX_KEY_TO_PROCESS = "selector.max.key.to.process";
   public static final String SELECTOR_USE_DIRECT_BUFFERS = "selector.use.direct.buffers";
+  public static final String REQUEST_QUEUE_TYPE = "request.queue.type";
+  public static final String REQUEST_QUEUE_TIMEOUT_MS = "request.queue.timeout.ms";
+  public static final String ADAPTIVE_LIFO_QUEUE_CODEL_TARGET_DELAY_MS = "adaptive.lifo.queue.codel.target.delay.ms";
+  public static final String ADAPTIVE_LIFO_QUEUE_THRESHOLD = "adaptive.lifo.queue.threshold";
 
   /**
    * The number of io threads that the server uses for carrying out network requests
@@ -42,13 +46,6 @@ public class NetworkConfig {
   @Config(NUM_IO_THREADS)
   @Default("8")
   public final int numIoThreads;
-
-  /**
-   * The number of queued requests allowed before blocking the network threads
-   */
-  @Config(QUEUED_MAX_REQUESTS)
-  @Default("500")
-  public final int queuedMaxRequests;
 
   /**
    * The port to listen and accept connections on
@@ -124,32 +121,36 @@ public class NetworkConfig {
 
   /**
    * The type of queue to use to hold requests waiting to be processed.
-   * TODO: Do tests to tune controlled delay queue parameters before switching the request queue type to {@link RequestQueueType#ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL}
+   * TODO: We need to come up right configuration values for {@link RequestQueueType#ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL}.
+   *  Until then, only use {@link RequestQueueType#BASIC_QUEUE_WITH_FIFO}.
    */
-  @Config("request.queue.type")
+  @Config(REQUEST_QUEUE_TYPE)
   public final RequestQueueType requestQueueType;
 
   /**
-   * The maximum time in milliseconds a request is allowed to spend in the queue waiting to be processed.
+   * The maximum time in milliseconds a request is allowed to spend in the queue waiting to be processed. Choose this
+   * value based on the Ambry frontend request timeout value {@link RouterConfig#routerRequestNetworkTimeoutMs} and
+   * request processing time at server. For ex, if request timeout at frontend is 4 seconds and request processing time
+   * at server is 1 seconds, choose queue timeout to be around 2 seconds assuming 1 seconds goes in sending response via
+   * network, etc.
    */
-  @Config("request.queue.timeout.ms")
+  @Config(REQUEST_QUEUE_TIMEOUT_MS)
   public final int requestQueueTimeoutMs;
 
   /**
    * The maximum queue delay that is allowed for a request when using Controlled delay algorithm.
    */
-  @Config("adaptive.lifo.queue.codel.target.delay.ms")
+  @Config(ADAPTIVE_LIFO_QUEUE_CODEL_TARGET_DELAY_MS)
   public final int adaptiveLifoQueueCodelTargetDelayMs;
 
   /**
-   * The threshold over which we switch the request queue from FIFO to LIFO mode.
+   * The capacity threshold over which we switch the request queue from FIFO to LIFO mode.
    */
-  @Config("adaptive.lifo.queue.threshold")
-  public final double adaptiveLifoQueueThreshold;
+  @Config(ADAPTIVE_LIFO_QUEUE_THRESHOLD)
+  public final int adaptiveLifoQueueThreshold;
 
   public NetworkConfig(VerifiableProperties verifiableProperties) {
     numIoThreads = verifiableProperties.getIntInRange(NUM_IO_THREADS, 8, 1, Integer.MAX_VALUE);
-    queuedMaxRequests = verifiableProperties.getIntInRange(QUEUED_MAX_REQUESTS, 500, 1, Integer.MAX_VALUE);
     port = verifiableProperties.getInt(PORT, 6667);
     hostName = verifiableProperties.getString(HOST_NAME, "localhost");
     socketSendBufferBytes = verifiableProperties.getInt(SOCKET_SEND_BUFFER_BYTES, 1 * 1024 * 1024);
@@ -165,11 +166,13 @@ public class NetworkConfig {
     selectorMaxKeyToProcess =
         verifiableProperties.getIntInRange(SELECTOR_MAX_KEY_TO_PROCESS, -1, -1, Integer.MAX_VALUE);
     selectorUseDirectBuffers = verifiableProperties.getBoolean(SELECTOR_USE_DIRECT_BUFFERS, false);
-    requestQueueType =
-        verifiableProperties.getEnum("request.queue.type", RequestQueueType.class, RequestQueueType.BASIC_QUEUE_WITH_FIFO);
-    requestQueueTimeoutMs = verifiableProperties.getIntInRange("request.queue.timeout.ms", 2000, 0, Integer.MAX_VALUE);
+
+    requestQueueType = verifiableProperties.getEnum(REQUEST_QUEUE_TYPE, RequestQueueType.class,
+        RequestQueueType.BASIC_QUEUE_WITH_FIFO);
+    requestQueueTimeoutMs = verifiableProperties.getIntInRange(REQUEST_QUEUE_TIMEOUT_MS, 2000, 0, Integer.MAX_VALUE);
     adaptiveLifoQueueCodelTargetDelayMs =
-        verifiableProperties.getIntInRange("adaptive.lifo.queue.codel.target.delay.ms", 100, 0, Integer.MAX_VALUE);
-    adaptiveLifoQueueThreshold = verifiableProperties.getDoubleInRange("adaptive.queue.lifo.threshold", 0.7, 0.0, 1.0);
+        verifiableProperties.getIntInRange(ADAPTIVE_LIFO_QUEUE_CODEL_TARGET_DELAY_MS, 100, 0, Integer.MAX_VALUE);
+    adaptiveLifoQueueThreshold =
+        verifiableProperties.getIntInRange(ADAPTIVE_LIFO_QUEUE_THRESHOLD, 2000, 0, Integer.MAX_VALUE);
   }
 }

@@ -197,73 +197,72 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
-  public void dropRequest(NetworkRequest request) throws InterruptedException {
+  public void dropRequest(NetworkRequest networkRequest) throws InterruptedException {
     try {
-      InputStream is = request.getInputStream();
+      InputStream is = networkRequest.getInputStream();
       DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
       RequestOrResponseType type = RequestOrResponseType.values()[dis.readShort()];
+      RequestOrResponse request;
       Response response;
-      long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
-      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, 0, 0, 0, true);
+      long requestProcessingStartTime = SystemTime.getInstance().milliseconds();
+      long requestQueueTime = requestProcessingStartTime - networkRequest.getStartTimeInMs();
       switch (type) {
         case PutRequest:
-          PutRequest putRequest = PutRequest.readFrom(dis, clusterMap);
-          putRequest.accept(metricsUpdater);
-          response = new PutResponse(putRequest.getCorrelationId(), putRequest.getClientId(),
-              ServerErrorCode.Retry_After_Backoff);
+          request = PutRequest.readFrom(dis, clusterMap);
+          response =
+              new PutResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
           break;
         case GetRequest:
-          GetRequest getRequest = GetRequest.readFrom(dis, clusterMap);
-          getRequest.accept(metricsUpdater);
-          response = new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-              ServerErrorCode.Retry_After_Backoff);
-
+          request = GetRequest.readFrom(dis, clusterMap);
+          response =
+              new GetResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
           break;
         case DeleteRequest:
-          DeleteRequest deleteRequest = DeleteRequest.readFrom(dis, clusterMap);
-          deleteRequest.accept(metricsUpdater);
-          response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
+          request = DeleteRequest.readFrom(dis, clusterMap);
+          response = new DeleteResponse(request.getCorrelationId(), request.getClientId(),
               ServerErrorCode.Retry_After_Backoff);
           break;
         case TtlUpdateRequest:
-          TtlUpdateRequest ttlUpdateRequest = TtlUpdateRequest.readFrom(dis, clusterMap);
-          ttlUpdateRequest.accept(metricsUpdater);
-          response = new TtlUpdateResponse(ttlUpdateRequest.getCorrelationId(), ttlUpdateRequest.getClientId(),
+          request = TtlUpdateRequest.readFrom(dis, clusterMap);
+          response = new TtlUpdateResponse(request.getCorrelationId(), request.getClientId(),
               ServerErrorCode.Retry_After_Backoff);
           break;
         case UndeleteRequest:
-          UndeleteRequest undeleteRequest = UndeleteRequest.readFrom(dis, clusterMap);
-          undeleteRequest.accept(metricsUpdater);
-          response = new UndeleteResponse(undeleteRequest.getCorrelationId(), undeleteRequest.getClientId(),
+          request = UndeleteRequest.readFrom(dis, clusterMap);
+          response = new UndeleteResponse(request.getCorrelationId(), request.getClientId(),
               ServerErrorCode.Retry_After_Backoff);
           break;
         case ReplicaMetadataRequest:
-          ReplicaMetadataRequest replicaMetadataRequest =
-              ReplicaMetadataRequest.readFrom(dis, clusterMap, findTokenHelper);
-          replicaMetadataRequest.accept(metricsUpdater);
-          response = new ReplicaMetadataResponse(replicaMetadataRequest.getCorrelationId(),
-              replicaMetadataRequest.getClientId(), ServerErrorCode.Retry_After_Backoff,
-              ReplicaMetadataResponse.getCompatibleResponseVersion(replicaMetadataRequest.getVersionId()));
+          request = ReplicaMetadataRequest.readFrom(dis, clusterMap, findTokenHelper);
+          response = new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(),
+              ServerErrorCode.Retry_After_Backoff,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId()));
           break;
         case AdminRequest:
-          AdminRequest adminRequest = AdminRequest.readFrom(dis, clusterMap);
-          adminRequest.accept(metricsUpdater);
-          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(),
-              ServerErrorCode.Retry_After_Backoff);
+          request = AdminRequest.readFrom(dis, clusterMap);
+          response =
+              new AdminResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
-
+      // Log the request and response in public access logs
+      long requestProcessingTime = SystemTime.getInstance().milliseconds() - requestProcessingStartTime;
+      publicAccessLogger.info("{} {} processingTime {}", request, response, requestProcessingTime);
+      // Update common metrics for the request
+      RequestMetricsUpdater metricsUpdater =
+          new RequestMetricsUpdater(requestQueueTime, requestProcessingTime, 0, 0, true);
+      request.accept(metricsUpdater);
       Histogram responseQueueTime = metricsUpdater.getResponseQueueTimeHistogram();
       Histogram responseSendTime = metricsUpdater.getResponseSendTimeHistogram();
       Histogram responseTotalTime = metricsUpdater.getRequestTotalTimeHistogram();
-      requestResponseChannel.sendResponse(response, request,
+      // Send response
+      requestResponseChannel.sendResponse(response, networkRequest,
           new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, responseTotalTime, null, null,
               requestQueueTime));
     } catch (Exception e) {
-      logger.error("Error while handling request " + request + " closing connection", e);
-      requestResponseChannel.closeConnection(request);
+      logger.error("Error while handling networkRequest " + networkRequest + " closing connection", e);
+      requestResponseChannel.closeConnection(networkRequest);
     }
   }
 
@@ -1282,7 +1281,7 @@ public class AmbryRequests implements RequestAPI {
       metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
       metrics.putBlobRequestRate.mark();
       metrics.putBlobProcessingTimeInMs.update(requestProcessingTime);
-      metrics.updatePutBlobProcessingTimeBySize(putRequest.getBlobSize(), requestProcessingTime);
+      metrics.updatePutBlobProcessingTimeBySize(requestBlobSize, requestProcessingTime);
       responseQueueTimeHistogram = metrics.putBlobResponseQueueTimeInMs;
       responseSendTimeHistogram = metrics.putBlobSendTimeInMs;
       requestTotalTimeHistogram = metrics.putBlobTotalTimeInMs;
@@ -1299,7 +1298,7 @@ public class AmbryRequests implements RequestAPI {
         metrics.getBlobRequestQueueTimeInMs.update(requestQueueTime);
         metrics.getBlobRequestRate.mark();
         metrics.getBlobProcessingTimeInMs.update(requestProcessingTime);
-        metrics.updateGetBlobProcessingTimeBySize(requestBlobSize, requestProcessingTime);
+        metrics.updateGetBlobProcessingTimeBySize(responseBlobSize, requestProcessingTime);
         responseQueueTimeHistogram = metrics.getBlobResponseQueueTimeInMs;
         responseSendTimeHistogram = metrics.getBlobSendTimeInMs;
         requestTotalTimeHistogram = metrics.getBlobTotalTimeInMs;
@@ -1350,7 +1349,7 @@ public class AmbryRequests implements RequestAPI {
           if (clientStrs.length > 1) {
             String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
             if (!currentNode.getDatacenterName().equals(clientDc)) {
-              metrics.updateCrossColoFetchBytesRate(clientDc, requestBlobSize);
+              metrics.updateCrossColoFetchBytesRate(clientDc, responseBlobSize);
             }
           }
           responseQueueTimeHistogram = metrics.getBlobAllByReplicaResponseQueueTimeInMs;

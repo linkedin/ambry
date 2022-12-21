@@ -927,6 +927,76 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     miscUndeleteFailuresTest();
   }
 
+  @Test
+  public void dropRequestsTest() throws InterruptedException, IOException {
+    MockPartitionId id = (MockPartitionId) clusterMap.getWritablePartitionIds(DEFAULT_PARTITION_CLASS).get(0);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM), id, false, BlobId.BlobDataType.DATACHUNK);
+    RequestOrResponse request;
+    RequestOrResponseType[] requestOrResponseTypes =
+        {RequestOrResponseType.PutRequest, RequestOrResponseType.DeleteRequest, RequestOrResponseType.GetRequest,
+            RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.TtlUpdateRequest,
+            RequestOrResponseType.UndeleteRequest};
+    int totalDroppedCount = 0;
+    for (RequestOrResponseType requestType : requestOrResponseTypes) {
+      switch (requestType) {
+        case PutRequest:
+          BlobProperties properties =
+              new BlobProperties(0, "serviceId", blobId.getAccountId(), blobId.getAccountId(), false);
+          request = new PutRequest(correlationId, clientId, blobId, properties, ByteBuffer.allocate(0),
+              Unpooled.wrappedBuffer(ByteBuffer.allocate(0)), 0, BlobType.DataBlob, null);
+          dropRequest(request);
+          assertEquals("Expected put request dropped count to be 1", 1, serverMetrics.putBlobDroppedRate.getCount());
+          break;
+        case DeleteRequest:
+          request = new DeleteRequest(correlationId, clientId, blobId, SystemTime.getInstance().milliseconds());
+          dropRequest(request);
+          assertEquals("Expected delete request dropped count to be 1", 1,
+              serverMetrics.deleteBlobDroppedRate.getCount());
+          break;
+        case UndeleteRequest:
+          request = new UndeleteRequest(correlationId, clientId, blobId, SystemTime.getInstance().milliseconds());
+          dropRequest(request);
+          assertEquals("Expected undelete request dropped count to be 1", 1,
+              serverMetrics.undeleteBlobDroppedRate.getCount());
+          break;
+        case GetRequest:
+          PartitionRequestInfo pRequestInfo = new PartitionRequestInfo(id, Collections.singletonList(blobId));
+          request =
+              new GetRequest(correlationId, clientId, MessageFormatFlags.All, Collections.singletonList(pRequestInfo),
+                  GetOption.Include_All);
+          dropRequest(request);
+          assertEquals("Expected get blob all request dropped count to be 1", 1,
+              serverMetrics.getBlobAllDroppedRate.getCount());
+          break;
+        case ReplicaMetadataRequest:
+          ReplicaMetadataRequestInfo rRequestInfo = new ReplicaMetadataRequestInfo(id,
+              findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken(),
+              "localhost", "/tmp", ReplicaType.DISK_BACKED, replicationConfig.replicaMetadataRequestVersion);
+          request = new ReplicaMetadataRequest(correlationId, clientId, Collections.singletonList(rRequestInfo),
+              Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
+          dropRequest(request);
+          assertEquals("Expected replica metadata request dropped count to be 1", 1,
+              serverMetrics.replicaMetadataDroppedRate.getCount());
+          break;
+        case TtlUpdateRequest:
+          request = new TtlUpdateRequest(correlationId, clientId, blobId, Utils.Infinite_Time,
+              SystemTime.getInstance().milliseconds());
+          dropRequest(request);
+          assertEquals("Expected update blob ttl request dropped count to be 1", 1,
+              serverMetrics.updateBlobTtlDroppedRate.getCount());
+          break;
+        default:
+          throw new IllegalArgumentException(requestType + " not supported by this function");
+      }
+      assertEquals("Mismatch in total request drop count", ++totalDroppedCount,
+          serverMetrics.totalRequestDroppedRate.getCount());
+    }
+  }
+
   /**
    * Tests success case for ReplicateBlobRequest.
    * Should replicate the PutBlob from the remote host.
@@ -1333,6 +1403,22 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         response.getClientId());
     assertEquals("Error code does not match expected", expectedServerErrorCode, response.getError());
     return response;
+  }
+
+  private void dropRequest(RequestOrResponse request) throws IOException, InterruptedException {
+    //verify that drop request API generates retry_after_backoff errorcode
+    NetworkRequest mockRequest = MockRequest.fromRequest(request);
+    ambryRequests.dropRequest(mockRequest);
+    assertEquals("Request accompanying response does not match original request", mockRequest,
+        requestResponseChannel.lastOriginalRequest);
+    assertNotNull("Response not sent", requestResponseChannel.lastResponse);
+    Response response = (Response) requestResponseChannel.lastResponse;
+    assertNotNull("Response is not of type Response", response);
+    assertEquals("Correlation id in response does match the one in the request", request.getCorrelationId(),
+        response.getCorrelationId());
+    assertEquals("Client id in response does match the one in the request", request.getClientId(),
+        response.getClientId());
+    assertEquals("Error code does not match expected", ServerErrorCode.Retry_After_Backoff, response.getError());
   }
 
   /**

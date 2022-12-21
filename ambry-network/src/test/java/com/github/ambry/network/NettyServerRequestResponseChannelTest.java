@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.http2.Http2ServerMetrics;
@@ -32,7 +33,7 @@ import org.junit.Test;
  * Unit test for {@link NettyServerRequestResponseChannel}.
  */
 public class NettyServerRequestResponseChannelTest {
-  private final static int QUEUE_SIZE = 10;
+  private final static int QUEUE_TIMEOUT_MS = 500;
   private final static int REQUEST_SIZE = 10;
 
   /**
@@ -43,10 +44,9 @@ public class NettyServerRequestResponseChannelTest {
   public void testSendAndReceiveRequest() throws Exception {
 
     Properties properties = new Properties();
-    properties.put("queued.max.requests", String.valueOf(QUEUE_SIZE));
     RequestResponseChannel channel =
         new NettyServerRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)),
-            new Http2ServerMetrics(new MetricRegistry()));
+            new Http2ServerMetrics(new MetricRegistry()), new ServerMetrics(new MetricRegistry(), this.getClass()));
 
     channel.sendRequest(createNettyServerRequest(13));
     NetworkRequest request = channel.receiveRequest();
@@ -74,45 +74,65 @@ public class NettyServerRequestResponseChannelTest {
   @Test
   public void testGetDroppedRequests() throws InterruptedException {
     Properties properties = new Properties();
-    properties.put("queued.max.requests", String.valueOf(QUEUE_SIZE));
+    properties.put(NetworkConfig.REQUEST_QUEUE_TIMEOUT_MS, String.valueOf(QUEUE_TIMEOUT_MS));
+    ServerMetrics serverMetrics = new ServerMetrics(new MetricRegistry(), this.getClass());
     RequestResponseChannel channel =
         new NettyServerRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)),
-            new Http2ServerMetrics(new MetricRegistry()));
+            new Http2ServerMetrics(new MetricRegistry()), serverMetrics);
 
-    int overflowSize = 10;
     List<NetworkRequest> validRequests = new ArrayList<>();
     List<NetworkRequest> droppedRequests = new ArrayList<>();
-    // Add requests within queue capacity
-    for (int i = 0; i < QUEUE_SIZE; i++) {
-      NetworkRequest request = createNettyServerRequest(REQUEST_SIZE);
-      validRequests.add(request);
-      channel.sendRequest(request);
-    }
-    // Add requests overflowing queue capacity
-    for (int i = 0; i < overflowSize; i++) {
-      NetworkRequest request = createNettyServerRequest(REQUEST_SIZE);
-      droppedRequests.add(request);
-      channel.sendRequest(request);
-    }
-    // Add an additional invalid request which would be dropped since its stream cannot be consumed
-    channel.sendRequest(createEmptyNettyServerRequest());
+    int numActiveRequests = 5;
+    int numDroppedRequests = 5;
 
-    // Receive the requests
-    for (int i = 0; i < QUEUE_SIZE; i++) {
+    // Add 5 requests to channel that would eventually timeout
+    for (int i = 0; i < numDroppedRequests; i++) {
+      NetworkRequest request = createNettyServerRequest(REQUEST_SIZE);
+      channel.sendRequest(request);
+      droppedRequests.add(request);
+    }
+    // Sleep so that requests timeout
+    Thread.sleep(QUEUE_TIMEOUT_MS + 10);
+    // Add 5 more requests to the channel which remain active
+    for (int i = 0; i < numActiveRequests; i++) {
+      NetworkRequest request = createNettyServerRequest(REQUEST_SIZE);
+      channel.sendRequest(request);
+      validRequests.add(request);
+    }
+
+    // Verify metrics to track queue sizes are updated
+    // Since we didn't dequeue any request, the timed out requests are not moved to dropped request queue.
+    Assert.assertEquals("Mismatch in number of active requests", numActiveRequests + numDroppedRequests,
+        serverMetrics.activeRequestsQueueSize.getValue().intValue());
+    Assert.assertEquals("Mismatch in number of dropped requests", 0,
+        serverMetrics.droppedRequestsQueueSize.getValue().intValue());
+
+    // Verify that when we receive requests, we only receive active requests.
+    for (int i = 0; i < 5; i++) {
       NetworkRequest request = channel.receiveRequest();
       Assert.assertTrue(request instanceof NettyServerRequest);
       Assert.assertEquals(((NettyServerRequest) validRequests.get(i)).content(),
           ((NettyServerRequest) request).content());
     }
 
-    List<NetworkRequest> receivedDroppedRequests = channel.getDroppedRequests();
-    Assert.assertEquals(overflowSize, receivedDroppedRequests.size());
-    for (int i = 0; i < overflowSize; i++) {
-      NetworkRequest droppedRequest = droppedRequests.get(i);
-      Assert.assertTrue(droppedRequest instanceof NettyServerRequest);
+    // Since we dequeued active requests, count should be 0. Also, the timed out requests would have been moved to
+    // dropped request queue.
+    Assert.assertEquals("Mismatch in number of active requests", 0,
+        serverMetrics.activeRequestsQueueSize.getValue().intValue());
+    Assert.assertEquals("Mismatch in number of dropped requests", numDroppedRequests,
+        serverMetrics.droppedRequestsQueueSize.getValue().intValue());
+
+    List<NetworkRequest> droppedRequestsInChannel = channel.getDroppedRequests();
+    for (int i = 0; i < 5; i++) {
+      Assert.assertTrue(droppedRequestsInChannel.get(i) instanceof NettyServerRequest);
       Assert.assertEquals(((NettyServerRequest) droppedRequests.get(i)).content(),
-          ((NettyServerRequest) droppedRequest).content());
+          ((NettyServerRequest) droppedRequestsInChannel.get(i)).content());
     }
+
+    Assert.assertEquals("Mismatch in number of active requests", 0,
+        serverMetrics.activeRequestsQueueSize.getValue().intValue());
+    Assert.assertEquals("Mismatch in number of dropped requests", 0,
+        serverMetrics.droppedRequestsQueueSize.getValue().intValue());
   }
 
   private NettyServerRequest createNettyServerRequest(int len) {

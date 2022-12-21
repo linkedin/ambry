@@ -45,7 +45,7 @@ public class RequestDropper implements Runnable {
             return;
           }
           requests.dropRequest(requestToDrop);
-          logger.warn("Request dropper dropping request {}", requestToDrop);
+          logger.trace("Request dropper dropping request {}", requestToDrop);
         }
       } catch (Throwable e) {
         // TODO add metric to track background threads

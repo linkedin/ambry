@@ -87,7 +87,6 @@ public class SocketRequestResponseChannelTest {
     try {
       Properties properties = new Properties();
       properties.put("num.io.threads", String.valueOf(2));
-      properties.put("queued.max.requests", String.valueOf(10));
       SocketRequestResponseChannel channel =
           new SocketRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)));
       String connectionId = "test_connectionId";

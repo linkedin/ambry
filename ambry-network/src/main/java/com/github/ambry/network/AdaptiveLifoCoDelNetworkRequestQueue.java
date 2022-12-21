@@ -35,14 +35,15 @@ import org.slf4j.LoggerFactory;
 public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue {
   private static final Logger logger = LoggerFactory.getLogger(AdaptiveLifoCoDelNetworkRequestQueue.class);
   private final Time time;
-  // Queue to hold requests for serving.
-  private final LinkedBlockingDeque<NetworkRequest> deque;
+  // Queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue. This
+  // would prevent the queue from growing unbounded.
+  private final LinkedBlockingDeque<NetworkRequest> deque = new LinkedBlockingDeque<>();
+  // Queue to hold timed out requests. The requests in this queue would be continuously picked up by 'request-dropper'
+  // thread. This would prevent the queue from growing unbounded.
+  private final BlockingQueue<NetworkRequest> droppedRequestsQueue = new LinkedBlockingQueue<>();
 
-  // so we can calculate actual threshold to switch to LIFO under load
-  private final int maxCapacity;
-  // if queue if full more than that percent, we switch to LIFO mode.
-  // Values are in the range of 0.7, 0.8 etc (0-1.0).
-  private final double lifoThreshold;
+  // If queue if full more than this size, we switch to LIFO mode.
+  private final int lifoThreshold;
   // Both are in milliseconds
   private final int coDelTargetDelayMs;
   private final int coDelIntervalMs;
@@ -56,44 +57,32 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   private final AtomicBoolean isOverloaded = new AtomicBoolean(false);
   // Variable used to track changing of queue modes from FIFO to LIFO and vice versa.
   private final AtomicBoolean lifoMode = new AtomicBoolean(false);
-  // Queue to hold requests which have expired or couldn't be en-queued in serving queue due to capacity constraints.
-  // This is a unbounded queue. We should make sure we always have a consumer thread reading from it.
-  private final BlockingQueue<NetworkRequest> droppedRequestsQueue;
+  // Variable used to track if emptyRequestReceived was called on server. If emptyRequestReceived is received, this
+  // indicates server is shutting down. Since request handler threads are waiting on this request, switch to LIFO mode.
+  private volatile boolean emptyRequestReceived = false;
 
   /**
-   *
-   * @param capacity the max capacity of the queue.
-   * @param lifoThreshold the fraction of capacity used at which to switch the queue from FIFO to LIFO mode.
+   *  @param lifoThreshold the fraction of capacity used at which to switch the queue from FIFO to LIFO mode.
    * @param coDelTargetDelayMs the target delay in ms to use for the controlled delay algorithm.
    * @param coDelIntervalMs the target interval in ms to use for the controlled delay algorithm.
    * @param time {@link Time} instance.
    */
-  AdaptiveLifoCoDelNetworkRequestQueue(int capacity, double lifoThreshold, int coDelTargetDelayMs, int coDelIntervalMs,
-      Time time) {
-    this.maxCapacity = capacity;
+  AdaptiveLifoCoDelNetworkRequestQueue(int lifoThreshold, int coDelTargetDelayMs, int coDelIntervalMs, Time time) {
     this.coDelTargetDelayMs = coDelTargetDelayMs;
     this.coDelIntervalMs = coDelIntervalMs;
     this.lifoThreshold = lifoThreshold;
     this.time = time;
-
-    deque = new LinkedBlockingDeque<>(capacity);
-    droppedRequestsQueue = new LinkedBlockingQueue<>();
     intervalTimeMs = time.milliseconds();
   }
 
   @Override
-  public void put(NetworkRequest request) throws InterruptedException {
+  public void offer(NetworkRequest request) throws InterruptedException {
+    deque.offer(request);
     if (request.equals(EmptyRequest.getInstance())) {
-      // This is a internal generated request used to signal shutdown. Add it to both queues (waiting if necessary) so
-      // that the consumer threads can shutdown gracefully.
-      logger.info("Received empty request which signals server shutdown. Adding it to queue");
-      deque.put(request);
-      droppedRequestsQueue.put(request);
-      return;
-    }
-    if (!deque.offer(request)) {
-      logger.warn("Request queue is full, dropping incoming request: {}", request);
+      // This is a internal generated request used to signal shutdown. Add it to dropped requests queue as well so that
+      // request-dropper thread shuts down gracefully.
       droppedRequestsQueue.offer(request);
+      emptyRequestReceived = true;
     }
   }
 
@@ -142,14 +131,21 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   }
 
   @Override
-  public int size() {
+  public int numActiveRequests() {
     return deque.size();
+  }
+
+  @Override
+  public int numDroppedRequests() {
+    return droppedRequestsQueue.size();
   }
 
   @Override
   public void close() {
     deque.forEach(NetworkRequest::release);
     deque.clear();
+    droppedRequestsQueue.forEach(NetworkRequest::release);
+    droppedRequestsQueue.clear();
   }
 
   @Override
@@ -162,8 +158,12 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
    * @return {@code true} if the queue should operate in LIFO mode.
    */
   private boolean useLifoMode() {
-    double loadFactor = (double) deque.size() / maxCapacity;
-    boolean localLifoMode = loadFactor > lifoThreshold;
+    if (emptyRequestReceived) {
+      // If emptyRequestReceived is received, this indicates server is shutting down. Since request handler threads are
+      // waiting on this request, switch to LIFO mode.
+      return true;
+    }
+    boolean localLifoMode = deque.size() > lifoThreshold;
     if (localLifoMode && lifoMode.compareAndSet(false, true)) {
       // Mode changed to LIFO
       logger.info("Request queue operating is LIFO mode");

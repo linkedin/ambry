@@ -17,7 +17,6 @@ import com.github.ambry.server.EmptyRequest;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
@@ -32,17 +31,16 @@ public class FifoNetworkRequestQueue implements NetworkRequestQueue {
   private static final Logger logger = LoggerFactory.getLogger(FifoNetworkRequestQueue.class);
   private final int timeout;
   private final Time time;
-  // Queue to hold requests for serving.
-  private final BlockingQueue<NetworkRequest> queue;
-  // Queue to hold requests which have expired or couldn't be en-queued in serving queue due to capacity constraints.
-  // This is a unbounded queue. We should make sure we always have a consumer thread reading from it.
-  private final BlockingQueue<NetworkRequest> droppedRequestsQueue;
+  // Queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue. This
+  // would prevent the queue from growing unbounded.
+  private final BlockingQueue<NetworkRequest> queue = new LinkedBlockingQueue<>();
+  // Queue to hold timed out requests. The requests in this queue would be continuously picked up by 'request-dropper'
+  // thread. This would prevent the queue from growing unbounded.
+  private final BlockingQueue<NetworkRequest> droppedRequestsQueue = new LinkedBlockingQueue<>();
 
-  FifoNetworkRequestQueue(int capacity, int timeout, Time time) {
+  FifoNetworkRequestQueue(int timeout, Time time) {
     this.timeout = timeout;
     this.time = time;
-    queue = new ArrayBlockingQueue<>(capacity);
-    droppedRequestsQueue = new LinkedBlockingQueue<>();
   }
 
   /**
@@ -50,17 +48,11 @@ public class FifoNetworkRequestQueue implements NetworkRequestQueue {
    * @param request element to be inserted.
    */
   @Override
-  public void put(NetworkRequest request) throws InterruptedException {
+  public void offer(NetworkRequest request) throws InterruptedException {
+    queue.offer(request);
     if (request.equals(EmptyRequest.getInstance())) {
-      // This is a internal generated request used to signal shutdown. Add it to both queues (waiting if necessary) so
-      // that the consumer threads can shutdown gracefully.
-      logger.info("Received empty request which signals server shutdown. Adding it to queue");
-      queue.put(request);
-      droppedRequestsQueue.put(request);
-      return;
-    }
-    if (!queue.offer(request)) {
-      logger.warn("Request queue is full, adding incoming request {} to dropped list", request);
+      // This is a internal generated request used to signal shutdown. Add it to dropped requests queue as well so that
+      // request-dropper thread shuts down gracefully.
       droppedRequestsQueue.offer(request);
     }
   }
@@ -70,9 +62,8 @@ public class FifoNetworkRequestQueue implements NetworkRequestQueue {
     while (true) {
       // If there are no requests in the queue, wait until a new request comes.
       NetworkRequest nextRequest = queue.take();
-      // If the request expired, add it to dropped request queue and continue.
+      // If the request expired, add it to dropped requests queue and continue.
       if (needToDrop(nextRequest)) {
-        logger.warn("Request expired in queue, adding request {} to dropped list", nextRequest);
         droppedRequestsQueue.offer(nextRequest);
         continue;
       }
@@ -96,14 +87,21 @@ public class FifoNetworkRequestQueue implements NetworkRequestQueue {
   }
 
   @Override
-  public int size() {
+  public int numActiveRequests() {
     return queue.size();
+  }
+
+  @Override
+  public int numDroppedRequests() {
+    return droppedRequestsQueue.size();
   }
 
   @Override
   public void close() {
     queue.forEach(NetworkRequest::release);
+    droppedRequestsQueue.forEach(NetworkRequest::release);
     queue.clear();
+    droppedRequestsQueue.clear();
   }
 
   @Override

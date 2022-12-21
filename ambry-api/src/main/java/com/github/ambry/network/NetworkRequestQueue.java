@@ -22,7 +22,7 @@ interface NetworkRequestQueue {
    * Inserts request into queue.
    * @param request to be inserted.
    */
-  void put(NetworkRequest request) throws InterruptedException;
+  void offer(NetworkRequest request) throws InterruptedException;
 
   /**
    * Get next request to serve (waiting if necessary).
@@ -37,9 +37,14 @@ interface NetworkRequestQueue {
   List<NetworkRequest> getDroppedRequests() throws InterruptedException;
 
   /**
-   * @return the size of the queue.
+   * @return the size of the queue containing active requests.
    */
-  int size();
+  int numActiveRequests();
+
+  /**
+   * @return the size of the queue containing dropped requests.
+   */
+  int numDroppedRequests();
 
   /**
    * Releases the resources in the queue.

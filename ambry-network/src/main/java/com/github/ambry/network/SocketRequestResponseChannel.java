@@ -130,21 +130,17 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   private final ArrayList<BlockingQueue<NetworkResponse>> responseQueues;
   private final ArrayList<ResponseListener> responseListeners;
   private final NetworkRequestQueue networkRequestQueue;
-  private static final Logger LOGGER = LoggerFactory.getLogger(SocketRequestResponseChannel.class);
-  private final BlockingQueue<NetworkRequest> unqueuedRequests = new LinkedBlockingQueue<>();
 
   public SocketRequestResponseChannel(NetworkConfig config) {
     this.numProcessors = config.numIoThreads;
     Time time = SystemTime.getInstance();
     switch (config.requestQueueType) {
       case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
-        this.networkRequestQueue =
-            new AdaptiveLifoCoDelNetworkRequestQueue(config.queuedMaxRequests, config.adaptiveLifoQueueThreshold,
-                config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, time);
+        this.networkRequestQueue = new AdaptiveLifoCoDelNetworkRequestQueue(config.adaptiveLifoQueueThreshold,
+            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, time);
         break;
       case BASIC_QUEUE_WITH_FIFO:
-        this.networkRequestQueue =
-            new FifoNetworkRequestQueue(config.queuedMaxRequests, config.requestQueueTimeoutMs, time);
+        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, time);
         break;
       default:
         throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
@@ -160,7 +156,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    networkRequestQueue.put(request);
+    networkRequestQueue.offer(request);
   }
 
   /** Send a response back to the socket server to be sent over the network */
@@ -207,7 +203,11 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   }
 
   public int getRequestQueueSize() {
-    return networkRequestQueue.size();
+    return networkRequestQueue.numActiveRequests();
+  }
+
+  public int getDroppedRequestsQueueSize() {
+    return networkRequestQueue.numDroppedRequests();
   }
 
   public int getResponseQueueSize(int processor) {
