@@ -156,7 +156,9 @@ public class MessageSievingInputStream extends InputStream {
    */
   public static Message transferInputStream(List<Transformer> transformers, InputStream inStream, MessageInfo msgInfo)
       throws IOException {
-    Message msg = new Message(msgInfo, inStream);
+    // Read the entire stream out so the underlying transformer won't increase the ref counter for the GetResponse ByteBuf.
+    Message msg =
+        new Message(msgInfo, new ByteArrayInputStream(Utils.readBytesFromStream(inStream, (int) msgInfo.getSize())));
     if (transformers == null || transformers.isEmpty()) {
       // Write the message without any transformations.
       return msg;
