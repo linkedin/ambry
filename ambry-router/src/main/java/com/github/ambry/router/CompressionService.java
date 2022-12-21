@@ -124,11 +124,6 @@ public class CompressionService {
           + ", specified in config does not exist.  This default has changed to " + compressor.getAlgorithmName());
     }
     defaultCompressor = compressor;
-
-    // TODO - Temporary deployment control code that will be removed after testing and deployment.
-    if (config.isCompressionEnabled) {
-      PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
-    }
   }
 
   /**
