@@ -35,14 +35,16 @@ public interface RequestResponseChannel {
       throws InterruptedException;
 
   /**
-   * Receives the request from the channel
+   * Receives the request from the channel. This method will block the caller thread if there are no requests in the
+   * channel.
    * @return The request that was queued by the network layer into the channel
    * @throws InterruptedException
    */
   NetworkRequest receiveRequest() throws InterruptedException;
 
   /**
-   * @return a list of overflow {@link NetworkRequest}s which couldn't be queued in the channel due to capacity bounds.
+   * @return a list of {@link NetworkRequest}s which have timed out waiting in the channel. This method will block the
+   * caller thread if there are no timed out requests currently.
    * @throws InterruptedException
    */
   List<NetworkRequest> getDroppedRequests() throws InterruptedException;

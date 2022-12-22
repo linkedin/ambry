@@ -38,6 +38,8 @@ public class RequestDropper implements Runnable {
     Collection<NetworkRequest> requestsToDrop = null;
     while (true) {
       try {
+        // Get timed out requests from the channel. If there are no timed out requests, we wait until a dropped request
+        // is available.
         requestsToDrop = requestChannel.getDroppedRequests();
         for (NetworkRequest requestToDrop : requestsToDrop) {
           if (requestToDrop.equals(EmptyRequest.getInstance())) {

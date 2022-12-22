@@ -154,11 +154,11 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   }
 
   /**
-   * Shuts down the request response channel
+   * Shuts down the request response channel and release any resources in {@link NetworkRequestQueue}.
    */
   @Override
   public void shutdown() {
-    return;
+    networkRequestQueue.close();
   }
 }
 

@@ -79,6 +79,10 @@ public class RequestHandlerPool implements Closeable {
       if (requestDropperThread != null) {
         requestDropperThread.join();
       }
+      // Shutdown request response channel to release memory of any requests still present in the channel
+      if(requestResponseChannel != null){
+        requestResponseChannel.shutdown();
+      }
       logger.info("shut down completely");
     } catch (Exception e) {
       logger.error("error when shutting down request handler pool", e);

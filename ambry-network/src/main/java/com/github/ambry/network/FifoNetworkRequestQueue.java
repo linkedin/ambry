@@ -19,16 +19,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
- * A FIFO queue to hold network requests. It Internally, it maintains two queues, a bounded blocking queue to hold immediate
- * set of next requests that can be handled by Ambry and unbounded queue to hold overflow requests.
+ * A FIFO queue to hold network requests. It Internally, it maintains two queues, a queue to hold active requests and
+ * another one to hold timed out requests. Both are unbounded queues but since we have {@code RequestHandler} and
+ * {@code RequestDropper thread} reading from them continuously, they shouldn't grow in indefinitely.
  */
 public class FifoNetworkRequestQueue implements NetworkRequestQueue {
-  private static final Logger logger = LoggerFactory.getLogger(FifoNetworkRequestQueue.class);
   private final int timeout;
   private final Time time;
   // Queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue. This
