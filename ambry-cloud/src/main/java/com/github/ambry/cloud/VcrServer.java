@@ -235,7 +235,7 @@ public class VcrServer {
         Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
 
         NettyServerRequestResponseChannel requestResponseChannel =
-            new NettyServerRequestResponseChannel(networkConfig.queuedMaxRequests, http2ServerMetrics);
+            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, serverMetrics);
 
         VcrRequests vcrRequestsForHttp2 =
             new VcrRequests(cloudStorageManager, requestResponseChannel, clusterMap, currentNode, registry,

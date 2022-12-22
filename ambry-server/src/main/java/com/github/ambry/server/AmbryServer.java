@@ -47,7 +47,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
-import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
@@ -60,7 +59,6 @@ import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
-import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
@@ -300,7 +298,7 @@ public class AmbryServer {
 
         logger.info("Http2 port {} is enabled. Starting HTTP/2 service.", nodeId.getHttp2Port());
         NettyServerRequestResponseChannel requestResponseChannel =
-            new NettyServerRequestResponseChannel(networkConfig.queuedMaxRequests, http2ServerMetrics);
+            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, metrics);
 
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,

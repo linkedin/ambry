@@ -197,6 +197,76 @@ public class AmbryRequests implements RequestAPI {
   }
 
   @Override
+  public void dropRequest(NetworkRequest networkRequest) throws InterruptedException {
+    try {
+      InputStream is = networkRequest.getInputStream();
+      DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
+      RequestOrResponseType type = RequestOrResponseType.values()[dis.readShort()];
+      RequestOrResponse request;
+      Response response;
+      long requestProcessingStartTime = SystemTime.getInstance().milliseconds();
+      long requestQueueTime = requestProcessingStartTime - networkRequest.getStartTimeInMs();
+      switch (type) {
+        case PutRequest:
+          request = PutRequest.readFrom(dis, clusterMap);
+          response =
+              new PutResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
+          break;
+        case GetRequest:
+          request = GetRequest.readFrom(dis, clusterMap);
+          response =
+              new GetResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
+          break;
+        case DeleteRequest:
+          request = DeleteRequest.readFrom(dis, clusterMap);
+          response = new DeleteResponse(request.getCorrelationId(), request.getClientId(),
+              ServerErrorCode.Retry_After_Backoff);
+          break;
+        case TtlUpdateRequest:
+          request = TtlUpdateRequest.readFrom(dis, clusterMap);
+          response = new TtlUpdateResponse(request.getCorrelationId(), request.getClientId(),
+              ServerErrorCode.Retry_After_Backoff);
+          break;
+        case UndeleteRequest:
+          request = UndeleteRequest.readFrom(dis, clusterMap);
+          response = new UndeleteResponse(request.getCorrelationId(), request.getClientId(),
+              ServerErrorCode.Retry_After_Backoff);
+          break;
+        case ReplicaMetadataRequest:
+          request = ReplicaMetadataRequest.readFrom(dis, clusterMap, findTokenHelper);
+          response = new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(),
+              ServerErrorCode.Retry_After_Backoff,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId()));
+          break;
+        case AdminRequest:
+          request = AdminRequest.readFrom(dis, clusterMap);
+          response =
+              new AdminResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
+          break;
+        default:
+          throw new UnsupportedOperationException("Request type not supported");
+      }
+      // Log the request and response in public access logs
+      long requestProcessingTime = SystemTime.getInstance().milliseconds() - requestProcessingStartTime;
+      publicAccessLogger.info("{} {} processingTime {}", request, response, requestProcessingTime);
+      // Update common metrics for the request
+      RequestMetricsUpdater metricsUpdater =
+          new RequestMetricsUpdater(requestQueueTime, requestProcessingTime, 0, 0, true);
+      request.accept(metricsUpdater);
+      Histogram responseQueueTime = metricsUpdater.getResponseQueueTimeHistogram();
+      Histogram responseSendTime = metricsUpdater.getResponseSendTimeHistogram();
+      Histogram responseTotalTime = metricsUpdater.getRequestTotalTimeHistogram();
+      // Send response
+      requestResponseChannel.sendResponse(response, networkRequest,
+          new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, responseTotalTime, null, null,
+              requestQueueTime));
+    } catch (Exception e) {
+      logger.error("Error while handling networkRequest " + networkRequest + " closing connection", e);
+      requestResponseChannel.closeConnection(networkRequest);
+    }
+  }
+
+  @Override
   public void handlePutRequest(NetworkRequest request) throws IOException, InterruptedException {
     PutRequest receivedRequest;
     if (request instanceof LocalChannelRequest) {
@@ -224,10 +294,8 @@ public class AmbryRequests implements RequestAPI {
 
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
-    metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
-    metrics.putBlobRequestRate.mark();
-    long startTime = SystemTime.getInstance().milliseconds();
     PutResponse response = null;
+    long startTime = SystemTime.getInstance().milliseconds();
     try {
       ServerErrorCode error =
           validateRequest(receivedRequest.getBlobId().getPartition(), RequestOrResponseType.PutRequest, false);
@@ -266,8 +334,10 @@ public class AmbryRequests implements RequestAPI {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", receivedRequest, response, processingTime);
-      metrics.putBlobProcessingTimeInMs.update(processingTime);
-      metrics.updatePutBlobProcessingTimeBySize(receivedRequest.getBlobSize(), processingTime);
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater =
+          new RequestMetricsUpdater(requestQueueTime, processingTime, receivedRequest.getBlobSize(), 0, false);
+      receivedRequest.accept(metricsUpdater);
     }
     sendPutResponse(requestResponseChannel, response, request, metrics.putBlobResponseQueueTimeInMs,
         metrics.putBlobSendTimeInMs, metrics.putBlobTotalTimeInMs, totalTimeSpent, receivedRequest.getBlobSize(),
@@ -285,54 +355,13 @@ public class AmbryRequests implements RequestAPI {
     } else {
       getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     }
-    Histogram responseQueueTime = null;
-    Histogram responseSendTime = null;
-    Histogram responseTotalTime = null;
+    Histogram responseQueueTime;
+    Histogram responseSendTime;
+    Histogram responseTotalTime;
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
-    boolean isReplicaRequest = getRequest.getClientId().startsWith(GetRequest.Replication_Client_Id_Prefix);
-    if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
-      metrics.getBlobRequestQueueTimeInMs.update(requestQueueTime);
-      metrics.getBlobRequestRate.mark();
-      responseQueueTime = metrics.getBlobResponseQueueTimeInMs;
-      responseSendTime = metrics.getBlobSendTimeInMs;
-      responseTotalTime = metrics.getBlobTotalTimeInMs;
-    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
-      metrics.getBlobPropertiesRequestQueueTimeInMs.update(requestQueueTime);
-      metrics.getBlobPropertiesRequestRate.mark();
-      responseQueueTime = metrics.getBlobPropertiesResponseQueueTimeInMs;
-      responseSendTime = metrics.getBlobPropertiesSendTimeInMs;
-      responseTotalTime = metrics.getBlobPropertiesTotalTimeInMs;
-    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
-      metrics.getBlobUserMetadataRequestQueueTimeInMs.update(requestQueueTime);
-      metrics.getBlobUserMetadataRequestRate.mark();
-      responseQueueTime = metrics.getBlobUserMetadataResponseQueueTimeInMs;
-      responseSendTime = metrics.getBlobUserMetadataSendTimeInMs;
-      responseTotalTime = metrics.getBlobUserMetadataTotalTimeInMs;
-    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobInfo) {
-      metrics.getBlobInfoRequestQueueTimeInMs.update(requestQueueTime);
-      metrics.getBlobInfoRequestRate.mark();
-      responseQueueTime = metrics.getBlobInfoResponseQueueTimeInMs;
-      responseSendTime = metrics.getBlobInfoSendTimeInMs;
-      responseTotalTime = metrics.getBlobInfoTotalTimeInMs;
-    } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
-      if (isReplicaRequest) {
-        metrics.getBlobAllByReplicaRequestQueueTimeInMs.update(requestQueueTime);
-        metrics.getBlobAllByReplicaRequestRate.mark();
-        responseQueueTime = metrics.getBlobAllByReplicaResponseQueueTimeInMs;
-        responseSendTime = metrics.getBlobAllByReplicaSendTimeInMs;
-        responseTotalTime = metrics.getBlobAllByReplicaTotalTimeInMs;
-      } else {
-        metrics.getBlobAllRequestQueueTimeInMs.update(requestQueueTime);
-        metrics.getBlobAllRequestRate.mark();
-        responseQueueTime = metrics.getBlobAllResponseQueueTimeInMs;
-        responseSendTime = metrics.getBlobAllSendTimeInMs;
-        responseTotalTime = metrics.getBlobAllTotalTimeInMs;
-      }
-    }
-
-    long startTime = SystemTime.getInstance().milliseconds();
     GetResponse response = null;
+    long startTime = SystemTime.getInstance().milliseconds();
     try {
       List<Send> messagesToSendList = new ArrayList<>(getRequest.getPartitionInfoList().size());
       List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<>(getRequest.getPartitionInfoList().size());
@@ -412,31 +441,13 @@ public class AmbryRequests implements RequestAPI {
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", getRequest, response, processingTime);
       long responseSize = response != null ? response.sizeInBytes() : 0;
-      if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
-        metrics.getBlobProcessingTimeInMs.update(processingTime);
-        metrics.updateGetBlobProcessingTimeBySize(responseSize, processingTime);
-      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
-        metrics.getBlobPropertiesProcessingTimeInMs.update(processingTime);
-      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
-        metrics.getBlobUserMetadataProcessingTimeInMs.update(processingTime);
-      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobInfo) {
-        metrics.getBlobInfoProcessingTimeInMs.update(processingTime);
-      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
-        if (isReplicaRequest) {
-          metrics.getBlobAllByReplicaProcessingTimeInMs.update(processingTime);
-          // client id now has dc name at the end, for example: ClientId=replication-fetch-abc.example.com[dc1]
-          String[] clientStrs = getRequest.getClientId().split("\\[");
-          if (clientStrs.length > 1) {
-            String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
-            if (!currentNode.getDatacenterName().equals(clientDc)) {
-              metrics.updateCrossColoFetchBytesRate(clientDc, responseSize);
-            }
-          }
-        } else {
-          metrics.getBlobAllProcessingTimeInMs.update(processingTime);
-          metrics.updateGetBlobProcessingTimeBySize(responseSize, processingTime);
-        }
-      }
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater =
+          new RequestMetricsUpdater(requestQueueTime, processingTime, 0, responseSize, false);
+      getRequest.accept(metricsUpdater);
+      responseQueueTime = metricsUpdater.getResponseQueueTimeHistogram();
+      responseSendTime = metricsUpdater.getResponseSendTimeHistogram();
+      responseTotalTime = metricsUpdater.getRequestTotalTimeHistogram();
     }
     sendGetResponse(requestResponseChannel, response, request, responseQueueTime, responseSendTime, responseTotalTime,
         totalTimeSpent, response.sizeInBytes(), getRequest.getMessageFormatFlag(), metrics);
@@ -455,8 +466,6 @@ public class AmbryRequests implements RequestAPI {
     }
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
-    metrics.deleteBlobRequestQueueTimeInMs.update(requestQueueTime);
-    metrics.deleteBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     DeleteResponse response = null;
     try {
@@ -513,7 +522,9 @@ public class AmbryRequests implements RequestAPI {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", deleteRequest, response, processingTime);
-      metrics.deleteBlobProcessingTimeInMs.update(processingTime);
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      deleteRequest.accept(metricsUpdater);
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
@@ -533,8 +544,6 @@ public class AmbryRequests implements RequestAPI {
     }
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
-    metrics.updateBlobTtlRequestQueueTimeInMs.update(requestQueueTime);
-    metrics.updateBlobTtlRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     TtlUpdateResponse response = null;
     try {
@@ -597,6 +606,9 @@ public class AmbryRequests implements RequestAPI {
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", updateRequest, response, processingTime);
       metrics.updateBlobTtlProcessingTimeInMs.update(processingTime);
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      updateRequest.accept(metricsUpdater);
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.updateBlobTtlResponseQueueTimeInMs, metrics.updateBlobTtlSendTimeInMs,
@@ -612,8 +624,6 @@ public class AmbryRequests implements RequestAPI {
         ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenHelper);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
-    metrics.replicaMetadataRequestQueueTimeInMs.update(requestQueueTime);
-    metrics.replicaMetadataRequestRate.mark();
 
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList =
         replicaMetadataRequest.getReplicaMetadataRequestInfoList();
@@ -704,15 +714,11 @@ public class AmbryRequests implements RequestAPI {
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
       logger.trace("{} {} processingTime {}", replicaMetadataRequest, response, processingTime);
-      metrics.replicaMetadataRequestProcessingTimeInMs.update(processingTime);
-      // client id now has dc name at the end, for example: ClientId=replication-metadata-abc.example.com[dc1]
-      String[] clientStrs = replicaMetadataRequest.getClientId().split("\\[");
-      if (clientStrs.length > 1) {
-        String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
-        if (!currentNode.getDatacenterName().equals(clientDc)) {
-          metrics.updateCrossColoMetadataExchangeBytesRate(clientDc, response != null ? response.sizeInBytes() : 0L);
-        }
-      }
+      long responseSizeInBytes = response != null ? response.sizeInBytes() : 0L;
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater =
+          new RequestMetricsUpdater(requestQueueTime, processingTime, 0, responseSizeInBytes, false);
+      replicaMetadataRequest.accept(metricsUpdater);
     }
 
     requestResponseChannel.sendResponse(response, request,
@@ -746,7 +752,7 @@ public class AmbryRequests implements RequestAPI {
     // Currently we don't enable the write repair. As long as the local store has the Blob, return success immediately.
     // check if local store has the key already
     StoreKey convertedKey = getConvertedStoreKeys(Collections.singletonList(blobId)).get(0);
-    Store store = storeManager.getStore(((BlobId)convertedKey).getPartition());
+    Store store = storeManager.getStore(((BlobId) convertedKey).getPartition());
     try {
       store.findKey(convertedKey);
       return true;
@@ -771,11 +777,9 @@ public class AmbryRequests implements RequestAPI {
     } else {
       replicateBlobRequest = ReplicateBlobRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     }
-    long totalTimeSpent = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
-    metrics.replicateBlobRequestQueueTimeInMs.update(totalTimeSpent);
-    metrics.replicateBlobRequestRate.mark();
-
     // Get the parameters from the replicateBlobRequest: the blobId, the remoteHostName and the remoteHostPort.
     BlobId blobId = replicateBlobRequest.getBlobId();
     String remoteHostName = replicateBlobRequest.getSourceHostName();
@@ -851,7 +855,9 @@ public class AmbryRequests implements RequestAPI {
     long processingTime = SystemTime.getInstance().milliseconds() - startTime;
     totalTimeSpent += processingTime;
     publicAccessLogger.info("{} {} processingTime {}", replicateBlobRequest, response, processingTime);
-    metrics.replicateBlobProcessingTimeInMs.update(processingTime);
+    // Update request metrics.
+    RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+    replicateBlobRequest.accept(metricsUpdater);
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.replicateBlobResponseQueueTimeInMs, metrics.replicateBlobSendTimeInMs,
             metrics.replicateBlobTotalTimeInMs, null, null, totalTimeSpent));
@@ -943,8 +949,6 @@ public class AmbryRequests implements RequestAPI {
     }
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
-    metrics.undeleteBlobRequestQueueTimeInMs.update(requestQueueTime);
-    metrics.undeleteBlobRequestRate.mark();
     long startTime = SystemTime.getInstance().milliseconds();
     UndeleteResponse response = null;
     Store storeToUndelete;
@@ -1018,7 +1022,9 @@ public class AmbryRequests implements RequestAPI {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", undeleteRequest, response, processingTime);
-      metrics.undeleteBlobProcessingTimeInMs.update(processingTime);
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      undeleteRequest.accept(metricsUpdater);
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.undeleteBlobResponseQueueTimeInMs, metrics.undeleteBlobSendTimeInMs,
@@ -1244,6 +1250,324 @@ public class AmbryRequests implements RequestAPI {
         logger.error("ReplicateBlobRequest applyDelete for {} failed with {}", blobId, e.getErrorCode());
         throw e;
       }
+    }
+  }
+
+  /**
+   * Used to update common metrics for the incoming request.
+   */
+  public class RequestMetricsUpdater implements RequestVisitor {
+
+    private final long requestQueueTime;
+    private final long requestProcessingTime;
+    private final long requestBlobSize;
+    private final long responseBlobSize;
+    private final boolean isRequestDropped;
+    private Histogram responseQueueTimeHistogram;
+    private Histogram responseSendTimeHistogram;
+    private Histogram requestTotalTimeHistogram;
+
+    public RequestMetricsUpdater(long requestQueueTime, long requestProcessingTime, long requestBlobSize,
+        long responseBlobSize, boolean isRequestDropped) {
+      this.requestQueueTime = requestQueueTime;
+      this.requestProcessingTime = requestProcessingTime;
+      this.requestBlobSize = requestBlobSize;
+      this.responseBlobSize = responseBlobSize;
+      this.isRequestDropped = isRequestDropped;
+    }
+
+    @Override
+    public void visit(PutRequest putRequest) {
+      metrics.putBlobRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.putBlobRequestRate.mark();
+      metrics.putBlobProcessingTimeInMs.update(requestProcessingTime);
+      metrics.updatePutBlobProcessingTimeBySize(requestBlobSize, requestProcessingTime);
+      responseQueueTimeHistogram = metrics.putBlobResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.putBlobSendTimeInMs;
+      requestTotalTimeHistogram = metrics.putBlobTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.putBlobDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(GetRequest getRequest) {
+      boolean isReplicaRequest = getRequest.getClientId().startsWith(GetRequest.Replication_Client_Id_Prefix);
+      if (getRequest.getMessageFormatFlag() == MessageFormatFlags.Blob) {
+        metrics.getBlobRequestQueueTimeInMs.update(requestQueueTime);
+        metrics.getBlobRequestRate.mark();
+        metrics.getBlobProcessingTimeInMs.update(requestProcessingTime);
+        metrics.updateGetBlobProcessingTimeBySize(responseBlobSize, requestProcessingTime);
+        responseQueueTimeHistogram = metrics.getBlobResponseQueueTimeInMs;
+        responseSendTimeHistogram = metrics.getBlobSendTimeInMs;
+        requestTotalTimeHistogram = metrics.getBlobTotalTimeInMs;
+        if (isRequestDropped) {
+          metrics.getBlobDroppedRate.mark();
+          metrics.totalRequestDroppedRate.mark();
+        }
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobProperties) {
+        metrics.getBlobPropertiesRequestQueueTimeInMs.update(requestQueueTime);
+        metrics.getBlobPropertiesRequestRate.mark();
+        metrics.getBlobPropertiesProcessingTimeInMs.update(requestProcessingTime);
+        responseQueueTimeHistogram = metrics.getBlobPropertiesResponseQueueTimeInMs;
+        responseSendTimeHistogram = metrics.getBlobPropertiesSendTimeInMs;
+        requestTotalTimeHistogram = metrics.getBlobPropertiesTotalTimeInMs;
+        if (isRequestDropped) {
+          metrics.getBlobPropertiesDroppedRate.mark();
+          metrics.totalRequestDroppedRate.mark();
+        }
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobUserMetadata) {
+        metrics.getBlobUserMetadataRequestQueueTimeInMs.update(requestQueueTime);
+        metrics.getBlobUserMetadataRequestRate.mark();
+        metrics.getBlobUserMetadataProcessingTimeInMs.update(requestProcessingTime);
+        responseQueueTimeHistogram = metrics.getBlobUserMetadataResponseQueueTimeInMs;
+        responseSendTimeHistogram = metrics.getBlobUserMetadataSendTimeInMs;
+        requestTotalTimeHistogram = metrics.getBlobUserMetadataTotalTimeInMs;
+        if (isRequestDropped) {
+          metrics.getBlobUserMetadataDroppedRate.mark();
+          metrics.totalRequestDroppedRate.mark();
+        }
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.BlobInfo) {
+        metrics.getBlobInfoRequestQueueTimeInMs.update(requestQueueTime);
+        metrics.getBlobInfoRequestRate.mark();
+        metrics.getBlobInfoProcessingTimeInMs.update(requestProcessingTime);
+        responseQueueTimeHistogram = metrics.getBlobInfoResponseQueueTimeInMs;
+        responseSendTimeHistogram = metrics.getBlobInfoSendTimeInMs;
+        requestTotalTimeHistogram = metrics.getBlobInfoTotalTimeInMs;
+        if (isRequestDropped) {
+          metrics.getBlobInfoDroppedRate.mark();
+          metrics.totalRequestDroppedRate.mark();
+        }
+      } else if (getRequest.getMessageFormatFlag() == MessageFormatFlags.All) {
+        if (isReplicaRequest) {
+          metrics.getBlobAllByReplicaRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.getBlobAllByReplicaRequestRate.mark();
+          metrics.getBlobAllByReplicaProcessingTimeInMs.update(requestProcessingTime);
+          // client id now has dc name at the end, for example: ClientId=replication-fetch-abc.example.com[dc1]
+          String[] clientStrs = getRequest.getClientId().split("\\[");
+          if (clientStrs.length > 1) {
+            String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
+            if (!currentNode.getDatacenterName().equals(clientDc)) {
+              metrics.updateCrossColoFetchBytesRate(clientDc, responseBlobSize);
+            }
+          }
+          responseQueueTimeHistogram = metrics.getBlobAllByReplicaResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.getBlobAllByReplicaSendTimeInMs;
+          requestTotalTimeHistogram = metrics.getBlobAllByReplicaTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.getBlobAllByReplicaDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+        } else {
+          metrics.getBlobAllRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.getBlobAllRequestRate.mark();
+          metrics.getBlobAllProcessingTimeInMs.update(requestProcessingTime);
+          metrics.updateGetBlobProcessingTimeBySize(responseBlobSize, requestProcessingTime);
+          responseQueueTimeHistogram = metrics.getBlobAllResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.getBlobAllSendTimeInMs;
+          requestTotalTimeHistogram = metrics.getBlobAllTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.getBlobAllDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+        }
+      }
+    }
+
+    @Override
+    public void visit(TtlUpdateRequest ttlUpdateRequest) {
+      metrics.updateBlobTtlRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.updateBlobTtlRequestRate.mark();
+      metrics.updateBlobTtlProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.updateBlobTtlResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.updateBlobTtlSendTimeInMs;
+      requestTotalTimeHistogram = metrics.updateBlobTtlTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.updateBlobTtlDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(DeleteRequest deleteRequest) {
+      metrics.deleteBlobRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.deleteBlobRequestRate.mark();
+      metrics.deleteBlobProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.deleteBlobResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.deleteBlobSendTimeInMs;
+      requestTotalTimeHistogram = metrics.deleteBlobTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.deleteBlobDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(UndeleteRequest undeleteRequest) {
+      metrics.undeleteBlobRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.undeleteBlobRequestRate.mark();
+      metrics.undeleteBlobProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.undeleteBlobResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.undeleteBlobSendTimeInMs;
+      requestTotalTimeHistogram = metrics.undeleteBlobTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.undeleteBlobDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(ReplicaMetadataRequest replicaMetadataRequest) {
+      metrics.replicaMetadataRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.replicaMetadataRequestRate.mark();
+      metrics.replicaMetadataRequestProcessingTimeInMs.update(requestProcessingTime);
+      // client id now has dc name at the end, for example: ClientId=replication-metadata-abc.example.com[dc1]
+      String[] clientStrs = replicaMetadataRequest.getClientId().split("\\[");
+      if (clientStrs.length > 1) {
+        String clientDc = clientStrs[1].substring(0, clientStrs[1].length() - 1);
+        if (!currentNode.getDatacenterName().equals(clientDc)) {
+          metrics.updateCrossColoMetadataExchangeBytesRate(clientDc, responseBlobSize);
+        }
+      }
+      responseQueueTimeHistogram = metrics.replicaMetadataResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.replicaMetadataSendTimeInMs;
+      requestTotalTimeHistogram = metrics.replicaMetadataTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.replicaMetadataDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(ReplicateBlobRequest replicateBlobRequest) {
+      metrics.replicateBlobRequestQueueTimeInMs.update(requestQueueTime);
+      metrics.replicateBlobRequestRate.mark();
+      metrics.replicateBlobProcessingTimeInMs.update(requestProcessingTime);
+      responseQueueTimeHistogram = metrics.replicateBlobResponseQueueTimeInMs;
+      responseSendTimeHistogram = metrics.replicateBlobSendTimeInMs;
+      requestTotalTimeHistogram = metrics.replicateBlobTotalTimeInMs;
+      if (isRequestDropped) {
+        metrics.replicateBlobDroppedRate.mark();
+        metrics.totalRequestDroppedRate.mark();
+      }
+    }
+
+    @Override
+    public void visit(AdminRequest adminRequest) {
+      switch (adminRequest.getType()) {
+        case TriggerCompaction:
+          metrics.triggerCompactionRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.triggerCompactionRequestRate.mark();
+          metrics.triggerCompactionRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.triggerCompactionDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+        case RequestControl:
+          metrics.requestControlRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.requestControlRequestRate.mark();
+          metrics.requestControlRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.requestControlResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.requestControlDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+        case ReplicationControl:
+          metrics.replicationControlRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.replicationControlRequestRate.mark();
+          metrics.replicationControlRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.replicationControlResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.replicationControlRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.replicationControlDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+        case CatchupStatus:
+          metrics.catchupStatusRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.catchupStatusRequestRate.mark();
+          metrics.catchupStatusRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.catchupStatusResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.catchupStatusDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+        case BlobStoreControl:
+          metrics.blobStoreControlRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.blobStoreControlRequestRate.mark();
+          metrics.blobStoreControlRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.blobStoreControlResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.blobStoreControlResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.blobStoreControlDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+        case HealthCheck:
+          metrics.healthCheckRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.healthCheckRequestRate.mark();
+          metrics.healthCheckRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.healthCheckResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.healthCheckResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.healthCheckRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.healthCheckDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+        case BlobIndex:
+          metrics.blobIndexRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.blobIndexRequestRate.mark();
+          metrics.blobIndexRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.blobIndexResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.blobIndexResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.blobIndexRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.blobIndexDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
+      }
+    }
+
+    /**
+     * Get the histogram object used for tracking response queue time. This should be called only after corresponding
+     * visit(Request request) method is invoked.
+     * @return {@link Histogram} associated with tracking the response queue times of the request.
+     */
+    public Histogram getResponseQueueTimeHistogram() {
+      return responseQueueTimeHistogram;
+    }
+
+    /**
+     * Get the histogram object used for tracking response send times. This should be called only after corresponding
+     * visit(Request request) method is invoked.
+     * @return {@link Histogram} associated with tracking the response send times of the request.
+     */
+    public Histogram getResponseSendTimeHistogram() {
+      return responseSendTimeHistogram;
+    }
+
+    /**
+     * Get the histogram object used for tracking request total time. This should be called only after corresponding
+     * visit(Request request) method is invoked.
+     * @return {@link Histogram} associated with tracking the request total times of the request.
+     */
+    public Histogram getRequestTotalTimeHistogram() {
+      return requestTotalTimeHistogram;
     }
   }
 }

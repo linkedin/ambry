@@ -14,6 +14,7 @@
 package com.github.ambry.commons;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
@@ -169,8 +170,6 @@ public class ServerMetrics {
   public final Histogram blobIndexResponseSendTimeInMs;
   public final Histogram blobIndexRequestTotalTimeInMs;
 
-
-
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
 
@@ -200,6 +199,28 @@ public class ServerMetrics {
   public final Meter blobStoreControlRequestRate;
   public final Meter healthCheckRequestRate;
   public final Meter blobIndexRequestRate;
+
+  public final Meter putBlobDroppedRate;
+  public final Meter getBlobDroppedRate;
+  public final Meter getBlobPropertiesDroppedRate;
+  public final Meter getBlobUserMetadataDroppedRate;
+  public final Meter getBlobAllDroppedRate;
+  public final Meter getBlobAllByReplicaDroppedRate;
+  public final Meter getBlobInfoDroppedRate;
+  public final Meter deleteBlobDroppedRate;
+  public final Meter replicateBlobDroppedRate;
+  public final Meter undeleteBlobDroppedRate;
+  public final Meter updateBlobTtlDroppedRate;
+  public final Meter replicaMetadataDroppedRate;
+  public final Meter triggerCompactionDroppedRate;
+  public final Meter requestControlDroppedRate;
+  public final Meter replicationControlDroppedRate;
+  public final Meter catchupStatusDroppedRate;
+  public final Meter blobStoreControlDroppedRate;
+  public final Meter healthCheckDroppedRate;
+  public final Meter blobIndexDroppedRate;
+
+  public final Meter totalRequestDroppedRate;
 
   public final Meter putSmallBlobRequestRate;
   public final Meter getSmallBlobRequestRate;
@@ -255,6 +276,9 @@ public class ServerMetrics {
 
   private final MetricRegistry registry;
   private final Class<?> requestClass;
+
+  public Gauge<Integer> activeRequestsQueueSize;
+  public Gauge<Integer> droppedRequestsQueueSize;
 
   public ServerMetrics(MetricRegistry registry, Class<?> requestClass) {
     this(registry, requestClass, null);
@@ -476,7 +500,6 @@ public class ServerMetrics {
     blobIndexRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "BlobIndexRequestTotalTimeInMs"));
 
-
     blobSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobUserMetadataSize"));
 
@@ -514,6 +537,30 @@ public class ServerMetrics {
     blobStoreControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobStoreControlRequestRate"));
     healthCheckRequestRate = registry.meter(MetricRegistry.name(requestClass, "HealthCheckRequestRate"));
     blobIndexRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobIndexRequestRate"));
+
+    putBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobDroppedRate"));
+    getBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobDroppedRate"));
+    getBlobPropertiesDroppedRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobPropertiesDroppedRate"));
+    getBlobUserMetadataDroppedRate =
+        registry.meter(MetricRegistry.name(requestClass, "GetBlobUserMetadataDroppedRate"));
+    getBlobAllDroppedRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobAllDroppedRate"));
+    getBlobAllByReplicaDroppedRate =
+        registry.meter(MetricRegistry.name(requestClass, "GetBlobAllByReplicaDroppedRate"));
+    getBlobInfoDroppedRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobInfoDroppedRate"));
+    deleteBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "DeleteBlobDroppedRate"));
+    undeleteBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "UndeleteBlobDroppedRate"));
+    updateBlobTtlDroppedRate = registry.meter(MetricRegistry.name(requestClass, "UpdateBlobTtlDroppedRate"));
+    replicateBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "ReplicateBlobDroppedRate"));
+    replicaMetadataDroppedRate = registry.meter(MetricRegistry.name(requestClass, "ReplicaMetadataDroppedRate"));
+    triggerCompactionDroppedRate = registry.meter(MetricRegistry.name(requestClass, "TriggerCompactionDroppedRate"));
+    requestControlDroppedRate = registry.meter(MetricRegistry.name(requestClass, "RequestControlDroppedRate"));
+    replicationControlDroppedRate = registry.meter(MetricRegistry.name(requestClass, "ReplicationControlDroppedRate"));
+    catchupStatusDroppedRate = registry.meter(MetricRegistry.name(requestClass, "CatchupStatusDroppedRate"));
+    blobStoreControlDroppedRate = registry.meter(MetricRegistry.name(requestClass, "BlobStoreControlDroppedRate"));
+    healthCheckDroppedRate = registry.meter(MetricRegistry.name(requestClass, "HealthCheckDroppedRate"));
+    blobIndexDroppedRate = registry.meter(MetricRegistry.name(requestClass, "BlobIndexDroppedRate"));
+
+    totalRequestDroppedRate = registry.meter(MetricRegistry.name(requestClass, "TotalRequestDroppedRate"));
 
     putSmallBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "PutSmallBlobRequestRate"));
     getSmallBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "GetSmallBlobRequestRate"));
@@ -568,6 +615,14 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionSuccess"));
     serverValidateConnectionFailure =
         registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionFailure"));
+  }
+
+  public void registerRequestQueuesMetrics(Gauge<Integer> activeRequestsQueueSize,
+      Gauge<Integer> droppedRequestsQueueSize) {
+    this.activeRequestsQueueSize = registry.gauge(MetricRegistry.name(ServerMetrics.class, "ActiveRequestsQueueSize"),
+        () -> activeRequestsQueueSize);
+    this.droppedRequestsQueueSize = registry.gauge(MetricRegistry.name(ServerMetrics.class, "DroppedRequestsQueueSize"),
+        () -> droppedRequestsQueueSize);
   }
 
   public void registerParticipantsMismatchMetrics() {

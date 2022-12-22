@@ -225,6 +225,11 @@ public class PutRequest extends RequestOrResponse {
     return sizeExcludingBlobAndCrc;
   }
 
+  @Override
+  public void accept(RequestVisitor visitor) {
+    visitor.visit(this);
+  }
+
   /**
    * Construct the bufferToSend to serialize request metadata and other blob related information. The newly constructed
    * bufferToSend will not include the blob content as it's carried by the {@code blob} field in this class.

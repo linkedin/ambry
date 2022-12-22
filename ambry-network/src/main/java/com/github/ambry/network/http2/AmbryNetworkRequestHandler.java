@@ -41,7 +41,6 @@ public class AmbryNetworkRequestHandler extends SimpleChannelInboundHandler<Full
 
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest msg) {
-
     ByteBuf dup = msg.content().retainedDuplicate();
     try {
       requestResponseChannel.sendRequest(new NettyServerRequest(ctx, dup));

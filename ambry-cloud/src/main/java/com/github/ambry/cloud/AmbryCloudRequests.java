@@ -181,50 +181,50 @@ public class AmbryCloudRequests extends AmbryRequests {
     } else {
       CloudBlobStore cloudBlobStore = (CloudBlobStore) storeManager.getStore(partitionRequestInfo.getPartition());
       EnumSet<StoreGetOptions> storeGetOptions = getStoreGetOptions(getRequest);
-      cloudBlobStore.getAsync(partitionRequestInfo.getBlobIds(), storeGetOptions).whenCompleteAsync((info, throwable) -> {
-        if (throwable != null) {
-          Exception ex = Utils.extractFutureExceptionCause(throwable);
-          if (ex instanceof StoreException) {
-            logger.error("Store exception on a get with error code {} for partition {}",
-                ((StoreException) ex).getErrorCode(), partitionRequestInfo.getPartition(), ex);
-            response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                ErrorMapping.getStoreErrorMapping(((StoreException) ex).getErrorCode())));
-          } else if (ex instanceof MessageFormatException) {
-            logger.error("Message format exception on a get with error code {} for partitionRequestInfo {}",
-                ((MessageFormatException) ex).getErrorCode(), partitionRequestInfo, ex);
-            response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                ErrorMapping.getMessageFormatErrorMapping(((MessageFormatException) ex).getErrorCode())));
-          } else {
-            logger.error("Unknown exception for request {}", getRequest, ex);
-            response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                ServerErrorCode.Unknown_Error));
-          }
-        } else {
-          MessageFormatSend blobsToSend;
-          try {
-            blobsToSend =
-                new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(), messageFormatMetrics,
-                    storeKeyFactory);
-            PartitionResponseInfo partitionResponseInfo =
-                new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo(),
-                    blobsToSend.getMessageMetadataList());
-            response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                Collections.singletonList(partitionResponseInfo), blobsToSend, ServerErrorCode.No_Error));
-          } catch (IOException e) {
-            response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                ServerErrorCode.Unknown_Error));
-          } catch (MessageFormatException ex) {
-            response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
-                ErrorMapping.getMessageFormatErrorMapping(ex.getErrorCode())));
-          }
-        }
-        try {
-          // Send Response
-          requestResponseChannel.sendResponse(response.get(), request, null);
-        } catch (InterruptedException ie) {
-          logger.warn("Interrupted while enqueuing the response", ie);
-        }
-      });
+      cloudBlobStore.getAsync(partitionRequestInfo.getBlobIds(), storeGetOptions)
+          .whenCompleteAsync((info, throwable) -> {
+            if (throwable != null) {
+              Exception ex = Utils.extractFutureExceptionCause(throwable);
+              if (ex instanceof StoreException) {
+                logger.error("Store exception on a get with error code {} for partition {}",
+                    ((StoreException) ex).getErrorCode(), partitionRequestInfo.getPartition(), ex);
+                response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+                    ErrorMapping.getStoreErrorMapping(((StoreException) ex).getErrorCode())));
+              } else if (ex instanceof MessageFormatException) {
+                logger.error("Message format exception on a get with error code {} for partitionRequestInfo {}",
+                    ((MessageFormatException) ex).getErrorCode(), partitionRequestInfo, ex);
+                response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+                    ErrorMapping.getMessageFormatErrorMapping(((MessageFormatException) ex).getErrorCode())));
+              } else {
+                logger.error("Unknown exception for request {}", getRequest, ex);
+                response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+                    ServerErrorCode.Unknown_Error));
+              }
+            } else {
+              MessageFormatSend blobsToSend;
+              try {
+                blobsToSend = new MessageFormatSend(info.getMessageReadSet(), getRequest.getMessageFormatFlag(),
+                    messageFormatMetrics, storeKeyFactory);
+                PartitionResponseInfo partitionResponseInfo =
+                    new PartitionResponseInfo(partitionRequestInfo.getPartition(), info.getMessageReadSetInfo(),
+                        blobsToSend.getMessageMetadataList());
+                response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+                    Collections.singletonList(partitionResponseInfo), blobsToSend, ServerErrorCode.No_Error));
+              } catch (IOException e) {
+                response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+                    ServerErrorCode.Unknown_Error));
+              } catch (MessageFormatException ex) {
+                response.set(new GetResponse(getRequest.getCorrelationId(), getRequest.getClientId(),
+                    ErrorMapping.getMessageFormatErrorMapping(ex.getErrorCode())));
+              }
+            }
+            try {
+              // Send Response
+              requestResponseChannel.sendResponse(response.get(), request, null);
+            } catch (InterruptedException ie) {
+              logger.warn("Interrupted while enqueuing the response", ie);
+            }
+          });
     }
   }
 

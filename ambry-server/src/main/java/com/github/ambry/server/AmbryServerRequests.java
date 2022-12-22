@@ -77,6 +77,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.server.ServerErrorCode.*;
+
 
 /**
  * The main request implementation class. All requests to the server are
@@ -192,74 +194,31 @@ public class AmbryServerRequests extends AmbryRequests {
     long startTime = SystemTime.getInstance().milliseconds();
     DataInputStream requestStream = new DataInputStream(request.getInputStream());
     AdminRequest adminRequest = AdminRequest.readFrom(requestStream, clusterMap);
-    Histogram processingTimeHistogram = null;
-    Histogram responseQueueTimeHistogram = null;
-    Histogram responseSendTimeHistogram = null;
-    Histogram requestTotalTimeHistogram = null;
+    Histogram responseQueueTimeHistogram;
+    Histogram responseSendTimeHistogram;
+    Histogram requestTotalTimeHistogram;
     AdminResponse response = null;
     try {
       switch (adminRequest.getType()) {
         case TriggerCompaction:
-          metrics.triggerCompactionRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.triggerCompactionRequestRate.mark();
-          processingTimeHistogram = metrics.triggerCompactionRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.triggerCompactionResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.triggerCompactionResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.triggerCompactionRequestTotalTimeInMs;
           response = handleTriggerCompactionRequest(adminRequest);
           break;
         case RequestControl:
-          metrics.requestControlRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.requestControlRequestRate.mark();
-          processingTimeHistogram = metrics.requestControlRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.requestControlResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.requestControlResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.requestControlRequestTotalTimeInMs;
           response = handleRequestControlRequest(requestStream, adminRequest);
           break;
         case ReplicationControl:
-          metrics.replicationControlRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.replicationControlRequestRate.mark();
-          processingTimeHistogram = metrics.replicationControlRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.replicationControlResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.replicationControlResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.replicationControlRequestTotalTimeInMs;
           response = handleReplicationControlRequest(requestStream, adminRequest);
           break;
         case CatchupStatus:
-          metrics.catchupStatusRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.catchupStatusRequestRate.mark();
-          processingTimeHistogram = metrics.catchupStatusRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.catchupStatusResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.catchupStatusResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.catchupStatusRequestTotalTimeInMs;
           response = handleCatchupStatusRequest(requestStream, adminRequest);
           break;
         case BlobStoreControl:
-          metrics.blobStoreControlRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.blobStoreControlRequestRate.mark();
-          processingTimeHistogram = metrics.blobStoreControlRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.blobStoreControlResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.blobStoreControlResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.blobStoreControlRequestTotalTimeInMs;
           response = handleBlobStoreControlRequest(requestStream, adminRequest);
           break;
         case HealthCheck:
-          metrics.healthCheckRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.healthCheckRequestRate.mark();
-          processingTimeHistogram = metrics.healthCheckRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.healthCheckResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.healthCheckResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.healthCheckRequestTotalTimeInMs;
           response = handleHealthCheckRequest(requestStream, adminRequest);
           break;
         case BlobIndex:
-          metrics.blobIndexRequestQueueTimeInMs.update(requestQueueTime);
-          metrics.blobIndexRequestRate.mark();
-          processingTimeHistogram = metrics.blobIndexRequestProcessingTimeInMs;
-          responseQueueTimeHistogram = metrics.blobIndexResponseQueueTimeInMs;
-          responseSendTimeHistogram = metrics.blobIndexResponseSendTimeInMs;
-          requestTotalTimeHistogram = metrics.blobIndexRequestTotalTimeInMs;
           response = handleBlobIndexRequest(requestStream, adminRequest);
           break;
       }
@@ -282,7 +241,12 @@ public class AmbryServerRequests extends AmbryRequests {
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       totalTimeSpent += processingTime;
       publicAccessLogger.info("{} {} processingTime {}", adminRequest, response, processingTime);
-      processingTimeHistogram.update(processingTime);
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      adminRequest.accept(metricsUpdater);
+      responseQueueTimeHistogram = metricsUpdater.getResponseQueueTimeHistogram();
+      responseSendTimeHistogram = metricsUpdater.getResponseSendTimeHistogram();
+      requestTotalTimeHistogram = metricsUpdater.getRequestTotalTimeHistogram();
     }
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(responseQueueTimeHistogram, responseSendTimeHistogram,
@@ -665,7 +629,7 @@ public class AmbryServerRequests extends AmbryRequests {
     }
     if (!isRemoteLagLesserOrEqual(partitionIds, 0, numReplicasCaughtUpPerPartition)) {
       logger.debug("Catchup not done on {}", partitionIds);
-      return ServerErrorCode.Retry_After_Backoff;
+      return Retry_After_Backoff;
     }
     controlRequestForPartitions(
         EnumSet.of(RequestOrResponseType.ReplicaMetadataRequest, RequestOrResponseType.GetRequest), partitionIds,

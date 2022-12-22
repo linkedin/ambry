@@ -13,14 +13,19 @@
  */
 package com.github.ambry.network;
 
+import com.github.ambry.commons.ServerMetrics;
+import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.server.EmptyRequest;
+import com.github.ambry.utils.SystemTime;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.nio.channels.ReadableByteChannel;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,18 +35,31 @@ import org.slf4j.LoggerFactory;
  */
 public class NettyServerRequestResponseChannel implements RequestResponseChannel {
   private static final Logger logger = LoggerFactory.getLogger(NettyServerRequestResponseChannel.class);
-  private final ArrayBlockingQueue<NetworkRequest> requestQueue;
   private final Http2ServerMetrics http2ServerMetrics;
+  private final NetworkRequestQueue networkRequestQueue;
 
-  public NettyServerRequestResponseChannel(int queueSize, Http2ServerMetrics http2ServerMetrics) {
-    requestQueue = new ArrayBlockingQueue<>(queueSize);
+  public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics,
+      ServerMetrics serverMetrics) {
+    switch (config.requestQueueType) {
+      case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
+        this.networkRequestQueue = new AdaptiveLifoCoDelNetworkRequestQueue(config.adaptiveLifoQueueThreshold,
+            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance());
+        break;
+      case BASIC_QUEUE_WITH_FIFO:
+        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, SystemTime.getInstance());
+        break;
+      default:
+        throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
+    }
     this.http2ServerMetrics = http2ServerMetrics;
+    serverMetrics.registerRequestQueuesMetrics(networkRequestQueue::numActiveRequests,
+        networkRequestQueue::numDroppedRequests);
   }
 
-  /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
+  /** Send a request to be handled */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    requestQueue.put(request);
+    networkRequestQueue.offer(request);
     http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
   }
 
@@ -80,38 +98,67 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     }
   }
 
-  /** Get the next request or block until there is one */
   @Override
   public NetworkRequest receiveRequest() throws InterruptedException {
-
-    NetworkRequest request = null;
-    while (request == null) {
-      request = requestQueue.take();
+    NetworkRequest request;
+    while (true) {
+      request = networkRequestQueue.take();
       http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
-      if (request.equals(EmptyRequest.getInstance())) {
-        logger.debug("Request handler {} received shut down command ", request);
-      } else {
-        DataInputStream stream = new DataInputStream(request.getInputStream());
-        try {
-          // The first 8 bytes is size of the request. TCP implementation uses this size to allocate buffer. See {@link BoundedReceive}
-          // Here we just need to consume it.
-          stream.readLong();
-        } catch (IOException e) {
-          logger.error("Encountered an error while reading length out, close the connection", e);
-          closeConnection(request);
-          request = null;
-        }
+      if (consumeSizeHeader(request)) {
+        return request;
       }
     }
-    return request;
+  }
+
+  @Override
+  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
+    while (true) {
+      List<NetworkRequest> droppedRequests = networkRequestQueue.getDroppedRequests();
+      List<NetworkRequest> validDroppedRequests = new ArrayList<>();
+      for (NetworkRequest requestToDrop : droppedRequests) {
+        if (consumeSizeHeader(requestToDrop)) {
+          validDroppedRequests.add(requestToDrop);
+        }
+      }
+      if (!validDroppedRequests.isEmpty()) {
+        return validDroppedRequests;
+      }
+    }
   }
 
   /**
-   * Shuts down the request response channel
+   * Consume the first 8 bytes of the input stream which represents the size of the request. This is added to the
+   * request since Ambry's {@link SocketServer} stack needs to know the number of the bytes to read for a request
+   * (see {@link BoundedNettyByteBufReceive#readFrom(ReadableByteChannel)} method). This is not needed when using
+   * Netty HTTP2 server stack. We can remove this once {@link SocketServer} stack is retired. For now, we are
+   * consuming the bytes here so that rest of request handling in server is same.
+   * @param request incoming network request.
+   * @return false if there was any error while reading the first 8 bytes. Else, return true.
+   */
+  private boolean consumeSizeHeader(NetworkRequest request) throws InterruptedException {
+    if (request.equals(EmptyRequest.getInstance())) {
+      logger.debug("Request handler {} received shut down command ", request);
+    } else {
+      DataInputStream stream = new DataInputStream(request.getInputStream());
+      try {
+        stream.readLong();
+      } catch (IOException e) {
+        logger.error("Encountered an error while reading length out of request {}, close the connection", request, e);
+        closeConnection(request);
+        // Release the memory held by this request.
+        request.release();
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Shuts down the request response channel and release any resources in {@link NetworkRequestQueue}.
    */
   @Override
   public void shutdown() {
-    return;
+    networkRequestQueue.close();
   }
 }
 
