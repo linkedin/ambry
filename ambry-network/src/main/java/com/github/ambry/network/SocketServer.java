@@ -53,6 +53,7 @@ public class SocketServer implements NetworkServer {
   private final String host;
   private final int port;
   private final int numProcessorThreads;
+  private final int maxQueuedRequests;
   private final int sendBufferSize;
   private final int recvBufferSize;
   private final ArrayList<Processor> processors;
@@ -68,10 +69,11 @@ public class SocketServer implements NetworkServer {
     this.host = config.hostName;
     this.port = config.port;
     this.numProcessorThreads = config.numIoThreads;
+    this.maxQueuedRequests = config.queuedMaxRequests;
     this.sendBufferSize = config.socketSendBufferBytes;
     this.recvBufferSize = config.socketReceiveBufferBytes;
     processors = new ArrayList<>(numProcessorThreads);
-    requestResponseChannel = new SocketRequestResponseChannel(config);
+    requestResponseChannel = new SocketRequestResponseChannel(numProcessorThreads, maxQueuedRequests);
     metrics = new ServerNetworkMetrics(requestResponseChannel, registry, processors);
     this.acceptors = new ArrayList<>();
     this.ports = new HashMap<>();
@@ -109,6 +111,10 @@ public class SocketServer implements NetworkServer {
 
   public int getNumProcessorThreads() {
     return numProcessorThreads;
+  }
+
+  public int getMaxQueuedRequests() {
+    return maxQueuedRequests;
   }
 
   public int getSendBufferSize() {

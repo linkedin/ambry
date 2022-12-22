@@ -13,15 +13,13 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
@@ -127,26 +125,17 @@ interface ResponseListener {
  */
 public class SocketRequestResponseChannel implements RequestResponseChannel {
   private final int numProcessors;
+  private final int queueSize;
+  private final ArrayBlockingQueue<NetworkRequest> requestQueue;
   private final ArrayList<BlockingQueue<NetworkResponse>> responseQueues;
   private final ArrayList<ResponseListener> responseListeners;
-  private final NetworkRequestQueue networkRequestQueue;
 
-  public SocketRequestResponseChannel(NetworkConfig config) {
-    this.numProcessors = config.numIoThreads;
-    Time time = SystemTime.getInstance();
-    switch (config.requestQueueType) {
-      case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
-        this.networkRequestQueue = new AdaptiveLifoCoDelNetworkRequestQueue(config.adaptiveLifoQueueThreshold,
-            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, time);
-        break;
-      case BASIC_QUEUE_WITH_FIFO:
-        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, time);
-        break;
-      default:
-        throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
-    }
+  public SocketRequestResponseChannel(int numProcessors, int queueSize) {
+    this.numProcessors = numProcessors;
+    this.queueSize = queueSize;
+    this.requestQueue = new ArrayBlockingQueue<>(this.queueSize);
     responseQueues = new ArrayList<>(this.numProcessors);
-    responseListeners = new ArrayList<>();
+    responseListeners = new ArrayList<ResponseListener>();
 
     for (int i = 0; i < this.numProcessors; i++) {
       responseQueues.add(i, new LinkedBlockingQueue<>());
@@ -156,7 +145,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    networkRequestQueue.offer(request);
+    requestQueue.put(request);
   }
 
   /** Send a response back to the socket server to be sent over the network */
@@ -183,14 +172,10 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
     }
   }
 
+  /** Get the next request or block until there is one */
   @Override
   public NetworkRequest receiveRequest() throws InterruptedException {
-    return networkRequestQueue.take();
-  }
-
-  @Override
-  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
-    return networkRequestQueue.getDroppedRequests();
+    return requestQueue.take();
   }
 
   /** Get a response for the given processor if there is one */
@@ -203,11 +188,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   }
 
   public int getRequestQueueSize() {
-    return networkRequestQueue.numActiveRequests();
-  }
-
-  public int getDroppedRequestsQueueSize() {
-    return networkRequestQueue.numDroppedRequests();
+    return requestQueue.size();
   }
 
   public int getResponseQueueSize(int processor) {
@@ -219,7 +200,8 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   }
 
   public void shutdown() {
-    networkRequestQueue.close();
+    requestQueue.forEach(NetworkRequest::release);
+    requestQueue.clear();
   }
 }
 

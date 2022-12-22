@@ -82,11 +82,6 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   }
 
   @Override
-  public void accept(RequestVisitor visitor) {
-    visitor.visit(this);
-  }
-
-  @Override
   protected void prepareBuffer() {
     super.prepareBuffer();
     bufferToSend.writeInt(replicaMetadataRequestInfoList.size());
