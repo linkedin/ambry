@@ -211,13 +211,11 @@ public class RequestResponseTest {
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey)
       throws IOException {
-    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blobType,
-        blob, blobSize, blobKey, blobKey);
-    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties,
         userMetadata, blobType, blob, blobSize, null, null);
-    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties,
         userMetadata, blobType, blob, blobSize, new byte[0], null);
-    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties,
         userMetadata, blobType, blob, blobSize, blobKey, blobKey);
   }
 
@@ -392,18 +390,11 @@ public class RequestResponseTest {
     BlobType blobType = BlobType.DataBlob;
     byte[] encryptionKey = new byte[]{1, 2, 3, 4, 5};
 
-    ByteBuf content;
-    short savedVersion = PutRequest.currentVersion;
-    try {
-      PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
-      // Compose and serialize the PutRequest with V5 enabled.
-      PutRequest request =
-          new PutRequest(correlationId, clientId, blobId, blobProperties, userMetadata, blobData, blobSize, blobType,
-              ByteBuffer.wrap(encryptionKey), true);
-      content = request.content();
-    } finally {
-      PutRequest.currentVersion = savedVersion;
-    }
+    // Compose and serialize the PutRequest with V5 enabled.
+    PutRequest request =
+        new PutRequest(correlationId, clientId, blobId, blobProperties, userMetadata, blobData, blobSize, blobType,
+            ByteBuffer.wrap(encryptionKey), true);
+    ByteBuf content = request.content();
 
     // Read back binary.  The content binary contains extra fields(total size and operation type).
     // Those extra fields must be read from the stream before calling readFrom().

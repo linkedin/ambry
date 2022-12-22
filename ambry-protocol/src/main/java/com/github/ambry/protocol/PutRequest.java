@@ -76,13 +76,10 @@ public class PutRequest extends RequestOrResponse {
   private static final int IS_COMPRESSED_SIZE_IN_BYTES = 1;
   private static final int CRC_SIZE_IN_BYTES = Long.BYTES;
   private static final short PUT_REQUEST_VERSION_V3 = 3;
+  private static final short PUT_REQUEST_VERSION_V4 = 4;
+  private static final short PUT_REQUEST_VERSION_V5 = 5;
 
-  // TODO - The V4 and V5 constants are public to allow config to control the version during deployment and testing.
-  // After compression feature tested and deploy, it will be converted back to private.
-  public static final short PUT_REQUEST_VERSION_V4 = 4;
-  public static final short PUT_REQUEST_VERSION_V5 = 5;
-
-  public static short currentVersion = PUT_REQUEST_VERSION_V4;
+  private static short currentVersion = PUT_REQUEST_VERSION_V5;
 
   /**
    * Construct a PutRequest
