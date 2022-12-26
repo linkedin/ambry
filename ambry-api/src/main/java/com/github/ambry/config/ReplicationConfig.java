@@ -224,6 +224,23 @@ public class ReplicationConfig {
   @Default("120")
   public final int replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds;
 
+  @Config(REPLICATION_REQUEST_NETWORK_TIMEOUT_MS)
+  @Default("10 * 1000")
+  public final long replicationRequestNetworkTimeoutMs;
+  public final static String REPLICATION_REQUEST_NETWORK_TIMEOUT_MS = "replication.request.network.timeout.ms";
+
+  @Config(REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS)
+  @Default("40")
+  public final long replicationRequestNetworkPollTimeoutMs;
+  public final static String REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS =
+      "replication.request.network.poll.timeout.ms";
+
+  @Config(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO)
+  @Default("false")
+  public final boolean replicationUsingNonblockingNetworkClientForRemoteColo;
+  public final static String REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO =
+      "replication.using.nonblocking.network.client.for.remote.colo";
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -275,5 +292,10 @@ public class ReplicationConfig {
     replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds =
         verifiableProperties.getIntInRange(REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS, 120,
             -1, Integer.MAX_VALUE);
+    replicationRequestNetworkTimeoutMs = verifiableProperties.getLong(REPLICATION_REQUEST_NETWORK_TIMEOUT_MS, 10000);
+    replicationRequestNetworkPollTimeoutMs =
+        verifiableProperties.getLong(REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS, 40);
+    replicationUsingNonblockingNetworkClientForRemoteColo =
+        verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
   }
 }

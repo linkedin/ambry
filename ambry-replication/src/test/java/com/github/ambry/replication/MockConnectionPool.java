@@ -16,7 +16,6 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.network.PortType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.ChannelOutput;
@@ -70,7 +69,7 @@ public class MockConnectionPool implements ConnectionPool {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
     this.maxEntriesToReturn = maxEntriesToReturn;
-    this.connections = new HashMap<DataNodeId, MockConnection>();
+    this.connections = new HashMap<>();
   }
 
   @Override

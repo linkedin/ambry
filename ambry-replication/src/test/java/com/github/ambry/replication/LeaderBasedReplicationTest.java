@@ -28,6 +28,8 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.protocol.ReplicaMetadataRequest;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
@@ -71,8 +73,24 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
    * Constructor to set the configs
    */
   public LeaderBasedReplicationTest(short requestVersion, short responseVersion) throws IOException {
-    super(requestVersion, responseVersion);
+    super(requestVersion, responseVersion, false);
     setUp();
+  }
+
+  /**
+   * Running for the two sets of compatible ReplicaMetadataRequest and ReplicaMetadataResponse,
+   * viz {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V1}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_5}}
+   * & {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V2}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_6}}
+   * @return an array with both pairs of compatible request and response.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    //@formatter:off
+    return Arrays.asList(new Object[][]{
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6},
+    });
+    //@formatter:on
   }
 
   public void setUp() throws IOException {

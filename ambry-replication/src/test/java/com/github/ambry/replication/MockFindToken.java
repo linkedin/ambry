@@ -77,4 +77,18 @@ public class MockFindToken implements FindToken {
   public long getBytesRead() {
     return this.bytesRead;
   }
+
+  @Override
+  public String toString() {
+    StringBuilder sb = new StringBuilder();
+    sb.append("Version:")
+        .append(version)
+        .append(" Type:")
+        .append(type.name())
+        .append(" Index:")
+        .append(index)
+        .append(" BytesRead:")
+        .append(bytesRead);
+    return sb.toString();
+  }
 }
