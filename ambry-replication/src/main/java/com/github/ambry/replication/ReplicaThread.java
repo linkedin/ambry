@@ -703,6 +703,7 @@ public class ReplicaThread implements Runnable {
     long processMetadataResponseTimeInMs = time.milliseconds() - startTimeInMs;
     logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}", remoteNode, threadName,
         processMetadataResponseTimeInMs);
+    return exchangeMetadataResponseList;
   }
 
   /**
