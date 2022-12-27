@@ -115,6 +115,9 @@ public class ReplicaThread implements Runnable {
   private volatile boolean allDisabled = false;
   private final ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin;
 
+  private final Timer replicationLatencyTimer;
+  private final Timer portTypeBasedReplicationLatencyTimer;
+
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
@@ -158,11 +161,24 @@ public class ReplicaThread implements Runnable {
       syncedBackOffCount = replicationMetrics.interColoReplicaSyncedBackoffCount;
       idleCount = replicationMetrics.interColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.interColoReplicaThreadThrottleCount;
+      replicationLatencyTimer = replicationMetrics.interColoReplicationLatency.get(datacenterName);
+      if (replicatingOverSsl) {
+        portTypeBasedReplicationLatencyTimer = replicationMetrics.sslInterColoReplicationLatency.get(datacenterName);
+      } else {
+        portTypeBasedReplicationLatencyTimer =
+            replicationMetrics.plainTextInterColoReplicationLatency.get(datacenterName);
+      }
     } else {
       threadThrottleDurationMs = replicationConfig.replicationIntraReplicaThreadThrottleSleepDurationMs;
       syncedBackOffCount = replicationMetrics.intraColoReplicaSyncedBackoffCount;
       idleCount = replicationMetrics.intraColoReplicaThreadIdleCount;
       throttleCount = replicationMetrics.intraColoReplicaThreadThrottleCount;
+      replicationLatencyTimer = replicationMetrics.intraColoReplicationLatency;
+      if (replicatingOverSsl) {
+        portTypeBasedReplicationLatencyTimer = replicationMetrics.sslIntraColoReplicationLatency;
+      } else {
+        portTypeBasedReplicationLatencyTimer = replicationMetrics.plainTextIntraColoReplicationLatency;
+      }
     }
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
@@ -328,30 +344,13 @@ public class ReplicaThread implements Runnable {
 
     logger.trace("Replicating from {} DataNodes.", replicasToReplicateGroupedByNode.size());
     for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
-      DataNodeId remoteNode = entry.getKey();
       if (!running) {
         break;
       }
+      DataNodeId remoteNode = entry.getKey();
       List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
-      Timer.Context context;
-      Timer.Context portTypeBasedContext;
-      if (replicatingFromRemoteColo) {
-        context = replicationMetrics.interColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
-        if (replicatingOverSsl) {
-          portTypeBasedContext =
-              replicationMetrics.sslInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
-        } else {
-          portTypeBasedContext =
-              replicationMetrics.plainTextInterColoReplicationLatency.get(remoteNode.getDatacenterName()).time();
-        }
-      } else {
-        context = replicationMetrics.intraColoReplicationLatency.time();
-        if (replicatingOverSsl) {
-          portTypeBasedContext = replicationMetrics.sslIntraColoReplicationLatency.time();
-        } else {
-          portTypeBasedContext = replicationMetrics.plainTextIntraColoReplicationLatency.time();
-        }
-      }
+      Timer.Context context = replicationLatencyTimer.time();
+      Timer.Context portTypeBasedContext = portTypeBasedReplicationLatencyTimer.time();
       ConnectedChannel connectedChannel = null;
       long checkoutConnectionTimeInMs = -1;
       long exchangeMetadataTimeInMs = -1;
@@ -359,36 +358,9 @@ public class ReplicaThread implements Runnable {
       long replicationStartTimeInMs = time.milliseconds();
       long startTimeInMs = replicationStartTimeInMs;
 
-      // Get a list of active replicas that needs be included for this replication cycle
       List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
       List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
-      for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
-        ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
-        boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
-        if (replicaId.isDown() || inBackoff
-            || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
-            || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
-          logger.debug(
-              "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
-                  + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
-              replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
-              remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
-              replicationDisabledPartitions.contains(replicaId.getPartitionId()));
-          continue;
-        }
-
-        if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-          // check if all missing keys for standby replicas from previous replication cycle are now obtained
-          // via leader replica. If we still have missing keys, don't include them in current replication cycle
-          // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
-          processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
-          if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
-            standbyReplicasWithNoProgress.add(remoteReplicaInfo);
-            continue;
-          }
-        }
-        activeReplicasPerNode.add(remoteReplicaInfo);
-      }
+      filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode, standbyReplicasWithNoProgress);
       logger.trace("Replicating from {} RemoteReplicaInfos.", activeReplicasPerNode.size());
 
       // use a variable to track current replica list to replicate (for logging purpose)
@@ -406,7 +378,7 @@ public class ReplicaThread implements Runnable {
               connectionPool.checkOutConnection(remoteNode.getHostname(), activeReplicasPerNode.get(0).getPort(),
                   replicationConfig.replicationConnectionPoolCheckoutTimeoutMs);
           checkoutConnectionTimeInMs = time.milliseconds() - startTimeInMs;
-          // we checkout ConnectedChannel once and replicate remote replicas in batch via same ConnectedChannel
+          // we check out ConnectedChannel once and replicate remote replicas in batch via same ConnectedChannel
           for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
             exchangeMetadataTimeInMs = -1;
             fixMissingStoreKeysTimeInMs = -1;
@@ -418,12 +390,10 @@ public class ReplicaThread implements Runnable {
             exchangeMetadataTimeInMs = time.milliseconds() - startTimeInMs;
 
             if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
-
-              // If leader based replication is enabled and we are replicating from remote colo, fetch the missing blobs
+              // If leader based replication is enabled, we are replicating from remote colo, fetch the missing blobs
               // only for local leader replicas from their corresponding peer leader replicas (Leader <-> Leader).
               // Non-leader replica pairs (standby <-> leaders, leader <-> standby, standby <-> standby) will get their
               // missing blobs from their leader pair exchanges and intra-dc replication.
-
               List<RemoteReplicaInfo> leaderReplicaList = new ArrayList<>();
               List<ExchangeMetadataResponse> exchangeMetadataResponseListForLeaderReplicas = new ArrayList<>();
               getLeaderReplicaList(replicaSubList, exchangeMetadataResponseList, leaderReplicaList,
@@ -539,6 +509,46 @@ public class ReplicaThread implements Runnable {
       } catch (InterruptedException e) {
         logger.error("Received interrupted exception during throttling", e);
       }
+    }
+  }
+
+  /**
+   * Filter the remote replicas in the list of {@link RemoteReplicaInfo}s. It will filter out the replicas that are down
+   * or in backoff state or is disabled. It will also filter out replicas that tries to replicate from remote datacenter
+   * but still have missing blobs from last ReplicaMetadataRequest when the leader based replication is enabled.
+   * @param replicasToReplicatePerNode All the replicas.
+   * @param activeReplicasPerNode A list to store all the active replicas after filtering.
+   * @param standbyReplicasWithNoProgress A list to store all the standby replicas that still have missing blobs from
+   *                                      previous ReplicaMetadataRequest.
+   */
+  void filterRemoteReplicasToReplicate(List<RemoteReplicaInfo> replicasToReplicatePerNode,
+      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasWithNoProgress) {
+    // Get a list of active replicas that needs be included for this replication cycle
+    for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
+      ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
+      boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
+      if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
+          || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
+        logger.debug(
+            "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
+                + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
+            replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
+            remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
+            replicationDisabledPartitions.contains(replicaId.getPartitionId()));
+        continue;
+      }
+
+      if (replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
+        // check if all missing keys for standby replicas from previous replication cycle are now obtained
+        // via leader replica. If we still have missing keys, don't include them in current replication cycle
+        // to avoid sending duplicate metadata requests since their token wouldn't have advanced.
+        processMissingKeysFromPreviousMetadataResponse(remoteReplicaInfo);
+        if (containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo)) {
+          standbyReplicasWithNoProgress.add(remoteReplicaInfo);
+          continue;
+        }
+      }
+      activeReplicasPerNode.add(remoteReplicaInfo);
     }
   }
 
