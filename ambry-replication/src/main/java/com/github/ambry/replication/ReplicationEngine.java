@@ -27,6 +27,8 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
@@ -79,6 +81,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final ScheduledExecutorService scheduler;
   private final AtomicInteger correlationIdGenerator;
   private final ConnectionPool connectionPool;
+  private final NetworkClientFactory networkClientFactory;
   private final NotificationSystem notification;
   // RemoteReplicaInfo are managed by replicaThread.
   protected final Map<String, List<ReplicaThread>> replicaThreadPoolByDc;
@@ -117,17 +120,18 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       ClusterParticipant clusterParticipant, StoreManager storeManager, Predicate<MessageInfo> skipPredicate,
       boolean enableClusterMapListener) throws ReplicationException {
     this(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, dataNode, replicaIds,
-        connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName,
+        connectionPool, null, metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName,
         clusterParticipant, storeManager, skipPredicate, null, SystemTime.getInstance(), enableClusterMapListener);
   }
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, List<? extends ReplicaId> replicaIds,
-      ConnectionPool connectionPool, MetricRegistry metricRegistry, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterParticipant clusterParticipant, StoreManager storeManager, Predicate<MessageInfo> skipPredicate,
-      FindTokenHelper findTokenHelper, Time time, boolean enableClusterMapListener) throws ReplicationException {
+      ConnectionPool connectionPool, NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
+      String transformerClassName, ClusterParticipant clusterParticipant, StoreManager storeManager,
+      Predicate<MessageInfo> skipPredicate, FindTokenHelper findTokenHelper, Time time,
+      boolean enableClusterMapListener) throws ReplicationException {
     this.replicationConfig = replicationConfig;
     this.storeConfig = storeConfig;
     this.storeKeyFactory = storeKeyFactory;
@@ -150,6 +154,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.correlationIdGenerator = new AtomicInteger(0);
     this.dataNodeId = dataNode;
     this.connectionPool = connectionPool;
+    this.networkClientFactory = networkClientFactory;
     this.notification = requestNotification;
     this.metricRegistry = metricRegistry;
     this.dataNodeIdToReplicaThread = new ConcurrentHashMap<>();
@@ -365,11 +370,12 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         StoreKeyConverter threadSpecificKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
         Transformer threadSpecificTransformer =
             Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
+        NetworkClient networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
         ReplicaThread replicaThread =
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-                connectionPool, replicationConfig, replicationMetrics, notification, threadSpecificKeyConverter,
-                threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter, responseHandler, time,
-                replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+                connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
+                threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
+                responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
         replicaThreads.add(replicaThread);
         if (startThread) {
           Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);

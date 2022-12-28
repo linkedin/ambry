@@ -101,7 +101,7 @@ public class MockReplicationManager extends ReplicationManager {
       ConnectionPool connectionPool, FindTokenHelper findTokenHelper, String transformerClassName,
       StoreKeyFactory storeKeyFactory, Time time) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory, clusterMap, null,
-        dataNodeId, connectionPool, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
+        dataNodeId, connectionPool, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, null, findTokenHelper, time);
     reset();
   }

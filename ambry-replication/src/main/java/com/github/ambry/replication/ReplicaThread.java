@@ -32,6 +32,7 @@ import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.notification.UpdateType;
@@ -90,6 +91,7 @@ public class ReplicaThread implements Runnable {
   private final AtomicInteger correlationIdGenerator;
   private final DataNodeId dataNodeId;
   private final ConnectionPool connectionPool;
+  private final NetworkClient networkClient;
   private final ReplicationConfig replicationConfig;
   private final ReplicationMetrics replicationMetrics;
   private final String threadName;
@@ -124,17 +126,17 @@ public class ReplicaThread implements Runnable {
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate) {
-    this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, replicationConfig,
-        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
-        datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, null);
+    this(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, null,
+        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, null);
   }
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
-      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
-      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics,
+      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
+      MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
+      Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     this.threadName = threadName;
     this.running = true;
@@ -143,6 +145,7 @@ public class ReplicaThread implements Runnable {
     this.correlationIdGenerator = correlationIdGenerator;
     this.dataNodeId = dataNodeId;
     this.connectionPool = connectionPool;
+    this.networkClient = networkClient;
     this.replicationConfig = replicationConfig;
     this.replicationMetrics = replicationMetrics;
     this.notification = notification;
