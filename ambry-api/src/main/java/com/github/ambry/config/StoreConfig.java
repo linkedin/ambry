@@ -463,7 +463,8 @@ public class StoreConfig {
   public final int storeDiskIoReservoirTimeWindowMs;
 
   /**
-   * True to enable batch mode in findMissingKeys
+   * True to enable batch mode in findMissingKeys.
+   * @TODO: There is a bug in the implementation that ignores some keys
    */
   @Config(storeEnableFindMissingKeysInBatchModeName)
   @Default("false")
@@ -516,6 +517,7 @@ public class StoreConfig {
    * because we are using one roundtrip to bypass on blob id.
    * Set this to true would help mitigate this issue. We know the put's final state is delete and the requester server won't
    * do anything, then we just move on to scan more entries.
+   * @TODO: there is a but in the implementation that returns too many blob ids in one request.
    */
   @Config(storeDeletedPutAsDeleteInFindEntriesName)
   public final boolean storeDeletedPutAsDeleteInFindEntries;

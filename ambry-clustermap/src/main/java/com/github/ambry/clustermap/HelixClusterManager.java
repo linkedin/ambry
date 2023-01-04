@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -45,6 +46,7 @@ import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.RoutingTableChangeListener;
 import org.apache.helix.model.IdealState;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
@@ -683,49 +685,47 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
+      Timer.Context operationTimer = helixClusterManagerMetrics.routingTableQueryTime.time();
+      long startTime = SystemTime.getInstance().milliseconds();
       Set<AmbryReplica> replicas = new HashSet<>();
       for (DcInfo dcInfo : dcToDcInfo.values()) {
         String dc = dcInfo.dcName;
         if (dcName == null || dcName.equals(dc)) {
+          // Note: When querying replicasByState from all DCs (i.e. input parameter "dcName" is null), Helix API
+          // "RoutingTableSnapshot#getInstancesForResource(resourceName, partition, replica state)" should ideally
+          // give instances from all DCs in one call when "Aggregated View" is enabled. But, we still query multiple
+          // times (with for-loop above) because the "resource -> partition" mapping can be different in each DC.
+          // For example, partition 1 can be under "resource 1" in "DC1" and under "resource 2" in "DC2". Hence,
+          // routingTableSnapshot.getInstancesForResource(resource1, partition1, standby) would give replicas of DC1
+          // routingTableSnapshot.getInstancesForResource(resource2, partition1, standby) would give replicas of DC2
           String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
           RoutingTableSnapshot routingTableSnapshot =
               clusterMapConfig.clusterMapUseAggregatedView ? globalRoutingTableSnapshotRef.get()
                   : dcToRoutingTableSnapshotRef.get(dc).get();
-
-          // Note:
-          // Even when we are using helix aggregated view, we still need the 'for' loop to get the list of
-          // all replicas belonging to a partition. This is because the resource -> partition mapping can be different
-          // in each DC. So, helix API routingTableSnapshot.getInstancesForResource(resourceName, partitionName, replicaState)
-          // doesn't give complete list of replica hosts when queried with single resource name.
-
-          // For example, consider below example of resource to partition mapping in each DC.
-          // DC1:
-          // Resource 1 -> {Partition 1, Partition 2, Partition 3...}
-          // Resource 2 -> {Partition 4, ... }
-          // DC2:
-          // Resource 1 -> {Partition 2, Partition 3,...}
-          // Resource 2 -> {Partition 1, Partition 4, ...}
-          // DC3:
-          // Resource 1 -> {Partition 1, Partition 2, Partition 3...}
-          // Resource 2 -> {Partition 4, ... }
-
-          // Then, the resource to partition mapping in Aggregated view would be:
-          // Resource 1 -> {Partition 1 (contains replicas of DC1 and DC3) , Partition 2, Partition 3...}
-          // Resource 2 -> {Partition 1 (contains replicas of DC2), Partition 4, Partition 5,...}
-
-          // Due to above, for aggregation view:
-          // routingTableSnapshot.getInstancesForResource(resource1, partition1, standby) would give replicas of DC1 and DC3
-          // routingTableSnapshot.getInstancesForResource(resource2, partition1, standby) would give replicas of DC2
-
           String partitionPath = partition.toPathString();
-          routingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
-              .stream()
-              .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-              .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-              .filter(Objects::nonNull)
-              .forEach(replicas::add);
+          long helixQueryStartTime = SystemTime.getInstance().milliseconds();
+          List<String> instances =
+              routingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
+                  .stream()
+                  .map(InstanceConfig::getInstanceName)
+                  .collect(Collectors.toList());
+          logger.debug(
+              "Helix returned instances for resourceName {}, partitionPath {}, state {} are {}. Query time in Ms {}",
+              resourceName, partitionPath, state.name(), instances,
+              SystemTime.getInstance().milliseconds() - helixQueryStartTime);
+          for (String instance : instances) {
+            AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instance);
+            AmbryReplica ambryReplica = ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString());
+            if (ambryReplica != null) {
+              replicas.add(ambryReplica);
+            }
+          }
         }
       }
+      logger.debug("Replicas for partition {} with state {} in dc {} are {}. Query time in Ms {}",
+          partition.toPathString(), state.name(), dcName != null ? dcName : "", replicas,
+          SystemTime.getInstance().milliseconds() - startTime);
+      operationTimer.stop();
       return new ArrayList<>(replicas);
     }
 

@@ -357,6 +357,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     List<ReplicaThread> replicaThreads = new ArrayList<>();
     logger.info("Number of replica threads to replicate from {}: {}", datacenter, numberOfThreads);
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
+    replicationMetrics.populateSingleColoMetrics(datacenter);
     for (int i = 0; i < numberOfThreads; i++) {
       boolean replicatingOverSsl = sslEnabledDatacenters.contains(datacenter);
       String threadIdentity = getReplicaThreadName(datacenter, i);
@@ -380,7 +381,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       }
     }
     replicationMetrics.trackLiveThreadsCount(replicaThreads, datacenter);
-    replicationMetrics.populateSingleColoMetrics(datacenter);
     return replicaThreads;
   }
 
