@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.HelixClusterManager.HelixClusterManagerQueryHelper;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -46,6 +47,7 @@ class HelixClusterManagerMetrics {
   public Gauge<Long> helixClusterManagerInstantiationFailed;
   public Gauge<Long> helixClusterManagerRemoteInstantiationFailed;
   public Gauge<Long> helixClusterManagerCurrentXid;
+  public final Timer routingTableQueryTime;
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -83,6 +85,8 @@ class HelixClusterManagerMetrics {
     ignoredUpdatesCount = registry.counter(MetricRegistry.name(HelixClusterManager.class, "ignoredUpdatesCount"));
     instanceConfigChangeErrorCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceConfigChangeErrorCount"));
+    routingTableQueryTime =
+        registry.timer(MetricRegistry.name(HelixClusterManager.class, "routingTableQueryTime"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated, final long instantiationExceptionCount) {
