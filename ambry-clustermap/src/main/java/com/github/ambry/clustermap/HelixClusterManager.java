@@ -45,6 +45,7 @@ import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.RoutingTableChangeListener;
 import org.apache.helix.model.IdealState;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
@@ -683,6 +684,7 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public List<AmbryReplica> getReplicaIdsByState(AmbryPartition partition, ReplicaState state, String dcName) {
+      long startTime = SystemTime.getInstance().milliseconds();
       Set<AmbryReplica> replicas = new HashSet<>();
       for (DcInfo dcInfo : dcToDcInfo.values()) {
         String dc = dcInfo.dcName;
@@ -718,14 +720,28 @@ public class HelixClusterManager implements ClusterMap {
           // routingTableSnapshot.getInstancesForResource(resource2, partition1, standby) would give replicas of DC2
 
           String partitionPath = partition.toPathString();
-          routingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
-              .stream()
-              .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-              .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-              .filter(Objects::nonNull)
-              .forEach(replicas::add);
+          long helixQueryStartTime = SystemTime.getInstance().milliseconds();
+          List<String> instances =
+              routingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
+                  .stream()
+                  .map(InstanceConfig::getInstanceName)
+                  .collect(Collectors.toList());
+          logger.debug(
+              "Helix returned instances for resourceName {}, partitionPath {}, state {} are {}. Query time in Ms {}",
+              resourceName, partitionPath, state.name(), instances,
+              SystemTime.getInstance().milliseconds() - helixQueryStartTime);
+          for (String instance : instances) {
+            AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instance);
+            AmbryReplica ambryReplica = ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString());
+            if (ambryReplica != null) {
+              replicas.add(ambryReplica);
+            }
+          }
         }
       }
+      logger.debug("Replicas for partition {} with state {} in dc {} are {}. Query time in Ms {}",
+          partition.toPathString(), state.name(), dcName != null ? dcName : "", replicas,
+          SystemTime.getInstance().milliseconds() - startTime);
       return new ArrayList<>(replicas);
     }
 
