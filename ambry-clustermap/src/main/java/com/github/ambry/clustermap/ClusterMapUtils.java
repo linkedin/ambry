@@ -530,13 +530,11 @@ public class ClusterMapUtils {
       this.defaultPartitionClass = defaultPartitionClass;
       updatePartitions(clusterManagerQueryHelper.getPartitions(), localDatacenterName);
       logger.debug("Number of partitions in data center {} {}", localDatacenterName, allPartitions.size());
-      for (String partitionClass : partitionIdsByClassAndLocalReplicaCount.keySet()) {
-        logger.debug("Partition class {}, partitions {}", partitionClass,
-            partitionIdsByClassAndLocalReplicaCount.get(partitionClass).values());
+      for (Map.Entry<String, SortedMap<Integer, List<PartitionId>>> entry : partitionIdsByClassAndLocalReplicaCount.entrySet()) {
+        logger.debug("Partition class {}, partitions {}", entry.getKey(), entry.getValue().values());
       }
-      for (PartitionId partitionId : partitionIdToLocalReplicas.keySet()) {
-        logger.debug("Partition {}, local Replicas {}", partitionId.toPathString(),
-            partitionIdToLocalReplicas.get(partitionId));
+      for (Map.Entry<PartitionId, List<ReplicaId>> entry : partitionIdToLocalReplicas.entrySet()) {
+        logger.debug("Partition {}, local Replicas {}", entry.getKey().toPathString(), entry.getValue());
       }
     }
 
