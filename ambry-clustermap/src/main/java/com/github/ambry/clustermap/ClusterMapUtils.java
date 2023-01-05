@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.network.Port;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -528,6 +529,13 @@ public class ClusterMapUtils {
       this.clusterManagerQueryHelper = clusterManagerQueryHelper;
       this.defaultPartitionClass = defaultPartitionClass;
       updatePartitions(clusterManagerQueryHelper.getPartitions(), localDatacenterName);
+      logger.debug("Number of partitions in data center {} {}", localDatacenterName, allPartitions.size());
+      for (Map.Entry<String, SortedMap<Integer, List<PartitionId>>> entry : partitionIdsByClassAndLocalReplicaCount.entrySet()) {
+        logger.debug("Partition class {}, partitions {}", entry.getKey(), entry.getValue().values());
+      }
+      for (Map.Entry<PartitionId, List<ReplicaId>> entry : partitionIdToLocalReplicas.entrySet()) {
+        logger.debug("Partition {}, local Replicas {}", entry.getKey().toPathString(), entry.getValue());
+      }
     }
 
     /**
@@ -593,9 +601,11 @@ public class ClusterMapUtils {
      */
     PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
       PartitionId anyWritablePartition = null;
+      long startTime = SystemTime.getInstance().milliseconds();
+      List<PartitionId> partitionsInClass = new ArrayList<>();
       rwLock.readLock().lock();
       try {
-        List<PartitionId> partitionsInClass = getPartitionsInClass(partitionClass, true);
+        partitionsInClass = getPartitionsInClass(partitionClass, true);
         int workingSize = partitionsInClass.size();
         while (workingSize > 0) {
           int randomIndex = ThreadLocalRandom.current().nextInt(workingSize);
@@ -618,6 +628,15 @@ public class ClusterMapUtils {
         return anyWritablePartition;
       } finally {
         rwLock.readLock().unlock();
+        if (anyWritablePartition != null) {
+          logger.debug("Partition class {}, number of partitions {}, selected partition {}, search time in Ms {}",
+              partitionClass != null ? partitionClass : "", partitionsInClass.size(), anyWritablePartition,
+              SystemTime.getInstance().milliseconds() - startTime);
+        } else {
+          logger.debug("Partition class {}, number of partitions {}, no partition selected, search time in Ms {}",
+              partitionClass != null ? partitionClass : "", partitionsInClass.size(),
+              SystemTime.getInstance().milliseconds() - startTime);
+        }
       }
     }
 
@@ -663,10 +682,15 @@ public class ClusterMapUtils {
       Set<ReplicaId> eligibleReplicas = new HashSet<>();
       EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)
           .forEach(state -> eligibleReplicas.addAll(partitionId.getReplicaIdsByState(state, dcName)));
+      List<? extends ReplicaId> replicas;
       if (dcName != null) {
-        return partitionIdToLocalReplicas.get(partitionId).size() == eligibleReplicas.size();
+        replicas = partitionIdToLocalReplicas.get(partitionId);
+      } else {
+        replicas = partitionId.getReplicaIds();
       }
-      return partitionId.getReplicaIds().size() == eligibleReplicas.size();
+      logger.debug("Partition for Put {}, all replicas {}, eligible replicas {}", partitionId.toPathString(), replicas,
+          eligibleReplicas);
+      return replicas.size() == eligibleReplicas.size();
     }
 
     /**
