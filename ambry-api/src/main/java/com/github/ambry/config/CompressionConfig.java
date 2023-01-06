@@ -21,8 +21,8 @@ package com.github.ambry.config;
 public class CompressionConfig {
 
   // Boolean whether compression is enabled in PUT operation.
-  static final String COMPRESSION_ENABLED = "router.compression.enabled";
-  static final boolean DEFAULT_COMPRESSION_ENABLED = true;
+  public static final String COMPRESSION_ENABLED = "router.compression.enabled";
+  static final boolean DEFAULT_COMPRESSION_ENABLED = false;
 
   // Whether to skip compression if content-encoding present.
   static final String SKIP_IF_CONTENT_ENCODED = "router.compression.skip.if.content.encoded";
