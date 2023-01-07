@@ -461,6 +461,50 @@ public class OperationTrackerTest {
     }
   }
 
+  /**
+   * Duplicate the GCN issue:
+   * Among the 9 replicas, 8 replicas were offline due to OOM, 1 replica was online and returned DISK_DOWN
+   * Helix external view only showed one replica. The 8 replicas were NOT in the ReplicaState.OFFLINE list.
+   */
+  @Test
+  public void getOperationWithReplicaStateTest2() {
+    assumeTrue(replicasStateEnabled);
+    assumeTrue(routerUnavailableDueToOfflineReplicas);
+
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    datanodes = new ArrayList<>(Arrays.asList(
+        new MockDataNodeId(portList, mountPaths, "dc-0"),
+        new MockDataNodeId(portList, mountPaths, "dc-1"),
+        new MockDataNodeId(portList, mountPaths, "dc-2")));
+    mockPartition = new MockPartitionId();
+    populateReplicaList(1, ReplicaState.LEADER);
+    populateReplicaList(8, ReplicaState.ERROR);
+
+    localDcName = datanodes.get(0).getDatacenterName();
+    originatingDcName = localDcName;
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    // 1. include down replicas (OFFLINE replicas are eligible for GET)
+    OperationTracker ot = getOperationTrackerForGetOrPut(true, 1, 1, RouterOperation.GetBlobOperation, true);
+    ReplicaId inflightReplica;
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.DISK_DOWN);
+    assertTrue("Operation should be done", ot.isDone());
+    assertTrue(ot.maybeFailedDueToOfflineReplicas());
+    assertTrue(ot.hasFailedOnNotFound());
+
+    // 2. exclude down replicas
+    repetitionTracker.clear();
+    ot = getOperationTrackerForGetOrPut(true, 1, 1, RouterOperation.GetBlobOperation, false);
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.DISK_DOWN);
+    assertTrue("Operation should be done", ot.isDone());
+    assertTrue(ot.maybeFailedDueToOfflineReplicas());
+    assertTrue(ot.hasFailedOnNotFound());
+  }
+
   @Test
   public void noReplicaStateTtlUpdateTest() {
     assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
