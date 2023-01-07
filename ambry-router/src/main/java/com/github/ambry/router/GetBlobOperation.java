@@ -1518,20 +1518,24 @@ class GetBlobOperation extends GetOperation {
                 blobInfo = new BlobInfo(serverBlobProperties, result.getDecryptedUserMetadata().array(), lifeVersion);
               }
               ByteBuf decryptedBlobContent = result.getDecryptedBlobContent();
-              totalSize = decryptedBlobContent.readableBytes();
-              if (!resolveRange(totalSize)) {
-                routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
-                routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
-                ByteBuf decompressedContent = decompressContent(decryptedBlobContent);
-                if (decompressedContent != null) {
-                  chunkIndexToBuf.put(0, filterChunkToRange(decompressedContent));
-                  numChunksRetrieved.set(1);
-                }
-                progressTracker.setCryptoJobSuccess();
-                logger.trace("BlobContent available to process for simple blob {}", blobId);
-              } else {
+              routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
+              routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
+              ByteBuf decompressedContent = decompressContent(decryptedBlobContent);
+              if (decompressedContent == null) {
                 ReferenceCountUtil.safeRelease(decryptedBlobContent);
                 progressTracker.setCryptoJobFailed();
+              } else {
+                totalSize = decompressedContent.readableBytes();
+                if (!resolveRange(totalSize)) {
+                  chunkIndexToBuf.put(0, filterChunkToRange(decompressedContent));
+                  numChunksRetrieved.set(1);
+                  progressTracker.setCryptoJobSuccess();
+                  logger.trace("BlobContent available to process for simple blob {}", blobId);
+                } else {
+                  ReferenceCountUtil.safeRelease(decompressedContent);
+                  ReferenceCountUtil.safeRelease(decryptedBlobContent);
+                  progressTracker.setCryptoJobFailed();
+                }
               }
             } else {
               // only in maybeReleaseDecryptionResultBuffer() will result be set to null, this means the bytebuf has been
@@ -1784,29 +1788,25 @@ class GetBlobOperation extends GetOperation {
     private void handleSimpleBlob(BlobData blobData, byte[] userMetadata, ByteBuffer encryptionKey) {
       try {
         ByteBuf chunkBuf = blobData.content();
-        boolean rangeResolutionFailure = false;
-        if (encryptionKey == null) {
-          totalSize = blobData.getSize();
-          rangeResolutionFailure = resolveRange(totalSize);
-        } else {
-          // for encrypted blobs, Blob data will not have the right size. Will have to wait until decryption is complete
-        }
-        if (!rangeResolutionFailure) {
-          chunkIdIterator = null;
-          numChunksTotal = 0;
-          dataChunks = null;
-          if (!options.getChunkIdsOnly) {
-            chunkIndex = 0;
-            numChunksTotal = 1;
-            boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, userMetadata, encryptionKey, blobId);
-            if (!launchedJob) {
-              routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
-              routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
+        chunkIdIterator = null;
+        numChunksTotal = 0;
+        dataChunks = null;
+        if (!options.getChunkIdsOnly) {
+          chunkIndex = 0;
+          numChunksTotal = 1;
+          boolean launchedJob = maybeLaunchCryptoJob(chunkBuf, userMetadata, encryptionKey, blobId);
+          if (!launchedJob) {
+            routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
+            routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
 
-              ByteBuf decompressedContent = decompressContent(chunkBuf.retainedDuplicate());
-              if (decompressedContent != null) {
+            ByteBuf decompressedContent = decompressContent(chunkBuf.retainedDuplicate());
+            if (decompressedContent != null) {
+              totalSize = decompressedContent.readableBytes();
+              if (!resolveRange(totalSize)) {
                 chunkIndexToBuf.put(0, filterChunkToRange(decompressedContent));
                 numChunksRetrieved.set(1);
+              } else {
+                decompressedContent.release();
               }
             }
           }
