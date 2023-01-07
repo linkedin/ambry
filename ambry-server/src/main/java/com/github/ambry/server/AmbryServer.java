@@ -23,9 +23,9 @@ import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterSpectator;
-import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.NettyInternalMetrics;
@@ -50,12 +50,14 @@ import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.network.http2.Http2BlockingChannelPool;
 import com.github.ambry.network.http2.Http2ClientMetrics;
+import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
@@ -120,6 +122,7 @@ public class AmbryServer {
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
+  private NetworkClientFactory networkClientFactory;
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
   private Time time;
@@ -236,10 +239,15 @@ public class AmbryServer {
       SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
 
       if (clusterMapConfig.clusterMapEnableHttp2Replication) {
-        connectionPool = new Http2BlockingChannelPool(sslFactory, new Http2ClientConfig(properties),
-            new Http2ClientMetrics(registry));
+        Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
+        Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
+        connectionPool = new Http2BlockingChannelPool(sslFactory, http2ClientConfig, http2ClientMetrics);
+        // Only enable nonblocking network client with http2
+        // We have to create a factory here, since one network client object can only be used in a single thread.
+        networkClientFactory = new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
       } else {
         connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+        networkClientFactory = null;
       }
       connectionPool.start();
 
@@ -249,7 +257,7 @@ public class AmbryServer {
       Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
+              clusterMap, scheduler, nodeId, connectionPool, networkClientFactory, registry, notificationSystem, storeKeyConverterFactory,
               serverConfig.serverMessageTransformer, clusterParticipants.get(0), skipPredicate);
       replicationManager.start();
 

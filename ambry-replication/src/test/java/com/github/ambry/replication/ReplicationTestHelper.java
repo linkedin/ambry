@@ -343,8 +343,8 @@ public class ReplicationTestHelper {
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
-            new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
-            storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
+            new AtomicInteger(0), localHost.dataNodeId, connectionPool, null, replicationConfig, replicationMetrics,
+            null, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpManager, null,
             null);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
@@ -732,8 +732,9 @@ public class ReplicationTestHelper {
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       boolean toEncrypt = i % 2 == 0;
-      BlobId id = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
-          containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      BlobId id =
+          new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+              partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
       ids.add(id);
       PutMsgInfoAndBuffer msgInfoAndBuffer =
           createPutMessage(id, id.getAccountId(), id.getContainerId(), toEncrypt, lifeVersion);
@@ -749,8 +750,8 @@ public class ReplicationTestHelper {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
     boolean toEncrypt = Utils.getRandomShort(TestUtils.RANDOM) % 2 == 0;
-    return new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId,
-        containerId, partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
+    return new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+        partitionId, toEncrypt, BlobId.BlobDataType.DATACHUNK);
   }
 
   public static void addPutMessagesToReplicasOfPartition(List<StoreKey> ids, List<MockHost> hosts)
@@ -1105,12 +1106,10 @@ public class ReplicationTestHelper {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
-      oldKey =
-          new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
-              partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
-      newKey =
-          new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
-              partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      oldKey = new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      newKey = new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
       localConversionMap.put(oldKey, newKey);
       remoteConversionMap.put(newKey, oldKey);
       ((MockStoreKeyConverterFactory.MockStoreKeyConverter) storeKeyConverter).setConversionMap(localConversionMap);
