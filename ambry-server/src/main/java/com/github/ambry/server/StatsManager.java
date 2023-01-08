@@ -15,7 +15,6 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
@@ -36,7 +35,6 @@ import com.github.ambry.store.StoreStats;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -69,12 +67,9 @@ class StatsManager {
   private static final Logger logger = LoggerFactory.getLogger(StatsManager.class);
 
   private final StorageManager storageManager;
-  private final File statsOutputFile;
   private final StatsManagerMetrics metrics;
   private final Time time;
-  private final ObjectMapper mapper = new ObjectMapper();
   private final AccountStatsStore accountStatsStore;
-  private final List<Short> healthReportExcludeAccountIds;
   private final List<Short> publishExcludeAccountIds;
   private ScheduledExecutorService scheduler = null;
   private AccountStatsPublisher accountsStatsPublisher = null;
@@ -104,7 +99,6 @@ class StatsManager {
       AccountService accountService) {
     this.storageManager = storageManager;
     this.config = config;
-    statsOutputFile = new File(config.outputFilePath);
     metrics = new StatsManagerMetrics(registry, aggregatedDeleteTombstoneStats);
     partitionToReplicaMap =
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
@@ -120,7 +114,6 @@ class StatsManager {
         .filter(Objects::nonNull)
         .map(Account::getId)
         .collect(Collectors.toList());
-    this.healthReportExcludeAccountIds = convertAccountNamesToIds.apply(config.healthReportExcludeAccountNames);
     this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.publishExcludeAccountNames);
   }
 
@@ -135,15 +128,15 @@ class StatsManager {
           .nextInt(config.initialDelayUpperBoundInSecs) : 0;
       logger.info("Scheduling account stats publishing job with an initial delay of {} secs", actualDelay);
       scheduler.scheduleAtFixedRate(accountsStatsPublisher, actualDelay, config.publishPeriodInSecs, TimeUnit.SECONDS);
-    }
 
-    if (config.publishPartitionClassReportPeriodInSecs != 0) {
-      partitionClassStatsPublisher = new PartitionClassStatsPublisher(accountStatsStore);
-      long initialDelay = ThreadLocalRandom.current().nextLong(config.publishPartitionClassReportPeriodInSecs / 2)
-          + config.publishPartitionClassReportPeriodInSecs / 2;
-      logger.info("Scheduling partition class stats publishing job with an initial delay of {} secs", initialDelay);
-      scheduler.scheduleAtFixedRate(partitionClassStatsPublisher, initialDelay,
-          config.publishPartitionClassReportPeriodInSecs, TimeUnit.SECONDS);
+      if (config.publishPartitionClassReportPeriodInSecs != 0) {
+        partitionClassStatsPublisher = new PartitionClassStatsPublisher(accountStatsStore);
+        long initialDelay = ThreadLocalRandom.current().nextLong(config.publishPartitionClassReportPeriodInSecs / 2)
+            + config.publishPartitionClassReportPeriodInSecs / 2;
+        logger.info("Scheduling partition class stats publishing job with an initial delay of {} secs", initialDelay);
+        scheduler.scheduleAtFixedRate(partitionClassStatsPublisher, initialDelay,
+            config.publishPartitionClassReportPeriodInSecs, TimeUnit.SECONDS);
+      }
     }
   }
 
@@ -160,13 +153,6 @@ class StatsManager {
     if (scheduler != null) {
       shutDownExecutorService(scheduler, 30, TimeUnit.SECONDS);
     }
-  }
-
-  /**
-   * @return the {@link #healthReportExcludeAccountIds}. Only for test.
-   */
-  List<Short> getHealthReportExcludeAccountIds() {
-    return Collections.unmodifiableList(healthReportExcludeAccountIds);
   }
 
   /**
@@ -387,8 +373,7 @@ class StatsManager {
         }
       } catch (Exception e) {
         metrics.statsAggregationFailureCount.inc();
-        logger.error("Exception while aggregating account stats for local report. Stats output file path - {}",
-            statsOutputFile.getAbsolutePath(), e);
+        logger.error("Exception while aggregating account stats for local report", e);
       }
     }
 

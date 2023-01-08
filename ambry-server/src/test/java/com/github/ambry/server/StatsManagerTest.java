@@ -179,7 +179,6 @@ public class StatsManagerTest {
     String excludedAccountNames = "account0,account10";
     Properties properties = new Properties();
     properties.put(StatsManagerConfig.STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, excludedAccountNames);
-    properties.put(StatsManagerConfig.STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES, excludedAccountNames);
     StatsManagerConfig newStatsManagerConfig = new StatsManagerConfig(new VerifiableProperties(properties));
     // prepare account service, we are only going to fetch account0, and account10
     inMemoryAccountService.updateAccounts(
@@ -187,10 +186,7 @@ public class StatsManagerTest {
     StatsManager testManager =
         new StatsManager(storageManager, replicas, new MetricRegistry(), newStatsManagerConfig, new MockTime(), null,
             null, inMemoryAccountService);
-    List<Short> ids = testManager.getHealthReportExcludeAccountIds();
-    assertEquals(1, ids.size());
-    assertEquals((short) 0, ids.get(0).shortValue());
-    ids = testManager.getPublishExcludeAccountIds();
+    List<Short> ids = testManager.getPublishExcludeAccountIds();
     assertEquals(1, ids.size());
     assertEquals((short) 0, ids.get(0).shortValue());
   }
@@ -283,9 +279,8 @@ public class StatsManagerTest {
       Map<Short, Map<Short, ContainerStorageStats>> containerStatsMapForPartition =
           hostAccountStorageStatsMap.get(partitionId.getId());
       if (partitionId.getId() < 3) {
-        assertEquals("Actual map does not match with expected snapshot with partition id "
-                + partitionId.toPathString(), hostAccountStorageStats.getStorageStats().get(partitionId.getId()),
-            containerStatsMapForPartition);
+        assertEquals("Actual map does not match with expected snapshot with partition id " + partitionId.toPathString(),
+            hostAccountStorageStats.getStorageStats().get(partitionId.getId()), containerStatsMapForPartition);
       }
     }
   }

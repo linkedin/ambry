@@ -158,7 +158,6 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
    * @param dataSource The {@link DataSource}.
    * @param clusterName  The name of the cluster, like Ambry-test.
    * @param hostname The name of the host.
-   * @param localBackupFilePath The filepath to local backup file.
    * @param hostnameHelper The {@link HostnameHelper} to simplify the hostname.
    * @param registry The {@link MetricRegistry}.
    */

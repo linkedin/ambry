@@ -38,20 +38,6 @@ public class ServerConfig {
   public final int serverSchedulerNumOfthreads;
 
   /**
-   * The option to enable or disable publishing stats locally.
-   */
-  @Config("server.stats.publish.local.enabled")
-  @Default("false")
-  public final boolean serverStatsPublishLocalEnabled;
-
-  /**
-   * The option to enable or disable publishing stats reports
-   */
-  @Config("server.stats.publish.report.enabled")
-  @Default("false")
-  public final boolean serverStatsPublishReportEnabled;
-
-  /**
    * The frequency in mins at which cluster wide quota stats will be aggregated
    */
   @Config("server.quota.stats.aggregate.interval.in.minutes")
@@ -73,7 +59,7 @@ public class ServerConfig {
   public final String serverMessageTransformer;
 
   /**
-   * The comma separated list of stats reports to publish in Helix.
+   * The comma separated list of stats reports to aggregate and then publish to AccountStatsStore.
    */
   @Config("server.stats.reports.to.publish")
   @Default("")
@@ -117,17 +103,14 @@ public class ServerConfig {
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
-    serverStatsPublishLocalEnabled = verifiableProperties.getBoolean("server.stats.publish.local.enabled", false);
-    serverStatsPublishReportEnabled =
-        verifiableProperties.getBoolean("server.stats.publish.report.enabled", false);
+    serverStatsReportsToPublish =
+        Utils.splitString(verifiableProperties.getString("server.stats.reports.to.publish", ""), ",");
     serverQuotaStatsAggregateIntervalInMinutes =
         verifiableProperties.getLong("server.quota.stats.aggregate.interval.in.minutes", 60);
     serverStoreKeyConverterFactory = verifiableProperties.getString("server.store.key.converter.factory",
         "com.github.ambry.store.StoreKeyConverterFactoryImpl");
     serverMessageTransformer = verifiableProperties.getString("server.message.transformer",
         "com.github.ambry.messageformat.ValidatingTransformer");
-    serverStatsReportsToPublish =
-        Utils.splitString(verifiableProperties.getString("server.stats.reports.to.publish", ""), ",");
     serverValidateRequestBasedOnStoreState =
         verifiableProperties.getBoolean("server.validate.request.based.on.store.state", false);
     serverHandleUndeleteRequestEnabled =

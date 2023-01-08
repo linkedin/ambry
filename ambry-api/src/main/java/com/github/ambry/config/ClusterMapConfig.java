@@ -33,7 +33,6 @@ public class ClusterMapConfig {
   public static final String AMBRY_STATE_MODEL_DEF = "AmbryLeaderStandby";
   public static final String OLD_STATE_MODEL_DEF = "LeaderStandby";
   public static final String DEFAULT_STATE_MODEL_DEF = AMBRY_STATE_MODEL_DEF;
-  public static final String ENABLE_MYSQL_AGGREGATION_TASK = "clustermap.enable.mysql.aggregation.task";
   public static final String ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK =
       "clustermap.enable.delete.invalid.data.in.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
@@ -324,13 +323,6 @@ public class ClusterMapConfig {
   public final boolean clustermapEnableAggregatedMonthlyAccountReport;
 
   /**
-   * True to enable aggregation task of stats data in mysql database.
-   */
-  @Config(ENABLE_MYSQL_AGGREGATION_TASK)
-  @Default("false")
-  public final boolean clustermapEnableMySqlAggregationTask;
-
-  /**
    * True to enable deleting invalid aggregated data in mysql aggregation task.
    */
   @Config(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK)
@@ -401,7 +393,6 @@ public class ClusterMapConfig {
     clustermapRetryDisablePartitionCompletionBackoffMs =
         verifiableProperties.getIntInRange("clustermap.retry.disable.partition.completion.backoff.ms", 10 * 1000, 1,
             Integer.MAX_VALUE);
-    clustermapEnableMySqlAggregationTask = verifiableProperties.getBoolean(ENABLE_MYSQL_AGGREGATION_TASK, false);
     clustermapEnableAggregatedMonthlyAccountReport =
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
