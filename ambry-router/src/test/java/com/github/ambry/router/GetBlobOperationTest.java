@@ -19,9 +19,11 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -858,6 +860,153 @@ public class GetBlobOperationTest {
     props.setProperty("router.datacenter.name", oldLocal);
     props.setProperty("router.get.request.parallelism", "2");
     props.setProperty("router.operation.tracker.max.inflight.requests", "2");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+  }
+
+  /**
+   * Test the case where two origin replicas are down and not in the clustermap, all others return NOT_FOUND.
+   * Expect Ambry Unavailable for GetBlob
+   * @throws Exception
+   */
+  @Test
+  public void testBlobOriginDcTwoDownAndOthersNotFound() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    doPut();
+
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    // Pick a remote DC as the new local DC.
+    Properties props = getDefaultNonBlockingRouterProperties(true);
+    String newLocal = "DC1";
+    String oldLocal = localDcName;
+    String oldPropTerminate = props.getProperty("router.operation.tracker.terminate.on.not.found.enabled");
+    String oldPropOffline = props.getProperty("router.unavailable.due.to.offline.replicas");
+    String oldPropGetEligible = props.getProperty("router.get.eligible.replicas.by.state.enabled");
+    props.setProperty("router.datacenter.name", newLocal);
+    props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "false");
+    props.setProperty("router.unavailable.due.to.offline.replicas", "true");
+    props.setProperty("router.get.eligible.replicas.by.state.enabled", "true");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    // change replica state.
+    // set two originating replica state to ERROR. exclude them from the eligible replica pool.
+    List<ReplicaId> replicaIds = partitionId.getReplicaIds();
+    int i = 0;
+    for (ReplicaId replicaId : replicaIds) {
+      MockReplicaId r = (MockReplicaId) replicaId;
+      // set two originating replica state to ERROR.
+      if (r.getDataNodeId().getDatacenterName().equals(oldLocal) && i < 2) {
+        partitionId.setReplicaState(r, ReplicaState.ERROR);
+        i++;
+      }
+    }
+
+    GetBlobOperation op = createOperation(routerConfig, null);
+    correlationIdToGetOperation.clear();
+    // all return Blob_Not_Found
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    }
+    op.poll(requestRegistrationCallback);
+
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+        op.handleResponse(responseInfo, getResponse);
+        responseInfo.release();
+      }
+    }
+
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(RouterErrorCode.AmbryUnavailable, routerException.getErrorCode());
+
+    props = getDefaultNonBlockingRouterProperties(true);
+    props.setProperty("router.datacenter.name", oldLocal);
+    if (oldPropTerminate != null) {
+      props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", oldPropTerminate);
+    }
+    if (oldPropOffline != null) {
+      props.setProperty("router.unavailable.due.to.offline.replicas", oldPropOffline);
+    }
+    if (oldPropGetEligible != null) {
+      props.setProperty("router.get.eligible.replicas.by.state.enabled", oldPropGetEligible);
+    }
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+  }
+
+  /**
+   * Test the case where two remote replicas are down and not in the clustermap,
+   * all others return NOT_FOUND including originating replicas.
+   * Expect Not Found for GetBlob
+   * @throws Exception
+   */
+  @Test
+  public void testBlobRemoteTwoDownAndOthersNotFound() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    doPut();
+
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    // Pick a remote DC as the new local DC.
+    Properties props = getDefaultNonBlockingRouterProperties(true);
+    String newLocal = "DC1";
+    String oldLocal = localDcName;
+    String oldPropTerminate = props.getProperty("router.operation.tracker.terminate.on.not.found.enabled");
+    String oldPropOffline = props.getProperty("router.unavailable.due.to.offline.replicas");
+    String oldPropGetEligible = props.getProperty("router.get.eligible.replicas.by.state.enabled");
+    props.setProperty("router.datacenter.name", newLocal);
+    props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "false");
+    props.setProperty("router.unavailable.due.to.offline.replicas", "true");
+    props.setProperty("router.get.eligible.replicas.by.state.enabled", "true");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    // change replica state.
+    // set two remote replica state to ERROR. exclude them from the eligible replica pool.
+    List<ReplicaId> replicaIds = partitionId.getReplicaIds();
+    int i = 0;
+    for (ReplicaId replicaId : replicaIds) {
+      MockReplicaId r = (MockReplicaId) replicaId;
+      // set two originating replica state to ERROR.
+      if (r.getDataNodeId().getDatacenterName().equals(newLocal) && i < 2) {
+        partitionId.setReplicaState(r, ReplicaState.ERROR);
+        i++;
+      }
+    }
+
+    GetBlobOperation op = createOperation(routerConfig, null);
+    correlationIdToGetOperation.clear();
+    // all return Blob_Not_Found
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    }
+    op.poll(requestRegistrationCallback);
+
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+        op.handleResponse(responseInfo, getResponse);
+        responseInfo.release();
+      }
+    }
+
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
+
+    props = getDefaultNonBlockingRouterProperties(true);
+    props.setProperty("router.datacenter.name", oldLocal);
+    if (oldPropTerminate != null) {
+      props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", oldPropTerminate);
+    }
+    if (oldPropOffline != null) {
+      props.setProperty("router.unavailable.due.to.offline.replicas", oldPropOffline);
+    }
+    if (oldPropGetEligible != null) {
+      props.setProperty("router.get.eligible.replicas.by.state.enabled", oldPropGetEligible);
+    }
     routerConfig = new RouterConfig(new VerifiableProperties(props));
   }
 

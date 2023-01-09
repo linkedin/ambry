@@ -97,6 +97,7 @@ class SimpleOperationTracker implements OperationTracker {
   private Iterator<ReplicaId> replicaIterator;
   private String reassignedOriginDc = null;
   private int originatingDcOfflineReplicaCount = 0;
+  private int originatingDcEligibleReplicaCount = 0;
   private int originatingDcTotalReplicaCount = 0;
   private int totalOfflineReplicaCount = 0;
   private int allReplicaCount = 0;
@@ -352,6 +353,10 @@ class SimpleOperationTracker implements OperationTracker {
     totalReplicaCount = replicaPool.size();
     originatingDcOfflineReplicaCount =
         getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
+    originatingDcEligibleReplicaCount = replicaPool.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(this.originatingDcName))
+        .collect(Collectors.toList())
+        .size();
     originatingDcTotalReplicaCount = allReplicas.stream()
         .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(this.originatingDcName))
         .collect(Collectors.toList())
@@ -419,6 +424,48 @@ class SimpleOperationTracker implements OperationTracker {
     if (!routerConfig.routerUnavailableDueToOfflineReplicas) {
       return false;
     }
+
+    // For GetBlob
+    if (routerOperation == RouterOperation.GetBlobOperation || routerOperation == RouterOperation.GetBlobInfoOperation) {
+      // Explanation of the following three conditions in order,
+      // 1. hasFailedOnCrossColoNotFound:
+      //    We tried all the "eligible" replicas at this moment, couldn't finish the operation due to NOT_FOUND
+      // 2. (allReplicaCount - totalNotFoundCount >= replicaSuccessTarget)
+      //    Minus all the NOT_FOUND replicas, among all the replicas belongs to the partition(no matter online or offline),
+      //    we should still have enough replicas to satisfy the replicaSuccessTarget.
+      //    That means, if we retry, potentially we have the chance to be successful and get the blob back from other replica.
+      // 3. (originatingDcEligibleReplicaCount < originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1)
+      //    The retry can be successful only if there is some offline replica coming back when retry happens.
+      //    That's why for TtlUpdate and Delete, we have the third condition as (totalOfflineReplicaCount > 0)
+      //    a). For GetBlob, the difference is that we already include OFFLINE replicas to the eligible replica pool
+      //        while TTLUpdate/Delete don't. Refer to routerOperationTrackerIncludeDownReplicas related code.
+      //        So it has tried the OFFLINE replicas already.
+      //    b). But with the recent Helix implementation, when the server is crashed,
+      //        the helix external view sometimes doesn't include the replica at all, not even in the OFFLINE category.
+      //        So we check how many replicas from the originating DC we read already.
+      //        Since we put routerPutSuccessTarget copies in the originating DC,
+      //        we should at least read "originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1" replicas
+      //        to make sure we read one of the copies.
+      //        If the eligible originating replica count is less that that, we should retry.
+      if (hasFailedOnCrossColoNotFound()
+          && (allReplicaCount - totalNotFoundCount >= replicaSuccessTarget)
+          && (originatingDcEligibleReplicaCount < originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1)) {
+        logger.info(
+            "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
+                + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
+                + "TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {}, "
+                + "originatingDcEligibleReplicaCount {} {} "
+                + "replicasByState = {}",
+            routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
+            replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, originatingDcEligibleReplicaCount,
+            getBlobIdLog(), allDcReplicasByState);
+        routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
+        return true;
+      }
+      return false;
+    }
+
+    // For Delete and TtlUpdate
     // We mark the failure as due to offline replicas when we know that we couldn't find the blob in eligible replicas,
     // and remaining replicas are enough to make the request successful, and there is atleast one offline replica in the
     // remaining set of replicas. The offline replicas can come back up in future to make the request successful, and
@@ -436,6 +483,8 @@ class SimpleOperationTracker implements OperationTracker {
       routerMetrics.failedMaybeDueToOriginatingDcOfflineReplicasCount.inc();
       return true;
     }
+    // TODO: When helix external view doesn't include OFFLINE replicas, the totalOfflineReplicaCount is zero.
+    // FIX IT.
     if (hasFailedOnCrossColoNotFound() && allReplicaCount - totalNotFoundCount >= replicaSuccessTarget
         && totalOfflineReplicaCount > 0) {
       logger.info(
@@ -582,6 +631,8 @@ class SimpleOperationTracker implements OperationTracker {
    * {@code false} otherwise.
    */
   private boolean hasFailedOnCrossColoNotFound() {
+    // we treat DiskDown same as NotFound.
+    // totalReplicaCount is the count of the replicaPool or the eligible replicas, not all the replicas belongs to the partition.
     return (crossColoEnabled && (diskDownCount + totalNotFoundCount > totalReplicaCount - replicaSuccessTarget));
   }
 
