@@ -171,6 +171,7 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
       CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) curFindToken;
       logger.info("[snkt] curFindToken = " + curFindToken.toString());
       ChangeFeedCacheEntry changeFeedCacheEntry = getNextChangeFeed(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
+      // ERROR; We never go beyond this point
       long resultSize = 0;
       int index = 0;
       List<CloudBlobMetadata> fetchedEntries = changeFeedCacheEntry.getFetchedEntries();

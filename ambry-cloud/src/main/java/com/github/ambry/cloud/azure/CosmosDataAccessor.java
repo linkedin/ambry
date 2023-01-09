@@ -684,6 +684,7 @@ public class CosmosDataAccessor {
     CosmosChangeFeedRequestOptions cosmosChangeFeedRequestOptions;
     if (Utils.isNullOrEmpty(requestContinuationToken)) {
       logger.info("[snkt] Requesting change feed from beginning");
+      logger.info("[snkt] partitionPath = " + partitionPath);
       cosmosChangeFeedRequestOptions = CosmosChangeFeedRequestOptions.createForProcessingFromBeginning(
           FeedRange.forLogicalPartition(new PartitionKey(partitionPath)));
     } else {
@@ -716,6 +717,9 @@ public class CosmosDataAccessor {
     // Since the requestCharge is being used inside lambda expression below, it needs to be atomic.
     AtomicReference<String> continuationToken = new AtomicReference<>();
 
+    logger.info("[snkt] cosmosChangeFeedRequestOptions.getMaxItemCount = " + cosmosChangeFeedRequestOptions.getMaxItemCount());
+    logger.info("[snkt] cosmosChangeFeedRequestOptions.getFeedRange = " + cosmosChangeFeedRequestOptions.getFeedRange());
+
     // Query change feed
     CosmosPagedFlux<CloudBlobMetadata> pagedFluxResponse =
         cosmosAsyncContainer.queryChangeFeed(cosmosChangeFeedRequestOptions, CloudBlobMetadata.class);
@@ -724,8 +728,10 @@ public class CosmosDataAccessor {
     pagedFluxResponse.byPage().subscribe(fluxResponse -> {
       logger.info("[snkt] Got a page of query result with " + fluxResponse.getResults().size() + " items(s)"
           + " and request charge of " + fluxResponse.getRequestCharge());
+      logger.info("[snkt] fluxResponse.getCosmosDiagnostics() = " + fluxResponse.getCosmosDiagnostics());
       changeFeed.addAll(fluxResponse.getResults());
       continuationToken.set(fluxResponse.getContinuationToken());
+      logger.info("[snkt] fluxResponse.getContinuationToken = " + fluxResponse.getContinuationToken());
     }, throwable -> {
       azureMetrics.changeFeedQueryFailureCount.inc();
       resultFuture.completeExceptionally(throwable);
