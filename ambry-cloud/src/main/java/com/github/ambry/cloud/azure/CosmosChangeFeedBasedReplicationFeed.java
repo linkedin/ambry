@@ -170,8 +170,9 @@ public final class CosmosChangeFeedBasedReplicationFeed implements AzureReplicat
     try {
       CosmosChangeFeedFindToken cosmosChangeFeedFindToken = (CosmosChangeFeedFindToken) curFindToken;
       logger.info("[snkt] curFindToken = " + curFindToken.toString());
+      ChangeFeedCacheEntry changeFeedCacheEntry;
       try {
-        ChangeFeedCacheEntry changeFeedCacheEntry = getNextChangeFeed(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
+        changeFeedCacheEntry = getNextChangeFeed(partitionPath, cosmosChangeFeedFindToken.getStartContinuationToken());
       } catch (Exception e) {
         logger.error("[snkt] change-feed error = " + e);
         throw e;
