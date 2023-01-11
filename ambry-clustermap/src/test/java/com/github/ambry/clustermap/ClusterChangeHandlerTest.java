@@ -125,7 +125,8 @@ public class ClusterChangeHandlerTest {
     props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
     props.setProperty("clustermap.listen.cross.colo", Boolean.toString(true));
     helixCluster =
-        new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
+        new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc,
+            false);
     helixManagerFactory = new HelixClusterManagerTest.MockHelixManagerFactory(helixCluster, znRecordMap, null);
   }
 
@@ -223,7 +224,8 @@ public class ClusterChangeHandlerTest {
 
     Counter initFailureCount = new Counter();
     HelixClusterChangeHandler helixClusterChangeHandler =
-        helixClusterManager.new HelixClusterChangeHandler(localDc, e -> initFailureCount.inc(), false);
+        helixClusterManager.new HelixClusterChangeHandler(localDc, clusterMapConfig.clusterMapClusterName,
+            e -> initFailureCount.inc(), false);
     // create an InstanceConfig with invalid entry that mocks error info added by Helix controller
     PartitionId selectedPartition = testPartitionLayout.getPartitionLayout().getPartitions(null).get(0);
     Replica testReplica = (Replica) selectedPartition.getReplicaIds().get(0);
@@ -357,7 +359,7 @@ public class ClusterChangeHandlerTest {
     }
     // trigger IdealState change and refresh partition-to-resource mapping (bring in the new partition in resource map)
     helixCluster.refreshIdealState();
-    Map<String, String> partitionNameToResource = helixClusterManager.getPartitionToResourceMap().get(localDc);
+    Map<String, String> partitionNameToResource = helixClusterManager.getPartitionToResourceMapByDC().get(localDc);
     List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
     // verify all partitions (including the new added one) are present in partition-to-resource map
     Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());

@@ -60,6 +60,12 @@ public class MockHelixAdmin implements HelixAdmin {
   private Map<String, ReplicaStateInfos> instanceToReplicaStateInfos = new HashMap<>();
   // A map of partitionId to instanceName associated with leader replica
   private Map<String, String> partitionToLeaderReplica = new HashMap<>();
+  // A map of resource name to resource information such as partitions of the resource and their replica states. This is
+  // used in external view.
+  private Map<String, ResourceInfo> resourceToResourceInfoMap = new HashMap<>();
+  // A map to reverse look up resource for a partition. This is used to update resourceToResourceInfoMap when a
+  // replica of a partition changes its state.
+  private Map<String, String> partitionToResourceMap = new HashMap<>();
   private long totalDiskCapacity;
   private int setInstanceConfigCallCount = 0;
 
@@ -133,7 +139,9 @@ public class MockHelixAdmin implements HelixAdmin {
   @Override
   public void addResource(String clusterName, String resourceName, IdealState idealstate) {
     resourcesToIdealStates.put(resourceName, idealstate);
+    ResourceInfo resourceInfo = resourceToResourceInfoMap.computeIfAbsent(resourceName, k -> new ResourceInfo());
     for (String partition : idealstate.getPartitionSet()) {
+      partitionToResourceMap.put(partition, resourceName);
       if (partitionToInstances.get(partition) == null) {
         Set<String> instanceSet = new HashSet<>();
         partitionToInstances.put(partition, instanceSet);
@@ -152,6 +160,7 @@ public class MockHelixAdmin implements HelixAdmin {
         }
         instanceToReplicaStateInfos.computeIfAbsent(instanceName, k -> new ReplicaStateInfos())
             .setReplicaState(partition, stateStr);
+        resourceInfo.setReplicasState(partition, instanceName, stateStr);
       }
     }
   }
@@ -236,6 +245,11 @@ public class MockHelixAdmin implements HelixAdmin {
     // set previous standby replica to LEADER state
     instanceToReplicaStateInfos.get(newLeaderInstance).setReplicaState(partition, ReplicaState.LEADER.name());
     partitionToLeaderReplica.put(partition, newLeaderInstance);
+    // Update external view maps
+    String resource = partitionToResourceMap.get(partition);
+    ResourceInfo resourceInfo = resourceToResourceInfoMap.get(resource);
+    resourceInfo.setReplicasState(partition, currentLeaderInstance, ReplicaState.STANDBY.name());
+    resourceInfo.setReplicasState(partition, newLeaderInstance, ReplicaState.LEADER.name());
   }
 
   /**
@@ -320,7 +334,6 @@ public class MockHelixAdmin implements HelixAdmin {
   void bringInstanceUp(String instance) {
     downInstances.remove(instance);
     upInstances.add(instance);
-    triggerLiveInstanceChangeNotification();
   }
 
   /**
@@ -337,7 +350,6 @@ public class MockHelixAdmin implements HelixAdmin {
   void bringInstanceDown(String instance) {
     downInstances.add(instance);
     upInstances.remove(instance);
-    triggerLiveInstanceChangeNotification();
   }
 
   /**
@@ -358,7 +370,7 @@ public class MockHelixAdmin implements HelixAdmin {
   /**
    * Trigger a live instance change notification.
    */
-  private void triggerLiveInstanceChangeNotification() {
+  void triggerLiveInstanceChangeNotification() {
     for (MockHelixManager helixManager : helixManagersForThisAdmin) {
       helixManager.triggerLiveInstanceNotification(false);
     }
@@ -440,6 +452,16 @@ public class MockHelixAdmin implements HelixAdmin {
   Map<String, Map<String, String>> getPartitionStateMapForInstance(String instanceName) {
     ReplicaStateInfos replicaStateInfos = instanceToReplicaStateInfos.get(instanceName);
     return replicaStateInfos != null ? replicaStateInfos.getReplicaStateMap() : new HashMap<>();
+  }
+
+  /**
+   * Get partitions and their replicas to state map for a given resource. This is used in construction of external view.
+   * @param resource resource name
+   * @return a map of partitions to their replica infos.
+   */
+  Map<String, Map<String, String>> getPartitionToReplicasMapForResource(String resource) {
+    ResourceInfo resourceInfo = resourceToResourceInfoMap.get(resource);
+    return resourceInfo != null ? resourceInfo.getPartitionToReplicasMap() : new HashMap<>();
   }
 
   /**
@@ -839,6 +861,23 @@ public class MockHelixAdmin implements HelixAdmin {
 
     Map<String, Map<String, String>> getReplicaStateMap() {
       return replicaStateMap;
+    }
+  }
+
+  class ResourceInfo {
+    Map<String, Map<String, String>> partitionToReplicasMap;
+
+    ResourceInfo() {
+      partitionToReplicasMap = new HashMap<>();
+    }
+
+    void setReplicasState(String partition, String replica, String state) {
+      Map<String, String> replicaToState = partitionToReplicasMap.computeIfAbsent(partition, k -> new HashMap<>());
+      replicaToState.put(replica, state);
+    }
+
+    Map<String, Map<String, String>> getPartitionToReplicasMap() {
+      return partitionToReplicasMap;
     }
   }
 }
