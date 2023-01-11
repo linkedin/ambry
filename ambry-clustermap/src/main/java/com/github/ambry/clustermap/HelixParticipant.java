@@ -22,7 +22,6 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
-import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -41,8 +40,6 @@ import org.apache.helix.InstanceType;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.store.HelixPropertyStore;
-import org.apache.helix.task.Task;
-import org.apache.helix.task.TaskCallbackContext;
 import org.apache.helix.task.TaskConstants;
 import org.apache.helix.task.TaskFactory;
 import org.apache.helix.task.TaskStateModelFactory;
@@ -450,20 +447,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       AccountStatsStore accountStatsStore, Callback<AggregatedAccountStorageStats> callback) {
     Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
     for (final AmbryStatsReport statsReport : statsReports) {
-      if (statsReport.getAggregateIntervalInMinutes() != Utils.Infinite_Time) {
-        if (clusterMapConfig.clustermapEnableMySqlAggregationTask && accountStatsStore != null) {
-          taskFactoryMap.put(
-              String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, statsReport.getReportName()),
-              new TaskFactory() {
-                @Override
-                public Task createNewTask(TaskCallbackContext context) {
-                  return new MySqlReportAggregatorTask(context.getManager(),
-                     statsReport.getAggregateIntervalInMinutes(), statsReport.getStatsReportType(), accountStatsStore,
-                      callback, clusterMapConfig, metricRegistry);
-                }
-              });
-        }
-      }
+      taskFactoryMap.put(
+          String.format("%s_%s", MySqlReportAggregatorTask.TASK_COMMAND_PREFIX, statsReport.getReportName()),
+          context -> new MySqlReportAggregatorTask(context.getManager(), statsReport.getAggregateIntervalInMinutes(),
+              statsReport.getStatsReportType(), accountStatsStore, callback, clusterMapConfig, metricRegistry));
     }
     if (!taskFactoryMap.isEmpty()) {
       engine.registerStateModelFactory(TaskConstants.STATE_MODEL_NAME,

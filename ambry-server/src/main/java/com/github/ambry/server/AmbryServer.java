@@ -279,9 +279,7 @@ public class AmbryServer {
               clusterMapConfig, registry).getAccountStatsStore() : null;
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
           clusterParticipants.get(0), accountStatsMySqlStore, accountService);
-      if (serverConfig.serverStatsPublishLocalEnabled) {
-        statsManager.start();
-      }
+      statsManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
@@ -329,7 +327,13 @@ public class AmbryServer {
       for (StatsReportType type : StatsReportType.values()) {
         validStatsTypes.add(type.toString());
       }
-      if (serverConfig.serverStatsPublishReportEnabled) {
+
+      // StatsManager would publish account stats to AccountStatsStore, and optionally publish partition class stats
+      // as well. So if serverStatsReportsToPublish contains PARTITION_CLASS_REPORT, then be sure to enable partition
+      // class stats with StatsManagerConfig.publishPartitionClassReportPeriodInSecs.
+      // Also, since StatsManager is tightly coupled with mysql database right now, if variable accountStatsMySqlStore
+      // is null, there is no report to aggregate and publish.
+      if (!serverConfig.serverStatsReportsToPublish.isEmpty() && accountStatsMySqlStore != null) {
         serverConfig.serverStatsReportsToPublish.forEach(e -> {
           if (validStatsTypes.contains(e)) {
             ambryStatsReports.add(new AmbryStatsReportImpl(serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
