@@ -871,7 +871,7 @@ public class CloudBlobStoreTest {
     ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
-            new AtomicInteger(0), cloudDataNode, connectionPool, replicationConfig, replicationMetrics, null,
+            new AtomicInteger(0), cloudDataNode, connectionPool, null, replicationConfig, replicationMetrics, null,
             storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
             new ResponseHandler(clusterMap), new MockTime(), null, null, null);
 

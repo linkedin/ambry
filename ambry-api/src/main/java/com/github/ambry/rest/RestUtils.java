@@ -24,7 +24,6 @@ import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.server.StatsReportType;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
@@ -46,6 +45,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -594,7 +594,7 @@ public class RestUtils {
           Utils.serializeString(userMetadata, key, CHARSET);
           Utils.serializeString(userMetadata, entry.getValue(), CHARSET);
         }
-        Crc32 crc = new Crc32();
+        CRC32 crc = new CRC32();
         crc.update(userMetadata.array(), 0, sizeToAllocate - CRC_SIZE);
         userMetadata.putLong(crc.getValue());
       }
@@ -633,7 +633,7 @@ public class RestUtils {
               toReturn.put(Headers.USER_META_DATA_HEADER_PREFIX + key, value);
             }
             long actualCRC = userMetadataBuffer.getLong();
-            Crc32 crc32 = new Crc32();
+            CRC32 crc32 = new CRC32();
             crc32.update(userMetadata, 0, userMetadata.length - CRC_SIZE);
             long expectedCRC = crc32.getValue();
             if (actualCRC != expectedCRC) {

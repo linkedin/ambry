@@ -154,7 +154,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
-            new AtomicInteger(0), localHost.dataNodeId, connectionPool, replicationConfig, replicationMetrics, null,
+            new AtomicInteger(0), localHost.dataNodeId, connectionPool, null, replicationConfig, replicationMetrics, null,
             mockStoreKeyConverterFactory.getStoreKeyConverter(), transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, null, null, null);
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {

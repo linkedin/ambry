@@ -211,13 +211,11 @@ public class RequestResponseTest {
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
       BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize, byte[] blobKey)
       throws IOException {
-    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties, userMetadata, blobType,
-        blob, blobSize, blobKey, blobKey);
-    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties,
         userMetadata, blobType, blob, blobSize, null, null);
-    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties,
         userMetadata, blobType, blob, blobSize, new byte[0], null);
-    doPutRequestTest(PutRequest.PUT_REQUEST_VERSION_V4, clusterMap, correlationId, clientId, blobId, blobProperties,
+    doPutRequestTest((short) -1, clusterMap, correlationId, clientId, blobId, blobProperties,
         userMetadata, blobType, blob, blobSize, blobKey, blobKey);
   }
 
@@ -382,27 +380,21 @@ public class RequestResponseTest {
     int correlationId = 1234;
     String clientId = "client";
     PartitionId partitionId = new MockPartitionId();
-    BlobId blobId = new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, (short) 1, (short) 1, partitionId, false,
-        BlobId.BlobDataType.DATACHUNK);
+    BlobId blobId =
+        new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, (short) 1, (short) 1, partitionId, false,
+            BlobId.BlobDataType.DATACHUNK);
     BlobProperties blobProperties = new BlobProperties(1234L, "testServiceID", (short) 2222, (short) 3333, true);
     ByteBuffer userMetadata = ByteBuffer.wrap("testMetadata".getBytes());
     ByteBuf blobData = Unpooled.wrappedBuffer("testBlobData".getBytes());
     long blobSize = blobData.readableBytes();
     BlobType blobType = BlobType.DataBlob;
-    byte[] encryptionKey = new byte[] { 1, 2, 3, 4, 5};
+    byte[] encryptionKey = new byte[]{1, 2, 3, 4, 5};
 
-    ByteBuf content;
-    short savedVersion = PutRequest.currentVersion;
-    try {
-      PutRequest.currentVersion = PutRequest.PUT_REQUEST_VERSION_V5;
-      // Compose and serialize the PutRequest with V5 enabled.
-      PutRequest request =
-          new PutRequest(correlationId, clientId, blobId, blobProperties, userMetadata, blobData, blobSize, blobType,
-              ByteBuffer.wrap(encryptionKey), Crc32Impl.getAmbryInstance(), true);
-      content = request.content();
-    } finally {
-      PutRequest.currentVersion = savedVersion;
-    }
+    // Compose and serialize the PutRequest with V5 enabled.
+    PutRequest request =
+        new PutRequest(correlationId, clientId, blobId, blobProperties, userMetadata, blobData, blobSize, blobType,
+            ByteBuffer.wrap(encryptionKey), true);
+    ByteBuf content = request.content();
 
     // Read back binary.  The content binary contains extra fields(total size and operation type).
     // Those extra fields must be read from the stream before calling readFrom().
@@ -417,8 +409,7 @@ public class RequestResponseTest {
       Assert.assertEquals(blobSize, newPutRequest.blobSize);
       Assert.assertTrue(newPutRequest.isCompressed());
       Assert.assertEquals("testServiceID", newPutRequest.getBlobProperties().getServiceId());
-    }
-    finally {
+    } finally {
       content.release();
     }
   }

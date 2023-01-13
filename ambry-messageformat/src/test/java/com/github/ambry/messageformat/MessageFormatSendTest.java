@@ -14,15 +14,14 @@
 package com.github.ambry.messageformat;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.ByteBuf;
@@ -37,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.zip.CRC32;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -50,7 +50,6 @@ import org.junit.runners.Parameterized;
 public class MessageFormatSendTest {
   private final short blobFormatVersion;
   private static short messageFormatHeaderVersionSaved;
-  private static boolean useBlobVersionSaved;
 
   private final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
@@ -67,25 +66,20 @@ public class MessageFormatSendTest {
   @BeforeClass
   public static void saveMessageFormatHeaderVersionToUse() {
     messageFormatHeaderVersionSaved = MessageFormatRecord.headerVersionToUse;
-    useBlobVersionSaved = PutMessageFormatInputStream.useBlobFormatV3;
   }
 
   @After
   public void resetMessageFormatHeaderVersionToUse() {
     MessageFormatRecord.headerVersionToUse = messageFormatHeaderVersionSaved;
-    PutMessageFormatInputStream.useBlobFormatV3 = useBlobVersionSaved;
   }
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{MessageFormatRecord.Blob_Version_V1},
-        {MessageFormatRecord.Blob_Version_V2},
-        {MessageFormatRecord.Blob_Version_V3}});
+    return Arrays.asList(new Object[][]{{MessageFormatRecord.Blob_Version_V3}});
   }
 
   public MessageFormatSendTest(short blobFormatVersion) {
     this.blobFormatVersion = blobFormatVersion;
-    PutMessageFormatInputStream.useBlobFormatV3 = (blobFormatVersion == MessageFormatRecord.Blob_Version_V3);
   }
 
   class MockMessageReadSet implements MessageReadSet {
@@ -610,7 +604,7 @@ public class MessageFormatSendTest {
     buf1.putInt(-1);                           // delete relative offset
     buf1.putInt(81);                           // user metadata relative offset
     buf1.putInt(191);                          // data relative offset
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(buf1.array(), 0, buf1.position());
     buf1.putLong(crc.getValue());                          // crc
     String id = new String("012345678910123456789012");     // blob id

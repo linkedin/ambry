@@ -594,11 +594,12 @@ public class ServerAdminTool implements Closeable {
    */
   public Pair<ServerErrorCode, BlobProperties> getBlobProperties(DataNodeId dataNodeId, BlobId blobId,
       GetOption getOption, ClusterMap clusterMap) throws Exception {
-    Pair<ServerErrorCode, InputStream> response =
+    Pair<Pair<ServerErrorCode, InputStream>, ResponseInfo> response =
         getGetResponse(dataNodeId, blobId, MessageFormatFlags.BlobProperties, getOption, clusterMap);
-    InputStream stream = response.getSecond();
+    InputStream stream = response.getFirst().getSecond();
     BlobProperties blobProperties = stream != null ? MessageFormatRecord.deserializeBlobProperties(stream) : null;
-    return new Pair<>(response.getFirst(), blobProperties);
+    response.getSecond().release();
+    return new Pair<>(response.getFirst().getFirst(), blobProperties);
   }
 
   /**
@@ -612,11 +613,12 @@ public class ServerAdminTool implements Closeable {
    */
   public Pair<ServerErrorCode, ByteBuffer> getUserMetadata(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
       ClusterMap clusterMap) throws Exception {
-    Pair<ServerErrorCode, InputStream> response =
+    Pair<Pair<ServerErrorCode, InputStream>, ResponseInfo> response =
         getGetResponse(dataNodeId, blobId, MessageFormatFlags.BlobUserMetadata, getOption, clusterMap);
-    InputStream stream = response.getSecond();
+    InputStream stream = response.getFirst().getSecond();
     ByteBuffer userMetadata = stream != null ? MessageFormatRecord.deserializeUserMetadata(stream) : null;
-    return new Pair<>(response.getFirst(), userMetadata);
+    response.getSecond().release();
+    return new Pair<>(response.getFirst().getFirst(), userMetadata);
   }
 
   /**
@@ -630,11 +632,12 @@ public class ServerAdminTool implements Closeable {
    */
   public Pair<ServerErrorCode, BlobData> getBlob(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
       ClusterMap clusterMap) throws Exception {
-    Pair<ServerErrorCode, InputStream> response =
+    Pair<Pair<ServerErrorCode, InputStream>, ResponseInfo> response =
         getGetResponse(dataNodeId, blobId, MessageFormatFlags.Blob, getOption, clusterMap);
-    InputStream stream = response.getSecond();
+    InputStream stream = response.getFirst().getSecond();
     BlobData blobData = stream != null ? MessageFormatRecord.deserializeBlob(stream) : null;
-    return new Pair<>(response.getFirst(), blobData);
+    response.getSecond().release();
+    return new Pair<>(response.getFirst().getFirst(), blobData);
   }
 
   /**
@@ -649,11 +652,12 @@ public class ServerAdminTool implements Closeable {
    */
   public Pair<ServerErrorCode, BlobAll> getAll(DataNodeId dataNodeId, BlobId blobId, GetOption getOption,
       ClusterMap clusterMap, StoreKeyFactory storeKeyFactory) throws Exception {
-    Pair<ServerErrorCode, InputStream> response =
+    Pair<Pair<ServerErrorCode, InputStream>, ResponseInfo> response =
         getGetResponse(dataNodeId, blobId, MessageFormatFlags.All, getOption, clusterMap);
-    InputStream stream = response.getSecond();
+    InputStream stream = response.getFirst().getSecond();
     BlobAll blobAll = stream != null ? MessageFormatRecord.deserializeBlobAll(stream, storeKeyFactory) : null;
-    return new Pair<>(response.getFirst(), blobAll);
+    response.getSecond().release();
+    return new Pair<>(response.getFirst().getFirst(), blobAll);
   }
 
   /**
@@ -811,7 +815,7 @@ public class ServerAdminTool implements Closeable {
    * response stream otherwise.
    * @throws Exception
    */
-  private Pair<ServerErrorCode, InputStream> getGetResponse(DataNodeId dataNodeId, BlobId blobId,
+  private Pair<Pair<ServerErrorCode, InputStream>, ResponseInfo> getGetResponse(DataNodeId dataNodeId, BlobId blobId,
       MessageFormatFlags flags, GetOption getOption, ClusterMap clusterMap) throws Exception {
     PartitionId partitionId = blobId.getPartition();
     PartitionRequestInfo partitionRequestInfo =
@@ -822,13 +826,12 @@ public class ServerAdminTool implements Closeable {
         new GetRequest(correlationId.incrementAndGet(), CLIENT_ID, flags, partitionRequestInfos, getOption);
     ResponseInfo response = sendRequestGetResponse(dataNodeId, partitionId, getRequest);
     InputStream serverResponseStream = new NettyByteBufDataInputStream(response.content());
-    response.release();
     GetResponse getResponse = GetResponse.readFrom(new DataInputStream(serverResponseStream), clusterMap);
     ServerErrorCode partitionErrorCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
     ServerErrorCode errorCode =
         partitionErrorCode == ServerErrorCode.No_Error ? getResponse.getError() : partitionErrorCode;
     InputStream stream = errorCode == ServerErrorCode.No_Error ? getResponse.getInputStream() : null;
-    return new Pair<>(errorCode, stream);
+    return new Pair<>(new Pair<>(errorCode, stream), response);
   }
 
   /**

@@ -23,31 +23,31 @@ import java.util.List;
  * The configs for stats.
  */
 public class StatsManagerConfig {
-  public static final String STATS_OUTPUT_FILE_PATH = "stats.output.file.path";
+  public static final String STATS_ENABLE_MYSQL_REPORT = "stats.enable.mysql.report";
   public static final String STATS_PUBLISH_PERIOD_IN_SECS = "stats.publish.period.in.secs";
   public static final String STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS = "stats.initial.delay.upper.bound.in.secs";
-  public static final String STATS_ENABLE_MYSQL_REPORT = "stats.enable.mysql.report";
-  public static final String STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES = "stats.health.report.exclude.account.names";
   public static final String STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES = "stats.publish.exclude.account.names";
   public static final String STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS =
       "stats.publish.partition.class.report.period.in.secs";
 
   /**
-   * The file path (including filename) to be used for publishing the stats.
+   * True to enable publishing stats to mysql database. StatsManager is tightly coupled with mysql database for now.
+   * Enable mysql report is the only way to enable stats reports.
    */
-  @Config(STATS_OUTPUT_FILE_PATH)
-  @Default("/tmp/stats_output.json")
-  public final String outputFilePath;
+  @Config(STATS_ENABLE_MYSQL_REPORT)
+  @Default("false")
+  public final boolean enableMysqlReport;
 
   /**
-   * The time period in seconds that configures how often stats are published.
+   * The time period in seconds that configures how often account stats are published. This configuration is only useful
+   * when {@link #STATS_ENABLE_MYSQL_REPORT} is true.
    */
   @Config(STATS_PUBLISH_PERIOD_IN_SECS)
   @Default("7200")
   public final long publishPeriodInSecs;
 
   /**
-   * The upper bound for the initial delay in seconds before the first stats collection is triggered. The delay is a
+   * The upper bound for the initial delay in seconds before the first account stats collection is triggered. The delay is a
    * random number b/w 0 (inclusive) and this number (exclusive). If no initial delay is desired, this can be set to 0.
    */
   @Config(STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS)
@@ -55,22 +55,7 @@ public class StatsManagerConfig {
   public final int initialDelayUpperBoundInSecs;
 
   /**
-   * True to enable publishing stats to mysql database
-   */
-  @Config(STATS_ENABLE_MYSQL_REPORT)
-  @Default("false")
-  public final boolean enableMysqlReport;
-
-  /**
-   * The account names to exclude from the health report. Multiple account names should be separated with ",".
-   */
-  @Config(STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES)
-  @Default("")
-  public final List<String> healthReportExcludeAccountNames;
-
-  /**
-   * The account names to exclude from publishing to local disk and mysql database. Multiple account names should be
-   * separated with ",".
+   * The account names to exclude from publishing to mysql database. Multiple account names should be separated with ",".
    */
   @Config(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES)
   @Default("")
@@ -85,15 +70,11 @@ public class StatsManagerConfig {
   public final long publishPartitionClassReportPeriodInSecs;
 
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
-    outputFilePath = verifiableProperties.getString(STATS_OUTPUT_FILE_PATH, "/tmp/stats_output.json");
     publishPeriodInSecs = verifiableProperties.getLongInRange(STATS_PUBLISH_PERIOD_IN_SECS, 7200, 0, Long.MAX_VALUE);
     initialDelayUpperBoundInSecs =
         verifiableProperties.getIntInRange(STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS, 600, 0, Integer.MAX_VALUE);
     enableMysqlReport = verifiableProperties.getBoolean(STATS_ENABLE_MYSQL_REPORT, false);
-    String excludeNames = verifiableProperties.getString(STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES, "").trim();
-    healthReportExcludeAccountNames =
-        excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
-    excludeNames = verifiableProperties.getString(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, "").trim();
+    String excludeNames = verifiableProperties.getString(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, "").trim();
     publishExcludeAccountNames =
         excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
     publishPartitionClassReportPeriodInSecs =

@@ -14,10 +14,10 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.zip.CRC32;
 
 
 /**
@@ -39,9 +39,6 @@ import java.nio.ByteBuffer;
  *  - - - - - - - - - - - - - -
  */
 public class PutMessageFormatInputStream extends MessageFormatInputStream {
-
-  // Temporary config for deployment control.  It will be removed after successfully deployed.
-  public static boolean useBlobFormatV3 = false;
 
   public PutMessageFormatInputStream(StoreKey key, ByteBuffer blobEncryptionKey, BlobProperties blobProperties,
       ByteBuffer userMetadata, InputStream blobStream, long streamSize, BlobType blobType)
@@ -86,8 +83,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     int blobPropertiesRecordSize =
         MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
     int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
-    long blobSize = useBlobFormatV3 ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(streamSize) :
-        MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
+    long blobSize = MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(streamSize);
 
     buffer = ByteBuffer.allocate(
         headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize + (int) (
@@ -118,12 +114,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecord(buffer, blobProperties);
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
     int bufferBlobStart = buffer.position();
-    if (useBlobFormatV3) {
-      MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
-    } else {
-      MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
-    }
-    Crc32 crc = new Crc32();
+    MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
+    CRC32 crc = new CRC32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);
     streamLength = streamSize;
@@ -145,8 +137,7 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     int blobPropertiesRecordSize =
         MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(blobProperties);
     int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
-    long blobSize = useBlobFormatV3 ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(streamSize) :
-        MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(streamSize);
+    long blobSize = MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(streamSize);
 
     buffer = ByteBuffer.allocate(
         headerSize + key.sizeInBytes() + blobPropertiesRecordSize + userMetadataSize + (int) (blobSize - streamSize
@@ -162,12 +153,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
     int bufferBlobStart = buffer.position();
 
-    if (useBlobFormatV3) {
-      MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
-    } else {
-      MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(buffer, streamSize, blobType);
-    }
-    Crc32 crc = new Crc32();
+    MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
+    CRC32 crc = new CRC32();
     crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
     stream = new CrcInputStream(crc, blobStream);
     streamLength = streamSize;

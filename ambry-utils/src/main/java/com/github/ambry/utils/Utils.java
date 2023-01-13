@@ -68,6 +68,7 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.CRC32;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -781,7 +782,7 @@ public class Utils {
    * @return The CRC32
    */
   public static long crc32(byte[] bytes, int offset, int size) {
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(bytes, offset, size);
     return crc.getValue();
   }

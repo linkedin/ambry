@@ -17,8 +17,6 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.compression.Compression;
-import com.github.ambry.config.CompressionConfig;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatException;
@@ -49,7 +47,6 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -63,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.zip.CRC32;
 
 import static com.github.ambry.messageformat.MessageFormatRecord.*;
 
@@ -287,7 +285,7 @@ class MockServer {
             }
             byteBuffer.put(
                 Utils.readBytesFromStream(originalBlobPutReq.getBlobStream(), (int) originalBlobPutReq.getBlobSize()));
-            Crc32 crc = new Crc32();
+            CRC32 crc = new CRC32();
             crc.update(byteBuffer.array(), 0, byteBuffer.position());
             byteBuffer.putLong(crc.getValue());
             break;
@@ -363,7 +361,7 @@ class MockServer {
             }
             byteBuffer.put(
                 Utils.readBytesFromStream(originalBlobPutReq.getBlobStream(), (int) originalBlobPutReq.getBlobSize()));
-            crc = new Crc32();
+            crc = new CRC32();
             crc.update(byteBuffer.array(), blobRecordStart, blobRecordSize - MessageFormatRecord.Crc_Size);
             byteBuffer.putLong(crc.getValue());
             break;

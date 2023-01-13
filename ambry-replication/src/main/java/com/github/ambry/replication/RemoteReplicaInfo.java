@@ -223,16 +223,16 @@ public class RemoteReplicaInfo {
   }
 
   /**
-   * Get the meta data response received for this replica in the most recent replication cycle.
-   * @return exchangeMetadataResponse contains the meta data response (missing keys, token info, local lag from remote, etc.).
+   * Get the metadata response received for this replica in the most recent replication cycle.
+   * @return exchangeMetadataResponse contains the metadata response (missing keys, token info, local lag from remote, etc.).
    */
   synchronized ReplicaThread.ExchangeMetadataResponse getExchangeMetadataResponse() {
     return exchangeMetadataResponse;
   }
 
   /**
-   * Set the meta data response received for this replica in the most recent replication cycle.
-   * @param exchangeMetadataResponse contains meta data response (missing keys, token info, local lag from remote, etc.).
+   * Set the metadata response received for this replica in the most recent replication cycle.
+   * @param exchangeMetadataResponse contains metadata response (missing keys, token info, local lag from remote, etc.).
    */
   synchronized void setExchangeMetadataResponse(ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse) {
     // Synchronized to avoid conflict between replica threads setting new exchangeMetadataResponse received for this replica

@@ -13,6 +13,9 @@
  */
 package com.github.ambry.network;
 
+import java.util.List;
+
+
 /**
  * RequestResponse Channel used by the network layer to queue new requests and
  * send responses over the network from the channel. This is used by the server
@@ -32,14 +35,22 @@ public interface RequestResponseChannel {
       throws InterruptedException;
 
   /**
-   * Receives the request from the channel
+   * Receives the request from the channel. This method will block the caller thread if there are no requests in the
+   * channel.
    * @return The request that was queued by the network layer into the channel
    * @throws InterruptedException
    */
   NetworkRequest receiveRequest() throws InterruptedException;
 
   /**
-   * Sends a request over the network. The request gets queued by the channel.
+   * @return a list of {@link NetworkRequest}s which have timed out waiting in the channel. This method will block the
+   * caller thread if there are no timed out requests currently.
+   * @throws InterruptedException
+   */
+  List<NetworkRequest> getDroppedRequests() throws InterruptedException;
+
+  /**
+   * Sends a request received from network over the channel. The request gets queued by the channel.
    * @param request The request to be queued by the channel
    * @throws InterruptedException
    */

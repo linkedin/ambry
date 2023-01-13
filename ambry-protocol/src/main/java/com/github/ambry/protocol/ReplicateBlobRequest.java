@@ -81,6 +81,11 @@ public class ReplicateBlobRequest extends RequestOrResponse {
     }
   }
 
+  @Override
+  public void accept(RequestVisitor visitor) {
+    visitor.visit(this);
+  }
+
   /**
    * Construct the bufferToSend to serialize the request
    */

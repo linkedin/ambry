@@ -3182,9 +3182,8 @@ final class ServerTestUtil {
           + blobId.sizeInBytes() + (blobEncryptionKey != null
           ? MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(blobEncryptionKey) : 0)
           + MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSize(properties)
-          + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata) + (
-          PutMessageFormatInputStream.useBlobFormatV3 ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(
-              data.length) : MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(data.length));
+          + MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(usermetadata)
+          + MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(data.length);
     } catch (Exception e) {
       fail("Unexpected exception" + e);
     }

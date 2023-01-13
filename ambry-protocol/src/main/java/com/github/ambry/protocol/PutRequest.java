@@ -31,6 +31,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.Iterator;
+import java.util.zip.CRC32;
 
 
 /**
@@ -57,7 +58,7 @@ public class PutRequest extends RequestOrResponse {
   // BlobData
 
   // Used to calculate crc value in ambry-frontend.
-  private final Crc32Impl crc;
+  private final CRC32 crc;
   private ByteBuf crcByteBuf;
   private boolean okayToWriteCrc = false;
   private int sizeExcludingBlobAndCrc = -1;
@@ -75,13 +76,10 @@ public class PutRequest extends RequestOrResponse {
   private static final int IS_COMPRESSED_SIZE_IN_BYTES = 1;
   private static final int CRC_SIZE_IN_BYTES = Long.BYTES;
   private static final short PUT_REQUEST_VERSION_V3 = 3;
+  private static final short PUT_REQUEST_VERSION_V4 = 4;
+  private static final short PUT_REQUEST_VERSION_V5 = 5;
 
-  // TODO - The V4 and V5 constants are public to allow config to control the version during deployment and testing.
-  // After compression feature tested and deploy, it will be converted back to private.
-  public static final short PUT_REQUEST_VERSION_V4 = 4;
-  public static final short PUT_REQUEST_VERSION_V5 = 5;
-
-  public static short currentVersion = PUT_REQUEST_VERSION_V4;
+  private static short currentVersion = PUT_REQUEST_VERSION_V5;
 
   /**
    * Construct a PutRequest
@@ -89,37 +87,17 @@ public class PutRequest extends RequestOrResponse {
    * @param clientId the clientId associated with the request.
    * @param blobId the {@link BlobId} of the blob that is being put as part of this request.
    * @param properties the {@link BlobProperties} associated with the request.
-   * @param usermetadata the user metadata associated with the request.
+   * @param userMetadata the user metadata associated with the request.
    * @param materializedBlob the materialized buffer containing the blob data.
    * @param blobSize the size of the blob data.
    * @param blobType the type of the blob data.
    * @param blobEncryptionKey the encryption key for the blob.
    */
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer usermetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType,
+      ByteBuffer userMetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType,
       ByteBuffer blobEncryptionKey) {
-    this(correlationId, clientId, blobId, properties, usermetadata, materializedBlob, blobSize, blobType,
-        blobEncryptionKey, Crc32Impl.getAmbryInstance());
-  }
-
-  /**
-   * Construct a PutRequest
-   * @param correlationId the correlation id associated with the request.
-   * @param clientId the clientId associated with the request.
-   * @param blobId the {@link BlobId} of the blob that is being put as part of this request.
-   * @param properties the {@link BlobProperties} associated with the request.
-   * @param userMetadata the user metadata associated with the request.
-   * @param materializedBlob the materialized buffer containing the blob data.
-   * @param blobSize the size of the blob data.
-   * @param blobType the type of the blob data.
-   * @param blobEncryptionKey the encryption key for the blob.
-   * @param crc32Impl the {@link Crc32Impl}.
-   */
-  public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-      ByteBuffer userMetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey,
-      Crc32Impl crc32Impl) {
     this(correlationId, clientId, blobId, properties, userMetadata, materializedBlob, blobSize, blobType,
-        blobEncryptionKey, crc32Impl, false);
+        blobEncryptionKey, false);
   }
 
   /**
@@ -133,12 +111,11 @@ public class PutRequest extends RequestOrResponse {
    * @param blobSize the size of the blob data.
    * @param blobType the type of the blob data.
    * @param blobEncryptionKey the encryption key for the blob.
-   * @param crc32Impl the {@link Crc32Impl}.
    * @param isCompressed Whether the materializedBlob is compressed.
    */
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
       ByteBuffer userMetadata, ByteBuf materializedBlob, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey,
-      Crc32Impl crc32Impl, boolean isCompressed) {
+      boolean isCompressed) {
     super(RequestOrResponseType.PutRequest, currentVersion, correlationId, clientId);
     this.blobId = blobId;
     this.properties = properties;
@@ -147,7 +124,7 @@ public class PutRequest extends RequestOrResponse {
     this.blobType = blobType;
     this.blobEncryptionKey = blobEncryptionKey;
     this.blob = materializedBlob;
-    this.crc = crc32Impl;
+    this.crc = new CRC32();
     this.blobStream = null;
     this.crcValue = null;
     this.isCompressed = isCompressed;
@@ -169,8 +146,8 @@ public class PutRequest extends RequestOrResponse {
   public PutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties blobProperties,
       ByteBuffer userMetadata, long blobSize, BlobType blobType, ByteBuffer blobEncryptionKey, InputStream blobStream,
       Long crc) {
-    this(correlationId, clientId, blobId, blobProperties, userMetadata, blobSize, blobType,
-        blobEncryptionKey, blobStream, crc, false);
+    this(correlationId, clientId, blobId, blobProperties, userMetadata, blobSize, blobType, blobEncryptionKey,
+        blobStream, crc, false);
   }
 
   /**
@@ -246,6 +223,11 @@ public class PutRequest extends RequestOrResponse {
       }
     }
     return sizeExcludingBlobAndCrc;
+  }
+
+  @Override
+  public void accept(RequestVisitor visitor) {
+    visitor.visit(this);
   }
 
   /**

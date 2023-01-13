@@ -19,9 +19,11 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
@@ -66,7 +68,6 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -145,6 +146,7 @@ public class GetBlobOperationTest {
   private final String operationTrackerType;
   private final boolean testEncryption;
   private final boolean enableMetadataCache;
+  private final boolean enableCompression;
   private final AmbryCache blobMetadataCache;
   private MockKeyManagementService kms = null;
   private MockCryptoService cryptoService = null;
@@ -205,16 +207,17 @@ public class GetBlobOperationTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false, false, false},
-        {SimpleOperationTracker.class.getSimpleName(), false, true, false},
-        {AdaptiveOperationTracker.class.getSimpleName(), false, false, false},
-        {AdaptiveOperationTracker.class.getSimpleName(), false, true, false},
-        {AdaptiveOperationTracker.class.getSimpleName(), true, false, false},
-        {SimpleOperationTracker.class.getSimpleName(), false, false, true},
-        {SimpleOperationTracker.class.getSimpleName(), false, true, true},
-        {AdaptiveOperationTracker.class.getSimpleName(), false, false, true},
-        {AdaptiveOperationTracker.class.getSimpleName(), false, true, true},
-        {AdaptiveOperationTracker.class.getSimpleName(), true, false, true},});
+    return Arrays.asList(new Object[][]{{SimpleOperationTracker.class.getSimpleName(), false, false, false, true},
+        {SimpleOperationTracker.class.getSimpleName(), false, false, false, false},
+        {SimpleOperationTracker.class.getSimpleName(), false, true, false, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, false, false, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, true, false, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), true, false, false, false},
+        {SimpleOperationTracker.class.getSimpleName(), false, false, true, false},
+        {SimpleOperationTracker.class.getSimpleName(), false, true, true, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, false, true, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), false, true, true, false},
+        {AdaptiveOperationTracker.class.getSimpleName(), true, false, true, false}});
   }
 
   /**
@@ -226,7 +229,7 @@ public class GetBlobOperationTest {
    * {@link com.github.ambry.config.QuotaConfig#bandwidthThrottlingFeatureEnabled}.
    */
   public GetBlobOperationTest(String operationTrackerType, boolean testEncryption, boolean isBandwidthThrottlingEnabled,
-      boolean enableMetadataCache) throws Exception {
+      boolean enableMetadataCache, boolean enableCompression) throws Exception {
     Properties properties = new Properties();
     properties.setProperty(QuotaConfig.BANDWIDTH_THROTTLING_FEATURE_ENABLED,
         String.valueOf(isBandwidthThrottlingEnabled));
@@ -234,8 +237,9 @@ public class GetBlobOperationTest {
     quotaChargeCallback = QuotaTestUtils.createTestQuotaChargeCallback(quotaConfig);
     this.operationTrackerType = operationTrackerType;
     this.testEncryption = testEncryption;
+    this.enableCompression = enableCompression;
     // Defaults. Tests may override these and do new puts as appropriate.
-    maxChunkSize = random.nextInt(1024 * 1024) + 1;
+    maxChunkSize = random.nextInt(1024 * 1024) + 1024;
     // a blob size that is greater than the maxChunkSize and is not a multiple of it. Will result in a composite blob.
     blobSize = maxChunkSize * random.nextInt(10) + random.nextInt(maxChunkSize - 1) + 1;
     mockSelectorState.set(MockSelectorState.Good);
@@ -244,6 +248,7 @@ public class GetBlobOperationTest {
     routerProperties.setProperty(RouterConfig.ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE, Long.toString(0));
     routerProperties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES,
         Integer.toString(RouterConfig.MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT));
+    routerProperties.setProperty(CompressionConfig.COMPRESSION_ENABLED, Boolean.toString(enableCompression));
     this.enableMetadataCache = enableMetadataCache;
     VerifiableProperties vprops = new VerifiableProperties(routerProperties);
     routerConfig = new RouterConfig(vprops);
@@ -283,12 +288,24 @@ public class GetBlobOperationTest {
    * @throws Exception
    */
   private void doPut() throws Exception {
-    blobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
+    String contentType = enableCompression ? "text/plain" : "application/octet-stream";
+    blobProperties = new BlobProperties(-1, "serviceId", "memberId", contentType, false, Utils.Infinite_Time,
         Utils.getRandomShort(random), Utils.getRandomShort(random), testEncryption, null, null, null);
     userMetadata = new byte[10];
     random.nextBytes(userMetadata);
-    putContent = new byte[blobSize];
-    random.nextBytes(putContent);
+    if (enableCompression) {
+      StringBuilder sb = new StringBuilder();
+      String temp = "abcdefg";
+      while (sb.length() < blobSize) {
+        int len = temp.length() < blobSize - sb.length() ? temp.length() : blobSize - sb.length();
+        sb.append("abcdefg".substring(0, len));
+      }
+      // This is highly compressible content
+      putContent = sb.toString().getBytes(StandardCharsets.US_ASCII);
+    } else {
+      putContent = new byte[blobSize];
+      random.nextBytes(putContent);
+    }
     ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
     // TODO fix null quota charge event listener
     blobIdStr = router.putBlob(blobProperties, userMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
@@ -395,6 +412,9 @@ public class GetBlobOperationTest {
     for (int i = 0; i < 10; i++) {
       // blobSize in the range [1, maxChunkSize]
       blobSize = random.nextInt(maxChunkSize) + 1;
+      if (this.enableCompression) {
+        blobSize = Math.max(blobSize, 1025);
+      }
       short expectedLifeVersion = expectedLifeVersions[random.nextInt(expectedLifeVersions.length)];
       doPut();
       changeLifeVersionForBlobId(blobId.getID(), expectedLifeVersion);
@@ -844,6 +864,153 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test the case where two origin replicas are down and not in the clustermap, all others return NOT_FOUND.
+   * Expect Ambry Unavailable for GetBlob
+   * @throws Exception
+   */
+  @Test
+  public void testBlobOriginDcTwoDownAndOthersNotFound() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    doPut();
+
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    // Pick a remote DC as the new local DC.
+    Properties props = getDefaultNonBlockingRouterProperties(true);
+    String newLocal = "DC1";
+    String oldLocal = localDcName;
+    String oldPropTerminate = props.getProperty("router.operation.tracker.terminate.on.not.found.enabled");
+    String oldPropOffline = props.getProperty("router.unavailable.due.to.offline.replicas");
+    String oldPropGetEligible = props.getProperty("router.get.eligible.replicas.by.state.enabled");
+    props.setProperty("router.datacenter.name", newLocal);
+    props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "false");
+    props.setProperty("router.unavailable.due.to.offline.replicas", "true");
+    props.setProperty("router.get.eligible.replicas.by.state.enabled", "true");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    // change replica state.
+    // set two originating replica state to ERROR. exclude them from the eligible replica pool.
+    List<ReplicaId> replicaIds = partitionId.getReplicaIds();
+    int i = 0;
+    for (ReplicaId replicaId : replicaIds) {
+      MockReplicaId r = (MockReplicaId) replicaId;
+      // set two originating replica state to ERROR.
+      if (r.getDataNodeId().getDatacenterName().equals(oldLocal) && i < 2) {
+        partitionId.setReplicaState(r, ReplicaState.ERROR);
+        i++;
+      }
+    }
+
+    GetBlobOperation op = createOperation(routerConfig, null);
+    correlationIdToGetOperation.clear();
+    // all return Blob_Not_Found
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    }
+    op.poll(requestRegistrationCallback);
+
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+        op.handleResponse(responseInfo, getResponse);
+        responseInfo.release();
+      }
+    }
+
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(RouterErrorCode.AmbryUnavailable, routerException.getErrorCode());
+
+    props = getDefaultNonBlockingRouterProperties(true);
+    props.setProperty("router.datacenter.name", oldLocal);
+    if (oldPropTerminate != null) {
+      props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", oldPropTerminate);
+    }
+    if (oldPropOffline != null) {
+      props.setProperty("router.unavailable.due.to.offline.replicas", oldPropOffline);
+    }
+    if (oldPropGetEligible != null) {
+      props.setProperty("router.get.eligible.replicas.by.state.enabled", oldPropGetEligible);
+    }
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+  }
+
+  /**
+   * Test the case where two remote replicas are down and not in the clustermap,
+   * all others return NOT_FOUND including originating replicas.
+   * Expect Not Found for GetBlob
+   * @throws Exception
+   */
+  @Test
+  public void testBlobRemoteTwoDownAndOthersNotFound() throws Exception {
+    assumeTrue(operationTrackerType.equals(AdaptiveOperationTracker.class.getSimpleName()));
+    doPut();
+
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    // Pick a remote DC as the new local DC.
+    Properties props = getDefaultNonBlockingRouterProperties(true);
+    String newLocal = "DC1";
+    String oldLocal = localDcName;
+    String oldPropTerminate = props.getProperty("router.operation.tracker.terminate.on.not.found.enabled");
+    String oldPropOffline = props.getProperty("router.unavailable.due.to.offline.replicas");
+    String oldPropGetEligible = props.getProperty("router.get.eligible.replicas.by.state.enabled");
+    props.setProperty("router.datacenter.name", newLocal);
+    props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "false");
+    props.setProperty("router.unavailable.due.to.offline.replicas", "true");
+    props.setProperty("router.get.eligible.replicas.by.state.enabled", "true");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    // change replica state.
+    // set two remote replica state to ERROR. exclude them from the eligible replica pool.
+    List<ReplicaId> replicaIds = partitionId.getReplicaIds();
+    int i = 0;
+    for (ReplicaId replicaId : replicaIds) {
+      MockReplicaId r = (MockReplicaId) replicaId;
+      // set two originating replica state to ERROR.
+      if (r.getDataNodeId().getDatacenterName().equals(newLocal) && i < 2) {
+        partitionId.setReplicaState(r, ReplicaState.ERROR);
+        i++;
+      }
+    }
+
+    GetBlobOperation op = createOperation(routerConfig, null);
+    correlationIdToGetOperation.clear();
+    // all return Blob_Not_Found
+    for (MockServer server : mockServerLayout.getMockServers()) {
+      server.setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    }
+    op.poll(requestRegistrationCallback);
+
+    while (!op.isOperationComplete()) {
+      op.poll(requestRegistrationCallback);
+      List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
+      for (ResponseInfo responseInfo : responses) {
+        GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+            new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+        op.handleResponse(responseInfo, getResponse);
+        responseInfo.release();
+      }
+    }
+
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
+
+    props = getDefaultNonBlockingRouterProperties(true);
+    props.setProperty("router.datacenter.name", oldLocal);
+    if (oldPropTerminate != null) {
+      props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", oldPropTerminate);
+    }
+    if (oldPropOffline != null) {
+      props.setProperty("router.unavailable.due.to.offline.replicas", oldPropOffline);
+    }
+    if (oldPropGetEligible != null) {
+      props.setProperty("router.get.eligible.replicas.by.state.enabled", oldPropGetEligible);
+    }
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+  }
+
+  /**
    * Test the case where all requests time out within the SocketNetworkClient.
    * @throws Exception
    */
@@ -1274,6 +1441,7 @@ public class GetBlobOperationTest {
    */
   @Test
   public void testLegacyBlobGetSuccess() throws Exception {
+    assumeFalse(enableCompression);
     mockServerLayout.getMockServers()
         .forEach(mockServer -> mockServer.setBlobFormatVersion(MessageFormatRecord.Blob_Version_V1));
     for (int i = 0; i < 10; i++) {
@@ -1328,20 +1496,21 @@ public class GetBlobOperationTest {
         .build(), false, routerMetrics.ageAtGet);
     // First range request gets the entire blob including blobInfo
     GetBlobOperation op1 = getAndAssertSuccess(false, false, (short) 0);
-    assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All, op1.getFirstChunkOperationFlag()),
-        op1.getFirstChunkOperationFlag(), MessageFormatFlags.All);
+    assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All,
+        op1.getFirstChunkOperationFlag()), op1.getFirstChunkOperationFlag(), MessageFormatFlags.All);
     // Subsequent range request gets only blobInfo to validate metadata cached by previous request
     GetBlobOperation op2 = getAndAssertSuccess(false, false, (short) 0);
     if (this.enableMetadataCache) {
-      assertNotNull(String.format("Blobsize must be greater than maxChunkSize. maxChunkSize = %s, blobSize = %s", maxChunkSize, blobSize),
-          this.blobMetadataCache.getObject(blobIdStr));
-      assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.BlobInfo, op2.getFirstChunkOperationFlag()),
-          op2.getFirstChunkOperationFlag(), MessageFormatFlags.BlobInfo);
+      assertNotNull(
+          String.format("Blobsize must be greater than maxChunkSize. maxChunkSize = %s, blobSize = %s", maxChunkSize,
+              blobSize), this.blobMetadataCache.getObject(blobIdStr));
+      assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.BlobInfo,
+          op2.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag(), MessageFormatFlags.BlobInfo);
     } else {
       assertNull(String.format("maxChunkSize = %s, blobSize = %s", maxChunkSize, blobSize),
           this.blobMetadataCache.getObject(blobIdStr));
-      assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All, op2.getFirstChunkOperationFlag()),
-          op2.getFirstChunkOperationFlag(), MessageFormatFlags.All);
+      assertEquals(String.format("Expected operation flag %s but received %s", MessageFormatFlags.All,
+          op2.getFirstChunkOperationFlag()), op2.getFirstChunkOperationFlag(), MessageFormatFlags.All);
     }
   }
 
@@ -1452,25 +1621,29 @@ public class GetBlobOperationTest {
     MockDataNodeId dn2 = new MockDataNodeId("dn2", Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), "DC2");
     MockPartitionId partitionId = new MockPartitionId(1, "default", Arrays.asList(dn1, dn2), 0);
-    BlobId blobId = new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.CRAFTED,
-        (byte) 1, (short) 2, (short) 3, partitionId, false, BlobId.BlobDataType.DATACHUNK);
+    BlobId blobId =
+        new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.CRAFTED, (byte) 1, (short) 2, (short) 3, partitionId, false,
+            BlobId.BlobDataType.DATACHUNK);
 
     // Create GetBlobOperation instance and get the FirstChunk instance.
-    GetBlobOperation op = new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId,
-        options, null, routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false,
-        quotaChargeCallback, this.blobMetadataCache, router, compressionService);
+    GetBlobOperation op =
+        new GetBlobOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, blobIdFactory, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback,
+            this.blobMetadataCache, router, compressionService);
     Object firstChunk = FieldUtils.readField(op, "firstChunk", true);
     FieldUtils.writeField(firstChunk, "isChunkCompressed", true, true);
 
     // Generate the test compressed buffer.
-    ByteBuffer sourceBuffer = ByteBuffer.wrap("Compression unit test to test compression.".getBytes(StandardCharsets.UTF_8));
+    ByteBuffer sourceBuffer =
+        ByteBuffer.wrap("Compression unit test to test compression.".getBytes(StandardCharsets.UTF_8));
     ZstdCompression zstd = new ZstdCompression();
     ByteBuffer compressedBuffer = ByteBuffer.allocate(zstd.getCompressBufferSize(sourceBuffer.remaining()));
     zstd.compress(sourceBuffer, compressedBuffer);
 
     // Invoke the decompressContent method on the compressed buffer.
-    ByteBuf compressedByteBuf = Unpooled.wrappedBuffer(compressedBuffer.flip());
-    ByteBuf decompressedByteBuf = (ByteBuf) MethodUtils.invokeMethod(firstChunk, true, "decompressContent", compressedByteBuf);
+    ByteBuf compressedByteBuf = Unpooled.wrappedBuffer((ByteBuffer) compressedBuffer.flip());
+    ByteBuf decompressedByteBuf =
+        (ByteBuf) MethodUtils.invokeMethod(firstChunk, true, "decompressContent", compressedByteBuf);
     byte[] decompressedData = new byte[decompressedByteBuf.readableBytes()];
     decompressedByteBuf.readBytes(decompressedData);
     decompressedByteBuf.release();
@@ -1800,8 +1973,7 @@ public class GetBlobOperationTest {
         if (options.getBlobOptions.getOperationType() != GetBlobOptions.OperationType.BlobInfo) {
           final ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
           final Future<Long> preSetReadIntoFuture =
-              initiateReadBeforeChunkGet ? result.getBlobDataChannel()
-                  .readInto(asyncWritableChannel, null) : null;
+              initiateReadBeforeChunkGet ? result.getBlobDataChannel().readInto(asyncWritableChannel, null) : null;
           Utils.newThread(() -> {
             if (getChunksBeforeRead) {
               // wait for all chunks (data + metadata) to be received
@@ -1813,8 +1985,7 @@ public class GetBlobOperationTest {
             Future<Long> readIntoFuture = initiateReadBeforeChunkGet ? preSetReadIntoFuture
                 : result.getBlobDataChannel().readInto(asyncWritableChannel, null);
             assertBlobReadSuccess(options.getBlobOptions, readIntoFuture, asyncWritableChannel,
-                result.getBlobDataChannel(), readCompleteLatch, readCompleteResult,
-                readCompleteThrowable);
+                result.getBlobDataChannel(), readCompleteLatch, readCompleteResult, readCompleteThrowable);
           }, false).start();
         } else {
           readCompleteLatch.countDown();

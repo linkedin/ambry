@@ -461,6 +461,130 @@ public class OperationTrackerTest {
     }
   }
 
+  /**
+   * Duplicate the GCN issue:
+   * Among the 9 replicas, some are ERROR(in the GCN case, these are not listed in the Helix external view.
+   * All the eligible replica returns either DiskDown or NotFound.
+   * Originating Colo only has 1 replica in the eligible replica, so we return Ambry Unavailable instead of Not_Found.
+   */
+  @Test
+  public void getOperationFailDueToNotFoundWithOriginatingTwoDown() {
+    assumeTrue(replicasStateEnabled);
+    assumeTrue(routerUnavailableDueToOfflineReplicas);
+
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    MockDataNodeId localDcNode = new MockDataNodeId(portList, mountPaths, "dc-0");
+    MockDataNodeId remoteNode1 = new MockDataNodeId(portList, mountPaths, "dc-1");
+    MockDataNodeId remoteNode2 = new MockDataNodeId(portList, mountPaths, "dc-2");
+    datanodes = new ArrayList<>(Arrays.asList(localDcNode, remoteNode1, remoteNode2));
+    mockPartition = new MockPartitionId();
+    populateReplicaList(1, ReplicaState.LEADER, Collections.singletonList(localDcNode));
+    populateReplicaList(2, ReplicaState.ERROR, Collections.singletonList(localDcNode));
+    populateReplicaList(3, ReplicaState.OFFLINE, Collections.singletonList(remoteNode1));
+    populateReplicaList(3, ReplicaState.OFFLINE, Collections.singletonList(remoteNode2));
+
+    localDcName = datanodes.get(0).getDatacenterName();
+    originatingDcName = localDcName;
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    // 1. include down replicas (OFFLINE replicas are eligible for GET)
+    OperationTracker ot = getOperationTrackerForGetOrPut(true, 1, 1, RouterOperation.GetBlobOperation, true);
+    ReplicaId inflightReplica;
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    assertNotSame("Replica state should not be OFFLINE ", mockPartition.replicaAndState.get(inflightReplica),
+        ReplicaState.OFFLINE);
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.DISK_DOWN);
+    assertFalse("Operation should not complete", ot.isDone());
+
+    for (int i = 0; i < 6; ++i) {
+      sendRequests(ot, 1, false);
+      inflightReplica = inflightReplicas.poll();
+      ot.onResponse(inflightReplica, TrackedRequestFinalState.NOT_FOUND);
+      if (i == 5) {
+        // the last one
+        assertTrue("Operation should complete", ot.isDone());
+      } else {
+        assertFalse("Operation should not complete", ot.isDone());
+      }
+    }
+    assertTrue(ot.maybeFailedDueToOfflineReplicas());
+    assertTrue(ot.hasFailedOnNotFound());
+
+    // 2. exclude down replicas
+    repetitionTracker.clear();
+    ot = getOperationTrackerForGetOrPut(true, 1, 1, RouterOperation.GetBlobOperation, false);
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.DISK_DOWN);
+    assertTrue("Operation should be done", ot.isDone());
+    assertTrue(ot.maybeFailedDueToOfflineReplicas());
+    assertTrue(ot.hasFailedOnNotFound());
+  }
+
+  /**
+   * Duplicate the GCN issue:
+   * Among the 9 replicas, some are ERROR(in the GCN case, these are not listed in the Helix external view.
+   * All the eligible replica returns either DiskDown or NotFound.
+   * Originating Colo has 2 replica in the eligible replica, so we return NOT_FOUND.
+   */
+  @Test
+  public void getOperationFailDueToNotFoundWithOriginatingTwoOnline() {
+    assumeTrue(replicasStateEnabled);
+    assumeTrue(routerUnavailableDueToOfflineReplicas);
+
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    MockDataNodeId localDcNode = new MockDataNodeId(portList, mountPaths, "dc-0");
+    MockDataNodeId remoteNode1 = new MockDataNodeId(portList, mountPaths, "dc-1");
+    MockDataNodeId remoteNode2 = new MockDataNodeId(portList, mountPaths, "dc-2");
+    datanodes = new ArrayList<>(Arrays.asList(localDcNode, remoteNode1, remoteNode2));
+    mockPartition = new MockPartitionId();
+    populateReplicaList(2, ReplicaState.STANDBY, Collections.singletonList(localDcNode));
+    populateReplicaList(1, ReplicaState.OFFLINE, Collections.singletonList(localDcNode));
+    populateReplicaList(3, ReplicaState.ERROR, Collections.singletonList(remoteNode1));
+    populateReplicaList(3, ReplicaState.OFFLINE, Collections.singletonList(remoteNode2));
+
+    localDcName = datanodes.get(0).getDatacenterName();
+    originatingDcName = localDcName;
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    // 1. include down replicas (OFFLINE replicas are eligible for GET)
+    OperationTracker ot = getOperationTrackerForGetOrPut(true, 1, 1, RouterOperation.GetBlobOperation, true);
+    ReplicaId inflightReplica;
+    // two originating returns DISK_DOWN or NOT_FOUND
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.DISK_DOWN);
+    assertFalse("Operation should not complete", ot.isDone());
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not complete", ot.isDone());
+    //ROUTER_OPERATION_TRACKER_TERMINATE_ON_NOT_FOUND_ENABLED is enabled in the test.
+    //Although there are 6 replicas, it'll go through the originating replica only.
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.NOT_FOUND);
+    assertTrue("Operation should complete", ot.isDone());
+    assertFalse(ot.maybeFailedDueToOfflineReplicas());
+    assertTrue(ot.hasFailedOnNotFound());
+
+    // 2. exclude down replicas
+    repetitionTracker.clear();
+    ot = getOperationTrackerForGetOrPut(true, 1, 1, RouterOperation.GetBlobOperation, false);
+    // two originating returns DISK_DOWN
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.DISK_DOWN);
+    assertFalse("Operation should not complete", ot.isDone());
+    sendRequests(ot, 1, false);
+    inflightReplica = inflightReplicas.poll();
+    ot.onResponse(inflightReplica, TrackedRequestFinalState.NOT_FOUND);
+    assertTrue("Operation should not complete", ot.isDone());
+    assertFalse(ot.maybeFailedDueToOfflineReplicas());
+    assertTrue(ot.hasFailedOnNotFound());
+  }
+
   @Test
   public void noReplicaStateTtlUpdateTest() {
     assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));

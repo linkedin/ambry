@@ -15,7 +15,6 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
@@ -26,6 +25,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -476,7 +476,7 @@ public class MessageFormatRecord {
       outputBuffer.putInt(updateRecordRelativeOffset);
       outputBuffer.putInt(userMetadataRecordRelativeOffset);
       outputBuffer.putInt(blobRecordRelativeOffset);
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, getHeaderSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
       logger.trace("serializing header : version {} size {} blobpropertiesrecordrelativeoffset {} "
@@ -623,7 +623,7 @@ public class MessageFormatRecord {
     }
 
     private void verifyCrc() throws MessageFormatException {
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
       if (crc.getValue() != getCrc()) {
         throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.Data_Corrupt);
@@ -712,7 +712,7 @@ public class MessageFormatRecord {
       outputBuffer.putInt(updateRecordRelativeOffset);
       outputBuffer.putInt(userMetadataRecordRelativeOffset);
       outputBuffer.putInt(blobRecordRelativeOffset);
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, getHeaderSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
       logger.trace(
@@ -873,7 +873,7 @@ public class MessageFormatRecord {
     }
 
     private void verifyCrc() throws MessageFormatException {
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
       if (crc.getValue() != getCrc()) {
         throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.Data_Corrupt);
@@ -969,7 +969,7 @@ public class MessageFormatRecord {
       outputBuffer.putInt(updateRecordRelativeOffset);
       outputBuffer.putInt(userMetadataRecordRelativeOffset);
       outputBuffer.putInt(blobRecordRelativeOffset);
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, getHeaderSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
       logger.trace(
@@ -1137,7 +1137,7 @@ public class MessageFormatRecord {
     }
 
     private void verifyCrc() throws MessageFormatException {
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
       if (crc.getValue() != getCrc()) {
         throw new MessageFormatException("Message header is corrupt", MessageFormatErrorCodes.Data_Corrupt);
@@ -1171,7 +1171,7 @@ public class MessageFormatRecord {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(BlobProperties_Version_V1);
       BlobPropertiesSerDe.serializeBlobProperties(outputBuffer, properties);
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, getBlobPropertiesRecordSize(properties) - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
@@ -1224,7 +1224,7 @@ public class MessageFormatRecord {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(Update_Version_V1);
       outputBuffer.put((byte) 1);
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, getRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
@@ -1278,7 +1278,7 @@ public class MessageFormatRecord {
       outputBuffer.putShort(updateRecord.getAccountId());
       outputBuffer.putShort(updateRecord.getContainerId());
       outputBuffer.putLong(updateRecord.getUpdateTimeInMs());
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, getRecordSize() - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
@@ -1374,7 +1374,7 @@ public class MessageFormatRecord {
         default:
           throw new IllegalArgumentException("Unknown update record type: " + updateRecord.getType());
       }
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, getRecordSize(updateRecord.getType()) - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
@@ -1580,7 +1580,7 @@ public class MessageFormatRecord {
       outputBuffer.putShort(Blob_Encryption_Key_V1);
       outputBuffer.putInt(blobEncryptionKey.remaining());
       outputBuffer.put(blobEncryptionKey);
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, blobEncryptionKeyRecordSize - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }
@@ -1629,7 +1629,7 @@ public class MessageFormatRecord {
       outputBuffer.putShort(UserMetadata_Version_V1);
       outputBuffer.putInt(userMetadata.limit());
       outputBuffer.put(userMetadata);
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(outputBuffer.array(), startOffset, getUserMetadataSize(userMetadata) - Crc_Size);
       outputBuffer.putLong(crc.getValue());
     }

@@ -231,6 +231,7 @@ class ServerNetworkMetrics extends NetworkMetrics {
   // SocketRequestResponseChannel metrics
   private final List<Gauge<Integer>> responseQueueSize;
   private final Gauge<Integer> requestQueueSize;
+  private final Gauge<Integer> droppedRequestsQueueSize;
 
   // SocketServer metrics
   public final Counter acceptConnectionErrorCount;
@@ -244,6 +245,9 @@ class ServerNetworkMetrics extends NetworkMetrics {
     super(registry);
     requestQueueSize = channel::getRequestQueueSize;
     registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, "RequestQueueSize"), requestQueueSize);
+    droppedRequestsQueueSize = channel::getDroppedRequestsQueueSize;
+    registry.register(MetricRegistry.name(SocketRequestResponseChannel.class, "DroppedRequestQueueSize"),
+        droppedRequestsQueueSize);
     responseQueueSize = new ArrayList<Gauge<Integer>>(channel.getNumberOfProcessors());
 
     for (int i = 0; i < channel.getNumberOfProcessors(); i++) {

@@ -23,9 +23,9 @@ import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterSpectator;
-import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.VcrClusterAgentsFactory;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.NettyInternalMetrics;
@@ -47,20 +47,20 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
-import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.network.http2.Http2BlockingChannelPool;
 import com.github.ambry.network.http2.Http2ClientMetrics;
+import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
-import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
@@ -122,6 +122,7 @@ public class AmbryServer {
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
+  private NetworkClientFactory networkClientFactory;
   private final NotificationSystem notificationSystem;
   private ServerMetrics metrics = null;
   private Time time;
@@ -204,11 +205,6 @@ public class AmbryServer {
       // verify the configs
       properties.verify();
 
-      // TODO - Temporary deploy code that will be removed after compression has been tested and deployed.
-      if (storeConfig.storeUseBlobFormatV3) {
-        PutMessageFormatInputStream.useBlobFormatV3 = true;
-      }
-
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       // if there are more than one participants on local node, we create a consistency checker to monitor and alert any
       // mismatch in sealed/stopped replica lists that maintained by each participant.
@@ -243,10 +239,15 @@ public class AmbryServer {
       SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
 
       if (clusterMapConfig.clusterMapEnableHttp2Replication) {
-        connectionPool = new Http2BlockingChannelPool(sslFactory, new Http2ClientConfig(properties),
-            new Http2ClientMetrics(registry));
+        Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
+        Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
+        connectionPool = new Http2BlockingChannelPool(sslFactory, http2ClientConfig, http2ClientMetrics);
+        // Only enable nonblocking network client with http2
+        // We have to create a factory here, since one network client object can only be used in a single thread.
+        networkClientFactory = new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslFactory, time);
       } else {
         connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+        networkClientFactory = null;
       }
       connectionPool.start();
 
@@ -256,7 +257,7 @@ public class AmbryServer {
       Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
       replicationManager =
           new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
+              clusterMap, scheduler, nodeId, connectionPool, networkClientFactory, registry, notificationSystem, storeKeyConverterFactory,
               serverConfig.serverMessageTransformer, clusterParticipants.get(0), skipPredicate);
       replicationManager.start();
 
@@ -278,9 +279,7 @@ public class AmbryServer {
               clusterMapConfig, registry).getAccountStatsStore() : null;
       statsManager = new StatsManager(storageManager, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
           clusterParticipants.get(0), accountStatsMySqlStore, accountService);
-      if (serverConfig.serverStatsPublishLocalEnabled) {
-        statsManager.start();
-      }
+      statsManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
       ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
@@ -305,7 +304,7 @@ public class AmbryServer {
 
         logger.info("Http2 port {} is enabled. Starting HTTP/2 service.", nodeId.getHttp2Port());
         NettyServerRequestResponseChannel requestResponseChannel =
-            new NettyServerRequestResponseChannel(networkConfig.queuedMaxRequests, http2ServerMetrics);
+            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, metrics);
 
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
@@ -328,7 +327,13 @@ public class AmbryServer {
       for (StatsReportType type : StatsReportType.values()) {
         validStatsTypes.add(type.toString());
       }
-      if (serverConfig.serverStatsPublishReportEnabled) {
+
+      // StatsManager would publish account stats to AccountStatsStore, and optionally publish partition class stats
+      // as well. So if serverStatsReportsToPublish contains PARTITION_CLASS_REPORT, then be sure to enable partition
+      // class stats with StatsManagerConfig.publishPartitionClassReportPeriodInSecs.
+      // Also, since StatsManager is tightly coupled with mysql database right now, if variable accountStatsMySqlStore
+      // is null, there is no report to aggregate and publish.
+      if (!serverConfig.serverStatsReportsToPublish.isEmpty() && accountStatsMySqlStore != null) {
         serverConfig.serverStatsReportsToPublish.forEach(e -> {
           if (validStatsTypes.contains(e)) {
             ambryStatsReports.add(new AmbryStatsReportImpl(serverConfig.serverQuotaStatsAggregateIntervalInMinutes,

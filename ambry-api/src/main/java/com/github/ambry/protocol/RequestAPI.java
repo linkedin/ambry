@@ -30,6 +30,12 @@ public interface RequestAPI {
   void handleRequests(NetworkRequest request) throws InterruptedException;
 
   /**
+   * Drop a request by immediately producing an error response.
+   * @param request The request to drop.
+   */
+  void dropRequest(NetworkRequest request) throws InterruptedException;
+
+  /**
    * Puts a blob into the store. It accepts a blob property, user metadata and the blob
    * as a stream and stores them.
    * @param request The request that contains the blob property, user metadata and blob as a stream.

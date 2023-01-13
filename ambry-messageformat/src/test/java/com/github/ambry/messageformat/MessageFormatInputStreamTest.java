@@ -20,7 +20,6 @@ import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
-import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
@@ -33,6 +32,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.Random;
+import java.util.zip.CRC32;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -72,26 +72,12 @@ public class MessageFormatInputStreamTest {
     messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V1, BlobType.DataBlob,
         MessageFormatRecord.Message_Header_Version_V1, false);
 
-    boolean oldUseBlobFormatValue = PutMessageFormatInputStream.useBlobFormatV3;
-    try {
-      PutMessageFormatInputStream.useBlobFormatV3 = false;
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V1, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3, false);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V2, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3, false);
-
-      PutMessageFormatInputStream.useBlobFormatV3 = true;
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V1, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3, true);
-      messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3, true);
-    } finally {
-      PutMessageFormatInputStream.useBlobFormatV3 = oldUseBlobFormatValue;
-    }
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V1, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V1, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V2, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V2, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.DataBlob, MessageFormatRecord.Message_Header_Version_V3, true);
+    messageFormatPutRecordsTest(MessageFormatRecord.Blob_Version_V3, BlobType.MetadataBlob, MessageFormatRecord.Message_Header_Version_V3, true);
   }
 
   private void messageFormatPutRecordsTest(short blobVersion, BlobType blobType, short headerVersion, boolean isCompressed)
@@ -175,7 +161,7 @@ public class MessageFormatInputStreamTest {
             headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize,
             headerBuf.getInt());
     }
-    Crc32 crc = new Crc32();
+    CRC32 crc = new CRC32();
     crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 
@@ -198,7 +184,7 @@ public class MessageFormatInputStreamTest {
       dest = new byte[100];
       blobEncryptionKeyBuf.get(dest);
       Assert.assertArrayEquals(dest, encryptionKey);
-      crc = new Crc32();
+      crc = new CRC32();
       crc.update(blobEncryptionKeyOutput, 0, blobEncryptionKeySize - MessageFormatRecord.Crc_Size);
       Assert.assertEquals(crc.getValue(), blobEncryptionKeyBuf.getLong());
     }
@@ -214,7 +200,7 @@ public class MessageFormatInputStreamTest {
     Assert.assertEquals("servid", propOutput.getServiceId());
     Assert.assertEquals("AccountId mismatch", accountId, propOutput.getAccountId());
     Assert.assertEquals("ContainerId mismatch", containerId, propOutput.getContainerId());
-    crc = new Crc32();
+    crc = new CRC32();
     crc.update(blobPropertiesOutput, 0, blobPropertiesRecordSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), blobPropertiesBuf.getLong());
 
@@ -227,7 +213,7 @@ public class MessageFormatInputStreamTest {
     dest = new byte[1000];
     userMetadataBuf.get(dest);
     Assert.assertArrayEquals(dest, usermetadata);
-    crc = new Crc32();
+    crc = new CRC32();
     crc.update(userMetadataOutput, 0, userMetadataSize - MessageFormatRecord.Crc_Size);
     Assert.assertEquals(crc.getValue(), userMetadataBuf.getLong());
 
@@ -347,7 +333,7 @@ public class MessageFormatInputStreamTest {
       Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
       // blob relative offset
       Assert.assertEquals(MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerBuf.getInt());
-      Crc32 crc = new Crc32();
+      CRC32 crc = new CRC32();
       crc.update(headerOutput, 0, headerSize - MessageFormatRecord.Crc_Size);
       Assert.assertEquals(crc.getValue(), headerBuf.getLong());
 

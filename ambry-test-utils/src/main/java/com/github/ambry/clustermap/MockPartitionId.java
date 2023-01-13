@@ -182,6 +182,8 @@ public class MockPartitionId implements PartitionId {
    */
   public void setReplicaState(ReplicaId replicaId, ReplicaState state) {
     replicaAndState.computeIfPresent(replicaId, (k, v) -> state);
+    MockReplicaId r = (MockReplicaId) replicaId;
+    r.setReplicaState(state);
   }
 
   /**

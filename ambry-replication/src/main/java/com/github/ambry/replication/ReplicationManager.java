@@ -27,6 +27,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
@@ -39,7 +40,6 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -57,23 +57,23 @@ public class ReplicationManager extends ReplicationEngine {
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
-      MetricRegistry metricRegistry, NotificationSystem requestNotification,
+      NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate) throws ReplicationException {
     this(replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory, clusterMap, scheduler,
-        dataNode, connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName,
-        clusterParticipant, skipPredicate, null, SystemTime.getInstance());
+        dataNode, connectionPool, networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
+        transformerClassName, clusterParticipant, skipPredicate, null, SystemTime.getInstance());
   }
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
-      MetricRegistry metricRegistry, NotificationSystem requestNotification,
+      NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate, FindTokenHelper findTokenHelper,
       Time time) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
-        clusterMap.getReplicaIds(dataNode), connectionPool, metricRegistry, requestNotification,
+        clusterMap.getReplicaIds(dataNode), connectionPool, networkClientFactory, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate,
         findTokenHelper, time, true);
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
