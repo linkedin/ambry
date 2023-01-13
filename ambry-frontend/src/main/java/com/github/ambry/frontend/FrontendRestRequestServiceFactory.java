@@ -77,8 +77,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
    * @return a new instance of {@link FrontendRestRequestService}.
    */
   @Override
-  public RestRequestService getRestRequestService() {
-    try {
+  public RestRequestService getRestRequestService() throws Exception {
       IdSigningService idSigningService =
           Utils.<IdSigningServiceFactory>getObj(frontendConfig.idSigningServiceFactory, verifiableProperties,
               clusterMap.getMetricRegistry()).getIdSigningService();
@@ -107,8 +106,6 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
           securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
           accountAndContainerInjector, clusterMapConfig.clusterMapDatacenterName, clusterMapConfig.clusterMapHostName,
           clusterMapConfig.clusterMapClusterName, accountStatsStore, quotaManager);
-    } catch (Exception e) {
-      throw new IllegalStateException("Could not instantiate FrontendRestRequestService", e);
-    }
+
   }
 }

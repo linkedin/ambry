@@ -67,7 +67,7 @@ public class Container {
   static final long CONTAINER_DELETE_TRIGGER_TIME_DEFAULT_VALUE = 0;
   static final boolean SECURE_PATH_REQUIRED_DEFAULT_VALUE = false;
   static final boolean OVERRIDE_ACCOUNT_ACL_DEFAULT_VALUE = false;
-  static final NamedBlobMode NAMED_BLOB_MODE_DEFAULT_VALUE = NamedBlobMode.DISABLED;
+  static final NamedBlobMode NAMED_BLOB_MODE_DEFAULT_VALUE = NamedBlobMode.OPTIONAL;
   static final boolean CACHEABLE_DEFAULT_VALUE = true;
   static final Set<String> CONTENT_TYPE_WHITELIST_FOR_FILENAMES_ON_DOWNLOAD_DEFAULT_VALUE = Collections.emptySet();
   static final long LAST_MODIFIED_TIME_DEFAULT_VALUE = 0;
