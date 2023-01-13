@@ -41,7 +41,7 @@ public class CompressionMetrics {
   public static class AlgorithmMetrics {
 
     // Algorithm's compress() metrics.
-    public final Meter compressRate;      // Rate compress() is called.
+    public final Meter compressRate;      // Rate compress() is called, it includes accepted, skipped, and error calls.
     public final Counter compressError;   // Rate compress() throws exception.
     public final Histogram compressRatioPercent;    // compression ratio % = 100 * UncompressedSize/CompressedSize
 
@@ -52,6 +52,7 @@ public class CompressionMetrics {
     // so the metrics for compressing 1 KB chunks will generate many misleading metrics (like low compression ratio,
     // low throughput due to overhead). It's recommended to use the full size (4 MB) compression metrics for
     // consistent and comparable picture of the algorithm performance.
+    // These metrics are emitted only if the compression has been accepted.
     public final Histogram fullSizeCompressTimeInMicroseconds;
     public final Histogram fullSizeCompressSpeedMBPerSec;
     public final Histogram smallSizeCompressTimeInMicroseconds;
