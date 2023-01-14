@@ -82,6 +82,7 @@ public abstract class StorageClient implements AzureStorageClient {
       throwable -> throwable instanceof BlobStorageException && handleExceptionAndHintRetry(
           (BlobStorageException) throwable);
 
+  static final int BLOB_ALREADY_EXISTS = 409;
   /**
    * Constructor for {@link StorageClient}.
    * @param cloudConfig {@link CloudConfig} object.
@@ -423,7 +424,17 @@ public abstract class StorageClient implements AzureStorageClient {
    * @param throwable associated with this error.
    */
   private void onError(Throwable throwable) {
-    logger.error("Blob store operation failed due to exception: " + throwable.toString());
+    boolean logError = true;
+    if (throwable instanceof BlobStorageException) {
+      BlobStorageException bse = (BlobStorageException) throwable;
+      // Do not log this error if status = 409 and blob-exists, it's just noise
+      logError = !(bse.getStatusCode() == BLOB_ALREADY_EXISTS && bse.getMessage().equals("The specified blob already exists"));
+    }
+    if (logError) {
+      logger.error("Blob store operation failed due to exception: " + throwable.toString());
+    } else {
+      logger.debug("Blob store operation failed due to exception: " + throwable);
+    }
     azureMetrics.storageClientOperationExceptionCount.inc();
     // All retries must have been completed internally by now.
     azureMetrics.storageClientFailureAfterRetryCount.inc();

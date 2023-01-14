@@ -75,6 +75,7 @@ class CloudBlobStore implements Store {
   private static final int cacheInitialCapacity = 1000;
   private static final float cacheLoadFactor = 0.75f;
   static final int STATUS_NOT_FOUND = 404;
+  static final int TOO_MANY_REQUESTS = 429;
   private static final short IGNORE_LIFE_VERSION = -2;
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
@@ -637,6 +638,11 @@ class CloudBlobStore implements Store {
             "Delete", partitionId.toPathString());
       }
     } catch (CloudStorageException ex) {
+      if (ex.getStatusCode() == TOO_MANY_REQUESTS) {
+        // Throw no exception for throttling errors
+        logger.debug(ex.toString());
+        return;
+      }
       if (ex.getCause() instanceof StoreException) {
         throw (StoreException) ex.getCause();
       }
