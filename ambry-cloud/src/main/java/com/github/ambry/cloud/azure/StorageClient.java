@@ -432,12 +432,12 @@ public abstract class StorageClient implements AzureStorageClient {
     }
     if (logError) {
       logger.error("Blob store operation failed due to exception: " + throwable.toString());
+      azureMetrics.storageClientOperationExceptionCount.inc();
+      // All retries must have been completed internally by now.
+      azureMetrics.storageClientFailureAfterRetryCount.inc();
     } else {
       logger.debug("Blob store operation failed due to exception: " + throwable);
     }
-    azureMetrics.storageClientOperationExceptionCount.inc();
-    // All retries must have been completed internally by now.
-    azureMetrics.storageClientFailureAfterRetryCount.inc();
   }
 
   /**
