@@ -135,6 +135,23 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String SOFT_DELETE_QUERY_V2 =
       String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH_VERSION);
 
+  /**
+   * Pull the stale blobs that need to be cleaned up
+   */
+  private static final String GET_STALE_QUERY = String.format(
+      "SELECT %s, %s, %s, %s, %s, %s FROM %s t1 LEFT JOIN (SELECT account_id, container_id, blob_name, max(version) as version FROM %s "
+          + "WHERE blob_state=1 GROUP BY account_id, container_id, blob_name) t2 "
+          + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+          + "WHERE t1.gg_modi_ts<(CURRENT_TIMESTAMP(6) - INTERVAL 60 DAY) and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL",
+      ACCOUNT_ID,
+      CONTAINER_ID,
+      BLOB_NAME,
+      BLOB_ID,
+      VERSION,
+      CURRENT_TIME,
+      NAMED_BLOBS_V2,
+      NAMED_BLOBS_V2);
+
   private final AccountService accountService;
   private final String localDatacenter;
   private final List<String> remoteDatacenters;
@@ -180,6 +197,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     public final Histogram namedBlobPutTimeInMs;
     public final Histogram namedBlobDeleteTimeInMs;
 
+    public final Histogram namedBlobPullStaleTimeInMs;
+
     /**
      * Constructor to create the Metrics.
      * @param metricRegistry The {@link MetricRegistry}.
@@ -213,6 +232,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPutTimeInMs"));
       namedBlobDeleteTimeInMs = metricRegistry.histogram(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobDeleteTimeInMs"));
+
+      namedBlobPullStaleTimeInMs = metricRegistry.histogram(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPullStaleTimeInMs"));
     }
   }
 
@@ -278,6 +300,29 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }, null);
   }
 
+  @Override
+  public CompletableFuture<List<StaleNamedResult>> pullStaleBlobIds() {
+    TransactionStateTracker transactionStateTracker =
+        new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
+    return executeGenericTransactionAsync(true, (connection) -> {
+      long startTime = System.currentTimeMillis();
+      List<StaleNamedResult> staleBobIds = runPullStaleBlobIds(connection);
+      metricsRecoder.namedBlobPullStaleTimeInMs.update(System.currentTimeMillis() - startTime);
+      return staleBobIds;
+    }, transactionStateTracker);
+  }
+
+  @Override
+  public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedResult> staleRecords) {
+    return executeGenericTransactionAsync(true, (connection) -> {
+      for (StaleNamedResult record : staleRecords) {
+        applySoftDelete(record.getAccountId(), record.getContainerId(), record.getBlobName(), record.getVersion(),
+            record.getDeleteTs(), connection);
+      }
+      return staleRecords.size();
+    }, null);
+  }
+
   /**
    * Run a transaction on a thread pool and handle common logic surrounding looking up account metadata and error
    * handling. Eventually this will handle retries.
@@ -326,6 +371,29 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return future;
   }
 
+  private <T> CompletableFuture<T> executeGenericTransactionAsync(boolean autoCommit, TransactionGeneric<T> transaction,
+      TransactionStateTracker transactionStateTracker) {
+    CompletableFuture<T> future = new CompletableFuture<>();
+
+    Callback<T> finalCallback = (result, exception) -> {
+      if (exception != null) {
+        future.completeExceptionally(exception);
+      } else {
+        future.complete(result);
+      }
+    };
+
+    if (transactionStateTracker != null) {
+      retryExecutor.runWithRetries(RetryPolicies.fixedBackoffPolicy(transactionExecutors.size(), 0), callback -> {
+        String datacenter = transactionStateTracker.getNextDatacenter();
+        transactionExecutors.get(datacenter).executeTransactionGeneric(autoCommit, transaction, callback);
+      }, transactionStateTracker::processFailure, finalCallback);
+    } else {
+      transactionExecutors.get(localDatacenter).executeTransactionGeneric(autoCommit, transaction, finalCallback);
+    }
+    return future;
+  }
+
   /**
    * Execute transaction on datacenter.
    */
@@ -350,6 +418,32 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             connection.setAutoCommit(false);
             try {
               result = transaction.run(container.getParentAccountId(), container.getId(), connection);
+              connection.commit();
+            } catch (Exception e) {
+              connection.rollback();
+              throw e;
+            } finally {
+              connection.setAutoCommit(true);
+            }
+          }
+          callback.onCompletion(result, null);
+        } catch (Exception e) {
+          callback.onCompletion(null, e);
+        }
+      });
+    }
+
+    <T> void executeTransactionGeneric(boolean autoCommit, TransactionGeneric<T> transaction, Callback<T> callback) {
+      executor.submit(() -> {
+        try (Connection connection = dataSource.getConnection()) {
+          T result;
+          if (autoCommit) {
+            result = transaction.run(connection);
+          } else {
+            // if autocommit is set to false, treat this as a multi-step txn that requires an explicit commit/rollback
+            connection.setAutoCommit(false);
+            try {
+              result = transaction.run(connection);
               connection.commit();
             } catch (Exception e) {
               connection.rollback();
@@ -491,17 +585,41 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }
     // only need to issue an update statement if the row was not already marked as deleted.
     if (!alreadyDeleted) {
-      try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
-        // use the current time
-        statement.setTimestamp(1, currentTime);
-        statement.setInt(2, accountId);
-        statement.setInt(3, containerId);
-        statement.setString(4, blobName);
-        statement.setLong(5, version);
-        statement.executeUpdate();
-      }
+      applySoftDelete(accountId, containerId, blobName, version, currentTime, connection);
     }
     return new DeleteResult(blobId, alreadyDeleted);
+  }
+
+  private List<StaleNamedResult> runPullStaleBlobIds(final Connection connection) throws Exception {
+    try (PreparedStatement statement = connection.prepareStatement(GET_STALE_QUERY)) {
+      try (ResultSet resultSet = statement.executeQuery()) {
+        List<StaleNamedResult> resultList = new ArrayList<>();
+        while (resultSet.next()) {
+          short accountId = resultSet.getShort(1);
+          short containerId = resultSet.getShort(2);
+          String blobName = resultSet.getString(3);
+          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
+          long version = resultSet.getLong(5);
+          Timestamp currentTime = resultSet.getTimestamp(6);
+          StaleNamedResult result = new StaleNamedResult(accountId, containerId, blobName, blobId, version, currentTime);
+          resultList.add(result);
+        }
+        return resultList;
+      }
+    }
+  }
+
+  private void applySoftDelete(short accountId, short containerId, String blobName, long version, Timestamp currentTime,
+      Connection connection) throws Exception {
+    try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
+      // use the current time
+      statement.setTimestamp(1, currentTime);
+      statement.setInt(2, accountId);
+      statement.setInt(3, containerId);
+      statement.setString(4, blobName);
+      statement.setLong(5, version);
+      statement.executeUpdate();
+    }
   }
 
   /**
@@ -554,6 +672,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
      * @throws Exception if there is an error.
      */
     T run(short accountId, short containerId, Connection connection) throws Exception;
+  }
+
+  private interface TransactionGeneric<T> {
+    T run(Connection connection) throws Exception;
   }
 
   /**
