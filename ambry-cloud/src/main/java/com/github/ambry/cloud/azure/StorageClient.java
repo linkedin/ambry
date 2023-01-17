@@ -426,9 +426,7 @@ public abstract class StorageClient implements AzureStorageClient {
     if (T instanceof BlobStorageException
         && ((BlobStorageException) T).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
       // Common case first
-      if (logger.isDebugEnabled()) {
         logger.debug("Blob store operation failed due to exception: " + T);
-      }
     } else {
       logger.error("Blob store operation failed due to exception: " + T.toString());
       azureMetrics.storageClientOperationExceptionCount.inc();
