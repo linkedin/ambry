@@ -58,6 +58,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
+import java.util.logging.Level;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,7 +83,6 @@ public abstract class StorageClient implements AzureStorageClient {
       throwable -> throwable instanceof BlobStorageException && handleExceptionAndHintRetry(
           (BlobStorageException) throwable);
 
-  static final int BLOB_ALREADY_EXISTS = 409;
   /**
    * Constructor for {@link StorageClient}.
    * @param cloudConfig {@link CloudConfig} object.
@@ -419,24 +419,23 @@ public abstract class StorageClient implements AzureStorageClient {
    */
   protected abstract boolean handleExceptionAndHintRetry(BlobStorageException blobStorageException);
 
+
   /**
    * Handle any errors. For now, we update the error metrics.
-   * @param throwable associated with this error.
+   * @param T associated with this error.
    */
-  private void onError(Throwable throwable) {
-    boolean logError = true;
-    if (throwable instanceof BlobStorageException) {
-      BlobStorageException bse = (BlobStorageException) throwable;
-      // Do not log this error if status = 409 and blob-exists, it's just noise
-      logError = !(bse.getStatusCode() == BLOB_ALREADY_EXISTS && bse.getMessage().equals("The specified blob already exists"));
-    }
-    if (logError) {
-      logger.error("Blob store operation failed due to exception: " + throwable.toString());
+  private void onError(Throwable T) {
+    if (T instanceof BlobStorageException
+        && ((BlobStorageException) T).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
+      // Common case first
+      if (logger.isDebugEnabled()) {
+        logger.debug("Blob store operation failed due to exception: " + T);
+      }
+    } else {
+      logger.error("Blob store operation failed due to exception: " + T.toString());
       azureMetrics.storageClientOperationExceptionCount.inc();
       // All retries must have been completed internally by now.
       azureMetrics.storageClientFailureAfterRetryCount.inc();
-    } else {
-      logger.debug("Blob store operation failed due to exception: " + throwable);
     }
   }
 
