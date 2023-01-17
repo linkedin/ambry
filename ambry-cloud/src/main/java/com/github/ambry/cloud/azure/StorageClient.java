@@ -420,15 +420,15 @@ public abstract class StorageClient implements AzureStorageClient {
 
   /**
    * Handle any errors. For now, we update the error metrics.
-   * @param T associated with this error.
+   * @param t associated with this error.
    */
-  private void onError(Throwable T) {
-    if (T instanceof BlobStorageException
-        && ((BlobStorageException) T).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
+  private void onError(Throwable t) {
+    if (t instanceof BlobStorageException
+        && ((BlobStorageException) t).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
       // Common case first
-      logger.debug("Blob store operation failed due to exception: " + T);
+      logger.debug("Blob store operation failed due to exception: " + t);
     } else {
-      logger.error("Blob store operation failed due to exception: " + T.toString());
+      logger.error("Blob store operation failed due to exception: " + t);
       azureMetrics.storageClientOperationExceptionCount.inc();
       // All retries must have been completed internally by now.
       azureMetrics.storageClientFailureAfterRetryCount.inc();
