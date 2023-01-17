@@ -418,7 +418,6 @@ public abstract class StorageClient implements AzureStorageClient {
    */
   protected abstract boolean handleExceptionAndHintRetry(BlobStorageException blobStorageException);
 
-
   /**
    * Handle any errors. For now, we update the error metrics.
    * @param T associated with this error.
