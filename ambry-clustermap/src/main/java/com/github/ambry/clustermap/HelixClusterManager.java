@@ -88,7 +88,8 @@ public class HelixClusterManager implements ClusterMap {
   private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef =
       new ConcurrentHashMap<>();
   // A map of partition to resource names used in aggregated cluster view.
-  private final ConcurrentHashMap<String, List<String>> globalPartitionToResourceNames = new ConcurrentHashMap<>();
+  private final AtomicReference<ConcurrentHashMap<String, List<String>>> globalPartitionToResourceNamesRef =
+      new AtomicReference<>(new ConcurrentHashMap<>());
   // Routing table snapshot reference used in aggregated cluster view.
   private final AtomicReference<RoutingTableSnapshot> globalRoutingTableSnapshotRef = new AtomicReference<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
@@ -539,8 +540,8 @@ public class HelixClusterManager implements ClusterMap {
    * Exposed for testing
    * @return a map of partition to its corresponding resources in all data centers.
    */
-  Map<String, List<String>> getGlobalPartitionToResourceMap(){
-    return Collections.unmodifiableMap(globalPartitionToResourceNames);
+  Map<String, List<String>> getGlobalPartitionToResourceMap() {
+    return Collections.unmodifiableMap(globalPartitionToResourceNamesRef.get());
   }
 
   /**
@@ -704,7 +705,7 @@ public class HelixClusterManager implements ClusterMap {
         String partitionPath = partition.toPathString();
         // A partition can be under different resources in different data centers. Due to that, when using aggregated
         // view, get replicas from all {Resource, partition}s.
-        List<String> resourceNames = globalPartitionToResourceNames.get(partitionPath);
+        List<String> resourceNames = globalPartitionToResourceNamesRef.get().get(partitionPath);
         RoutingTableSnapshot globalRoutingTableSnapshot = globalRoutingTableSnapshotRef.get();
         for (String resourceName : resourceNames) {
           globalRoutingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
@@ -718,7 +719,7 @@ public class HelixClusterManager implements ClusterMap {
       } else {
         List<String> dcs = dcName != null ? Collections.singletonList(dcName)
             : dcToDcInfo.values().stream().map(dcInfo -> dcInfo.dcName).collect(Collectors.toList());
-        for(String dc : dcs){
+        for (String dc : dcs) {
           // Get the resource that contains this partition in this data center.
           String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
           RoutingTableSnapshot routingTableSnapshot = dcToRoutingTableSnapshotRef.get(dc).get();
@@ -1011,7 +1012,8 @@ public class HelixClusterManager implements ClusterMap {
       }
       logger.debug("Detailed ideal states from helix cluster {} in dc {} are: {}", helixClusterName, dcName,
           idealStates);
-      // rebuild the entire partition-to-resource map in current dc
+      // For CURRENT_STATE based Routing table provider (used in for non-aggregated view), we are not able to get
+      // external view snapshot. So, we rely on IDEAL STATES to build partition-to-resource mapping.
       updatePartitionResourceMappingFromIdealStates(idealStates, dcName);
       helixClusterManagerMetrics.idealStateChangeTriggerCount.inc();
     }
@@ -1048,8 +1050,8 @@ public class HelixClusterManager implements ClusterMap {
      */
     private void handleRoutingTableChange(RoutingTableSnapshot routingTableSnapshot) {
       if (isAggregatedViewHandler) {
-        // When using aggregated view, we create EXTERNAL_VIEW based RoutingTableProvider. We can update
-        // partition-to-resources map from this external view.
+        // When using aggregated view, we create EXTERNAL_VIEW based RoutingTableProvider. It provides us the
+        // external view of all resources in the cluster. We can use it to update partition-to-resource mapping.
         updatePartitionResourcesMappingFromExternalView(routingTableSnapshot.getExternalViews(), null);
       }
       setRoutingTableSnapshot(routingTableSnapshot);
@@ -1114,47 +1116,45 @@ public class HelixClusterManager implements ClusterMap {
     /**
      * Update partition to resource mapping from Ideal states.
      * @param idealStates list of ideal states for various resources.
-     * @param dcName data center for which this mapping corresponds to. If it is null, the mapping is for resources in
+     * @param dcName data center for which this mapping corresponds to.
      */
     private void updatePartitionResourceMappingFromIdealStates(Collection<IdealState> idealStates, String dcName) {
-      // rebuild the entire partition-to-resource map in current dc
-      for (IdealState state : idealStates) {
-        String resourceName = state.getResourceName();
-        for (String partition : state.getPartitionSet()) {
-          if (dcName != null) {
-            ConcurrentHashMap<String, String> partitionToResourceName =
-                partitionToResourceNameByDc.computeIfAbsent(dcName, k -> new ConcurrentHashMap<>());
-            partitionToResourceName.put(partition, resourceName);
-          } else {
-            List<String> resourceNames =
-                globalPartitionToResourceNames.computeIfAbsent(partition, k -> new CopyOnWriteArrayList<>());
-            resourceNames.add(resourceName);
-          }
+      if (dcName != null) {
+        // Rebuild the entire partition-to-resource map in current dc
+        ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
+        for (IdealState state : idealStates) {
+          String resourceName = state.getResourceName();
+          state.getPartitionSet().forEach(partitionName -> partitionToResourceMap.put(partitionName, resourceName));
         }
+        partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
+      } else {
+        logger.warn("Partition to resource mapping for aggregated cluster view would be built from external view");
       }
     }
 
     /**
      * Update partition to resource mapping from External view.
      * @param externalViews list of external view for various resources.
-     * @param dcName data center for which this mapping corresponds to. If it is null, the mapping is for resources in
+     * @param dcName data center for which this mapping corresponds to. Since the partition to resource mapping for
+     *               non-aggregated view is built from IDEAL STATES currently, this value would always be null today.
      */
     private void updatePartitionResourcesMappingFromExternalView(Collection<ExternalView> externalViews,
         String dcName) {
-      // rebuild the entire partition-to-resource map in current dc
-      for (ExternalView externalView : externalViews) {
-        String resourceName = externalView.getResourceName();
-        for (String partition : externalView.getPartitionSet()) {
-          if (dcName != null) {
-            ConcurrentHashMap<String, String> partitionToResourceName =
-                partitionToResourceNameByDc.computeIfAbsent(dcName, k -> new ConcurrentHashMap<>());
-            partitionToResourceName.put(partition, resourceName);
-          } else {
+      if (dcName != null) {
+        logger.warn(
+            "Partition to resource mapping for individual dc (non-aggregated view) would be built from ideal states");
+      } else {
+        // Rebuild the partition-to-resource map across all data centers
+        ConcurrentHashMap<String, List<String>> partitionToResourceNames = new ConcurrentHashMap<>();
+        for (ExternalView externalView : externalViews) {
+          String resourceName = externalView.getResourceName();
+          externalView.getPartitionSet().forEach(partitionName -> {
             List<String> resourceNames =
-                globalPartitionToResourceNames.computeIfAbsent(partition, k -> new CopyOnWriteArrayList<>());
+                partitionToResourceNames.computeIfAbsent(partitionName, k -> new ArrayList<>());
             resourceNames.add(resourceName);
-          }
+          });
         }
+        globalPartitionToResourceNamesRef.set(partitionToResourceNames);
       }
     }
 
