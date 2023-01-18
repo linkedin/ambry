@@ -130,6 +130,7 @@ public class ReplicaThread implements Runnable {
   private final Timer replicationLatencyTimer;
   private final Timer portTypeBasedReplicationLatencyTimer;
 
+  // This is used in the test cases
   private Map<DataNodeId, List<ExchangeMetadataResponse>> exchangeMetadataResponsesInEachCycle = null;
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -1593,6 +1594,10 @@ public class ReplicaThread implements Runnable {
     return replicationMetrics;
   }
 
+  /**
+   * This is only used in test cases.
+   * @return A map from DataNodeId to the list of ExchangeMetadataResponse in one replication cycle.
+   */
   Map<DataNodeId, List<ExchangeMetadataResponse>> getExchangeMetadataResponsesInEachCycle() {
     return exchangeMetadataResponsesInEachCycle;
   }
@@ -1761,11 +1766,11 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * ReplicaGroupState indicates different state of RemoteReplicaGroup in one replication cycle.
+   * ReplicaGroupReplicationState indicates different state of RemoteReplicaGroup in one replication cycle.
    * Each replication cycle, we will break all the replicas in order different groups and each group
    * has to go through these states to finish replication with nonblocking network client.
    */
-  enum ReplicaGroupState {
+  enum ReplicaGroupReplicationState {
     /**
      * The group is ready to start replication.
      */
@@ -1812,10 +1817,10 @@ public class ReplicaThread implements Runnable {
   private class RemoteReplicaGroup {
     private final List<RemoteReplicaInfo> remoteReplicaInfos;
     private final DataNodeId remoteDataNode;
-    private final boolean standbyCatchingUp;
+    private final boolean isNonProgressStandbyReplicaGroup;
     private final int id;
     private List<ExchangeMetadataResponse> exchangeMetadataResponseList;
-    private ReplicaGroupState state;
+    private ReplicaGroupReplicationState state;
     private Exception exception = null;
     private long replicaMetadataRequestStartTimeMs;
     private long getRequestStartTimeMs;
@@ -1825,19 +1830,19 @@ public class ReplicaThread implements Runnable {
     /**
      * Constructor of {@link RemoteReplicaGroup}.
      * @param remoteReplicaInfos The list {@link RemoteReplicaInfo} that point to the list of replicas.
-     * @param dataNodeId The remote data no
-     * @param standbyCatchingUp True if this is standby replicas trying to catch up with the missing blob content. If true,
+     * @param dataNodeId The remote data node
+     * @param isNonProgressStandbyReplicaGroup True if this is standby replicas trying to catch up with the missing blob content. If true,
      *                          this group should start with REPLICA_METADATA_RESPONSE_HANDLED, since it already exchanged
      *                          ReplicaMetadata before and now wants to download missing blobs.
      * @param id The id of this RemoteReplicaGroup. This id should be unique at each cycle.
      */
     public RemoteReplicaGroup(List<RemoteReplicaInfo> remoteReplicaInfos, DataNodeId dataNodeId,
-        boolean standbyCatchingUp, int id) {
+        boolean isNonProgressStandbyReplicaGroup, int id) {
       this.remoteReplicaInfos = remoteReplicaInfos;
       this.remoteDataNode = dataNodeId;
-      this.standbyCatchingUp = standbyCatchingUp;
+      this.isNonProgressStandbyReplicaGroup = isNonProgressStandbyReplicaGroup;
       this.id = id;
-      if (standbyCatchingUp) {
+      if (isNonProgressStandbyReplicaGroup) {
         exchangeMetadataResponseList = remoteReplicaInfos.stream()
             .map(remoteReplicaInfo -> new ExchangeMetadataResponse(remoteReplicaInfo.getExchangeMetadataResponse()))
             .collect(Collectors.toList());
@@ -1847,16 +1852,16 @@ public class ReplicaThread implements Runnable {
             .collect(Collectors.toList());
         try {
           storeKeyConverter.convert(storeKeysToConvert);
-          state = ReplicaGroupState.REPLICA_METADATA_RESPONSE_HANDLED;
+          state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
         } catch (Exception e) {
           setException(e, "Failed to convert storeKeys");
         }
       } else {
-        state = ReplicaGroupState.STARTED;
+        state = ReplicaGroupReplicationState.STARTED;
       }
       logger.trace(
-          "Remote node: {} Thread name: {} Adding a new RemoteReplicaGroup {}, ReplicaInfos {}, State {} isStandbyCatchingup {}",
-          dataNodeId, threadName, id, remoteReplicaInfos, state, standbyCatchingUp);
+          "Remote node: {} Thread name: {} Adding a new RemoteReplicaGroup {}, ReplicaInfos {}, State {} isNonProgressStandByReplicaGroup {}",
+          dataNodeId, threadName, id, remoteReplicaInfos, state, isNonProgressStandbyReplicaGroup);
     }
 
     public List<RemoteReplicaInfo> getRemoteReplicaInfos() {
@@ -1868,7 +1873,7 @@ public class ReplicaThread implements Runnable {
     }
 
     public boolean isDone() {
-      return state == ReplicaGroupState.DONE;
+      return state == ReplicaGroupReplicationState.DONE;
     }
 
     public int getId() {
@@ -1890,7 +1895,7 @@ public class ReplicaThread implements Runnable {
     public RequestInfo poll() {
       Port port = remoteReplicaInfos.get(0).getPort();
       long timeout = replicationConfig.replicationRequestNetworkTimeoutMs;
-      if (state == ReplicaGroupState.STARTED) {
+      if (state == ReplicaGroupReplicationState.STARTED) {
         // When the state is STARTED, we will send the ReplicaMetadataRequest out.
         replicaMetadataRequestStartTimeMs = time.milliseconds();
         exchangeMetadataStartTimeInMs = replicaMetadataRequestStartTimeMs;
@@ -1901,12 +1906,12 @@ public class ReplicaThread implements Runnable {
         logger.trace(
             "Remote node: {} Thread name: {} RemoteReplicaGroup {} Create ReplicaMetadataRequest, correlation id {}, state {}",
             dataNodeId, threadName, id, requestInfo.getRequest().getCorrelationId(), state);
-        state = ReplicaGroupState.REPLICA_METADATA_REQUEST_SENT;
+        state = ReplicaGroupReplicationState.REPLICA_METADATA_REQUEST_SENT;
         return requestInfo;
-      } else if (state == ReplicaGroupState.REPLICA_METADATA_RESPONSE_HANDLED) {
+      } else if (state == ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED) {
         // When the state is REPLICA_METADATA_RESPONSE_HANDLED, we will send the GetRequest out if needed.
         List<RemoteReplicaInfo> remoteReplicaInfosToSendGet = remoteReplicaInfos;
-        if (!standbyCatchingUp && replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
+        if (!isNonProgressStandbyReplicaGroup && replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
           // If this is not standby replicas trying to catch up, and this is cross-colo replication, and we enable
           // leader based replication, then filter out remote replicas that is not leader to leader.
           List<RemoteReplicaInfo> leaderReplicaList = new ArrayList<>();
@@ -1928,13 +1933,13 @@ public class ReplicaThread implements Runnable {
             logger.trace(
                 "Remote node: {} Thread name: {} RemoteReplicaGroup {} Create GetRequest, correlation id {}, state {}",
                 dataNodeId, threadName, id, requestInfo.getRequest().getCorrelationId(), state);
-            state = ReplicaGroupState.GET_REQUEST_SENT;
+            state = ReplicaGroupReplicationState.GET_REQUEST_SENT;
             return requestInfo;
           }
         }
         logger.trace("Remote node: {} Thread name: {} RemoteReplicaGroup {} No GetRequest needed, set state to Done",
             dataNodeId, threadName, id);
-        state = ReplicaGroupState.DONE;
+        state = ReplicaGroupReplicationState.DONE;
       }
       return null;
     }
@@ -1944,7 +1949,7 @@ public class ReplicaThread implements Runnable {
      * @param responseInfo The {@link ResponseInfo} that carries a {@link ReplicaMetadataResponse}.
      */
     public void handleReplicaMetadataResponse(ResponseInfo responseInfo) {
-      if (state != ReplicaGroupState.REPLICA_METADATA_REQUEST_SENT) {
+      if (state != ReplicaGroupReplicationState.REPLICA_METADATA_REQUEST_SENT) {
         logger.error("Remote node: {} Thread name: {} ReplicaMetadataResponse comes back after wrong state {}",
             remoteDataNode, threadName, state);
         return;
@@ -1964,7 +1969,7 @@ public class ReplicaThread implements Runnable {
           ReplicaMetadataResponse response = ReplicaMetadataResponse.readFrom(dis, findTokenHelper, clusterMap);
           exchangeMetadataResponseList =
               ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode);
-          state = ReplicaGroupState.REPLICA_METADATA_RESPONSE_HANDLED;
+          state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
           logger.trace(
               "Remote node: {} Thread name: {} RemoteReplicaGroup {} Handled ReplicaMetadataResponse for correlation id {}, set state to {}",
               dataNodeId, threadName, id, responseInfo.getRequestInfo().getRequest().getCorrelationId(), state);
@@ -1987,7 +1992,7 @@ public class ReplicaThread implements Runnable {
      * @param responseInfo The {@link ResponseInfo} that carries a {@link GetResponse}.
      */
     public void handleGetResponse(ResponseInfo responseInfo) {
-      if (state != ReplicaGroupState.GET_REQUEST_SENT) {
+      if (state != ReplicaGroupReplicationState.GET_REQUEST_SENT) {
         logger.error("Remote node: {} Thread name: {} GetResponse comes back after wrong state {}", remoteDataNode,
             threadName, state);
         return;
@@ -1999,13 +2004,13 @@ public class ReplicaThread implements Runnable {
           networkClientErrorCode);
       if (networkClientErrorCode == null) {
         replicationMetrics.updateGetRequestTime(time.milliseconds() - getRequestStartTimeMs, replicatingFromRemoteColo,
-            replicatingOverSsl, datacenterName, standbyCatchingUp);
+            replicatingOverSsl, datacenterName, isNonProgressStandbyReplicaGroup);
         try {
           // Deserialize the request from the given ResponseInfo
           DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
           GetResponse response = GetResponse.readFrom(dis, clusterMap);
           ReplicaThread.this.handleGetResponse(response, remoteReplicaInfos, exchangeMetadataResponseList,
-              remoteDataNode, standbyCatchingUp);
+              remoteDataNode, isNonProgressStandbyReplicaGroup);
           logger.trace(
               "Remote node: {} Thread name: {} RemoteReplicaGroup {} Handled GetResponse for correlation id {}",
               dataNodeId, threadName, id, responseInfo.getRequestInfo().getRequest().getCorrelationId());
@@ -2019,7 +2024,7 @@ public class ReplicaThread implements Runnable {
         remoteReplicaInfos.forEach(r -> responseHandler.onEvent(r.getReplicaId(), networkClientErrorCode));
         setException(new IOException("NetworkClientErrorCode: " + networkClientErrorCode), "Failed to send GetRequest");
       }
-      state = ReplicaGroupState.DONE;
+      state = ReplicaGroupReplicationState.DONE;
     }
 
     /**
@@ -2031,7 +2036,7 @@ public class ReplicaThread implements Runnable {
       logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} {}", remoteDataNode, threadName, id, message,
           e);
       exception = e;
-      state = ReplicaGroupState.DONE;
+      state = ReplicaGroupReplicationState.DONE;
     }
 
     /**
@@ -2205,15 +2210,14 @@ public class ReplicaThread implements Runnable {
         DataNodeId dataNodeId = responseInfo.getDataNode();
         responseHandler.onConnectionTimeout(dataNodeId);
       } else {
-        RemoteReplicaGroup remoteReplicaGroup =
-            correlationIdToReplicaGroup.remove(requestInfo.getRequest().getCorrelationId());
+        int correlationId = requestInfo.getRequest().getCorrelationId();
+        RemoteReplicaGroup remoteReplicaGroup = correlationIdToReplicaGroup.remove(correlationId);
         // This correlation id might be removed because the corresponding request timed out. But later we get the response
         // back from the network client.
         if (remoteReplicaGroup != null) {
           RequestOrResponseType type = ((RequestOrResponse) requestInfo.getRequest()).getRequestType();
           logger.debug("Remote node: {} Thread name: RemoteReplicaGroup {} Handling response of type {} for {}",
-              remoteReplicaGroup.getRemoteDataNode(), threadName, remoteReplicaGroup.getId(), type,
-              requestInfo.getRequest().getCorrelationId());
+              remoteReplicaGroup.getRemoteDataNode(), threadName, remoteReplicaGroup.getId(), type, correlationId);
           switch (type) {
             case ReplicaMetadataRequest:
               remoteReplicaGroup.handleReplicaMetadataResponse(responseInfo);
@@ -2226,6 +2230,9 @@ public class ReplicaThread implements Runnable {
                   "Remote node: {} Thread name: {} RemoteReplicaGroup {} Unexpected type: {} received, discarding",
                   remoteReplicaGroup.getRemoteDataNode(), threadName, remoteReplicaGroup.getId(), type);
           }
+        } else {
+          logger.trace("Thread Name: {} No RemoteReplicaGroup found for correlation Id {}, it might already time out",
+              correlationId);
         }
       }
     }
