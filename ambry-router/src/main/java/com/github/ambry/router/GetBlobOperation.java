@@ -1004,7 +1004,7 @@ class GetBlobOperation extends GetOperation {
      * Check if the operation on the chunk is eligible for completion, if so complete it.
      */
     void checkAndMaybeComplete() {
-      if (progressTracker.isDone()) {
+      if (progressTracker.isDone() || chunkCompleted) {
         if (progressTracker.hasSucceeded() && !retainChunkExceptionOnSuccess) {
           chunkException = null;
         } else if (chunkOperationTracker.maybeFailedDueToOfflineReplicas()) {

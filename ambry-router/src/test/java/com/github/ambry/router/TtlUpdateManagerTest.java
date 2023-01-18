@@ -51,6 +51,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -109,7 +110,8 @@ public class TtlUpdateManagerTest {
       ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(PUT_CONTENT));
       BlobProperties putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,
           Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
-      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
     }
     ttlUpdateManager =
@@ -162,9 +164,9 @@ public class TtlUpdateManagerTest {
   public void singleBlobThroughTtlManagerTest() throws Exception {
     for (String blobId : blobIds) {
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
-      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true);
+      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true, false);
       // ok to do it again
-      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true);
+      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true, false);
     }
   }
 
@@ -177,8 +179,16 @@ public class TtlUpdateManagerTest {
     // configure failure for the metadata chunk
     serverLayout.getMockServers()
         .forEach(mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(0), ServerErrorCode.Unknown_Error));
-    executeOpAndVerify(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false,
+    executeOpAndVerifyWithInfinity(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false,
         blobIds.subList(1, blobIds.size()));
+  }
+
+  /**
+   * Test for the case when delete operation fails due to quota compliance.
+   */
+  @Test
+  public void testQuotaRejected() throws Exception {
+    executeOpAndVerify(blobIds, RouterErrorCode.TooManyRequests, false, true, true, false, true);
   }
 
   /**
@@ -188,9 +198,9 @@ public class TtlUpdateManagerTest {
   @Test
   public void batchedThroughTtlManagerTest() throws Exception {
     assertTtl(router, blobIds, TTL_SECS);
-    executeOpAndVerify(blobIds, null, false, false, false, true);
+    executeOpAndVerify(blobIds, null, false, false, false, true, false);
     // ok to do it again
-    executeOpAndVerify(blobIds, null, false, false, false, true);
+    executeOpAndVerify(blobIds, null, false, false, false, true, false);
   }
 
   /**
@@ -204,7 +214,7 @@ public class TtlUpdateManagerTest {
     serverLayout.getMockServers()
         .forEach(
             mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(BLOBS_COUNT / 2), ServerErrorCode.Unknown_Error));
-    executeOpAndVerify(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false, false);
+    executeOpAndVerify(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false, false, false);
   }
 
   /**
@@ -237,7 +247,7 @@ public class TtlUpdateManagerTest {
       // extremely rare in real world), it means blob is no long present and it's ok to return BlobDoesNotExist.
       RouterErrorCode expected = errorCode == ServerErrorCode.Disk_Unavailable ? RouterErrorCode.BlobDoesNotExist
           : errorCodeMap.getOrDefault(errorCode, RouterErrorCode.UnexpectedInternalError);
-      executeOpAndVerify(blobIds, expected, false, true, true, false);
+      executeOpAndVerify(blobIds, expected, false, true, true, false, false);
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
     assertTtl(router, blobIds, TTL_SECS);
@@ -288,7 +298,7 @@ public class TtlUpdateManagerTest {
   public void responseTimeoutTest() throws Exception {
     // configure servers to not respond to requests
     serverLayout.getMockServers().forEach(mockServer -> mockServer.setShouldRespond(false));
-    executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, true, true, false);
+    executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, true, true, false, false);
   }
 
   /**
@@ -302,7 +312,7 @@ public class TtlUpdateManagerTest {
         continue;
       }
       mockSelectorState.set(state);
-      executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, true, true, false);
+      executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, true, true, false, false);
     }
   }
 
@@ -314,8 +324,8 @@ public class TtlUpdateManagerTest {
   public void duplicateBlobIdsTest() throws RouterException {
     blobIds.add(blobIds.get(1));
     try {
-      ttlUpdateManager.submitTtlUpdateOperation(blobIds.get(0), blobIds.subList(1, blobIds.size()), UPDATE_SERVICE_ID, Utils.Infinite_Time, new FutureResult<>(),
-          new TestCallback<>(), quotaChargeCallback);
+      ttlUpdateManager.submitTtlUpdateOperation(blobIds.get(0), blobIds.subList(1, blobIds.size()), UPDATE_SERVICE_ID,
+          Utils.Infinite_Time, new FutureResult<>(), new TestCallback<>(), quotaChargeCallback);
       fail("Should have failed to submit operation because the provided blob id list contains duplicates");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
@@ -332,11 +342,12 @@ public class TtlUpdateManagerTest {
    *                                   request not sent in this execution of the function
    * @param verifyNoNotificationsOnFailure if {@code true}, verifies that there are no notifications on failure.
    * @param verifyTtlAfterUpdate if {@code true}, verify the TTL after the update succeeds/fails
+   * @param isQuotaRejected if {@code true}, return quota rejected ResponseInfo back to op.
    * @throws Exception
    */
   private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime,
-      boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure, boolean verifyTtlAfterUpdate)
-      throws Exception {
+      boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure, boolean verifyTtlAfterUpdate,
+      boolean isQuotaRejected) throws Exception {
     FutureResult<Void> future = new FutureResult<>();
     TestCallback<Void> callback = new TestCallback<>();
     notificationSystem.reset();
@@ -344,7 +355,7 @@ public class TtlUpdateManagerTest {
     router.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
     ttlUpdateManager.submitTtlUpdateOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UPDATE_SERVICE_ID,
         Utils.Infinite_Time, future, callback, quotaChargeCallback);
-    sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests);
+    sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests, isQuotaRejected);
     long expectedTtlSecs = TTL_SECS;
     if (expectedErrorCode == null) {
       assertTrue("Future should be complete", future.isDone());
@@ -380,12 +391,12 @@ public class TtlUpdateManagerTest {
    * @param verifyTtlUpdatedList the collection of chunk ids for which ttl should be verified to have been applied.
    * @throws Exception
    */
-  private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime,
-      boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure,
+  private void executeOpAndVerifyWithInfinity(Collection<String> ids, RouterErrorCode expectedErrorCode,
+      boolean advanceTime, boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure,
       Collection<String> verifyTtlUpdatedList) throws Exception {
-    executeOpAndVerify(
-        ids, expectedErrorCode, advanceTime, ignoreUnrecognizedRequests, verifyNoNotificationsOnFailure, false);
-      assertTtl(router, verifyTtlUpdatedList, Utils.Infinite_Time);
+    executeOpAndVerify(ids, expectedErrorCode, advanceTime, ignoreUnrecognizedRequests, verifyNoNotificationsOnFailure,
+        false, false);
+    assertTtl(router, verifyTtlUpdatedList, Utils.Infinite_Time);
   }
 
   // helpers
@@ -398,9 +409,10 @@ public class TtlUpdateManagerTest {
    * @param advanceTime if {@code true}, advances time after each poll and handleResponse iteration
    * @param ignoreUnrecognizedRequests if {@code true}, doesn't throw an exception if a response is received for a
    *                                   request not sent in this execution of the function
+   * @param isQuotaRejected if {@code true}, return quota rejected ResponseInfo back to op.
    */
   private void sendRequestsGetResponses(FutureResult<Void> futureResult, TtlUpdateManager manager, boolean advanceTime,
-      boolean ignoreUnrecognizedRequests) {
+      boolean ignoreUnrecognizedRequests, boolean isQuotaRejected) {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     Set<Integer> requestsToDrop = new HashSet<>();
     Set<RequestInfo> requestAcks = new HashSet<>();
@@ -409,11 +421,17 @@ public class TtlUpdateManagerTest {
       manager.poll(requestInfoList, requestsToDrop);
       referenceRequestInfos.addAll(requestInfoList);
       List<ResponseInfo> responseInfoList = new ArrayList<>();
-      try {
-        responseInfoList = networkClient.sendAndPoll(requestInfoList, requestsToDrop, AWAIT_TIMEOUT_MS);
-      } catch (RuntimeException | Error e) {
-        if (!advanceTime) {
-          throw e;
+      if (isQuotaRejected) {
+        responseInfoList = requestInfoList.stream()
+            .map(requestInfo -> new ResponseInfo(requestInfo, true))
+            .collect(Collectors.toList());
+      } else {
+        try {
+          responseInfoList = networkClient.sendAndPoll(requestInfoList, requestsToDrop, AWAIT_TIMEOUT_MS);
+        } catch (RuntimeException | Error e) {
+          if (!advanceTime) {
+            throw e;
+          }
         }
       }
       for (ResponseInfo responseInfo : responseInfoList) {
@@ -484,8 +502,9 @@ public class TtlUpdateManagerTest {
     for (int i = 0; i < successfulResponsesCount; i++) {
       serversInLocalDc.get(i).setServerErrorForAllRequests(errorCodeToReturn);
     }
-    RouterErrorCode expectedErrorCode = (successfulResponsesCount > 0) ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.BlobDoesNotExist;
-    executeOpAndVerify(blobIds, shouldSucceed ? null : expectedErrorCode, false, true, true, false);
+    RouterErrorCode expectedErrorCode =
+        (successfulResponsesCount > 0) ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.BlobDoesNotExist;
+    executeOpAndVerify(blobIds, shouldSucceed ? null : expectedErrorCode, false, true, true, false, false);
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 
@@ -520,7 +539,7 @@ public class TtlUpdateManagerTest {
       Collections.shuffle(shuffled);
       setServerErrorCodes(shuffled, serverLayout);
       RouterErrorCode expectedRouterError = resolveRouterErrorCode(serverErrorCodes, expected.get(i));
-      executeOpAndVerify(blobIds, expectedRouterError, false, true, true, false);
+      executeOpAndVerify(blobIds, expectedRouterError, false, true, true, false, false);
       if (i * 2 + 1 < serverErrorCodes.size()) {
         serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
         serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
