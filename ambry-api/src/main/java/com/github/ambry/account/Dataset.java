@@ -46,30 +46,31 @@ import java.util.Map;
 @JsonDeserialize(builder = DatasetBuilder.class)
 public class Dataset {
   //constant
+
   static final String ACCOUNT_NAME_KEY = "accountName";
-  @JsonProperty(ACCOUNT_NAME_KEY)
   static final String CONTAINER_NAME_KEY = "containerName";
-  @JsonProperty(CONTAINER_NAME_KEY)
   static final String DATASET_NAME_KEY = "datasetName";
-  @JsonProperty(DATASET_NAME_KEY)
   static final String JSON_VERSION_SCHEMA_KEY = "versionSchema";
-  @JsonProperty(JSON_VERSION_SCHEMA_KEY)
   static final String JSON_EXPIRATION_TIME_KEY = "expirationTimeMs";
-  @JsonProperty(JSON_EXPIRATION_TIME_KEY)
   static final String JSON_RETENTION_COUNT_KEY = "retentionCount";
-  @JsonProperty(JSON_RETENTION_COUNT_KEY)
   static final String JSON_USER_TAGS_KEY = "userTags";
-  @JsonProperty(JSON_USER_TAGS_KEY)
 
   static final Integer RETENTION_COUNT_DEFAULT = null;
   static final Map<String, String> USER_TAGS_DEFAULT = Collections.emptyMap();
 
+  @JsonProperty(ACCOUNT_NAME_KEY)
   private final String accountName;
+  @JsonProperty(CONTAINER_NAME_KEY)
   private final String containerName;
+  @JsonProperty(DATASET_NAME_KEY)
   private final String datasetName;
+  @JsonProperty(JSON_VERSION_SCHEMA_KEY)
   private final VersionSchema versionSchema;
+  @JsonProperty(JSON_EXPIRATION_TIME_KEY)
   private final Long expirationTimeMs;
+  @JsonProperty(JSON_RETENTION_COUNT_KEY)
   private final Integer retentionCount;
+  @JsonProperty(JSON_USER_TAGS_KEY)
   private final Map<String, String> userTags;
 
   /**
