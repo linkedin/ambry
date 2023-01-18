@@ -329,10 +329,9 @@ public class ReplicationTestHelper {
       replicasToReplicate.put(remoteHost.dataNodeId, remoteReplicaInfoList);
       hosts.put(remoteHost.dataNodeId, remoteHost);
     }
-    Map<StoreKey, StoreKey> conversionMap = new HashMap<>();
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
     MockNetworkClient networkClient =
-        shouldUseNetworkClient ? new MockNetworkClient(hosts, clusterMap, batchSize, conversionMap) : null;
+        shouldUseNetworkClient ? new MockNetworkClient(hosts, clusterMap, batchSize) : null;
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
             new AtomicInteger(0), localHost.dataNodeId, connectionPool, networkClient, replicationConfig,

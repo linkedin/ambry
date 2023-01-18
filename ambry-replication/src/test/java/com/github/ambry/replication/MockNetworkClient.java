@@ -40,17 +40,14 @@ public class MockNetworkClient implements NetworkClient {
   private final Map<DataNodeId, MockConnectionPool.MockConnection> connections;
   private final ClusterMap clusterMap;
   private final int batchSize;
-  private final Map<StoreKey, StoreKey> conversionMap;
 
   private final Map<Integer, RequestInfo> correlationIdToRequestInfos = new HashMap<>();
 
-  public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
-      Map<StoreKey, StoreKey> conversionMap) {
+  public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize) {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
     this.batchSize = batchSize;
     this.connections = new HashMap<>();
-    this.conversionMap = conversionMap;
   }
 
   @Override
