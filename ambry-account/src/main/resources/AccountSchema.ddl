@@ -44,3 +44,27 @@ CREATE TABLE IF NOT EXISTS Containers
     INDEX statusIndex (status)
 )
 CHARACTER SET utf8 COLLATE utf8_bin;
+
+CREATE TABLE IF NOT EXISTS Datasets (
+    accountId INT NOT NULL,
+    containerId INT NOT NULL,
+    datasetName VARCHAR(255) NOT NULL,
+    versionSchema INT NOT NULL,
+    retentionCount INT DEFAULT NULL,
+    userTags JSON DEFAULT NULL,
+    lastModifiedTime DATETIME(3) NOT NULL,
+    delete_ts datetime(6) DEFAULT NULL,
+    PRIMARY KEY (accountId, containerId, datasetName)
+)
+CHARACTER SET utf8 COLLATE utf8_bin;
+
+CREATE TABLE IF NOT EXISTS DatasetVersions (
+    accountId INT NOT NULL,
+    containerId INT NOT NULL,
+    datasetName VARCHAR(255) NOT NULL,
+    version bigint NOT NULL,
+    lastModifiedTime DATETIME(3) NOT NULL,
+    delete_ts datetime(6) DEFAULT NULL,
+    PRIMARY KEY (accountId, containerId, datasetName, version)
+)
+CHARACTER SET utf8 COLLATE utf8_bin;
