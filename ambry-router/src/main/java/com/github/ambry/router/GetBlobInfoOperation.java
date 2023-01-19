@@ -490,7 +490,7 @@ class GetBlobInfoOperation extends GetOperation {
    * Check whether the operation can be completed, if so complete it.
    */
   private void checkAndMaybeComplete() {
-    if (progressTracker.isDone() || operationCompleted) {
+    if (progressTracker.isDone()) {
       if (progressTracker.hasSucceeded()) {
         operationException.set(null);
       } else if (operationTracker.hasFailedOnNotFound()) {

@@ -1004,7 +1004,7 @@ class GetBlobOperation extends GetOperation {
      * Check if the operation on the chunk is eligible for completion, if so complete it.
      */
     void checkAndMaybeComplete() {
-      if (progressTracker.isDone() || chunkCompleted) {
+      if (progressTracker.isDone()) {
         if (progressTracker.hasSucceeded() && !retainChunkExceptionOnSuccess) {
           chunkException = null;
         } else if (chunkOperationTracker.maybeFailedDueToOfflineReplicas()) {
@@ -1290,6 +1290,7 @@ class GetBlobOperation extends GetOperation {
     private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
       logger.trace("GetBlobRequest with response correlationId {} rejected because it exceeded quota", correlationId);
       onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
+      chunkCompleted = true;
       checkAndMaybeComplete();
     }
 
