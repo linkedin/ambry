@@ -2182,7 +2182,7 @@ public class ReplicaThread implements Runnable {
               group.getRemoteDataNode(), threadName, group.getId(), entry.getKey(), requestInfo.getRequestCreateTime());
         } else {
           // This shouldn't happen
-          logger.trace("Thread name: {} Request {} timed out", threadName, group.getId(), entry.getKey());
+          logger.trace("Thread name: {} RemoteReplicaGroup {} Request {} timed out", threadName, group.getId(), entry.getKey());
         }
       } else {
         // The correlationIdToRequest should be a LinkedHashMap that has a predictable iteration order based on insertion.
@@ -2216,7 +2216,7 @@ public class ReplicaThread implements Runnable {
         // back from the network client.
         if (remoteReplicaGroup != null) {
           RequestOrResponseType type = ((RequestOrResponse) requestInfo.getRequest()).getRequestType();
-          logger.debug("Remote node: {} Thread name: RemoteReplicaGroup {} Handling response of type {} for {}",
+          logger.debug("Remote node: {} Thread name: {} RemoteReplicaGroup {} Handling response of type {} for {}",
               remoteReplicaGroup.getRemoteDataNode(), threadName, remoteReplicaGroup.getId(), type, correlationId);
           switch (type) {
             case ReplicaMetadataRequest:
@@ -2232,7 +2232,7 @@ public class ReplicaThread implements Runnable {
           }
         } else {
           logger.trace("Thread Name: {} No RemoteReplicaGroup found for correlation Id {}, it might already time out",
-              correlationId);
+              threadName, correlationId);
         }
       }
     }

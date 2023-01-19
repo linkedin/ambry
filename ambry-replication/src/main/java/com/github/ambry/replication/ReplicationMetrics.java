@@ -242,7 +242,7 @@ public class ReplicationMetrics {
     intraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoTotalReplicationTime"));
     intraColoOneCycleReplicationTime =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoOneRoundReplicationTime"));
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoOneCycleReplicationTime"));
     plainTextIntraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoTotalReplicationTime"));
     sslIntraColoTotalReplicationTime =
@@ -373,9 +373,9 @@ public class ReplicationMetrics {
     Histogram interColoTotalReplicationTimePerDC =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-TotalReplicationTime"));
     interColoTotalReplicationTime.put(datacenter, interColoTotalReplicationTimePerDC);
-    Histogram interColoOneRoundReplicationTimePerDC = registry.histogram(
-        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-OneRoundReplicationTime"));
-    interColoOneCycleReplicationTime.put(datacenter, interColoOneRoundReplicationTimePerDC);
+    Histogram interColoOneCycleReplicationTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-OneCycleReplicationTime"));
+    interColoOneCycleReplicationTime.put(datacenter, interColoOneCycleReplicationTimePerDC);
     Histogram plainTextInterColoTotalReplicationTimePerDC = registry.histogram(
         MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-TotalReplicationTime"));
     plainTextInterColoTotalReplicationTime.put(datacenter, plainTextInterColoTotalReplicationTimePerDC);
