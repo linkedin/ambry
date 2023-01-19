@@ -56,7 +56,7 @@ public class ClusterMapSnapshotConstants {
   // partitions
   public static final String PARTITION_ID = "id";
   public static final String PARTITION_CLASS = "class";
-  public static final String PARTITION_RESOURCE_NAME = "resourceName";
+  public static final String PARTITION_RESOURCE_NAMES = "resourceNames";
   public static final String PARTITION_WRITE_STATE = "writeState";
   public static final String PARTITION_REPLICAS = "replicas";
 

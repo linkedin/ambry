@@ -157,8 +157,8 @@ public class AmbryPartition implements PartitionId {
   }
 
   @Override
-  public String getResourceName() {
-    return clusterManagerQueryHelper.getResourceNameForPartition(this);
+  public List<String> getResourceNames() {
+    return clusterManagerQueryHelper.getResourceNamesForPartition(this);
   }
 
   @Override
@@ -167,7 +167,7 @@ public class AmbryPartition implements PartitionId {
     snapshot.put(PARTITION_ID, toPathString());
     snapshot.put(PARTITION_WRITE_STATE, getPartitionState().name());
     snapshot.put(PARTITION_CLASS, getPartitionClass());
-    snapshot.put(PARTITION_RESOURCE_NAME, getResourceName());
+    snapshot.put(PARTITION_RESOURCE_NAMES, getResourceNames());
     JSONArray replicas = new JSONArray();
     getReplicaIds().forEach(replica -> replicas.put(replica.getSnapshot()));
     snapshot.put(PARTITION_REPLICAS, replicas);

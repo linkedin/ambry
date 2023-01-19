@@ -631,43 +631,34 @@ public class HelixClusterManagerTest {
   @Test
   public void routingTableProviderChangeTest() throws Exception {
     assumeTrue(!useComposite && !overrideEnabled && !listenCrossColo);
-    // Change zk connect strings to ensure HelixClusterManager sees local DC only
-    JSONObject zkJson = constructZkLayoutJSON(Collections.singletonList(dcsToZkInfo.get(localDc)));
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", hostname);
-    props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
-    props.setProperty("clustermap.aggregated.view.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
-    props.setProperty("clustermap.use.aggregated.view", Boolean.toString(useAggregatedView));
-    props.setProperty("clustermap.datacenter.name", localDc);
-    props.setProperty("clustermap.port", Integer.toString(portNum));
-    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
-    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
-    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    // Mock metricRegistry here to introduce a latch based counter for testing purpose
-    metricRegistry = new MetricRegistry();
-    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
-        new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
+
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     Map<String, RoutingTableSnapshot> snapshotsByDc = helixClusterManager.getRoutingTableSnapshots();
+
+    // This contains aggregated view snapshot if aggregated view is enabled
     RoutingTableSnapshot localDcSnapshot = snapshotsByDc.get(localDc);
 
     Set<InstanceConfig> instanceConfigsInSnapshot = new HashSet<>(localDcSnapshot.getInstanceConfigs());
     Set<InstanceConfig> instanceConfigsInCluster =
-        new HashSet<>(helixCluster.getInstanceConfigsFromDcs(new String[]{localDc}));
+        useAggregatedView ? new HashSet<>(helixCluster.getInstanceConfigsFromDcs(helixDcs))
+            : new HashSet<>(helixCluster.getInstanceConfigsFromDcs(new String[]{localDc}));
     assertEquals("Mismatch in instance configs", instanceConfigsInCluster, instanceConfigsInSnapshot);
-    // verify leader replica of each partition is correct
+    // verify leader replica of each partition is correct in local dc
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
+    // verify leader replicas of each partition is correct in remote dc
+    verifyLeaderReplicasInDc(helixClusterManager, remoteDc);
 
     // test live instance triggered routing table change
     // we purposely bring down one instance and wait for expected number of live instance unless times out.
     int initialLiveCnt = localDcSnapshot.getLiveInstances().size();
-    MockHelixAdmin mockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+    MockHelixAdmin localHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
     String instance = instanceConfigsInCluster.stream()
         .filter(insConfig -> !insConfig.getInstanceName().equals(selfInstanceName))
         .findFirst()
         .get()
         .getInstanceName();
-    mockHelixAdmin.bringInstanceDown(instance);
-    mockHelixAdmin.triggerRoutingTableNotification();
+    localHelixAdmin.bringInstanceDown(instance);
+    localHelixAdmin.triggerRoutingTableNotification();
     int sleepCnt = 0;
     while (helixClusterManager.getRoutingTableSnapshots().get(localDc).getLiveInstances().size()
         != initialLiveCnt - 1) {
@@ -676,9 +667,9 @@ public class HelixClusterManagerTest {
       sleepCnt++;
     }
     // then bring up the same instance, the number of live instances should equal to initial count
-    mockHelixAdmin.bringInstanceUp(instance);
-    mockHelixAdmin.triggerLiveInstanceChangeNotification();
-    mockHelixAdmin.triggerRoutingTableNotification();
+    localHelixAdmin.bringInstanceUp(instance);
+    localHelixAdmin.triggerLiveInstanceChangeNotification();
+    localHelixAdmin.triggerRoutingTableNotification();
     sleepCnt = 0;
     while (helixClusterManager.getRoutingTableSnapshots().get(localDc).getLiveInstances().size() != initialLiveCnt) {
       assertTrue("Routing table change (triggered by bringing up node) didn't come within 1 sec", sleepCnt < 5);
@@ -689,15 +680,15 @@ public class HelixClusterManagerTest {
     // randomly choose a partition and change the leader replica of it in cluster
     List<? extends PartitionId> defaultPartitionIds = helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
     PartitionId partitionToChange = defaultPartitionIds.get((new Random()).nextInt(defaultPartitionIds.size()));
-    String currentLeaderInstance = mockHelixAdmin.getPartitionToLeaderReplica().get(partitionToChange.toPathString());
+    String currentLeaderInstance = localHelixAdmin.getPartitionToLeaderReplica().get(partitionToChange.toPathString());
     int currentLeaderPort = Integer.parseInt(currentLeaderInstance.split("_")[1]);
-    String newLeaderInstance = mockHelixAdmin.getInstancesForPartition(partitionToChange.toPathString())
+    String newLeaderInstance = localHelixAdmin.getInstancesForPartition(partitionToChange.toPathString())
         .stream()
         .filter(k -> !k.equals(currentLeaderInstance))
         .findFirst()
         .get();
-    mockHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
-    mockHelixAdmin.triggerRoutingTableNotification();
+    localHelixAdmin.changeLeaderReplicaForPartition(partitionToChange.toPathString(), newLeaderInstance);
+    localHelixAdmin.triggerRoutingTableNotification();
     sleepCnt = 0;
     while (partitionToChange.getReplicaIdsByState(ReplicaState.LEADER, localDc).get(0).getDataNodeId().getPort()
         == currentLeaderPort) {
@@ -706,8 +697,6 @@ public class HelixClusterManagerTest {
       sleepCnt++;
     }
     verifyLeaderReplicasInDc(helixClusterManager, localDc);
-
-    helixClusterManager.close();
   }
 
   /**
@@ -1279,14 +1268,15 @@ public class HelixClusterManagerTest {
 
       // 2. verify all resources and partitions from Helix are present in cluster manager
       if (useAggregatedView) {
-        Map<String, List<String>> partitionToResourceMap = clusterManager.getGlobalPartitionToResourceMap();
+        Map<String, Set<String>> partitionToResourceMap = clusterManager.getGlobalPartitionToResourceMap();
         MockHelixAdmin helixAdmin = helixCluster.getHelixAdminFromDc(dc);
         List<IdealState> idealStates = helixAdmin.getIdealStates();
         for (IdealState idealState : idealStates) {
           String resourceName = idealState.getResourceName();
           Set<String> partitionSet = idealState.getPartitionSet();
           for (String partitionStr : partitionSet) {
-            assertEquals("Mismatch in resource name", resourceName, partitionToResourceMap.get(partitionStr).get(0));
+            assertEquals("Mismatch in resource name", resourceName,
+                partitionToResourceMap.get(partitionStr).iterator().next());
           }
         }
       } else {

@@ -141,12 +141,28 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
       } else if (key.toString().matches("/Ambry-/CONFIGS/PARTICIPANT/.*_\\d+")) {
         String[] segments = key.toString().split("/");
         String instanceName = segments[4];
-        InstanceConfig instanceConfig = mockLocalHelixAdmin.getInstanceConfigs(clusterName)
-            .stream()
-            .filter(config -> config.getInstanceName().equals(instanceName))
-            .findFirst()
-            .get();
-        result.add((T) instanceConfig);
+        if (isAggregatedViewCluster) {
+          boolean foundInstance = false;
+          for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+            for (InstanceConfig instanceConfig : mockHelixAdmin.getInstanceConfigs(clusterName)) {
+              if (instanceConfig.getInstanceName().equals(instanceName)) {
+                result.add((T) instanceConfig);
+                foundInstance = true;
+                break;
+              }
+            }
+            if (foundInstance) {
+              break;
+            }
+          }
+        } else {
+          InstanceConfig instanceConfig = mockLocalHelixAdmin.getInstanceConfigs(clusterName)
+              .stream()
+              .filter(config -> config.getInstanceName().equals(instanceName))
+              .findFirst()
+              .get();
+          result.add((T) instanceConfig);
+        }
       } else if (key.toString().matches("/Ambry-/EXTERNALVIEW/\\d+")) {
         // Add external view for the asked resource
         String[] segments = key.toString().split("/");
@@ -215,8 +231,16 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
         result.addAll(mockLocalHelixAdmin.getUpInstances());
       }
     } else if (key.toString().equals(INSTANCECONFIG_PATH)) {
-      for (InstanceConfig config : mockLocalHelixAdmin.getInstanceConfigs(clusterName)) {
-        result.add(config.getInstanceName());
+      if (isAggregatedViewCluster) {
+        for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+          for (InstanceConfig config : mockHelixAdmin.getInstanceConfigs(clusterName)) {
+            result.add(config.getInstanceName());
+          }
+        }
+      } else {
+        for (InstanceConfig config : mockLocalHelixAdmin.getInstanceConfigs(clusterName)) {
+          result.add(config.getInstanceName());
+        }
       }
     } else if (key.toString().equals(EXTERNALVIEW_PATH)) {
       if (isAggregatedViewCluster) {

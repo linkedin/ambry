@@ -368,7 +368,7 @@ public class ClusterChangeHandlerTest {
     // verify all partitions are able to get their resource name
     helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
         .forEach(partitionId -> assertEquals("Resource name is not expected",
-            partitionNameToResource.get(partitionId.toPathString()), partitionId.getResourceName()));
+            partitionNameToResource.get(partitionId.toPathString()), partitionId.getResourceNames().get(0)));
     helixClusterManager.close();
   }
 

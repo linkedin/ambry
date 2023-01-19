@@ -148,7 +148,7 @@ class HelixAggregatedViewClusterInitializer {
 
     // 2. Fetch External view. Helix provides a helper class RoutingTableProvider to get information in external view in
     // a convenient way.
-    logger.info("Creating routing table provider for entire cluster associated with Helix manager at {}",
+    logger.info("Creating routing table provider for cluster {} via Helix manager at {}", aggregatedViewClusterName,
         localZkConnectStr);
     // There are two ways to instantiate a RoutingTable. 1. EXTERNAL_VIEW based, 2. CURRENT_STATES based. In the former
     // one, helix controller generates the external view and this is read by the helix spectator to create the Routing
@@ -160,9 +160,10 @@ class HelixAggregatedViewClusterInitializer {
     // In case of Aggregated view, CURRENT_STATES based RoutingTable doesn't work since CURRENT_STATES are
     // not aggregated by helix. So, we only have one option, i.e EXTERNAL_VIEW based and helix team asked to use it.
     RoutingTableProvider routingTableProvider = new RoutingTableProvider(helixManager, PropertyType.EXTERNALVIEW);
-    logger.info("Routing table provider is created for entire cluster");
+    logger.info("Routing table provider is created for cluster {} via Helix manager at {}", aggregatedViewClusterName,
+        localZkConnectStr);
     routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
-    logger.info("Registered routing table change listeners for entire cluster");
+    logger.info("Registered routing table change listeners for cluster {}", aggregatedViewClusterName);
     // Since it is possible that initial event occurs before adding routing table listener, we explicitly set snapshot in
     // HelixClusterManager. The reason is, if listener missed initial event, snapshot inside routing table
     // provider should be already populated.
@@ -183,8 +184,8 @@ class HelixAggregatedViewClusterInitializer {
     // I.e. by the time we return from below method, initial notification of live instances states would have been
     // arrived. So, we don't need separate latch to wait for notification of live instances.
     helixManager.addLiveInstanceChangeListener(clusterChangeHandler);
-    logger.info("Registered live instance change listeners for entire cluster via Helix manager at {}",
-        localZkConnectStr);
+    logger.info("Registered live instance change listeners for cluster {} via Helix manager at {}",
+        aggregatedViewClusterName, localZkConnectStr);
 
     return new HelixAggregatedViewClusterInfo(helixManager, clusterChangeHandler, dataNodeConfigSources);
   }
@@ -202,10 +203,12 @@ class HelixAggregatedViewClusterInitializer {
     // (Please see PropertyStoreToDataNodeConfigAdapter.Subscription#start() method). I.e. by the time we return from
     // below method, initial notification of data node configs would have been arrived. So, we don't need separate latch
     // to wait for notification of data node configs.
+    logger.info(
+        "Registering data node config change listeners for cluster {} in data center {} via Helix manager at {}",
+        clusterMapConfig.clusterMapClusterName, dcZkInfo.getDcName(), zkConnectStr);
     dataNodeConfigSource.addDataNodeConfigChangeListener(
-        configs -> clusterChangeHandler.handleDataNodeConfigChange(configs, dcName));
+        configs -> clusterChangeHandler.handleDataNodeConfigChange(configs, dcName,
+            clusterMapConfig.clusterMapClusterName));
     dataNodeConfigSources.add(dataNodeConfigSource);
-    logger.info("Registered data node config change listeners for data center {} via Helix manager at {}",
-        dcZkInfo.getDcName(), zkConnectStr);
   }
 }
