@@ -133,6 +133,14 @@ public class MySqlNamedBlobDbTest {
         e -> Assert.assertEquals(sqlException, e.getCause()));
   }
 
+  @Test
+  public void testPullAndCleanStaleNamedBlobs() throws Exception {
+    dataSourceFactory.setLocalDatacenter(localDatacenter);
+    dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
+    List<StaleNamedResult> staleNamedResults = namedBlobDb.pullStaleBlobIds().get();
+    namedBlobDb.cleanupStaleData(staleNamedResults);
+  }
+
   /**
    * @param callable an async call, where the {@link Future} is expected to be completed with an exception.
    * @param errorCode the expected {@link RestServiceErrorCode}.

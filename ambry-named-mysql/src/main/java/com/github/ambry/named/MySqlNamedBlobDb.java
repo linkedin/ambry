@@ -306,9 +306,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = System.currentTimeMillis();
-      List<StaleNamedResult> staleBobIds = runPullStaleBlobIds(connection);
+      List<StaleNamedResult> staleNamedBlobResults= runPullStaleBlobIds(connection);
       metricsRecoder.namedBlobPullStaleTimeInMs.update(System.currentTimeMillis() - startTime);
-      return staleBobIds;
+      return staleNamedBlobResults;
     }, transactionStateTracker);
   }
 

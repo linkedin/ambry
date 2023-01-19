@@ -39,11 +39,15 @@ import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.GregorianCalendar;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -69,6 +73,9 @@ class FrontendRestRequestService implements RestRequestService {
   private final String datacenterName;
   private final String hostname;
   private final String clusterName;
+  private NamedBlobsCleanupRunner namedBlobsCleanupRunner = null;
+  private ScheduledExecutorService namedBlobsCleanupScheduler = null;
+  private ScheduledFuture<?> namedBlobsCleanupTask = null;
   private RestResponseHandler responseHandler;
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
@@ -190,6 +197,11 @@ class FrontendRestRequestService implements RestRequestService {
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
+
+    namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
+    namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
+    namedBlobsCleanupTask = namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, 60*60*1, 60*60*24, TimeUnit.SECONDS);
+
     isUp = true;
     logger.info("FrontendRestRequestService has started");
     frontendMetrics.restRequestServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -214,6 +226,12 @@ class FrontendRestRequestService implements RestRequestService {
       }
       if (accountStatsStore != null) {
         accountStatsStore.shutdown();
+      }
+      if (namedBlobsCleanupTask != null) {
+        namedBlobsCleanupTask.cancel(false);
+      }
+      if (namedBlobsCleanupScheduler != null) {
+        shutDownExecutorService(namedBlobsCleanupScheduler,5, TimeUnit.MINUTES);
       }
       logger.info("FrontendRestRequestService shutdown complete");
     } catch (IOException e) {
