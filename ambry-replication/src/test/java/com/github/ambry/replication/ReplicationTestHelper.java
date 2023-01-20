@@ -45,8 +45,6 @@ import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.network.ConnectionPool;
-import com.github.ambry.protocol.ReplicaMetadataRequest;
-import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -80,7 +78,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.json.JSONObject;
-import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.TestUtils.*;
@@ -99,8 +96,11 @@ public class ReplicationTestHelper {
   protected VerifiableProperties verifiableProperties;
   protected ReplicationConfig replicationConfig;
   protected final AccountService accountService;
+  protected final boolean shouldUseNetworkClient;
 
-  public ReplicationTestHelper(short requestVersion, short responseVersion) {
+  public ReplicationTestHelper(short requestVersion, short responseVersion, boolean shouldUseNetworkClient) {
+    System.out.println("The request version: " + requestVersion + " ResponseVersion: " + responseVersion);
+    this.shouldUseNetworkClient = shouldUseNetworkClient;
     List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -123,20 +123,7 @@ public class ReplicationTestHelper {
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
     accountService = Mockito.mock(AccountService.class);
-  }
-
-  /**
-   * Running for the two sets of compatible ReplicaMetadataRequest and ReplicaMetadataResponse,
-   * viz {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V1}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_5}}
-   * & {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V2}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_6}}
-   * @return an array with both pairs of compatible request and response.
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1,
-        ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5},
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2,
-            ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6}});
+    time.setCurrentMilliseconds(System.currentTimeMillis());
   }
 
   // helpers
@@ -159,7 +146,7 @@ public class ReplicationTestHelper {
   }
 
   /**
-   * Helepr function to test when the local lifeVersion is greater than the remote lifeVersion.
+   * Helper function to test when the local lifeVersion is greater than the remote lifeVersion.
    * @param localTtlUpdated
    * @param remoteTtlUpdated
    * @throws Exception
@@ -213,15 +200,15 @@ public class ReplicationTestHelper {
 
     int batchSize = 4;
     Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter, null, null,
-            null);
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, null, null, null,
+            remoteHost);
     List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
     ReplicaThread replicaThread = replicasAndThread.getSecond();
 
     // Do the replica metadata exchange.
+    replicaThread.replicate();
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-            remoteReplicaInfos);
+        replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
 
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (int i = 0; i < response.size(); i++) {
@@ -320,35 +307,41 @@ public class ReplicationTestHelper {
    * @param batchSize the number of messages to be returned in each iteration of replication
    * @param clusterMap the {@link ClusterMap} to use
    * @param localHost the local {@link MockHost} (the one running the replica thread)
-   * @param remoteHost the remote {@link MockHost} (the target of replication)
    * @param storeKeyConverter the {@link StoreKeyConverter} to be used in {@link ReplicaThread}
    * @param transformer the {@link Transformer} to be used in {@link ReplicaThread}
    * @param listener the {@link StoreEventListener} to use.
    * @param replicaSyncUpManager the {@link ReplicaSyncUpManager} to help create replica thread
+   * @param remoteHosts the list of remote {@link MockHost} (the target of replication)
    * @return a pair whose first element is the set of remote replicas and the second element is the {@link ReplicaThread}
    */
   protected Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(
-      int batchSize, ClusterMap clusterMap, MockHost localHost, MockHost remoteHost,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, StoreEventListener listener,
-      ReplicaSyncUpManager replicaSyncUpManager) throws ReflectiveOperationException {
+      int batchSize, ClusterMap clusterMap, MockHost localHost, StoreKeyConverter storeKeyConverter,
+      Transformer transformer, StoreEventListener listener, ReplicaSyncUpManager replicaSyncUpManager,
+      MockHost... remoteHosts) throws ReflectiveOperationException {
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
-    replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
-    List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, listener);
-    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate =
-        Collections.singletonMap(remoteHost.dataNodeId, remoteReplicaInfoList);
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
-    hosts.put(remoteHost.dataNodeId, remoteHost);
+    Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate = new HashMap<>();
+    for (MockHost remoteHost : remoteHosts) {
+      replicationMetrics.populateSingleColoMetrics(remoteHost.dataNodeId.getDatacenterName());
+      List<RemoteReplicaInfo> remoteReplicaInfoList = localHost.getRemoteReplicaInfos(remoteHost, listener);
+      replicasToReplicate.put(remoteHost.dataNodeId, remoteReplicaInfoList);
+      hosts.put(remoteHost.dataNodeId, remoteHost);
+    }
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
+    MockNetworkClient networkClient =
+        shouldUseNetworkClient ? new MockNetworkClient(hosts, clusterMap, batchSize) : null;
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
-            new AtomicInteger(0), localHost.dataNodeId, connectionPool, null, replicationConfig, replicationMetrics,
-            null, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
+            new AtomicInteger(0), localHost.dataNodeId, connectionPool, networkClient, replicationConfig,
+            replicationMetrics, null, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
             localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpManager, null,
             null);
-    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfoList) {
-      replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+    for (MockHost remoteHost : remoteHosts) {
+      for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicate.get(remoteHost.dataNodeId)) {
+        replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
+      }
     }
     for (PartitionId partitionId : clusterMap.getAllPartitionIds(null)) {
       replicationMetrics.addLagMetricForPartition(partitionId, true);
@@ -369,11 +362,11 @@ public class ReplicationTestHelper {
    * @return expectedIndex + expectedIndexInc
    * @throws Exception
    */
-  protected int assertMissingKeysAndFixMissingStoreKeys(int expectedIndex, int expectedIndexInc, int batchSize,
-      int expectedMissingKeysSum, ReplicaThread replicaThread, MockHost remoteHost,
+  protected int assertMissingKeysAndFixMissingStoreKeys(int expectedIndex, int expectedIndexInc,
+      int expectedMissingKeysSum, ReplicaThread replicaThread,
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
-    return assertMissingKeysAndFixMissingStoreKeys(expectedIndex, expectedIndex, expectedIndexInc, batchSize,
-        expectedMissingKeysSum, replicaThread, remoteHost, replicasToReplicate);
+    return assertMissingKeysAndFixMissingStoreKeys(expectedIndex, expectedIndex, expectedIndexInc,
+        expectedMissingKeysSum, replicaThread, replicasToReplicate);
   }
 
   /**
@@ -381,35 +374,30 @@ public class ReplicationTestHelper {
    * @param expectedIndex initial expected index for even numbered partitions
    * @param expectedIndexOdd initial expected index for odd numbered partitions
    * @param expectedIndexInc increment level for the expected index (how much the findToken index is expected to increment)
-   * @param batchSize how large of a batch size the internal MockConnection will use for fixing missing store keys
    * @param expectedMissingKeysSum the number of missing keys expected
    * @param replicaThread replicaThread that will be performing replication
-   * @param remoteHost the remote host that keys are being pulled from
    * @param replicasToReplicate list of replicas to replicate between
    * @return expectedIndex + expectedIndexInc
    * @throws Exception
    */
   protected int assertMissingKeysAndFixMissingStoreKeys(int expectedIndex, int expectedIndexOdd, int expectedIndexInc,
-      int batchSize, int expectedMissingKeysSum, ReplicaThread replicaThread, MockHost remoteHost,
+      int expectedMissingKeysSum, ReplicaThread replicaThread,
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
     expectedIndex += expectedIndexInc;
     expectedIndexOdd += expectedIndexInc;
-    List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-            replicasToReplicate.get(remoteHost.dataNodeId));
-    assertEquals("Response should contain a response for each replica",
-        replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
-    for (int i = 0; i < response.size(); i++) {
-      assertEquals(expectedMissingKeysSum, response.get(i).missingStoreMessages.size());
-      assertEquals(i % 2 == 0 ? expectedIndex : expectedIndexOdd,
-          ((MockFindToken) response.get(i).remoteToken).getIndex());
-      replicasToReplicate.get(remoteHost.dataNodeId).get(i).setToken(response.get(i).remoteToken);
-    }
-    replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        replicasToReplicate.get(remoteHost.dataNodeId), response, false);
-    for (int i = 0; i < response.size(); i++) {
-      assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
-          replicasToReplicate.get(remoteHost.dataNodeId).get(i).getToken());
+    replicaThread.replicate();
+    for (DataNodeId dataNodeId : replicasToReplicate.keySet()) {
+      List<ReplicaThread.ExchangeMetadataResponse> response =
+          replicaThread.getExchangeMetadataResponsesInEachCycle().get(dataNodeId);
+      assertEquals("Response should contain a response for each replica", replicasToReplicate.get(dataNodeId).size(),
+          response.size());
+      for (int i = 0; i < response.size(); i++) {
+        assertEquals(expectedMissingKeysSum, response.get(i).missingStoreMessages.size());
+        assertEquals(i % 2 == 0 ? expectedIndex : expectedIndexOdd,
+            ((MockFindToken) response.get(i).remoteToken).getIndex());
+        assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
+            replicasToReplicate.get(dataNodeId).get(i).getToken());
+      }
     }
     return expectedIndex;
   }
@@ -455,8 +443,7 @@ public class ReplicationTestHelper {
       int expectedIndex, int expectedIndexOdd, int expectedMissingBuffers) throws Exception {
     // no more missing keys
     List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, 4),
-            replicasToReplicate.get(remoteHost.dataNodeId));
+        replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
     assertEquals("Response should contain a response for each replica",
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
     for (int i = 0; i < response.size(); i++) {
@@ -1118,8 +1105,8 @@ public class ReplicationTestHelper {
       Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
 
       Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-          getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, remoteHost, storeKeyConverter,
-              transformer, null, null);
+          getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null,
+              null, remoteHost);
       replicasToReplicate = replicasAndThread.getFirst();
       replicaThread = replicasAndThread.getSecond();
     }

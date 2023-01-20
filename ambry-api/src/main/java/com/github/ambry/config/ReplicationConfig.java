@@ -224,6 +224,36 @@ public class ReplicationConfig {
   @Default("120")
   public final int replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds;
 
+  /**
+   * True to start using nonblocking network client for remote colo replication. The remote colo replication is a lot
+   * slower than the intra-colo replication so using a nonblocking network client should greatly improve the speed of
+   * replication. When doing so, also set the number of inter-colo replication thread to 1 since we only need one thread
+   * when using a nonblocking network client.
+   */
+  @Config(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO)
+  @Default("false")
+  public final boolean replicationUsingNonblockingNetworkClientForRemoteColo;
+  public final static String REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO =
+      "replication.using.nonblocking.network.client.for.remote.colo";
+  /**
+   * Timeout in milliseconds for requests in nonblocking network client. This configuration is only useful when the
+   * nonblocking network client is enabled.
+   */
+  @Config(REPLICATION_REQUEST_NETWORK_TIMEOUT_MS)
+  @Default("10 * 1000")
+  public final long replicationRequestNetworkTimeoutMs;
+  public final static String REPLICATION_REQUEST_NETWORK_TIMEOUT_MS = "replication.request.network.timeout.ms";
+
+  /**
+   * Timeout in milliseconds for polling the nonblocking network client to fetch more responses from remote hosts. This
+   * configuration is only useful when the nonblocking network client is enabled.
+   */
+  @Config(REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS)
+  @Default("40")
+  public final long replicationRequestNetworkPollTimeoutMs;
+  public final static String REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS =
+      "replication.request.network.poll.timeout.ms";
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
     replicationStoreTokenFactory =
@@ -275,5 +305,10 @@ public class ReplicationConfig {
     replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds =
         verifiableProperties.getIntInRange(REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS, 120,
             -1, Integer.MAX_VALUE);
+    replicationRequestNetworkTimeoutMs = verifiableProperties.getLong(REPLICATION_REQUEST_NETWORK_TIMEOUT_MS, 10000);
+    replicationRequestNetworkPollTimeoutMs =
+        verifiableProperties.getLong(REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS, 40);
+    replicationUsingNonblockingNetworkClientForRemoteColo =
+        verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
   }
 }

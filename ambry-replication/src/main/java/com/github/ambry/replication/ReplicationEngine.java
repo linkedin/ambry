@@ -370,7 +370,11 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         StoreKeyConverter threadSpecificKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
         Transformer threadSpecificTransformer =
             Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
-        NetworkClient networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
+        NetworkClient networkClient = null;
+        if (!dataNodeId.getDatacenterName().equals(datacenter)
+            && replicationConfig.replicationUsingNonblockingNetworkClientForRemoteColo) {
+          networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
+        }
         ReplicaThread replicaThread =
             new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
                 connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
