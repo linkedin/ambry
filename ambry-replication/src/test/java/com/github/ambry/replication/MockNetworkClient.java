@@ -21,7 +21,6 @@ import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
@@ -40,14 +39,19 @@ public class MockNetworkClient implements NetworkClient {
   private final Map<DataNodeId, MockConnectionPool.MockConnection> connections;
   private final ClusterMap clusterMap;
   private final int batchSize;
-
   private final Map<Integer, RequestInfo> correlationIdToRequestInfos = new HashMap<>();
+
+  private volatile NetworkClientErrorCode expectedNetworkClientErrorCode = null;
 
   public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize) {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
     this.batchSize = batchSize;
     this.connections = new HashMap<>();
+  }
+
+  void setExpectedNetworkClientErrorCode(NetworkClientErrorCode code) {
+    expectedNetworkClientErrorCode = code;
   }
 
   @Override
@@ -69,10 +73,14 @@ public class MockNetworkClient implements NetworkClient {
       Port port = requestInfo.getPort();
       DataNodeId dataNodeId = clusterMap.getDataNodeId(host, port.getPort());
       try {
-        connections.get(dataNodeId).send(requestInfo.getRequest());
-        ChannelOutput channelOutput = connections.get(dataNodeId).receive();
-        byte[] bytes = Utils.readBytesFromStream(channelOutput.getInputStream(), (int) channelOutput.getStreamSize());
-        responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
+        if (expectedNetworkClientErrorCode == null) {
+          connections.get(dataNodeId).send(requestInfo.getRequest());
+          ChannelOutput channelOutput = connections.get(dataNodeId).receive();
+          byte[] bytes = Utils.readBytesFromStream(channelOutput.getInputStream(), (int) channelOutput.getStreamSize());
+          responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
+        } else {
+          responseInfos.add(new ResponseInfo(requestInfo, expectedNetworkClientErrorCode, null));
+        }
       } catch (IOException e) {
         responseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
       }
