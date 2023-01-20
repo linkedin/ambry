@@ -163,15 +163,6 @@ public class OperationTrackerTest {
     // 0-0-1-2; 9-0-0-0
     assertFalse("Operation should not have succeeded", ot.hasSucceeded());
     assertTrue("Operation should be done", ot.isDone());
-
-    // test quota rejection failure.
-    initialize();
-    ot = getOperationTrackerForGetOrPut(false, 2, 3, RouterOperation.GetBlobOperation, true);
-    assertFalse("Operation should not have been done.", ot.isDone());
-    sendRequests(ot, 3, false);
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.QUOTA_REJECTED);
-    assertFalse("Operation should not have succeeded", ot.hasSucceeded());
-    assertTrue("Operation should be done", ot.isDone());
   }
 
   /**
@@ -182,17 +173,14 @@ public class OperationTrackerTest {
    *         for remaining 3 replicas:
    *         (1) two success and one failure (whole operation should succeed)
    *         (2) one success and two failure (whole operation should fail)
-   *         (3) one quota exception (whole operation should fail)
    * Case 3: 1 LEADER and 5 STANDBY replicas. Several combinations to discuss:
    *         (1) 3 REQUEST_DISABLED, 2 success and 1 failure (operation should succeed)
    *         (2) 2 REQUEST_DISABLED, 2 failure (operation should fail no matter what results are from remaining replicas)
    *         (3) 1 REQUEST_DISABLED, 1 failure, 4 success (operation should succeed)
    *         (4) 0 REQUEST_DISABLED, 2 failure, 4 success (operation should fail)
-   *         (5) one quota exception (operation should fail)
    * Case 4: 1 LEADER, 4 STANDBY, 1 INACTIVE  (this is to mock one replica has completed STANDBY -> INACTIVE)
    *         (1) 2 REQUEST_DISABLED, 1 failure and 2 success (operation should succeed)
    *         (2) 3 REQUEST_DISABLED, 1 failure (operation should fail no matter what result is from remaining replica)
-   *         (3) one quota exception (operation should fail)
    */
   @Test
   public void putOperationWithDynamicTargetTest() {
@@ -235,13 +223,6 @@ public class OperationTrackerTest {
       ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
     }
     assertFalse("Operation should fail", ot.hasSucceeded());
-    // Case 2.3
-    repetitionTracker.clear();
-    ot = getOperationTrackerForGetOrPut(true, 1, 4, RouterOperation.PutOperation, true);
-    sendRequests(ot, 4, false);
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.QUOTA_REJECTED);
-    assertFalse("Operation should fail", ot.hasSucceeded());
-    assertTrue("Operation should be done", ot.isDone());
     // Case 3.1
     populateReplicaList(2, ReplicaState.STANDBY);
     repetitionTracker.clear();
@@ -288,13 +269,6 @@ public class OperationTrackerTest {
       }
     }
     assertFalse("Operation should fail", ot.hasSucceeded());
-    // Case 3.5
-    repetitionTracker.clear();
-    ot = getOperationTrackerForGetOrPut(true, 1, 6, RouterOperation.PutOperation, true);
-    sendRequests(ot, 6, false);
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.QUOTA_REJECTED);
-    assertFalse("Operation should fail", ot.hasSucceeded());
-    assertTrue("Operation should be done", ot.isDone());
     // Case 4
     // re-populate replica list
     mockPartition.cleanUp();
@@ -322,13 +296,6 @@ public class OperationTrackerTest {
       ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.REQUEST_DISABLED);
     }
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.FAILURE);
-    assertTrue("Operation should be done", ot.isDone());
-    assertFalse("Operation should fail", ot.hasSucceeded());
-    // Case 4.3
-    repetitionTracker.clear();
-    ot = getOperationTrackerForGetOrPut(true, 1, 5, RouterOperation.PutOperation, true);
-    sendRequests(ot, 5, false);
-    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.QUOTA_REJECTED);
     assertTrue("Operation should be done", ot.isDone());
     assertFalse("Operation should fail", ot.hasSucceeded());
   }

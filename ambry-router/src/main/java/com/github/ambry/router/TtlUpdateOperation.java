@@ -298,6 +298,7 @@ class TtlUpdateOperation {
   private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
     LOGGER.debug("TtlUpdateRequest with response correlationId {} was rejected because quota was exceeded.",
         correlationId);
+    operationCompleted = true;
     onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
     checkAndMaybeComplete();
   }

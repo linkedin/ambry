@@ -106,9 +106,6 @@ class AdaptiveOperationTracker extends SimpleOperationTracker {
   @Override
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
     super.onResponse(replicaId, trackedRequestFinalState);
-    if (trackedRequestFinalState == TrackedRequestFinalState.QUOTA_REJECTED) {
-      return;
-    }
     long elapsedTime;
     if (unexpiredRequestSendTimes.containsKey(replicaId)) {
       elapsedTime = time.milliseconds() - unexpiredRequestSendTimes.remove(replicaId).getSecond();

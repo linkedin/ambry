@@ -254,6 +254,7 @@ class DeleteOperation {
   private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
     logger.trace("DeleteRequest with response correlationId {} was rejected because quota was exceeded.",
         correlationId);
+    operationCompleted = true;
     onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
     checkAndMaybeComplete();
   }

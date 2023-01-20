@@ -1290,6 +1290,7 @@ class GetBlobOperation extends GetOperation {
     private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
       logger.trace("GetBlobRequest with response correlationId {} rejected because it exceeded quota", correlationId);
       onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
+      chunkCompleted = true;
       checkAndMaybeComplete();
     }
 
