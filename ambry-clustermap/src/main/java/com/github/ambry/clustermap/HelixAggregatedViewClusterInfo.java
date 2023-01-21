@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler
 import java.io.Closeable;
 import java.util.List;
 import org.apache.helix.HelixManager;
+import org.apache.helix.spectator.RoutingTableProvider;
 
 
 /**
@@ -29,19 +30,22 @@ public class HelixAggregatedViewClusterInfo implements Closeable {
   private final List<DataNodeConfigSource> dataNodeConfigSources;
   // Handler that handles resource state changes in the entire cluster.
   final HelixClusterChangeHandler clusterChangeHandler;
+  private RoutingTableProvider routingTableProvider;
 
   /**
    * Construct a HelixAggregatedViewClusterInfo object with the given parameters.
-   * @param helixManager the associated {@link HelixManager} for this cluster.
-   * @param clusterChangeHandler the associated {@link HelixClusterChangeHandler}
-   *                            for this datacenter.
+   *
+   * @param helixManager          the associated {@link HelixManager} for this cluster.
+   * @param clusterChangeHandler  the associated {@link HelixClusterChangeHandler} for this datacenter.
    * @param dataNodeConfigSources the list of {@link DataNodeConfigSource}s for data centers in this cluster.
+   * @param routingTableProvider a helix helper class to provide snapshot of the cluster
    */
   HelixAggregatedViewClusterInfo(HelixManager helixManager, HelixClusterChangeHandler clusterChangeHandler,
-      List<DataNodeConfigSource> dataNodeConfigSources) {
+      List<DataNodeConfigSource> dataNodeConfigSources, RoutingTableProvider routingTableProvider) {
     this.helixManager = helixManager;
     this.dataNodeConfigSources = dataNodeConfigSources;
     this.clusterChangeHandler = clusterChangeHandler;
+    this.routingTableProvider = routingTableProvider;
   }
 
   @Override
@@ -52,6 +56,7 @@ public class HelixAggregatedViewClusterInfo implements Closeable {
       }
     } finally {
       dataNodeConfigSources.forEach(DataNodeConfigSource::close);
+      routingTableProvider.shutdown();
     }
   }
 }

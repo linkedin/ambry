@@ -182,12 +182,13 @@ class HelixAggregatedViewClusterInitializer {
     // listener (Please follow below method to
     // https://github.com/apache/helix/blob/fb773839117ee0689451fab7c8b949115f555100/helix-core/src/main/java/org/apache/helix/manager/zk/CallbackHandler.java#L393).
     // I.e. by the time we return from below method, initial notification of live instances states would have been
-    // arrived. So, we don't need separate latch to wait for notification of live instances.
+    // arrived. So, we don't need to separate latch to wait for notification of live instances.
     helixManager.addLiveInstanceChangeListener(clusterChangeHandler);
     logger.info("Registered live instance change listeners for cluster {} via Helix manager at {}",
         aggregatedViewClusterName, localZkConnectStr);
 
-    return new HelixAggregatedViewClusterInfo(helixManager, clusterChangeHandler, dataNodeConfigSources);
+    return new HelixAggregatedViewClusterInfo(helixManager, clusterChangeHandler, dataNodeConfigSources,
+        routingTableProvider);
   }
 
   /**

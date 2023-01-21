@@ -161,6 +161,8 @@ class MockHelixManager implements HelixManager {
         helixPropertyStore.remove(znodePath, AccessOption.PERSISTENT);
       }
     }
+    helixPropertyStore.stop();
+    helixPropertyStore.close();
   }
 
   @Override
@@ -419,7 +421,7 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public boolean removeListener(PropertyKey key, Object listener) {
-    throw new IllegalStateException("Not implemented");
+    return true;
   }
 
   @Override

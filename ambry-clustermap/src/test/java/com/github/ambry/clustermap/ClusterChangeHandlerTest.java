@@ -65,7 +65,7 @@ public class ClusterChangeHandlerTest {
   private final String localDc;
   private final String remoteDc;
   private final boolean overrideEnabled;
-  private boolean useAggregatedView;
+  private final boolean useAggregatedView;
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final TestHardwareLayout testHardwareLayout;
@@ -202,8 +202,10 @@ public class ClusterChangeHandlerTest {
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(invalidClusterMapConfig, selfInstanceName, helixManagerFactory, metricRegistry);
-      fail("Instantiation with dynamic cluster change handler should fail due to connection issue to zk");
+      try (HelixClusterManager ignored = new HelixClusterManager(invalidClusterMapConfig, selfInstanceName,
+          helixManagerFactory, metricRegistry)) {
+        fail("Instantiation with dynamic cluster change handler should fail due to connection issue to zk");
+      }
     } catch (IOException e) {
       assertEquals(1L,
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
@@ -269,6 +271,7 @@ public class ClusterChangeHandlerTest {
     // 2nd call, to verify dynamic update code path
     helixClusterChangeHandler.onDataNodeConfigChange(Collections.singletonList(converter.convert(instanceConfig)));
     assertEquals("There shouldn't be initialization errors", 0, initFailureCount.getCount());
+    helixClusterManager.close();
   }
 
   /**
@@ -637,7 +640,7 @@ public class ClusterChangeHandlerTest {
         partitionInManager.getReplicaIds().size());
     // verify that the replica instance in HelixClusterManager is same with bootstrap replica instance
     ReplicaId replicaInManager = helixClusterManager.getReplicaIds(
-        helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
+            helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
         .stream()
         .filter(r -> r.getPartitionId().toPathString().equals(addedPartition2.toPathString()))
         .findFirst()

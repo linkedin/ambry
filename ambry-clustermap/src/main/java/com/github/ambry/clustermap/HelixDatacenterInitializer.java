@@ -184,6 +184,6 @@ class HelixDatacenterInitializer {
       logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
     }
 
-    return new HelixDcInfo(dcName, dcZkInfo, manager, clusterChangeHandler, dataNodeConfigSource);
+    return new HelixDcInfo(dcName, dcZkInfo, manager, clusterChangeHandler, dataNodeConfigSource, routingTableProvider);
   }
 }

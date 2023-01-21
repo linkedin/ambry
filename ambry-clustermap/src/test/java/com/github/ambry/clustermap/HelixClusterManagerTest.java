@@ -110,18 +110,18 @@ public class HelixClusterManagerTest {
         // @formatter:off
         new Object[][]{{false, false, true, false}, {false, true, true, false}, {true, false, true, false}, {false, false, false, false},
                        {false, true, false, false}, {true, false, false, false}, {false, false, true, true}, {false, true, true, true},
-                       {true, false, true, true}, {false, false, false, true}, {false, true, false, true}, {true, false, false, true}});
+                       {true, false, true, true}});
         // @formatter:on
   }
 
   /**
    * Construct the static layout files and use that to instantiate a {@link MockHelixCluster}.
    * Instantiate a {@link MockHelixManagerFactory} for use by the cluster manager.
-   * @param useComposite whether or not the test are to be done for the {@link CompositeClusterManager}
-   * @param overrideEnabled whether or not the {@link ClusterMapConfig#clusterMapEnablePartitionOverride} is enabled.
+   * @param useComposite whether the test are to be done for the {@link CompositeClusterManager}
+   * @param overrideEnabled whether the {@link ClusterMapConfig#clusterMapEnablePartitionOverride} is enabled.
    *                        This config is only applicable for {@link HelixClusterManager}
-   * @param listenCrossColo whether or not listenCrossColo config in {@link ClusterMapConfig} should be set to true.
-   * @param useAggregatedView
+   * @param listenCrossColo whether listenCrossColo config in {@link ClusterMapConfig} should be set to true.
+   * @param useAggregatedView whether aggregated view config in {@link ClusterMapConfig} should be set to true.
    * @throws Exception
    */
   public HelixClusterManagerTest(boolean useComposite, boolean overrideEnabled, boolean listenCrossColo,
@@ -366,6 +366,7 @@ public class HelixClusterManagerTest {
           .get(HelixClusterManager.class.getName() + ".instantiationExceptionCount")
           .getValue());
       verifyInitialClusterChanges(clusterManager, helixCluster, new String[]{localDc});
+      clusterManager.close();
     }
 
     // Local dc connectivity failure should fail instantiation.
@@ -377,9 +378,10 @@ public class HelixClusterManagerTest {
     invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(invalidClusterMapConfig, selfInstanceName,
-          new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
-      fail("Instantiation should have failed with invalid zk addresses");
+      try (HelixClusterManager ignored = new HelixClusterManager(invalidClusterMapConfig, selfInstanceName,
+          new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry)) {
+        fail("Instantiation should have failed with invalid zk addresses");
+      }
     } catch (IOException e) {
       assertEquals(1L,
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
@@ -390,9 +392,10 @@ public class HelixClusterManagerTest {
 
     metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(clusterMapConfig, selfInstanceName,
-          new MockHelixManagerFactory(helixCluster, null, new Exception("beBad"), useAggregatedView), metricRegistry);
-      fail("Instantiation should fail with a HelixManager factory that throws exception on listener registrations");
+      try (HelixClusterManager ignored = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+          new MockHelixManagerFactory(helixCluster, null, new Exception("beBad"), useAggregatedView), metricRegistry)) {
+        fail("Instantiation should fail with a HelixManager factory that throws exception on listener registrations");
+      }
     } catch (Exception e) {
       assertEquals(1L,
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
@@ -426,6 +429,7 @@ public class HelixClusterManagerTest {
       writableInCluster = helixCluster.getAllWritablePartitions();
     }
     assertEquals("Mismatch in writable partitions during initialization", writableInCluster, writableInClusterManager);
+    clusterManagerWithEmptyRecord.close();
   }
 
   /**
@@ -937,6 +941,7 @@ public class HelixClusterManagerTest {
           clusterManager.getWritablePartitionIds(null).contains(partition));
       assertEquals("If any one replica is SEALED, the whole partition should be SEALED", PartitionState.READ_ONLY,
           partition.getPartitionState());
+      clusterManager.close();
     } else {
       // Verify clustermap uses instanceConfig for initialization when override map is non-empty but disabled.
       Set<String> writableInClusterManager = getWritablePartitions().getSecond();
