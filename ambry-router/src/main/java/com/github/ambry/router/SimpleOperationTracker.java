@@ -776,8 +776,8 @@ class SimpleOperationTracker implements OperationTracker {
         .append(partitionId)
         .append(", partition class is ")
         .append(partitionId.getPartitionClass())
-        .append(" and associated resource is ")
-        .append(partitionId.getResourceName())
+        .append(" and associated resources are ")
+        .append(partitionId.getResourceNames())
         .append(". examinedReplicas: ");
     for (ReplicaId replicaId : examinedReplicas) {
       errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");

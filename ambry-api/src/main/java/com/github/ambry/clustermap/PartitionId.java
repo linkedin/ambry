@@ -91,9 +91,9 @@ public interface PartitionId extends Resource, Comparable<PartitionId> {
   String getPartitionClass();
 
   /**
-   * @return the resource name which this partition belongs to. Can be null if resource is not defined or applicable.
+   * @return the resource names which this partition belongs to. Can be null if resource is not defined or applicable.
    */
-  default String getResourceName() {
+  default List<String> getResourceNames() {
     return null;
   }
 }

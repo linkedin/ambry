@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ClusterMessagingService;
 import org.apache.helix.ConfigAccessor;
@@ -74,11 +75,13 @@ class MockHelixManager implements HelixManager {
   private final List<InstanceConfigChangeListener> instanceConfigChangeListeners = new CopyOnWriteArrayList<>();
   private IdealStateChangeListener idealStateChangeListener;
   private RoutingTableProvider routingTableProvider;
-  private final MockHelixAdmin mockAdmin;
+  private final MockHelixAdmin localHelixAdmin;
   private final MockHelixDataAccessor dataAccessor;
   private final Exception beBadException;
   private final Map<String, ZNRecord> znRecordMap;
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
+  private boolean isAggregatedViewCluster;
+  private final List<MockHelixAdmin> helixAdminList;
 
   /**
    * Instantiate a MockHelixManager.
@@ -88,11 +91,16 @@ class MockHelixManager implements HelixManager {
    * @param helixCluster the {@link MockHelixCluster} associated with this manager.
    * @param znRecordMap a map that contains ZNode path and its {@link ZNRecord} associated with HelixPropertyStore in this manager.
    * @param beBadException the {@link Exception} that this manager will throw on listener registrations.
+   * @param zkAddrs
+   * @param isAggregatedViewCluster
    */
   MockHelixManager(String instanceName, InstanceType instanceType, String zkAddr, MockHelixCluster helixCluster,
-      Map<String, ZNRecord> znRecordMap, Exception beBadException) {
+      Map<String, ZNRecord> znRecordMap, Exception beBadException, List<String> zkAddrs,
+      boolean isAggregatedViewCluster) {
     this(instanceName, instanceType, zkAddr, helixCluster.getClusterName(),
-        helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr), znRecordMap, beBadException);
+        helixCluster.getHelixAdminFactory().getHelixAdmin(zkAddr), znRecordMap, beBadException,
+        zkAddrs.stream().map(s -> helixCluster.getHelixAdminFactory().getHelixAdmin(s)).collect(Collectors.toList()),
+        isAggregatedViewCluster);
   }
 
   /**
@@ -101,18 +109,23 @@ class MockHelixManager implements HelixManager {
    * @param instanceType the {@link InstanceType} of the requester.
    * @param zkAddr the address identifying the zk service to which this request is to be made.
    * @param clusterName the cluster name for this manager.
-   * @param helixAdmin the {@link HelixAdmin} that can be used to change configs.
+   * @param localHelixAdmin the {@link HelixAdmin} that can be used to change configs.
    * @param znRecordMap a map that contains ZNode path and its {@link ZNRecord} associated with HelixPropertyStore in this manager.
    * @param beBadException the {@link Exception} that this manager will throw on listener registrations.
+   * @param helixAdminList
+   * @param isAggregatedViewCluster
    */
   MockHelixManager(String instanceName, InstanceType instanceType, String zkAddr, String clusterName,
-      MockHelixAdmin helixAdmin, Map<String, ZNRecord> znRecordMap, Exception beBadException) {
+      MockHelixAdmin localHelixAdmin, Map<String, ZNRecord> znRecordMap, Exception beBadException,
+      List<MockHelixAdmin> helixAdminList, boolean isAggregatedViewCluster) {
     this.instanceName = instanceName;
     this.instanceType = instanceType;
     this.clusterName = clusterName;
-    mockAdmin = helixAdmin;
-    mockAdmin.addHelixManager(this);
-    dataAccessor = new MockHelixDataAccessor(clusterName, mockAdmin);
+    this.localHelixAdmin = localHelixAdmin;
+    this.helixAdminList = helixAdminList;
+    this.localHelixAdmin.addHelixManager(this);
+    dataAccessor =
+        new MockHelixDataAccessor(clusterName, this.localHelixAdmin, helixAdminList, isAggregatedViewCluster);
     this.beBadException = beBadException;
     this.znRecordMap = znRecordMap;
     Properties storeProps = new Properties();
@@ -127,6 +140,7 @@ class MockHelixManager implements HelixManager {
         helixPropertyStore.set(znodePathAndRecord.getKey(), znodePathAndRecord.getValue(), AccessOption.PERSISTENT);
       }
     }
+    this.isAggregatedViewCluster = isAggregatedViewCluster;
   }
 
   @Override
@@ -147,6 +161,8 @@ class MockHelixManager implements HelixManager {
         helixPropertyStore.remove(znodePath, AccessOption.PERSISTENT);
       }
     }
+    helixPropertyStore.stop();
+    helixPropertyStore.close();
   }
 
   @Override
@@ -179,7 +195,7 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public HelixAdmin getClusterManagmentTool() {
-    return mockAdmin;
+    return localHelixAdmin;
   }
 
   @Override
@@ -197,10 +213,18 @@ class MockHelixManager implements HelixManager {
    */
   void triggerLiveInstanceNotification(boolean init) {
     List<LiveInstance> liveInstances = new ArrayList<>();
-    ListIterator<String> it = mockAdmin.getUpInstances().listIterator();
-    while (it.hasNext()) {
-      ZNRecord znRecord = new ZNRecord(it.next());
-      znRecord.setEphemeralOwner(it.nextIndex()+1);
+    List<String> instances = new ArrayList<>();
+    if (isAggregatedViewCluster) {
+      for (MockHelixAdmin mockHelixAdmin : helixAdminList) {
+        instances.addAll(mockHelixAdmin.getUpInstances());
+      }
+    } else {
+      instances.addAll(localHelixAdmin.getUpInstances());
+    }
+    int count = 0;
+    for (String instance : instances) {
+      ZNRecord znRecord = new ZNRecord(instance);
+      znRecord.setEphemeralOwner(++count);
       liveInstances.add(new LiveInstance(znRecord));
     }
     NotificationContext notificationContext = new NotificationContext(this);
@@ -219,7 +243,8 @@ class MockHelixManager implements HelixManager {
       notificationContext.setType(NotificationContext.Type.INIT);
     }
     instanceConfigChangeListeners.forEach(
-        listener -> listener.onInstanceConfigChange(mockAdmin.getInstanceConfigs(clusterName), notificationContext));
+        listener -> listener.onInstanceConfigChange(localHelixAdmin.getInstanceConfigs(clusterName),
+            notificationContext));
   }
 
   void triggerIdealStateNotification(boolean init) throws InterruptedException {
@@ -227,12 +252,16 @@ class MockHelixManager implements HelixManager {
     if (init) {
       notificationContext.setType(NotificationContext.Type.INIT);
     }
-    idealStateChangeListener.onIdealStateChange(mockAdmin.getIdealStates(), notificationContext);
+    idealStateChangeListener.onIdealStateChange(localHelixAdmin.getIdealStates(), notificationContext);
   }
 
   void triggerRoutingTableNotification() {
     NotificationContext notificationContext = new NotificationContext(this);
-    routingTableProvider.onStateChange(instanceName, Collections.emptyList(), notificationContext);
+    if (isAggregatedViewCluster) {
+      routingTableProvider.onExternalViewChange(Collections.emptyList(), notificationContext);
+    } else {
+      routingTableProvider.onStateChange(instanceName, Collections.emptyList(), notificationContext);
+    }
   }
 
   //****************************
@@ -254,6 +283,10 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public void addLiveInstanceChangeListener(LiveInstanceChangeListener liveInstanceChangeListener) throws Exception {
+    if (!(liveInstanceChangeListener instanceof RoutingTableProvider) && beBadException != null) {
+      // Throw exception when HelixClusterManager tries to add listener if beBadException is set
+      throw beBadException;
+    }
     this.liveInstanceChangeListener = liveInstanceChangeListener;
     triggerLiveInstanceNotification(false);
   }
@@ -336,9 +369,8 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public void addExternalViewChangeListener(ExternalViewChangeListener externalViewChangeListener) throws Exception {
-    if (beBadException != null) {
-      throw beBadException;
-    }
+    // Note: routingTableProvider implements external view change listener
+    this.routingTableProvider = (RoutingTableProvider) externalViewChangeListener;
     this.externalViewChangeListener = externalViewChangeListener;
     NotificationContext notificationContext = new NotificationContext(this);
     notificationContext.setType(NotificationContext.Type.INIT);
@@ -389,7 +421,7 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public boolean removeListener(PropertyKey key, Object listener) {
-    throw new IllegalStateException("Not implemented");
+    return true;
   }
 
   @Override

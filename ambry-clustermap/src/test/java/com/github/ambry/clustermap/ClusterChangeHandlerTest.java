@@ -65,6 +65,7 @@ public class ClusterChangeHandlerTest {
   private final String localDc;
   private final String remoteDc;
   private final boolean overrideEnabled;
+  private final boolean useAggregatedView;
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final TestHardwareLayout testHardwareLayout;
@@ -76,12 +77,13 @@ public class ClusterChangeHandlerTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, false}, {true, false}, {false, true}, {true, true}});
   }
 
   // set up a mock helix cluster, create separate HelixClusterManager with both Simple and Dynamic cluster change handler
-  public ClusterChangeHandlerTest(boolean overrideEnabled) throws Exception {
+  public ClusterChangeHandlerTest(boolean overrideEnabled, boolean useAggregatedView) throws Exception {
     this.overrideEnabled = overrideEnabled;
+    this.useAggregatedView = useAggregatedView;
     File tempDir = Files.createTempDirectory("ClusterChangeHandlerTest-").toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
@@ -118,6 +120,8 @@ public class ClusterChangeHandlerTest {
     selfInstanceName = getInstanceName(hostname, portNum);
     props.setProperty("clustermap.host.name", hostname);
     props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.aggregated.view.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.use.aggregated.view", Boolean.toString(useAggregatedView));
     props.setProperty("clustermap.datacenter.name", localDc);
     props.setProperty("clustermap.port", Integer.toString(portNum));
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
@@ -125,8 +129,10 @@ public class ClusterChangeHandlerTest {
     props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
     props.setProperty("clustermap.listen.cross.colo", Boolean.toString(true));
     helixCluster =
-        new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath);
-    helixManagerFactory = new HelixClusterManagerTest.MockHelixManagerFactory(helixCluster, znRecordMap, null);
+        new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc,
+            useAggregatedView);
+    helixManagerFactory =
+        new HelixClusterManagerTest.MockHelixManagerFactory(helixCluster, znRecordMap, null, useAggregatedView);
   }
 
   /**
@@ -196,8 +202,10 @@ public class ClusterChangeHandlerTest {
     ClusterMapConfig invalidClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     try {
-      new HelixClusterManager(invalidClusterMapConfig, selfInstanceName, helixManagerFactory, metricRegistry);
-      fail("Instantiation with dynamic cluster change handler should fail due to connection issue to zk");
+      try (HelixClusterManager ignored = new HelixClusterManager(invalidClusterMapConfig, selfInstanceName,
+          helixManagerFactory, metricRegistry)) {
+        fail("Instantiation with dynamic cluster change handler should fail due to connection issue to zk");
+      }
     } catch (IOException e) {
       assertEquals(1L,
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
@@ -223,7 +231,8 @@ public class ClusterChangeHandlerTest {
 
     Counter initFailureCount = new Counter();
     HelixClusterChangeHandler helixClusterChangeHandler =
-        helixClusterManager.new HelixClusterChangeHandler(localDc, e -> initFailureCount.inc(), false);
+        helixClusterManager.new HelixClusterChangeHandler(localDc, clusterMapConfig.clusterMapClusterName,
+            e -> initFailureCount.inc(), false);
     // create an InstanceConfig with invalid entry that mocks error info added by Helix controller
     PartitionId selectedPartition = testPartitionLayout.getPartitionLayout().getPartitions(null).get(0);
     Replica testReplica = (Replica) selectedPartition.getReplicaIds().get(0);
@@ -262,6 +271,7 @@ public class ClusterChangeHandlerTest {
     // 2nd call, to verify dynamic update code path
     helixClusterChangeHandler.onDataNodeConfigChange(Collections.singletonList(converter.convert(instanceConfig)));
     assertEquals("There shouldn't be initialization errors", 0, initFailureCount.getCount());
+    helixClusterManager.close();
   }
 
   /**
@@ -356,17 +366,35 @@ public class ClusterChangeHandlerTest {
           helixClusterManager.getReplicaForPartitionOnNode(ambryNode, "0"));
     }
     // trigger IdealState change and refresh partition-to-resource mapping (bring in the new partition in resource map)
-    helixCluster.refreshIdealState();
-    Map<String, String> partitionNameToResource = helixClusterManager.getPartitionToResourceMap().get(localDc);
-    List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
-    // verify all partitions (including the new added one) are present in partition-to-resource map
-    Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
-    assertEquals("Some partitions are not present in partition-to-resource map", partitionNames,
-        partitionNameToResource.keySet());
-    // verify all partitions are able to get their resource name
-    helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
-        .forEach(partitionId -> assertEquals("Resource name is not expected",
-            partitionNameToResource.get(partitionId.toPathString()), partitionId.getResourceName()));
+    if (!useAggregatedView) {
+      helixCluster.refreshIdealState();
+      Map<String, String> partitionNameToResource = helixClusterManager.getPartitionToResourceMapByDC().get(localDc);
+      List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
+      // verify all partitions (including the new added one) are present in partition-to-resource map
+      Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
+      assertEquals("Some partitions are not present in partition-to-resource map", partitionNames,
+          partitionNameToResource.keySet());
+      // verify all partitions are able to get their resource name
+      helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
+          .forEach(partitionId -> assertEquals("Resource name is not expected",
+              partitionNameToResource.get(partitionId.toPathString()), partitionId.getResourceNames().get(0)));
+    } else {
+      helixCluster.getHelixAdminFromDc(localDc).triggerRoutingTableNotification();
+      // Wait for some time to get the routing table notification
+      Thread.sleep(1000);
+      Map<String, Set<String>> globalPartitionNameToResourcesMap =
+          helixClusterManager.getGlobalPartitionToResourceMap();
+      List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
+      // verify all partitions (including the new added one) are present in partition-to-resource map
+      Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
+      assertEquals("Some partitions are not present in partition-to-resource map", partitionNames,
+          globalPartitionNameToResourcesMap.keySet());
+      // verify all partitions are able to get their resource name
+      helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
+          .forEach(partitionId -> assertEquals("Resource name is not expected",
+              globalPartitionNameToResourcesMap.get(partitionId.toPathString()).iterator().next(),
+              partitionId.getResourceNames().get(0)));
+    }
     helixClusterManager.close();
   }
 
@@ -612,7 +640,7 @@ public class ClusterChangeHandlerTest {
         partitionInManager.getReplicaIds().size());
     // verify that the replica instance in HelixClusterManager is same with bootstrap replica instance
     ReplicaId replicaInManager = helixClusterManager.getReplicaIds(
-        helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
+            helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
         .stream()
         .filter(r -> r.getPartitionId().toPathString().equals(addedPartition2.toPathString()))
         .findFirst()

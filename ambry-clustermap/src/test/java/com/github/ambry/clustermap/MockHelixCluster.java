@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 
@@ -39,6 +40,9 @@ public class MockHelixCluster {
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final String zkLayoutPath;
+  private String localDC;
+  private boolean isAggregatedViewUsed;
+  private MockHelixAdmin localHelixAdmin;
 
   /**
    * Instantiate a MockHelixCluster.
@@ -46,10 +50,14 @@ public class MockHelixCluster {
    * @param hardwareLayoutPath the path to the {@link HardwareLayout} file used to bootstrap this cluster.
    * @param partitionLayoutPath the path to the {@link PartitionLayout} file used to bootstrap this cluster.
    * @param zkLayoutPath the path to the file containing the zk layout json string.
+   * @param localDC
+   * @param isAggregatedViewUsed
    * @throws Exception
    */
-  MockHelixCluster(String clusterName, String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath)
-      throws Exception {
+  MockHelixCluster(String clusterName, String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String localDC, boolean isAggregatedViewUsed) throws Exception {
+    this.localDC = localDC;
+    this.isAggregatedViewUsed = isAggregatedViewUsed;
     helixAdminFactory = new MockHelixAdminFactory();
     helixAdmins = helixAdminFactory.getAllHelixAdmins();
     this.hardwareLayoutPath = hardwareLayoutPath;
@@ -61,6 +69,8 @@ public class MockHelixCluster {
         "all", MAX_PARTITIONS_IN_ONE_RESOURCE, false, false, helixAdminFactory, false,
         ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, DataNodeConfigSourceType.INSTANCE_CONFIG, false);
     this.clusterName = clusterName;
+    this.localHelixAdmin =
+        helixAdminFactory.getHelixAdmin(dataCenterToZkAddress.get(localDC).getZkConnectStrs().get(0));
   }
 
   /**
@@ -199,6 +209,11 @@ public class MockHelixCluster {
         helixAdmin.bringInstanceUp(instanceName);
       }
     }
+    if (isAggregatedViewUsed) {
+      localHelixAdmin.triggerLiveInstanceChangeNotification();
+    } else {
+      helixAdmins.values().forEach(MockHelixAdmin::triggerLiveInstanceChangeNotification);
+    }
   }
 
   /**
@@ -210,6 +225,11 @@ public class MockHelixCluster {
         helixAdmin.bringInstanceUp(instance);
       }
     }
+    if (isAggregatedViewUsed) {
+      localHelixAdmin.triggerLiveInstanceChangeNotification();
+    } else {
+      helixAdmins.values().forEach(MockHelixAdmin::triggerLiveInstanceChangeNotification);
+    }
   }
 
   /**
@@ -217,9 +237,19 @@ public class MockHelixCluster {
    * @param instanceName the instance to be brought down.
    */
   void bringInstanceDown(String instanceName) {
+    MockHelixAdmin helixAdminForInstance = null;
     for (MockHelixAdmin helixAdmin : helixAdmins.values()) {
       if (helixAdmin.getInstancesInCluster(clusterName).contains(instanceName)) {
         helixAdmin.bringInstanceDown(instanceName);
+        helixAdminForInstance = helixAdmin;
+        break;
+      }
+    }
+    if (isAggregatedViewUsed) {
+      localHelixAdmin.triggerLiveInstanceChangeNotification();
+    } else {
+      if (helixAdminForInstance != null) {
+        helixAdminForInstance.triggerLiveInstanceChangeNotification();
       }
     }
   }
@@ -232,6 +262,11 @@ public class MockHelixCluster {
       for (String instance : helixAdmin.getUpInstances()) {
         helixAdmin.bringInstanceDown(instance);
       }
+    }
+    if (isAggregatedViewUsed) {
+      localHelixAdmin.triggerLiveInstanceChangeNotification();
+    } else {
+      helixAdmins.values().forEach(MockHelixAdmin::triggerLiveInstanceChangeNotification);
     }
   }
 

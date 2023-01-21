@@ -58,7 +58,7 @@ public class InstanceConfigToDataNodeConfigAdapterTest extends DataNodeConfigSou
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     helixManager =
         new MockHelixManager(selfInstanceName, InstanceType.SPECTATOR, "localhost:" + zkInfo.getPort(), clusterName,
-            new MockHelixAdmin(), null, null);
+            new MockHelixAdmin(), null, null, null, false);
     helixManager.connect();
   }
 

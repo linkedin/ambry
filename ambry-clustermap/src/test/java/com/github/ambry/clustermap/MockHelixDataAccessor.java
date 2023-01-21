@@ -15,14 +15,18 @@ package com.github.ambry.clustermap;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.BaseDataAccessor;
 import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixProperty;
 import org.apache.helix.PropertyKey;
 import org.apache.helix.model.CurrentState;
+import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.model.MaintenanceSignal;
@@ -43,17 +47,24 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
   private static final long SESSION_ID = 1024L;
   private final String LIVEINSTANCE_PATH;
   private final String INSTANCECONFIG_PATH;
+  private final String EXTERNALVIEW_PATH;
+  private final boolean isAggregatedViewCluster;
   private final String clusterName;
   private final PropertyKey.Builder propertyKeyBuilder;
-  private final MockHelixAdmin mockHelixAdmin;
+  private final MockHelixAdmin mockLocalHelixAdmin;
+  private final List<MockHelixAdmin> mockHelixAdminList;
   private Map<PropertyKey, HelixProperty> properties = new ConcurrentHashMap<>();
 
-  MockHelixDataAccessor(String clusterName, MockHelixAdmin mockHelixAdmin) {
+  MockHelixDataAccessor(String clusterName, MockHelixAdmin mockLocalHelixAdmin, List<MockHelixAdmin> mockHelixAdminList,
+      boolean isAggregatedViewCluster) {
     this.clusterName = clusterName;
-    this.mockHelixAdmin = mockHelixAdmin;
+    this.mockLocalHelixAdmin = mockLocalHelixAdmin;
     propertyKeyBuilder = new PropertyKey.Builder(clusterName);
     LIVEINSTANCE_PATH = "/" + clusterName + "/LIVEINSTANCES";
     INSTANCECONFIG_PATH = "/" + clusterName + "/CONFIGS/PARTICIPANT";
+    EXTERNALVIEW_PATH = "/" + clusterName + "/EXTERNALVIEW";
+    this.mockHelixAdminList = mockHelixAdminList;
+    this.isAggregatedViewCluster = isAggregatedViewCluster;
   }
 
   @Override
@@ -117,7 +128,7 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
         String instanceName = segments[3];
         String resourceName = segments[6];
         Map<String, Map<String, String>> partitionStateMap =
-            mockHelixAdmin.getPartitionStateMapForInstance(instanceName);
+            mockLocalHelixAdmin.getPartitionStateMapForInstance(instanceName);
         ZNRecord record = new ZNRecord(resourceName);
         record.setMapFields(partitionStateMap);
         result.add((T) (new CurrentState(record)));
@@ -130,12 +141,54 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
       } else if (key.toString().matches("/Ambry-/CONFIGS/PARTICIPANT/.*_\\d+")) {
         String[] segments = key.toString().split("/");
         String instanceName = segments[4];
-        InstanceConfig instanceConfig = mockHelixAdmin.getInstanceConfigs(clusterName)
-            .stream()
-            .filter(config -> config.getInstanceName().equals(instanceName))
-            .findFirst()
-            .get();
-        result.add((T) instanceConfig);
+        if (isAggregatedViewCluster) {
+          boolean foundInstance = false;
+          for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+            for (InstanceConfig instanceConfig : mockHelixAdmin.getInstanceConfigs(clusterName)) {
+              if (instanceConfig.getInstanceName().equals(instanceName)) {
+                result.add((T) instanceConfig);
+                foundInstance = true;
+                break;
+              }
+            }
+            if (foundInstance) {
+              break;
+            }
+          }
+        } else {
+          InstanceConfig instanceConfig = mockLocalHelixAdmin.getInstanceConfigs(clusterName)
+              .stream()
+              .filter(config -> config.getInstanceName().equals(instanceName))
+              .findFirst()
+              .get();
+          result.add((T) instanceConfig);
+        }
+      } else if (key.toString().matches("/Ambry-/EXTERNALVIEW/\\d+")) {
+        // Add external view for the asked resource
+        String[] segments = key.toString().split("/");
+        String resourceName = segments[3];
+        ZNRecord record = new ZNRecord(resourceName);
+        if (isAggregatedViewCluster) {
+          // If aggregated view is being used, go through all mock helix clusters and calculate the aggregated mapping
+          Map<String, Map<String, String>> aggregatedPartitionToReplicasMap = new HashMap<>();
+          for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+            Map<String, Map<String, String>> partitionToReplicasMap =
+                mockHelixAdmin.getPartitionToReplicasMapForResource(resourceName);
+            for (Map.Entry<String, Map<String, String>> entry : partitionToReplicasMap.entrySet()) {
+              String partition = entry.getKey();
+              Map<String, String> replicaToState = entry.getValue();
+              Map<String, String> aggregatedReplicaToState =
+                  aggregatedPartitionToReplicasMap.computeIfAbsent(partition, k -> new HashMap<>());
+              aggregatedReplicaToState.putAll(replicaToState);
+            }
+          }
+          record.setMapFields(aggregatedPartitionToReplicasMap);
+        } else {
+          Map<String, Map<String, String>> partitionToReplicasMap =
+              mockLocalHelixAdmin.getPartitionToReplicasMapForResource(resourceName);
+          record.setMapFields(partitionToReplicasMap);
+        }
+        result.add((T) new ExternalView(record));
       } else {
         result.add((T) properties.get(key));
       }
@@ -168,12 +221,37 @@ public class MockHelixDataAccessor implements HelixDataAccessor {
     List<String> result = new ArrayList<>();
     if (key.toString().endsWith("/CURRENTSTATES/" + Long.toHexString(SESSION_ID))) {
       // Add resource name into result. Note that, in current test setup, all partitions within same dc are under same resource.
-      result.add(mockHelixAdmin.getResourcesInCluster(clusterName).get(0));
+      result.add(mockLocalHelixAdmin.getResourcesInCluster(clusterName).get(0));
     } else if (key.toString().equals(LIVEINSTANCE_PATH)) {
-      result = mockHelixAdmin.getUpInstances();
+      if (isAggregatedViewCluster) {
+        for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+          result.addAll(mockHelixAdmin.getUpInstances());
+        }
+      } else {
+        result.addAll(mockLocalHelixAdmin.getUpInstances());
+      }
     } else if (key.toString().equals(INSTANCECONFIG_PATH)) {
-      for (InstanceConfig config : mockHelixAdmin.getInstanceConfigs(clusterName)) {
-        result.add(config.getInstanceName());
+      if (isAggregatedViewCluster) {
+        for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+          for (InstanceConfig config : mockHelixAdmin.getInstanceConfigs(clusterName)) {
+            result.add(config.getInstanceName());
+          }
+        }
+      } else {
+        for (InstanceConfig config : mockLocalHelixAdmin.getInstanceConfigs(clusterName)) {
+          result.add(config.getInstanceName());
+        }
+      }
+    } else if (key.toString().equals(EXTERNALVIEW_PATH)) {
+      if (isAggregatedViewCluster) {
+        // return resources from all DCs. But use set to avoid adding resources twice.
+        Set<String> resources = new HashSet<>();
+        for (MockHelixAdmin mockHelixAdmin : mockHelixAdminList) {
+          resources.addAll(mockHelixAdmin.getResourcesInCluster(clusterName));
+        }
+        result.addAll(resources);
+      } else {
+        result.addAll(mockLocalHelixAdmin.getResourcesInCluster(clusterName));
       }
     }
     return result;

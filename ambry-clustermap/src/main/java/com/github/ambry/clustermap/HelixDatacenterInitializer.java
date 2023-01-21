@@ -133,7 +133,8 @@ class HelixDatacenterInitializer {
           InstanceType.SPECTATOR, zkConnectStr);
     }
     HelixClusterChangeHandler clusterChangeHandler =
-        helixClusterManager.new HelixClusterChangeHandler(dcName, this::onInitializationFailure, false);
+        helixClusterManager.new HelixClusterChangeHandler(dcName, clusterMapConfig.clusterMapClusterName,
+            this::onInitializationFailure, false);
     // Create Helix RoutingTableProvider of each DC to keep track of partition(replicas) state. Here, we use CURRENT
     // STATES based RoutingTableProvider to remove dependency on Helix's pipeline and reduce notification latency.
     // To elaborate more, there are two ways to instantiate a RoutingTable. 1. EXTERNAL_VIEW based, 2. CURRENT_STATES
@@ -183,6 +184,6 @@ class HelixDatacenterInitializer {
       logger.info("Stopped listening to cross colo ZK server {}", zkConnectStr);
     }
 
-    return new HelixDcInfo(dcName, dcZkInfo, manager, clusterChangeHandler, dataNodeConfigSource);
+    return new HelixDcInfo(dcName, dcZkInfo, manager, clusterChangeHandler, dataNodeConfigSource, routingTableProvider);
   }
 }

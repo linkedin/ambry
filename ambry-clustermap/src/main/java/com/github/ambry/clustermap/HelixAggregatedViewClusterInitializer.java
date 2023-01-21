@@ -18,6 +18,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.clustermap.ClusterMapUtils.DcZkInfo;
 import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +45,8 @@ class HelixAggregatedViewClusterInitializer {
   private final HelixClusterManager helixClusterManager;
   private final Map<String, DcZkInfo> dataCenterToZkAddress;
   private Exception exception = null;
+  List<DataNodeConfigSource> dataNodeConfigSources = new ArrayList<>();
+  HelixClusterChangeHandler clusterChangeHandler;
 
   /**
    * @param clusterMapConfig {@link ClusterMapConfig} to help some admin operations
@@ -91,40 +94,61 @@ class HelixAggregatedViewClusterInitializer {
    * @throws Exception if something went wrong during startup
    */
   public HelixAggregatedViewClusterInfo initialize() throws Exception {
-    // We can assume that Helix Aggregated view cluster will be present in same zookeeper hosting regular Ambry cluster
-    // information. Get the HelixManager to talk to the local zk service.
-    DcZkInfo localDcZkInfo = dataCenterToZkAddress.get(clusterMapConfig.clusterMapDatacenterName);
+    // We will have Helix Aggregated view cluster in each data center. Connect to helix aggregated view cluster in local
+    // DC.
+    String localDcName = clusterMapConfig.clusterMapDatacenterName;
+    String aggregatedViewClusterName = clusterMapConfig.clusterMapAggregatedViewClusterName;
+    DcZkInfo localDcZkInfo = dataCenterToZkAddress.get(localDcName);
 
-    // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default for initialization.
-    // Note that, Ambry currently doesn't support multiple spectators, because there should be only one source of truth.
+    // The first ZK endpoint (if there are more than one endpoints) will be adopted by default for initialization since
+    // Ambry doesn't support multiple spectators and uses only one source of truth.
     String localZkConnectStr = localDcZkInfo.getZkConnectStrs().get(0);
     HelixManager helixManager =
-        helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapAggregatedViewClusterName, selfInstanceName,
-            InstanceType.SPECTATOR, localZkConnectStr);
+        helixFactory.getZkHelixManagerAndConnect(aggregatedViewClusterName, selfInstanceName, InstanceType.SPECTATOR,
+            localZkConnectStr);
     logger.info("Helix cluster name {}", helixManager.getClusterName());
 
-    HelixClusterChangeHandler clusterChangeHandler =
-        helixClusterManager.new HelixClusterChangeHandler(clusterMapConfig.clusterMapClusterName, ex -> exception = ex,
+    clusterChangeHandler =
+        helixClusterManager.new HelixClusterChangeHandler(localDcName, aggregatedViewClusterName, ex -> exception = ex,
             true);
 
-    // Helix aggregated view cluster currently aggregates the following:
-    // 1. External view (which tells the current state of the cluster like replicas and their states).
-    // 2. Instance configs (These mostly contain fields set and used by Helix like host name and port).
-    // 3. Live instances (List of live hosts in cluster).
+    // Ambry needs below information from Helix:
+    // 1. Topology information list of hosts, disks in each host, partitions on each disk, etc. This is stored in helix
+    //    "PROPERTYSTORE/DataNodeConfigs" znodes.
+    // 2. External view: This tells the current states of various replicas in the cluster. For ex, list of replicas in
+    //    leader state in a given partition.
+    // 3. Live instances: This tells the list of live hosts in cluster so that we can mark the hosts as down.
 
-    // Ambry currently needs and listens to following changes in Helix/ZKs in all datacenters:
-    // 1. External view (indirectly via using RoutingTableProvider)
-    // 2. Live instances (List of live hosts in cluster)
-    // 3. HelixPropertyStore. This is where Ambry data node configuration like disk information, disk to replica mapping,
-    //    replica sealed states, etc are stored.
-    // 4. Helix ideal states. This is needed to keep track of Helix Resource (Helix terminology) to Ambry partitions
-    //    (Multiple Ambry partitions are grouped under one helix resource).
+    // Currently, Helix only provides aggregated view of External view and Live instances. So, we will have to
+    // fetch data in Helix Property store from all colos ourselves.
 
-    // As we can see above, since #3 and #4 are not aggregated by Helix currently, we get these information by talking
-    // to all ZK servers ourselves.
+    // 1. Fetch Data node configs from each Data center and wait until the initialization is complete before registering
+    // for changes from Aggregated helix view.
+    List<Thread> dcInitThreads = new ArrayList<>();
+    for (String dcName : dataCenterToZkAddress.keySet()) {
+      DcZkInfo dcZkInfo = dataCenterToZkAddress.get(dcName);
+      if (dcZkInfo.getReplicaType() != ReplicaType.DISK_BACKED) {
+        // There could be old configs which have CLOUD_BACKED replica information. Keep this until CLOUD_BACKED replicas
+        // are completely deprecated.
+        continue;
+      }
+      Thread thread = Utils.newThread("helix-aggregated-view-datanode-config-init-dc-" + dcName, () -> {
+        try {
+          registerForDataNodeConfigsChanges(dcName);
+        } catch (Exception e) {
+          exception = e;
+        }
+      }, false);
+      thread.start();
+      dcInitThreads.add(thread);
+    }
+    for (Thread thread : dcInitThreads) {
+      thread.join();
+    }
 
-    // 1. Create Helix RoutingTableProvider class which provides APIs to get information from external view.
-    logger.info("Creating routing table provider for entire cluster associated with Helix manager at {}",
+    // 2. Fetch External view. Helix provides a helper class RoutingTableProvider to get information in external view in
+    // a convenient way.
+    logger.info("Creating routing table provider for cluster {} via Helix manager at {}", aggregatedViewClusterName,
         localZkConnectStr);
     // There are two ways to instantiate a RoutingTable. 1. EXTERNAL_VIEW based, 2. CURRENT_STATES based. In the former
     // one, helix controller generates the external view and this is read by the helix spectator to create the Routing
@@ -136,36 +160,10 @@ class HelixAggregatedViewClusterInitializer {
     // In case of Aggregated view, CURRENT_STATES based RoutingTable doesn't work since CURRENT_STATES are
     // not aggregated by helix. So, we only have one option, i.e EXTERNAL_VIEW based and helix team asked to use it.
     RoutingTableProvider routingTableProvider = new RoutingTableProvider(helixManager, PropertyType.EXTERNALVIEW);
-    logger.info("Routing table provider is created for entire cluster");
-    routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
-    logger.info("Registered routing table change listeners for entire cluster");
-
-    // 2. Since helix property store and ideal states are not aggregated as mentioned above, we get/subscribe to them by
-    // talking to ZKs in all colos.
-    List<DataNodeConfigSource> dataNodeConfigSources = new ArrayList<>();
-    for (DcZkInfo dcZkInfo : dataCenterToZkAddress.values()) {
-      String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
-      // Register Data node configs listener.
-      DataNodeConfigSource dataNodeConfigSource =
-          helixFactory.getDataNodeConfigSource(clusterMapConfig, zkConnectStr, dataNodeConfigSourceMetrics);
-      dataNodeConfigSource.addDataNodeConfigChangeListener(clusterChangeHandler);
-      dataNodeConfigSources.add(dataNodeConfigSource);
-      logger.info("Registered data node config change listeners for data center {} via Helix manager at {}",
-          dcZkInfo.getDcName(), zkConnectStr);
-      // Register ideal state listener.
-      HelixManager manager =
-          helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
-              InstanceType.SPECTATOR, zkConnectStr);
-      manager.addIdealStateChangeListener(clusterChangeHandler);
-      logger.info("Registered ideal state change listeners for data center {} via Helix manager at {}",
-          dcZkInfo.getDcName(), zkConnectStr);
-    }
-
-    // 3. Register aggregate cluster change handler to get notified on live instance changes in entire cluster.
-    helixManager.addLiveInstanceChangeListener(clusterChangeHandler);
-    logger.info("Registered live instance change listeners for entire cluster via Helix manager at {}",
+    logger.info("Routing table provider is created for cluster {} via Helix manager at {}", aggregatedViewClusterName,
         localZkConnectStr);
-
+    routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
+    logger.info("Registered routing table change listeners for cluster {}", aggregatedViewClusterName);
     // Since it is possible that initial event occurs before adding routing table listener, we explicitly set snapshot in
     // HelixClusterManager. The reason is, if listener missed initial event, snapshot inside routing table
     // provider should be already populated.
@@ -179,6 +177,39 @@ class HelixAggregatedViewClusterInitializer {
       clusterChangeHandler.waitForInitNotification();
     }
 
-    return new HelixAggregatedViewClusterInfo(helixManager, clusterChangeHandler, dataNodeConfigSources);
+    // 3. Fetch live instance changes in entire cluster
+    // When adding a listener, current live instances are fetched from Helix using blocking call and notified to the
+    // listener (Please follow below method to
+    // https://github.com/apache/helix/blob/fb773839117ee0689451fab7c8b949115f555100/helix-core/src/main/java/org/apache/helix/manager/zk/CallbackHandler.java#L393).
+    // I.e. by the time we return from below method, initial notification of live instances states would have been
+    // arrived. So, we don't need to separate latch to wait for notification of live instances.
+    helixManager.addLiveInstanceChangeListener(clusterChangeHandler);
+    logger.info("Registered live instance change listeners for cluster {} via Helix manager at {}",
+        aggregatedViewClusterName, localZkConnectStr);
+
+    return new HelixAggregatedViewClusterInfo(helixManager, clusterChangeHandler, dataNodeConfigSources,
+        routingTableProvider);
+  }
+
+  /**
+   * Register for data node configs from Helix Property store.
+   * @param dcName data center for which we are interested in data node configs.
+   */
+  private void registerForDataNodeConfigsChanges(String dcName) throws Exception {
+    DcZkInfo dcZkInfo = dataCenterToZkAddress.get(dcName);
+    String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
+    DataNodeConfigSource dataNodeConfigSource =
+        helixFactory.getDataNodeConfigSource(clusterMapConfig, zkConnectStr, dataNodeConfigSourceMetrics);
+    // When attaching a listener, current data is fetched from Helix using blocking call and notified to the listener
+    // (Please see PropertyStoreToDataNodeConfigAdapter.Subscription#start() method). I.e. by the time we return from
+    // below method, initial notification of data node configs would have been arrived. So, we don't need separate latch
+    // to wait for notification of data node configs.
+    logger.info(
+        "Registering data node config change listeners for cluster {} in data center {} via Helix manager at {}",
+        clusterMapConfig.clusterMapClusterName, dcZkInfo.getDcName(), zkConnectStr);
+    dataNodeConfigSource.addDataNodeConfigChangeListener(
+        configs -> clusterChangeHandler.handleDataNodeConfigChange(configs, dcName,
+            clusterMapConfig.clusterMapClusterName));
+    dataNodeConfigSources.add(dataNodeConfigSource);
   }
 }
