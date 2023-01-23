@@ -242,6 +242,9 @@ public class TestNamedBlobDb implements NamedBlobDb {
         .computeIfAbsent(record.getContainerName(), k -> new TreeMap<>())
         .getOrDefault(record.getBlobName(), new ArrayList<>());
     recordList.add(newRecord);
+    allRecords.computeIfAbsent(record.getAccountName(), k -> new HashMap<>())
+        .computeIfAbsent(record.getContainerName(), k -> new TreeMap<>())
+        .put(record.getBlobName(), recordList);
   }
 
   private void setException(Exception exception) {
