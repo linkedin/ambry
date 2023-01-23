@@ -25,8 +25,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
@@ -49,6 +51,7 @@ import static org.junit.Assume.*;
 public class AccountContainerTest {
   private static final Random random = new Random();
   private static final int CONTAINER_COUNT = 10;
+  private static final int DATASET_COUNT = 5;
   private static final short LATEST_CONTAINER_JSON_VERSION = Container.JSON_VERSION_2;
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -84,6 +87,15 @@ public class AccountContainerTest {
   private List<Integer> refContainerSnapshotVersions;
   private List<String> refAccessControlAllowOriginValues;
 
+  //Reference Dataset fields
+  private List<Dataset> refDatasets;
+  private List<String> refDatasetNames;
+  private List<Dataset.VersionSchema> refDatasetVersionSchemas;
+  private List<Long> refDatasetExpirationTimeMs;
+  private List<Integer> refDatasetRetentionCounts;
+  private List<Map<String, String>> refDatasetUserTags;
+
+
   // Newly added fields to Container (2022/10/19)
   private List<Long> refContainerCacheTtlInSeconds;
   private List<Set<String>> refContainerUserMetadataKeysToNotPrefixInResponses;
@@ -114,6 +126,7 @@ public class AccountContainerTest {
         .containers(refContainers)
         .lastModifiedTime(0)
         .build();
+    initializeRefDatasets();
   }
 
   /**
@@ -286,6 +299,21 @@ public class AccountContainerTest {
       // turn off again, previouslyEncrypted should still be set.
       containerFromBuilder = new ContainerBuilder(containerFromBuilder).setEncrypted(false).build();
       assertEncryptionSettings(containerFromBuilder, false, true);
+    }
+  }
+
+  @Test
+  public void testDatasetBuilder() {
+    for (int i = 0; i < DATASET_COUNT; i++) {
+      // build a dataset with arguments supplied
+      Dataset datasetFromBuilder = buildDatasetWithOtherFields(
+          new DatasetBuilder(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i),
+              refDatasetVersionSchemas.get(i), refDatasetExpirationTimeMs.get(i)).setRetentionCount(
+              refDatasetRetentionCounts.get(i)).setUserTags(refDatasetUserTags.get(i)), refDatasets.get(i));
+      assertDataset(datasetFromBuilder, i);
+      // build a dataset from existing container
+      Dataset anotherDatasetFromBuilder = new DatasetBuilder(datasetFromBuilder).build();
+      assertDataset(anotherDatasetFromBuilder, i);
     }
   }
 
@@ -789,6 +817,35 @@ public class AccountContainerTest {
   }
 
   /**
+   * Build a dataset in the {@link DatasetBuilder} with the values from {@code dataset}.
+   * @param builder the {@link DatasetBuilder}
+   * @param dataset the {@link Dataset}
+   * @return a dataset
+   */
+  private Dataset buildDatasetWithOtherFields(DatasetBuilder builder, Dataset dataset) {
+    return builder.setAccountName(dataset.getAccountName())
+        .setContainerName(dataset.getContainerName())
+        .setVersionSchema(dataset.getVersionSchema())
+        .setExpirationTimeMs(dataset.getExpirationTimeMs())
+        .build();
+  }
+
+  /**
+   * Asserts a {@link Dataset} against the reference account for every internal field.
+   * @param dataset the {@link Dataset} to assert.
+   * @param index the index in the reference dataset list to assert against.
+   */
+  private void assertDataset(Dataset dataset, int index) {
+    assertEquals("Wrong account name", refAccountName, dataset.getAccountName());
+    assertEquals("Wrong container name", refContainers.get(0).getName(), dataset.getContainerName());
+    assertEquals("Wrong dataset name", refDatasetNames.get(index), dataset.getDatasetName());
+    assertEquals("Wrong version schema", refDatasetVersionSchemas.get(index), dataset.getVersionSchema());
+    assertEquals("Wrong expiration time", refDatasetExpirationTimeMs.get(index), dataset.getExpirationTimeMs());
+    assertEquals("Wrong retention count", refDatasetRetentionCounts.get(index), dataset.getRetentionCount());
+    assertEquals("Wrong user tage", refDatasetUserTags.get(index), dataset.getUserTags());
+  }
+
+  /**
    * Asserts a {@link Container} against the reference account for every internal field
    * @param container The {@link Container} to assert.
    * @param index The index in the reference container list to assert against.
@@ -1005,6 +1062,35 @@ public class AccountContainerTest {
           refContainerDeleteTriggerTime.get(i), refContainerLastModifiedTimes.get(i),
           refContainerSnapshotVersions.get(i), refAccessControlAllowOriginValues.get(i),
           refContainerCacheTtlInSeconds.get(i), refContainerUserMetadataKeysToNotPrefixInResponses.get(i)));
+    }
+  }
+
+  /**
+   * Initializes reference datasets.
+   */
+  private void initializeRefDatasets() {
+    refDatasetNames = new ArrayList<>();
+    refDatasetVersionSchemas = new ArrayList<>();
+    refDatasetExpirationTimeMs = new ArrayList<>();
+    refDatasetRetentionCounts = new ArrayList<>();
+    refDatasetUserTags = new ArrayList<>();
+    refDatasets = new ArrayList<>();
+
+    for (int i = 0; i < DATASET_COUNT; i++) {
+      String datasetName = UUID.randomUUID().toString();
+      refDatasetNames.add(datasetName);
+      refDatasetVersionSchemas.add(
+          random.nextBoolean() ? Dataset.VersionSchema.MONOTONIC : Dataset.VersionSchema.TIMESTAMP);
+      long expirationTimeMs = random.nextBoolean() ? -1 : Utils.getRandomLong(random, Long.MAX_VALUE);
+      refDatasetExpirationTimeMs.add(expirationTimeMs);
+      int retentionCount = Utils.getRandomShort(random);
+      refDatasetRetentionCounts.add(retentionCount);
+      Map<String, String> userTags = new HashMap<>();
+      userTags.put(UUID.randomUUID().toString(), UUID.randomUUID().toString());
+      refDatasetUserTags.add(userTags);
+      refDatasets.add(new Dataset(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i),
+          refDatasetVersionSchemas.get(i), refDatasetExpirationTimeMs.get(i), refDatasetRetentionCounts.get(i),
+          refDatasetUserTags.get(i)));
     }
   }
 
