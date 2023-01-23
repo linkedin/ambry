@@ -45,6 +45,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.NetworkClient;
+import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
@@ -2048,6 +2050,57 @@ public class ReplicationTest extends ReplicationTestHelper {
       // 1 expired + 1 corrupt + 1 put (never present) + 1 deleted (never present) expected missing buffers
       verifyNoMoreMissingKeysAndExpectedMissingBufferCount(rHost, localHost, replicaThread, replicasToReplicate,
           idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex + 1, 4);
+    }
+  }
+
+  @Test
+  public void networkClientNetworkErrorTest() throws Exception {
+    assumeTrue(shouldUseNetworkClient);
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+    for (PartitionId partitionId : partitionIds) {
+      // add 5 messages into each partition and place it on remote host only
+      addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 5);
+    }
+
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    MockStoreKeyConverterFactory mockStoreKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    mockStoreKeyConverterFactory.setReturnInputIfAbsent(true);
+    mockStoreKeyConverterFactory.setConversionMap(new HashMap<>());
+    // we set batchSize to 10 in order to get all messages from one partition within single replication cycle
+    int batchSize = 10;
+    StoreKeyConverter storeKeyConverter = mockStoreKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null, null,
+            remoteHost);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // Make mock network client return NetworkErrors
+    NetworkClient c = replicaThread.getNetworkClient();
+    assertNotNull(c);
+    MockNetworkClient mockNetworkClient = (MockNetworkClient) c;
+    mockNetworkClient.setExpectedNetworkClientErrorCode(NetworkClientErrorCode.NetworkError);
+
+    replicaThread.replicate();
+    List<ReplicaThread.ExchangeMetadataResponse> exchangeMetadataResponseList =
+        replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
+    assertEquals(0, exchangeMetadataResponseList.size());
+
+    mockNetworkClient.setExpectedNetworkClientErrorCode(null);
+    replicaThread.replicate();
+
+    Map<PartitionId, List<MessageInfo>> missingInfos = remoteHost.getMissingInfos(localHost.infosByPartition);
+    for (Map.Entry<PartitionId, List<MessageInfo>> entry : missingInfos.entrySet()) {
+      assertEquals("No infos should be missing", 0, entry.getValue().size());
+    }
+    Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
+      assertEquals("No buffers should be missing", 0, entry.getValue().size());
     }
   }
 
