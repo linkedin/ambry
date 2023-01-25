@@ -510,6 +510,25 @@ public class MySqlAccountService extends AbstractAccountService {
     return container;
   }
 
+  @Override
+  public void addDataset(short accountId, short containerId, Dataset dataset) throws AccountServiceException {
+    try {
+      mySqlAccountStore.addDataset(accountId, containerId, dataset);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
+      String datasetName) throws AccountServiceException {
+    try {
+      return mySqlAccountStore.getDataset(accountId, containerId, accountName, containerName, datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
   /**
    * Updates MySql DB with added or modified {@link Account}s
    * @param accounts collection of {@link Account}s

@@ -105,4 +105,33 @@ public class AccountCollectionSerde {
           .collect(Collectors.toList());
     }
   }
+
+  /**
+   * Serialize the {@link Dataset} to json bytes that can be used in requests/responses.
+   * @param dataset the {@link Dataset} to serialize.
+   * @return the serialized bytes in json format.
+   * @throws IOException
+   */
+  public static byte[] serializeDatasetsInJson(Dataset dataset) throws IOException {
+    Map<String, Dataset> resultObj = new HashMap<>();
+    resultObj.put(Account.DATASET_KEY, dataset);
+    return objectMapper.writeValueAsBytes(resultObj);
+  }
+
+  /**
+   * Deserialize the {@link Dataset} in json from given InputStream.
+   * @param inputStream the {@link InputStream} that contains serialized json bytes.
+   * @return the {@link Dataset}
+   * @throws IOException
+   */
+  public static Dataset datasetsFromInputStreamInJson(InputStream inputStream) throws IOException {
+    Map<String, Dataset> map = objectMapper.readValue(inputStream, new TypeReference<Map<String, Dataset>>() {
+    });
+    if (!map.containsKey(Account.DATASET_KEY)) {
+      return null;
+    } else {
+      Dataset dataset = map.get(Account.DATASET_KEY);
+      return new DatasetBuilder(dataset).build();
+    }
+  }
 }

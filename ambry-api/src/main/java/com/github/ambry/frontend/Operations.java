@@ -25,6 +25,7 @@ public class Operations {
   public static final String STATS_REPORT = "statsReport";
   public static final String ACCOUNTS = "accounts";
   public static final String ACCOUNTS_CONTAINERS = "accounts/containers";
+  public static final String ACCOUNTS_CONTAINERS_DATASETS = "accounts/containers/datasets";
   public static final String UNDELETE = "undelete";
   /**
    * First path segment for any operation on a named blob.

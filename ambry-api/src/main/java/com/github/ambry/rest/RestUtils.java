@@ -166,6 +166,10 @@ public class RestUtils {
      */
     public final static String TARGET_CONTAINER_NAME = "x-ambry-target-container-name";
     /**
+     * for put or get dataset request; string; name of target dataset.
+     */
+    public final static String TARGET_DATASET_NAME = "x-ambry-target-dataset-name";
+    /**
      * optional in request; date string; default unset ("infinite ttl")
      */
     public final static String TTL = "x-ambry-ttl";
