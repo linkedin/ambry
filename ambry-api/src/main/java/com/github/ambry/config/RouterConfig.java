@@ -663,17 +663,16 @@ public class RouterConfig {
   @Default("0")
   public final int routerGetBlobRetryLimitInSec;
   public static final String ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC = "router.get.blob.retry.limit.in.sec";
-  public static final int ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX = 30;
+  public static final int ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX = 300;
 
   /**
    * The maximum number of retries for get blob. The default value is 0, which means no retry for get blob.
-   * The maximum number for this is 10. We don't want to retry more than 10 times.
    */
   @Config(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT)
   @Default("0")
   public final int routerGetBlobRetryLimitCount;
   public static final String ROUTER_GET_BLOB_RETRY_LIMIT_COUNT = "router.get.blob.retry.limit.count";
-  public static final int ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX = 10;
+  public static final int ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX = 100;
 
   // Group compression-related configs in the CompressConfig class.
   private final CompressionConfig compressionConfig;
