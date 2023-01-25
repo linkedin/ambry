@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
@@ -143,6 +144,38 @@ public class MySqlAccountStore {
    */
   public Container getContainerById(int accountId, int containerId) throws SQLException {
     return accountDao.getContainerById(accountId, containerId);
+  }
+
+  /**
+   * Add a version of {@link Dataset}
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @param expirationTimeMs the expiration time of the version of the dataset.
+   * @return the corresponding {@link Dataset}
+   * @throws SQLException
+   */
+  public Dataset addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
+      String datasetName, long version, long expirationTimeMs) throws SQLException {
+    return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
+        expirationTimeMs);
+  }
+
+  /**
+   * Get a version of {@link Dataset}
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @return the {@link DatasetVersionRecord}
+   * @throws SQLException
+   */
+  public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String datasetName,
+      long version) throws SQLException {
+    return  accountDao.getDatasetVersions(accountId, containerId, datasetName, version);
   }
 
   /**
