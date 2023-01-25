@@ -378,9 +378,15 @@ public class UndeleteOperation {
     if (operationTracker.isDone() || operationCompleted) {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
-      } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(
-            new RouterException("UndeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
+      } else {
+        if (operationTracker.hasFailedOnNotFound()) {
+          operationException.set(new RouterException("UndeleteOperation failed because of BlobNotFound",
+              RouterErrorCode.BlobDoesNotExist));
+        } else if (operationTracker.hasSomeUnavailability()) {
+          setOperationException(
+              new RouterException("UndeleteOperation failed possibly because some replicas are unavailable",
+                  RouterErrorCode.AmbryUnavailable));
+        }
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {

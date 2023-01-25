@@ -127,6 +127,8 @@ public class RouterConfig {
   public static final String ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE =
       "router.unavailable.due.to.success.count.is.non.zero.for.delete";
   public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED = "router.repair.with.replicate.blob.enabled";
+  public static final String ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND =
+      "router.operation.tracker.check.all.originating.replicas.for.not.found";
 
   /**
    * Number of independent scaling units for the router.
@@ -672,6 +674,16 @@ public class RouterConfig {
   public static final String ROUTER_GET_BLOB_RETRY_LIMIT_COUNT = "router.get.blob.retry.limit.count";
   public static final int ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX = 100;
 
+  /*
+   * If this config is set to {@code true} the operation tracker would make sure all replicas in originating data center
+   * are up and respond with BLOB_NOT_FOUND before concluding that blob is not present. Else, it would check in
+   * total_originating_dc_replicas - put_success_target + 1 replicas.
+   */
+  @Config(ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND)
+  @Default("true")
+  public final boolean routerOperationTrackerCheckAllOriginatingReplicasForNotFound;
+
+
   // Group compression-related configs in the CompressConfig class.
   private final CompressionConfig compressionConfig;
 
@@ -825,6 +837,8 @@ public class RouterConfig {
         ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX);
 
     compressionConfig = new CompressionConfig(verifiableProperties);
+    routerOperationTrackerCheckAllOriginatingReplicasForNotFound =
+        verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND, true);
   }
 
   /**

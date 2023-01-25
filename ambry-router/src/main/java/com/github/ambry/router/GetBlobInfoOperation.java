@@ -493,9 +493,15 @@ class GetBlobInfoOperation extends GetOperation {
     if (progressTracker.isDone()) {
       if (progressTracker.hasSucceeded()) {
         operationException.set(null);
-      } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(new RouterException("GetBlobInfoOperation failed because of BlobNotFound",
-            RouterErrorCode.BlobDoesNotExist));
+      } else {
+        if (operationTracker.hasFailedOnNotFound()) {
+          operationException.set(new RouterException("GetBlobInfoOperation failed because of BlobNotFound",
+              RouterErrorCode.BlobDoesNotExist));
+        } else if (operationTracker.hasSomeUnavailability()) {
+          setOperationException(
+              new RouterException("GetBlobInfoOperation failed possibly because some replicas are unavailable",
+                  RouterErrorCode.AmbryUnavailable));
+        }
       }
       operationCompleted = true;
     }
