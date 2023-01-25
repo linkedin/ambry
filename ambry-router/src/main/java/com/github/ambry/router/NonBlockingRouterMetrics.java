@@ -196,6 +196,7 @@ public class NonBlockingRouterMetrics {
   public final Counter skippedGetBlobCount;
   public Gauge<Long> chunkFillerThreadRunning;
   public Gauge<Long> requestResponseHandlerThreadRunning;
+  public final Counter getBlobRetryCount;
 
   // metrics for tracking blob sizes and chunking.
   public final Histogram putBlobSizeBytes;
@@ -502,6 +503,7 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(OperationController.class, "UpdateOptimizedCount"));
     updateUnOptimizedCount =
         metricRegistry.counter(MetricRegistry.name(OperationController.class, "UpdateUnOptimizedCount"));
+    getBlobRetryCount = metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "GetBlobRetryCount"));
 
     // metrics to track blob sizes and chunking.
     putBlobSizeBytes = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutBlobSizeBytes"));

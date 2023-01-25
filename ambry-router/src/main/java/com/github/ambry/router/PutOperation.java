@@ -1221,7 +1221,6 @@ class PutOperation {
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
             passedInBlobProperties.getFilename());
         operationTracker = getOperationTracker();
-        chunkException = null;
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
         state = ChunkState.Ready;
@@ -1434,6 +1433,7 @@ class PutOperation {
             logger.trace("{}: Attempt to put chunk with id: {} failed, attempting slipped put ", loggingContext,
                 chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
+            chunkException = null;
             prepareForSending();
           } else {
             // this chunk could not be successfully put. The whole operation has to fail.
