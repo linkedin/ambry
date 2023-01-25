@@ -20,7 +20,9 @@ import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -28,6 +30,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 import static com.github.ambry.utils.Utils.*;
@@ -52,6 +55,14 @@ public class AccountDao {
   public static final String CONTAINER_NAME = "containerName";
   public static final String CONTAINER_INFO = "containerInfo";
 
+  // Dataset table fields
+  public static final String DATASET_TABLE = "Datasets";
+  public static final String DATASET_NAME = "datasetName";
+  public static final String VERSION_SCHEMA = "versionSchema";
+  public static final String RETENTION_COUNT = "retentionCount";
+  public static final String USER_TAGS = "userTags";
+  public static final String DELETE_TS = "delete_ts";
+
   // Common fields
   public static final String VERSION = "version";
   public static final String CREATION_TIME = "creationTime";
@@ -69,6 +80,10 @@ public class AccountDao {
   private final String getContainersByAccountSql;
   private final String getContainerByNameSql;
   private final String getContainerByIdSql;
+
+  // Dataset table query strings
+  private final String insertDatasetSql;
+  private final String getDatasetByNameSql;
 
   /**
    * Types of MySql statements.
@@ -106,6 +121,14 @@ public class AccountDao {
     getContainerByIdSql =
         String.format("select %s, %s, %s, %s from %s where %s = ? and %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
             LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID, CONTAINER_ID);
+    insertDatasetSql =
+        String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?)",
+            DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT,
+            USER_TAGS, DELETE_TS);
+    getDatasetByNameSql =
+        String.format("select %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
+            VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID,
+            CONTAINER_ID, DATASET_NAME);
   }
 
   /**
@@ -254,6 +277,53 @@ public class AccountDao {
       throw e;
     } finally {
       closeQuietly(rs);
+    }
+  }
+
+  /**
+   * Add {@link Dataset} based on the supplied properties.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param dataset the {@link Dataset}
+   * @throws SQLException
+   */
+  public synchronized void addDataset(int accountId, int containerId, Dataset dataset) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(true);
+      PreparedStatement insertDatasetStatement = dataAccessor.getPreparedStatement(insertDatasetSql, true);
+      executeAddDatasetStatement(insertDatasetStatement, accountId, containerId, dataset);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
+
+  /**
+   * Get {@link Dataset} based on the supplied properties.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @return the {@link Dataset}
+   * @throws SQLException
+   */
+  public synchronized Dataset getDataset(int accountId, int containerId, String accountName, String containerName,
+      String datasetName) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(false);
+      PreparedStatement getDatasetStatement = dataAccessor.getPreparedStatement(getDatasetByNameSql, false);
+      Dataset dataset =
+          executeGetDatasetStatement(getDatasetStatement, accountId, containerId, accountName, containerName,
+              datasetName);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return dataset;
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
     }
   }
 
@@ -419,6 +489,91 @@ public class AccountDao {
         statement.setInt(3, accountId);
         statement.setInt(4, container.getId());
     }
+  }
+
+  /**
+   * Execute insertDatasetStatement to add Dataset.
+   * @param statement the mysql statement to add dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param dataset the {@link Dataset}
+   * @throws SQLException
+   */
+  private void executeAddDatasetStatement(PreparedStatement statement, int accountId, int containerId, Dataset dataset)
+      throws SQLException {
+    String datasetName = dataset.getDatasetName();
+    int schemaVersionOrdinal = dataset.getVersionSchema().ordinal();
+    Integer retentionCount = dataset.getRetentionCount();
+    Map<String, String> userTags = dataset.getUserTags();
+    String userTagsInJson;
+    try {
+      userTagsInJson = objectMapper.writeValueAsString(userTags);
+    } catch (IOException e) {
+      throw new SQLException("Fail to serialize user tags : " + userTags.toString(), e);
+    }
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, datasetName);
+    statement.setInt(4, schemaVersionOrdinal);
+    if (retentionCount != null) {
+      statement.setInt(5, retentionCount);
+    } else {
+      statement.setObject(5, null);
+    }
+    if (userTags != null) {
+      statement.setString(6, userTagsInJson);
+    } else {
+      statement.setString(6, null);
+    }
+    if (dataset.getExpirationTimeMs() != Utils.Infinite_Time) {
+      statement.setTimestamp(7, new Timestamp(dataset.getExpirationTimeMs()));
+    } else {
+      statement.setTimestamp(7, null);
+    }
+    statement.executeUpdate();
+  }
+
+  /**
+   * Execute getDatasetStatement to get Dataset.
+   * @param statement the mysql statement to get dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @return the {@link Dataset}
+   * @throws SQLException
+   */
+  private Dataset executeGetDatasetStatement(PreparedStatement statement, int accountId, int containerId, String accountName,
+      String containerName, String datasetName) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, datasetName);
+    ResultSet resultSet = statement.executeQuery();
+    resultSet.next();
+    Dataset.VersionSchema versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
+    Integer retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
+    String userTagsInJson = resultSet.getString(USER_TAGS);
+    Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
+    Map<String, String> userTags;
+    try {
+      userTags = objectMapper.readValue(userTagsInJson, Map.class);
+    } catch (IOException e) {
+      throw new SQLException("Fail to deserialize user tags : " + userTagsInJson, e);
+    } finally {
+      //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
+      closeQuietly(resultSet);
+    }
+    return new Dataset(accountName, containerName, datasetName, versionSchema, timestampToMs(deletionTime),
+        retentionCount, userTags);
+  }
+
+  /**
+   * @param timestamp a {@link Timestamp}, can be null.
+   * @return the milliseconds since the epoch if {@code timestamp} is non-null, or {@link Utils#Infinite_Time} if null.
+   */
+  private static long timestampToMs(Timestamp timestamp) {
+    return timestamp == null ? Utils.Infinite_Time : timestamp.getTime();
   }
 
   /**

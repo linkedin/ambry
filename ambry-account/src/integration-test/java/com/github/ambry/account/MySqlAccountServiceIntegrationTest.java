@@ -36,7 +36,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -63,6 +65,7 @@ public class MySqlAccountServiceIntegrationTest {
   private MySqlAccountStore mySqlAccountStore;
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
+  private static final String DATASET_NAME = "testDataset";
 
   public MySqlAccountServiceIntegrationTest() throws Exception {
     mySqlConfigProps = Utils.loadPropsFromResource("mysql.properties");
@@ -711,6 +714,29 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
   }
 
+  /**
+   * Test adding and getting dataset.
+   * @throws Exception
+   */
+  @Test
+  public void testAddAndGetDatasets() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Map<String, String> userTags = new HashMap<>();
+    userTags.put("userTag", "tagValue");
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME,
+        Dataset.VersionSchema.TIMESTAMP, -1).setUserTags(userTags).build();
+    // Add dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // query db and check
+    Dataset datasetFromMysql =
+        mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME);
+
+    assertEquals("Mistmatch in dataset read from db", dataset, datasetFromMysql);
+  }
+
   private Account makeTestAccountWithContainer() {
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
@@ -740,5 +766,6 @@ public class MySqlAccountServiceIntegrationTest {
     Statement statement = dbConnection.createStatement();
     statement.executeUpdate("DELETE FROM " + AccountDao.ACCOUNT_TABLE);
     statement.executeUpdate("DELETE FROM " + AccountDao.CONTAINER_TABLE);
+    statement.executeUpdate("DELETE FROM " + AccountDao.DATASET_TABLE);
   }
 }

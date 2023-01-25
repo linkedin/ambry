@@ -17,6 +17,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 
 
 /**
@@ -83,7 +84,7 @@ public class Dataset {
    * @param retentionCount The retention of dataset by count. The older versions will be deprecated. Can be null.
    * @param userTags The user defined metadata. Can be null.
    */
-  Dataset(String accountName, String containerName, String datasetName, VersionSchema versionSchema,
+  public Dataset(String accountName, String containerName, String datasetName, VersionSchema versionSchema,
       Long expirationTimeMs, Integer retentionCount, Map<String, String> userTags) {
     checkPreconditions(accountName, containerName, datasetName, versionSchema, expirationTimeMs);
     this.accountName = accountName;
@@ -172,5 +173,34 @@ public class Dataset {
           "At lease one of required fields accountName=" + accountName + " or containerName=" + containerName
               + " or datasetName=" + datasetName + " is empty");
     }
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    Dataset dataset = (Dataset) o;
+    return Objects.equals(accountName, dataset.accountName)
+        && Objects.equals(containerName, dataset.containerName)
+        && Objects.equals(datasetName, dataset.datasetName)
+        && versionSchema == dataset.versionSchema
+        && Objects.equals(expirationTimeMs, dataset.expirationTimeMs)
+        && Objects.equals(retentionCount, dataset.retentionCount)
+        && Objects.equals(userTags, dataset.userTags);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(accountName, containerName, datasetName);
+  }
+
+  @Override
+  public String toString() {
+    return "Dataset[" + getAccountName() + ":" + getContainerName() + ":" + getDatasetName() + ":" + getVersionSchema()
+        + "]";
   }
 }

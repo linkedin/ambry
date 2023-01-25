@@ -16,6 +16,7 @@ package com.github.ambry.account.mysql;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
@@ -64,6 +65,32 @@ public class MySqlAccountStore {
    */
   public void updateAccounts(List<AccountUpdateInfo> accountsInfo) throws SQLException {
     accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize);
+  }
+
+  /**
+   * Add dataset to the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param dataset the {@link Dataset}.
+   * @throws SQLException
+   */
+  public void addDataset(short accountId, short containerId, Dataset dataset) throws SQLException {
+    accountDao.addDataset(accountId, containerId, dataset);
+  }
+
+  /**
+   * Get dataset from the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param accountName the name of the {@link Account}.
+   * @param containerName the name of the {@link Container}
+   * @param datasetName the name of the dataset.
+   * @return the {@link Dataset}
+   * @throws SQLException
+   */
+  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
+      String datasetName) throws SQLException {
+    return accountDao.getDataset(accountId, containerId, accountName, containerName, datasetName);
   }
 
   /**
