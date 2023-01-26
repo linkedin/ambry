@@ -16,6 +16,7 @@ package com.github.ambry.frontend;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.StaleNamedResult;
 import com.github.ambry.router.Router;
+import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,11 +39,19 @@ public class NamedBlobsCleanupRunner implements Runnable {
     logger.info("Named Blobs Cleanup Runner is initiated");
     try {
       List<StaleNamedResult> staleResultList = namedBlobDb.pullStaleBlobIds().get();
+      List<StaleNamedResult> failedResults = new ArrayList<>();
       for (StaleNamedResult staleResult : staleResultList) {
-        router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
+        try {
+          router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
+        } catch (Exception e) {
+          logger.error("Failed to cleanup named stale blob {}", staleResult.toString(), e);
+          failedResults.add(staleResult);
+        }
       }
+      staleResultList.removeAll(failedResults);
       namedBlobDb.cleanupStaleData(staleResultList);
-      logger.info("Named Blobs Cleanup Runner is completed for {} stale cases", staleResultList.size());
+      logger.info("Named Blobs Cleanup Runner is completed for {} stale cases (there are {} failed cases)",
+          staleResultList.size(), failedResults.size());
     } catch (Throwable t) {
       logger.error("Exception occurs when running Named Blobs Cleanup Runner", t);
     }

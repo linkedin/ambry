@@ -40,14 +40,15 @@ import java.util.stream.Collectors;
 
 
 public class TestNamedBlobDb implements NamedBlobDb {
-  private final Map<String, Map<String, TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>>>> allRecords = new HashMap<>();
-  private Exception exception;
-  private final Time time;
-  private final int listMaxResults;
   private static final Set<GetOption> includeDeletedOptions =
       new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs));
   private static final Set<GetOption> includeExpiredOptions =
       new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Expired_Blobs));
+  private final Map<String, Map<String, TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>>>>
+      allRecords = new HashMap<>();
+  private final Time time;
+  private final int listMaxResults;
+  private Exception exception;
 
   public TestNamedBlobDb(Time time, int listMaxResults) {
     this.time = time;
@@ -164,11 +165,13 @@ public class TestNamedBlobDb implements NamedBlobDb {
     CompletableFuture<List<StaleNamedResult>> future = new CompletableFuture<>();
     List<StaleNamedResult> resultList = new ArrayList<>();
     for (String accountName : allRecords.keySet()) {
-      Map<String, TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>>> map2 = allRecords.get(accountName);
-      for (String containerName : map2.keySet()) {
-        TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> map3 = map2.get(containerName);
-        for (String blobName : map3.keySet()) {
-          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordList = map3.get(blobName);
+      Map<String, TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>>> recordsPerAccount =
+          allRecords.get(accountName);
+      for (String containerName : recordsPerAccount.keySet()) {
+        TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> recordsPerContainer =
+            recordsPerAccount.get(containerName);
+        for (String blobName : recordsPerContainer.keySet()) {
+          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordList = recordsPerContainer.get(blobName);
           int latestReadyIndex = -1;
           for (int i = recordList.size() - 1; i >= 0; i--) {
             Pair<NamedBlobRecord, Pair<NamedBlobState, Long>> record = recordList.get(i);
@@ -180,19 +183,20 @@ public class TestNamedBlobDb implements NamedBlobDb {
             }
           }
           if (latestReadyIndex != -1) {
-            List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordStaleList = recordList.subList(latestReadyIndex+1, recordList.size());
+            List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordStaleList =
+                recordList.subList(latestReadyIndex + 1, recordList.size());
             recordList = recordList.subList(0, latestReadyIndex);
             recordList.addAll(recordStaleList);
           }
           for (Pair<NamedBlobRecord, Pair<NamedBlobState, Long>> r : recordList) {
-            StaleNamedResult result = new StaleNamedResult((short) accountName.hashCode(), (short) containerName.hashCode(), blobName,
-                r.getFirst().getBlobId(), r.getFirst().getVersion(), new Timestamp(r.getFirst().getExpirationTimeMs()));
+            StaleNamedResult result =
+                new StaleNamedResult((short) accountName.hashCode(), (short) containerName.hashCode(), blobName,
+                    r.getFirst().getBlobId(), r.getFirst().getVersion(),
+                    new Timestamp(r.getFirst().getExpirationTimeMs()));
             resultList.add(result);
           }
-
         }
       }
-
     }
     future.complete(resultList);
     return future;
@@ -205,15 +209,18 @@ public class TestNamedBlobDb implements NamedBlobDb {
     Set<String> staleBlobIds = staleRecords.stream().map(r -> r.getBlobId()).collect(Collectors.toSet());
 
     for (String accountName : allRecords.keySet()) {
-      Map<String, TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>>> map2 = allRecords.get(accountName);
-      for (String containerName : map2.keySet()) {
-        TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> map3 = map2.get(containerName);
-        for (String blobName : map3.keySet()) {
-          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordList = map3.get(blobName);
+      Map<String, TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>>> recordsPerAccount =
+          allRecords.get(accountName);
+      for (String containerName : recordsPerAccount.keySet()) {
+        TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> recordsPerContainer =
+            recordsPerAccount.get(containerName);
+        for (String blobName : recordsPerContainer.keySet()) {
+          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordList = recordsPerContainer.get(blobName);
 
-          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> newRecordList = recordList.stream().filter(
-              r -> !staleBlobIds.contains(r.getFirst().getBlobId())).collect(Collectors.toList());
-          map3.put(blobName, newRecordList);
+          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> newRecordList = recordList.stream()
+              .filter(r -> !staleBlobIds.contains(r.getFirst().getBlobId()))
+              .collect(Collectors.toList());
+          recordsPerContainer.put(blobName, newRecordList);
         }
       }
     }
@@ -225,8 +232,12 @@ public class TestNamedBlobDb implements NamedBlobDb {
     if (allRecords.containsKey(accountName)) {
       if (allRecords.get(accountName).containsKey(containerName)) {
         if (allRecords.get(accountName).get(containerName).containsKey(blobName)) {
-          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> readyRecords = allRecords.get(accountName).get(containerName).get(blobName).stream()
-              .filter(e -> e.getSecond().getFirst() == NamedBlobState.READY).collect(Collectors.toList());
+          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> readyRecords = allRecords.get(accountName)
+              .get(containerName)
+              .get(blobName)
+              .stream()
+              .filter(e -> e.getSecond().getFirst() == NamedBlobState.READY)
+              .collect(Collectors.toList());
           Pair<NamedBlobRecord, Pair<NamedBlobState, Long>> latestRecord = readyRecords.get(readyRecords.size() - 1);
           return new Pair<>(latestRecord.getFirst(), latestRecord.getSecond().getSecond());
         }
@@ -238,9 +249,10 @@ public class TestNamedBlobDb implements NamedBlobDb {
   private void putInternal(NamedBlobRecord record, NamedBlobState state, long deleteTs) {
     Pair<NamedBlobState, Long> stateAndDeleteTs = new Pair<>(state, deleteTs);
     Pair<NamedBlobRecord, Pair<NamedBlobState, Long>> newRecord = new Pair<>(record, stateAndDeleteTs);
-    List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordList = allRecords.computeIfAbsent(record.getAccountName(), k -> new HashMap<>())
-        .computeIfAbsent(record.getContainerName(), k -> new TreeMap<>())
-        .getOrDefault(record.getBlobName(), new ArrayList<>());
+    List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordList =
+        allRecords.computeIfAbsent(record.getAccountName(), k -> new HashMap<>())
+            .computeIfAbsent(record.getContainerName(), k -> new TreeMap<>())
+            .getOrDefault(record.getBlobName(), new ArrayList<>());
     recordList.add(newRecord);
     allRecords.computeIfAbsent(record.getAccountName(), k -> new HashMap<>())
         .computeIfAbsent(record.getContainerName(), k -> new TreeMap<>())

@@ -56,7 +56,7 @@ import static com.github.ambry.utils.Utils.*;
  */
 class FrontendRestRequestService implements RestRequestService {
   static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
-
+  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
   private final Router router;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
@@ -69,7 +69,6 @@ class FrontendRestRequestService implements RestRequestService {
   private final AccountService accountService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final AccountStatsStore accountStatsStore;
-  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
   private final String datacenterName;
   private final String hostname;
   private final String clusterName;
@@ -189,9 +188,8 @@ class FrontendRestRequestService implements RestRequestService {
 
     namedBlobListHandler =
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
-    namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName, quotaManager);
+    namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
+        accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager);
 
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
@@ -200,7 +198,8 @@ class FrontendRestRequestService implements RestRequestService {
 
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
-    namedBlobsCleanupTask = namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, 60*60*1, 60*60*24, TimeUnit.SECONDS);
+    namedBlobsCleanupTask =
+        namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, 60 * 10, 60 * 10, TimeUnit.SECONDS);
 
     isUp = true;
     logger.info("FrontendRestRequestService has started");
@@ -231,7 +230,7 @@ class FrontendRestRequestService implements RestRequestService {
         namedBlobsCleanupTask.cancel(false);
       }
       if (namedBlobsCleanupScheduler != null) {
-        shutDownExecutorService(namedBlobsCleanupScheduler,5, TimeUnit.MINUTES);
+        shutDownExecutorService(namedBlobsCleanupScheduler, 5, TimeUnit.MINUTES);
       }
       logger.info("FrontendRestRequestService shutdown complete");
     } catch (IOException e) {

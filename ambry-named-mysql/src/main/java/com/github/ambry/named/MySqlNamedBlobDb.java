@@ -138,11 +138,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   /**
    * Pull the stale blobs that need to be cleaned up
    */
-  private static final String GET_STALE_QUERY = String.format(
-      "SELECT %s, %s, %s, %s, %s, %s FROM %s t1 LEFT JOIN (SELECT account_id, container_id, blob_name, max(version) as version FROM %s "
-          + "WHERE blob_state=1 GROUP BY account_id, container_id, blob_name) t2 "
+  private static final String GET_STALE_QUERY = String.format(""
+          + "SELECT %s, %s, %s, %s, %s, %s "
+          + "FROM %s t1 "
+          + "LEFT JOIN "
+          + "(SELECT account_id, container_id, blob_name, max(version) as version "
+          + "FROM %s "
+          + "WHERE blob_state=1 "
+          + "      GROUP BY account_id, container_id, blob_name) t2 "
           + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE t1.gg_modi_ts<(CURRENT_TIMESTAMP(6) - INTERVAL 60 DAY) and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL",
+          + "WHERE t1.gg_modi_ts<(%s - INTERVAL 60 DAY) and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL "
+          + "LIMIT 1000",
       ACCOUNT_ID,
       CONTAINER_ID,
       BLOB_NAME,
@@ -150,7 +156,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       VERSION,
       CURRENT_TIME,
       NAMED_BLOBS_V2,
-      NAMED_BLOBS_V2);
+      NAMED_BLOBS_V2,
+      CURRENT_TIME);
 
   private final AccountService accountService;
   private final String localDatacenter;
@@ -198,6 +205,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     public final Histogram namedBlobDeleteTimeInMs;
 
     public final Histogram namedBlobPullStaleTimeInMs;
+    public final Histogram namedBlobCleanupTimeInMs;
 
     /**
      * Constructor to create the Metrics.
@@ -235,6 +243,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
       namedBlobPullStaleTimeInMs = metricRegistry.histogram(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPullStaleTimeInMs"));
+      namedBlobCleanupTimeInMs = metricRegistry.histogram(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobCleanupTimeInMs"));
     }
   }
 
@@ -315,10 +325,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   @Override
   public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedResult> staleRecords) {
     return executeGenericTransactionAsync(true, (connection) -> {
+      long startTime = System.currentTimeMillis();
       for (StaleNamedResult record : staleRecords) {
         applySoftDelete(record.getAccountId(), record.getContainerId(), record.getBlobName(), record.getVersion(),
             record.getDeleteTs(), connection);
       }
+      metricsRecoder.namedBlobCleanupTimeInMs.update(System.currentTimeMillis() - startTime);
       return staleRecords.size();
     }, null);
   }
@@ -565,7 +577,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       short containerId, Connection connection) throws Exception {
     String blobId;
     long version;
-    Timestamp currentTime;
+    Timestamp currentDeleteTime;
     boolean alreadyDeleted;
     try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY_V2)) {
       statement.setInt(1, accountId);
@@ -578,14 +590,14 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         }
         blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
         version = resultSet.getLong(2);
-        Timestamp deletionTime = resultSet.getTimestamp(3);
-        currentTime = resultSet.getTimestamp(4);
-        alreadyDeleted = (deletionTime != null && currentTime.after(deletionTime));
+        Timestamp originalDeletionTime = resultSet.getTimestamp(3);
+        currentDeleteTime = resultSet.getTimestamp(4);
+        alreadyDeleted = (originalDeletionTime != null && currentDeleteTime.after(originalDeletionTime));
       }
     }
     // only need to issue an update statement if the row was not already marked as deleted.
     if (!alreadyDeleted) {
-      applySoftDelete(accountId, containerId, blobName, version, currentTime, connection);
+      applySoftDelete(accountId, containerId, blobName, version, currentDeleteTime, connection);
     }
     return new DeleteResult(blobId, alreadyDeleted);
   }
@@ -609,11 +621,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }
   }
 
-  private void applySoftDelete(short accountId, short containerId, String blobName, long version, Timestamp currentTime,
+  private void applySoftDelete(short accountId, short containerId, String blobName, long version, Timestamp deleteTs,
       Connection connection) throws Exception {
     try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
       // use the current time
-      statement.setTimestamp(1, currentTime);
+      statement.setTimestamp(1, deleteTs);
       statement.setInt(2, accountId);
       statement.setInt(3, containerId);
       statement.setString(4, blobName);

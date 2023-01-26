@@ -17,6 +17,7 @@ package com.github.ambry.named;
 import java.sql.Timestamp;
 import java.util.Objects;
 
+
 /**
  * Class to convey information about a successful stale named blob pulling {@link NamedBlobDb}.
  */
@@ -88,7 +89,6 @@ public class StaleNamedResult {
     return deleteTs;
   }
 
-
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -99,13 +99,14 @@ public class StaleNamedResult {
     }
 
     StaleNamedResult record = (StaleNamedResult) o;
-    return accountId == record.accountId && containerId == record.containerId && Objects.equals(blobName, record.blobName)
-        && Objects.equals(blobId, record.blobId) && version == record.version && deleteTs.equals(record.deleteTs);
+    return accountId == record.accountId && containerId == record.containerId && Objects.equals(blobName,
+        record.blobName) && Objects.equals(blobId, record.blobId) && version == record.version && deleteTs.equals(
+        record.deleteTs);
   }
 
   @Override
   public String toString() {
-    return "StaleNamedResult[accountId=" + accountId + ",containerId=" + containerId + ",blobName=" + blobName +
-        ",blobId=" + blobId + ",version=" + version + ",deleteTs=" + deleteTs + "]";
+    return "StaleNamedResult[accountId=" + accountId + ",containerId=" + containerId + ",blobName=" + blobName
+        + ",blobId=" + blobId + ",version=" + version + ",deleteTs=" + deleteTs + "]";
   }
 }
