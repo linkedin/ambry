@@ -40,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -66,6 +67,7 @@ public class MySqlAccountServiceIntegrationTest {
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
   private static final String DATASET_NAME = "testDataset";
+  private static final String DATASET_NAME_WITH_TTL = "testDatasetWithTtl";
 
   public MySqlAccountServiceIntegrationTest() throws Exception {
     mySqlConfigProps = Utils.loadPropsFromResource("mysql.properties");
@@ -737,6 +739,74 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mistmatch in dataset read from db", dataset, datasetFromMysql);
   }
 
+  /**
+   * Test add and get dataset version with different input.
+   */
+  @Test
+  public void testAddAndGetDatasetVersion() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Map<String, String> userTags = new HashMap<>();
+    userTags.put("userTag", "tagValue");
+
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME, Dataset.VersionSchema.SEMANTIC,
+            -1).setUserTags(userTags).build();
+
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // Add a valid dataset version
+    int version = 1;
+    DatasetVersionRecord expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, -1);
+    Dataset datasetFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version, -1);
+    assertEquals("Mismatch in dataset read from db", dataset, datasetFromMysql);
+
+    // Get the dataset version
+    DatasetVersionRecord datasetVersionRecordFromMysql =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, version);
+    assertEquals("Mismatch in dataset version read from db", expectedDatasetVersionRecord,
+        datasetVersionRecordFromMysql);
+
+    // Add a valid dataset version with ttl and get from DB
+    version = 2;
+    long expirationTimeMs = System.currentTimeMillis();
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, expirationTimeMs);
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME, version, expirationTimeMs);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, version);
+    assertEquals("Mismatch in dataset version read from db", expectedDatasetVersionRecord,
+        datasetVersionRecordFromMysql);
+
+    // Add a dataset with ttl (set to a past timestamp) and add a dataset version with current ttl, expect to be failed.
+    expirationTimeMs = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(10);
+    Dataset datasetWithTtl = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL,
+        Dataset.VersionSchema.TIMESTAMP, expirationTimeMs).setUserTags(userTags).build();
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), datasetWithTtl);
+    version = 3;
+    expirationTimeMs = System.currentTimeMillis();
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_TTL, version, expirationTimeMs);
+      fail("Add dataset version should fail with ttl larger than dataset level");
+    } catch (SQLException e) {
+      // do nothing
+    }
+    // Add a permanent dataset version, it should inherit from dataset level ttl.
+    version = 4;
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_TTL, version, -1);
+    DatasetVersionRecord datasetVersionRecordWithTtl =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL, version);
+    assertEquals("Mismatch in dataset expirationTimeMs", (long) datasetWithTtl.getExpirationTimeMs(),
+        datasetVersionRecordWithTtl.getExpirationTimeMs());
+  }
+
   private Account makeTestAccountWithContainer() {
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
@@ -767,5 +837,6 @@ public class MySqlAccountServiceIntegrationTest {
     statement.executeUpdate("DELETE FROM " + AccountDao.ACCOUNT_TABLE);
     statement.executeUpdate("DELETE FROM " + AccountDao.CONTAINER_TABLE);
     statement.executeUpdate("DELETE FROM " + AccountDao.DATASET_TABLE);
+    statement.executeUpdate("DELETE FROM " + AccountDao.DATASET_VERSION_TABLE);
   }
 }

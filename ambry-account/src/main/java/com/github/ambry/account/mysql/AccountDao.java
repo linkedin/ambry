@@ -21,6 +21,7 @@ import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -63,6 +64,9 @@ public class AccountDao {
   public static final String USER_TAGS = "userTags";
   public static final String DELETE_TS = "delete_ts";
 
+  // Dataset version table fields
+  public static final String DATASET_VERSION_TABLE = "DatasetVersions";
+
   // Common fields
   public static final String VERSION = "version";
   public static final String CREATION_TIME = "creationTime";
@@ -80,6 +84,10 @@ public class AccountDao {
   private final String getContainersByAccountSql;
   private final String getContainerByNameSql;
   private final String getContainerByIdSql;
+
+  // Dataset version table query strings.
+  private final String insertDatasetVersionSql;
+  private final String getDatasetVersionByNameSql;
 
   // Dataset table query strings
   private final String insertDatasetSql;
@@ -129,6 +137,11 @@ public class AccountDao {
         String.format("select %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
             VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
+    insertDatasetVersionSql = String.format("insert into %s (%s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?)",
+        DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, LAST_MODIFIED_TIME, DELETE_TS);
+    getDatasetVersionByNameSql =
+        String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
+            DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
   }
 
   /**
@@ -278,6 +291,114 @@ public class AccountDao {
     } finally {
       closeQuietly(rs);
     }
+  }
+
+  /**
+   * Add a version of {@link Dataset} based on the supplied properties.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @param expirationTimeMs the expiration time of the version of the dataset.
+   * @return the {@link Dataset} which contains the metadata.
+   * @throws SQLException
+   */
+  public synchronized Dataset addDatasetVersions(int accountId, int containerId, String accountName,
+      String containerName, String datasetName, long version, long expirationTimeMs) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(true);
+      PreparedStatement insertDatasetVersionStatement =
+          dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
+      Dataset dataset =
+          getDatasetMetadata(accountId, containerId, accountName, containerName, datasetName, expirationTimeMs);
+      executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, datasetName, version,
+          expirationTimeMs, dataset);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+      return dataset;
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
+
+  /**
+   * Get a version of {@link Dataset} based on supplied properties.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @return the {@link DatasetVersionRecord}
+   * @throws SQLException
+   */
+  public synchronized DatasetVersionRecord getDatasetVersions(short accountId, short containerId, String datasetName,
+      long version) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(false);
+      PreparedStatement getDatasetVersionStatement =
+          dataAccessor.getPreparedStatement(getDatasetVersionByNameSql, false);
+      DatasetVersionRecord result =
+          executeGetDatasetVersionStatement(getDatasetVersionStatement, accountId, containerId, datasetName, version);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return result;
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
+    }
+  }
+
+  /**
+   * Execute insert dataset version statement to add a dataset version.
+   * @param statement the mysql statement to add dataset version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @param expirationTimeMs the expiration time in milliseconds.
+   * @param dataset the {@link Dataset} including the metadata.
+   * @throws SQLException
+   */
+  private void executeAddDatasetVersionStatement(PreparedStatement statement, int accountId, int containerId,
+      String datasetName, long version, long expirationTimeMs, Dataset dataset) throws SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, datasetName);
+    statement.setLong(4, version);
+    if (expirationTimeMs != Infinite_Time) {
+      statement.setTimestamp(5, new Timestamp(expirationTimeMs));
+    } else {
+      if (dataset.getExpirationTimeMs() != Infinite_Time) {
+        statement.setTimestamp(5, new Timestamp(dataset.getExpirationTimeMs()));
+      } else {
+        statement.setTimestamp(5, null);
+      }
+    }
+    statement.executeUpdate();
+  }
+
+  /**
+   * Get the {@link Dataset} metadata which might be used for dataset version
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name of the account.
+   * @param containerName the name of the container.
+   * @param datasetName the name of the dataset.
+   * @param expirationTimeMs the expiration time in milliseconds.
+   * @return the {@link Dataset}
+   * @throws SQLException
+   */
+  private Dataset getDatasetMetadata(int accountId, int containerId, String accountName, String containerName,
+      String datasetName, long expirationTimeMs) throws SQLException {
+    Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
+    if (dataset.getExpirationTimeMs() != -1 && dataset.getExpirationTimeMs() < expirationTimeMs) {
+      throw new SQLException(
+          "This accountName: " + accountName + " containerName: " + containerName + " datasetName: " + datasetName
+              + " already expired");
+    }
+    return dataset;
   }
 
   /**
@@ -544,28 +665,62 @@ public class AccountDao {
    * @return the {@link Dataset}
    * @throws SQLException
    */
-  private Dataset executeGetDatasetStatement(PreparedStatement statement, int accountId, int containerId, String accountName,
-      String containerName, String datasetName) throws SQLException {
-    statement.setInt(1, accountId);
-    statement.setInt(2, containerId);
-    statement.setString(3, datasetName);
-    ResultSet resultSet = statement.executeQuery();
-    resultSet.next();
-    Dataset.VersionSchema versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
-    Integer retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
-    String userTagsInJson = resultSet.getString(USER_TAGS);
-    Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
+  private Dataset executeGetDatasetStatement(PreparedStatement statement, int accountId, int containerId,
+      String accountName, String containerName, String datasetName) throws SQLException {
+    Dataset.VersionSchema versionSchema;
+    Integer retentionCount;
+    Timestamp deletionTime;
     Map<String, String> userTags;
+    ResultSet resultSet = null;
     try {
-      userTags = objectMapper.readValue(userTagsInJson, Map.class);
-    } catch (IOException e) {
-      throw new SQLException("Fail to deserialize user tags : " + userTagsInJson, e);
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, datasetName);
+      resultSet = statement.executeQuery();
+      resultSet.next();
+      versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
+      retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
+      String userTagsInJson = resultSet.getString(USER_TAGS);
+      deletionTime = resultSet.getTimestamp(DELETE_TS);
+      try {
+        userTags = objectMapper.readValue(userTagsInJson, Map.class);
+      } catch (IOException e) {
+        throw new SQLException("Fail to deserialize user tags : " + userTagsInJson, e);
+      }
     } finally {
       //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
       closeQuietly(resultSet);
     }
     return new Dataset(accountName, containerName, datasetName, versionSchema, timestampToMs(deletionTime),
         retentionCount, userTags);
+  }
+
+  /**
+   * Execute the get dataset version statement to get the dataset version.
+   * @param statement the mysql statement to get dataset version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @return the {@link DatasetVersionRecord}
+   * @throws SQLException
+   */
+  private DatasetVersionRecord executeGetDatasetVersionStatement(PreparedStatement statement, short accountId,
+      short containerId, String datasetName, long version) throws SQLException {
+    ResultSet resultSet = null;
+    Timestamp deletionTime;
+    try {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, datasetName);
+      statement.setLong(4, version);
+      resultSet = statement.executeQuery();
+      resultSet.next();
+      deletionTime = resultSet.getTimestamp(DELETE_TS);
+    } finally {
+      closeQuietly(resultSet);
+    }
+    return new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime));
   }
 
   /**
