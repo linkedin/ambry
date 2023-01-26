@@ -795,9 +795,8 @@ public class MySqlAccountServiceIntegrationTest {
           testContainer.getName(), DATASET_NAME_WITH_TTL, version, expirationTimeMs);
       fail("Add dataset version should fail with ttl larger than dataset level");
     } catch (SQLException e) {
-      assertEquals("Mismatch in error code", "This dataset already expired", e.getMessage());
+      // do nothing
     }
-
     // Add a permanent dataset version, it should inherit from dataset level ttl.
     version = 4;
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),

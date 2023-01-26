@@ -307,14 +307,15 @@ public class AccountDao {
    */
   public synchronized Dataset addDatasetVersions(int accountId, int containerId, String accountName,
       String containerName, String datasetName, long version, long expirationTimeMs) throws SQLException {
-    Dataset dataset;
     try {
       long startTimeMs = System.currentTimeMillis();
       dataAccessor.getDatabaseConnection(true);
       PreparedStatement insertDatasetVersionStatement =
           dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
-      dataset = executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, accountName,
-          containerName, datasetName, version, expirationTimeMs);
+      Dataset dataset =
+          getDatasetMetadata(accountId, containerId, accountName, containerName, datasetName, expirationTimeMs);
+      executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, datasetName, version,
+          expirationTimeMs, dataset);
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
       return dataset;
     } catch (SQLException e) {
@@ -357,12 +358,11 @@ public class AccountDao {
    * @param datasetName the name of the dataset.
    * @param version the version of the dataset.
    * @param expirationTimeMs the expiration time in milliseconds.
+   * @param dataset the {@link Dataset} including the metadata.
    * @throws SQLException
    */
-  private Dataset executeAddDatasetVersionStatement(PreparedStatement statement, int accountId, int containerId,
-      String accountName, String containerName, String datasetName, long version, long expirationTimeMs)
-      throws SQLException {
-    Dataset dataset = getDatasetMetadata(accountId, containerId, accountName, containerName, datasetName, expirationTimeMs);
+  private void executeAddDatasetVersionStatement(PreparedStatement statement, int accountId, int containerId,
+      String datasetName, long version, long expirationTimeMs, Dataset dataset) throws SQLException {
     statement.setInt(1, accountId);
     statement.setInt(2, containerId);
     statement.setString(3, datasetName);
@@ -377,7 +377,6 @@ public class AccountDao {
       }
     }
     statement.executeUpdate();
-    return dataset;
   }
 
   /**
@@ -396,8 +395,8 @@ public class AccountDao {
     Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
     if (dataset.getExpirationTimeMs() != -1 && dataset.getExpirationTimeMs() < expirationTimeMs) {
       throw new SQLException(
-          "This accountName " + accountName + " containerName: " + containerName + " datasetName: " + datasetName
-              + "already expired");
+          "This accountName: " + accountName + " containerName: " + containerName + " datasetName: " + datasetName
+              + " already expired");
     }
     return dataset;
   }
