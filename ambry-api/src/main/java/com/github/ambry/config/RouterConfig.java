@@ -660,7 +660,6 @@ public class RouterConfig {
    * The maximum duration in seconds to retry. If the get blob operation takes more than this duration, we would not retry.
    */
   @Config(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC)
-  @Default("0")
   public final int routerGetBlobRetryLimitInSec;
   public static final String ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC = "router.get.blob.retry.limit.in.sec";
   public static final int ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX = 300;
@@ -669,7 +668,6 @@ public class RouterConfig {
    * The maximum number of retries for get blob. The default value is 0, which means no retry for get blob.
    */
   @Config(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT)
-  @Default("0")
   public final int routerGetBlobRetryLimitCount;
   public static final String ROUTER_GET_BLOB_RETRY_LIMIT_COUNT = "router.get.blob.retry.limit.count";
   public static final int ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX = 100;
