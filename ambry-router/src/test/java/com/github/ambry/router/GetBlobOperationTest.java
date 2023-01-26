@@ -1132,8 +1132,11 @@ public class GetBlobOperationTest {
     props.setProperty(RouterConfig.ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, String.valueOf(retryLimitInSeconds));
     routerConfig = new RouterConfig(new VerifiableProperties(props));
     try {
+      List<ServerErrorCode> errorCodes = new ArrayList<>();
+      errorCodes.add(ServerErrorCode.Replica_Unavailable); // First get return unavailable
+      errorCodes.add(ServerErrorCode.No_Error); // Second get return no_error
       for (MockServer server : mockServerLayout.getMockServers()) {
-        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        server.setServerErrors(errorCodes);
       }
       AtomicReference<GetBlobResult> resultRef = new AtomicReference<>();
       AtomicReference<Exception> exceptionRef = new AtomicReference<>();
@@ -1144,7 +1147,6 @@ public class GetBlobOperationTest {
 
       long retryCountBefore = routerMetrics.getBlobRetryCount.getCount();
       GetBlobOperation op = createOperation(routerConfig, callback);
-      boolean errorCodeChanged = false;
       while (!op.isOperationComplete()) {
         op.poll(requestRegistrationCallback);
         List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
@@ -1157,19 +1159,104 @@ public class GetBlobOperationTest {
         if (resultRef.get() != null || exceptionRef.get() != null) {
           break;
         }
-        if (!errorCodeChanged && !op.isOperationComplete()
-            && routerMetrics.getBlobRetryCount.getCount() != retryCountBefore) {
-          for (MockServer server : mockServerLayout.getMockServers()) {
-            server.setServerErrorForAllRequests(null);
-          }
-          errorCodeChanged = true;
-        }
       }
       Assert.assertNull("Operation should succeed now", op.getOperationException());
       Assert.assertNull("Operation should succeed now", exceptionRef.get());
       Assert.assertNotNull("Operation should succeed now", resultRef.get());
       resultRef.get().getBlobDataChannel().close();
       assertEquals(1, routerMetrics.getBlobRetryCount.getCount() - retryCountBefore);
+    } finally {
+      routerConfig = originalConfig;
+    }
+  }
+
+  @Test
+  public void testGetCompositeBlobRetryUntilSuccess() throws Exception {
+    blobSize = 2 * maxChunkSize - 1; // two data chunks and one metadata chunk
+    doPut();
+
+    List<BlobId> blobIds = new ArrayList<>();
+    blobIds.add(blobId);
+    options =
+        new GetBlobOptionsInternal(new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(),
+            true, routerMetrics.ageAtGet);
+    AtomicReference<GetBlobResult> resultRef = new AtomicReference<>();
+    AtomicReference<Exception> exceptionRef = new AtomicReference<>();
+    Callback<GetBlobResult> callback = (result, exception) -> {
+      resultRef.set(result);
+      exceptionRef.set(exception);
+    };
+
+    createOperationAndComplete(callback);
+    assertNotNull(resultRef.get());
+    assertNull(exceptionRef.get());
+    for (StoreKey storeKey : resultRef.get().getBlobChunkIds()) {
+      blobIds.add((BlobId) storeKey);
+    }
+    // Now we have all three blob ids in order
+    resultRef.set(null);
+    exceptionRef.set(null);
+
+    int retryLimitInSeconds = 10;
+    RouterConfig originalConfig = routerConfig;
+    Properties props = getDefaultNonBlockingRouterProperties(true);
+    props.setProperty(RouterConfig.ROUTER_GET_BLOB_RETRY_LIMIT_COUNT, "10");
+    props.setProperty(RouterConfig.ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, String.valueOf(retryLimitInSeconds));
+    // Fetch one chunk at a time
+    props.setProperty(RouterConfig.ROUTER_MAX_IN_MEM_GET_CHUNKS, "1");
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+    try {
+      // For all the blobs, return unavailable
+      for (MockServer server : mockServerLayout.getMockServers()) {
+        for (BlobId blobId : blobIds) {
+          server.setErrorCodeForBlob(blobId.getID(), ServerErrorCode.Replica_Unavailable);
+        }
+      }
+      options = new GetBlobOptionsInternal(
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build(), false,
+          routerMetrics.ageAtGet);
+      final CountDownLatch readCompleteLatch = new CountDownLatch(1);
+      final AtomicReference<Throwable> readCompleteThrowable = new AtomicReference<>(null);
+      final AtomicLong readCompleteResult = new AtomicLong(0);
+      callback = (result, exception) -> {
+        if (exception != null) {
+          exceptionRef.set(exception);
+          readCompleteLatch.countDown();
+        } else {
+          ByteBufferAsyncWritableChannel asyncWritableChannel = new ByteBufferAsyncWritableChannel();
+
+          Utils.newThread(() -> {
+            Future<Long> readIntoFuture = result.getBlobDataChannel().readInto(asyncWritableChannel, null);
+            assertBlobReadSuccess(options.getBlobOptions, readIntoFuture, asyncWritableChannel,
+                result.getBlobDataChannel(), readCompleteLatch, readCompleteResult, readCompleteThrowable);
+          }, false).start();
+        }
+      };
+
+      long retryCountBefore = routerMetrics.getBlobRetryCount.getCount();
+      long initialValueForRetry = retryCountBefore;
+      int blobInd = 0;
+      GetBlobOperation op = createOperation(routerConfig, callback);
+      while (!op.isOperationComplete()) {
+        op.poll(requestRegistrationCallback);
+        List<ResponseInfo> responses = sendAndWaitForResponses(requestRegistrationCallback.getRequestsToSend());
+        for (ResponseInfo responseInfo : responses) {
+          GetResponse getResponse = responseInfo.getError() == null ? GetResponse.readFrom(
+              new NettyByteBufDataInputStream(responseInfo.content()), mockClusterMap) : null;
+          op.handleResponse(responseInfo, getResponse);
+          responseInfo.release();
+        }
+        if (routerMetrics.getBlobRetryCount.getCount() != retryCountBefore) {
+          for (MockServer server : mockServerLayout.getMockServers()) {
+            server.setErrorCodeForBlob(blobIds.get(blobInd).getID(), null);
+          }
+          blobInd++;
+          retryCountBefore = routerMetrics.getBlobRetryCount.getCount();
+        }
+      }
+      readCompleteLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertEquals(blobIds.size(), routerMetrics.getBlobRetryCount.getCount() - initialValueForRetry);
+      assertNull(exceptionRef.get());
     } finally {
       routerConfig = originalConfig;
     }
