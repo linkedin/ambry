@@ -233,6 +233,14 @@ public class FrontendMetrics {
   public final Meter putWithAccountAndContainerHeaderRate;
   public final Meter putWithAccountAndContainerUriRate;
 
+  //Dataset Version
+  public final Counter addDatasetVersionError;
+  public final Counter getDatasetVersionError;
+  public final Meter addDatasetVersionRate;
+  public final Meter getDatasetVersionRate;
+  public final Histogram addDatasetVersionProcessingTimeInMs;
+  public final Histogram getDatasetVersionProcessingTimeInMs;
+
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
    * @param metricRegistry the {@link MetricRegistry} to use for the metrics.
@@ -589,5 +597,19 @@ public class FrontendMetrics {
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerHeaderRate"));
     putWithAccountAndContainerUriRate = metricRegistry.meter(
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerUriRate"));
+
+    //Dataset Version
+    addDatasetVersionError =
+        metricRegistry.counter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionError"));
+    getDatasetVersionError =
+        metricRegistry.counter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionError"));
+    addDatasetVersionRate =
+        metricRegistry.meter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionRate"));
+    getDatasetVersionRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionRate"));
+    addDatasetVersionProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionProcessingTimeInMs"));
+    getDatasetVersionProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionProcessingTimeInMs"));
   }
 }

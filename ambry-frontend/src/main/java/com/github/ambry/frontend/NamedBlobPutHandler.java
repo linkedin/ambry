@@ -13,7 +13,10 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
@@ -29,7 +32,6 @@ import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
-import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -84,6 +86,7 @@ public class NamedBlobPutHandler {
   private final NamedBlobDb namedBlobDb;
   private final IdConverter idConverter;
   private final IdSigningService idSigningService;
+  private final AccountService accountService;
   private final Router router;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendConfig frontendConfig;
@@ -107,10 +110,12 @@ public class NamedBlobPutHandler {
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterName the name of the storage cluster that the router communicates with
    * @param quotaManager The {@link QuotaManager} class to account for quota usage in serving requests.
+   * @param accountService The {@link AccountService} to get the account and container id based on names.
    */
-  NamedBlobPutHandler(SecurityService securityService, NamedBlobDb namedBlobDb, IdConverter idConverter, IdSigningService idSigningService,
-      Router router, AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig,
-      FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager) {
+  NamedBlobPutHandler(SecurityService securityService, NamedBlobDb namedBlobDb, IdConverter idConverter,
+      IdSigningService idSigningService, Router router, AccountAndContainerInjector accountAndContainerInjector,
+      FrontendConfig frontendConfig, FrontendMetrics frontendMetrics, String clusterName, QuotaManager quotaManager,
+      AccountService accountService) {
     this.securityService = securityService;
     this.namedBlobDb = namedBlobDb;
     this.idConverter = idConverter;
@@ -121,6 +126,7 @@ public class NamedBlobPutHandler {
     this.frontendMetrics = frontendMetrics;
     this.clusterName = clusterName;
     this.quotaManager = quotaManager;
+    this.accountService = accountService;
   }
 
   /**
@@ -339,15 +345,45 @@ public class NamedBlobPutHandler {
               "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " will be required for future uploads");
         }
       }
+      Map <String, String> userTags = addDatasetVersion(blobProperties);
       // inject encryption frontendMetrics if applicable
       if (blobProperties.isEncrypted()) {
         restRequest.getMetricsTracker()
             .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
-      byte[] userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
+      Map <String, Object> userMetadataFromRequest = restRequest.getArgs();
+      if (userTags != null) {
+        userTags.forEach((key, value) -> {
+          if (!userMetadataFromRequest.containsKey(key)) {
+            userMetadataFromRequest.put(key, value);
+          }
+        });
+      }
+      byte[] userMetadata = RestUtils.buildUserMetadata(userMetadataFromRequest);
       frontendMetrics.blobPropsBuildForNameBlobPutTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
       LOGGER.trace("Blob properties of blob being PUT - {}", blobProperties);
       return new BlobInfo(blobProperties, userMetadata);
+    }
+
+    /**
+     * Add the dataset version to account service database.
+     * @param blobProperties the {@link BlobProperties} corresponding to the dataset version.
+     * @return the userTags set at dataset level.
+     * @throws RestServiceException
+     */
+    private Map<String, String> addDatasetVersion(BlobProperties blobProperties) throws RestServiceException {
+      Map<String, String> userTags = null;
+      try {
+        if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
+          frontendMetrics.addDatasetVersionRate.mark();
+          Dataset dataset = addDatasetVersion(blobProperties, restRequest);
+          userTags = dataset.getUserTags();
+        }
+        return userTags;
+      } catch (RestServiceException e) {
+        frontendMetrics.addDatasetVersionError.inc();
+        throw e;
+      }
     }
 
     /**
@@ -451,6 +487,43 @@ public class NamedBlobPutHandler {
         properties = blobInfoFromRequest.getBlobProperties();
       }
       return properties;
+    }
+
+    /**
+     * Support add dataset version queries after before the named blob.
+     * @param blobProperties The {@link BlobProperties} of this blob.
+     * @param restRequest {@link RestRequest} representing the request.
+     * @return the {@link Dataset}
+     * @throws RestServiceException
+     */
+    private Dataset addDatasetVersion(BlobProperties blobProperties, RestRequest restRequest) throws RestServiceException {
+      long startAddDatasetVersionTime = System.currentTimeMillis();
+      String accountName = null;
+      String containerName = null;
+      String datasetName = null;
+      String version = null;
+      try {
+        accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
+        containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
+        datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
+        version = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_VERSION, false);
+        long expirationTimeMs =
+            Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
+        Dataset dataset =
+            accountService.addDatasetVersion(accountName, containerName, datasetName, version, expirationTimeMs);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, version);
+        frontendMetrics.addDatasetVersionProcessingTimeInMs.update(
+            System.currentTimeMillis() - startAddDatasetVersionTime);
+        return dataset;
+      } catch (AccountServiceException ex) {
+        throw new RestServiceException(
+            "Dataset version create failed for accountName: " + accountName + " containerName: " + containerName
+                + " datasetName: " + datasetName + " version: " + version,
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      }
     }
   }
 }
