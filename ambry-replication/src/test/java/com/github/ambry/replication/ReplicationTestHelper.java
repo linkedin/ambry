@@ -45,6 +45,7 @@ import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -119,6 +120,8 @@ public class ReplicationTestHelper {
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
     properties.setProperty("replication.track.local.from.remote.per.partition.lag", "true");
     properties.setProperty("replication.max.partition.count.per.request", Integer.toString(0));
+    properties.setProperty(ReplicationConfig.REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO,
+        String.valueOf(shouldUseNetworkClient));
     properties.put("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
@@ -277,9 +280,13 @@ public class ReplicationTestHelper {
             new InMemAccountService(false, false));
     storageManager.start();
 
+    MockConnectionPool mockPool = (MockConnectionPool) mockConnectionPool;
+    NetworkClientFactory mockNetworkClientFactory =
+        shouldUseNetworkClient && mockConnectionPool != null ? new MockNetworkClientFactory(mockPool.getHosts(),
+            mockPool.getClusterMap(), mockPool.getMaxEntriesToReturn()) : null;
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            dataNodeId, storeKeyConverterFactory, clusterParticipant, mockConnectionPool,
+            dataNodeId, storeKeyConverterFactory, clusterParticipant, mockConnectionPool, mockNetworkClientFactory,
             new MockFindTokenHelper(storeKeyFactory, replicationConfig), BlobIdTransformer.class.getName(),
             storeKeyFactory, time);
 
@@ -354,10 +361,8 @@ public class ReplicationTestHelper {
    * Asserts the number of missing keys between the local and remote replicas and fixes the keys
    * @param expectedIndex initial expected index
    * @param expectedIndexInc increment level for the expected index (how much the findToken index is expected to increment)
-   * @param batchSize how large of a batch size the internal MockConnection will use for fixing missing store keys
    * @param expectedMissingKeysSum the number of missing keys expected
    * @param replicaThread replicaThread that will be performing replication
-   * @param remoteHost the remote host that keys are being pulled from
    * @param replicasToReplicate list of replicas to replicate between
    * @return expectedIndex + expectedIndexInc
    * @throws Exception
