@@ -718,6 +718,7 @@ class GetBlobOperation extends GetOperation {
     // Tracks quota charging for this chunk.
     private OperationQuotaCharger operationQuotaCharger;
     protected long initializedTimeMs;
+    private long timeLimitForRetryInMs;
     private int failedAttempts;
     protected boolean isChunkCompressed;
 
@@ -777,6 +778,7 @@ class GetBlobOperation extends GetOperation {
       operationQuotaCharger =
           new OperationQuotaCharger(quotaChargeCallback, GetBlobOperation.class.getSimpleName(), routerMetrics);
       initializedTimeMs = -1;
+      timeLimitForRetryInMs = 0;
       failedAttempts = 0;
     }
 
@@ -796,6 +798,7 @@ class GetBlobOperation extends GetOperation {
       progressTracker = new ProgressTracker(chunkOperationTracker);
       state = ChunkState.Ready;
       initializedTimeMs = time.milliseconds();
+      timeLimitForRetryInMs = initializedTimeMs + TimeUnit.SECONDS.toMillis(routerConfig.routerGetBlobRetryLimitInSec);
     }
 
     /**
@@ -1040,8 +1043,7 @@ class GetBlobOperation extends GetOperation {
         case OperationTimedOut:
         case UnexpectedInternalError:
           return failedAttempts < routerConfig.routerGetBlobRetryLimitCount
-              && time.milliseconds() < initializedTimeMs + TimeUnit.SECONDS.toMillis(
-              routerConfig.routerGetBlobRetryLimitInSec);
+              && time.milliseconds() < timeLimitForRetryInMs;
         default:
           return false;
       }
