@@ -1824,10 +1824,13 @@ public class ReplicaThread implements Runnable {
    */
   private class RemoteReplicaGroup {
     private final List<RemoteReplicaInfo> remoteReplicaInfos;
+    private List<ExchangeMetadataResponse> exchangeMetadataResponseList;
+
+    private List<RemoteReplicaInfo> remoteReplicaInfosToSend;
+    private List<ExchangeMetadataResponse> exchangeMetadataResponseListToProcess;
     private final DataNodeId remoteDataNode;
     private final boolean isNonProgressStandbyReplicaGroup;
     private final int id;
-    private List<ExchangeMetadataResponse> exchangeMetadataResponseList;
     private ReplicaGroupReplicationState state;
     private Exception exception = null;
     private long replicaMetadataRequestStartTimeMs;
@@ -1858,6 +1861,8 @@ public class ReplicaThread implements Runnable {
             .map(ExchangeMetadataResponse::getMissingStoreKeys)
             .flatMap(Collection::stream)
             .collect(Collectors.toList());
+        remoteReplicaInfosToSend = this.remoteReplicaInfos;
+        exchangeMetadataResponseListToProcess = exchangeMetadataResponseList;
         try {
           storeKeyConverter.convert(storeKeysToConvert);
           state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
@@ -1918,7 +1923,8 @@ public class ReplicaThread implements Runnable {
         return requestInfo;
       } else if (state == ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED) {
         // When the state is REPLICA_METADATA_RESPONSE_HANDLED, we will send the GetRequest out if needed.
-        List<RemoteReplicaInfo> remoteReplicaInfosToSendGet = remoteReplicaInfos;
+        remoteReplicaInfosToSend = remoteReplicaInfos;
+        exchangeMetadataResponseListToProcess = exchangeMetadataResponseList;
         if (!isNonProgressStandbyReplicaGroup && replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
           // If this is not standby replicas trying to catch up, and this is cross-colo replication, and we enable
           // leader based replication, then filter out remote replicas that is not leader to leader.
@@ -1926,18 +1932,24 @@ public class ReplicaThread implements Runnable {
           List<ExchangeMetadataResponse> exchangeMetadataResponseListForLeaderReplicas = new ArrayList<>();
           getLeaderReplicaList(remoteReplicaInfos, exchangeMetadataResponseList, leaderReplicaList,
               exchangeMetadataResponseListForLeaderReplicas);
-          remoteReplicaInfosToSendGet = leaderReplicaList;
-          exchangeMetadataResponseList = exchangeMetadataResponseListForLeaderReplicas;
+          remoteReplicaInfosToSend = leaderReplicaList;
+          exchangeMetadataResponseListToProcess = exchangeMetadataResponseListForLeaderReplicas;
         }
-        if (!remoteReplicaInfosToSendGet.isEmpty()) {
-          GetRequest request = createGetRequest(remoteReplicaInfos, exchangeMetadataResponseList, remoteDataNode);
+        if (!remoteReplicaInfosToSend.isEmpty()) {
+          if (exchangeMetadataResponseListToProcess.size() != remoteReplicaInfosToSend.size()) {
+            throw new IllegalArgumentException("RemoteReplicaGroup " + id + " ExchangeMetadataResponseList size "
+                + exchangeMetadataResponseListToProcess.size() + " and RemoteReplicaInfo size "
+                + remoteReplicaInfosToSend.size() + " should be the same and greater than zero");
+          }
+          GetRequest request =
+              createGetRequest(remoteReplicaInfosToSend, exchangeMetadataResponseListToProcess, remoteDataNode);
           if (request != null) {
             // Only when we still have RemoteReplicaInfos and when the GetRequest is not null
             // we send the GetRequest out
             getRequestStartTimeMs = time.milliseconds();
             fixMissingStoreKeysStartTimeInMs = getRequestStartTimeMs;
             RequestInfo requestInfo = new RequestInfo(remoteDataNode.getHostname(), port, request,
-                remoteReplicaInfosToSendGet.get(0).getReplicaId(), null, time.milliseconds(), timeout, timeout);
+                remoteReplicaInfosToSend.get(0).getReplicaId(), null, time.milliseconds(), timeout, timeout);
             logger.trace(
                 "Remote node: {} Thread name: {} RemoteReplicaGroup {} Create GetRequest, correlation id {}, state {}",
                 remoteDataNode, threadName, id, requestInfo.getRequest().getCorrelationId(), state);
@@ -2018,8 +2030,8 @@ public class ReplicaThread implements Runnable {
           // Deserialize the request from the given ResponseInfo
           DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
           GetResponse response = GetResponse.readFrom(dis, clusterMap);
-          ReplicaThread.this.handleGetResponse(response, remoteReplicaInfos, exchangeMetadataResponseList,
-              remoteDataNode, isNonProgressStandbyReplicaGroup);
+          ReplicaThread.this.handleGetResponse(response, remoteReplicaInfosToSend,
+              exchangeMetadataResponseListToProcess, remoteDataNode, isNonProgressStandbyReplicaGroup);
           logger.trace(
               "Remote node: {} Thread name: {} RemoteReplicaGroup {} Handled GetResponse for correlation id {}",
               remoteDataNode, threadName, id, responseInfo.getRequestInfo().getRequest().getCorrelationId());
@@ -2088,9 +2100,10 @@ public class ReplicaThread implements Runnable {
       if (standbyReplicasWithNoProgress.size() > 0) {
         List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
             getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
-        RemoteReplicaGroup group =
-            new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
-        remoteReplicaGroups.add(group);
+        if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
+          RemoteReplicaGroup group = new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
+          remoteReplicaGroups.add(group);
+        }
       }
     }
     try {

@@ -98,6 +98,18 @@ public class MockConnectionPool implements ConnectionPool {
   public void destroyConnection(ConnectedChannel connectedChannel) {
   }
 
+  public Map<DataNodeId, MockHost> getHosts() {
+    return hosts;
+  }
+
+  public ClusterMap getClusterMap() {
+    return clusterMap;
+  }
+
+  public int getMaxEntriesToReturn() {
+    return maxEntriesToReturn;
+  }
+
   /**
    * Implementation of {@link ConnectedChannel} that fetches message infos or blobs based on the type of request.
    */
