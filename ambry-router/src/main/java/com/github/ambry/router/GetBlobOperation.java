@@ -65,6 +65,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -717,6 +718,8 @@ class GetBlobOperation extends GetOperation {
     // Tracks quota charging for this chunk.
     private OperationQuotaCharger operationQuotaCharger;
     protected long initializedTimeMs;
+    private long timeLimitForRetryInMs;
+    private int failedAttempts;
     protected boolean isChunkCompressed;
 
     /**
@@ -775,6 +778,8 @@ class GetBlobOperation extends GetOperation {
       operationQuotaCharger =
           new OperationQuotaCharger(quotaChargeCallback, GetBlobOperation.class.getSimpleName(), routerMetrics);
       initializedTimeMs = -1;
+      timeLimitForRetryInMs = 0;
+      failedAttempts = 0;
     }
 
     /**
@@ -792,7 +797,23 @@ class GetBlobOperation extends GetOperation {
           RouterOperation.GetBlobOperation, chunkBlobId);
       progressTracker = new ProgressTracker(chunkOperationTracker);
       state = ChunkState.Ready;
-      initializedTimeMs = System.currentTimeMillis();
+      initializedTimeMs = time.milliseconds();
+      timeLimitForRetryInMs = initializedTimeMs + TimeUnit.SECONDS.toMillis(routerConfig.routerGetBlobRetryLimitInSec);
+    }
+
+    /**
+     * Reset some variables for retry.
+     */
+    void resetForRetry() {
+      logger.trace("BlobId {}: Retry for chunk Id: {}, failed attempts: {}, initializedTime: {}", blobId, chunkBlobId,
+          failedAttempts, initializedTimeMs);
+      chunkException = null;
+      chunkOperationTracker = getOperationTracker(chunkBlobId.getPartition(), chunkBlobId.getDatacenterId(),
+          RouterOperation.GetBlobOperation, chunkBlobId);
+      progressTracker = new ProgressTracker(chunkOperationTracker);
+      state = ChunkState.Ready;
+      failedAttempts++;
+      routerMetrics.getBlobRetryCount.inc();
     }
 
     /**
@@ -1001,6 +1022,34 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
+     * Return a boolean value to indicate whether we should retry on fetching this chunk based on the given exception.
+     * To Retry on a Get failure, these conditions have to be met at the same time
+     * <p>
+     *   <ol>
+     *     <li>Exception is AmbryUnavailable, or OperationTimeout, or UnexpectedInternalError. The errors that return 503</li>
+     *     <li>Failed attempts is less than the maximum retry count</li>
+     *     <li>Operation duration is less than maximum retry duration</li>
+     *   </ol>
+     * </p>
+     * @param exception The exception for this chunk operation.
+     * @return {@code True} to retry this chunk. otherwise, return false.
+     */
+    boolean shouldRetry(RouterException exception) {
+      if (exception == null) {
+        return false;
+      }
+      switch (exception.getErrorCode()) {
+        case AmbryUnavailable:
+        case OperationTimedOut:
+        case UnexpectedInternalError:
+          return failedAttempts < routerConfig.routerGetBlobRetryLimitCount
+              && time.milliseconds() < timeLimitForRetryInMs;
+        default:
+          return false;
+      }
+    }
+
+    /**
      * Check if the operation on the chunk is eligible for completion, if so complete it.
      */
     void checkAndMaybeComplete() {
@@ -1010,11 +1059,15 @@ class GetBlobOperation extends GetOperation {
         } else if (chunkOperationTracker.maybeFailedDueToOfflineReplicas()) {
           chunkException =
               buildChunkException("Get Chunk failed because of offline replicas", RouterErrorCode.AmbryUnavailable);
-        } else if (chunkOperationTracker.hasFailedOnNotFound()){
+        } else if (chunkOperationTracker.hasFailedOnNotFound()) {
           chunkException =
               buildChunkException("Get Chunk failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist);
         }
-        chunkCompleted = true;
+        if (shouldRetry(chunkException)) {
+          resetForRetry();
+        } else {
+          chunkCompleted = true;
+        }
       }
       if (chunkCompleted) {
         if (state != ChunkState.Complete && QuotaUtils.postProcessCharge(quotaChargeCallback)

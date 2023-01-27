@@ -656,6 +656,22 @@ public class RouterConfig {
   @Default("false")
   public final boolean routerRepairWithReplicateBlobEnabled;
 
+  /**
+   * The maximum duration in seconds to retry. If the get blob operation takes more than this duration, we would not retry.
+   */
+  @Config(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC)
+  public final int routerGetBlobRetryLimitInSec;
+  public static final String ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC = "router.get.blob.retry.limit.in.sec";
+  public static final int ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX = 300;
+
+  /**
+   * The maximum number of retries for get blob. The default value is 0, which means no retry for get blob.
+   */
+  @Config(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT)
+  public final int routerGetBlobRetryLimitCount;
+  public static final String ROUTER_GET_BLOB_RETRY_LIMIT_COUNT = "router.get.blob.retry.limit.count";
+  public static final int ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX = 100;
+
   // Group compression-related configs in the CompressConfig class.
   private final CompressionConfig compressionConfig;
 
@@ -798,10 +814,15 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE, true);
     routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
-    routerUpdateOpMetadataRelianceTimestampInMs = verifiableProperties.getLong(
-        ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS, DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
+    routerUpdateOpMetadataRelianceTimestampInMs =
+        verifiableProperties.getLong(ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS,
+            DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
     routerRepairWithReplicateBlobEnabled =
         verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED, false);
+    routerGetBlobRetryLimitInSec = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, 0, 0,
+        ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX);
+    routerGetBlobRetryLimitCount = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT, 0, 0,
+        ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX);
 
     compressionConfig = new CompressionConfig(verifiableProperties);
   }
