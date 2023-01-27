@@ -45,6 +45,7 @@ import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
+import org.apache.helix.model.ResourceConfig;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -115,9 +116,17 @@ public class HelixClusterManagerTest {
   public static List<Object[]> data() {
     return Arrays.asList(
         // @formatter:off
-        new Object[][]{{false, false, true, false}, {false, true, true, false}, {true, false, true, false}, {false, false, false, false},
-                       {false, true, false, false}, {true, false, false, false}, {false, false, true, true}, {false, true, true, true},
-                       {true, false, true, true}});
+        new Object[][]{
+            {false, false, true, false},
+            {false, true, true, false},
+            {true, false, true, false},
+            {false, false, false, false},
+            {false, true, false, false},
+            {true, false, false, false},
+            {false, false, true, true},
+            {false, true, true, true},
+            {true, false, true, true}
+        });
         // @formatter:on
   }
 
@@ -656,6 +665,190 @@ public class HelixClusterManagerTest {
         partitionToResource.get(remoteDc).size() + 1);
     assertTrue(partitionToResource.get(localDc).containsKey(partitionName) && !partitionToResource.get(remoteDc)
         .containsKey(partitionName));
+  }
+
+  /**
+   * Test duplicate partition ids in ideal state.
+   * @throws Exception
+   */
+  @Test
+  public void helixDuplicatePartitionInIdealStateChangeTest() throws Exception {
+    assumeTrue(!useComposite && !overrideEnabled && !useAggregatedView);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
+
+    Map<String, Map<String, String>> partitionToResourceByDc = helixClusterManager.getPartitionToResourceMapByDC();
+    Map<String, String> localDCPartitionToResource = partitionToResourceByDc.get(localDc);
+
+    Map.Entry<String, String> randomPartitionAndResource = localDCPartitionToResource.entrySet().iterator().next();
+    String partitionName = randomPartitionAndResource.getKey();
+    String resourceName = randomPartitionAndResource.getValue();
+    String newResourceName = String.valueOf(Integer.valueOf(resourceName) + 1000);
+
+    IdealState idealState = new IdealState(newResourceName);
+    idealState.setPreferenceList(partitionName, new ArrayList<>());
+    helixCluster.addNewResource(newResourceName, idealState, localDc);
+
+    // Local dc's partition's resource should be updated to newResource name
+    Map<String, String> partitionToResourceAfterUpdate =
+        (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
+    assertEquals(localDCPartitionToResource.size(), partitionToResourceAfterUpdate.size());
+
+    // Only partitionName changes resource
+    for (Map.Entry<String, String> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
+      String pName = partitionAndResource.getKey();
+      String rName = partitionAndResource.getValue();
+      if (pName.equals(partitionName)) {
+        assertEquals(newResourceName, rName);
+      } else {
+        assertEquals(localDCPartitionToResource.get(pName), rName);
+      }
+    }
+  }
+
+  /**
+   * Test add and remove ideal state with duplicate partition ids
+   * @throws Exception
+   */
+  @Test
+  public void helixRemoveOldIdealStateChangeTest() throws Exception {
+    assumeTrue(!useComposite && !overrideEnabled && !useAggregatedView);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
+
+    String resourceName = helixCluster.getResources(localDc).get(0);
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    Set<String> partitionNames = idealState.getPartitionSet();
+
+    // Add a new resource to override the old resource
+    String newResourceName = String.valueOf(Integer.valueOf(resourceName) + 1000);
+    helixCluster.addNewResource(newResourceName, cloneIdealState(idealState, newResourceName), localDc);
+
+    // After change, all partitions in the partitionNames should have updated resourceName
+    Map<String, String> partitionToResourceAfterUpdate =
+        (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
+    for (Map.Entry<String, String> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
+      String pName = partitionAndResource.getKey();
+      String rName = partitionAndResource.getValue();
+      if (partitionNames.contains(pName)) {
+        assertEquals(newResourceName, rName);
+      }
+    }
+
+    // Now replace it with yet another resource, however, this time, resource name would be smaller
+    String newResourceName2 = String.valueOf(Integer.valueOf(resourceName) + 100);
+    helixCluster.addNewResource(newResourceName2, cloneIdealState(idealState, newResourceName2), localDc);
+    partitionToResourceAfterUpdate = (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
+    for (Map.Entry<String, String> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
+      String pName = partitionAndResource.getKey();
+      String rName = partitionAndResource.getValue();
+      if (partitionNames.contains(pName)) {
+        assertEquals(newResourceName, rName); // still equals to the newResourceName, not newResourceName2
+      }
+    }
+
+    // Now remove resourceName and newResourceName2, it shouldn't change the partition to resource mapping
+    helixCluster.removeResourceIdealState(resourceName, localDc);
+    helixCluster.removeResourceIdealState(newResourceName2, localDc);
+    partitionToResourceAfterUpdate = (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
+    for (Map.Entry<String, String> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
+      String pName = partitionAndResource.getKey();
+      String rName = partitionAndResource.getValue();
+      if (partitionNames.contains(pName)) {
+        assertEquals(newResourceName, rName); // still equals to the newResourceName, not newResourceName2
+      }
+    }
+  }
+
+  /**
+   * Test generate partition to resource name in aggregated view with duplicate partition ids.
+   */
+  @Test
+  public void testAggregatedExternalViewWithDuplicatePartitionIds() throws Exception {
+    assumeTrue(!useComposite && useAggregatedView);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
+
+    Map<String, Set<String>> partitionToResourceMap = helixClusterManager.getGlobalPartitionToResourceMap();
+    Map<String, String> partitionToResourceBefore = new HashMap<>();
+    // Before any change, we should have only one resource in each map, because every dc has the same resource name
+    for (Map.Entry<String, Set<String>> entry : partitionToResourceMap.entrySet()) {
+      assertEquals("Partition should have only one resource", 1, entry.getValue().size());
+      partitionToResourceBefore.put(entry.getKey(), entry.getValue().iterator().next());
+    }
+
+    // Add a new resource to override the old resource
+    String resourceName = helixCluster.getResources(localDc).get(0);
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    Set<String> partitionNames = idealState.getPartitionSet();
+
+    String newResourceName = String.valueOf(Integer.valueOf(resourceName) + 1000);
+    // User MockHelixAdmin::addResource to add resource and external view
+    MockHelixAdmin localHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+    // This method would
+    // 1. add new resource
+    // 2. update partition to resource map
+    // 3. generate different states for different instances for again
+    localHelixAdmin.addResource("", newResourceName, cloneIdealState(idealState, newResourceName));
+    localHelixAdmin.triggerRoutingTableNotification();
+    Thread.sleep(1000);
+
+    // After change, we should have two resources in each map. One is from previous one and the other is the new resource
+    // name
+    partitionToResourceMap = helixClusterManager.getGlobalPartitionToResourceMap();
+    for (Map.Entry<String, Set<String>> entry : partitionToResourceMap.entrySet()) {
+      String pName = entry.getKey();
+      if (partitionNames.contains(pName)) {
+        assertEquals("Partition now should have two resources", 2, entry.getValue().size());
+        assertTrue(entry.getValue().contains(newResourceName));
+        assertTrue(entry.getValue().contains(partitionToResourceBefore.get(pName)));
+      } else {
+        assertEquals("Partition not changed, should have one resource", 1, entry.getValue().size());
+        assertTrue(entry.getValue().contains(partitionToResourceBefore.get(pName)));
+      }
+    }
+
+    // Now return old resource in local dc, and nothing should change
+    localHelixAdmin.removeResourceIdealState("", resourceName);
+    localHelixAdmin.triggerRoutingTableNotification();
+    Thread.sleep(1000);
+
+    // Nothing should change
+    partitionToResourceMap = helixClusterManager.getGlobalPartitionToResourceMap();
+    for (Map.Entry<String, Set<String>> entry : partitionToResourceMap.entrySet()) {
+      String pName = entry.getKey();
+      if (partitionNames.contains(pName)) {
+        assertEquals("Partition now should have two resources", 2, entry.getValue().size());
+        assertTrue(entry.getValue().contains(newResourceName));
+        assertTrue(entry.getValue().contains(partitionToResourceBefore.get(pName)));
+      } else {
+        assertEquals("Partition not changed, should have one resource", 1, entry.getValue().size());
+        assertTrue(entry.getValue().contains(partitionToResourceBefore.get(pName)));
+      }
+    }
+
+    // Now change resource name in remote DC
+    resourceName = helixCluster.getResources(remoteDc).get(0);
+    idealState = helixCluster.getResourceIdealState(resourceName, remoteDc);
+
+    MockHelixAdmin remoteHelixAdmin = helixCluster.getHelixAdminFromDc(remoteDc);
+    remoteHelixAdmin.addResource("", newResourceName, cloneIdealState(idealState, resourceName));
+    // Trigger routing table change for local helix
+    localHelixAdmin.triggerRoutingTableNotification();
+    Thread.sleep(1000);
+
+    // Now remote and local has the same resource name
+    partitionToResourceMap = helixClusterManager.getGlobalPartitionToResourceMap();
+    for (Map.Entry<String, Set<String>> entry : partitionToResourceMap.entrySet()) {
+      String pName = entry.getKey();
+      if (partitionNames.contains(pName)) {
+        assertEquals("Partition now should have two resources", 1, entry.getValue().size());
+        assertTrue(entry.getValue().contains(newResourceName));
+      } else {
+        assertEquals("Partition not changed, should have one resource", 1, entry.getValue().size());
+        assertTrue(entry.getValue().contains(partitionToResourceBefore.get(pName)));
+      }
+    }
   }
 
   /**
@@ -1479,6 +1672,23 @@ public class HelixClusterManagerTest {
     Pair<Set<String>, Set<String>> writablePartitionsInTwoPlaces = getWritablePartitions();
     assertEquals(writablePartitionsInTwoPlaces.getFirst(), writablePartitionsInTwoPlaces.getSecond());
     testAllPartitions();
+  }
+
+  private IdealState cloneIdealState(IdealState state, String newResourceName) {
+    IdealState newState = new IdealState(newResourceName);
+    newState.setStateModelDefRef(state.getStateModelDefRef());
+    for (Map.Entry<String, List<String>> entry : state.getPreferenceLists().entrySet()) {
+      String partitionName = entry.getKey();
+      ArrayList<String> instances = new ArrayList<>(entry.getValue());
+      Collections.shuffle(instances);
+      newState.setPreferenceList(partitionName, instances);
+    }
+    newState.setNumPartitions(state.getPreferenceLists().size());
+    newState.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.name());
+    if (!newState.isValid()) {
+      throw new IllegalStateException("IdealState could not be validated for new resource " + newResourceName);
+    }
+    return newState;
   }
 
   /**

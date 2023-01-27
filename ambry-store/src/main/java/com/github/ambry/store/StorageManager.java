@@ -582,7 +582,11 @@ public class StorageManager implements StoreManager {
         // Only update store state if this is a state transition for primary participant. Since replication Manager
         // which eventually moves this state to STANDBY/LEADER only listens to primary participant, store state gets
         // stuck in BOOTSTRAP if this is updated by second participant listener too
-        store.setCurrentState(ReplicaState.BOOTSTRAP);
+        ReplicaState currentState = store.getCurrentState();
+        if (currentState != ReplicaState.LEADER && currentState != ReplicaState.STANDBY) {
+          // Only set the current state to BOOTSTRAP when it's not LEADER or STANDBY
+          store.setCurrentState(ReplicaState.BOOTSTRAP);
+        }
       }
     }
 

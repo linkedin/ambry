@@ -20,7 +20,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 
@@ -282,6 +281,21 @@ public class MockHelixCluster {
   void addNewResource(String resourceName, IdealState idealState, String dcName) throws Exception {
     MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
     helixAdmin.addNewResource(resourceName, idealState);
+  }
+
+  List<String> getResources(String dcName) throws Exception {
+    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
+    return helixAdmin.getResourcesInCluster("");
+  }
+
+  IdealState getResourceIdealState(String resourceName, String dcName) throws Exception {
+    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
+    return helixAdmin.getResourceIdealState("", resourceName);
+  }
+
+  void removeResourceIdealState(String resourceName, String dcName) throws Exception {
+    MockHelixAdmin helixAdmin = helixAdmins.get(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
+    helixAdmin.removeResourceIdealState("", resourceName);
   }
 
   Map<String, String> getPartitionToLeaderReplica(String dcName) {

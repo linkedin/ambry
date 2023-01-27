@@ -301,7 +301,7 @@ public class TestUtils {
         nioFactory.configure(new InetSocketAddress(port), maxClientConnections);
         nioFactory.startup(zk);
       } catch (IOException e) {
-        throw new ZkException("Unable to start single ZooKeeper server.", e);
+        throw new ZkException("Unable to start single ZooKeeper server at port " + port, e);
       } catch (InterruptedException e) {
         throw new ZkInterruptedException(e);
       }
