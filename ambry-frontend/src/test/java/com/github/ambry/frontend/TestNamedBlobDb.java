@@ -161,7 +161,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<List<StaleNamedResult>> pullStaleBlobIds() {
+  public CompletableFuture<List<StaleNamedResult>> pullStaleBlobs() {
     CompletableFuture<List<StaleNamedResult>> future = new CompletableFuture<>();
     List<StaleNamedResult> resultList = new ArrayList<>();
     for (String accountName : allRecords.keySet()) {

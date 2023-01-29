@@ -137,7 +137,7 @@ public class MySqlNamedBlobDbTest {
   public void testPullAndCleanStaleNamedBlobs() throws Exception {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
     dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
-    List<StaleNamedResult> staleNamedResults = namedBlobDb.pullStaleBlobIds().get();
+    List<StaleNamedResult> staleNamedResults = namedBlobDb.pullStaleBlobs().get();
     namedBlobDb.cleanupStaleData(staleNamedResults);
   }
 

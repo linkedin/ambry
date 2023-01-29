@@ -137,9 +137,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   /**
    * Pull the stale blobs that need to be cleaned up
+   * It will pull out any stale record (limit to be 1000 records at most) meeting below conditions:
+   * 1. created more than 60 days ago, and
+   * 2. it's NOT a VLR (Valid Latest Record) for any named blob.
+   * VLR of a named blob is the record whose blob_state=1 (READY), and has the max version for the named blob.
+   *
+   * To pull out the rows that meet the 2nd condition above, we are using left join and then pull out the rows where
+   * right side table's keys are all NULL
    */
+  // @formatter:off
   private static final String GET_STALE_QUERY = String.format(""
-          + "SELECT %s, %s, %s, %s, %s, %s "
+          + "SELECT t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, %s "
           + "FROM %s t1 "
           + "LEFT JOIN "
           + "(SELECT account_id, container_id, blob_name, max(version) as version "
@@ -148,16 +156,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "      GROUP BY account_id, container_id, blob_name) t2 "
           + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
           + "WHERE t1.gg_modi_ts<(%s - INTERVAL 60 DAY) and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL "
-          + "LIMIT 1000",
+          + "LIMIT ?",
       ACCOUNT_ID,
       CONTAINER_ID,
       BLOB_NAME,
       BLOB_ID,
       VERSION,
+      DELETED_TS,
       CURRENT_TIME,
       NAMED_BLOBS_V2,
       NAMED_BLOBS_V2,
       CURRENT_TIME);
+  // @formatter:on
 
   private final AccountService accountService;
   private final String localDatacenter;
@@ -311,12 +321,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<List<StaleNamedResult>> pullStaleBlobIds() {
+  public CompletableFuture<List<StaleNamedResult>> pullStaleBlobs() {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = System.currentTimeMillis();
-      List<StaleNamedResult> staleNamedBlobResults= runPullStaleBlobIds(connection);
+      List<StaleNamedResult> staleNamedBlobResults= runPullStaleBlobs(connection);
       metricsRecoder.namedBlobPullStaleTimeInMs.update(System.currentTimeMillis() - startTime);
       return staleNamedBlobResults;
     }, transactionStateTracker);
@@ -602,8 +612,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return new DeleteResult(blobId, alreadyDeleted);
   }
 
-  private List<StaleNamedResult> runPullStaleBlobIds(final Connection connection) throws Exception {
+  private List<StaleNamedResult> runPullStaleBlobs(final Connection connection) throws Exception {
     try (PreparedStatement statement = connection.prepareStatement(GET_STALE_QUERY)) {
+      statement.setInt(1, config.staleMaxResults);
       try (ResultSet resultSet = statement.executeQuery()) {
         List<StaleNamedResult> resultList = new ArrayList<>();
         while (resultSet.next()) {
@@ -612,9 +623,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           String blobName = resultSet.getString(3);
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
           long version = resultSet.getLong(5);
-          Timestamp currentTime = resultSet.getTimestamp(6);
-          StaleNamedResult result = new StaleNamedResult(accountId, containerId, blobName, blobId, version, currentTime);
-          resultList.add(result);
+          Timestamp deletionTime = resultSet.getTimestamp(6);
+          Timestamp currentTime = resultSet.getTimestamp(7);
+          if (compareTimestamp(deletionTime, currentTime.getTime()) > 0) {
+            StaleNamedResult result = new StaleNamedResult(accountId, containerId, blobName, blobId, version, currentTime);
+            resultList.add(result);
+          }
         }
         return resultList;
       }

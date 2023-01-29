@@ -38,7 +38,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
   public void run() {
     logger.info("Named Blobs Cleanup Runner is initiated");
     try {
-      List<StaleNamedResult> staleResultList = namedBlobDb.pullStaleBlobIds().get();
+      List<StaleNamedResult> staleResultList = namedBlobDb.pullStaleBlobs().get();
       List<StaleNamedResult> failedResults = new ArrayList<>();
       for (StaleNamedResult staleResult : staleResultList) {
         try {

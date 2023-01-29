@@ -25,6 +25,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
@@ -34,12 +35,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.junit.Test;
 
@@ -211,6 +213,69 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   /**
+   * Test behavior with stale blob cleanup
+   */
+  @Test
+  public void testCleanupStaleBlobs() throws Exception {
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+
+    int staleCount = 10;
+    int needCleanupCount = 0;
+    List<NamedBlobRecord> records = new ArrayList<>();
+
+    // Create stale named blob records
+    for (int i = 0; i < staleCount; i++) {
+      String blobId = getBlobId(account, container);
+      String blobName = "stale/" + i + "/more path segments--";
+      long expirationTime = i % 2 == 0 ? Utils.Infinite_Time : System.currentTimeMillis() - TimeUnit.DAYS.toMillis(61);
+      NamedBlobRecord record =
+          new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
+
+      NamedBlobState blob_state = expirationTime == Utils.Infinite_Time ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
+
+      namedBlobDb.put(record, blob_state, true).get();
+      namedBlobDb.put(record, NamedBlobState.READY, true).get();
+
+      if (expirationTime == Utils.Infinite_Time) {
+        needCleanupCount += 1;
+      }
+      records.add(record);
+    }
+
+    Thread.sleep(100);
+
+    // Confirm the pullStaleBlobs indeed pulled out the stale blob cases
+    Set<String> staleInputSet = records.stream().filter((r) -> r.getExpirationTimeMs() == Utils.Infinite_Time).map((r) ->
+        String.join("|", r.getBlobName(), r.getBlobId())
+    ).collect(Collectors.toSet());
+
+    List<StaleNamedResult> staleNamedResults = namedBlobDb.pullStaleBlobs().get();
+    Set<String> staleResultSet = staleNamedResults.stream().map((s) ->
+        String.join("|", s.getBlobName(), s.getBlobId())
+    ).collect(Collectors.toSet());
+    assertEquals("Stale records count does not match!", needCleanupCount, staleNamedResults.size());
+    assertEquals("Stale records pulled out does not meet expectation", staleInputSet, staleResultSet);
+
+    // Confirm pullStaleBlobs return empty list after cleanupStaleData is called
+    Integer cleanedUpStaleCount = namedBlobDb.cleanupStaleData(staleNamedResults).get();
+    List<StaleNamedResult> staleNamedResultsNew = namedBlobDb.pullStaleBlobs().get();
+
+    assertEquals("Cleaned Stale records count does not match!", needCleanupCount, cleanedUpStaleCount.intValue());
+    assertTrue("Still pulled out stale blobs after cleanup!", staleNamedResultsNew.isEmpty());
+
+
+    // Verify we can still pull out the valid named blobs after cleanup
+    for (NamedBlobRecord record : records) {
+      if (record.getExpirationTimeMs() == Utils.Infinite_Time) {
+        NamedBlobRecord recordFromDb =
+            namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
+        assertEquals("After stale cleanup, the record does not match expectation.", record, recordFromDb);
+      }
+    }
+  }
+
+  /**
    * Get a sample blob ID.
    * @param account the account of the blob.
    * @param container the container of the blob.
@@ -234,7 +299,7 @@ public class MySqlNamedBlobDbIntegrationTest {
 
   /**
    * Empties the accounts and containers tables.
-   * @throws SQLException
+   * @throws SQLException throw any SQL related exception
    */
   private void cleanup() throws SQLException {
     for (DataSource dataSource : namedBlobDb.getDataSources().values()) {

@@ -97,7 +97,7 @@ public interface NamedBlobDb {
   /**
    * Pull the stale blobs that need to be cleaned up
    */
-  CompletableFuture<List<StaleNamedResult>> pullStaleBlobIds();
+  CompletableFuture<List<StaleNamedResult>> pullStaleBlobs();
 
   /**
    * Cleanup the stale blobs records

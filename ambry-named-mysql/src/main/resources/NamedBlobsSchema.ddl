@@ -6,9 +6,11 @@ CREATE TABLE IF NOT EXISTS named_blobs_v2 (
     version bigint NOT NULL,
     blob_id varbinary(50) NOT NULL,
     deleted_ts datetime(6) DEFAULT NULL,
+    gg_modi_ts datetime(6) DEFAULT (CURRENT_TIMESTAMP(6) - INTERVAL 61 DAY),
     blob_state smallint NOT NULL,
     PRIMARY KEY (account_id, container_id, blob_name, version)
 )
+
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_bin
