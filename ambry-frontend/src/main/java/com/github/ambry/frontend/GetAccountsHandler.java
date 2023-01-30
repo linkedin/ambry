@@ -128,7 +128,6 @@ class GetAccountsHandler {
           serialized = AccountCollectionSerde.serializeDatasetsInJson(dataset);
           restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, dataset.getAccountName());
           restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, dataset.getContainerName());
-          restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, dataset.getDatasetName());
         } else if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
           LOGGER.debug("Received request for getting single container with arguments: {}", restRequest.getArgs());
           Container container = getContainer();
@@ -201,14 +200,14 @@ class GetAccountsHandler {
      * @throws RestServiceException
      */
     private Dataset getDataset() throws RestServiceException {
-      String accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
-      String containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
-      String datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
+      String accountName = null;
+      String containerName = null;
+      String datasetName = null;
       try {
-        Container container = accountService.getContainerByName(accountName, containerName);
-        short accountId = container.getParentAccountId();
-        short containerId = container.getId();
-        return accountService.getDataset(accountId, containerId, accountName, containerName, datasetName);
+        accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
+        containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
+        datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
+        return accountService.getDataset(accountName, containerName, datasetName);
       } catch (AccountServiceException ex) {
         throw new RestServiceException(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "

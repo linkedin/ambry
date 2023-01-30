@@ -269,17 +269,6 @@ public abstract class AbstractAccountService implements AccountService {
     return accountUpdateConsumers.remove(accountUpdateConsumer);
   }
 
-  @Override
-  public void addDataset(short accountId, short containerId, Dataset dataset) throws AccountServiceException {
-    throw new UnsupportedOperationException("This method is not supported");
-  }
-
-  @Override
-  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
-      String DatasetName) throws AccountServiceException {
-    throw new UnsupportedOperationException("This method is not supported");
-  }
-
   /**
    * Logs and notifies account update {@link Consumer}s about any new account changes/creations.
    * @param updatedAccounts collection of updated accounts

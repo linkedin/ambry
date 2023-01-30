@@ -1030,8 +1030,7 @@ public class FrontendRestRequestServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
     assertEquals("Dataset not created correctly", dataset,
-        accountService.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME));
+        accountService.getDataset(testAccount.getName(), testContainer.getName(), DATASET_NAME));
 
     headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
         .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName())
@@ -1043,8 +1042,6 @@ public class FrontendRestRequestServiceTest {
         new ByteArrayInputStream(restResponseChannel.getResponseBody()));
     assertEquals("Unexpected GET /accounts/containers/datasets response ", dataset, datasetFromResponse);
     assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
-    assertEquals("Unexpected header", DATASET_NAME,
-        restResponseChannel.getHeader(RestUtils.Headers.TARGET_DATASET_NAME));
     assertEquals("Unexpected header", testAccount.getName(),
         restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME));
     assertEquals("Unexpected header", testContainer.getName(),

@@ -511,8 +511,17 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
-  public void addDataset(short accountId, short containerId, Dataset dataset) throws AccountServiceException {
+  public void addDataset(Dataset dataset) throws AccountServiceException {
     try {
+      String accountName = dataset.getAccountName();
+      String containerName = dataset.getContainerName();
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
       mySqlAccountStore.addDataset(accountId, containerId, dataset);
     } catch (SQLException e) {
       throw translateSQLException(e);
@@ -520,9 +529,17 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
-  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
-      String datasetName) throws AccountServiceException {
+  public Dataset getDataset(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
     try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException(
+            "Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
       return mySqlAccountStore.getDataset(accountId, containerId, accountName, containerName, datasetName);
     } catch (SQLException e) {
       throw translateSQLException(e);

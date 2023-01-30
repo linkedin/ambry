@@ -55,7 +55,7 @@ public class InMemAccountService implements AccountService {
   private final Set<Consumer<Collection<Account>>> accountUpdateConsumers = new HashSet<>();
   private final ScheduledExecutorService scheduler;
   private boolean shouldUpdateSucceed = true;
-  private final Map<Pair<Short, Short>, Map<String, Dataset>> idToDatasetMap = new HashMap<>();
+  private final Map<Pair<String, String>, Map<String, Dataset>> nameToDatasetMap = new HashMap<>();
 
   /**
    * Constructor.
@@ -143,15 +143,17 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized void addDataset(short accountId, short containerId, Dataset dataset) {
-    idToDatasetMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
-    idToDatasetMap.get(new Pair<>(accountId, containerId)).put(dataset.getDatasetName(), dataset);
+  public synchronized void addDataset(Dataset dataset) {
+    String accountName = dataset.getAccountName();
+    String containerName = dataset.getContainerName();
+    nameToDatasetMap.putIfAbsent(new Pair<>(accountName, containerName), new HashMap<>());
+    nameToDatasetMap.get(new Pair<>(accountName, containerName)).put(dataset.getDatasetName(), dataset);
   }
 
   @Override
-  public synchronized Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
-      String datasetName) throws AccountServiceException {
-    return idToDatasetMap.get(new Pair<>(accountId, containerId)).get(datasetName);
+  public synchronized Dataset getDataset(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
+    return nameToDatasetMap.get(new Pair<>(accountName, containerName)).get(datasetName);
   }
 
   @Override

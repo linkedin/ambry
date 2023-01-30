@@ -113,9 +113,7 @@ public class AccountCollectionSerde {
    * @throws IOException
    */
   public static byte[] serializeDatasetsInJson(Dataset dataset) throws IOException {
-    Map<String, Dataset> resultObj = new HashMap<>();
-    resultObj.put(Account.DATASET_KEY, dataset);
-    return objectMapper.writeValueAsBytes(resultObj);
+    return objectMapper.writeValueAsBytes(dataset);
   }
 
   /**
@@ -125,13 +123,7 @@ public class AccountCollectionSerde {
    * @throws IOException
    */
   public static Dataset datasetsFromInputStreamInJson(InputStream inputStream) throws IOException {
-    Map<String, Dataset> map = objectMapper.readValue(inputStream, new TypeReference<Map<String, Dataset>>() {
-    });
-    if (!map.containsKey(Account.DATASET_KEY)) {
-      return null;
-    } else {
-      Dataset dataset = map.get(Account.DATASET_KEY);
-      return new DatasetBuilder(dataset).build();
-    }
+    Dataset dataset = objectMapper.readValue(inputStream, Dataset.class);
+    return new DatasetBuilder(dataset).build();
   }
 }

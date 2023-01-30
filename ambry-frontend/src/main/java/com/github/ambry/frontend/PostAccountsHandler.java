@@ -259,10 +259,7 @@ class PostAccountsHandler {
               "There is a mismatch between account name from header: " + containerNameFromRequest
                   + " and account name from dataset: " + containerName, RestServiceErrorCode.BadRequest);
         }
-        Container container = accountService.getContainerByName(accountName, containerName);
-        short accountId = container.getParentAccountId();
-        short containerId = container.getId();
-        accountService.addDataset(accountId, containerId, datasetToUpdate);
+        accountService.addDataset(datasetToUpdate);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
