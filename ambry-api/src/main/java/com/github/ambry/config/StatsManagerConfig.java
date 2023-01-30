@@ -37,14 +37,14 @@ public class StatsManagerConfig {
    */
   @Config(STATS_OUTPUT_FILE_PATH)
   @Default("/tmp/stats_output.json")
-  public final String outputFilePath;
+  public final String statsOutputFilePath;
 
   /**
    * The time period in seconds that configures how often stats are published.
    */
   @Config(STATS_PUBLISH_PERIOD_IN_SECS)
   @Default("7200")
-  public final long publishPeriodInSecs;
+  public final long statsPublishPeriodInSecs;
 
   /**
    * The upper bound for the initial delay in seconds before the first stats collection is triggered. The delay is a
@@ -52,21 +52,21 @@ public class StatsManagerConfig {
    */
   @Config(STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS)
   @Default("600")
-  public final int initialDelayUpperBoundInSecs;
+  public final int statsInitialDelayUpperBoundInSecs;
 
   /**
    * True to enable publishing stats to mysql database
    */
   @Config(STATS_ENABLE_MYSQL_REPORT)
   @Default("false")
-  public final boolean enableMysqlReport;
+  public final boolean statsEnableMysqlReport;
 
   /**
    * The account names to exclude from the health report. Multiple account names should be separated with ",".
    */
   @Config(STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES)
   @Default("")
-  public final List<String> healthReportExcludeAccountNames;
+  public final List<String> statsHealthReportExcludeAccountNames;
 
   /**
    * The account names to exclude from publishing to local disk and mysql database. Multiple account names should be
@@ -74,7 +74,7 @@ public class StatsManagerConfig {
    */
   @Config(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES)
   @Default("")
-  public final List<String> publishExcludeAccountNames;
+  public final List<String> statsPublishExcludeAccountNames;
 
   /**
    * The time period in seconds that configures how often partition class stats are published to mysql. Set it to 0 to
@@ -82,25 +82,25 @@ public class StatsManagerConfig {
    */
   @Config(STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS)
   @Default("0")
-  public final long publishPartitionClassReportPeriodInSecs;
+  public final long statsPublishPartitionClassReportPeriodInSecs;
 
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
-    outputFilePath = verifiableProperties.getString(STATS_OUTPUT_FILE_PATH, "/tmp/stats_output.json");
-    publishPeriodInSecs = verifiableProperties.getLongInRange(STATS_PUBLISH_PERIOD_IN_SECS, 7200, 0, Long.MAX_VALUE);
-    initialDelayUpperBoundInSecs =
+    statsOutputFilePath = verifiableProperties.getString(STATS_OUTPUT_FILE_PATH, "/tmp/stats_output.json");
+    statsPublishPeriodInSecs = verifiableProperties.getLongInRange(STATS_PUBLISH_PERIOD_IN_SECS, 7200, 0, Long.MAX_VALUE);
+    statsInitialDelayUpperBoundInSecs =
         verifiableProperties.getIntInRange(STATS_INITIAL_DELAY_UPPER_BOUND_IN_SECS, 600, 0, Integer.MAX_VALUE);
-    enableMysqlReport = verifiableProperties.getBoolean(STATS_ENABLE_MYSQL_REPORT, false);
+    statsEnableMysqlReport = verifiableProperties.getBoolean(STATS_ENABLE_MYSQL_REPORT, false);
     String excludeNames = verifiableProperties.getString(STATS_HEALTH_REPORT_EXCLUDE_ACCOUNT_NAMES, "").trim();
-    healthReportExcludeAccountNames =
+    statsHealthReportExcludeAccountNames =
         excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
     excludeNames = verifiableProperties.getString(STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES, "").trim();
-    publishExcludeAccountNames =
+    statsPublishExcludeAccountNames =
         excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
-    publishPartitionClassReportPeriodInSecs =
+    statsPublishPartitionClassReportPeriodInSecs =
         verifiableProperties.getLongInRange(STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS, 0, 0, Long.MAX_VALUE);
-    if (publishPartitionClassReportPeriodInSecs != 0 && !enableMysqlReport) {
+    if (statsPublishPartitionClassReportPeriodInSecs != 0 && !statsEnableMysqlReport) {
       throw new IllegalStateException(
-          "Bad configuration, you have to enableMysqlReport if you set a non-zero value for publishPartitionClassReportPeriodInSecs");
+          "Bad configuration, you have to statsEnableMysqlReport if you set a non-zero value for statsPublishPartitionClassReportPeriodInSecs");
     }
   }
 }

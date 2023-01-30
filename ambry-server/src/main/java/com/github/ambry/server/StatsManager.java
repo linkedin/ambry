@@ -104,7 +104,7 @@ class StatsManager {
       AccountService accountService) {
     this.storageManager = storageManager;
     this.config = config;
-    statsOutputFile = new File(config.outputFilePath);
+    statsOutputFile = new File(config.statsOutputFilePath);
     metrics = new StatsManagerMetrics(registry, aggregatedDeleteTombstoneStats);
     partitionToReplicaMap =
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
@@ -120,8 +120,8 @@ class StatsManager {
         .filter(Objects::nonNull)
         .map(Account::getId)
         .collect(Collectors.toList());
-    this.healthReportExcludeAccountIds = convertAccountNamesToIds.apply(config.healthReportExcludeAccountNames);
-    this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.publishExcludeAccountNames);
+    this.healthReportExcludeAccountIds = convertAccountNamesToIds.apply(config.statsHealthReportExcludeAccountNames);
+    this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.statsPublishExcludeAccountNames);
   }
 
   /**
@@ -131,19 +131,19 @@ class StatsManager {
     scheduler = Utils.newScheduler(1, false);
     if (accountStatsStore != null) {
       accountsStatsPublisher = new AccountStatsPublisher(accountStatsStore);
-      int actualDelay = config.initialDelayUpperBoundInSecs > 0 ? ThreadLocalRandom.current()
-          .nextInt(config.initialDelayUpperBoundInSecs) : 0;
+      int actualDelay = config.statsInitialDelayUpperBoundInSecs > 0 ? ThreadLocalRandom.current()
+          .nextInt(config.statsInitialDelayUpperBoundInSecs) : 0;
       logger.info("Scheduling account stats publishing job with an initial delay of {} secs", actualDelay);
-      scheduler.scheduleAtFixedRate(accountsStatsPublisher, actualDelay, config.publishPeriodInSecs, TimeUnit.SECONDS);
+      scheduler.scheduleAtFixedRate(accountsStatsPublisher, actualDelay, config.statsPublishPeriodInSecs, TimeUnit.SECONDS);
     }
 
-    if (config.publishPartitionClassReportPeriodInSecs != 0) {
+    if (config.statsPublishPartitionClassReportPeriodInSecs != 0) {
       partitionClassStatsPublisher = new PartitionClassStatsPublisher(accountStatsStore);
-      long initialDelay = ThreadLocalRandom.current().nextLong(config.publishPartitionClassReportPeriodInSecs / 2)
-          + config.publishPartitionClassReportPeriodInSecs / 2;
+      long initialDelay = ThreadLocalRandom.current().nextLong(config.statsPublishPartitionClassReportPeriodInSecs / 2)
+          + config.statsPublishPartitionClassReportPeriodInSecs / 2;
       logger.info("Scheduling partition class stats publishing job with an initial delay of {} secs", initialDelay);
       scheduler.scheduleAtFixedRate(partitionClassStatsPublisher, initialDelay,
-          config.publishPartitionClassReportPeriodInSecs, TimeUnit.SECONDS);
+          config.statsPublishPartitionClassReportPeriodInSecs, TimeUnit.SECONDS);
     }
   }
 
