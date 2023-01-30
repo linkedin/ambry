@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.slf4j.Logger;
@@ -94,6 +95,7 @@ public class HelixAccountService extends AbstractAccountService {
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final BackupFileManager backupFileManager;
   private final HelixPropertyStore<ZNRecord> helixStore;
+  private final ZkBaseDataAccessor<ZNRecord> baseDataAccessor;
   private final ScheduledExecutorService scheduler;
   private final HelixAccountServiceConfig config;
   private final AccountMetadataStore accountMetadataStore;
@@ -111,6 +113,7 @@ public class HelixAccountService extends AbstractAccountService {
    *   This call is blocking until it fetches all the {@link Account} metadata from {@link HelixPropertyStore}.
    * </p>
    * @param helixStore A {@link HelixPropertyStore} used by the {@code HelixAccountService}. Cannot be {@code null}.
+   * @param baseDataAccessor A {@link ZkBaseDataAccessor} that backs PropertyStore. Close this accessor after property store.
    * @param accountServiceMetrics {@link AccountServiceMetrics} to report metrics. Cannot be {@code null}.
    * @param notifier A {@link Notifier} that will be used to publish message after updating {@link Account}s, and
    *                 listen to {@link Account} change messages. Can be {@code null}.
@@ -119,11 +122,12 @@ public class HelixAccountService extends AbstractAccountService {
    * @param config The configs for {@code HelixAccountService}.
    * @throws IOException if backup directory creation was needed but failed.
    */
-  HelixAccountService(HelixPropertyStore<ZNRecord> helixStore, AccountServiceMetrics accountServiceMetrics,
-      Notifier<String> notifier, ScheduledExecutorService scheduler, HelixAccountServiceConfig config)
-      throws IOException {
+  HelixAccountService(HelixPropertyStore<ZNRecord> helixStore, ZkBaseDataAccessor<ZNRecord> baseDataAccessor,
+      AccountServiceMetrics accountServiceMetrics, Notifier<String> notifier, ScheduledExecutorService scheduler,
+      HelixAccountServiceConfig config) throws IOException {
     super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"), notifier);
     this.helixStore = Objects.requireNonNull(helixStore, "helixStore cannot be null");
+    this.baseDataAccessor = baseDataAccessor;
     this.scheduler = scheduler;
     this.config = config;
     this.backupFileManager =
@@ -306,6 +310,10 @@ public class HelixAccountService extends AbstractAccountService {
         shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
       }
       helixStore.stop();
+      if (baseDataAccessor != null) {
+        baseDataAccessor.close();
+      }
+      notifier.close();
     }
   }
 

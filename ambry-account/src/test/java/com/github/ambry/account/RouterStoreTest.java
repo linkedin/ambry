@@ -100,6 +100,7 @@ public class RouterStoreTest {
     if (operator.exist("/")) {
       operator.delete("/");
     }
+    operator.close();
     if (Files.exists(accountBackupDir)) {
       Utils.deleteFileOrDirectory(accountBackupDir.toFile());
     }

@@ -15,50 +15,60 @@
 package com.github.ambry.commons;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
+import com.github.ambry.utils.Pair;
 import java.util.List;
-import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.manager.zk.ZkBaseDataAccessor;
-import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
+import org.apache.helix.zookeeper.api.client.RealmAwareZkClient;
 import org.apache.helix.zookeeper.api.client.ZkClientType;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
+import org.apache.helix.zookeeper.datamodel.serializer.ZNRecordSerializer;
 
 
 public class CommonUtils {
   /**
-   * Create a instance of {@link HelixPropertyStore} based on given {@link HelixPropertyStoreConfig}.
+   * Create an instance of {@link HelixPropertyStore} and {@link ZkBaseDataAccessor} based on given {@link HelixPropertyStoreConfig}.
+   * Close {@link ZkBaseDataAccessor} after stopping {@link HelixPropertyStore}.
    * @param zkServers the ZooKeeper server address.
    * @param propertyStoreConfig the config for {@link HelixPropertyStore}.
    * @param subscribedPaths a list of paths to which the PropertyStore subscribes.
-   * @return the instance of {@link HelixPropertyStore}.
+   * @return A pair of an instance of {@link HelixPropertyStore} and an instance of {@link ZkBaseDataAccessor}.
    */
-  public static HelixPropertyStore<ZNRecord> createHelixPropertyStore(String zkServers,
-      HelixPropertyStoreConfig propertyStoreConfig, List<String> subscribedPaths) {
+  public static Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> createHelixPropertyStore(
+      String zkServers, HelixPropertyStoreConfig propertyStoreConfig, List<String> subscribedPaths) {
     if (zkServers == null || zkServers.isEmpty() || propertyStoreConfig == null) {
       throw new IllegalArgumentException("Invalid arguments, cannot create HelixPropertyStore");
     }
-    ZkClient zkClient = new ZkClient(zkServers, propertyStoreConfig.zkClientSessionTimeoutMs,
-        propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-    return new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath,
-        subscribedPaths);
+    ZkBaseDataAccessor<ZNRecord> baseDataAccessor =
+        new ZkBaseDataAccessor.Builder<ZNRecord>().setZkClientType(ZkClientType.DEDICATED)
+            .setZkAddress(zkServers)
+            .setRealmAwareZkClientConfig(new RealmAwareZkClient.RealmAwareZkClientConfig().setConnectInitTimeout(
+                propertyStoreConfig.zkClientConnectionTimeoutMs).setZkSerializer(new ZNRecordSerializer()))
+            .setRealmAwareZkConnectionConfig(
+                new RealmAwareZkClient.RealmAwareZkConnectionConfig.Builder().setSessionTimeout(
+                    propertyStoreConfig.zkClientSessionTimeoutMs).build())
+            .build();
+    return new Pair<>(new ZkHelixPropertyStore<>(baseDataAccessor, propertyStoreConfig.rootPath, subscribedPaths),
+        baseDataAccessor);
   }
 
   /**
-   * Create an instance of {@link HelixPropertyStore}, using non-deprecated APIs.
+   * Create an instance of {@link HelixPropertyStore} and {@link ZkBaseDataAccessor}, using non-deprecated APIs.
+   * Close {@link ZkBaseDataAccessor} after stopping {@link HelixPropertyStore}.
    * TODO replace usages of the other method with this one once verified to be stable.
    * @param zkAddress the ZooKeeper server address.
    * @param rootPath the root path for this {@link HelixPropertyStore}.
    * @param subscribedPaths the paths to subscribe to for change notification. Note that these should be absolute paths,
    *                        not relative paths under {@code rootPath}.
-   * @return the instance of {@link HelixPropertyStore}.
+   * @return A pair of an instance of {@link HelixPropertyStore} and an instance of {@link ZkBaseDataAccessor}.
    */
-  public static HelixPropertyStore<ZNRecord> createHelixPropertyStore(String zkAddress, String rootPath,
-      List<String> subscribedPaths) {
+  public static Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> createHelixPropertyStore(
+      String zkAddress, String rootPath, List<String> subscribedPaths) {
     ZkBaseDataAccessor<ZNRecord> baseDataAccessor =
         new ZkBaseDataAccessor.Builder<ZNRecord>().setZkClientType(ZkClientType.DEDICATED)
             .setZkAddress(zkAddress)
             .build();
-    return new ZkHelixPropertyStore<>(baseDataAccessor, rootPath, subscribedPaths);
+    return new Pair<>(new ZkHelixPropertyStore<>(baseDataAccessor, rootPath, subscribedPaths), baseDataAccessor);
   }
 }

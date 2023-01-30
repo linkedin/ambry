@@ -59,7 +59,7 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
       ScheduledExecutorService scheduler =
           accountServiceConfig.updaterPollingIntervalMs > 0 ? Utils.newScheduler(1, updaterThreadPrefix, false) : null;
       HelixAccountService accountService =
-          new HelixAccountService(getHelixStore(accountServiceConfig.zkClientConnectString, storeConfig),
+          new HelixAccountService(getHelixStore(accountServiceConfig.zkClientConnectString, storeConfig), null,
               accountServiceMetrics, notifier, scheduler, accountServiceConfig);
       if (useNewZNodePath) {
         accountService.setupRouter(router);

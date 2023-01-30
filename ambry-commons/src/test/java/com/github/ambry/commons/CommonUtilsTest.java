@@ -17,6 +17,7 @@ package com.github.ambry.commons;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -24,6 +25,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import org.apache.helix.AccessOption;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.junit.Test;
@@ -67,10 +69,13 @@ public class CommonUtilsTest {
       //expected
     }
 
-    HelixPropertyStore<ZNRecord> propertyStore =
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
         CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
             Collections.singletonList(propertyStoreConfig.rootPath));
+    HelixPropertyStore<ZNRecord> propertyStore = pair.getFirst();
+    ZkBaseDataAccessor<ZNRecord> baseDataAccessor = pair.getSecond();
     assertNotNull(propertyStore);
+    assertNotNull(baseDataAccessor);
 
     // Ensure the HelixPropertyStore works correctly
     List<String> list = Arrays.asList("first", "second", "third");
@@ -86,6 +91,7 @@ public class CommonUtilsTest {
     ZNRecord result = propertyStore.get(path, null, AccessOption.PERSISTENT);
     assertEquals("Mismatch in list content", new HashSet<>(list), new HashSet<>(result.getListField("AmbryList")));
     propertyStore.stop();
+    baseDataAccessor.close();
     zkInfo.shutdown();
   }
 }

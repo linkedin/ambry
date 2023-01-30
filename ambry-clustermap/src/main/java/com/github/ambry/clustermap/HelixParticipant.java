@@ -22,6 +22,7 @@ import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -37,6 +38,7 @@ import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.store.HelixPropertyStore;
@@ -423,8 +425,9 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     Properties properties = new Properties();
     properties.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(properties));
-    HelixPropertyStore<ZNRecord> helixPropertyStore =
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
         CommonUtils.createHelixPropertyStore(zkConnectStr, propertyStoreConfig, null);
+    HelixPropertyStore<ZNRecord> helixPropertyStore = pair.getFirst();
     String path = PARTITION_DISABLED_ZNODE_PATH + instanceName;
     int count = 1;
     while (helixPropertyStore.exists(path, AccessOption.PERSISTENT)) {
@@ -433,6 +436,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       logger.info("{} th attempt on checking the completion of disabling partition.", ++count);
     }
     helixPropertyStore.stop();
+    pair.getSecond().close();
   }
 
   /**

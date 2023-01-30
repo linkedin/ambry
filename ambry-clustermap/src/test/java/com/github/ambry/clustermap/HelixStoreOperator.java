@@ -15,11 +15,13 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
+import com.github.ambry.utils.Pair;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.helix.AccessOption;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -36,6 +38,7 @@ public class HelixStoreOperator {
   private static final Logger logger = LoggerFactory.getLogger(HelixStoreOperator.class);
   private static final long OPERATION_TIMEOUT_MS = 20000;
   private final HelixPropertyStore<ZNRecord> helixStore;
+  private final ZkBaseDataAccessor<ZNRecord> baseDataAccessor;
 
   /**
    * Constructor.
@@ -43,6 +46,7 @@ public class HelixStoreOperator {
    */
   public HelixStoreOperator(HelixPropertyStore<ZNRecord> helixStore) {
     this.helixStore = helixStore;
+    this.baseDataAccessor = null;
   }
 
   /**
@@ -57,13 +61,14 @@ public class HelixStoreOperator {
     long startTimeMs = System.currentTimeMillis();
     logger.info("Starting a HelixStoreOperator");
     List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath);
-    HelixPropertyStore<ZNRecord> helixStore =
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
         CommonUtils.createHelixPropertyStore(zkServers, storeConfig, subscribedPaths);
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", zkServers,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
         subscribedPaths);
-    this.helixStore = helixStore;
+    this.helixStore = pair.getFirst();
+    this.baseDataAccessor = pair.getSecond();
     logger.info("HelixStoreOperator started, took {}ms", System.currentTimeMillis() - startTimeMs);
   }
 
@@ -113,6 +118,18 @@ public class HelixStoreOperator {
    */
   public boolean exist(String path) {
     return helixStore.exists(path, AccessOption.PERSISTENT);
+  }
+
+  /**
+   * Close StoreOperator and all the  underlying data structures.
+   */
+  public void close() {
+    if (helixStore != null) {
+      helixStore.stop();
+    }
+    if (baseDataAccessor != null) {
+      baseDataAccessor.close();
+    }
   }
 
   /**

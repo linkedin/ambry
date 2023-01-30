@@ -23,6 +23,7 @@ import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -39,6 +40,7 @@ import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import org.apache.helix.AccessOption;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.apache.zookeeper.data.Stat;
@@ -85,6 +87,7 @@ public class MySqlAccountsDBTool {
 
   private final MySqlAccountStore mySqlAccountStore;
   private final HelixPropertyStore<ZNRecord> helixPropertyStore;
+  private final ZkBaseDataAccessor<ZNRecord> baseDataAccessor;
   private final String fullZKAccountMetadataPath;
 
   enum OPERATION_TYPE {
@@ -112,24 +115,24 @@ public class MySqlAccountsDBTool {
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> storePathOpt = parser.accepts(STOREPATH,
-        "The root path of helix property store in the ZooKeeper. "
-            + "Must start with /, and must not end with /. It is recommended to make root path in the form of "
-            + "/ambry/<clustername>/helixPropertyStore. This option is required if source of storage is zookeeper.")
+            "The root path of helix property store in the ZooKeeper. "
+                + "Must start with /, and must not end with /. It is recommended to make root path in the form of "
+                + "/ambry/<clustername>/helixPropertyStore. This option is required if source of storage is zookeeper.")
         .withRequiredArg()
         .describedAs(STOREPATH)
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<Integer> zkConnectionTimeoutMsOpt = parser.accepts("zkConnectionTimeout",
-        "Optional timeout in millisecond for connecting to the ZooKeeper server. This option is not required, "
-            + "and the default value is 5000.")
+            "Optional timeout in millisecond for connecting to the ZooKeeper server. This option is not required, "
+                + "and the default value is 5000.")
         .withRequiredArg()
         .describedAs("zk_connection_timeout")
         .ofType(Integer.class)
         .defaultsTo(ZK_CLIENT_CONNECTION_TIMEOUT_MS);
 
     ArgumentAcceptingOptionSpec<Integer> zkSessionTimeoutMsOpt = parser.accepts("zkSessionTimeout",
-        "Optional timeout in millisecond for session to the ZooKeeper server. This option is not required, "
-            + "and the default value is 20000.")
+            "Optional timeout in millisecond for session to the ZooKeeper server. This option is not required, "
+                + "and the default value is 20000.")
         .withRequiredArg()
         .describedAs("zk_session_timeout")
         .ofType(Integer.class)
@@ -161,6 +164,7 @@ public class MySqlAccountsDBTool {
     Integer zkConnectionTimeoutMs = options.valueOf(zkConnectionTimeoutMsOpt);
     Integer zkSessionTimeoutMs = options.valueOf(zkSessionTimeoutMsOpt);
 
+    MySqlAccountsDBTool mySqlAccountsDBTool = null;
     try {
       Properties properties = Utils.loadProps(propsFilePath);
       properties.setProperty(HelixPropertyStoreConfig.HELIX_ZK_CLIENT_CONNECTION_TIMEOUT_MS,
@@ -170,7 +174,7 @@ public class MySqlAccountsDBTool {
       properties.setProperty(HelixPropertyStoreConfig.HELIX_ROOT_PATH, storePath);
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
 
-      MySqlAccountsDBTool mySqlAccountsDBTool = new MySqlAccountsDBTool(verifiableProperties, zkServer);
+      mySqlAccountsDBTool = new MySqlAccountsDBTool(verifiableProperties, zkServer);
 
       if (operationType == OPERATION_TYPE.INIT) {
         mySqlAccountsDBTool.initialize();
@@ -179,6 +183,10 @@ public class MySqlAccountsDBTool {
       }
     } catch (Exception e) {
       logger.error("MySQL accounts initialization or comparison failed", e);
+    } finally {
+      if (mySqlAccountsDBTool != null) {
+        mySqlAccountsDBTool.close();
+      }
     }
   }
 
@@ -188,10 +196,22 @@ public class MySqlAccountsDBTool {
         new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore();
     //Create helix property store
     HelixPropertyStoreConfig helixPropertyStoreConfig = new HelixPropertyStoreConfig(verifiableProperties);
-    this.helixPropertyStore = CommonUtils.createHelixPropertyStore(zkServer, helixPropertyStoreConfig, null);
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
+        CommonUtils.createHelixPropertyStore(zkServer, helixPropertyStoreConfig, null);
+    this.helixPropertyStore = pair.getFirst();
+    this.baseDataAccessor = pair.getSecond();
 
     //store the complete path of metadata in zk for logging
     fullZKAccountMetadataPath = helixPropertyStoreConfig.rootPath + RELATIVE_ACCOUNT_METADATA_PATH;
+  }
+
+  void close() {
+    if (helixPropertyStore != null) {
+      helixPropertyStore.stop();
+    }
+    if (baseDataAccessor != null) {
+      baseDataAccessor.close();
+    }
   }
 
   private void cleanup() throws SQLException {

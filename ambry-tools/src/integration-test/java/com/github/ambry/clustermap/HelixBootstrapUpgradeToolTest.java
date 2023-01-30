@@ -15,11 +15,11 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.TestUtils.*;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.HelixException;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.store.HelixPropertyStore;
@@ -119,14 +120,10 @@ public class HelixBootstrapUpgradeToolTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{
-        {"DC1", DataNodeConfigSourceType.INSTANCE_CONFIG},
-        {"DC1", DataNodeConfigSourceType.PROPERTY_STORE},
-        {"DC1, DC0", DataNodeConfigSourceType.INSTANCE_CONFIG},
-        {"DC1, DC0", DataNodeConfigSourceType.PROPERTY_STORE},
-        {"all", DataNodeConfigSourceType.INSTANCE_CONFIG},
-        {"all", DataNodeConfigSourceType.PROPERTY_STORE},
-    });
+    return Arrays.asList(new Object[][]{{"DC1", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"DC1", DataNodeConfigSourceType.PROPERTY_STORE}, {"DC1, DC0", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"DC1, DC0", DataNodeConfigSourceType.PROPERTY_STORE}, {"all", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"all", DataNodeConfigSourceType.PROPERTY_STORE},});
   }
 
   /**
@@ -488,9 +485,10 @@ public class HelixBootstrapUpgradeToolTest {
         CLUSTER_NAME_PREFIX, dcStr, false, new String[]{ClusterMapUtils.REPLICA_ADDITION_STR}, null);
     // verify replica addition znode in Helix PropertyStore
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
-      HelixPropertyStore<ZNRecord> propertyStore =
+      Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
+      HelixPropertyStore<ZNRecord> propertyStore = pair.getFirst();
       ZNRecord zNRecord = propertyStore.get(ClusterMapUtils.REPLICA_ADDITION_ZNODE_PATH, null, AccessOption.PERSISTENT);
       if (!activeDcSet.contains(zkInfo.getDcName())) {
         // if data center is not enabled, no admin config should be uploaded to Helix.
@@ -520,6 +518,8 @@ public class HelixBootstrapUpgradeToolTest {
         assertEquals("Disk capacity is not expected", diskForNewReplica.getRawCapacityInBytes(),
             Long.parseLong(diskCapacity));
       }
+      propertyStore.stop();
+      pair.getSecond().close();
     }
     // test deleting replica addition config (failure case)
     try {
@@ -534,11 +534,14 @@ public class HelixBootstrapUpgradeToolTest {
         CLUSTER_NAME_PREFIX, dcStr, true, new String[]{ClusterMapUtils.REPLICA_ADDITION_STR}, null);
     // verify config no longer exists
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
-      HelixPropertyStore<ZNRecord> propertyStore =
+      Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
+      HelixPropertyStore<ZNRecord> propertyStore = pair.getFirst();
       ZNRecord zNRecord = propertyStore.get(ClusterMapUtils.REPLICA_ADDITION_ZNODE_PATH, null, AccessOption.PERSISTENT);
       assertNull("ZNode associated with admin config should not exist", zNRecord);
+      propertyStore.stop();
+      pair.getSecond().close();
     }
   }
 
@@ -695,12 +698,14 @@ public class HelixBootstrapUpgradeToolTest {
     Properties properties = new Properties();
     properties.setProperty("helix.property.store.root.path", "/" + clusterName + "/" + PROPERTYSTORE_STR);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(properties));
-    HelixPropertyStore<ZNRecord> helixPropertyStore =
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
         CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig, null);
+    HelixPropertyStore<ZNRecord> helixPropertyStore = pair.getFirst();
     String path = PARTITION_DISABLED_ZNODE_PATH + getInstanceName(removedReplica.getDataNodeId());
     assertTrue("ZNode is not found for disabled partition node.",
         helixPropertyStore.exists(path, AccessOption.PERSISTENT));
     helixPropertyStore.stop();
+    pair.getSecond().close();
 
     // unblock HelixBootstrapTool
     blockRemovingNodeLatch.countDown();
@@ -709,7 +714,8 @@ public class HelixBootstrapUpgradeToolTest {
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
     assertTrue("Helix participant didn't complete update within 5 seconds",
         updateCompletionLatch.await(5, TimeUnit.SECONDS));
-    InstanceConfig currentInstanceConfig = admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
+    InstanceConfig currentInstanceConfig =
+        admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
     // Verify that replica has been disabled
     String resourceName = null;
     for (String rs : admin.getResourcesInCluster(clusterName)) {
@@ -979,9 +985,10 @@ public class HelixBootstrapUpgradeToolTest {
         CLUSTER_NAME_PREFIX, dcStr, false, new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR}, adminConfigFilePath);
     // verify overridden partitions in Helix
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
-      HelixPropertyStore<ZNRecord> propertyStore =
+      Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
+      HelixPropertyStore<ZNRecord> propertyStore = pair.getFirst();
       ZNRecord zNRecord =
           propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
       if (!activeDcSet.contains(zkInfo.getDcName())) {
@@ -998,6 +1005,8 @@ public class HelixBootstrapUpgradeToolTest {
         // Verify ReadOnly partitions in DC match that in static file
         assertEquals("Mismatch in ReadOnly partitions for static file and propertyStore", readOnlyInFile, readOnlyInDc);
       }
+      propertyStore.stop();
+      pair.getSecond().close();
     }
   }
 
@@ -1082,9 +1091,10 @@ public class HelixBootstrapUpgradeToolTest {
         CLUSTER_NAME_PREFIX, dcStr, false, new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR}, null);
     // Check writable partitions in each datacenter
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
-      HelixPropertyStore<ZNRecord> propertyStore =
+      Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
+      HelixPropertyStore<ZNRecord> propertyStore = pair.getFirst();
       ZNRecord zNRecord =
           propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
       if (!activeDcSet.contains(zkInfo.getDcName())) {
@@ -1102,18 +1112,23 @@ public class HelixBootstrapUpgradeToolTest {
         assertEquals("Mismatch in writable partitions for partitionLayout and propertyStore", writableInPartitionLayout,
             writableInDC);
       }
+      propertyStore.stop();
+      pair.getSecond().close();
     }
     // delete partition override config
     HelixBootstrapUpgradeUtil.uploadOrDeleteAdminConfigs(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, true, new String[]{ClusterMapUtils.PARTITION_OVERRIDE_STR}, null);
     // verify that the config is cleaned up
     for (ZkInfo zkInfo : dcsToZkInfo.values()) {
-      HelixPropertyStore<ZNRecord> propertyStore =
+      Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
+      HelixPropertyStore<ZNRecord> propertyStore = pair.getFirst();
       ZNRecord zNRecord =
           propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
       assertNull("Partition override config should no longer exist", zNRecord);
+      propertyStore.stop();
+      pair.getSecond().close();
     }
   }
 

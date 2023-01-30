@@ -491,6 +491,9 @@ public class HelixClusterManager implements ClusterMap {
    */
   @Override
   public void close() {
+    if(helixPropertyStoreInLocalDc != null){
+      helixPropertyStoreInLocalDc.stop();
+    }
     for (DcInfo dcInfo : dcToDcInfo.values()) {
       dcInfo.close();
     }
@@ -498,10 +501,6 @@ public class HelixClusterManager implements ClusterMap {
 
     if (clusterMapConfig.clusterMapUseAggregatedView && helixAggregatedViewClusterInfo != null) {
       helixAggregatedViewClusterInfo.close();
-    }
-
-    if(helixPropertyStoreInLocalDc != null){
-      helixPropertyStoreInLocalDc.stop();
     }
   }
 

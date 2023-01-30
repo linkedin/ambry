@@ -47,4 +47,10 @@ public interface Notifier<T> {
    * @param listener The {@link TopicListener} who unsubscribes the topic.
    */
   public void unsubscribe(String topic, TopicListener<T> listener);
+
+  /**
+   * Close this notifier.
+   */
+  default void close() {
+  }
 }

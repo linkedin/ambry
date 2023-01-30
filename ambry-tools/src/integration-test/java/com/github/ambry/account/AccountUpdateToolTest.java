@@ -137,6 +137,8 @@ public class AccountUpdateToolTest {
       accountService.removeAccountUpdateConsumer(accountUpdateConsumer);
       accountService.close();
     }
+    storeOperator.close();
+    notifier.close();
   }
 
   @AfterClass

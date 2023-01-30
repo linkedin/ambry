@@ -16,10 +16,10 @@ package com.github.ambry.clustermap;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Pair;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -54,10 +54,12 @@ import org.apache.helix.api.listeners.ResourceConfigChangeListener;
 import org.apache.helix.api.listeners.ScopedConfigChangeListener;
 import org.apache.helix.controller.pipeline.Pipeline;
 import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.spectator.RoutingTableProvider;
+import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 
@@ -80,6 +82,7 @@ class MockHelixManager implements HelixManager {
   private final Exception beBadException;
   private final Map<String, ZNRecord> znRecordMap;
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
+  private ZkBaseDataAccessor<ZNRecord> baseDataAccessor;
   private boolean isAggregatedViewCluster;
   private final List<MockHelixAdmin> helixAdminList;
 
@@ -132,9 +135,11 @@ class MockHelixManager implements HelixManager {
     storeProps.setProperty("helix.property.store.root.path",
         "/" + clusterName + "/" + ClusterMapUtils.PROPERTYSTORE_STR);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
-    helixPropertyStore =
-        (ZkHelixPropertyStore<ZNRecord>) CommonUtils.createHelixPropertyStore(zkAddr, propertyStoreConfig,
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
+        CommonUtils.createHelixPropertyStore(zkAddr, propertyStoreConfig,
             Collections.singletonList(propertyStoreConfig.rootPath));
+    helixPropertyStore = (ZkHelixPropertyStore<ZNRecord>) pair.getFirst();
+    baseDataAccessor = pair.getSecond();
     if (znRecordMap != null) {
       for (Map.Entry<String, ZNRecord> znodePathAndRecord : znRecordMap.entrySet()) {
         helixPropertyStore.set(znodePathAndRecord.getKey(), znodePathAndRecord.getValue(), AccessOption.PERSISTENT);
@@ -163,6 +168,7 @@ class MockHelixManager implements HelixManager {
     }
     helixPropertyStore.stop();
     helixPropertyStore.close();
+    baseDataAccessor.close();
   }
 
   @Override

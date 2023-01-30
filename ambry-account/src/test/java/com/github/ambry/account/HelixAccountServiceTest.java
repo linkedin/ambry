@@ -1310,6 +1310,7 @@ public class HelixAccountServiceTest {
     if (shouldNotify) {
       notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
     }
+    storeOperator.close();
   }
 
   /**
@@ -1328,6 +1329,7 @@ public class HelixAccountServiceTest {
     if (shouldNotify) {
       notifier.publish(ACCOUNT_METADATA_CHANGE_TOPIC, FULL_ACCOUNT_METADATA_CHANGE_MESSAGE);
     }
+    storeOperator.close();
   }
 
   /**
@@ -1392,6 +1394,7 @@ public class HelixAccountServiceTest {
     if (storeOperator.exist("/")) {
       storeOperator.delete("/");
     }
+    storeOperator.close();
   }
 
   /**

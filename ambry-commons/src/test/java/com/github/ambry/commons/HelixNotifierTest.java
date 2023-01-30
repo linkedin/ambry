@@ -424,6 +424,7 @@ public class HelixNotifierTest {
     if (storeOperator.exist("/")) {
       storeOperator.delete("/");
     }
+    storeOperator.close();
   }
 
   /**

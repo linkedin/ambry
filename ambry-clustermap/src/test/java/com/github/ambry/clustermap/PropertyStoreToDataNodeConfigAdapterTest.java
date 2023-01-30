@@ -104,7 +104,7 @@ public class PropertyStoreToDataNodeConfigAdapterTest extends DataNodeConfigSour
     reset(listener2);
     String rootPath = PropertyPathBuilder.propertyStore(clusterMapConfig.clusterMapClusterName);
     HelixPropertyStore<ZNRecord> propertyStore =
-        CommonUtils.createHelixPropertyStore(zkAddress, rootPath, Collections.emptyList());
+        CommonUtils.createHelixPropertyStore(zkAddress, rootPath, Collections.emptyList()).getFirst();
     try {
       assertTrue("Remove did not succeed",
           propertyStore.remove(PropertyStoreToDataNodeConfigAdapter.CONFIG_PATH + "/" + updatedConfig.getInstanceName(),

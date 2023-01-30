@@ -17,6 +17,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,6 +32,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.PropertyPathBuilder;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -50,14 +52,17 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
   static final int GET_CHILDREN_RETRY_COUNT = 3;
   static final int GET_CHILDREN_RETRY_INTERVAL = 0;
   private static final Logger LOGGER = LoggerFactory.getLogger(PropertyStoreToDataNodeConfigAdapter.class);
+  private final ZkBaseDataAccessor<ZNRecord> baseDataAccessor;
   private final HelixPropertyStore<ZNRecord> propertyStore;
   private final Converter converter;
   private final Executor eventExecutor;
 
   PropertyStoreToDataNodeConfigAdapter(String zkAddress, ClusterMapConfig clusterMapConfig) {
     String rootPath = PropertyPathBuilder.propertyStore(clusterMapConfig.clusterMapClusterName);
-    this.propertyStore =
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
         CommonUtils.createHelixPropertyStore(zkAddress, rootPath, Collections.singletonList(rootPath + CONFIG_PATH));
+    this.propertyStore = pair.getFirst();
+    this.baseDataAccessor = pair.getSecond();
     this.converter = new Converter(clusterMapConfig.clusterMapDefaultPartitionClass);
     this.eventExecutor = Executors.newSingleThreadExecutor();
   }
@@ -86,6 +91,7 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
   @Override
   public void close() {
     propertyStore.stop();
+    baseDataAccessor.close();
   }
 
   /**

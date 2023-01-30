@@ -30,6 +30,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.tools.util.ToolUtils;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONException;
@@ -144,6 +146,7 @@ public class AccountTool {
   private final HelixPropertyStoreConfig storeConfig;
   private final HelixAccountServiceConfig accountServiceConfig;
   private final HelixPropertyStore<ZNRecord> helixStore;
+  private final ZkBaseDataAccessor<ZNRecord> baseDataAccessor;
 
   private RouterStore routerStore = null;
   private Router router = null;
@@ -200,24 +203,24 @@ public class AccountTool {
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> storePathOpt = parser.accepts("storePath",
-        "The root path of helix property store in the ZooKeeper. "
-            + "Must start with /, and must not end with /. It is recommended to make root path in the form of "
-            + "/ambry/<clustername>/helixPropertyStore. This option is required.")
+            "The root path of helix property store in the ZooKeeper. "
+                + "Must start with /, and must not end with /. It is recommended to make root path in the form of "
+                + "/ambry/<clustername>/helixPropertyStore. This option is required.")
         .withRequiredArg()
         .describedAs("helix_store_path")
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<Integer> zkConnectionTimeoutMsOpt = parser.accepts("zkConnectionTimeout",
-        "Optional timeout in millisecond for connecting to the ZooKeeper server. This option is not required, "
-            + "and the default value is 5000.")
+            "Optional timeout in millisecond for connecting to the ZooKeeper server. This option is not required, "
+                + "and the default value is 5000.")
         .withRequiredArg()
         .describedAs("zk_connection_timeout")
         .ofType(Integer.class)
         .defaultsTo(ZK_CLIENT_CONNECTION_TIMEOUT_MS);
 
     ArgumentAcceptingOptionSpec<Integer> zkSessionTimeoutMsOpt = parser.accepts("zkSessionTimeout",
-        "Optional timeout in millisecond for session to the ZooKeeper server. This option is not required, "
-            + "and the default value is 20000.")
+            "Optional timeout in millisecond for session to the ZooKeeper server. This option is not required, "
+                + "and the default value is 20000.")
         .withRequiredArg()
         .describedAs("zk_session_timeout")
         .ofType(Integer.class)
@@ -229,10 +232,7 @@ public class AccountTool {
             + "       \"zkConnectStr\":\"abc.example.com:2199\",\n" + "     },\n" + "     {\n"
             + "       \"datacenter\":\"dc2\",\n" + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n"
             + "     {\n" + "       \"datacenter\":\"dc3\",\n" + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n"
-            + "     }\n" + "  ]\n" + "}").
-        withRequiredArg().
-        describedAs("zk_connect_info_path").
-        ofType(String.class);
+            + "     }\n" + "  ]\n" + "}").withRequiredArg().describedAs("zk_connect_info_path").ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> clusterNameOpt =
         parser.accepts("clustername", "Cluster name of current machine.")
@@ -241,41 +241,41 @@ public class AccountTool {
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> hostnameOpt = parser.accepts("hostname",
-        "Optional hostname of current machine. The option is not required and will defaulted to localhost")
+            "Optional hostname of current machine. The option is not required and will defaulted to localhost")
         .withRequiredArg()
         .describedAs("hostname")
         .ofType(String.class)
         .defaultsTo(DEFAULT_HOSTNAME);
 
     ArgumentAcceptingOptionSpec<String> dcnameOpt = parser.accepts("dcname",
-        "Optional dc name of current machine. The option is not required and will defaulted to \"dc\"")
+            "Optional dc name of current machine. The option is not required and will defaulted to \"dc\"")
         .withRequiredArg()
         .describedAs("dc name")
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<Integer> versionOpt = parser.accepts("version",
-        "Required when the action is rollback or view. When the action is rollback, this tool would rollback the account metadata"
-            + " to the given version and create a new version on top of the latest version. When the action is view, this tool will print out"
-            + " the account metadata for the given version")
+            "Required when the action is rollback or view. When the action is rollback, this tool would rollback the account metadata"
+                + " to the given version and create a new version on top of the latest version. When the action is view, this tool will print out"
+                + " the account metadata for the given version")
         .withRequiredArg()
         .describedAs("version")
         .ofType(Integer.class);
 
     ArgumentAcceptingOptionSpec<String> accountJsonPathOpt = parser.accepts("accountJsonPath",
-        "The path to the account json file. The json file must be in the form of a json array, with each"
-            + "entry to be an account in its json form.")
+            "The path to the account json file. The json file must be in the form of a json array, with each"
+                + "entry to be an account in its json form.")
         .withRequiredArg()
         .describedAs("account_json_path")
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt = parser.accepts("hardwareLayout",
-        "The hardware layout json file. This is optional if you provide a zklayout file.")
+            "The hardware layout json file. This is optional if you provide a zklayout file.")
         .withRequiredArg()
         .describedAs("hardware_layout")
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> partitionLayoutOpt = parser.accepts("partitionLayout",
-        "The partition layout json file. This is optional if you provide a zklayout file.")
+            "The partition layout json file. This is optional if you provide a zklayout file.")
         .withRequiredArg()
         .describedAs("partition_layout")
         .ofType(String.class);
@@ -417,7 +417,10 @@ public class AccountTool {
     registry = new MetricRegistry();
     backupFileManager = new BackupFileManager(new AccountServiceMetrics(registry), accountServiceConfig.backupDir,
         accountServiceConfig.maxBackupFileCount);
-    helixStore = CommonUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
+        CommonUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
+    helixStore = pair.getFirst();
+    baseDataAccessor = pair.getSecond();
     routerStore = getRouterStore();
   }
 
@@ -514,6 +517,9 @@ public class AccountTool {
     }
     if (helixStore != null) {
       helixStore.stop();
+    }
+    if (baseDataAccessor != null) {
+      baseDataAccessor.close();
     }
   }
 

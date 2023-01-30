@@ -14,10 +14,13 @@
 package com.github.ambry.commons;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
+import com.github.ambry.utils.Pair;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.helix.AccessOption;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.apache.helix.store.HelixPropertyListener;
 import org.apache.helix.store.HelixPropertyStore;
@@ -44,6 +47,8 @@ public class HelixNotifier implements Notifier<String> {
   private static final String MESSAGE_KEY = "message";
   private static final Logger logger = LoggerFactory.getLogger(HelixNotifier.class);
   private final HelixPropertyStore<ZNRecord> helixStore;
+  private final ZkBaseDataAccessor<ZNRecord> baseDataAccessor;
+  private final AtomicBoolean closed = new AtomicBoolean(false);
   private final ConcurrentHashMap<TopicListener, HelixPropertyListener> topicListenerToHelixListenerMap =
       new ConcurrentHashMap<>();
 
@@ -56,6 +61,7 @@ public class HelixNotifier implements Notifier<String> {
       throw new IllegalArgumentException("helixStore cannot be null.");
     }
     this.helixStore = helixStore;
+    this.baseDataAccessor = null;
   }
 
   /**
@@ -70,13 +76,14 @@ public class HelixNotifier implements Notifier<String> {
     long startTimeMs = System.currentTimeMillis();
     logger.info("Starting a HelixNotifier");
     List<String> subscribedPaths = Collections.singletonList(storeConfig.rootPath + HelixNotifier.TOPIC_PATH);
-    HelixPropertyStore<ZNRecord> helixStore =
+    Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
         CommonUtils.createHelixPropertyStore(zkServers, storeConfig, subscribedPaths);
     logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
             + "zkClientConnectionTimeoutMs={}, rootPath={}, subscribedPaths={}", zkServers,
         storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath,
         subscribedPaths);
-    this.helixStore = helixStore;
+    this.helixStore = pair.getFirst();
+    this.baseDataAccessor = pair.getSecond();
     long startUpTimeInMs = System.currentTimeMillis() - startTimeMs;
     logger.info("HelixNotifier started, took {} ms", startUpTimeInMs);
   }
@@ -194,5 +201,17 @@ public class HelixNotifier implements Notifier<String> {
    */
   private String getTopicPath(String topic) {
     return TOPIC_PATH + "/" + topic;
+  }
+
+  @Override
+  public void close() {
+    if (closed.compareAndSet(false, true)) {
+      if (helixStore != null) {
+        helixStore.stop();
+      }
+      if (baseDataAccessor != null) {
+        baseDataAccessor.close();
+      }
+    }
   }
 }

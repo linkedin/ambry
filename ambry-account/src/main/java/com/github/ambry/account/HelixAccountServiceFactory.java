@@ -20,8 +20,10 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.HelixAccountServiceConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.concurrent.ScheduledExecutorService;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.slf4j.Logger;
@@ -74,8 +76,10 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
     try {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a HelixAccountService");
-      HelixPropertyStore<ZNRecord> helixStore =
+      Pair<HelixPropertyStore<ZNRecord>, ZkBaseDataAccessor<ZNRecord>> pair =
           CommonUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
+      HelixPropertyStore<ZNRecord> helixStore = pair.getFirst();
+      ZkBaseDataAccessor<ZNRecord> baseDataAccessor = pair.getSecond();
       logger.info("HelixPropertyStore started with zkClientConnectString={}, zkClientSessionTimeoutMs={}, "
               + "zkClientConnectionTimeoutMs={}, rootPath={}", accountServiceConfig.zkClientConnectString,
           storeConfig.zkClientSessionTimeoutMs, storeConfig.zkClientConnectionTimeoutMs, storeConfig.rootPath);
@@ -83,7 +87,8 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
           accountServiceConfig.updaterPollingIntervalMs > 0 ? Utils.newScheduler(1, HELIX_ACCOUNT_UPDATER_PREFIX, false)
               : null;
       HelixAccountService helixAccountService =
-          new HelixAccountService(helixStore, accountServiceMetrics, notifier, scheduler, accountServiceConfig);
+          new HelixAccountService(helixStore, baseDataAccessor, accountServiceMetrics, notifier, scheduler,
+              accountServiceConfig);
       long spentTimeMs = System.currentTimeMillis() - startTimeMs;
       logger.info("HelixAccountService started, took {} ms", spentTimeMs);
       accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
