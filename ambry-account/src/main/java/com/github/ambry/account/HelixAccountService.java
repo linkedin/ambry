@@ -313,7 +313,9 @@ public class HelixAccountService extends AbstractAccountService {
       if (baseDataAccessor != null) {
         baseDataAccessor.close();
       }
-      notifier.close();
+      if (notifier != null) {
+        notifier.close();
+      }
     }
   }
 
