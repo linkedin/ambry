@@ -144,7 +144,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   /**
    * Pull the stale blobs that need to be cleaned up
-   * It will pull out any stale record (limit to be 1000 records at most) meeting below conditions:
+   * It will pull out any stale record (limit to be config.staleMaxResults [Default 1000] records at most) meeting below conditions:
    * 1. created more than 60 days ago, and
    * 2. it's NOT a VLR (Valid Latest Record) for any named blob.
    * VLR of a named blob is the record whose blob_state=1 (READY), and has the max version for the named blob.

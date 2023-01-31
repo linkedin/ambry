@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS named_blobs_v2 (
     version bigint NOT NULL,
     blob_id varbinary(50) NOT NULL,
     deleted_ts datetime(6) DEFAULT NULL,
-    gg_modi_ts datetime(6) DEFAULT CURRENT_TIMESTAMP(6)
+    gg_modi_ts datetime(6) DEFAULT CURRENT_TIMESTAMP(6),
     blob_state smallint NOT NULL,
     PRIMARY KEY (account_id, container_id, blob_name, version)
 )
