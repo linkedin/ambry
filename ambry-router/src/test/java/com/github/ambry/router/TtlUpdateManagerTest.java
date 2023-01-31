@@ -75,7 +75,7 @@ public class TtlUpdateManagerTest {
   private static final byte[] PUT_CONTENT = new byte[1000];
   private static final int BLOBS_COUNT = 5;
   private static final String UPDATE_SERVICE_ID = "update-service-id";
-  private static final String LOCAL_DC = "DC1";
+  private String localDc;
   private final NonBlockingRouter router;
   private final TtlUpdateManager ttlUpdateManager;
   private final SocketNetworkClient networkClient;
@@ -96,6 +96,7 @@ public class TtlUpdateManagerTest {
    */
   public TtlUpdateManagerTest() throws Exception {
     assertTrue("Server count has to be at least 9", serverCount >= 9);
+    localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     VerifiableProperties vProps =
         new VerifiableProperties(getNonBlockingRouterProperties(DEFAULT_SUCCESS_TARGET, DEFAULT_PARALLELISM));
     RouterConfig routerConfig = new RouterConfig(vProps);
@@ -226,7 +227,11 @@ public class TtlUpdateManagerTest {
     Map<ServerErrorCode, RouterErrorCode> errorCodeMap = new HashMap<>();
     errorCodeMap.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
     errorCodeMap.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-    errorCodeMap.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
+    // In production, disk_unavailable usually means disk is bad with I/O errors. For now, the only way to fix this is
+    // to replace disk and relies on replication to restore data. If all replicas return disk unavailable (should be
+    // extremely rare in real world), it means blob is no long present and it's should be ok to return BlobDoesNotExist.
+    // But for simplicity, we will return AmbryUnavailable. Once disks are replaced, we will begin to return
+    // BlobDoesNotExist.
     errorCodeMap.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     errorCodeMap.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     errorCodeMap.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
@@ -236,17 +241,13 @@ public class TtlUpdateManagerTest {
         continue;
       }
       ArrayList<ServerErrorCode> serverErrorCodes =
-          new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found));
+          new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IO_Error));
       // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
       serverErrorCodes.set(3, errorCode);
       serverErrorCodes.set(5, errorCode);
       Collections.shuffle(serverErrorCodes);
       setServerErrorCodes(serverErrorCodes, serverLayout);
-      // In production, disk_unavailable usually means disk is bad with I/O errors. For now, the only way to fix this is
-      // to replace disk and relies on replication to restore data. If all replicas return disk unavailable (should be
-      // extremely rare in real world), it means blob is no long present and it's ok to return BlobDoesNotExist.
-      RouterErrorCode expected = errorCode == ServerErrorCode.Disk_Unavailable ? RouterErrorCode.BlobDoesNotExist
-          : errorCodeMap.getOrDefault(errorCode, RouterErrorCode.UnexpectedInternalError);
+      RouterErrorCode expected = errorCodeMap.getOrDefault(errorCode, RouterErrorCode.UnexpectedInternalError);
       executeOpAndVerify(blobIds, expected, false, true, true, false, false);
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
@@ -353,6 +354,7 @@ public class TtlUpdateManagerTest {
     notificationSystem.reset();
     List<String> chunkIds = new ArrayList<>(ids);
     router.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
+    ttlUpdateManager.close();
     ttlUpdateManager.submitTtlUpdateOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UPDATE_SERVICE_ID,
         Utils.Infinite_Time, future, callback, quotaChargeCallback);
     sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests, isQuotaRejected);
@@ -473,7 +475,7 @@ public class TtlUpdateManagerTest {
   private Properties getNonBlockingRouterProperties(int successTarget, int parallelism) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", LOCAL_DC);
+    properties.setProperty("router.datacenter.name", localDc);
     properties.setProperty("router.ttl.update.success.target", Integer.toString(successTarget));
     properties.setProperty("router.ttl.update.request.parallelism", Integer.toString(parallelism));
     return properties;
@@ -490,7 +492,7 @@ public class TtlUpdateManagerTest {
       ServerErrorCode errorCodeToReturn) throws Exception {
     List<MockServer> serversInLocalDc = new ArrayList<>();
     serverLayout.getMockServers().forEach(mockServer -> {
-      if (mockServer.getDataCenter().equals(LOCAL_DC)) {
+      if (mockServer.getDataCenter().equals(localDc)) {
         serversInLocalDc.add(mockServer);
       }
     });
@@ -499,8 +501,15 @@ public class TtlUpdateManagerTest {
     }
     List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
     setServerErrorCodes(serverErrorCodes, serverLayout);
-    for (int i = 0; i < successfulResponsesCount; i++) {
-      serversInLocalDc.get(i).setServerErrorForAllRequests(errorCodeToReturn);
+    if (successfulResponsesCount > 0) {
+      for (int i = 0; i < successfulResponsesCount; i++) {
+        serversInLocalDc.get(i).setServerErrorForAllRequests(errorCodeToReturn);
+      }
+      // Set error code from other local dc servers as Disk_Unavailable since it is not practical that we get 1 found
+      // and 2 not found from healthy local dc servers.
+      for (int i = successfulResponsesCount; i < serversInLocalDc.size(); i++) {
+        serversInLocalDc.get(i).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
+      }
     }
     RouterErrorCode expectedErrorCode =
         (successfulResponsesCount > 0) ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.BlobDoesNotExist;
@@ -522,7 +531,7 @@ public class TtlUpdateManagerTest {
       throw new IllegalStateException("Cannot run test because there aren't enough servers for the given codes");
     }
     List<ServerErrorCode> serverErrorCodes =
-        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found));
+        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IO_Error));
     List<RouterErrorCode> expected = new ArrayList<>(codesToSetAndTest.size());
     // fill in the array with all the error codes that need resolution and knock them off one by one
     // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
@@ -533,49 +542,20 @@ public class TtlUpdateManagerTest {
       expected.add(entry.getValue());
       serverIdx += 2;
     }
-    expected.add(RouterErrorCode.BlobDoesNotExist);
+    expected.add(RouterErrorCode.UnexpectedInternalError);
     for (int i = 0; i < expected.size(); i++) {
       List<ServerErrorCode> shuffled = new ArrayList<>(serverErrorCodes);
       Collections.shuffle(shuffled);
       setServerErrorCodes(shuffled, serverLayout);
-      RouterErrorCode expectedRouterError = resolveRouterErrorCode(serverErrorCodes, expected.get(i));
-      executeOpAndVerify(blobIds, expectedRouterError, false, true, true, false, false);
+      executeOpAndVerify(blobIds, expected.get(i), false, true, true, false, false);
       if (i * 2 + 1 < serverErrorCodes.size()) {
-        serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
-        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
+        serverErrorCodes.set(i * 2, ServerErrorCode.IO_Error);
+        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.IO_Error);
       }
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
     assertTtl(router, blobIds, TTL_SECS);
   }
-
-  /**
-   * Helper method to resolve router error code. This accounts for combined disk_unavailable and not_found situation.
-   * @param serverErrorCodes a list of error code which servers will return.
-   * @param routerErrorCode the router error code solely decided by getPrecedenceLevel() method (which might be overridden)
-   * @return the resolved router error code.
-   */
-  private RouterErrorCode resolveRouterErrorCode(List<ServerErrorCode> serverErrorCodes,
-      RouterErrorCode routerErrorCode) {
-    RouterErrorCode resolvedErrorCode = routerErrorCode;
-    if (routerErrorCode == RouterErrorCode.AmbryUnavailable) {
-      int diskDownCount = 0;
-      int notFoundCount = 0;
-      for (ServerErrorCode errorCode : serverErrorCodes) {
-        if (errorCode == ServerErrorCode.Disk_Unavailable) {
-          diskDownCount++;
-        } else if (errorCode == ServerErrorCode.Blob_Not_Found) {
-          notFoundCount++;
-        }
-      }
-      if (diskDownCount + notFoundCount > serverCount - 2) {
-        resolvedErrorCode = RouterErrorCode.BlobDoesNotExist;
-      }
-    }
-    return resolvedErrorCode;
-  }
-
-  // routerErrorCodeResolutionTest() helpers
 
   static {
     TestUtils.RANDOM.nextBytes(PUT_CONTENT);

@@ -124,7 +124,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
    */
   @Override
   protected Properties getNonBlockingRouterProperties(String routerDataCenter) {
-    Properties properties = super.getNonBlockingRouterProperties(routerDataCenter, PUT_REQUEST_PARALLELISM, DELETE_REQUEST_PARALLELISM);
+    Properties properties =
+        super.getNonBlockingRouterProperties(routerDataCenter, PUT_REQUEST_PARALLELISM, DELETE_REQUEST_PARALLELISM);
     properties.setProperty("router.operation.controller", "com.github.ambry.router.QuotaAwareOperationController");
 
     return properties;
@@ -139,14 +140,16 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       Properties props = getNonBlockingRouterProperties("NotInClusterMap");
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       try {
-        router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap, new LoggingNotificationSystem(), null, accountService).getRouter();
+        router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
+            new LoggingNotificationSystem(), null, accountService).getRouter();
         Assert.fail("NonBlockingRouterFactory instantiation should have failed because the router datacenter is not in "
             + "the cluster map");
       } catch (IllegalStateException e) {
       }
-      props = getNonBlockingRouterProperties("DC1");
+      props = getNonBlockingRouterProperties(localDcName);
       verifiableProperties = new VerifiableProperties((props));
-      router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap, new LoggingNotificationSystem(), null, accountService).getRouter();
+      router = (NonBlockingRouter) new NonBlockingRouterFactory(verifiableProperties, mockClusterMap,
+          new LoggingNotificationSystem(), null, accountService).getRouter();
       assertExpectedThreadCounts(2, 1);
     } finally {
       if (router != null) {
@@ -289,7 +292,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // For example, when deleting a blob, there are three delete requests being sent to the mock server. But only two of
       // them required to be acknowledged. There is a chance that when we undelete this blob, this third unacknowledged
       // delete request would override the undelete state.
-      setRouter(getNonBlockingRouterProperties("DC1", 3, 2), mockServerLayout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterProperties(localDcName, 3, 2), mockServerLayout, new LoggingNotificationSystem());
       assertExpectedThreadCounts(2, 1);
 
       // 1. Test undelete a composite blob
@@ -334,7 +337,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // 2. Test undelete a simple blob
       setOperationParams();
-      String simpleBlobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+      String simpleBlobId =
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
       ensurePutInAllServers(simpleBlobId, mockServerLayout);
       router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().build()).get();
       router.deleteBlob(simpleBlobId, null).get();
@@ -346,7 +350,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         RouterException r = (RouterException) e.getCause();
         Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
       }
-      router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
+      router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build())
+          .get();
       router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
       router.undeleteBlob(simpleBlobId, "undelete_server_id").get();
       ensureUndeleteInAllServers(simpleBlobId, mockServerLayout);
@@ -362,7 +367,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         RouterException r = (RouterException) e.getCause();
         Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
       }
-      router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build()).get();
+      router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_Deleted_Blobs).build())
+          .get();
       router.getBlob(simpleBlobId, new GetBlobOptionsBuilder().getOption(GetOption.Include_All).build()).get();
 
       // 4. Test undelete more than once
@@ -405,7 +411,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           undeletesDoneLatch.countDown();
         }
       };
-      setRouter(getNonBlockingRouterProperties("DC1"), mockServerLayout, undeleteTrackingNotificationSystem);
+      setRouter(getNonBlockingRouterProperties(localDcName), mockServerLayout, undeleteTrackingNotificationSystem);
 
       List<String> blobIds = new ArrayList<>();
       for (int i = 0; i < 4; i++) {
@@ -430,7 +436,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
       router.undeleteBlob(blobId, "undelete_server_id").get();
 
-      Assert.assertTrue("Undelete should not take longer than " + AWAIT_TIMEOUT_MS, undeletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      Assert.assertTrue("Undelete should not take longer than " + AWAIT_TIMEOUT_MS,
+          undeletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       Assert.assertTrue("All blobs in server are deleted", blobsThatAreUndeleted.containsAll(blobsToBeUndeleted));
       Assert.assertTrue("Only blobs in server are undeleted", blobsToBeUndeleted.containsAll(blobsThatAreUndeleted));
     } finally {
@@ -456,7 +463,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       setOperationParams();
       String nonExistBlobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
           mockClusterMap.getLocalDatacenterId(), putBlobProperties.getAccountId(), putBlobProperties.getContainerId(),
-          mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false, BlobId.BlobDataType.DATACHUNK).getID();
+          mockClusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+          BlobId.BlobDataType.DATACHUNK).getID();
       try {
         router.getBlob(nonExistBlobId, new GetBlobOptionsBuilder().build()).get();
         fail("Should fail because of non-existed id");
@@ -510,7 +518,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         fail("Should fail because of lifeVersion conflict");
       } catch (ExecutionException e) {
         RouterException r = (RouterException) e.getCause();
-        Assert.assertEquals("LifeVersionConflict error is expected", RouterErrorCode.LifeVersionConflict, r.getErrorCode());
+        Assert.assertEquals("LifeVersionConflict error is expected", RouterErrorCode.LifeVersionConflict,
+            r.getErrorCode());
       }
     } finally {
       if (router != null) {
@@ -596,7 +605,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         Assert.fail("Put should have failed if there are no partitions");
       } catch (Exception e) {
         RouterException r = (RouterException) e.getCause();
-        Assert.assertEquals("Should have received AmbryUnavailable error", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+        Assert.assertEquals("Should have received AmbryUnavailable error", RouterErrorCode.AmbryUnavailable,
+            r.getErrorCode());
       }
     } finally {
       if (router != null) {
@@ -642,7 +652,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   @Test
   public void testRequestResponseHandlerThreadExitFlow() throws Exception {
     nettyByteBufLeakHelper.setDisabled(true);
-    Properties props = getNonBlockingRouterProperties("DC1");
+    Properties props = getNonBlockingRouterProperties(localDcName);
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     RouterConfig routerConfig = new RouterConfig(verifiableProperties);
     MockClusterMap mockClusterMap = new MockClusterMap();
@@ -708,7 +718,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       // Ensure there are 4 chunks.
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
-      Properties props = getNonBlockingRouterProperties("DC1");
+      Properties props =
+          getNonBlockingRouterProperties(localDcName);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       RouterConfig routerConfig = new RouterConfig(verifiableProperties);
       MockClusterMap mockClusterMap = new MockClusterMap();
@@ -759,9 +770,11 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       // Now, wait until the deletes of the successfully put blobs are complete.
-      Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS, deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS,
+          deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       for (Map.Entry<String, String> blobIdAndServiceId : blobsThatAreDeleted.entrySet()) {
-        Assert.assertEquals("Unexpected service ID for deleted blob", BackgroundDeleteRequest.SERVICE_ID_PREFIX + putBlobProperties.getServiceId(),
+        Assert.assertEquals("Unexpected service ID for deleted blob",
+            BackgroundDeleteRequest.SERVICE_ID_PREFIX + putBlobProperties.getServiceId(),
             blobIdAndServiceId.getValue());
       }
     } finally {
@@ -785,7 +798,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // to guarantee that slipped puts would eventually happen and operation would succeed.
       maxPutChunkSize = PUT_CONTENT_SIZE / 8;
       final int NUM_MAX_ATTEMPTS = 100;
-      Properties props = getNonBlockingRouterProperties("DC1");
+      Properties props = getNonBlockingRouterProperties(localDcName);
       props.setProperty("router.max.slipped.put.attempts", Integer.toString(NUM_MAX_ATTEMPTS));
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       RouterConfig routerConfig = new RouterConfig(verifiableProperties);
@@ -835,15 +848,19 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
 
       // Now, wait until at least one delete happens within AWAIT_TIMEOUT_MS.
-      Assert.assertTrue("Some blobs should have been deleted within " + AWAIT_TIMEOUT_MS, deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      Assert.assertTrue("Some blobs should have been deleted within " + AWAIT_TIMEOUT_MS,
+          deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       // Wait for the rest of the deletes to finish.
       long waitStart = SystemTime.getInstance().milliseconds();
-      while (router.getBackgroundOperationsCount() != 0 && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_MS) {
+      while (router.getBackgroundOperationsCount() != 0
+          && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_MS) {
         Thread.sleep(1000);
       }
       for (Map.Entry<String, String> blobIdAndServiceId : blobsThatAreDeleted.entrySet()) {
-        Assert.assertNotSame("We should not be deleting the valid blob by mistake", blobId, blobIdAndServiceId.getKey());
-        Assert.assertEquals("Unexpected service ID for deleted blob", BackgroundDeleteRequest.SERVICE_ID_PREFIX + putBlobProperties.getServiceId(),
+        Assert.assertNotSame("We should not be deleting the valid blob by mistake", blobId,
+            blobIdAndServiceId.getKey());
+        Assert.assertEquals("Unexpected service ID for deleted blob",
+            BackgroundDeleteRequest.SERVICE_ID_PREFIX + putBlobProperties.getServiceId(),
             blobIdAndServiceId.getValue());
       }
     } finally {
@@ -853,7 +870,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
     }
   }
-
 
   /**
    * Test that if a composite blob is deleted, the data chunks are eventually deleted. Also check the service IDs used
@@ -879,9 +895,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       // Ensure there are 4 chunks.
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
-      Properties props = getNonBlockingRouterProperties("DC1");
+      Properties props = getNonBlockingRouterProperties(localDcName);
       if (maxDeleteOperation != 0) {
-        props.setProperty(RouterConfig.ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS, Integer.toString(maxDeleteOperation));
+        props.setProperty(RouterConfig.ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS,
+            Integer.toString(maxDeleteOperation));
       }
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       RouterConfig routerConfig = new RouterConfig(verifiableProperties);
@@ -915,7 +932,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         if (i == 2) {
           // Create a clean cluster and put another blob that immediate expires.
           setOperationParams();
-          putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+          putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, 0,
+              Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
           blobId =
               router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
           Set<String> allBlobsInServer = getBlobsInServers(mockServerLayout);
@@ -927,12 +945,16 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         router.deleteBlob(blobId, deleteServiceId).get();
         Assert.assertTrue("Deletes should not take longer than " + AWAIT_TIMEOUT_MS,
             deletesDoneLatch.get().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-        Assert.assertTrue("All blobs in server are deleted", blobsThatAreDeleted.keySet().containsAll(blobsToBeDeleted));
-        Assert.assertTrue("Only blobs in server are deleted", blobsToBeDeleted.containsAll(blobsThatAreDeleted.keySet()));
+        Assert.assertTrue("All blobs in server are deleted",
+            blobsThatAreDeleted.keySet().containsAll(blobsToBeDeleted));
+        Assert.assertTrue("Only blobs in server are deleted",
+            blobsToBeDeleted.containsAll(blobsThatAreDeleted.keySet()));
 
         for (Map.Entry<String, String> blobIdAndServiceId : blobsThatAreDeleted.entrySet()) {
-          String expectedServiceId = blobIdAndServiceId.getKey().equals(blobId) ? deleteServiceId : BackgroundDeleteRequest.SERVICE_ID_PREFIX + deleteServiceId;
-          Assert.assertEquals("Unexpected service ID for deleted blob", expectedServiceId, blobIdAndServiceId.getValue());
+          String expectedServiceId = blobIdAndServiceId.getKey().equals(blobId) ? deleteServiceId
+              : BackgroundDeleteRequest.SERVICE_ID_PREFIX + deleteServiceId;
+          Assert.assertEquals("Unexpected service ID for deleted blob", expectedServiceId,
+              blobIdAndServiceId.getValue());
         }
         // For 1 chunk deletion attempt, 1 background operation for Get is initiated which results in 2 Get Requests at
         // the servers.
@@ -988,14 +1010,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           receivedDeleteServiceId.set(serviceId);
         }
       };
-      Properties props = getNonBlockingRouterProperties("DC1");
+      Properties props = getNonBlockingRouterProperties(localDcName);
       setRouter(props, new MockServerLayout(mockClusterMap), deleteTrackingNotificationSystem);
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
       router.deleteBlob(blobId, deleteServiceId).get();
       long waitStart = SystemTime.getInstance().milliseconds();
-      while (router.getBackgroundOperationsCount() != 0 && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_MS) {
+      while (router.getBackgroundOperationsCount() != 0
+          && SystemTime.getInstance().milliseconds() < waitStart + AWAIT_TIMEOUT_MS) {
         Thread.sleep(1000);
       }
       Assert.assertEquals("All background operations should be complete ", 0, router.getBackgroundOperationsCount());
@@ -1046,10 +1069,11 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           deletesDoneLatch.get().countDown();
         }
       };
-      setRouter(getNonBlockingRouterProperties("DC1"), new MockServerLayout(mockClusterMap),
+      setRouter(getNonBlockingRouterProperties(localDcName), new MockServerLayout(mockClusterMap),
           deleteTrackingNotificationSystem);
       for (int intermediateChunkSize : new int[]{maxPutChunkSize, maxPutChunkSize / 2}) {
-        for (LongStream chunkSizeStream : new LongStream[]{RouterTestHelpers.buildValidChunkSizeStream(3 * intermediateChunkSize, intermediateChunkSize),
+        for (LongStream chunkSizeStream : new LongStream[]{
+            RouterTestHelpers.buildValidChunkSizeStream(3 * intermediateChunkSize, intermediateChunkSize),
             RouterTestHelpers.buildValidChunkSizeStream(
                 3 * intermediateChunkSize + random.nextInt(intermediateChunkSize - 1) + 1, intermediateChunkSize)}) {
           // Upload data chunks
@@ -1060,8 +1084,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
             long chunkSize = chunkSizeIter.nextLong();
             setOperationParams((int) chunkSize, TTL_SECS);
             String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel,
-                new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(PUT_CONTENT_SIZE).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            long expirationTime = Utils.addSecondsToEpochTime(putBlobProperties.getCreationTimeInMs(), putBlobProperties.getTimeToLiveInSeconds());
+                new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(PUT_CONTENT_SIZE).build())
+                .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            long expirationTime = Utils.addSecondsToEpochTime(putBlobProperties.getCreationTimeInMs(),
+                putBlobProperties.getTimeToLiveInSeconds());
             chunksToStitch.add(new ChunkInfo(blobId, chunkSize, expirationTime));
             stitchedContentStream.write(putContent);
           }
@@ -1069,12 +1095,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
           // Stitch the chunks together
           setOperationParams(0, TTL_SECS / 2);
-          String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch)
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
           // Fetch the stitched blob
-          GetBlobResult getBlobResult = router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-          assertTrue("Blob properties must be the same", RouterTestHelpers.arePersistedFieldsEquivalent(putBlobProperties,
-              getBlobResult.getBlobInfo().getBlobProperties()));
+          GetBlobResult getBlobResult = router.getBlob(stitchedBlobId, new GetBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          assertTrue("Blob properties must be the same",
+              RouterTestHelpers.arePersistedFieldsEquivalent(putBlobProperties,
+                  getBlobResult.getBlobInfo().getBlobProperties()));
           assertEquals("Unexpected blob size", expectedContent.length,
               getBlobResult.getBlobInfo().getBlobProperties().getBlobSize());
           assertArrayEquals("User metadata must be the same", putUserMetadata,
@@ -1082,7 +1111,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           RouterTestHelpers.compareContent(expectedContent, null, getBlobResult.getBlobDataChannel());
 
           // TtlUpdate the blob.
-          router.updateBlobTtl(stitchedBlobId, "update-service", Utils.Infinite_Time).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          router.updateBlobTtl(stitchedBlobId, "update-service", Utils.Infinite_Time)
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
           // Ensure that TTL was updated on the metadata blob and all data chunks
           Set<String> allBlobIds = chunksToStitch.stream().map(ChunkInfo::getBlobId).collect(Collectors.toSet());
@@ -1114,33 +1144,35 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterProperties(localDcName),
+          layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       Map<ServerErrorCode, RouterErrorCode> testsAndExpected = new HashMap<>();
       testsAndExpected.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
       testsAndExpected.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
       testsAndExpected.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-      testsAndExpected.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.BlobDoesNotExist);
+      testsAndExpected.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
       testsAndExpected.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
       testsAndExpected.put(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError);
-      // note that this test makes all nodes return same server error code. For Disk_Unavailable error, the router will
-      // return BlobDoesNotExist because all disks are down (which should be extremely rare) and blob is gone.
+      // note that this test makes all nodes return same server error code.
       for (Map.Entry<ServerErrorCode, RouterErrorCode> testAndExpected : testsAndExpected.entrySet()) {
-        layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));
+        layout.getMockServers()
+            .forEach(mockServer -> mockServer.setServerErrorForAllRequests(testAndExpected.getKey()));
         TestCallback<Void> testCallback = new TestCallback<>();
         Future<Void> future = router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time, testCallback, null);
         assertFailureAndCheckErrorCode(future, testCallback, testAndExpected.getValue());
 
         // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
         router.getNotFoundCache().invalidateAll();
-
       }
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
       // bad blob id
       TestCallback<Void> testCallback = new TestCallback<>();
-      Future<Void> future = router.updateBlobTtl("bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback, null);
+      Future<Void> future =
+          router.updateBlobTtl("bad-blob-id", updateServiceId, Utils.Infinite_Time, testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, RouterErrorCode.InvalidBlobId);
     } finally {
       if (router != null) {
@@ -1157,13 +1189,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testBadCallbackForUpdateTtl() throws Exception {
     try {
       MockServerLayout serverLayout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties("DC1"), serverLayout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterProperties(localDcName), serverLayout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
-          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
       String blobIdCheck =
-          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       testWithErrorCodes(Collections.singletonMap(ServerErrorCode.No_Error, 9), serverLayout, null, expectedError -> {
         final CountDownLatch callbackCalled = new CountDownLatch(1);
         router.updateBlobTtl(blobId, null, Utils.Infinite_Time, (result, exception) -> {
@@ -1195,7 +1229,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testReplicateBlobToRemoteSuccess() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       String serviceId = "replicate-blob-service";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
@@ -1267,7 +1300,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testReplicateDeletedBlob() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       String serviceId = "replicate-blob-service";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
@@ -1325,7 +1357,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testReplicateTtlUpdatedBlob() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       String serviceId = "replicate-blob-service";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
@@ -1404,7 +1435,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testReplicateBlobAlreadyExist() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       String serviceId = "replicate-blob-service";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
@@ -1447,7 +1477,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testReplicateBlobMaxUnavailableAllowed() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       String serviceId = "replicate-blob-service";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
@@ -1509,7 +1538,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testReplicateBlobFailureDueToNotEnoughQuorum() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       String serviceId = "replicate-blob-service";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
@@ -1556,7 +1584,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // CompositeBlob with four chunks.
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       String serviceId = "replicate-blob-service";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
@@ -1615,7 +1642,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
         }
       }
-      GetBlobResult remoteGetBlobResult = router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
+      GetBlobResult remoteGetBlobResult =
+          router.getBlob(compositeBlobId, new GetBlobOptionsBuilder().build(), null, null).get();
 
       // verify BlobProperties
       Assert.assertEquals(remoteGetBlobResult.getBlobInfo().getBlobProperties(), localProperties);
@@ -1659,7 +1687,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testMultipleScalingUnit() throws Exception {
     try {
       final int SCALING_UNITS = 3;
-      Properties props = getNonBlockingRouterProperties("DC1");
+      Properties props = getNonBlockingRouterProperties(localDcName);
       props.setProperty("router.scaling.unit.count", Integer.toString(SCALING_UNITS));
       setRouter(props, new MockServerLayout(mockClusterMap), new LoggingNotificationSystem());
       assertExpectedThreadCounts(SCALING_UNITS + 1, SCALING_UNITS);
@@ -1710,7 +1738,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   @Test
   public void testResponseWithNullRequestInfo() throws Exception {
     try {
-      Properties props = getNonBlockingRouterProperties("DC1");
+      Properties props = getNonBlockingRouterProperties(localDcName);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       RouterConfig routerConfig = new RouterConfig(verifiableProperties);
       routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
@@ -1729,9 +1757,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }).when(mockNetworkClient).sendAndPoll(anyList(), anySet(), anyInt());
       NetworkClientFactory networkClientFactory = Mockito.mock(NetworkClientFactory.class);
       Mockito.when(networkClientFactory.getNetworkClient()).thenReturn(mockNetworkClient);
-      router =
-          new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
-              mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+      router = new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, new LoggingNotificationSystem(),
+          mockClusterMap, kms, cryptoService, cryptoJobHandler, accountService, mockTime,
+          MockClusterMap.DEFAULT_PARTITION_CLASS, null);
       assertTrue("Invocation latch didn't count to 0 within 10 seconds", invocationLatch.await(10, TimeUnit.SECONDS));
       // verify the test node is considered timeout
       assertTrue("The node should be considered timeout", testDataNode.isTimedOut());
@@ -1748,7 +1776,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   @Test
   public void testResponseHandling() throws Exception {
     try {
-      Properties props = getNonBlockingRouterProperties("DC1");
+      Properties props = getNonBlockingRouterProperties(localDcName);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       setOperationParams();
       final List<ReplicaId> failedReplicaIds = new ArrayList<>();
@@ -1788,8 +1816,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
               CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime).getNetworkClient();
       cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
-      KeyManagementService localKMS = new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
-      putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(), new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
+      KeyManagementService localKMS =
+          new MockKeyManagementService(new KMSConfig(verifiableProperties), singleKeyForKMS);
+      putManager = new PutManager(mockClusterMap, mockResponseHandler, new LoggingNotificationSystem(),
+          new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
           new RouterCallback(networkClient, new ArrayList<>()), "0", localKMS, cryptoService, cryptoJobHandler,
           accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, router);
       OperationHelper opHelper = new OperationHelper(OperationType.PUT);
@@ -1805,7 +1835,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       testResponseDeserializationError(opHelper, networkClient, null);
 
       opHelper = new OperationHelper(OperationType.GET);
-      getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
+      getManager = new GetManager(mockClusterMap, mockResponseHandler, new RouterConfig(verifiableProperties),
+          new NonBlockingRouterMetrics(mockClusterMap, null),
           new RouterCallback(networkClient, new ArrayList<BackgroundDeleteRequest>()), localKMS, cryptoService,
           cryptoJobHandler, mockTime, null, router);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
@@ -1821,7 +1852,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       opHelper = new OperationHelper(OperationType.DELETE);
       deleteManager =
-          new DeleteManager(mockClusterMap, mockResponseHandler, accountService, new LoggingNotificationSystem(), new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
+          new DeleteManager(mockClusterMap, mockResponseHandler, accountService, new LoggingNotificationSystem(),
+              new RouterConfig(verifiableProperties), new NonBlockingRouterMetrics(mockClusterMap, null),
               new RouterCallback(null, new ArrayList<BackgroundDeleteRequest>()), mockTime, router);
       testFailureDetectorNotification(opHelper, networkClient, failedReplicaIds, blobId, successfulResponseCount,
           invalidResponse, -1);
@@ -1850,18 +1882,17 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testRouterMetadataCacheSimpleBlob() throws Exception {
     String blobId = null;
     try {
-      Properties properties = getNonBlockingRouterProperties("DC1");
+      Properties properties = getNonBlockingRouterProperties(localDcName);
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
-      setRouterWithMetadataCache(properties, new AmbryCacheStats(1,1,1,0));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(1, 1, 1, 0));
       AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
       assertNotNull("Metadata cache must be created", ambryCacheWithStats);
 
       // put a simple blob and test it is absent in the metadata cache
       setOperationParams(PUT_CONTENT_SIZE, TTL_SECS);
-      blobId =
-          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
-              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
       // get the entire simple blob, and it's metadata must be absent from cache
       router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -1870,7 +1901,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // get the one byte from simple blob, and it's metadata must be absent from cache
       ByteRange range = ByteRanges.fromOffsetRange(1, 2);
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       // Metadata for simple blob must be absent from metadata cache
       assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
@@ -1881,7 +1913,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       try {
         // get the one byte from simple blob and it's metadata must be absent from cache
-        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         fail("Blob must be deleted");
       } catch (Exception e) {
         RouterException r = (RouterException) e.getCause();
@@ -1889,8 +1922,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         // Metadata for simple blob must be absent from metadata cache
         assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
       }
-      } finally {
-        router.close();
+    } finally {
+      router.close();
     }
   }
 
@@ -1906,20 +1939,22 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       int TEST_MAX_NUM_METADATA_CACHE_ENTRIES = 1;
       int numMisses = NUM_GET_COMPOSITE_BLOBS;
       int numInserts = NUM_GET_COMPOSITE_BLOBS;
-      Properties properties = getNonBlockingRouterProperties("DC1");
+      Properties properties = getNonBlockingRouterProperties(localDcName);
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
       // Set the size of cache to 1 entry which means the cache can store at max of one entry at any time
-      properties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, Integer.toString(TEST_MAX_NUM_METADATA_CACHE_ENTRIES));
-      setRouterWithMetadataCache(properties, new AmbryCacheStats(0, numMisses, numInserts,0));
+      properties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES,
+          Integer.toString(TEST_MAX_NUM_METADATA_CACHE_ENTRIES));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(0, numMisses, numInserts, 0));
       AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
       assertNotNull("Metadata cache must be created", ambryCacheWithStats);
-      assertEquals(String.format("Expected %s to be %s but found %s",
-          RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries()),
+      assertEquals(
+          String.format("Expected %s to be %s but found %s", RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES,
+              TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries()),
           TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries());
 
       ArrayList<String> blobIds = new ArrayList<>();
-      for(int i = 0; i < NUM_PUT_COMPOSITE_BLOBS; ++i) {
+      for (int i = 0; i < NUM_PUT_COMPOSITE_BLOBS; ++i) {
         // put few composite blob and test it is absent in the metadata cache
         setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
         String blobId =
@@ -1928,17 +1963,21 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         blobIds.add(blobId);
       }
 
-      for(int i = 0; i < NUM_GET_COMPOSITE_BLOBS; ++i) {
+      for (int i = 0; i < NUM_GET_COMPOSITE_BLOBS; ++i) {
         // cache miss and populate cache
         // get the one byte from composite blob, and it's metadata must be present in cache
         ByteRange range = ByteRanges.fromOffsetRange(1, 2);
         String blobId = blobIds.get(i % NUM_PUT_COMPOSITE_BLOBS);
-        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        assertNotNull("Blob metadata must be present in metadata cache",
+            router.getBlobMetadataCache().getObject(blobId));
       }
 
-      assertTrue(String.format("Must encounter %s cache misses", numMisses), ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue(String.format("Must encounter %s cache inserts", numInserts), ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(String.format("Must encounter %s cache misses", numMisses),
+          ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(String.format("Must encounter %s cache inserts", numInserts),
+          ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     } finally {
       router.close();
     }
@@ -1957,20 +1996,22 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       int numHits = NUM_GET_COMPOSITE_BLOBS - NUM_PUT_COMPOSITE_BLOBS;
       int numMisses = NUM_PUT_COMPOSITE_BLOBS;
       int numInserts = NUM_PUT_COMPOSITE_BLOBS;
-      Properties properties = getNonBlockingRouterProperties("DC1");
+      Properties properties = getNonBlockingRouterProperties(localDcName);
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
       // Set the size of cache to 1 entry which means the cache can store at max of one entry at any time
-      properties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, Integer.toString(TEST_MAX_NUM_METADATA_CACHE_ENTRIES));
-      setRouterWithMetadataCache(properties, new AmbryCacheStats(numHits, numMisses, numInserts,0));
+      properties.setProperty(RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES,
+          Integer.toString(TEST_MAX_NUM_METADATA_CACHE_ENTRIES));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(numHits, numMisses, numInserts, 0));
       AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
       assertNotNull("Metadata cache must be created", ambryCacheWithStats);
-      assertEquals(String.format("Expected %s to be %s but found %s",
-              RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries()),
+      assertEquals(
+          String.format("Expected %s to be %s but found %s", RouterConfig.ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES,
+              TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries()),
           TEST_MAX_NUM_METADATA_CACHE_ENTRIES, ambryCacheWithStats.getMaxNumCacheEntries());
 
       ArrayList<String> blobIds = new ArrayList<>();
-      for(int i = 0; i < NUM_PUT_COMPOSITE_BLOBS; ++i) {
+      for (int i = 0; i < NUM_PUT_COMPOSITE_BLOBS; ++i) {
         // put few composite blob and test it is absent in the metadata cache
         setOperationParams(2 * PUT_CONTENT_SIZE, TTL_SECS);
         String blobId =
@@ -1979,18 +2020,23 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         blobIds.add(blobId);
       }
 
-      for(int i = 0; i < NUM_GET_COMPOSITE_BLOBS; ++i) {
+      for (int i = 0; i < NUM_GET_COMPOSITE_BLOBS; ++i) {
         // cache miss and populate cache
         // get the one byte from composite blob, and it's metadata must be present in cache
         ByteRange range = ByteRanges.fromOffsetRange(1, 2);
         String blobId = blobIds.get(i % NUM_PUT_COMPOSITE_BLOBS);
-        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+        router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        assertNotNull("Blob metadata must be present in metadata cache",
+            router.getBlobMetadataCache().getObject(blobId));
       }
 
-      assertTrue(String.format("Must encounter %s cache hits", numHits), ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue(String.format("Must encounter %s cache misses", numMisses), ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue(String.format("Must encounter %s cache inserts", numInserts), ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(String.format("Must encounter %s cache hits", numHits),
+          ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(String.format("Must encounter %s cache misses", numMisses),
+          ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue(String.format("Must encounter %s cache inserts", numInserts),
+          ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     } finally {
       router.close();
     }
@@ -1999,10 +2045,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   @Test
   public void testRouterMetadataCacheGetCompositeBlob() throws Exception {
     try {
-      Properties properties = getNonBlockingRouterProperties("DC1");
+      Properties properties = getNonBlockingRouterProperties(localDcName);
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
-      setRouterWithMetadataCache(properties, new AmbryCacheStats(1,1,1,0));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(1, 1, 1, 0));
       AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
       assertNotNull("Metadata cache must be created", ambryCacheWithStats);
 
@@ -2018,26 +2064,33 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       if (testEncryption) {
         // get the entire composite blob in raw mode, and it's metadata must be absent from cache
-        router.getBlob(blobId, new GetBlobOptionsBuilder().rawMode(true).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        router.getBlob(blobId, new GetBlobOptionsBuilder().rawMode(true).build())
+            .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
       }
 
       // get one segment of composite blob, and it's metadata must be absent from cache
-      router.getBlob(blobId, new GetBlobOptionsBuilder().blobSegment(1).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().blobSegment(1).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
       // cache miss and populate cache
       // get the one byte from composite blob, and it's metadata must be present in cache
       ByteRange range = ByteRanges.fromOffsetRange(1, 2);
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache miss", ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue("Must put metadata in cache", ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss",
+          ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache",
+          ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
       // cache hit
       // get one byte from composite blob, and it's metadata must be present in cache
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache hit", ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache hit",
+          ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
     } finally {
       router.close();
@@ -2047,10 +2100,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   @Test
   public void testRouterMetadataCacheDeleteCompositeBlob() throws Exception {
     try {
-      Properties properties = getNonBlockingRouterProperties("DC1");
+      Properties properties = getNonBlockingRouterProperties(localDcName);
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
-      setRouterWithMetadataCache(properties, new AmbryCacheStats(1,1,1,1));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(1, 1, 1, 1));
       AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
       assertNotNull("Metadata cache must be created", ambryCacheWithStats);
 
@@ -2062,15 +2115,20 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // get the one byte from composite blob, and it's metadata must be present in cache
       ByteRange range = ByteRanges.fromOffsetRange(1, 2);
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache miss", ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue("Must put metadata in cache", ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss",
+          ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache",
+          ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
       // delete composite blob
       router.deleteBlob(blobId, null).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache hit", ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue("Must delete metadata in cache", ambryCacheWithStats.getDeleteObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must encounter a cache hit",
+          ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must delete metadata in cache",
+          ambryCacheWithStats.getDeleteObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
     } finally {
       router.close();
@@ -2080,10 +2138,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   @Test
   public void testRouterMetadataCacheUpdateTTLCompositeBlob() throws Exception {
     try {
-      Properties properties = getNonBlockingRouterProperties("DC1");
+      Properties properties = getNonBlockingRouterProperties(localDcName);
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
-      setRouterWithMetadataCache(properties, new AmbryCacheStats(1,1,1,1));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(1, 1, 1, 1));
       AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
       assertNotNull("Metadata cache must be created", ambryCacheWithStats);
 
@@ -2096,9 +2154,12 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // get one byte from composite blob, and it's metadata must be present in cache
       ByteRange range = ByteRanges.fromOffsetRange(1, 2);
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache miss", ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue("Must put metadata in cache", ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss",
+          ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache",
+          ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
       // update TTL and make it permanent
@@ -2106,19 +2167,23 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
 
       // get one byte from composite blob, and it's metadata must be present in cache
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache hit", ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache hit",
+          ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
     } finally {
       router.close();
     }
   }
-  void routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode serverErrorCode, RouterErrorCode routerErrorCode, boolean deleteCacheEntryOnFail) throws Exception {
-    try{
-      Properties properties = getNonBlockingRouterProperties("DC1");
+
+  void routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode serverErrorCode, RouterErrorCode routerErrorCode,
+      boolean deleteCacheEntryOnFail) throws Exception {
+    try {
+      Properties properties = getNonBlockingRouterProperties(localDcName);
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
-      setRouterWithMetadataCache(properties, new AmbryCacheStats(1,1,1,1));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(1, 1, 1, 1));
       AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
       assertNotNull("Metadata cache must be created", ambryCacheWithStats);
 
@@ -2130,29 +2195,37 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // successful get
       ByteRange range = ByteRanges.fromOffsetRange(1, 2);
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache miss", ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue("Must put metadata in cache", ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss",
+          ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache",
+          ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
       // failed get
       mockServerLayout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(serverErrorCode));
       TestCallback<GetBlobResult> testCallback = new TestCallback<>();
-      Future<GetBlobResult> future = router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build(), testCallback, null);
+      Future<GetBlobResult> future =
+          router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build(), testCallback, null);
       assertFailureAndCheckErrorCode(future, testCallback, routerErrorCode);
-      assertTrue("Must encounter a cache hit", ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must encounter a cache hit",
+          ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       if (deleteCacheEntryOnFail) {
-        assertTrue("Must delete metadata in cache", ambryCacheWithStats.getDeleteObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        assertTrue("Must delete metadata in cache",
+            ambryCacheWithStats.getDeleteObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
         assertNull("Blob metadata must be absent in metadata cache", router.getBlobMetadataCache().getObject(blobId));
       } else {
-        assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
+        assertNotNull("Blob metadata must be present in metadata cache",
+            router.getBlobMetadataCache().getObject(blobId));
       }
       mockServerLayout.getMockServers().forEach(mockServer -> mockServer.resetServerErrors());
       // There should be flag to disable this cache !
       router.getNotFoundCache().invalidateAll();
 
       // successful get, cache must repopulate
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
     } finally {
       router.close();
@@ -2163,25 +2236,30 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testRouterMetadataCacheBlobDoesNotExistOnGetCompositeBlob() throws Exception {
     routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist, true);
   }
+
   @Test
   public void testRouterMetadataCacheBlobDeletedOnGetCompositeBlob() throws Exception {
     routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted, true);
   }
+
   @Test
   public void testRouterMetadataCacheBlobExpiredOnGetCompositeBlob() throws Exception {
     routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired, true);
   }
+
   @Test
   public void testRouterMetadataCacheUnexpectedInternalErrorOnGetCompositeBlob() throws Exception {
-    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError, false);
+    routerMetadataCacheErrorOnGetCompositeBlob(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError,
+        false);
   }
 
-  void routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode serverErrorCode, RouterErrorCode routerErrorCode) throws Exception {
-    try{
-      Properties properties = getNonBlockingRouterProperties("DC1");
+  void routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode serverErrorCode, RouterErrorCode routerErrorCode)
+      throws Exception {
+    try {
+      Properties properties = getNonBlockingRouterProperties(localDcName);
       properties.setProperty("router.blob.metadata.cache.enabled", Boolean.toString(true));
       properties.setProperty("router.smallest.blob.for.metadata.cache", Long.toString(0));
-      setRouterWithMetadataCache(properties, new AmbryCacheStats(1,1,1,1));
+      setRouterWithMetadataCache(properties, new AmbryCacheStats(1, 1, 1, 1));
       AmbryCacheWithStats ambryCacheWithStats = (AmbryCacheWithStats) router.getBlobMetadataCache();
       assertNotNull("Metadata cache must be created", ambryCacheWithStats);
 
@@ -2193,9 +2271,12 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       // successful get
       ByteRange range = ByteRanges.fromOffsetRange(1, 2);
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache miss", ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      assertTrue("Must put metadata in cache", ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache miss",
+          ambryCacheWithStats.getCacheMissCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      assertTrue("Must put metadata in cache",
+          ambryCacheWithStats.getPutObjectCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
       assertNotNull("Blob metadata must be present in metadata cache", router.getBlobMetadataCache().getObject(blobId));
 
       // failed delete
@@ -2209,8 +2290,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       router.getNotFoundCache().invalidateAll();
 
       // successful get, cache must be intact
-      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTrue("Must encounter a cache hit", ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      router.getBlob(blobId, new GetBlobOptionsBuilder().range(range).build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      assertTrue("Must encounter a cache hit",
+          ambryCacheWithStats.getCacheHitCountDown().await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
     } finally {
       router.close();
     }
@@ -2218,7 +2301,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   @Test
   public void testRouterMetadataCacheUnexpectedInternalErrorOnDeleteCompositeBlob() throws Exception {
-    routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode.Unknown_Error, RouterErrorCode.UnexpectedInternalError);
+    routerMetadataCacheErrorOnDeleteCompositeBlob(ServerErrorCode.Unknown_Error,
+        RouterErrorCode.UnexpectedInternalError);
   }
 
   @Test
@@ -2235,7 +2319,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2308,14 +2392,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testGetBlobChunkIdsForSimpleBlob() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       int numberOfChunks = 1;
       setOperationParams(numberOfChunks * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       GetBlobResult result = router.getBlob(blobId,
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertNull("Blob chunk Ids should be null for simple blob", result.getBlobChunkIds());
     } finally {
@@ -2331,14 +2415,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public void testGetBlobChunkIdsForCompositeBlob() throws Exception {
     try {
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties("DC1"), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       int numberOfChunks = 4;
       setOperationParams(numberOfChunks * PUT_CONTENT_SIZE, TTL_SECS);
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       GetBlobResult result = router.getBlob(blobId,
-              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
+          new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobChunkIds).build())
           .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       assertEquals("Number of blob chunk Ids mismatch", numberOfChunks, result.getBlobChunkIds().size());
     } finally {
@@ -2369,7 +2453,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
@@ -2421,7 +2504,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String compositeBlobId =
@@ -2474,7 +2556,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String compositeBlobId =
@@ -2523,7 +2604,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
@@ -2577,23 +2657,26 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
-      // set error status for all the replicas except one local replica
+      // Since 1 success, 1 Blob_Not_Found, 1 Disk_Unavailable
       boolean oneSuccess = false;
+      boolean oneDiskUnavailable = false;
       List<ServerErrorCode> serverErrors = new ArrayList<>();
       serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first TtlUpdate Request
       serverErrors.add(ServerErrorCode.Unknown_Error); // return Unknown_Error for the ReplicateBlob Request
       for (MockServer server : layout.getMockServers()) {
         if (server.getDataCenter().equals(localDcName)) {
-          // local DC, return NO_ERROR for one replica,
+          // local DC, return NO_ERROR for one replica and Disk unavailable for another replica.
           if (!oneSuccess) {
             oneSuccess = true;
+          } else if (!oneDiskUnavailable) {
+            server.setServerErrors(Arrays.asList(ServerErrorCode.Disk_Unavailable, ServerErrorCode.Unknown_Error));
+            oneDiskUnavailable = true;
           } else {
             server.setServerErrors(serverErrors);
           }
@@ -2627,7 +2710,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
@@ -2674,7 +2756,6 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      String localDcName = "DC1";
       setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
       setOperationParams();
       String blobId =

@@ -1331,7 +1331,7 @@ public class GetBlobOperationTest {
 
   /**
    * Test the case where originating dc returns 2 Disk_Unavailable and 1 Not_Found and rest replicas return Not_Found.
-   * In this case, result of GET operation will be Not_Found.
+   * In this case, result of GET operation will be AmbryUnavailable.
    * @throws Exception
    */
   @Test
@@ -1353,7 +1353,7 @@ public class GetBlobOperationTest {
         localDcServers.get(i).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
       }
     }
-    getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
+    getErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
     mockServerLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 
@@ -1454,12 +1454,10 @@ public class GetBlobOperationTest {
       RouterErrorCode expectedRouterError;
       switch (serverErrorCode) {
         case Replica_Unavailable:
-          expectedRouterError = RouterErrorCode.AmbryUnavailable;
-          break;
         case Disk_Unavailable:
-          // if all the disks are unavailable (which should be extremely rare), after replacing these disks, the blob is
-          // definitely not present.
-          expectedRouterError = RouterErrorCode.BlobDoesNotExist;
+          // Even if all the disks are unavailable (which should be extremely rare), we will return AmbryUnavailable.
+          // Once the disks are back up, we will return BlobNotFound.
+          expectedRouterError = RouterErrorCode.AmbryUnavailable;
           break;
         default:
           expectedRouterError = RouterErrorCode.UnexpectedInternalError;
