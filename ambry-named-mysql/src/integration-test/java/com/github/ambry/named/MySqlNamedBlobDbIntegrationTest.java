@@ -188,6 +188,7 @@ public class MySqlNamedBlobDbIntegrationTest {
    */
   @Test
   public void testExpiredBlobs() throws Exception {
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
 
@@ -197,6 +198,8 @@ public class MySqlNamedBlobDbIntegrationTest {
     NamedBlobRecord record =
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
     namedBlobDb.put(record).get();
+
+    time.setCurrentMilliseconds(System.currentTimeMillis());
 
     Thread.sleep(100);
     checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName),
@@ -285,6 +288,8 @@ public class MySqlNamedBlobDbIntegrationTest {
         assertEquals("After stale cleanup, the record does not match expectation.", record, recordFromDb);
       }
     }
+
+    time.setCurrentMilliseconds(System.currentTimeMillis());
   }
 
   /**
