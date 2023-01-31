@@ -83,6 +83,7 @@ public class MySqlNamedBlobDbIntegrationTest {
    */
   @Test
   public void testPutGetListDeleteSequence() throws Exception {
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     int blobsPerContainer = 5;
 
     List<NamedBlobRecord> records = new ArrayList<>();
