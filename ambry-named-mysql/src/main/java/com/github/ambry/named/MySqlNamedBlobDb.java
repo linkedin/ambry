@@ -32,6 +32,8 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.sql.Connection;
@@ -40,10 +42,12 @@ import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -64,6 +68,9 @@ import org.slf4j.LoggerFactory;
  */
 class MySqlNamedBlobDb implements NamedBlobDb {
   private static final Logger logger = LoggerFactory.getLogger(MySqlNamedBlobDb.class);
+
+  private final Time time;
+  private static final int VERSION_BASE = 100000;
   // table name
   private static final String NAMED_BLOBS_V2 = "named_blobs_v2";
   // column names
@@ -155,7 +162,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "WHERE blob_state=1 "
           + "      GROUP BY account_id, container_id, blob_name) t2 "
           + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE t1.gg_modi_ts<(%s - INTERVAL 60 DAY) and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL "
+          + "WHERE t1.%s<? and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL "
           + "LIMIT ?",
       ACCOUNT_ID,
       CONTAINER_ID,
@@ -166,7 +173,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       CURRENT_TIME,
       NAMED_BLOBS_V2,
       NAMED_BLOBS_V2,
-      CURRENT_TIME);
+      VERSION);
   // @formatter:on
 
   private final AccountService accountService;
@@ -178,7 +185,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private final Metrics metricsRecoder;
 
   MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
-      String localDatacenter, MetricRegistry metricRegistry) {
+      String localDatacenter, MetricRegistry metricRegistry, Time time) {
     this.accountService = accountService;
     this.config = config;
     this.localDatacenter = localDatacenter;
@@ -194,6 +201,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                 localDatacenter.equals(dbEndpoint.getDatacenter()) ? config.localPoolSize : config.remotePoolSize)));
     this.remoteDatacenters = MySqlUtils.getRemoteDcFromDbInfo(config.dbInfo, localDatacenter);
     this.metricsRecoder = new MySqlNamedBlobDb.Metrics(metricRegistry);
+    this.time = time;
+  }
+
+  MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
+      String localDatacenter, MetricRegistry metricRegistry) {
+    this(accountService, config, dataSourceFactory, localDatacenter, metricRegistry, SystemTime.getInstance());
   }
 
   private static class Metrics {
@@ -264,9 +277,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
-      long startTime = System.currentTimeMillis();
+      long startTime = this.time.milliseconds();
       NamedBlobRecord record = run_get_v2(accountName, containerName, blobName, option, accountId, containerId, connection);
-      metricsRecoder.namedBlobGetTimeInMs.update(System.currentTimeMillis() - startTime);
+      metricsRecoder.namedBlobGetTimeInMs.update(this.time.milliseconds() - startTime);
       return record;
     }, transactionStateTracker);
   }
@@ -275,9 +288,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
       String pageToken) {
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
-      long startTime = System.currentTimeMillis();
+      long startTime = this.time.milliseconds();
       Page<NamedBlobRecord> recordPage = run_list_v2(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
-      metricsRecoder.namedBlobListTimeInMs.update(System.currentTimeMillis() - startTime);
+      metricsRecoder.namedBlobListTimeInMs.update(this.time.milliseconds() - startTime);
       return recordPage;
     }, null);
   }
@@ -286,7 +299,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
-          long startTime = System.currentTimeMillis();
+          long startTime = this.time.milliseconds();
           // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
           logger.trace("NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}', dbRelyOnNewTable='{}', isUpsert='{}'",
               accountId, containerId, record.getBlobName(), config.dbRelyOnNewTable, isUpsert);
@@ -305,7 +318,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
             }
           }
           PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
-          metricsRecoder.namedBlobPutTimeInMs.update(System.currentTimeMillis() - startTime);
+          metricsRecoder.namedBlobPutTimeInMs.update(this.time.milliseconds() - startTime);
           return putResult;
         }, null);
   }
@@ -313,9 +326,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
-      long startTime = System.currentTimeMillis();
+      long startTime = this.time.milliseconds();
       DeleteResult deleteResult = run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
-      metricsRecoder.namedBlobDeleteTimeInMs.update(System.currentTimeMillis() - startTime);
+      metricsRecoder.namedBlobDeleteTimeInMs.update(this.time.milliseconds() - startTime);
       return deleteResult;
     }, null);
   }
@@ -325,9 +338,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
-      long startTime = System.currentTimeMillis();
+      long startTime = this.time.milliseconds();
       List<StaleNamedResult> staleNamedBlobResults= runPullStaleBlobs(connection);
-      metricsRecoder.namedBlobPullStaleTimeInMs.update(System.currentTimeMillis() - startTime);
+      metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
     }, transactionStateTracker);
   }
@@ -335,12 +348,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   @Override
   public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedResult> staleRecords) {
     return executeGenericTransactionAsync(true, (connection) -> {
-      long startTime = System.currentTimeMillis();
+      long startTime = this.time.milliseconds();
       for (StaleNamedResult record : staleRecords) {
         applySoftDelete(record.getAccountId(), record.getContainerId(), record.getBlobName(), record.getVersion(),
             record.getDeleteTs(), connection);
       }
-      metricsRecoder.namedBlobCleanupTimeInMs.update(System.currentTimeMillis() - startTime);
+      metricsRecoder.namedBlobCleanupTimeInMs.update(this.time.milliseconds() - startTime);
       return staleRecords.size();
     }, null);
   }
@@ -515,7 +528,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
         long version = resultSet.getLong(2);
         Timestamp deletionTime = resultSet.getTimestamp(3);
-        long currentTime = System.currentTimeMillis();
+        long currentTime = this.time.milliseconds();
         if (compareTimestamp(deletionTime, currentTime) <= 0 && !includeDeletedOrExpiredOptions.contains(option)) {
           throw buildException("GET: Blob is not available due to it is deleted or expired",
               RestServiceErrorCode.Deleted, accountName, containerName, blobName);
@@ -538,7 +551,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       try (ResultSet resultSet = statement.executeQuery()) {
         String nextContinuationToken = null;
         List<NamedBlobRecord> entries = new ArrayList<>();
-        long currentTime = System.currentTimeMillis();
+        long currentTime = this.time.milliseconds();
         int resultIndex = 0;
         while (resultSet.next()) {
           if (resultIndex++ == config.listMaxResults) {
@@ -614,7 +627,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   private List<StaleNamedResult> runPullStaleBlobs(final Connection connection) throws Exception {
     try (PreparedStatement statement = connection.prepareStatement(GET_STALE_QUERY)) {
-      statement.setInt(1, config.staleMaxResults);
+      Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+      calendar.add(Calendar.MONTH, -2);
+      long previousTimeInMillis = calendar.getTimeInMillis();
+      statement.setLong(1, previousTimeInMillis * VERSION_BASE);
+      statement.setInt(2, config.staleMaxResults);
       try (ResultSet resultSet = statement.executeQuery()) {
         List<StaleNamedResult> resultList = new ArrayList<>();
         while (resultSet.next()) {
@@ -652,11 +669,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * Build the version for Named Blob row based on timestamp and uuid postfix.
    * @return a long number whose rightmost 5 digits are uuid postfix, and the remaining digits are current timestamp
    */
-  private static long buildVersion() {
-    long currentTime = System.currentTimeMillis();
+  private long buildVersion() {
+    long currentTime = this.time.milliseconds();
     UUID uuid = UUID.randomUUID();
-    int base = 100000;
-    return currentTime * base + Long.parseLong(uuid.toString().split("-")[0],16) % base;
+    return currentTime * VERSION_BASE + Long.parseLong(uuid.toString().split("-")[0],16) % VERSION_BASE;
   }
 
   /**

@@ -28,15 +28,18 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -53,6 +56,7 @@ import static org.junit.Assert.*;
  */
 public class MySqlNamedBlobDbIntegrationTest {
   private static final String LOCAL_DC = "dc1";
+  private static final MockTime time = new MockTime();
   private final MySqlNamedBlobDb namedBlobDb;
   private final InMemAccountService accountService;
   private final PartitionId partitionId;
@@ -67,7 +71,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     MockClusterMap clusterMap = new MockClusterMap();
     partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     MySqlNamedBlobDbFactory namedBlobDbFactory =
-        new MySqlNamedBlobDbFactory(new VerifiableProperties(properties), new MetricRegistry(), accountService);
+        new MySqlNamedBlobDbFactory(new VerifiableProperties(properties), new MetricRegistry(), accountService, time);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
 
     cleanup();
@@ -217,6 +221,11 @@ public class MySqlNamedBlobDbIntegrationTest {
    */
   @Test
   public void testCleanupStaleBlobs() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.MONTH, -2);
+    long twoMonthAgo = calendar.getTimeInMillis();
+    long twoMonthAgoABitLater = twoMonthAgo + 1;
+
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
 
@@ -228,13 +237,16 @@ public class MySqlNamedBlobDbIntegrationTest {
     for (int i = 0; i < staleCount; i++) {
       String blobId = getBlobId(account, container);
       String blobName = "stale/" + i + "/more path segments--";
-      long expirationTime = i % 2 == 0 ? Utils.Infinite_Time : System.currentTimeMillis() - TimeUnit.DAYS.toMillis(61);
+      long expirationTime = i % 2 == 0 ? Utils.Infinite_Time : twoMonthAgoABitLater;
       NamedBlobRecord record =
           new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
 
       NamedBlobState blob_state = expirationTime == Utils.Infinite_Time ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
 
+      time.setCurrentMilliseconds(twoMonthAgo);
       namedBlobDb.put(record, blob_state, true).get();
+
+      time.setCurrentMilliseconds(twoMonthAgoABitLater);
       namedBlobDb.put(record, NamedBlobState.READY, true).get();
 
       if (expirationTime == Utils.Infinite_Time) {
