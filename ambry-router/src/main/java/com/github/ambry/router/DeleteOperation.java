@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -31,6 +32,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
@@ -61,7 +63,7 @@ class DeleteOperation {
   // Parameters associated with the state.
   private final long deletionTimeMs;
   // The operation tracker that tracks the state of this operation.
-  private final OperationTracker operationTracker;
+  private OperationTracker operationTracker;
   // A map used to find inflight requests using a correlation id.
   private final Map<Integer, RequestInfo> deleteRequestInfos;
   // The result of this operation to be set into FutureResult.
@@ -75,6 +77,10 @@ class DeleteOperation {
   // Denotes whether the operation is complete.
   private boolean operationCompleted = false;
 
+  private final NonBlockingRouter nonBlockingRouter;
+  private ReplicateBlobCallback replicateBlobCallback;
+  private final String originatingDcName;
+
   /**
    * Instantiates a {@link DeleteOperation}.
    * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
@@ -85,10 +91,12 @@ class DeleteOperation {
    * @param callback The {@link Callback} that is supplied by the caller.
    * @param time A {@link Time} reference.
    * @param futureResult The {@link FutureResult} that is returned to the caller.
+   * @param quotaChargeCallback The {@link QuotaChargeCallback} object.
+   * @param nonBlockingRouter The non-blocking router object
    */
   DeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       ResponseHandler responsehandler, BlobId blobId, String serviceId, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -102,12 +110,14 @@ class DeleteOperation {
     this.deletionTimeMs = time.milliseconds();
     this.deleteRequestInfos = new LinkedHashMap<>();
     byte blobDcId = blobId.getDatacenterId();
-    String originatingDcName = clusterMap.getDatacenterName(blobDcId);
+    this.originatingDcName = clusterMap.getDatacenterName(blobDcId);
     this.operationTracker =
         new SimpleOperationTracker(routerConfig, RouterOperation.DeleteOperation, blobId.getPartition(),
             originatingDcName, false, routerMetrics, blobId);
     operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
+    this.nonBlockingRouter = nonBlockingRouter;
+    this.replicateBlobCallback = null;
   }
 
   /**
@@ -350,6 +360,22 @@ class DeleteOperation {
   }
 
   /**
+   * Check if we should replicate the blob and retry the operation.
+   * @return true if need to do the retry.
+   */
+  private boolean shouldReplicateBlobAndRetry() {
+    // the conditions to trigger ReplicateBlob and retry the original operation:
+    // 1. the feature is enabled.
+    // 2. and at least one replica returned NOT_FOUND status.
+    // 3. and at least one replica returned successful status.
+    // 4. and error code precedence is over AmbryUnavailable. We don't do replication if there BlobExpired or TooManyRequests.
+    RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
+    return (routerConfig.routerRepairWithReplicateBlobOnDeleteEnabled && operationTracker.hasNotFound()
+        && operationTracker.getSuccessCount() > 0 && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(
+        RouterErrorCode.AmbryUnavailable));
+  }
+
+  /**
    * Completes the {@code DeleteOperation} if it is done.
    */
   private void checkAndMaybeComplete() {
@@ -358,6 +384,15 @@ class DeleteOperation {
       if (operationTracker.hasSucceeded()) {
         operationException.set(null);
       } else {
+        // the operation is failed, try to recover with ReplicateBlob
+        if (shouldReplicateBlobAndRetry()) {
+          // if retryWithReplicateBlob returns true, it's under retry. operation is not completed yet. so return.
+          // if it returns false, continue the following code to set the proper operationException and complete the request.
+          if (retryWithReplicateBlob()) {
+            return;
+          }
+        }
+
         if (operationTracker.hasFailedOnNotFound()) {
           operationException.set(
               new RouterException("DeleteOperation failed because of BlobNotFound", RouterErrorCode.BlobDoesNotExist));
@@ -376,6 +411,60 @@ class DeleteOperation {
         }
       }
       operationCompleted = true;
+    }
+  }
+
+  /**
+   * Try to replicate the blob and then retry the Delete Operation
+   * @return true if it's under retry. return false if cannot do retry or retry is finished.
+   */
+  private boolean retryWithReplicateBlob() {
+    // it's the first time we hit the 503
+    if (replicateBlobCallback == null) {
+      List<ReplicaId> successfulReplica = operationTracker.getSuccessReplica();
+      DataNodeId sourceDataNode = successfulReplica.get(0).getDataNodeId();
+      replicateBlobCallback = new ReplicateBlobCallback(blobId, sourceDataNode);
+
+      nonBlockingRouter.replicateBlob(blobId.getID(), this.getClass().getSimpleName(), sourceDataNode,
+          replicateBlobCallback);
+      logger.trace("Start the on-demand replication {} {}.", replicateBlobCallback.getBlobId(),
+          replicateBlobCallback.getSourceDataNode());
+      return true;
+    }
+
+    ReplicateBlobCallback.State state = replicateBlobCallback.getState();
+    switch (state) {
+      case REPLICATING_BLOB:
+        // Has sent out the ReplicateBlob operation and is waiting for its completion.
+        logger.trace("Running on-demand replication {} {}.", replicateBlobCallback.getBlobId(),
+            replicateBlobCallback.getSourceDataNode());
+        return true;
+      case REPLICATION_DONE:
+        // ReplicateBlob is done.
+        // If ReplicateBlob fails, recovery procedure is done. Will complete the DeleteOperation
+        if (replicateBlobCallback.getException() != null) {
+          logger.error("on-demand replication {} {} failed.", replicateBlobCallback.getBlobId(),
+              replicateBlobCallback.getSourceDataNode(), replicateBlobCallback.getException());
+          return false;
+        }
+        // If ReplicateBlob is successful, retry the DeleteOperation.
+        logger.info("On-demand replication {} {} is successful.", replicateBlobCallback.getBlobId(),
+            replicateBlobCallback.getSourceDataNode());
+        replicateBlobCallback.setState(ReplicateBlobCallback.State.RETRYING);
+
+        // retry the Delete
+        operationException.set(null);
+        operationTracker =
+            new SimpleOperationTracker(routerConfig, RouterOperation.DeleteOperation, blobId.getPartition(),
+                originatingDcName, false, routerMetrics, blobId);
+        deleteRequestInfos.clear();
+        return true;
+      case RETRYING:
+        // DeleteOperation retry is finished but still failed. Nothing else we can do. Will complete the operation.
+        return false;
+      default:
+        // code shouldn't come here
+        throw new IllegalStateException("Unrecognized state type");
     }
   }
 

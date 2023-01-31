@@ -368,7 +368,7 @@ class TtlUpdateOperation {
     // 3. and at least one replica returned successful status.
     // 4. and error code precedence is over AmbryUnavailable. If we have one success and one delete, shouldn't do retry.
     RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
-    return (routerConfig.routerRepairWithReplicateBlobEnabled && operationTracker.hasNotFound()
+    return (routerConfig.routerRepairWithReplicateBlobOnTtlUpdateEnabled && operationTracker.hasNotFound()
         && operationTracker.getSuccessCount() > 0 && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(
         RouterErrorCode.AmbryUnavailable));
   }

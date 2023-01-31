@@ -19,7 +19,7 @@ import com.github.ambry.commons.Callback;
 
 
 /**
- * If some operation like {@link TtlUpdateOperation} fails due to some replicas don't have the Blob.
+ * If some operation like {@link TtlUpdateOperation} or {@link DeleteOperation} fails due to some replicas don't have the Blob.
  * We use {@link ReplicateBlobOperation} to replicate the blob to the NOT_FOUND replicas.
  * After that, retry the failed operation for example the {@link TtlUpdateOperation}
  * ReplicateBlobCallback is the callback function of the {@link ReplicateBlobOperation},
