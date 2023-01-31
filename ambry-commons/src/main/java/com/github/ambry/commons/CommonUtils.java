@@ -35,13 +35,11 @@ public class CommonUtils {
     if (zkServers == null || zkServers.isEmpty() || propertyStoreConfig == null) {
       throw new IllegalArgumentException("Invalid arguments, cannot create HelixPropertyStore");
     }
-    return new ZkHelixPropertyStore<ZNRecord>(zkServers, new ZNRecordSerializer(), propertyStoreConfig.rootPath,
-        subscribedPaths);
+    return createHelixPropertyStore(zkServers, propertyStoreConfig.rootPath, subscribedPaths);
   }
 
   /**
    * Create an instance of {@link HelixPropertyStore}, using non-deprecated APIs.
-   * TODO replace usages of the other method with this one once verified to be stable.
    * @param zkAddress the ZooKeeper server address.
    * @param rootPath the root path for this {@link HelixPropertyStore}.
    * @param subscribedPaths the paths to subscribe to for change notification. Note that these should be absolute paths,

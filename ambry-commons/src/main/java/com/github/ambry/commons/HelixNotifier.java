@@ -161,6 +161,13 @@ public class HelixNotifier implements Notifier<String> {
     logger.trace("TopicListener={} has been unsubscribed from topic={}", topicListener, topic);
   }
 
+  @Override
+  public void close() {
+    if (helixStore != null) {
+      helixStore.stop();
+    }
+  }
+
   /**
    * Sends a message to local {@link TopicListener} that subscribed topics through this {@code HelixNotifier}.
    * @param topicListener The {@link TopicListener} to send the message.
