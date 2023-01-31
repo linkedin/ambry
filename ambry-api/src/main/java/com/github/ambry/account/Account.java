@@ -91,6 +91,7 @@ public class Account {
   static final String ACCOUNT_ID_KEY = "accountId";
   static final String ACCOUNT_NAME_KEY = "accountName";
   static final String CONTAINERS_KEY = "containers";
+  static final String DATASET_KEY = "datasets";
 
   static final short JSON_VERSION_1 = 1;
   static final short CURRENT_JSON_VERSION = JSON_VERSION_1;

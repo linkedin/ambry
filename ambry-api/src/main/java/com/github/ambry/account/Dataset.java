@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.util.Collections;
@@ -70,6 +71,7 @@ public class Dataset {
   @JsonProperty(JSON_EXPIRATION_TIME_KEY)
   private final Long expirationTimeMs;
   @JsonProperty(JSON_RETENTION_COUNT_KEY)
+  @JsonInclude(JsonInclude.Include.NON_DEFAULT)
   private final Integer retentionCount;
   @JsonProperty(JSON_USER_TAGS_KEY)
   private final Map<String, String> userTags;

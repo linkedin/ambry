@@ -22,6 +22,8 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.accountstats.AccountStatsStore;
@@ -178,6 +180,7 @@ public class FrontendRestRequestServiceTest {
   private AccountAndContainerInjector accountAndContainerInjector;
   private final String SECURE_PATH_PREFIX = "secure-path";
   private final int CONTENT_LENGTH = 1024;
+  private static final String DATASET_NAME = "testDataset";
 
   /**
    * Sets up the {@link FrontendRestRequestService} instance before a test.
@@ -1003,6 +1006,46 @@ public class FrontendRestRequestServiceTest {
     } catch (RestServiceException e) {
       assertEquals("Error code not as expected", RestServiceErrorCode.NotFound, e.getErrorCode());
     }
+  }
+
+  /**
+   * Test add and get {@link Dataset}.
+   * @throws Exception
+   */
+  @Test
+  public void addAndGetDatasetTest() throws Exception {
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    Dataset.VersionSchema versionSchema = Dataset.VersionSchema.TIMESTAMP;
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME, versionSchema, -1).build();
+    byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    RestRequest restRequest =
+        createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Dataset not created correctly", dataset,
+        accountService.getDataset(testAccount.getName(), testContainer.getName(), DATASET_NAME));
+
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName())
+        .put(RestUtils.Headers.TARGET_DATASET_NAME, DATASET_NAME);
+    restRequest = createRestRequest(RestMethod.GET, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, null);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    Dataset datasetFromResponse = AccountCollectionSerde.datasetsFromInputStreamInJson(
+        new ByteArrayInputStream(restResponseChannel.getResponseBody()));
+    assertEquals("Unexpected GET /accounts/containers/datasets response ", dataset, datasetFromResponse);
+    assertEquals("Unexpected response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertEquals("Unexpected header", testAccount.getName(),
+        restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME));
+    assertEquals("Unexpected header", testContainer.getName(),
+        restResponseChannel.getHeader(RestUtils.Headers.TARGET_CONTAINER_NAME));
   }
 
   /**

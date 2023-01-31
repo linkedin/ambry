@@ -19,6 +19,7 @@ import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestRequest;
@@ -121,7 +122,13 @@ class GetAccountsHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.getAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
         byte[] serialized;
-        if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
+        if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
+          LOGGER.debug("Received request for getting single dataset with arguments: {}", restRequest.getArgs());
+          Dataset dataset = getDataset();
+          serialized = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, dataset.getAccountName());
+          restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, dataset.getContainerName());
+        } else if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
           LOGGER.debug("Received request for getting single container with arguments: {}", restRequest.getArgs());
           Container container = getContainer();
           serialized = AccountCollectionSerde.serializeContainersInJson(Collections.singletonList(container));
@@ -186,6 +193,26 @@ class GetAccountsHandler {
             RestServiceErrorCode.NotFound);
       }
       return container;
+    }
+
+    /**
+     * @return requested dataset.
+     * @throws RestServiceException
+     */
+    private Dataset getDataset() throws RestServiceException {
+      String accountName = null;
+      String containerName = null;
+      String datasetName = null;
+      try {
+        accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
+        containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
+        datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
+        return accountService.getDataset(accountName, containerName, datasetName);
+      } catch (AccountServiceException ex) {
+        throw new RestServiceException(
+            "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "
+                + datasetName, RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      }
     }
   }
 }
