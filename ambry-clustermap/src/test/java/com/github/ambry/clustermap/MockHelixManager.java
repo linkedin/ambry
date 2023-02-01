@@ -19,7 +19,6 @@ import com.github.ambry.config.VerifiableProperties;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -58,6 +57,7 @@ import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.spectator.RoutingTableProvider;
+import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 
@@ -79,7 +79,7 @@ class MockHelixManager implements HelixManager {
   private final MockHelixDataAccessor dataAccessor;
   private final Exception beBadException;
   private final Map<String, ZNRecord> znRecordMap;
-  private ZkHelixPropertyStore<ZNRecord> helixPropertyStore;
+  private HelixPropertyStore<ZNRecord> helixPropertyStore;
   private boolean isAggregatedViewCluster;
   private final List<MockHelixAdmin> helixAdminList;
 
@@ -132,9 +132,8 @@ class MockHelixManager implements HelixManager {
     storeProps.setProperty("helix.property.store.root.path",
         "/" + clusterName + "/" + ClusterMapUtils.PROPERTYSTORE_STR);
     HelixPropertyStoreConfig propertyStoreConfig = new HelixPropertyStoreConfig(new VerifiableProperties(storeProps));
-    helixPropertyStore =
-        (ZkHelixPropertyStore<ZNRecord>) CommonUtils.createHelixPropertyStore(zkAddr, propertyStoreConfig,
-            Collections.singletonList(propertyStoreConfig.rootPath));
+    helixPropertyStore = CommonUtils.createHelixPropertyStore(zkAddr, propertyStoreConfig,
+        Collections.singletonList(propertyStoreConfig.rootPath));
     if (znRecordMap != null) {
       for (Map.Entry<String, ZNRecord> znodePathAndRecord : znRecordMap.entrySet()) {
         helixPropertyStore.set(znodePathAndRecord.getKey(), znodePathAndRecord.getValue(), AccessOption.PERSISTENT);
@@ -205,7 +204,7 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public ZkHelixPropertyStore<ZNRecord> getHelixPropertyStore() {
-    return helixPropertyStore;
+    return (ZkHelixPropertyStore<ZNRecord>) helixPropertyStore;
   }
 
   /**

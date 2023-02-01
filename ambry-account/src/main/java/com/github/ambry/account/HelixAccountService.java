@@ -306,6 +306,9 @@ public class HelixAccountService extends AbstractAccountService {
         shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMs, TimeUnit.MILLISECONDS);
       }
       helixStore.stop();
+      if (notifier != null) {
+        notifier.close();
+      }
     }
   }
 

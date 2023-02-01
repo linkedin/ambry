@@ -30,7 +30,7 @@ public interface Notifier<T> {
    * @param message The message to send for the topic.
    * @return {@code true} if the message has been sent out successfully, {@code false} otherwise.
    */
-  public boolean publish(String topic, T message);
+  boolean publish(String topic, T message);
 
   /**
    * Let a {@link TopicListener} subscribe to a topic. After subscription, it will receive the messages
@@ -38,7 +38,7 @@ public interface Notifier<T> {
    * @param topic The topic to subscribe.
    * @param listener The {@link TopicListener} who subscribes the topic.
    */
-  public void subscribe(String topic, TopicListener<T> listener);
+  void subscribe(String topic, TopicListener<T> listener);
 
   /**
    * Let a {@link TopicListener} unsubscribe from a topic, so it will no longer receive the messages for
@@ -46,5 +46,11 @@ public interface Notifier<T> {
    * @param topic The topic to unsubscribe.
    * @param listener The {@link TopicListener} who unsubscribes the topic.
    */
-  public void unsubscribe(String topic, TopicListener<T> listener);
+  void unsubscribe(String topic, TopicListener<T> listener);
+
+  /**
+   * Close all the underlying data structures.
+   */
+  default void close() {
+  }
 }
