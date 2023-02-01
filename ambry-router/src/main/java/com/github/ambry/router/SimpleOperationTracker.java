@@ -22,11 +22,13 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -68,13 +70,13 @@ import org.slf4j.LoggerFactory;
  */
 class SimpleOperationTracker implements OperationTracker {
   private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
+  private static final int NOT_FOUND_THRESHOLD_INVALID_VALUE = -1;
   protected final String datacenterName;
   protected final String originatingDcName;
   protected final int replicaSuccessTarget;
   protected final int replicaParallelism;
   // How many NotFound responses from originating dc will terminate the operation.
-  // It is set to tolerate one random failure in the originating dc if all other responses are not found.
-  protected final int originatingDcNotFoundFailureThreshold;
+  protected int originatingDcNotFoundFailureThreshold = NOT_FOUND_THRESHOLD_INVALID_VALUE;
   protected final int totalReplicaCount;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
   protected final NonBlockingRouterMetrics routerMetrics;
@@ -82,7 +84,6 @@ class SimpleOperationTracker implements OperationTracker {
   private final RouterOperation routerOperation;
   private final PartitionId partitionId;
   private final RouterConfig routerConfig;
-  private final boolean crossColoEnabled;
   protected int inflightCount = 0;
   protected int replicaSuccessCount = 0;
   protected List<ReplicaId> successReplica = new ArrayList<>();
@@ -91,17 +92,11 @@ class SimpleOperationTracker implements OperationTracker {
   protected int disabledCount = 0;
   protected int originatingDcNotFoundCount = 0;
   protected int totalNotFoundCount = 0;
-  protected int diskDownCount = 0;
   protected ReplicaId lastReturnedByIterator = null;
   private Iterator<ReplicaId> replicaIterator;
-  private String reassignedOriginDc = null;
-  private int originatingDcOfflineReplicaCount = 0;
-  private int originatingDcEligibleReplicaCount = 0;
-  private int originatingDcTotalReplicaCount = 0;
-  private int totalOfflineReplicaCount = 0;
-  private int allReplicaCount = 0;
+  private final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
+  private final int originatingDcTotalReplicaCount;
   private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
-  private final List<ReplicaId> allReplicas;
   private final BlobId blobId;
 
   /**
@@ -195,12 +190,11 @@ class SimpleOperationTracker implements OperationTracker {
         (Map<ReplicaState, List<ReplicaId>>) partitionId.getReplicaIdsByStates(EnumSet.allOf(ReplicaState.class), null);
     List<ReplicaId> eligibleReplicas;
     List<ReplicaId> offlineReplicas = new ArrayList<>();
-    totalOfflineReplicaCount =
-        getReplicasByState(null, EnumSet.of(ReplicaState.OFFLINE)).getOrDefault(ReplicaState.OFFLINE,
-            Collections.emptyList()).size();
-    allReplicas = partitionId.getReplicaIds().stream().collect(Collectors.toList());
-    allReplicaCount = allReplicas.size();
+    // This is a list of all replicas for this partition. This comes from replica information updated by us in helix
+    // Data node configs via bootstrap tool and not external view. This would be same as ideal view.
+    List<ReplicaId> allReplicas = new ArrayList<>(partitionId.getReplicaIds());
 
+    boolean crossColoEnabled;
     switch (routerOperation) {
       case GetBlobOperation:
       case GetBlobInfoOperation:
@@ -278,6 +272,7 @@ class SimpleOperationTracker implements OperationTracker {
     // rate of cross-colo requests(GET/DELETE/TTLUpdate), operation tracker should be allowed to try remote dc with most
     // replicas first. This is useful in cluster with "unbalanced" replica distribution (i.e. 3 replicas in local dc and
     // 1 replica per remote dc)
+    String reassignedOriginDc = null;
     if (originatingDcName == null && routerConfig.routerCrossColoRequestToDcWithMostReplicas) {
       Map<String, Long> dcToReplicaCnt = replicas.stream()
           .collect(Collectors.groupingBy(e -> e.getDataNodeId().getDatacenterName(), Collectors.counting()));
@@ -350,16 +345,6 @@ class SimpleOperationTracker implements OperationTracker {
       }
     }
     totalReplicaCount = replicaPool.size();
-    originatingDcOfflineReplicaCount =
-        getReplicasByState(originatingDcName, EnumSet.of(ReplicaState.OFFLINE)).values().size();
-    originatingDcEligibleReplicaCount = replicaPool.stream()
-        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(this.originatingDcName))
-        .collect(Collectors.toList())
-        .size();
-    originatingDcTotalReplicaCount = allReplicas.stream()
-        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(this.originatingDcName))
-        .collect(Collectors.toList())
-        .size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
     // Please report the test failure if you run into this exception.
@@ -370,21 +355,15 @@ class SimpleOperationTracker implements OperationTracker {
       throw notEnoughReplicasException.get();
     }
 
-    int numActiveReplicasInOriginatingDc =
-        getEligibleReplicas(originatingDcName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)).size();
-    if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled
-        && numActiveReplicasInOriginatingDc >= routerConfig.routerPutSuccessTarget) {
-      // There are two conditions to meet in order to use this feature
-      // 1. TerminateOnNotFound has to be enabled.
-      // 2. We need enough active replicas in the originating DC
-      // How many active replicas is considered as enough? We have to consider some extreme cases.
-      // When the put success target is 2, we at least need 2 replicas in active state so we know the replicas are up to
-      // date. If we have only one replica in active state, we might run into a scenario that we are getting NotFound
-      // from the other two inactive replicas and we should not ignore the active one.
-      originatingDcNotFoundFailureThreshold = originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1;
-    } else {
-      originatingDcNotFoundFailureThreshold = 0;
-    }
+    originatingDcTotalReplicaCount = (int) allReplicas.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(this.originatingDcName))
+        .count();
+    originatingDcLeaderOrStandbyReplicas = new HashSet<>(
+        getEligibleReplicas(this.originatingDcName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)));
+    originatingDcNotFoundFailureThreshold =
+        routerConfig.routerOperationTrackerCheckAllOriginatingReplicasForNotFound ? originatingDcTotalReplicaCount
+            : Math.max(originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1, 0);
+
     this.otIterator = new OpTrackerIterator();
     logger.debug(
         "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}, originatingDC = {}",
@@ -419,112 +398,38 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   @Override
-  public boolean maybeFailedDueToOfflineReplicas() {
-    if (!routerConfig.routerUnavailableDueToOfflineReplicas) {
-      return false;
-    }
-
-    // For GetBlob
-    if (routerOperation == RouterOperation.GetBlobOperation || routerOperation == RouterOperation.GetBlobInfoOperation) {
-      // Explanation of the following three conditions in order,
-      // 1. hasFailedOnCrossColoNotFound:
-      //    We tried all the "eligible" replicas at this moment, couldn't finish the operation due to NOT_FOUND
-      // 2. (allReplicaCount - totalNotFoundCount >= replicaSuccessTarget)
-      //    Minus all the NOT_FOUND replicas, among all the replicas belongs to the partition(no matter online or offline),
-      //    we should still have enough replicas to satisfy the replicaSuccessTarget.
-      //    That means, if we retry, potentially we have the chance to be successful and get the blob back from other replica.
-      // 3. (originatingDcEligibleReplicaCount < originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1)
-      //    The retry can be successful only if there is some offline replica coming back when retry happens.
-      //    That's why for TtlUpdate and Delete, we have the third condition as (totalOfflineReplicaCount > 0)
-      //    a). For GetBlob, the difference is that we already include OFFLINE replicas to the eligible replica pool
-      //        while TTLUpdate/Delete don't. Refer to routerOperationTrackerIncludeDownReplicas related code.
-      //        So it has tried the OFFLINE replicas already.
-      //    b). But with the recent Helix implementation, when the server is crashed,
-      //        the helix external view sometimes doesn't include the replica at all, not even in the OFFLINE category.
-      //        So we check how many replicas from the originating DC we read already.
-      //        Since we put routerPutSuccessTarget copies in the originating DC,
-      //        we should at least read "originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1" replicas
-      //        to make sure we read one of the copies.
-      //        If the eligible originating replica count is less that that, we should retry.
-      if (hasFailedOnCrossColoNotFound()
-          && (allReplicaCount - totalNotFoundCount >= replicaSuccessTarget)
-          && (originatingDcEligibleReplicaCount < originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1)) {
-        logger.info(
-            "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
-                + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
-                + "TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {}, "
-                + "originatingDcEligibleReplicaCount {} {} "
-                + "replicasByState = {}",
-            routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
-            replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, originatingDcEligibleReplicaCount,
-            getBlobIdLog(), allDcReplicasByState);
-        routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
-        return true;
-      }
-      return false;
-    }
-
-    // For Delete and TtlUpdate
-    // We mark the failure as due to offline replicas when we know that we couldn't find the blob in eligible replicas,
-    // and remaining replicas are enough to make the request successful, and there is atleast one offline replica in the
-    // remaining set of replicas. The offline replicas can come back up in future to make the request successful, and
-    // hence such a failure should be deemed as retryable.
-    if (hasFailedOnOriginatingDcNotFound()
-        && originatingDcTotalReplicaCount - originatingDcNotFoundCount >= replicaSuccessTarget
-        && originatingDcOfflineReplicaCount > 0) {
-      logger.info(
-          "Terminating {} on {} due to Not_Found failure on some originatingDc replicas and some other originatingDc"
-              + "replicas being offline. Originating Not_Found count: {}, failure threshold: {},"
-              + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
-              + "replicaSuccessTarget: {} {}", routerOperation.name(), partitionId, originatingDcNotFoundCount,
-          originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount, originatingDcTotalReplicaCount,
-          replicaSuccessTarget, getBlobIdLog());
-      routerMetrics.failedMaybeDueToOriginatingDcOfflineReplicasCount.inc();
-      return true;
-    }
-    // TODO: When helix external view doesn't include OFFLINE replicas, the totalOfflineReplicaCount is zero.
-    // FIX IT.
-    if (hasFailedOnCrossColoNotFound() && allReplicaCount - totalNotFoundCount >= replicaSuccessTarget
-        && totalOfflineReplicaCount > 0) {
-      logger.info(
-          "Terminating {} on {} due to disk down count and total Not_Found count from eligible replicas and some "
-              + "other replicas being unavailable. CrossColoEnabled: {}, DiskDownCount: {}, TotalNotFoundCount: {}, "
-              + "TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {}, allReplicaCount: {} {} "
-              + "replicasByState = {}",
-          routerOperation, partitionId, crossColoEnabled, diskDownCount, totalNotFoundCount, totalReplicaCount,
-          replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount, getBlobIdLog(), allDcReplicasByState);
-      routerMetrics.failedMaybeDueToTotalOfflineReplicasCount.inc();
-      return true;
-    }
-    return false;
-  }
-
-  @Override
   public boolean hasFailedOnNotFound() {
     if (routerOperation == RouterOperation.PutOperation) {
       return false;
     }
-    if (hasFailedOnOriginatingDcNotFound()) {
-      logger.info(
-          "Terminating {} on {} due to Not_Found failure. Originating Not_Found count: {}, failure threshold: {},"
-              + "originatingDcOfflineReplicaCount: {}, originatingDcNameTotalReplicaCount: {},"
-              + "replicaSuccessTarget: {}, allReplicaCount: {} {}", routerOperation.name(), partitionId,
-          originatingDcNotFoundCount, originatingDcNotFoundFailureThreshold, originatingDcOfflineReplicaCount,
-          originatingDcTotalReplicaCount, replicaSuccessTarget, allReplicaCount, getBlobIdLog());
-      routerMetrics.failedOnOriginatingDcNotFoundCount.inc();
+
+    if (originatingDcName == null || replicaSuccessCount > 0) {
+      return false;
+    }
+
+    if (originatingDcNotFoundFailureThreshold > 0
+        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold) {
+      // If we get sufficient not found responses in originating DC, we can confirm that blob is not present in Ambry.
+      logger.info("Terminating {} on {} due to Not_Found failure in originating DC {}, "
+              + "NotFoundCount: {}, FailureThreshold: {}, TotalReplicaCount: {}, LeaderStandbyCount: {}, {}",
+          routerOperation.name(), partitionId, originatingDcName, originatingDcNotFoundCount,
+          originatingDcNotFoundFailureThreshold, originatingDcTotalReplicaCount,
+          originatingDcLeaderOrStandbyReplicas.size(), getBlobIdLog());
+      routerMetrics.failedOnTotalNotFoundCount.inc();
       return true;
     }
-    // To account for GET operation, the threshold should be  >= totalReplicaCount - (success target - 1)
-    // Right now, this only applies for replica only partitions and may not be completely accurate if there are
-    // failures responses other than not found.
-    if (hasFailedOnCrossColoNotFound()) {
-      logger.info(
-          "Terminating {} on {} due to disk down count and total Not_Found. CrossColoEnabled: {}, DiskDownCount: {},"
-              + "TotalNotFoundCount: {}, TotalReplicaCount: {}, replicaSuccessTarget: {}, OfflineReplicaCount: {},"
-              + "allReplicaCount: {} {} replicasByState = {}", routerOperation, partitionId, crossColoEnabled, diskDownCount,
-          totalNotFoundCount, totalReplicaCount, replicaSuccessTarget, totalOfflineReplicaCount, allReplicaCount,
-          getBlobIdLog(), allDcReplicasByState);
-      routerMetrics.failedOnTotalNotFoundCount.inc();
+
+    return false;
+  }
+
+  @Override
+  public boolean hasSomeUnavailability() {
+    if (originatingDcName != null && originatingDcLeaderOrStandbyReplicas.size() < originatingDcTotalReplicaCount) {
+      logger.info("{} on {} has some replicas unavailable in originating DC {}, TotalReplicaCount: {},"
+              + "LeaderStandbyCount: {}, ReplicasByState: {}, {}", routerOperation.name(), partitionId, originatingDcName,
+          originatingDcTotalReplicaCount, originatingDcLeaderOrStandbyReplicas.size(), allDcReplicasByState,
+          getBlobIdLog());
+      routerMetrics.failedMaybeDueToUnavailableReplicasCount.inc();
       return true;
     }
     return false;
@@ -576,10 +481,12 @@ class SimpleOperationTracker implements OperationTracker {
         if (trackedRequestFinalState == TrackedRequestFinalState.NOT_FOUND) {
           totalNotFoundCount++;
           if (replicaId.getDataNodeId().getDatacenterName().equals(originatingDcName)) {
-            originatingDcNotFoundCount++;
+            if (originatingDcLeaderOrStandbyReplicas.contains(replicaId)) {
+              // Since bootstrap replicas could still be catching up, treat NotFound responses only from leader or
+              // standby replicas as valid.
+              originatingDcNotFoundCount++;
+            }
           }
-        } else if (trackedRequestFinalState == TrackedRequestFinalState.DISK_DOWN) {
-          diskDownCount++;
         }
     }
   }
@@ -610,26 +517,6 @@ class SimpleOperationTracker implements OperationTracker {
       lastReturnedByIterator = replicaIterator.next();
       return lastReturnedByIterator;
     }
-  }
-
-  /**
-   * Check if not found count in originating datacenter exceeds threshold.
-   * @return {@code true} if not found count in originating datacenter exceeds threshold, {@code false} otherwise.
-   */
-  private boolean hasFailedOnOriginatingDcNotFound() {
-    return originatingDcNotFoundFailureThreshold > 0 && (originatingDcNotFoundCount
-        >= originatingDcNotFoundFailureThreshold);
-  }
-
-  /**
-   * Check if its not possible to get enough successful responses due to not found count.
-   * @return {@code true} if its not possible to get enough successful responses due to not found count.
-   * {@code false} otherwise.
-   */
-  private boolean hasFailedOnCrossColoNotFound() {
-    // we treat DiskDown same as NotFound.
-    // totalReplicaCount is the count of the replicaPool or the eligible replicas, not all the replicas belongs to the partition.
-    return (crossColoEnabled && (diskDownCount + totalNotFoundCount > totalReplicaCount - replicaSuccessTarget));
   }
 
   /**
@@ -674,12 +561,15 @@ class SimpleOperationTracker implements OperationTracker {
       return totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,
           routerConfig.routerPutSuccessTarget + disabledCount);
     } else {
-      // if there is no possible way to use the remaining replicas to meet the success target,
-      // deem the operation a failure.
-      if (replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget) {
+      // If blob is not found in originating DC, we can terminate the operation early. Adding
+      // routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled as a safe guard to search replicas in all colos
+      // before terminating the operation.
+      if (routerConfig.routerOperationTrackerTerminateOnNotFoundEnabled && hasFailedOnNotFound()) {
         return true;
       }
-      return maybeFailedDueToOfflineReplicas() || hasFailedOnNotFound();
+      // if there is no possible way to use the remaining replicas to meet the success target,
+      // deem the operation a failure.
+      return replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget;
     }
   }
 

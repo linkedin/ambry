@@ -369,8 +369,8 @@ class TtlUpdateOperation {
     // 4. and error code precedence is over AmbryUnavailable. If we have one success and one delete, shouldn't do retry.
     RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
     return (routerConfig.routerRepairWithReplicateBlobEnabled && operationTracker.hasNotFound()
-        && operationTracker.getSuccessCount() > 0
-        && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable));
+        && operationTracker.getSuccessCount() > 0 && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(
+        RouterErrorCode.AmbryUnavailable));
   }
 
   /**
@@ -391,26 +391,12 @@ class TtlUpdateOperation {
             return;
           }
         }
-
-        if (operationTracker.maybeFailedDueToOfflineReplicas()) {
-          operationException.set(new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
+        if (operationTracker.hasFailedOnNotFound()) {
+          operationException.set(new RouterException("TtlUpdateOperation failed because of BlobNotFound",
+              RouterErrorCode.BlobDoesNotExist));
+        } else if (operationTracker.hasSomeUnavailability()) {
+          setOperationException(new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
               RouterErrorCode.AmbryUnavailable));
-        } else if (operationTracker.hasFailedOnNotFound()) {
-          /*
-            We are relying on the fact that at least one replica has the blob. Scenarios like below are rare, so that we don’t need to handle them for now.
-            1. put parallelism is 3 && all three replicas of originating dc are down && remote replication is not caught up
-            2. put parallelism is 2 && 2 replicas are down (note that 2 replicas down happen all the time) && replication has not caught up such that blob doesn’t exist in at least one other replica.
-                i.e, its very rare for 2 replicas to be down simultaneously and immediately after taking a POST (with parallelism 2)
-          */
-          if (operationTracker.getSuccessCount() > 0) {
-            routerMetrics.failedMaybeDueToUnavailableReplicasCount.inc();
-            operationException.set(
-                new RouterException("TtlUpdateOperation failed possibly because of unavailable replicas",
-                    RouterErrorCode.AmbryUnavailable));
-          } else {
-            operationException.set(new RouterException("TtlUpdateOperation failed because of BlobNotFound",
-                RouterErrorCode.BlobDoesNotExist));
-          }
         }
       }
 

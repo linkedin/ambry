@@ -17,7 +17,10 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -67,7 +70,8 @@ import static org.junit.Assert.*;
 
 public class DeleteManagerTest {
   private static final int AWAIT_TIMEOUT_SECONDS = 10;
-  private static final String LOCAL_DC = "DC1";
+  // Since PUTs are sent to local DC, it is same as originating DC during DELETEs.
+  private String localDc;
   private Time mockTime;
   private AtomicReference<MockSelectorState> mockSelectorState;
   private MockClusterMap clusterMap;
@@ -111,11 +115,12 @@ public class DeleteManagerTest {
    */
   @Before
   public void init() throws Exception {
-    VerifiableProperties vProps = new VerifiableProperties(getNonBlockingRouterProperties());
     mockTime = new MockTime();
     mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
     clusterMap = new MockClusterMap();
     serverLayout = new MockServerLayout(clusterMap);
+    localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+    VerifiableProperties vProps = new VerifiableProperties(getNonBlockingRouterProperties());
     RouterConfig routerConfig = new RouterConfig(vProps);
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     router = new NonBlockingRouter(routerConfig, routerMetrics,
@@ -130,8 +135,8 @@ public class DeleteManagerTest {
             BlobId.BlobDataType.DATACHUNK);
     blobIdString = blobId.getID();
     deleteManager =
-        new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem,
-            routerConfig, routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime, router);
+        new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem, routerConfig,
+            routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime, router);
     MockNetworkClientFactory networkClientFactory =
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime);
@@ -221,7 +226,8 @@ public class DeleteManagerTest {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Replica_Unavailable);
     serverErrorCodes[5] = ServerErrorCode.Blob_Expired;
-    testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobExpired, deleteErrorCodeChecker);
+    testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobExpired, deleteErrorCodeChecker,
+        localDc);
   }
 
   /**
@@ -253,9 +259,9 @@ public class DeleteManagerTest {
   public void testBlobAuthorizationFailure() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
-    serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
+    serverErrorCodes[0] = ServerErrorCode.Blob_Authorization_Failure;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobAuthorizationFailure,
-        deleteErrorCodeChecker);
+        deleteErrorCodeChecker, localDc);
   }
 
   /**
@@ -268,7 +274,7 @@ public class DeleteManagerTest {
   public void testBlobAuthorizationFailureOverrideAll() throws Exception {
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
 
-    Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
+    Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
     serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
     serverErrorCodes[1] = ServerErrorCode.Data_Corrupt;
     serverErrorCodes[2] = ServerErrorCode.IO_Error;
@@ -276,7 +282,7 @@ public class DeleteManagerTest {
     serverErrorCodes[4] = ServerErrorCode.Disk_Unavailable;
     serverErrorCodes[5] = ServerErrorCode.Blob_Authorization_Failure;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobAuthorizationFailure,
-        deleteErrorCodeChecker);
+        deleteErrorCodeChecker, localDc);
   }
 
   /**
@@ -290,7 +296,6 @@ public class DeleteManagerTest {
     codesToSetAndTest.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     codesToSetAndTest.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     codesToSetAndTest.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
-    codesToSetAndTest.put(ServerErrorCode.IO_Error, RouterErrorCode.UnexpectedInternalError);
     doRouterErrorCodeResolutionTest(codesToSetAndTest);
   }
 
@@ -316,7 +321,7 @@ public class DeleteManagerTest {
     HashMap<ServerErrorCode, RouterErrorCode> map = new HashMap<>();
     map.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
     map.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
-    map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.BlobDoesNotExist);
+    map.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     map.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     map.put(ServerErrorCode.Blob_Authorization_Failure, RouterErrorCode.BlobAuthorizationFailure);
     for (ServerErrorCode serverErrorCode : ServerErrorCode.values()) {
@@ -345,7 +350,7 @@ public class DeleteManagerTest {
     Arrays.fill(serverErrorCodes, ServerErrorCode.Blob_Not_Found);
     serverErrorCodes[8] = ServerErrorCode.IO_Error;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobDoesNotExist,
-        deleteErrorCodeChecker);
+        deleteErrorCodeChecker, localDc);
   }
 
   @Test
@@ -356,8 +361,7 @@ public class DeleteManagerTest {
     RouterErrorCode expectedErrorCode = RouterErrorCode.BlobDoesNotExist;
     FutureResult<Void> future = new FutureResult<>();
     TestCallback<Void> callback = new TestCallback<>();
-    deleteManager.submitDeleteBlobOperation(blobIdString, LOCAL_DC, future, callback,
-        quotaChargeCallback);
+    deleteManager.submitDeleteBlobOperation(blobIdString, localDc, future, callback, quotaChargeCallback);
 
     router.incrementOperationsCount(1);
     sendRequestsGetResponses(future, deleteManager);
@@ -366,24 +370,13 @@ public class DeleteManagerTest {
   }
 
   /**
-   * Test the case when routerUnavailableDueToSuccessCountIsNonZero enabled, if success count is larger than zero,
-   * we should return AmbryUnavailable.
-   * if routerUnavailableDueToSuccessCountIsNonZero has been disabled, if success count is larger than zero,
-   * we should return BlobDoesNotExist.
+   * Test the case when some of the replicas in originating DC are unavailable, we should return AmbryUnavailable.
    * @throws Exception
    */
   @Test
-  public void testDeleteBlobWhenOneReplicaReturnSucceed() throws Exception {
-    deleteBlobWhenOneReplicaReturnSucceed(true);
-    deleteBlobWhenOneReplicaReturnSucceed(false);
-  }
-
-  private void deleteBlobWhenOneReplicaReturnSucceed(boolean routerUnavailableDueToSuccessCountIsNonZero)
-      throws Exception {
+  public void testOrigDcUnavailability() throws Exception {
     router.close();
     Properties properties = getNonBlockingRouterProperties();
-    properties.setProperty(RouterConfig.ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE,
-        Boolean.toString(routerUnavailableDueToSuccessCountIsNonZero));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     RouterConfig routerConfig = new RouterConfig(vProps);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
@@ -393,32 +386,161 @@ public class DeleteManagerTest {
     deleteManager =
         new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem, routerConfig,
             routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime, router);
+
+    String originatingDcName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
     List<MockServer> serversInLocalDc = new ArrayList<>();
     serverLayout.getMockServers().forEach(mockServer -> {
-      if (mockServer.getDataCenter().equals(LOCAL_DC)) {
+      if (mockServer.getDataCenter().equals(originatingDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+
+    // Default all replicas to return not found.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not-found from bootstrap, 1 notFound from standby and 1 success from standby in originating dc
+    ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(originatingDcName))
+        .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+        .findFirst()
+        .get();
+    partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+
+    // Verify that final error is Ambry unavailable since one of the replica is in bootstrap state.
+    deleteErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
+  }
+
+  /**
+   * Test the case when all of the replicas in originating DC return NotFound, we should return BlobNotFound.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcNotFound() throws Exception {
+    router.close();
+    Properties properties = getNonBlockingRouterProperties();
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
+        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+    deleteManager =
+        new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem, routerConfig,
+            routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime, router);
+
+    String originatingDcName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(originatingDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+
+    // Default all replicas to return IO error which has higher precedence than NotFound.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IO_Error);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set NotFound error from all originating DC replicas.
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    // Verify that final error is BlobDoesNotExist.
+    deleteErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
+  }
+
+  /**
+   * Test the case when error precedence is maintained with unavailability in originating DC.
+   * @throws Exception
+   */
+  @Test
+  public void testErrorPrecedenceWithOrigDcUnavailability() throws Exception {
+    router.close();
+    Properties properties = getNonBlockingRouterProperties();
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
+        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+    deleteManager =
+        new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem, routerConfig,
+            routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime, router);
+
+    String originatingDcName = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(originatingDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+
+    // Default all replicas to return not found.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not-found from bootstrap, 1 notFound from standby and 1 success from standby in originating dc
+    ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(originatingDcName))
+        .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+        .findFirst()
+        .get();
+    partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+
+    // Set one server to return Authorization failure
+    MockServer serverInRemoteDc = serverLayout.getMockServers()
+        .stream()
+        .filter(mockServer -> !mockServer.getDataCenter().equals(originatingDcName))
+        .findAny()
+        .get();
+    serverInRemoteDc.setServerErrorForAllRequests(ServerErrorCode.Blob_Authorization_Failure);
+
+    // Verify that final error is BlobAuthorizationFailure since it is higher precedence than unavailability.
+    deleteErrorCodeChecker.testAndAssert(RouterErrorCode.BlobAuthorizationFailure);
+  }
+
+  /**
+   * Test the case when there is 2 success and 1 not found in originating data center, we should return success.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcSuccess() throws Exception {
+    router.close();
+    Properties properties = getNonBlockingRouterProperties();
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    RouterConfig routerConfig = new RouterConfig(vProps);
+    router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
+        new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+            CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
+        new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+    deleteManager =
+        new DeleteManager(clusterMap, new ResponseHandler(clusterMap), accountService, notificationSystem, routerConfig,
+            routerMetrics, new RouterCallback(null, new ArrayList<>()), mockTime, router);
+    String originatingDcName = clusterMap.getDatacenterName(blobId.getDatacenterId());
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(originatingDcName)) {
         serversInLocalDc.add(mockServer);
       }
     });
     int serverCount = serverLayout.getMockServers().size();
     List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
     setServerErrorCodes(serverErrorCodes, serverLayout);
-    for (int i = 0; i < 2; i++) {
-      serversInLocalDc.get(i).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
-    }
-    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
-    RouterErrorCode expectedErrorCode;
-    if (routerUnavailableDueToSuccessCountIsNonZero) {
-      expectedErrorCode = RouterErrorCode.AmbryUnavailable;
-    } else {
-      expectedErrorCode = RouterErrorCode.BlobDoesNotExist;
-    }
-    FutureResult<Void> future = new FutureResult<>();
-    TestCallback<Void> callback = new TestCallback<>();
-    deleteManager.submitDeleteBlobOperation(blobIdString, LOCAL_DC, future, callback, quotaChargeCallback);
-
-    router.incrementOperationsCount(1);
-    sendRequestsGetResponses(future, deleteManager);
-    assertFailureAndCheckErrorCode(future, expectedErrorCode);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    deleteErrorCodeChecker.testAndAssert(null);
   }
 
   /**
@@ -466,7 +588,7 @@ public class DeleteManagerTest {
     Arrays.fill(serverErrorCodes, ServerErrorCode.IO_Error);
     serverErrorCodes[5] = ServerErrorCode.Blob_Deleted;
     serverErrorCodes[8] = ServerErrorCode.Blob_Deleted;
-    testWithErrorCodes(serverErrorCodes, partition, serverLayout, null, deleteErrorCodeChecker);
+    testWithErrorCodes(serverErrorCodes, partition, serverLayout, null, deleteErrorCodeChecker, localDc);
   }
 
   /**
@@ -480,7 +602,7 @@ public class DeleteManagerTest {
     Arrays.fill(serverErrorCodes, ServerErrorCode.Unknown_Error);
     serverErrorCodes[7] = ServerErrorCode.Blob_Deleted;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.UnexpectedInternalError,
-        deleteErrorCodeChecker);
+        deleteErrorCodeChecker, localDc);
   }
 
   /**
@@ -502,7 +624,7 @@ public class DeleteManagerTest {
     serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
     serverErrorCodes[8] = ServerErrorCode.Disk_Unavailable;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.AmbryUnavailable,
-        deleteErrorCodeChecker);
+        deleteErrorCodeChecker, localDc);
   }
 
   /**
@@ -535,7 +657,7 @@ public class DeleteManagerTest {
     serverErrorCodes[7] = ServerErrorCode.Unknown_Error;
     serverErrorCodes[8] = ServerErrorCode.Disk_Unavailable;
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.AmbryUnavailable,
-        deleteErrorCodeChecker);
+        deleteErrorCodeChecker, localDc);
   }
 
   /**
@@ -583,7 +705,7 @@ public class DeleteManagerTest {
         continue;
       }
       mockSelectorState.set(state);
-      setServerErrorCodes(serverErrorCodes, partition, serverLayout);
+      setServerErrorCodes(serverErrorCodes, partition, serverLayout, localDc);
       CountDownLatch operationCompleteLatch = new CountDownLatch(1);
       future = router.deleteBlob(blobIdString, null, new ClientCallback(operationCompleteLatch), quotaChargeCallback);
       do {
@@ -621,24 +743,26 @@ public class DeleteManagerTest {
     Properties props = getNonBlockingRouterProperties();
     props.setProperty("router.delete.request.parallelism", "1");
     props.setProperty("router.operation.tracker.terminate.on.not.found.enabled", "true");
+    props.setProperty("router.operation.tracker.check.all.originating.replicas.for.not.found", "false");
     VerifiableProperties vProps = new VerifiableProperties(props);
     RouterConfig routerConfig = new RouterConfig(vProps);
     router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(clusterMap, routerConfig),
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), new LoggingNotificationSystem(), clusterMap, null, null, null,
         new InMemAccountService(false, true), mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
-    blobId = new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, (byte) 0,
-        Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition, false,
-        BlobId.BlobDataType.DATACHUNK);
+    blobId =
+        new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+            Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), partition, false,
+            BlobId.BlobDataType.DATACHUNK);
     blobIdString = blobId.getID();
     ServerErrorCode[] serverErrorCodes = new ServerErrorCode[9];
-    Arrays.fill(serverErrorCodes, ServerErrorCode.No_Error);
+    Arrays.fill(serverErrorCodes, ServerErrorCode.IO_Error);
     serverErrorCodes[0] = ServerErrorCode.Blob_Not_Found;
     serverErrorCodes[1] = ServerErrorCode.Blob_Not_Found;
     // The first two responses are blob not found and they are from the local dc and originating dc.
     // So even if the rest of servers returns No_Error, router will not send any requests to them.
     testWithErrorCodes(serverErrorCodes, partition, serverLayout, RouterErrorCode.BlobDoesNotExist,
-        deleteErrorCodeChecker);
+        deleteErrorCodeChecker, localDc);
   }
 
   /**
@@ -692,7 +816,7 @@ public class DeleteManagerTest {
   private Properties getNonBlockingRouterProperties() {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", LOCAL_DC);
+    properties.setProperty("router.datacenter.name", localDc);
     properties.setProperty("router.delete.request.parallelism", DELETE_PARALLELISM);
     return properties;
   }
@@ -709,7 +833,7 @@ public class DeleteManagerTest {
       throw new IllegalStateException("Cannot run test because there aren't enough servers for the given codes");
     }
     List<ServerErrorCode> serverErrorCodes =
-        new ArrayList<>(Collections.nCopies(serverLayout.getMockServers().size(), ServerErrorCode.Blob_Not_Found));
+        new ArrayList<>(Collections.nCopies(serverLayout.getMockServers().size(), ServerErrorCode.IO_Error));
     List<RouterErrorCode> expected = new ArrayList<>(codesToSetAndTest.size());
     // fill in the array with all the error codes that need resolution and knock them off one by one
     // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
@@ -720,15 +844,15 @@ public class DeleteManagerTest {
       expected.add(entry.getValue());
       serverIdx += 2;
     }
-    expected.add(RouterErrorCode.BlobDoesNotExist);
+    expected.add(RouterErrorCode.UnexpectedInternalError);
     for (int i = 0; i < expected.size(); i++) {
       List<ServerErrorCode> shuffled = new ArrayList<>(serverErrorCodes);
       Collections.shuffle(shuffled);
       setServerErrorCodes(shuffled, serverLayout);
       deleteErrorCodeChecker.testAndAssert(expected.get(i));
       if (i * 2 + 1 < serverErrorCodes.size()) {
-        serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
-        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
+        serverErrorCodes.set(i * 2, ServerErrorCode.IO_Error);
+        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.IO_Error);
       }
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);

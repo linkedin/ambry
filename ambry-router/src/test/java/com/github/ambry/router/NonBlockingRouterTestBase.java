@@ -114,6 +114,7 @@ public class NonBlockingRouterTestBase {
   protected GetManager getManager;
   protected DeleteManager deleteManager;
   protected final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
+  protected String localDcName;
 
   /**
    * Initialize parameters common to all tests. This constructor is exposed for use by {@link CloudRouterTest}.
@@ -129,6 +130,7 @@ public class NonBlockingRouterTestBase {
     this.includeCloudDc = includeCloudDc;
     mockTime = new MockTime();
     mockClusterMap = new MockClusterMap(false, true, 9, 3, 3, false, includeCloudDc, null);
+    localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
     mockServerLayout = new MockServerLayout(mockClusterMap);
     VerifiableProperties vProps = new VerifiableProperties(new Properties());
     singleKeyForKMS = TestUtils.getRandomKey(SingleKeyManagementServiceTest.DEFAULT_KEY_SIZE_CHARS);
@@ -204,7 +206,8 @@ public class NonBlockingRouterTestBase {
    * router with them.
    */
   protected void setRouter() throws Exception {
-    setRouter(getNonBlockingRouterProperties("DC1"), mockServerLayout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterProperties(mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId())),
+        mockServerLayout, new LoggingNotificationSystem());
   }
 
   /**
@@ -224,17 +227,18 @@ public class NonBlockingRouterTestBase {
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
   }
 
-  protected void setRouterWithMetadataCache(Properties props, AmbryCacheStats ambryCacheStats)
-      throws Exception {
+  protected void setRouterWithMetadataCache(Properties props, AmbryCacheStats ambryCacheStats) throws Exception {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
-    AmbryCacheWithStats ambryCacheWithStats = new AmbryCacheWithStats("AmbryCacheWithStats",
-        true, routerConfig.routerMaxNumMetadataCacheEntries, routerMetrics.getMetricRegistry(), ambryCacheStats);
+    AmbryCacheWithStats ambryCacheWithStats =
+        new AmbryCacheWithStats("AmbryCacheWithStats", true, routerConfig.routerMaxNumMetadataCacheEntries,
+            routerMetrics.getMetricRegistry(), ambryCacheStats);
     router = new NonBlockingRouter(routerConfig, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
-            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms, cryptoService,
-        cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, ambryCacheWithStats);
+            CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), new LoggingNotificationSystem(), mockClusterMap, kms,
+        cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS,
+        ambryCacheWithStats);
   }
 
   /**

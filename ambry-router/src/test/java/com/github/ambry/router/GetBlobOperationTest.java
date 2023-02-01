@@ -853,7 +853,7 @@ public class GetBlobOperationTest {
     }
 
     RouterException routerException = (RouterException) op.getOperationException();
-    // error code should be OperationTimedOut because it precedes BlobDoesNotExist
+    // error code should be BlobDoesNotExist
     Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
 
     props = getDefaultNonBlockingRouterProperties(true);
@@ -861,6 +861,141 @@ public class GetBlobOperationTest {
     props.setProperty("router.get.request.parallelism", "2");
     props.setProperty("router.operation.tracker.max.inflight.requests", "2");
     routerConfig = new RouterConfig(new VerifiableProperties(props));
+  }
+
+  /**
+   * Test the case when some of the replicas in originating DC are unavailable, we should return AmbryUnavailable.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcUnavailability() throws Exception {
+    doPut();
+
+    // Default all replicas to return not found.
+    int serverCount = mockServerLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, mockServerLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    mockServerLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+        .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+        .findFirst()
+        .get();
+    partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    getErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
+  }
+
+  /**
+   * Test the case when all of the replicas in originating DC return NotFound, we should return BlobNotFound.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcNotFound() throws Exception {
+    doPut();
+
+    // Default all replicas to return not found.
+    int serverCount = mockServerLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IO_Error);
+    setServerErrorCodes(serverErrorCodes, mockServerLayout);
+
+    // Set 3 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    mockServerLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
+  }
+
+  /**
+   * Test the case when error precedence is maintained with unavailability in originating DC.
+   * @throws Exception
+   */
+  @Test
+  public void testErrorPrecedenceWithOrigDcUnavailability() throws Exception {
+    doPut();
+
+    // Default all replicas to return not found.
+    int serverCount = mockServerLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, mockServerLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    mockServerLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+        .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+        .findFirst()
+        .get();
+    partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    // Set two remote servers to return BlobExpired
+    List<MockServer> serversInRemoteDc = new ArrayList<>(mockServerLayout.getMockServers());
+    serversInRemoteDc.removeAll(serversInLocalDc);
+    serversInRemoteDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Expired);
+    serversInRemoteDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Expired);
+
+    getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobExpired);
+  }
+
+  /**
+   * Test the case when there is 1 success in originating data center, we should return success.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcSuccess() throws Exception {
+    doPut();
+
+    // Default all replicas to return not found.
+    int serverCount = mockServerLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, mockServerLayout);
+
+    // Set 1 success and rest not found in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    mockServerLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+        .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+        .findFirst()
+        .get();
+    partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+
+    getErrorCodeChecker.testAndAssert(null);
   }
 
   /**
@@ -1331,7 +1466,7 @@ public class GetBlobOperationTest {
 
   /**
    * Test the case where originating dc returns 2 Disk_Unavailable and 1 Not_Found and rest replicas return Not_Found.
-   * In this case, result of GET operation will be Not_Found.
+   * In this case, result of GET operation will be AmbryUnavailable.
    * @throws Exception
    */
   @Test
@@ -1353,7 +1488,7 @@ public class GetBlobOperationTest {
         localDcServers.get(i).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
       }
     }
-    getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
+    getErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
     mockServerLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 
@@ -1454,12 +1589,10 @@ public class GetBlobOperationTest {
       RouterErrorCode expectedRouterError;
       switch (serverErrorCode) {
         case Replica_Unavailable:
-          expectedRouterError = RouterErrorCode.AmbryUnavailable;
-          break;
         case Disk_Unavailable:
-          // if all the disks are unavailable (which should be extremely rare), after replacing these disks, the blob is
-          // definitely not present.
-          expectedRouterError = RouterErrorCode.BlobDoesNotExist;
+          // Even if all the disks are unavailable (which should be extremely rare), we will return AmbryUnavailable.
+          // Once the disks are back up, we will return BlobNotFound.
+          expectedRouterError = RouterErrorCode.AmbryUnavailable;
           break;
         default:
           expectedRouterError = RouterErrorCode.UnexpectedInternalError;

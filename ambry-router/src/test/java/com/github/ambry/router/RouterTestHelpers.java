@@ -117,12 +117,14 @@ class RouterTestHelpers {
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
    * @param expectedError The {@link RouterErrorCode} expected, or null if no error is expected.
    * @param errorCodeChecker Performs the checks that ensure that the expected {@link RouterErrorCode} is returned .
+   * @param originatingDcName
    * @throws Exception
    */
   static void testWithErrorCodes(ServerErrorCode[] serverErrorCodesInOrder, PartitionId partition,
-      MockServerLayout serverLayout, RouterErrorCode expectedError, ErrorCodeChecker errorCodeChecker)
+      MockServerLayout serverLayout, RouterErrorCode expectedError, ErrorCodeChecker errorCodeChecker,
+      String originatingDcName)
       throws Exception {
-    setServerErrorCodes(serverErrorCodesInOrder, partition, serverLayout);
+    setServerErrorCodes(serverErrorCodesInOrder, partition, serverLayout, originatingDcName);
     errorCodeChecker.testAndAssert(expectedError);
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
@@ -132,8 +134,7 @@ class RouterTestHelpers {
    * @param errorCodeChecker Performs the checks that ensure that {@link RouterErrorCode#TooManyRequests} is returned .
    * @throws Exception
    */
-  static void testWithQuotaRejection(ErrorCodeChecker errorCodeChecker)
-      throws Exception {
+  static void testWithQuotaRejection(ErrorCodeChecker errorCodeChecker) throws Exception {
     errorCodeChecker.testAndAssert(RouterErrorCode.TooManyRequests);
   }
 
@@ -168,10 +169,11 @@ class RouterTestHelpers {
    *                                {@link ServerErrorCode#No_Error}
    * @param partition The partition contained by the servers to set error codes on.
    * @param serverLayout A {@link MockServerLayout} that is used to find the {@link MockServer}s to set error codes on.
+   * @param originatingDcName originating DC name.
    * @throws IllegalArgumentException If there are more error codes in the input array then there are servers.
    */
   static void setServerErrorCodes(ServerErrorCode[] serverErrorCodesInOrder, PartitionId partition,
-      MockServerLayout serverLayout) {
+      MockServerLayout serverLayout, String originatingDcName) {
     List<? extends ReplicaId> replicas = partition.getReplicaIds();
     if (serverErrorCodesInOrder.length > replicas.size()) {
       throw new IllegalArgumentException("More server error codes provided than replicas in partition");
@@ -183,15 +185,27 @@ class RouterTestHelpers {
         Arrays.asList(serverErrorCodesInOrder).subList(0, numOfNodesEachDatacenter);
     List<ServerErrorCode> serverErrorInOtherDCs =
         Arrays.asList(serverErrorCodesInOrder).subList(numOfNodesEachDatacenter, serverErrorCodesInOrder.length);
-    Collections.reverse(serverErrorInLocalDC);
-    Collections.reverse(serverErrorInOtherDCs);
-    List<ServerErrorCode> serverErrorCodesInOperationTrackerOrder = new ArrayList<>(serverErrorInLocalDC);
-    serverErrorCodesInOperationTrackerOrder.addAll(serverErrorInOtherDCs);
+
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    List<MockServer> serversInRemoteDc = new ArrayList<>();
 
     for (int i = 0; i < partition.getReplicaIds().size(); i++) {
       DataNodeId node = partition.getReplicaIds().get(i).getDataNodeId();
       MockServer mockServer = serverLayout.getMockServer(node.getHostname(), node.getPort());
-      mockServer.setServerErrorForAllRequests(serverErrorCodesInOperationTrackerOrder.get(i));
+      if (mockServer.getDataCenter().equals(originatingDcName)) {
+        serversInLocalDc.add(mockServer);
+      } else {
+        serversInRemoteDc.add(mockServer);
+      }
+    }
+
+    assertEquals(serversInLocalDc.size(), serverErrorInLocalDC.size());
+    assertEquals(serversInRemoteDc.size(), serverErrorInOtherDCs.size());
+    for (int i = 0; i < serverErrorInLocalDC.size(); i++) {
+      serversInLocalDc.get(i).setServerErrorForAllRequests(serverErrorInLocalDC.get(i));
+    }
+    for (int i = 0; i < serverErrorInOtherDCs.size(); i++) {
+      serversInRemoteDc.get(i).setServerErrorForAllRequests(serverErrorInOtherDCs.get(i));
     }
   }
 
