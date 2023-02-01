@@ -18,6 +18,10 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
@@ -331,6 +335,139 @@ public class TtlUpdateManagerTest {
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
+  }
+
+  /**
+   * Test the case when some of the replicas in originating DC are unavailable, we should return AmbryUnavailable.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcUnavailability() throws Exception {
+    // Default all replicas to return not found.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDc)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    for (String blob : blobIds) {
+      BlobId blobId = RouterUtils.getBlobIdFromString(blob, clusterMap);
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDc))
+          .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+          .findFirst()
+          .get();
+      partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    }
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    executeOpAndVerify(blobIds, RouterErrorCode.AmbryUnavailable, false, true, true, false, false);
+  }
+
+  /**
+   * Test the case when all of the replicas in originating DC return NotFound, we should return BlobNotFound.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcNotFound() throws Exception {
+    // Default all replicas to return IO error.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IO_Error);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDc)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    executeOpAndVerify(blobIds, RouterErrorCode.BlobDoesNotExist, false, true, true, false, false);
+  }
+
+  /**
+   * Test the case when error precedence is maintained with unavailability in originating DC.
+   * @throws Exception
+   */
+  @Test
+  public void testErrorPrecedenceWithOrigDcUnavailability() throws Exception {
+    // Default all replicas to return not found.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDc)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    for (String blob : blobIds) {
+      BlobId blobId = RouterUtils.getBlobIdFromString(blob, clusterMap);
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDc))
+          .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+          .findFirst()
+          .get();
+      partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    }
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    // Set two remote servers to return Blob_Update_Not_Allowed
+    List<MockServer> serversInRemoteDc = new ArrayList<>(serverLayout.getMockServers());
+    serversInRemoteDc.removeAll(serversInLocalDc);
+    serversInRemoteDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Update_Not_Allowed);
+    serversInRemoteDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Update_Not_Allowed);
+
+    executeOpAndVerify(blobIds, RouterErrorCode.BlobUpdateNotAllowed, false, true, true, false, false);
+  }
+
+  /**
+   * Test the case when there is 2 success in originating data center, we should return success.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcSuccess() throws Exception {
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDc)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    for (String blob : blobIds) {
+      BlobId blobId = RouterUtils.getBlobIdFromString(blob, clusterMap);
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDc))
+          .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+          .findFirst()
+          .get();
+      partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    }
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    executeOpAndVerify(blobIds, null, false, true, true, false, false);
   }
 
   /**

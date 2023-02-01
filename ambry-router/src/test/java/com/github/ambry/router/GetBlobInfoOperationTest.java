@@ -16,7 +16,9 @@ package com.github.ambry.router;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
@@ -134,10 +136,10 @@ public class GetBlobInfoOperationTest {
   public GetBlobInfoOperationTest(String operationTrackerType, boolean testEncryption) throws Exception {
     this.operationTrackerType = operationTrackerType;
     this.testEncryption = testEncryption;
-    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties(true));
-    routerConfig = new RouterConfig(vprops);
     mockClusterMap = new MockClusterMap();
     localDcName = mockClusterMap.getDatacenterName(mockClusterMap.getLocalDatacenterId());
+    VerifiableProperties vprops = new VerifiableProperties(getNonBlockingRouterProperties(true));
+    routerConfig = new RouterConfig(vprops);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     options = new GetBlobOptionsInternal(
         new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build(), false,
@@ -497,6 +499,179 @@ public class GetBlobInfoOperationTest {
     // the count of data points in Histogram should be 5 because 9(total replicas) - 4(# of timed out request) = 5
     Assert.assertEquals("The number of data points in cross colo latency histogram is not expected", 5,
         tracker.getLatencyHistogram(remoteReplica).getCount());
+  }
+
+  /**
+   * Test the case when some of the replicas in originating DC are unavailable, we should return AmbryUnavailable.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcUnavailability() throws Exception {
+    correlationIdToGetOperation.clear();
+
+    // Default all replicas to return not found.
+    int serverCount = mockServerLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, mockServerLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    mockServerLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+        .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+        .findFirst()
+        .get();
+    partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    router.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback, router);
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
+    completeOp(op);
+
+    // error code should be Unavailability
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(RouterErrorCode.AmbryUnavailable, routerException.getErrorCode());
+  }
+
+  /**
+   * Test the case when all of the replicas in originating DC return NotFound, we should return BlobNotFound.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcNotFound() throws Exception {
+    correlationIdToGetOperation.clear();
+
+    // Default all replicas to return not found.
+    int serverCount = mockServerLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IO_Error);
+    setServerErrorCodes(serverErrorCodes, mockServerLayout);
+
+    // Set 3 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    mockServerLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    router.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback, router);
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
+    completeOp(op);
+
+    // error code should be BlobNotFound
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
+  }
+
+  /**
+   * Test the case when error precedence is maintained with unavailability in originating DC.
+   * @throws Exception
+   */
+  @Test
+  public void testErrorPrecedenceWithOrigDcUnavailability() throws Exception {
+    correlationIdToGetOperation.clear();
+
+    // Default all replicas to return not found.
+    int serverCount = mockServerLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, mockServerLayout);
+
+    // Set Originating DC to be unavailable by setting 1 not found from bootstrap, 2 notFound from standby
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    mockServerLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+        .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+        .findFirst()
+        .get();
+    partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    // Set one remote server to return Blob_Deleted
+    MockServer serverInRemoteDc = mockServerLayout.getMockServers()
+        .stream()
+        .filter(mockServer -> !mockServer.getDataCenter().equals(localDcName))
+        .findAny()
+        .get();
+    serverInRemoteDc.setServerErrorForAllRequests(ServerErrorCode.Blob_Deleted);
+
+    router.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback, router);
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
+    completeOp(op);
+
+    // error code should be BlobDeleted
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertEquals(RouterErrorCode.BlobDeleted, routerException.getErrorCode());
+  }
+
+  /**
+   * Test the case when there is 1 success in originating data center, we should return success.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcSuccess() throws Exception {
+    correlationIdToGetOperation.clear();
+
+    // Default all replicas to return not found.
+    int serverCount = mockServerLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, mockServerLayout);
+
+    // Set one success from Originating DC and rest to be unavailable
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    mockServerLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDcName)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+    ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+        .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+        .findFirst()
+        .get();
+    partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+
+    router.currentOperationsCount.incrementAndGet();
+    GetBlobInfoOperation op =
+        new GetBlobInfoOperation(routerConfig, routerMetrics, mockClusterMap, responseHandler, blobId, options, null,
+            routerCallback, kms, cryptoService, cryptoJobHandler, time, false, quotaChargeCallback, router);
+    requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
+    completeOp(op);
+
+    // Operation should succeed
+    RouterException routerException = (RouterException) op.getOperationException();
+    Assert.assertNull(routerException);
   }
 
   /**
@@ -996,7 +1171,7 @@ public class GetBlobInfoOperationTest {
   private Properties getNonBlockingRouterProperties(boolean excludeTimeout) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC3");
+    properties.setProperty("router.datacenter.name", localDcName);
     properties.setProperty("router.get.request.parallelism", Integer.toString(requestParallelism));
     properties.setProperty("router.get.success.target", Integer.toString(successTarget));
     properties.setProperty("router.get.operation.tracker.type", operationTrackerType);
