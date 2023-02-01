@@ -21,19 +21,24 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -42,6 +47,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
@@ -106,6 +112,32 @@ public class ReplicationManager extends ReplicationEngine {
     }
     persistor = new DiskTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
         tokenHelper, storeManager);
+  }
+
+  /**
+   * Returns replication thread
+   */
+  @Override
+  protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
+      NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics,
+      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
+      MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
+      Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+    switch(replicationConfig.replicationThreadType) {
+      case ReplicationConfig.BACKUP_CHECKER_THREAD:
+        return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+            connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
+            storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
+            responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+      case ReplicationConfig.DEFAULT_REPLICATION_THREAD:
+      default:
+        return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+            connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
+            storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
+            responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+    }
   }
 
   @Override
