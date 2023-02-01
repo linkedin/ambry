@@ -499,8 +499,7 @@ public class HelixClusterManager implements ClusterMap {
     if (clusterMapConfig.clusterMapUseAggregatedView && helixAggregatedViewClusterInfo != null) {
       helixAggregatedViewClusterInfo.close();
     }
-
-    if(helixPropertyStoreInLocalDc != null){
+    if (helixPropertyStoreInLocalDc != null) {
       helixPropertyStoreInLocalDc.stop();
     }
   }

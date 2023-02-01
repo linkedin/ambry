@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -39,15 +40,19 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.helix.AccessOption;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.spectator.RoutingTableSnapshot;
+import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -69,14 +74,16 @@ import static org.junit.Assume.*;
 public class HelixClusterManagerTest {
   static final long CURRENT_XID = 64;
   static final String clusterNamePrefixInHelix = "Ambry-";
-  private final HashMap<String, com.github.ambry.utils.TestUtils.ZkInfo> dcsToZkInfo = new HashMap<>();
-  private final String[] helixDcs = new String[]{"DC0", "DC1"};
+  private static final HashMap<String, com.github.ambry.utils.TestUtils.ZkInfo> dcsToZkInfo = new HashMap<>();
+  private static final List<Integer> zookeeperServerPorts = new ArrayList<>();
+  private static final String[] helixDcs = new String[]{"DC0", "DC1"};
   private final TestHardwareLayout testHardwareLayout;
   private final TestPartitionLayout testPartitionLayout;
   private final JSONObject zkJson;
   private final String clusterNameStatic = "HelixClusterManagerTestCluster";
   private final ClusterMapConfig clusterMapConfig;
   private final MockHelixCluster helixCluster;
+  private final MockHelixManagerFactory helixManagerFactory;
   private final DataNode currentNode;
   private final String hostname;
   private final int portNum;
@@ -137,11 +144,6 @@ public class HelixClusterManagerTest {
     File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
-    int port = 2200;
-    byte dcId = (byte) 0;
-    for (String dcName : helixDcs) {
-      dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port++, true));
-    }
     hardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
     partitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
@@ -216,8 +218,7 @@ public class HelixClusterManagerTest {
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     Map<String, ZNRecord> znRecordMap = new HashMap<>();
     znRecordMap.put(PARTITION_OVERRIDE_ZNODE_PATH, znRecord);
-    MockHelixManagerFactory helixManagerFactory =
-        new MockHelixManagerFactory(helixCluster, znRecordMap, null, useAggregatedView);
+    helixManagerFactory = new MockHelixManagerFactory(helixCluster, znRecordMap, null, useAggregatedView);
     if (useComposite) {
       StaticClusterAgentsFactory staticClusterAgentsFactory =
           new StaticClusterAgentsFactory(clusterMapConfig, hardwareLayoutPath, partitionLayoutPath);
@@ -230,6 +231,28 @@ public class HelixClusterManagerTest {
     }
   }
 
+  @BeforeClass
+  public static void setupZookeeperServers() throws Exception {
+    Random random = new Random();
+    File tempDir = Files.createTempDirectory("helixClusterManager-" + random.nextInt(1000)).toFile();
+    String tempDirPath = tempDir.getAbsolutePath();
+    tempDir.deleteOnExit();
+    int port = 2200;
+    byte dcId = (byte) 0;
+    for (String dcName : helixDcs) {
+      dcsToZkInfo.put(dcName, new com.github.ambry.utils.TestUtils.ZkInfo(tempDirPath, dcName, dcId++, port, true));
+      zookeeperServerPorts.add(port);
+      port++;
+    }
+  }
+
+  @AfterClass
+  public static void shutdownZookeeperServers() {
+    for (com.github.ambry.utils.TestUtils.ZkInfo zkInfo : dcsToZkInfo.values()) {
+      zkInfo.shutdown();
+    }
+  }
+
   /**
    * Close the cluster managers created.
    */
@@ -238,8 +261,13 @@ public class HelixClusterManagerTest {
     if (clusterManager != null) {
       clusterManager.close();
     }
-    for (com.github.ambry.utils.TestUtils.ZkInfo zkInfo : dcsToZkInfo.values()) {
-      zkInfo.shutdown();
+
+    for (int port : zookeeperServerPorts) {
+      String addr = "localhost:" + port;
+      HelixPropertyStore<ZNRecord> propertyStore =
+          CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName(), null);
+      propertyStore.remove("/", AccessOption.PERSISTENT);
+      propertyStore.stop();
     }
   }
 
@@ -371,6 +399,7 @@ public class HelixClusterManagerTest {
 
     // Local dc connectivity failure should fail instantiation.
     dcsToZkInfo.get(remoteDc).setPort(savedPort);
+    savedPort = dcsToZkInfo.get(localDc).getPort();
     dcsToZkInfo.get(localDc).setPort(0);
     zkInfos = new HashSet<>(dcsToZkInfo.values());
     invalidZkJson = constructZkLayoutJSON(zkInfos);
@@ -401,6 +430,7 @@ public class HelixClusterManagerTest {
           metricRegistry.getGauges().get(HelixClusterManager.class.getName() + ".instantiationFailed").getValue());
       assertEquals("beBad", e.getCause().getMessage());
     }
+    dcsToZkInfo.get(localDc).setPort(savedPort);
   }
 
   /**
