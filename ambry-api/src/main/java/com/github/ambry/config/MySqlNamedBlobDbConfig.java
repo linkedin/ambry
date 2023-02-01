@@ -24,6 +24,7 @@ public class MySqlNamedBlobDbConfig {
   public static final String REMOTE_POOL_SIZE = PREFIX + "remote.pool.size";
   public static final String  LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String  STALE_MAX_RESULTS = PREFIX + "stale.max.results";
+  public static final String  STALE_MAX_DAYS = PREFIX + "stale.max.days";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -60,6 +61,14 @@ public class MySqlNamedBlobDbConfig {
   @Default("1000")
   public final int staleMaxResults;
 
+  /**
+   * The maximum number of days for a stale blob to say uncleaned.
+   */
+  @Config(STALE_MAX_DAYS)
+  @Default("5")
+  public final int staleMaxDays;
+
+
 
   /**
    * A flag on whether to turn on DB Transition run
@@ -80,6 +89,7 @@ public class MySqlNamedBlobDbConfig {
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
     this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
     this.staleMaxResults = verifiableProperties.getIntInRange(STALE_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
+    this.staleMaxDays = verifiableProperties.getIntInRange(STALE_MAX_DAYS, 5, 1, Integer.MAX_VALUE);
     this.dbTransition = verifiableProperties.getBoolean(DB_TRANSITION, false);
     this.dbRelyOnNewTable = verifiableProperties.getBoolean(DB_RELY_ON_NEW_TABLE, false);
   }

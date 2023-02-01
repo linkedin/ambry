@@ -56,6 +56,8 @@ import static org.junit.Assert.*;
  */
 public class MySqlNamedBlobDbIntegrationTest {
   private static final String LOCAL_DC = "dc1";
+  // Please note that we are using mock time for time travel. Need to reset time (call setCurrentMilliseconds) when the
+  // tests depends on time sequences
   private static final MockTime time = new MockTime();
   private final MySqlNamedBlobDb namedBlobDb;
   private final InMemAccountService accountService;

@@ -628,7 +628,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private List<StaleNamedResult> runPullStaleBlobs(final Connection connection) throws Exception {
     try (PreparedStatement statement = connection.prepareStatement(GET_STALE_QUERY)) {
       Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-      calendar.add(Calendar.MONTH, -2);
+      calendar.add(Calendar.DATE, -config.staleMaxDays);
       long previousTimeInMillis = calendar.getTimeInMillis();
       statement.setLong(1, previousTimeInMillis * VERSION_BASE);
       statement.setInt(2, config.staleMaxResults);
