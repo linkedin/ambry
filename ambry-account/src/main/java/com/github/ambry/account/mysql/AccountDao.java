@@ -90,6 +90,7 @@ public class AccountDao {
   // Dataset version table query strings.
   private final String insertDatasetVersionSql;
   private final String getDatasetVersionByNameSql;
+  private final String listVersionSql;
 
   // Dataset table query strings
   private final String insertDatasetSql;
@@ -146,6 +147,9 @@ public class AccountDao {
             CONTAINER_ID, DATASET_NAME);
     insertDatasetVersionSql = String.format("insert into %s (%s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?)",
         DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, LAST_MODIFIED_TIME, DELETE_TS);
+    listVersionSql =
+        String.format("select %1$s from %2$s " + "where (%3$s, %4$s, %5$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
+            VERSION, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
@@ -460,6 +464,53 @@ public class AccountDao {
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    }
+  }
+
+  /**
+   * Get the latest version value of the dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @return the latest version.
+   * @throws SQLException
+   */
+  public synchronized long getLatestVersion(short accountId, short containerId, String datasetName)
+      throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(false);
+      PreparedStatement listVersionStatement = dataAccessor.getPreparedStatement(listVersionSql, false);
+      long latestVersion = executeListVersionStatement(listVersionStatement, accountId, containerId, datasetName);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return latestVersion;
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
+    }
+  }
+
+  /**
+   * Execute the listVersionSql statement.
+   * @param statement the statement to list the latest version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @return the latest version of the dataset.
+   * @throws SQLException
+   */
+  private long executeListVersionStatement(PreparedStatement statement, int accountId, int containerId,
+      String datasetName) throws SQLException {
+    ResultSet resultSet = null;
+    try {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, datasetName);
+      resultSet = statement.executeQuery();
+      resultSet.next();
+      return resultSet.getLong(VERSION);
+    } finally {
+      closeQuietly(resultSet);
     }
   }
 

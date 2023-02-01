@@ -749,6 +749,7 @@ public class MySqlAccountServiceIntegrationTest {
     Account testAccount = makeTestAccountWithContainer();
     Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
     Map<String, String> userTags = new HashMap<>();
+    List<Long> versions = new ArrayList<>();
     userTags.put("userTag", "tagValue");
 
     Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME,
@@ -758,7 +759,9 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
 
     // Add a valid dataset version
-    String version = "1";
+    long versionNumber = 1;
+    String version = String.valueOf(versionNumber);
+    versions.add(versionNumber);
     DatasetVersionRecord expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, -1);
     Dataset datasetFromMysql =
@@ -773,7 +776,9 @@ public class MySqlAccountServiceIntegrationTest {
         datasetVersionRecordFromMysql);
 
     // Add a valid dataset version with ttl and get from DB
-    version = "2";
+    versionNumber = 2;
+    version = String.valueOf(versionNumber);
+    versions.add(versionNumber);
     long expirationTimeMs = System.currentTimeMillis();
     expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, expirationTimeMs);
@@ -806,6 +811,12 @@ public class MySqlAccountServiceIntegrationTest {
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL, version);
     assertEquals("Mismatch in dataset expirationTimeMs", (long) datasetWithTtl.getExpirationTimeMs(),
         datasetVersionRecordWithTtl.getExpirationTimeMs());
+
+    Collections.reverse(versions);
+    long expectedLatestVersion = versions.get(0);
+    long latestVersionFromMysql =
+        mySqlAccountStore.getLatestVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME);
+    assertEquals("Unexpected latest version", expectedLatestVersion, latestVersionFromMysql);
 
     //Test semantic version.
     dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC,
