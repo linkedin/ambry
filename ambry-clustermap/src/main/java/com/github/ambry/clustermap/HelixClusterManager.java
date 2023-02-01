@@ -1180,6 +1180,12 @@ public class HelixClusterManager implements ClusterMap {
       }
     }
 
+    /**
+     * Return a BiFunction to replace resource name for partition.
+     * @param resourceName The new resource name.
+     * @param <K> The Key of the map.
+     * @return A BiFunction to replace resource name for partition.
+     */
     private <K> BiFunction<K, String, String> resourceNameReplaceFunc(String resourceName) {
       return (k, s) -> {
         if (s == null || s.equals(resourceName)) {
@@ -1190,7 +1196,8 @@ public class HelixClusterManager implements ClusterMap {
           int oldId = Integer.valueOf(s);
           return newId > oldId ? resourceName : s;
         } catch (Exception e) {
-          return resourceName;
+          logger.error("Failed to parse resource name to an integer", e);
+          throw new IllegalArgumentException("Failed to parse resource name to an integer", e);
         }
       };
     }

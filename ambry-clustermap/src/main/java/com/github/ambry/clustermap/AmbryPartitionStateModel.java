@@ -26,6 +26,38 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * Ambry is currently going through the process of reconstructing resources. We used to assign partition ids to several
+ * resources, even if those partition ids belong to the same clique. Now we are trying to gather all the partition ids
+ * of the same clique to one resource.
+ *
+ * In doing so, we should inevitably 1. duplicate all the partition ids with a different resource 2. remove the old
+ * resources.  The issue is that resource doesn't really matter in Ambry. Resource is a structure required by Helix.
+ * Ambry has a flatter structure. This structure starts with a cluster. Under this cluster, it has partitions. If we
+ * duplicate all the partition ids with different resources, we would force these partitions to go through state
+ * transition twice. And by removing the old resource, we would effectively force all the partitions to go through
+ * downward transition to DROPPED state. We have to make sure that frontend and server would be able to deal with both
+ * situations.
+ *
+ * Current resource names are all numeric numbers starting from 0. The new resource names will be numeric numbers as
+ * well, but it will be starting from a much higher number, like 1000. So we can easily find the new resource by just
+ * comparing the resource names.
+ *
+ * When we eventually remove old resources, all the partition ids under those resourced would have to go through state
+ * transition to become DROPPED in the end. A dropped partition means all the data will be removed, we don't want any
+ * of the partition to remove data. So in state transition, we have to make sure after we add new resources, the state
+ * transition messages from the old resources would be ignored and won't take effect anymore.
+ *
+ * Since in server we honor new resource over the old resource, we have to do the same thing in the clustermap.
+ *
+ * We have three implementations of {@link PartitionStateChangeListener}, StorageManager's implementation, ReplicationManager's
+ * implementation and StatsManager's implementation. Most of the those implementations are fine with going through state
+ * transition multiple times and generate the same result, except for ReplicationManager. When transitioning from standby
+ * to leader and from leader to standby, replication manager would change the leader pair. If different replicas are chosen
+ * to be leader in different transition, then we would have multiple leaders. But this is fine, since replication manager
+ * use this leader pair information for cross-col replication. The worst case is that we have more than one replicas doing
+ * cross-colo data replication.
+ */
 @StateModelInfo(initialState = "OFFLINE", states = {"BOOTSTRAP", "LEADER", "STANDBY", "INACTIVE"})
 public class AmbryPartitionStateModel extends StateModel {
   private static final Logger logger = LoggerFactory.getLogger(AmbryPartitionStateModel.class);
@@ -171,7 +203,9 @@ public class AmbryPartitionStateModel extends StateModel {
         int newResourceId = Integer.valueOf(resourceName);
         return newResourceId > oldResourceId ? resourceName : v;
       } catch (Exception e) {
-        return resourceName;
+        logger.error("Failed to parse resource name to an integer", e);
+        throw new StateTransitionException("Failed to parse resource name",
+            StateTransitionException.TransitionErrorCode.InvalidResourceName, e);
       }
     });
     return mappedResourceName.equals(resourceName);
