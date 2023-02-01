@@ -58,7 +58,7 @@ import static org.junit.Assert.*;
 public class AccountUpdateToolTest {
   private static final int NUM_REF_ACCOUNT = 10 + (int) (Math.random() * 50);
   private static final int NUM_CONTAINER_PER_ACCOUNT = 4;
-  private static final int ZK_SERVER_PORT = 2200;
+  private static final int ZK_SERVER_PORT = 2600;
   private static final String DC_NAME = "testDc";
   private static final byte DC_ID = (byte) 1;
   private static final String ZK_SERVER_ADDRESS = "localhost:" + ZK_SERVER_PORT;
