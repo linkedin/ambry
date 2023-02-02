@@ -254,8 +254,20 @@ public class ReplicationConfig {
   public final static String REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS =
       "replication.request.network.poll.timeout.ms";
 
+  /**
+   * The replication manager used to replicate objects from other backend servers.
+   * DEFAULT_REPLICATION_THREAD as the name suggests is the current one.
+   * BACKUP_CHECKER_THREAD is the one that checks for missing blobs in backup by comparing blobs from on-prem servers.
+   */
+  public static final String REPLICATION_THREAD_TYPE = "replication.thread.type";
+  public static final String DEFAULT_REPLICATION_THREAD = "com.github.ambry.replication.ReplicaThread";
+  public static final String BACKUP_CHECKER_THREAD = "com.github.ambry.replication.BackupCheckerThread";
+  @Config(REPLICATION_THREAD_TYPE)
+  public final String replicationThreadType;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
+    replicationThreadType = verifiableProperties.getString(REPLICATION_THREAD_TYPE, DEFAULT_REPLICATION_THREAD);
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
     replicationCloudTokenFactory = verifiableProperties.getString(REPLICATION_CLOUD_TOKEN_FACTORY,

@@ -247,6 +247,13 @@ public class ReplicaThread implements Runnable {
     return networkClient;
   }
 
+  /**
+   * Logs the fact that replication on local node has caught up with remote replica
+   * Empty for current ReplicaThread but can be re-written in other cases to track progress.
+   * @param remoteReplicaInfo
+   */
+  protected void logReplicationCaughtUp(RemoteReplicaInfo remoteReplicaInfo) {}
+
   @Override
   public void run() {
     try {
@@ -705,6 +712,7 @@ public class ReplicaThread implements Runnable {
               remoteReplicaInfo.setReEnableReplicationTime(
                   time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
               syncedBackOffCount.inc();
+              logReplicationCaughtUp(remoteReplicaInfo);
             }
 
             // There are no missing keys. We just advance the token
@@ -783,7 +791,7 @@ public class ReplicaThread implements Runnable {
    * @throws IOException
    * @throws ReplicationException
    */
-  void fixMissingStoreKeys(ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
+  protected void fixMissingStoreKeys(ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
       List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby)
       throws IOException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = time.milliseconds();
@@ -1224,7 +1232,6 @@ public class ReplicaThread implements Runnable {
                   exchangeMetadataResponse.getMissingStoreKeys(), remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
-              MessageFormatWriteSet writeset;
               MessageSievingInputStream validMessageDetectionInputStream =
                   new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList,
                       Collections.singletonList(transformer), metricRegistry);
@@ -1236,13 +1243,7 @@ public class ReplicaThread implements Runnable {
                     remoteReplicaInfo.getReplicaId());
               }
               messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
-              if (messageInfoList.size() == 0) {
-                logger.debug(
-                    "MessageInfoList is of size 0 as all messages are invalidated, deprecated, deleted or expired.");
-              } else {
-                writeset = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
-                remoteReplicaInfo.getLocalStore().put(writeset);
-              }
+              applyPut(validMessageDetectionInputStream, remoteReplicaInfo);
 
               for (MessageInfo messageInfo : messageInfoList) {
                 totalBytesFixed += messageInfo.getSize();
@@ -1311,12 +1312,31 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Applies a TTL update to the blob described by {@code messageInfo}.
-   * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
-   * @param remoteReplicaInfo The remote replica that is being replicated from
+   * Applies PUT to local store and creates the blob locally
+   * @param validMessageDetectionInputStream Stream of valid blob IDs
+   * @param remoteReplicaInfo Info about remote replica from which we are replicating
    * @throws StoreException
+   * @throws IOException
    */
-  private void applyTtlUpdate(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
+  protected void applyPut(MessageSievingInputStream validMessageDetectionInputStream, RemoteReplicaInfo remoteReplicaInfo)
+      throws StoreException, IOException {
+    List<MessageInfo> messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
+    if (messageInfoList.size() == 0) {
+      logger.debug(
+          "MessageInfoList is of size 0 as all messages are invalidated, deprecated, deleted or expired.");
+    } else {
+      MessageFormatWriteSet writeSet = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
+      remoteReplicaInfo.getLocalStore().put(writeSet);
+    }
+  }
+
+    /**
+     * Applies a TTL update to the blob described by {@code messageInfo}.
+     * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
+     * @param remoteReplicaInfo The remote replica that is bein1g replicated from
+     * @throws StoreException
+     */
+  protected void applyTtlUpdate(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
       // NOTE: It is possible that the key in question may have expired and this TTL update is being applied after it
@@ -1353,7 +1373,7 @@ public class ReplicaThread implements Runnable {
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @throws StoreException
    */
-  private void applyUndelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
+  protected void applyUndelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
       messageInfo = new MessageInfo.Builder(messageInfo).isUndeleted(true).isDeleted(false).build();
@@ -1384,7 +1404,7 @@ public class ReplicaThread implements Runnable {
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @throws StoreException
    */
-  private void applyDelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
+  protected void applyDelete(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
       messageInfo = new MessageInfo.Builder(messageInfo).isDeleted(true).isUndeleted(false).build();
