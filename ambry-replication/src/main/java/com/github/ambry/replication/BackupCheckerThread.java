@@ -32,6 +32,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
+import java.io.File;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -57,6 +58,7 @@ import org.slf4j.LoggerFactory;
 public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
+  public static final String DR_Verifier_Keyword = "dr";
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -169,8 +171,8 @@ public class BackupCheckerThread extends ReplicaThread {
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
     try {
       EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
-      // findKey is better than get() since it will return records from index even if blob is marked for deletion
-      // whereas get() won't return the blob if it is marked for deletion unless we force it to.
+      // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
+      // However, get() can also do this with additional and appropriate StoreGetOptions.
       MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
@@ -219,5 +221,17 @@ public class BackupCheckerThread extends ReplicaThread {
     // This will help us know when to stop DR process for sealed partitions
     logger.info("Local-store has caught up with remote-store. RemoteReplica = {}, Token = {}",
         remoteReplicaInfo.toString(), remoteReplicaInfo.getToken().toString());
+  }
+
+  /**
+   * Returns local replica mount path of the partition
+   * @param remoteReplicaInfo Info about remote replica
+   * @return Local replica mount path of the partition
+   */
+  @Override
+  protected String getLocalReplicaPath(RemoteReplicaInfo remoteReplicaInfo) {
+    // This will let the DR advertise its replicas as "dr/" replicas to other servers
+    // And prevent servers from complaining of requests from unknown peers.
+    return DR_Verifier_Keyword + File.separator + super.getLocalReplicaPath(remoteReplicaInfo);
   }
 }
