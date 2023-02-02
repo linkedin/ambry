@@ -374,7 +374,7 @@ class DeleteOperation {
     return (routerConfig.routerRepairWithReplicateBlobOnDeleteEnabled && operationTracker.hasNotFound()
         && operationTracker.getSuccessCount() > 0
         && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable)
-        && serviceId.indexOf(BackgroundDeleteRequest.SERVICE_ID_PREFIX) != 0);
+        && !serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX));
   }
 
   /**
