@@ -89,7 +89,6 @@ public class MySqlNamedBlobDbIntegrationTest {
    */
   @Test
   public void testPutGetListDeleteSequence() throws Exception {
-    time.setCurrentMilliseconds(System.currentTimeMillis());
     int blobsPerContainer = 5;
 
     List<NamedBlobRecord> records = new ArrayList<>();
@@ -110,7 +109,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
 
     // get records just inserted
-    time.sleep(10);
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     for (NamedBlobRecord record : records) {
       NamedBlobRecord recordFromStore =
           namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
@@ -118,7 +117,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
 
     // list records in each container
-    time.sleep(10);
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
         Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), "name", null).get();
@@ -128,7 +127,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
 
     // check that puts to the same keys fail.
-    time.sleep(10);
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
         for (int i = 0; i < blobsPerContainer; i++) {
@@ -143,12 +142,12 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     // delete the records and check that they cannot be fetched with a get call.
     for (NamedBlobRecord record : records) {
-      time.sleep(10);
+      time.setCurrentMilliseconds(System.currentTimeMillis());
       DeleteResult deleteResult =
           namedBlobDb.delete(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
       assertEquals("Unexpected deleted ID", record.getBlobId(), deleteResult.getBlobId());
       assertFalse("Unexpected alreadyDeleted value", deleteResult.isAlreadyDeleted());
-      time.sleep(10);
+      time.setCurrentMilliseconds(System.currentTimeMillis());
       checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()),
           RestServiceErrorCode.Deleted);
       NamedBlobRecord recordFromStore =
@@ -161,7 +160,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
 
     // deletes should be idempotent and additional delete calls should succeed
-    time.sleep(10);
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     for (NamedBlobRecord record : records) {
       DeleteResult deleteResult =
           namedBlobDb.delete(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
@@ -170,7 +169,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
 
     // delete and get for non existent blobs should return not found.
-    time.sleep(10);
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     for (NamedBlobRecord record : records) {
       String nonExistentName = record.getBlobName() + "-other";
       checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), nonExistentName),
@@ -181,7 +180,7 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     records.clear();
     // should be able to put new records again after deletion
-    time.sleep(10);
+    time.setCurrentMilliseconds(System.currentTimeMillis());
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
         for (int i = 0; i < blobsPerContainer; i++) {
@@ -214,7 +213,7 @@ public class MySqlNamedBlobDbIntegrationTest {
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
     namedBlobDb.put(record).get();
 
-    time.sleep(10);
+    time.setCurrentMilliseconds(System.currentTimeMillis());
 
     Thread.sleep(100);
     checkErrorCode(() -> namedBlobDb.get(account.getName(), container.getName(), blobName),
