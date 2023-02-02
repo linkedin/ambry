@@ -39,11 +39,15 @@ import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.GregorianCalendar;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -52,7 +56,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  */
 class FrontendRestRequestService implements RestRequestService {
   static final String TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE = "GET,HEAD,DELETE";
-
+  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
   private final Router router;
   private final IdConverterFactory idConverterFactory;
   private final SecurityServiceFactory securityServiceFactory;
@@ -65,10 +69,12 @@ class FrontendRestRequestService implements RestRequestService {
   private final AccountService accountService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final AccountStatsStore accountStatsStore;
-  private static final Logger logger = LoggerFactory.getLogger(FrontendRestRequestService.class);
   private final String datacenterName;
   private final String hostname;
   private final String clusterName;
+  private NamedBlobsCleanupRunner namedBlobsCleanupRunner = null;
+  private ScheduledExecutorService namedBlobsCleanupScheduler = null;
+  private ScheduledFuture<?> namedBlobsCleanupTask = null;
   private RestResponseHandler responseHandler;
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
@@ -182,14 +188,22 @@ class FrontendRestRequestService implements RestRequestService {
 
     namedBlobListHandler =
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
-    namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName, quotaManager);
+    namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
+        accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager);
 
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
+
+    namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
+    if (frontendConfig.enableNamedBlobCleanupTask) {
+      namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
+      namedBlobsCleanupTask =
+          namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, 60 * 10, 60 * 10, TimeUnit.SECONDS);
+      logger.info("Named Blob Stale Data Cleanup Process has started");
+    }
+
     isUp = true;
     logger.info("FrontendRestRequestService has started");
     frontendMetrics.restRequestServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
@@ -214,6 +228,12 @@ class FrontendRestRequestService implements RestRequestService {
       }
       if (accountStatsStore != null) {
         accountStatsStore.shutdown();
+      }
+      if (namedBlobsCleanupTask != null) {
+        namedBlobsCleanupTask.cancel(false);
+      }
+      if (namedBlobsCleanupScheduler != null) {
+        shutDownExecutorService(namedBlobsCleanupScheduler, 5, TimeUnit.MINUTES);
       }
       logger.info("FrontendRestRequestService shutdown complete");
     } catch (IOException e) {
