@@ -55,7 +55,7 @@ import org.slf4j.LoggerFactory;
  * transition multiple times and generate the same result, except for ReplicationManager. When transitioning from standby
  * to leader and from leader to standby, replication manager would change the leader pair. If different replicas are chosen
  * to be leader in different transition, then we would have multiple leaders. But this is fine, since replication manager
- * use this leader pair information for cross-col replication. The worst case is that we have more than one replicas doing
+ * use this leader pair information for cross-colo replication. The worst case is that we have more than one replicas doing
  * cross-colo data replication.
  */
 @StateModelInfo(initialState = "OFFLINE", states = {"BOOTSTRAP", "LEADER", "STANDBY", "INACTIVE"})
@@ -83,8 +83,8 @@ public class AmbryPartitionStateModel extends StateModel {
   public void onBecomeBootstrapFromOffline(Message message, NotificationContext context) {
     boolean shouldTransition = shouldTransition(message);
     String partitionName = message.getPartitionName();
-    logger.info("Partition {} in resource {} is becoming BOOTSTRAP from OFFLINE, Should Transition? {}",
-        message.getPartitionName(), message.getResourceName(), shouldTransition);
+    logger.info("Partition {} in resource {} is becoming BOOTSTRAP from OFFLINE, Should Transition? {}", partitionName,
+        message.getResourceName(), shouldTransition);
     if (clusterMapConfig.clustermapEnableStateModelListener && shouldTransition) {
       partitionStateChangeListener.onPartitionBecomeBootstrapFromOffline(partitionName);
     }
