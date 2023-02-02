@@ -280,15 +280,15 @@ public class ReplicationTestHelper {
             new InMemAccountService(false, false));
     storageManager.start();
 
+    FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     MockConnectionPool mockPool = (MockConnectionPool) mockConnectionPool;
     NetworkClientFactory mockNetworkClientFactory =
         shouldUseNetworkClient && mockConnectionPool != null ? new MockNetworkClientFactory(mockPool.getHosts(),
-            mockPool.getClusterMap(), mockPool.getMaxEntriesToReturn()) : null;
+            mockPool.getClusterMap(), mockPool.getMaxEntriesToReturn(), findTokenHelper) : null;
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
             dataNodeId, storeKeyConverterFactory, clusterParticipant, mockConnectionPool, mockNetworkClientFactory,
-            new MockFindTokenHelper(storeKeyFactory, replicationConfig), BlobIdTransformer.class.getName(),
-            storeKeyFactory, time);
+            findTokenHelper, BlobIdTransformer.class.getName(), storeKeyFactory, time);
 
     return new Pair<>(storageManager, replicationManager);
   }
@@ -336,15 +336,15 @@ public class ReplicationTestHelper {
       replicasToReplicate.put(remoteHost.dataNodeId, remoteReplicaInfoList);
       hosts.put(remoteHost.dataNodeId, remoteHost);
     }
+    FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
     MockNetworkClient networkClient =
-        shouldUseNetworkClient ? new MockNetworkClient(hosts, clusterMap, batchSize) : null;
+        shouldUseNetworkClient ? new MockNetworkClient(hosts, clusterMap, batchSize, findTokenHelper) : null;
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
-            new AtomicInteger(0), localHost.dataNodeId, connectionPool, networkClient, replicationConfig,
-            replicationMetrics, null, storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false,
-            localHost.dataNodeId.getDatacenterName(), new ResponseHandler(clusterMap), time, replicaSyncUpManager, null,
-            null);
+        new ReplicaThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), localHost.dataNodeId,
+            connectionPool, networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+            clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+            new ResponseHandler(clusterMap), time, replicaSyncUpManager, null, null);
     for (MockHost remoteHost : remoteHosts) {
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicate.get(remoteHost.dataNodeId)) {
         replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);

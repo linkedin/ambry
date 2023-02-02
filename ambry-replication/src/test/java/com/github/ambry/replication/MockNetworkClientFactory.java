@@ -26,16 +26,19 @@ public class MockNetworkClientFactory implements NetworkClientFactory {
 
   private final Map<DataNodeId, MockHost> hosts;
   private final ClusterMap clusterMap;
+  private final FindTokenHelper findTokenHelper;
   private final int batchSize;
 
-  public MockNetworkClientFactory(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize) {
+  public MockNetworkClientFactory(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
+      FindTokenHelper findTokenHelper) {
     this.batchSize = batchSize;
     this.clusterMap = clusterMap;
+    this.findTokenHelper = findTokenHelper;
     this.hosts = hosts;
   }
 
   @Override
   public NetworkClient getNetworkClient() throws IOException {
-    return new MockNetworkClient(hosts, clusterMap, batchSize);
+    return new MockNetworkClient(hosts, clusterMap, batchSize, findTokenHelper);
   }
 }
