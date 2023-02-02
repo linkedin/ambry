@@ -3135,4 +3135,105 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
     }
   }
+
+  /**
+   * When a composite blob put fails, background deleter will kick off and delete all the data chunks.
+   * Test On-Demand replication won't get triggered for the background deleter.
+   */
+  @Test
+  public void testReplicateBlobIgnoreBackgroundDeleter() throws Exception {
+    try {
+      // Ensure there are 2 chunks.
+      maxPutChunkSize = PUT_CONTENT_SIZE / 2;
+      Properties props = getNonBlockingRouterProperties("DC3");
+      VerifiableProperties verifiableProperties = new VerifiableProperties((props));
+      RouterConfig routerConfig = new RouterConfig(verifiableProperties);
+      MockClusterMap mockClusterMap = new MockClusterMap();
+      MockTime mockTime = new MockTime();
+      MockServerLayout mockServerLayout = new MockServerLayout(mockClusterMap);
+
+      // uses a notification system to track the deletions for all the data chunks.
+      // there are three blobs to be deleted.
+      // the first chunk which is put successfully.
+      // the second chunk is failed to put and the retried blob also fails.
+      final int dataChunkNumber = 3;
+      final CountDownLatch deletesDoneLatch = new CountDownLatch(dataChunkNumber);
+      final Map<String, String> blobsThatAreDeleted = new HashMap<>();
+      LoggingNotificationSystem deleteTrackingNotificationSystem = new LoggingNotificationSystem() {
+        @Override
+        public void onBlobDeleted(String blobId, String serviceId, Account account, Container container) {
+          System.out.println("deleted " + blobId);
+          blobsThatAreDeleted.put(blobId, serviceId);
+          deletesDoneLatch.countDown();
+        }
+      };
+      router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
+          new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
+              CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
+          cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+      setOperationParams();
+
+      List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
+      List<ServerErrorCode> sourceServerError = new ArrayList<>();
+      List<ServerErrorCode> otherServerError = new ArrayList<>();
+      List<ServerErrorCode> remoteServerError = new ArrayList<>();
+      // There are 2 chunks for this blob.
+      // All put operations make one request to each local server as there are 3 servers overall in the local DC.
+      // Set the state of the mock servers so that they return success for the first request/chunk.
+      sourceServerError.add(ServerErrorCode.No_Error);
+      // fail requests for the second data chunk including the slipped put attempts.
+      sourceServerError.add(ServerErrorCode.Unknown_Error); // second data chunk
+      sourceServerError.add(ServerErrorCode.Unknown_Error); // slipped chunk
+      // all subsequent requests including delete will succeed on the source server.
+
+      // For all the other two local servers
+      otherServerError.add(ServerErrorCode.No_Error);      // Put for the first data chunk
+      otherServerError.add(ServerErrorCode.Unknown_Error); // second data chunk
+      otherServerError.add(ServerErrorCode.Unknown_Error); // slipped chunk
+      // also it fails the background deletion with NOT_FOUND
+      otherServerError.add(ServerErrorCode.Blob_Not_Found); // delete 1st blob
+      otherServerError.add(ServerErrorCode.Blob_Not_Found); // delete 2nd blob
+      otherServerError.add(ServerErrorCode.Blob_Not_Found); // delete 3rd blob
+
+      // For the remote servers. Won't receive PutRequest. The following errors are for deletion
+      remoteServerError.add(ServerErrorCode.Blob_Not_Found); // delete 1st blob
+      remoteServerError.add(ServerErrorCode.Blob_Not_Found); // delete 2nd blob
+      remoteServerError.add(ServerErrorCode.Blob_Not_Found); // delete 3rd blob
+
+      DataNodeId sourceDataNode = null;
+      String localDcName = "DC3";
+      for (DataNodeId dataNodeId : dataNodeIds) {
+        MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
+        if (server.getDataCenter().equals(localDcName)) {
+          if (sourceDataNode == null) {
+            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+            server.setServerErrors(sourceServerError);
+          } else {
+            server.setServerErrors(otherServerError);
+          }
+        } else {
+          server.setServerErrors(remoteServerError);
+        }
+      }
+
+      // Submit the put operation and wait for it to fail.
+      try {
+        router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+      } catch (ExecutionException e) {
+        Assert.assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
+      }
+
+      // Now, wait AWAIT_TIMEOUT_MS to see if any blob is deleted.
+      // Suppose on-demand replication won't get triggered. So all the blob deletion will fail.
+      Assert.assertFalse("No blob can be deleted." + AWAIT_TIMEOUT_MS, deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      Assert.assertEquals(deletesDoneLatch.getCount(), dataChunkNumber);
+      Assert.assertEquals(blobsThatAreDeleted.entrySet().size(), 0);
+    } finally {
+      if (router != null) {
+        router.close();
+        assertClosed();
+        Assert.assertEquals("All operations should have completed", 0, router.getOperationsCount());
+      }
+    }
+  }
 }
