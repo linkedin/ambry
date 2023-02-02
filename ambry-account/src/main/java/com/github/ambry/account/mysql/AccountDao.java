@@ -145,11 +145,14 @@ public class AccountDao {
     getVersionSchemaSql =
         String.format("select %s from %s where %s = ? and %s = ? and %s = ?", VERSION_SCHEMA, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
-    insertDatasetVersionSql = String.format("insert into %s (%s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?)",
-        DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, LAST_MODIFIED_TIME, DELETE_TS);
+    insertDatasetVersionSql =
+        String.format("insert into %s (%s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?)", DATASET_VERSION_TABLE,
+            ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, LAST_MODIFIED_TIME, DELETE_TS);
     listVersionSql =
         String.format("select %1$s from %2$s " + "where (%3$s, %4$s, %5$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
             VERSION, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    String.format("select %1$s from %2$s where (%3$s, %4$s, %5$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1", VERSION,
+        DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
@@ -507,7 +510,11 @@ public class AccountDao {
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
       resultSet = statement.executeQuery();
-      resultSet.next();
+      if (!resultSet.next()) {
+        throw new SQLException(
+            "Latest version not found for account: " + accountId + " container: " + containerId + " dataset: "
+                + datasetName);
+      }
       return resultSet.getLong(VERSION);
     } finally {
       closeQuietly(resultSet);
@@ -743,7 +750,10 @@ public class AccountDao {
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
       resultSet = statement.executeQuery();
-      resultSet.next();
+      if (!resultSet.next()) {
+        throw new SQLException(
+            "Dataset not found for account: " + accountId + " container: " + containerId + " dataset: " + datasetName);
+      }
       versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
       retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
       String userTagsInJson = resultSet.getString(USER_TAGS);
@@ -878,7 +888,11 @@ public class AccountDao {
       statement.setString(3, datasetName);
       statement.setLong(4, versionValue);
       resultSet = statement.executeQuery();
-      resultSet.next();
+      if (!resultSet.next()) {
+        throw new SQLException(
+            "Dataset version not found for account: " + accountId + " container: " + containerId + " dataset: "
+                + datasetName + " version: " + version);
+      }
       deletionTime = resultSet.getTimestamp(DELETE_TS);
     } finally {
       closeQuietly(resultSet);
