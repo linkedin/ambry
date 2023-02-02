@@ -126,6 +126,12 @@ public class RouterConfig {
       "router.update.op.metadata.reliance.timestamp.in.ms";
   public static final String ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE =
       "router.unavailable.due.to.success.count.is.non.zero.for.delete";
+  // repair the blob with the on-demand replication on ttlupdate
+  public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_TTLUPDATE_ENABLED =
+      "router.repair.with.replicate.blob.enabled";
+  // repair the blob with the on-demand replication on deletion
+  public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED =
+      "router.repair.with.replicate.blob.on.delete.enabled";
   public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED = "router.repair.with.replicate.blob.enabled";
   public static final String ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND =
       "router.operation.tracker.check.all.originating.replicas.for.not.found";
@@ -651,12 +657,18 @@ public class RouterConfig {
   public final long routerUpdateOpMetadataRelianceTimestampInMs;
 
   /**
-   * If this config is set to {@code true}, when operation fails because of not enough replicas having replicated the Blob,
+   * If this config is set to {@code true}, when ttlupdate fails because of not enough replicas having replicated the Blob,
    * the operation will trigger the on-demand replication to replicate the Blob to more replicas and then retry the request.
    */
-  @Config(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED)
-  @Default("false")
-  public final boolean routerRepairWithReplicateBlobEnabled;
+  @Config(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_TTLUPDATE_ENABLED)
+  public final boolean routerRepairWithReplicateBlobOnTtlUpdateEnabled;
+
+  /**
+   * If this config is set to {@code true}, when deletion fails because of not enough replicas having replicated the Blob,
+   * the operation will trigger the on-demand replication to replicate the Blob to more replicas and then retry the request.
+   */
+  @Config(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED)
+  public final boolean routerRepairWithReplicateBlobOnDeleteEnabled;
 
   /**
    * The maximum duration in seconds to retry. If the get blob operation takes more than this duration, we would not retry.
@@ -829,8 +841,10 @@ public class RouterConfig {
     routerUpdateOpMetadataRelianceTimestampInMs =
         verifiableProperties.getLong(ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS,
             DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
-    routerRepairWithReplicateBlobEnabled =
-        verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED, false);
+    routerRepairWithReplicateBlobOnTtlUpdateEnabled =
+        verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_TTLUPDATE_ENABLED, false);
+    routerRepairWithReplicateBlobOnDeleteEnabled =
+        verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED, false);
     routerGetBlobRetryLimitInSec = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, 0, 0,
         ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX);
     routerGetBlobRetryLimitCount = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT, 0, 0,
