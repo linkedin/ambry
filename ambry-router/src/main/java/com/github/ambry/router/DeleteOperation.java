@@ -369,10 +369,12 @@ class DeleteOperation {
     // 2. and at least one replica returned NOT_FOUND status.
     // 3. and at least one replica returned successful status.
     // 4. and error code precedence is over AmbryUnavailable. We don't do replication if there BlobExpired or TooManyRequests.
+    // 5. It's not a delete request from the BackgroundDeleter. We don't do on-demand replication for background deleter.
     RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
     return (routerConfig.routerRepairWithReplicateBlobOnDeleteEnabled && operationTracker.hasNotFound()
-        && operationTracker.getSuccessCount() > 0 && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(
-        RouterErrorCode.AmbryUnavailable));
+        && operationTracker.getSuccessCount() > 0
+        && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable)
+        && !serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX));
   }
 
   /**
