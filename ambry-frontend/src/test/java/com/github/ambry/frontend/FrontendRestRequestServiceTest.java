@@ -522,16 +522,36 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void addAndGetDatasetVersionTest() throws Exception {
-    // Prepare the input and mock class
+    //Add dataset
     Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
     Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    Dataset.VersionSchema versionSchema = Dataset.VersionSchema.TIMESTAMP;
+    Map<String, String> userTags = new HashMap<>();
+    String userTagKey = USER_META_DATA_HEADER_PREFIX + "tag";
+    userTags.put(userTagKey, "tagValues");
+
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME, versionSchema, -1).setUserTags(
+            userTags).build();
+    byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    RestRequest restRequest =
+        createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+
+    // Add dataset version
     Long version = System.currentTimeMillis();
     String blobName = SLASH + DATASET_NAME + SLASH + version;
     String namedBlobPathUri =
         NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + blobName;
     int contentLength = 10;
     ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentLength));
-    List<ByteBuffer> body = new LinkedList<>();
+    body = new LinkedList<>();
     body.add(content);
     body.add(null);
 
@@ -540,8 +560,7 @@ public class FrontendRestRequestServiceTest {
     String contentType = "application/octet-stream";
     String ownerId = "owner";
     String userMetadataKey = USER_META_DATA_ENCODED_HEADER_PREFIX + "userMetadata";
-    String userTagKey = USER_META_DATA_HEADER_PREFIX + "tag";
-    JSONObject headers = new JSONObject();
+    headers = new JSONObject();
     setAmbryHeadersForPut(headers, blobTtl, testContainer.isCacheable(), serviceId, contentType, ownerId,
         testAccount.getName(), testContainer.getName(), null);
     headers.put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
@@ -549,12 +568,8 @@ public class FrontendRestRequestServiceTest {
     headers.put(RestUtils.Headers.TARGET_DATASET_VERSION, version);
     headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
     headers.put(userMetadataKey, "userMetadataValue");
-//    headers.put(userTagKey, "newValue");
-    Map<String, String> userTags = new HashMap<>();
-    userTags.put(userTagKey, "tagValues");
-    accountService.setUserTagsForDataset(userTags);
-    RestRequest restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
-    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
 
     List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds(null);
     String blobId =

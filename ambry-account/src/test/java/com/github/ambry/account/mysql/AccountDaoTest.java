@@ -21,6 +21,7 @@ import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
@@ -77,7 +78,7 @@ public class AccountDaoTest {
 
     Connection mockConnection = mock(Connection.class);
     MySqlDataAccessor dataAccessor = getDataAccessor(mockConnection, metrics);
-    accountDao = new AccountDao(dataAccessor);
+    accountDao = new AccountDao(dataAccessor, null);
 
     //Account mock statements
     String accountJson = new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(testAccount));

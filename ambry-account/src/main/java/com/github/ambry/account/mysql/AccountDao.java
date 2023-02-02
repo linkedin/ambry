@@ -22,6 +22,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.Dataset;
 import com.github.ambry.account.DatasetVersionRecord;
+import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -43,6 +44,7 @@ import static com.github.ambry.utils.Utils.*;
 public class AccountDao {
 
   private final MySqlDataAccessor dataAccessor;
+  private final MySqlAccountServiceConfig mySqlAccountServiceConfig;
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   // Account table fields
@@ -101,8 +103,9 @@ public class AccountDao {
     Select, Insert, Update, Delete
   }
 
-  public AccountDao(MySqlDataAccessor dataAccessor) {
+  public AccountDao(MySqlDataAccessor dataAccessor, MySqlAccountServiceConfig mySqlAccountServiceConfig) {
     this.dataAccessor = dataAccessor;
+    this.mySqlAccountServiceConfig = mySqlAccountServiceConfig;
     insertAccountsSql =
         String.format("insert into %s (%s, %s, %s, %s) values (?, ?, now(3), now(3))", ACCOUNT_TABLE, ACCOUNT_INFO,
             VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
@@ -750,11 +753,43 @@ public class AccountDao {
       case MONOTONIC:
         return Long.parseLong(version);
       case SEMANTIC:
+        //Given a version number MAJOR.MINOR.PATCH, increment the:
+        //1.MAJOR version when you make incompatible API changes
+        //2.MINOR version when you add functionality in a backwards compatible manner
+        //3.PATCH version when you make backwards compatible bug fixes
+        //The MAJOR,MINOR and PATCH version are non-negative value.
         String[] versionArray = version.split("[.]", 3);
-        return Long.parseLong(versionArray[0]) * 1000000 + Long.parseLong(versionArray[1]) * 1000 + Integer.parseInt(
-            versionArray[2]);
+        long patchVersion = Long.parseLong(versionArray[2]);
+        long minorVersion = Long.parseLong(versionArray[1]);
+        long majorVersion = Long.parseLong(versionArray[0]);
+        sanityCheckForSemanticVersion(majorVersion, minorVersion, patchVersion);
+        return majorVersion * 1000000 + minorVersion * 1000 + patchVersion;
       default:
         throw new IllegalArgumentException("Unsupported version schema: " + versionSchema);
+    }
+  }
+
+  /**
+   * Sanity check for semantic version.
+   * @param majorVersion update MAJOR version when you make incompatible API changes
+   * @param minorVersion update MINOR version when you add functionality in a backwards compatible manner
+   * @param patchVersion update PATCH version when you make backwards compatible bug fixes
+   */
+  private void sanityCheckForSemanticVersion(long majorVersion, long minorVersion, long patchVersion) {
+    if (patchVersion < 0 || minorVersion < 0 || majorVersion < 0) {
+      throw new IllegalArgumentException(
+          "The major, minor or patch version is less than 0, major version: " + majorVersion + " minor version: "
+              + minorVersion + " patch version: " + patchVersion);
+    }
+    if (patchVersion > 999 || minorVersion > 999) {
+      throw new IllegalArgumentException(
+          "The minor or patch version exceeded max allowed number: 999, minor version: " + minorVersion
+              + " patch version: " + patchVersion);
+    }
+    //We set the max major version same as patch and minor version based on current use cases.
+    if (majorVersion > mySqlAccountServiceConfig.maxMajorVersionForSemanticSchemaDataset) {
+      throw new IllegalStateException("The major version exceeded max allowed number: "
+          + mySqlAccountServiceConfig.maxMajorVersionForSemanticSchemaDataset + " major version: " + majorVersion);
     }
   }
 

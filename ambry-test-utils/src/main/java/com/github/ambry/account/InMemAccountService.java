@@ -327,12 +327,4 @@ public class InMemAccountService implements AccountService {
         .setCacheTtlInSecond(refCacheTtlInSecond)
         .build();
   }
-
-  /**
-   * Set the userTags for dataset.
-   * @param userTags the user tag for the dataset.
-   */
-  public void setUserTagsForDataset(Map<String, String> userTags) {
-    this.userTags = userTags;
-  }
 }

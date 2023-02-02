@@ -202,10 +202,12 @@ public class NamedBlobPutHandler {
               new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
+          if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
+            addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
+          }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo),
-              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -345,13 +347,13 @@ public class NamedBlobPutHandler {
               "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " will be required for future uploads");
         }
       }
-      Map <String, String> userTags = addDatasetVersion(blobProperties);
       // inject encryption frontendMetrics if applicable
       if (blobProperties.isEncrypted()) {
         restRequest.getMetricsTracker()
             .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
       Map <String, Object> userMetadataFromRequest = restRequest.getArgs();
+      Map <String, String> userTags = getDatasetUserTags(restRequest);
       if (userTags != null) {
         userTags.forEach((key, value) -> {
           if (!userMetadataFromRequest.containsKey(key)) {
@@ -366,24 +368,19 @@ public class NamedBlobPutHandler {
     }
 
     /**
-     * Add the dataset version to account service database.
-     * @param blobProperties the {@link BlobProperties} corresponding to the dataset version.
+     * Get the user tags at dataset level.
+     * @param restRequest the {@link RestRequest} to get dataset user tags.
      * @return the userTags set at dataset level.
      * @throws RestServiceException
      */
-    private Map<String, String> addDatasetVersion(BlobProperties blobProperties) throws RestServiceException {
+    private Map<String, String> getDatasetUserTags(RestRequest restRequest) throws RestServiceException {
       Map<String, String> userTags = null;
-      try {
-        if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
-          frontendMetrics.addDatasetVersionRate.mark();
-          Dataset dataset = addDatasetVersion(blobProperties, restRequest);
-          userTags = dataset.getUserTags();
-        }
-        return userTags;
-      } catch (RestServiceException e) {
-        frontendMetrics.addDatasetVersionError.inc();
-        throw e;
+      if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
+        //TODO: Can optimize by querying the user tags only.
+        Dataset dataset = getDataset();
+        userTags = dataset.getUserTags();
       }
+      return userTags;
     }
 
     /**
@@ -523,6 +520,26 @@ public class NamedBlobPutHandler {
             "Dataset version create failed for accountName: " + accountName + " containerName: " + containerName
                 + " datasetName: " + datasetName + " version: " + version,
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      }
+    }
+
+    /**
+     * @return requested dataset.
+     * @throws RestServiceException
+     */
+    private Dataset getDataset() throws RestServiceException {
+      String accountName = null;
+      String containerName = null;
+      String datasetName = null;
+      try {
+        accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
+        containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
+        datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
+        return accountService.getDataset(accountName, containerName, datasetName);
+      } catch (AccountServiceException ex) {
+        throw new RestServiceException(
+            "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "
+                + datasetName, RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
   }

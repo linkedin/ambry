@@ -47,7 +47,7 @@ public class MySqlAccountStore {
   public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics,
       MySqlAccountServiceConfig config) throws SQLException {
     mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
-    accountDao = new AccountDao(mySqlDataAccessor);
+    accountDao = new AccountDao(mySqlDataAccessor, config);
     this.config = config;
   }
 
