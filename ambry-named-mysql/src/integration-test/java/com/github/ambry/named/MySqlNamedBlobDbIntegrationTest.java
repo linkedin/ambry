@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
@@ -58,14 +59,17 @@ public class MySqlNamedBlobDbIntegrationTest {
   private static final String LOCAL_DC = "dc1";
   // Please note that we are using mock time for time travel. Need to reset time (call setCurrentMilliseconds) when the
   // tests depends on time sequences
-  private static final MockTime time = new MockTime();
+  private static final MockTime time = new MockTime(System.currentTimeMillis());
   private final MySqlNamedBlobDb namedBlobDb;
   private final InMemAccountService accountService;
   private final PartitionId partitionId;
+  private final MySqlNamedBlobDbConfig config;
 
   public MySqlNamedBlobDbIntegrationTest() throws Exception {
     Properties properties = Utils.loadPropsFromResource("mysql.properties");
     properties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, LOCAL_DC);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    config = new MySqlNamedBlobDbConfig(verifiableProperties);
     accountService = new InMemAccountService(false, false);
     for (int i = 0; i < 5; i++) {
       accountService.createAndAddRandomAccount();
@@ -73,7 +77,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     MockClusterMap clusterMap = new MockClusterMap();
     partitionId = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     MySqlNamedBlobDbFactory namedBlobDbFactory =
-        new MySqlNamedBlobDbFactory(new VerifiableProperties(properties), new MetricRegistry(), accountService, time);
+        new MySqlNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), accountService, time);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
 
     cleanup();
@@ -87,7 +91,6 @@ public class MySqlNamedBlobDbIntegrationTest {
   public void testPutGetListDeleteSequence() throws Exception {
     int blobsPerContainer = 5;
 
-    time.setCurrentMilliseconds(System.currentTimeMillis());
     List<NamedBlobRecord> records = new ArrayList<>();
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
@@ -231,14 +234,14 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   /**
-   * Test behavior with stale blob cleanup
+   * Test behavior with blob cleanup main pipeline
    */
   @Test
-  public void testCleanupStaleBlobs() throws Exception {
+  public void testCleanupBlobsPipeline() throws Exception {
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-    calendar.add(Calendar.MONTH, -2);
-    long twoMonthAgo = calendar.getTimeInMillis();
-    long twoMonthAgoABitLater = twoMonthAgo + 1;
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long staleCutoffTime = calendar.getTimeInMillis();
+    long staleCutoffTimePlusOneMillisecond = staleCutoffTime + 1;
 
     Account account = accountService.getAllAccounts().iterator().next();
     Container container = account.getAllContainers().iterator().next();
@@ -251,16 +254,16 @@ public class MySqlNamedBlobDbIntegrationTest {
     for (int i = 0; i < staleCount; i++) {
       String blobId = getBlobId(account, container);
       String blobName = "stale/" + i + "/more path segments--";
-      long expirationTime = i % 2 == 0 ? Utils.Infinite_Time : twoMonthAgoABitLater;
+      long expirationTime = i % 2 == 0 ? Utils.Infinite_Time : staleCutoffTimePlusOneMillisecond;
       NamedBlobRecord record =
           new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
 
       NamedBlobState blob_state = expirationTime == Utils.Infinite_Time ? NamedBlobState.IN_PROGRESS : NamedBlobState.READY;
 
-      time.setCurrentMilliseconds(twoMonthAgo);
+      time.setCurrentMilliseconds(staleCutoffTime);
       namedBlobDb.put(record, blob_state, true).get();
 
-      time.setCurrentMilliseconds(twoMonthAgoABitLater);
+      time.setCurrentMilliseconds(staleCutoffTimePlusOneMillisecond);
       namedBlobDb.put(record, NamedBlobState.READY, true).get();
 
       if (expirationTime == Utils.Infinite_Time) {
@@ -276,19 +279,19 @@ public class MySqlNamedBlobDbIntegrationTest {
         String.join("|", r.getBlobName(), r.getBlobId())
     ).collect(Collectors.toSet());
 
-    List<StaleNamedResult> staleNamedResults = namedBlobDb.pullStaleBlobs().get();
-    Set<String> staleResultSet = staleNamedResults.stream().map((s) ->
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    Set<String> staleResultSet = staleNamedBlobs.stream().map((s) ->
         String.join("|", s.getBlobName(), s.getBlobId())
     ).collect(Collectors.toSet());
-    assertEquals("Stale records count does not match!", needCleanupCount, staleNamedResults.size());
+    assertEquals("Stale records count does not match!", needCleanupCount, staleNamedBlobs.size());
     assertEquals("Stale records pulled out does not meet expectation", staleInputSet, staleResultSet);
 
     // Confirm pullStaleBlobs return empty list after cleanupStaleData is called
-    Integer cleanedUpStaleCount = namedBlobDb.cleanupStaleData(staleNamedResults).get();
-    List<StaleNamedResult> staleNamedResultsNew = namedBlobDb.pullStaleBlobs().get();
+    Integer cleanedUpStaleCount = namedBlobDb.cleanupStaleData(staleNamedBlobs).get();
+    List<StaleNamedBlob> staleNamedBlobsNew = namedBlobDb.pullStaleBlobs().get();
 
     assertEquals("Cleaned Stale records count does not match!", needCleanupCount, cleanedUpStaleCount.intValue());
-    assertTrue("Still pulled out stale blobs after cleanup!", staleNamedResultsNew.isEmpty());
+    assertTrue("Still pulled out stale blobs after cleanup!", staleNamedBlobsNew.isEmpty());
 
 
     // Verify we can still pull out the valid named blobs after cleanup
@@ -301,6 +304,177 @@ public class MySqlNamedBlobDbIntegrationTest {
     }
 
     time.setCurrentMilliseconds(System.currentTimeMillis());
+  }
+
+  /**
+   * Test behavior with blob cleanup for stale blob case
+   * Case 1. created more than staleDataRetentionDays ago, InProgress, is Largest (Don't care about the ttl and delete)
+   */
+  @Test
+  public void testCleanupBlobStaleCase1() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long staleCutoffTime = calendar.getTimeInMillis();
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "stale/" + "case1"  + "/more path segments--";
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+
+    time.setCurrentMilliseconds(staleCutoffTime);
+    namedBlobDb.put(record,  NamedBlobState.IN_PROGRESS, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertEquals("Stale blob case 1 count does not match!", 1, staleNamedBlobs.size());
+    assertEquals("Stale blob case 1 pulled out blob name does not meet expectation",
+        staleNamedBlobs.get(0).getBlobName(), record.getBlobName());
+    assertEquals("Stale blob case 1 pulled out blob id does not meet expectation",
+        staleNamedBlobs.get(0).getBlobId(), record.getBlobId());
+  }
+
+  /**
+   * Test behavior with blob cleanup for stale blob case
+   * Case 2. created more than staleDataRetentionDays ago, Ready, not Largest and bigger version is ready
+   */
+  @Test
+  public void testCleanupBlobStaleCase2() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long staleCutoffTime = calendar.getTimeInMillis();
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "stale/" + "case2"  + "/more path segments--";
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+
+    time.setCurrentMilliseconds(staleCutoffTime);
+    namedBlobDb.put(record,  NamedBlobState.READY, true).get();
+
+    time.setCurrentMilliseconds(staleCutoffTime+1);
+    String blobIdNew = getBlobId(account, container);
+    NamedBlobRecord recordNew =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
+    namedBlobDb.put(recordNew,  NamedBlobState.READY, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertEquals("Stale blob case 2 count does not match!", 1, staleNamedBlobs.size());
+    assertEquals("Stale blob case 2 pulled out blob name does not meet expectation",
+        staleNamedBlobs.get(0).getBlobName(), record.getBlobName());
+    assertEquals("Stale blob case 2 pulled out blob id does not meet expectation",
+        staleNamedBlobs.get(0).getBlobId(), record.getBlobId());
+  }
+
+
+  /**
+   * Test behavior with blob cleanup for good blob case
+   * Case 1, created less than staleDataRetentionDays ago, InProgress, is Largest (Don't care about ttl and delete)
+   */
+  @Test
+  public void testCleanupBlobGoodCase1() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long afterStaleCutoffTime = calendar.getTimeInMillis() + 5000;
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "good/" + "case1" + "/more path segments--";
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+
+    time.setCurrentMilliseconds(afterStaleCutoffTime + 5000);
+    namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertTrue("Good blob case 1 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
+  }
+
+  /**
+   * Test behavior with blob cleanup for good blob case
+   * Case 2, created less than staleDataRetentionDays ago, Ready, not largest, and bigger version is ready
+   */
+  @Test
+  public void testCleanupBlobGoodCase2() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long afterStaleCutoffTime = calendar.getTimeInMillis() + 5000;
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "good/" + "case2" + "/more path segments--";
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+
+    time.setCurrentMilliseconds(afterStaleCutoffTime);
+    namedBlobDb.put(record, NamedBlobState.READY, true).get();
+
+    time.setCurrentMilliseconds(afterStaleCutoffTime+1);
+    String blobIdNew = getBlobId(account, container);
+    NamedBlobRecord recordNew =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
+    namedBlobDb.put(recordNew,  NamedBlobState.READY, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertTrue("Good blob case 2 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
+  }
+
+  /**
+   * Test behavior with blob cleanup for good blob case
+   * Case 3, created more than staleDataRetentionDays ago, Ready, is Largest
+   */
+  @Test
+  public void testCleanupBlobGoodCase3() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long staleCutoffTime = calendar.getTimeInMillis();
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "good/" + "case3" + "/more path segments--";
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+
+    time.setCurrentMilliseconds(staleCutoffTime);
+    namedBlobDb.put(record, NamedBlobState.READY, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertTrue("Good blob case 3 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
+  }
+
+
+  /**
+   * Test behavior with blob cleanup for good blob case
+   * Case 4, created more than staleDataRetentionDays ago, Ready, not Largest, but bigger version is InProgress.
+   */
+  @Test
+  public void testCleanupBlobGoodCase4() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long staleCutoffTime = calendar.getTimeInMillis();
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "good/" + "case4" + "/more path segments--";
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+
+    time.setCurrentMilliseconds(staleCutoffTime);
+    namedBlobDb.put(record, NamedBlobState.READY, true).get();
+
+    time.setCurrentMilliseconds(staleCutoffTime+5000);
+    String blobIdNew = getBlobId(account, container);
+    NamedBlobRecord recordNew =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobIdNew, Utils.Infinite_Time);
+    namedBlobDb.put(recordNew,  NamedBlobState.IN_PROGRESS, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    assertTrue("Good blob case 4 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
   }
 
   /**

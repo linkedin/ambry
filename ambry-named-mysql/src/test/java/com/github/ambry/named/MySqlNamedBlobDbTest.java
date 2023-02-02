@@ -59,7 +59,7 @@ import static org.mockito.Mockito.*;
  */
 public class MySqlNamedBlobDbTest {
   private final List<String> datacenters = Arrays.asList("dc3", "dc2", "dc1");
-  private static final Set<String> notFoundDatacenters = new HashSet<>();;
+  private static final Set<String> notFoundDatacenters = new HashSet<>();
   private final String localDatacenter = "dc1";
   private final MockDataSourceFactory dataSourceFactory = new MockDataSourceFactory();
   private final InMemAccountService accountService = new InMemAccountService(false, false);
@@ -137,8 +137,8 @@ public class MySqlNamedBlobDbTest {
   public void testPullAndCleanStaleNamedBlobs() throws Exception {
     dataSourceFactory.setLocalDatacenter(localDatacenter);
     dataSourceFactory.triggerEmptyResultSetForLocalDataCenter(datacenters);
-    List<StaleNamedResult> staleNamedResults = namedBlobDb.pullStaleBlobs().get();
-    namedBlobDb.cleanupStaleData(staleNamedResults);
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    namedBlobDb.cleanupStaleData(staleNamedBlobs);
   }
 
   /**

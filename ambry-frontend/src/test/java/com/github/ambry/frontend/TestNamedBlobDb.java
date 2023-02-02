@@ -18,7 +18,7 @@ import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.named.PutResult;
-import com.github.ambry.named.StaleNamedResult;
+import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -161,9 +161,9 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<List<StaleNamedResult>> pullStaleBlobs() {
-    CompletableFuture<List<StaleNamedResult>> future = new CompletableFuture<>();
-    List<StaleNamedResult> resultList = new ArrayList<>();
+  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs() {
+    CompletableFuture<List<StaleNamedBlob>> future = new CompletableFuture<>();
+    List<StaleNamedBlob> resultList = new ArrayList<>();
     for (String accountName : allRecords.keySet()) {
       Map<String, TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>>> recordsPerAccount =
           allRecords.get(accountName);
@@ -189,8 +189,8 @@ public class TestNamedBlobDb implements NamedBlobDb {
             recordList.addAll(recordStaleList);
           }
           for (Pair<NamedBlobRecord, Pair<NamedBlobState, Long>> r : recordList) {
-            StaleNamedResult result =
-                new StaleNamedResult((short) accountName.hashCode(), (short) containerName.hashCode(), blobName,
+            StaleNamedBlob result =
+                new StaleNamedBlob((short) accountName.hashCode(), (short) containerName.hashCode(), blobName,
                     r.getFirst().getBlobId(), r.getFirst().getVersion(),
                     new Timestamp(r.getFirst().getExpirationTimeMs()));
             resultList.add(result);
@@ -203,7 +203,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedResult> staleRecords) {
+  public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords) {
     CompletableFuture<Integer> future = new CompletableFuture<>();
 
     Set<String> staleBlobIds = staleRecords.stream().map(r -> r.getBlobId()).collect(Collectors.toSet());

@@ -197,7 +197,7 @@ class FrontendRestRequestService implements RestRequestService {
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
 
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
-    if (frontendConfig.namedBlobCleanupEnabled) {
+    if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
       namedBlobsCleanupTask =
           namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, 60 * 10, 60 * 10, TimeUnit.SECONDS);

@@ -21,7 +21,7 @@ import java.util.Objects;
 /**
  * Class to convey information about a successful stale named blob pulling {@link NamedBlobDb}.
  */
-public class StaleNamedResult {
+public class StaleNamedBlob {
   private final short accountId;
   private final short containerId;
   private final String blobName;
@@ -37,7 +37,7 @@ public class StaleNamedResult {
    * @param version the version for the stale record.
    * @param deleteTs the timestamp of deleting the stale record.
    */
-  public StaleNamedResult(short accountId, short containerId, String blobName, String blobId, long version,
+  public StaleNamedBlob(short accountId, short containerId, String blobName, String blobId, long version,
       Timestamp deleteTs) {
     this.accountId = accountId;
     this.containerId = containerId;
@@ -98,7 +98,7 @@ public class StaleNamedResult {
       return false;
     }
 
-    StaleNamedResult record = (StaleNamedResult) o;
+    StaleNamedBlob record = (StaleNamedBlob) o;
     return accountId == record.accountId && containerId == record.containerId && Objects.equals(blobName,
         record.blobName) && Objects.equals(blobId, record.blobId) && version == record.version && deleteTs.equals(
         record.deleteTs);
@@ -106,7 +106,7 @@ public class StaleNamedResult {
 
   @Override
   public String toString() {
-    return "StaleNamedResult[accountId=" + accountId + ",containerId=" + containerId + ",blobName=" + blobName
+    return "StaleNamedBlob[accountId=" + accountId + ",containerId=" + containerId + ",blobName=" + blobName
         + ",blobId=" + blobId + ",version=" + version + ",deleteTs=" + deleteTs + "]";
   }
 }

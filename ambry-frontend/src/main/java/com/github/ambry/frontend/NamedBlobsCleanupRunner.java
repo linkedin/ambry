@@ -14,7 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.named.NamedBlobDb;
-import com.github.ambry.named.StaleNamedResult;
+import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.router.Router;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,9 +38,9 @@ public class NamedBlobsCleanupRunner implements Runnable {
   public void run() {
     logger.info("Named Blobs Cleanup Runner is initiated");
     try {
-      List<StaleNamedResult> staleResultList = namedBlobDb.pullStaleBlobs().get();
-      List<StaleNamedResult> failedResults = new ArrayList<>();
-      for (StaleNamedResult staleResult : staleResultList) {
+      List<StaleNamedBlob> staleResultList = namedBlobDb.pullStaleBlobs().get();
+      List<StaleNamedBlob> failedResults = new ArrayList<>();
+      for (StaleNamedBlob staleResult : staleResultList) {
         try {
           router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
         } catch (Exception e) {

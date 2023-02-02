@@ -144,8 +144,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   /**
    * Pull the stale blobs that need to be cleaned up
-   * It will pull out any stale record (limit to be config.staleMaxResults [Default 1000] records at most) meeting below conditions:
-   * 1. created more than 60 days ago, and
+   * It will pull out any stale record (limit to be config.queryStaleDataMaxResults [Default 1000] records at most)
+   * meeting below conditions:
+   * 1. created more than config.staleDataRetentionDays [Default 5] days ago, and
    * 2. it's NOT a VLR (Valid Latest Record) for any named blob.
    * VLR of a named blob is the record whose blob_state=1 (READY), and has the max version for the named blob.
    *
@@ -312,7 +313,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               logger.trace("Skip exception in pulling data from db: accountId='{}', containerId='{}', blobName='{}': {}",
                   accountId, containerId, record.getBlobName(), e);
             }
-            if (recordCurrent != null) {
+            if (recordCurrent != null && !isUpsert) {
               throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
                   record.getContainerName(), record.getBlobName());
             }
@@ -334,22 +335,22 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<List<StaleNamedResult>> pullStaleBlobs() {
+  public CompletableFuture<List<StaleNamedBlob>> pullStaleBlobs() {
     TransactionStateTracker transactionStateTracker =
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      List<StaleNamedResult> staleNamedBlobResults= runPullStaleBlobs(connection);
+      List<StaleNamedBlob> staleNamedBlobResults= runPullStaleBlobs(connection);
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
     }, transactionStateTracker);
   }
 
   @Override
-  public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedResult> staleRecords) {
+  public CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords) {
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      for (StaleNamedResult record : staleRecords) {
+      for (StaleNamedBlob record : staleRecords) {
         applySoftDelete(record.getAccountId(), record.getContainerId(), record.getBlobName(), record.getVersion(),
             record.getDeleteTs(), connection);
       }
@@ -625,15 +626,15 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return new DeleteResult(blobId, alreadyDeleted);
   }
 
-  private List<StaleNamedResult> runPullStaleBlobs(final Connection connection) throws Exception {
+  private List<StaleNamedBlob> runPullStaleBlobs(final Connection connection) throws Exception {
     try (PreparedStatement statement = connection.prepareStatement(GET_STALE_QUERY)) {
       Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
-      calendar.add(Calendar.DATE, -config.staleMaxDays);
+      calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
       long previousTimeInMillis = calendar.getTimeInMillis();
       statement.setLong(1, previousTimeInMillis * VERSION_BASE);
-      statement.setInt(2, config.staleMaxResults);
+      statement.setInt(2, config.queryStaleDataMaxResults);
       try (ResultSet resultSet = statement.executeQuery()) {
-        List<StaleNamedResult> resultList = new ArrayList<>();
+        List<StaleNamedBlob> resultList = new ArrayList<>();
         while (resultSet.next()) {
           short accountId = resultSet.getShort(1);
           short containerId = resultSet.getShort(2);
@@ -643,7 +644,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           Timestamp deletionTime = resultSet.getTimestamp(6);
           Timestamp currentTime = resultSet.getTimestamp(7);
           if (compareTimestamp(deletionTime, currentTime.getTime()) > 0) {
-            StaleNamedResult result = new StaleNamedResult(accountId, containerId, blobName, blobId, version, currentTime);
+            StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime);
             resultList.add(result);
           }
         }

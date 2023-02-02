@@ -76,9 +76,9 @@ public class FrontendConfig {
   /**
    * Whether to enable named blob stale data cleanup process
    */
-  @Config("named.blob.cleanup.enabled")
+  @Config("frontend.enable.named.blob.cleanup.task")
   @Default("false")
-  public final boolean namedBlobCleanupEnabled;
+  public final boolean enableNamedBlobCleanupTask;
 
   /**
    * For permanent named blob, the put procedure is put, database insert and then ttlUpdate. This config is the ttl used
@@ -274,7 +274,7 @@ public class FrontendConfig {
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
-    namedBlobCleanupEnabled = verifiableProperties.getBoolean("named.blob.cleanup.enabled", false);
+    enableNamedBlobCleanupTask = verifiableProperties.getBoolean("frontend.enable.named.blob.cleanup.task", false);
     permanentNamedBlobInitialPutTtl =
         verifiableProperties.getLong("permanent.named.blob.initial.put.ttl", 25 * 60 * 60);
     optionsAllowMethods =
