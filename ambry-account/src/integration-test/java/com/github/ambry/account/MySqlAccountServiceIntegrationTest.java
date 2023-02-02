@@ -819,6 +819,15 @@ public class MySqlAccountServiceIntegrationTest {
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC,
             version);
     assertEquals("Mismatch in dataset version", version, datasetVersionRecordWithSemanticVersion.getVersion());
+
+    // Add dataset version for non-existing dataset.
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), "NonExistingDataset", version, -1);
+      fail("Add dataset version should fail without dataset");
+    } catch (SQLException e) {
+      // do nothing
+    }
   }
 
   private Account makeTestAccountWithContainer() {

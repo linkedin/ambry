@@ -313,11 +313,11 @@ public class AccountDao {
       String containerName, String datasetName, String version, long expirationTimeMs) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
+      Dataset dataset =
+          getDatasetMetadata(accountId, containerId, accountName, containerName, datasetName, expirationTimeMs);
       dataAccessor.getDatabaseConnection(true);
       PreparedStatement insertDatasetVersionStatement =
           dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
-      Dataset dataset =
-          getDatasetMetadata(accountId, containerId, accountName, containerName, datasetName, expirationTimeMs);
       //TODO: if version == null, add the latest version from db + 1.
       long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
       executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, datasetName,
@@ -343,12 +343,12 @@ public class AccountDao {
       String version) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      dataAccessor.getDatabaseConnection(false);
-      PreparedStatement getDatasetVersionStatement =
-          dataAccessor.getPreparedStatement(getDatasetVersionByNameSql, false);
       PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, false);
       Dataset.VersionSchema versionSchema =
           executeGetVersionSchema(getVersionSchemaStatement, accountId, containerId, datasetName);
+      dataAccessor.getDatabaseConnection(false);
+      PreparedStatement getDatasetVersionStatement =
+          dataAccessor.getPreparedStatement(getDatasetVersionByNameSql, false);
       //TODO: if version == null, get the latest version from db + 1.
       long versionValue = getVersionBasedOnSchema(version, versionSchema);
       DatasetVersionRecord result =
@@ -725,7 +725,11 @@ public class AccountDao {
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
       resultSet = statement.executeQuery();
-      resultSet.next();
+      if (!resultSet.next()) {
+        throw new SQLException(
+            "Version Schema not found for account: " + accountId + " container: " + containerId + " dataset: "
+                + datasetName);
+      }
       versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
     } finally {
       //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
