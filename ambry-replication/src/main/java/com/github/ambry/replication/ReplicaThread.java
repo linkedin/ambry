@@ -814,13 +814,13 @@ public class ReplicaThread implements Runnable {
       getResponse =
           getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
               remoteNode, remoteColoGetRequestForStandby);
-      if (getResponse.getError() != ServerErrorCode.No_Error) {
-        // Getting error for entire response, something unexpected happened.
-        logger.error("Remote node: {} Thread name: {} ServerError for GetResponse {}", remoteNode, threadName,
-            getResponse.getError());
-        throw new ReplicationException("GetResponse unexpected error " + getResponse.getError());
-      }
       if (getResponse != null) {
+        if (getResponse.getError() != ServerErrorCode.No_Error) {
+          // Getting error for entire response, something unexpected happened.
+          logger.error("Remote node: {} Thread name: {} ServerError for GetResponse {}", remoteNode, threadName,
+              getResponse.getError());
+          throw new ReplicationException("GetResponse unexpected error " + getResponse.getError());
+        }
         handleGetResponse(getResponse, replicasToReplicatePerNode, exchangeMetadataResponseList, remoteNode,
             remoteColoGetRequestForStandby);
       }
