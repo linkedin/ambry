@@ -252,7 +252,8 @@ public class ReplicaThread implements Runnable {
    * Empty for current ReplicaThread but can be re-written in other cases to track progress.
    * @param remoteReplicaInfo
    */
-  protected void logReplicationCaughtUp(RemoteReplicaInfo remoteReplicaInfo) {}
+  protected void logReplicationCaughtUp(RemoteReplicaInfo remoteReplicaInfo) {
+  }
 
   @Override
   public void run() {
@@ -791,9 +792,9 @@ public class ReplicaThread implements Runnable {
    * @throws IOException
    * @throws ReplicationException
    */
-  protected void fixMissingStoreKeys(ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby)
-      throws IOException, ReplicationException {
+  protected void fixMissingStoreKeys(ConnectedChannel connectedChannel,
+      List<RemoteReplicaInfo> replicasToReplicatePerNode, List<ExchangeMetadataResponse> exchangeMetadataResponseList,
+      boolean remoteColoGetRequestForStandby) throws IOException, ReplicationException {
     long fixMissingStoreKeysStartTimeInMs = time.milliseconds();
     GetResponse getResponse = null;
     try {
@@ -1327,24 +1328,24 @@ public class ReplicaThread implements Runnable {
    * @throws StoreException
    * @throws IOException
    */
-  protected void applyPut(MessageSievingInputStream validMessageDetectionInputStream, RemoteReplicaInfo remoteReplicaInfo)
-      throws StoreException, IOException {
+  protected void applyPut(MessageSievingInputStream validMessageDetectionInputStream,
+      RemoteReplicaInfo remoteReplicaInfo) throws StoreException, IOException {
     List<MessageInfo> messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
     if (messageInfoList.size() == 0) {
-      logger.debug(
-          "MessageInfoList is of size 0 as all messages are invalidated, deprecated, deleted or expired.");
+      logger.debug("MessageInfoList is of size 0 as all messages are invalidated, deprecated, deleted or expired.");
     } else {
-      MessageFormatWriteSet writeSet = new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
+      MessageFormatWriteSet writeSet =
+          new MessageFormatWriteSet(validMessageDetectionInputStream, messageInfoList, false);
       remoteReplicaInfo.getLocalStore().put(writeSet);
     }
   }
 
-    /**
-     * Applies a TTL update to the blob described by {@code messageInfo}.
-     * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
-     * @param remoteReplicaInfo The remote replica that is bein1g replicated from
-     * @throws StoreException
-     */
+  /**
+   * Applies a TTL update to the blob described by {@code messageInfo}.
+   * @param messageInfo the {@link MessageInfo} that will be transformed into a TTL update
+   * @param remoteReplicaInfo The remote replica that is bein1g replicated from
+   * @throws StoreException
+   */
   protected void applyTtlUpdate(MessageInfo messageInfo, RemoteReplicaInfo remoteReplicaInfo) throws StoreException {
     DataNodeId remoteNode = remoteReplicaInfo.getReplicaId().getDataNodeId();
     try {
@@ -2016,6 +2017,18 @@ public class ReplicaThread implements Runnable {
           // Deserialize the request from the given ResponseInfo
           DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
           ReplicaMetadataResponse response = ReplicaMetadataResponse.readFrom(dis, findTokenHelper, clusterMap);
+          if (response.getError() != ServerErrorCode.No_Error
+              || response.getReplicaMetadataResponseInfoList().size() != remoteReplicaInfos.size()) {
+            int replicaMetadataResponseInfoListSize = response.getReplicaMetadataResponseInfoList() == null ? 0
+                : response.getReplicaMetadataResponseInfoList().size();
+            exchangeMetadataResponseList = Collections.emptyList();
+            // Getting error for entire response, something unexpected happened.
+            logger.error(
+                "Remote node: {} Thread name: {} RemoteReplicaGroup {} ServerError for ReplicaMetadataResponse {} "
+                    + "ReplicaMetadataResponseInfoListSize: {} RemoteReplicaInfoSize: {}", remoteDataNode, threadName,
+                id, response.getError(), replicaMetadataResponseInfoListSize, remoteReplicaInfos.size());
+            throw new ReplicationException("ReplicaMetadataResponse unexpected error " + response.getError());
+          }
           exchangeMetadataResponseList =
               ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode);
           state = ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED;
@@ -2026,7 +2039,7 @@ public class ReplicaThread implements Runnable {
           replicationMetrics.updateExchangeMetadataTime(exchangeMetadataTimeInMs, replicatingFromRemoteColo,
               replicatingOverSsl, datacenterName);
         } catch (Exception e) {
-          setException(e, "ReplicaMetadataResponse deserialization received unexpected error");
+          setException(e, "ReplicaMetadataResponse unexpected error");
         }
       } else {
         // We have a network client error here, mark all the replicas int request with this error.
@@ -2059,6 +2072,12 @@ public class ReplicaThread implements Runnable {
           // Deserialize the request from the given ResponseInfo
           DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
           GetResponse response = GetResponse.readFrom(dis, clusterMap);
+          if (response.getError() != ServerErrorCode.No_Error) {
+            // Getting error for entire response, something unexpected happened.
+            logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} ServerError for GetResponse {}",
+                remoteDataNode, threadName, id, response.getError());
+            throw new ReplicationException("GetResponse unexpected error " + response.getError());
+          }
           ReplicaThread.this.handleGetResponse(response, remoteReplicaInfosToSend,
               exchangeMetadataResponseListToProcess, remoteDataNode, isNonProgressStandbyReplicaGroup);
           logger.trace(
@@ -2068,7 +2087,7 @@ public class ReplicaThread implements Runnable {
           replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo,
               replicatingOverSsl, datacenterName);
         } catch (Exception e) {
-          setException(e, "GetResponse deserialization received unexpected error");
+          setException(e, "GetResponse unexpected error");
         }
       } else {
         remoteReplicaInfos.forEach(r -> responseHandler.onEvent(r.getReplicaId(), networkClientErrorCode));
@@ -2107,35 +2126,38 @@ public class ReplicaThread implements Runnable {
     List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
     int remoteReplicaGroupId = 0;
 
-    // Before each cycle of replication, we clean up the cache in key converter.
-    storeKeyConverter.dropCache();
-    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
-    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
-      DataNodeId remoteNode = entry.getKey();
-      List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
-      List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
-      List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
-      filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode, standbyReplicasWithNoProgress);
-
-      if (activeReplicasPerNode.size() > 0) {
-        List<List<RemoteReplicaInfo>> activeReplicaSubLists =
-            maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest)
-                : Collections.singletonList(activeReplicasPerNode);
-        for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
-          RemoteReplicaGroup group = new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
-          remoteReplicaGroups.add(group);
-        }
-      }
-      if (standbyReplicasWithNoProgress.size() > 0) {
-        List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
-            getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
-        if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
-          RemoteReplicaGroup group = new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
-          remoteReplicaGroups.add(group);
-        }
-      }
-    }
     try {
+      // Before each cycle of replication, we clean up the cache in key converter.
+      storeKeyConverter.dropCache();
+      Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
+      for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
+        DataNodeId remoteNode = entry.getKey();
+        List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
+        List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
+        List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+        filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode,
+            standbyReplicasWithNoProgress);
+
+        if (activeReplicasPerNode.size() > 0) {
+          List<List<RemoteReplicaInfo>> activeReplicaSubLists =
+              maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest)
+                  : Collections.singletonList(activeReplicasPerNode);
+          for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
+            RemoteReplicaGroup group =
+                new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
+            remoteReplicaGroups.add(group);
+          }
+        }
+        if (standbyReplicasWithNoProgress.size() > 0) {
+          List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
+              getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
+          if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
+            RemoteReplicaGroup group =
+                new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
+            remoteReplicaGroups.add(group);
+          }
+        }
+      }
       // A map from correlation id to RemoteReplicaGroup. This is used to find the group when response comes back.
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
       // A map from correlation id to RequestInfo. This is used to find timed out RequestInfos.
@@ -2150,7 +2172,7 @@ public class ReplicaThread implements Runnable {
 
         final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
         List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
-        onResponses(responseInfos, correlationIdToReplicaGroup);
+        onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
       }
       logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
       remoteReplicaGroups.stream()
@@ -2231,8 +2253,7 @@ public class ReplicaThread implements Runnable {
               group.getRemoteDataNode(), threadName, group.getId(), entry.getKey(), requestInfo.getRequestCreateTime());
         } else {
           // This shouldn't happen
-          logger.trace("Thread name: {} RemoteReplicaGroup {} Request {} timed out", threadName, group.getId(),
-              entry.getKey());
+          logger.trace("Thread name: {} Request {} timed out", threadName, entry.getKey());
         }
       } else {
         // The correlationIdToRequest should be a LinkedHashMap that has a predictable iteration order based on insertion.
@@ -2248,9 +2269,10 @@ public class ReplicaThread implements Runnable {
   /**
    * Handle the response from the nonblocking network client.
    * @param responseInfos The list of {@link ResponseInfo}s.
+   * @param correlationIdToRequest The map from correlation id to request.
    * @param correlationIdToReplicaGroup The map from correlation id to remote replica group.
    */
-  private void onResponses(List<ResponseInfo> responseInfos,
+  private void onResponses(List<ResponseInfo> responseInfos, Map<Integer, RequestInfo> correlationIdToRequest,
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup) {
     logger.trace("Thread Name: {} There are {} Responses to handle", threadName, responseInfos.size());
     for (ResponseInfo responseInfo : responseInfos) {
@@ -2261,6 +2283,8 @@ public class ReplicaThread implements Runnable {
         responseHandler.onConnectionTimeout(dataNodeId);
       } else {
         int correlationId = requestInfo.getRequest().getCorrelationId();
+        // Request comes back, from this request from the map
+        correlationIdToRequest.remove(correlationId);
         RemoteReplicaGroup remoteReplicaGroup = correlationIdToReplicaGroup.remove(correlationId);
         // This correlation id might be removed because the corresponding request timed out. But later we get the response
         // back from the network client.

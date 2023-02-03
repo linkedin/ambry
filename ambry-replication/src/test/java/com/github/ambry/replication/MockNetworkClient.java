@@ -21,8 +21,15 @@ import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,20 +45,33 @@ public class MockNetworkClient implements NetworkClient {
   private final Map<DataNodeId, MockHost> hosts;
   private final Map<DataNodeId, MockConnectionPool.MockConnection> connections;
   private final ClusterMap clusterMap;
+  private final FindTokenHelper findTokenHelper;
   private final int batchSize;
   private final Map<Integer, RequestInfo> correlationIdToRequestInfos = new HashMap<>();
 
   private volatile NetworkClientErrorCode expectedNetworkClientErrorCode = null;
+  private volatile ServerErrorCode expectedReplicaMetadataResponseError = ServerErrorCode.No_Error;
+  private volatile ServerErrorCode expectedGetResponseError = ServerErrorCode.No_Error;
 
-  public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize) {
+  public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
+      FindTokenHelper findTokenHelper) {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
+    this.findTokenHelper = findTokenHelper;
     this.batchSize = batchSize;
     this.connections = new HashMap<>();
   }
 
   void setExpectedNetworkClientErrorCode(NetworkClientErrorCode code) {
     expectedNetworkClientErrorCode = code;
+  }
+
+  void setExpectedReplicaMetadataResponseError(ServerErrorCode code) {
+    expectedReplicaMetadataResponseError = code;
+  }
+
+  void setExpectedGetResponseError(ServerErrorCode code) {
+    expectedGetResponseError = code;
   }
 
   @Override
@@ -77,7 +97,38 @@ public class MockNetworkClient implements NetworkClient {
           connections.get(dataNodeId).send(requestInfo.getRequest());
           ChannelOutput channelOutput = connections.get(dataNodeId).receive();
           byte[] bytes = Utils.readBytesFromStream(channelOutput.getInputStream(), (int) channelOutput.getStreamSize());
-          responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
+          if (requestInfo.getRequest()
+              .getRequestOrResponseType()
+              .equals(RequestOrResponseType.ReplicaMetadataRequest.name())) {
+            if (expectedReplicaMetadataResponseError == ServerErrorCode.No_Error) {
+              responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
+            } else {
+              DataInputStream dis = new NettyByteBufDataInputStream(Unpooled.wrappedBuffer(bytes));
+              ReplicaMetadataResponse ogResponse = ReplicaMetadataResponse.readFrom(dis, findTokenHelper, clusterMap);
+              ReplicaMetadataResponse newResponse =
+                  new ReplicaMetadataResponse(ogResponse.getCorrelationId(), ogResponse.getClientId(),
+                      expectedReplicaMetadataResponseError, ogResponse.getVersionId());
+              ByteBuf content = newResponse.content();
+              content.readLong(); // remove the size
+              responseInfos.add(new ResponseInfo(requestInfo, null, content));
+              ogResponse.release();
+            }
+          } else if (requestInfo.getRequest()
+              .getRequestOrResponseType()
+              .equals(RequestOrResponseType.GetRequest.name())) {
+            if (expectedGetResponseError == ServerErrorCode.No_Error) {
+              responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
+            } else {
+              DataInputStream dis = new NettyByteBufDataInputStream(Unpooled.wrappedBuffer(bytes));
+              GetResponse ogResponse = GetResponse.readFrom(dis, clusterMap);
+              GetResponse newResponse =
+                  new GetResponse(ogResponse.getCorrelationId(), ogResponse.getClientId(), expectedGetResponseError);
+              ByteBuf content = newResponse.content();
+              content.readLong(); // remove the size
+              responseInfos.add(new ResponseInfo(requestInfo, null, content));
+              ogResponse.release();
+            }
+          }
         } else {
           responseInfos.add(new ResponseInfo(requestInfo, expectedNetworkClientErrorCode, null));
         }

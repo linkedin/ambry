@@ -52,6 +52,7 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockMessageWriteSet;
@@ -2053,6 +2054,10 @@ public class ReplicationTest extends ReplicationTestHelper {
     }
   }
 
+  /**
+   * Test the case where nonblocking network client returns NetworkError for each request.
+   * @throws Exception
+   */
   @Test
   public void networkClientNetworkErrorTest() throws Exception {
     assumeTrue(shouldUseNetworkClient);
@@ -2099,6 +2104,131 @@ public class ReplicationTest extends ReplicationTestHelper {
       assertEquals("No infos should be missing", 0, entry.getValue().size());
     }
     Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
+      assertEquals("No buffers should be missing", 0, entry.getValue().size());
+    }
+  }
+
+  /**
+   * Test the case where nonblocking network client returns ServerError For ReplicaMetadataRequests.
+   * @throws Exception
+   */
+  @Test
+  public void networkClientReplicaMetadataResponseErrorTest() throws Exception {
+    assumeTrue(shouldUseNetworkClient);
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+    for (PartitionId partitionId : partitionIds) {
+      // add 5 messages into each partition and place it on remote host only
+      addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 5);
+    }
+
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    MockStoreKeyConverterFactory mockStoreKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    mockStoreKeyConverterFactory.setReturnInputIfAbsent(true);
+    mockStoreKeyConverterFactory.setConversionMap(new HashMap<>());
+    // we set batchSize to 10 in order to get all messages from one partition within single replication cycle
+    int batchSize = 10;
+    StoreKeyConverter storeKeyConverter = mockStoreKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null, null,
+            remoteHost);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // Make mock network client return NetworkErrors
+    NetworkClient c = replicaThread.getNetworkClient();
+    assertNotNull(c);
+    MockNetworkClient mockNetworkClient = (MockNetworkClient) c;
+    mockNetworkClient.setExpectedReplicaMetadataResponseError(ServerErrorCode.Unknown_Error);
+
+    replicaThread.replicate();
+    List<ReplicaThread.ExchangeMetadataResponse> exchangeMetadataResponseList =
+        replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
+    assertEquals(0, exchangeMetadataResponseList.size());
+
+    mockNetworkClient.setExpectedReplicaMetadataResponseError(ServerErrorCode.No_Error);
+    replicaThread.replicate();
+
+    Map<PartitionId, List<MessageInfo>> missingInfos = remoteHost.getMissingInfos(localHost.infosByPartition);
+    for (Map.Entry<PartitionId, List<MessageInfo>> entry : missingInfos.entrySet()) {
+      assertEquals("No infos should be missing", 0, entry.getValue().size());
+    }
+    Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
+      assertEquals("No buffers should be missing", 0, entry.getValue().size());
+    }
+  }
+
+  /**
+   * Test the case where nonblocking network client returns ServerError For GetRequests.
+   * @throws Exception
+   */
+  @Test
+  public void networkClientGetResponseErrorTest() throws Exception {
+    assumeTrue(shouldUseNetworkClient);
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+    for (PartitionId partitionId : partitionIds) {
+      // add 5 messages into each partition and place it on remote host only
+      addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 5);
+    }
+
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    MockStoreKeyConverterFactory mockStoreKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    mockStoreKeyConverterFactory.setReturnInputIfAbsent(true);
+    mockStoreKeyConverterFactory.setConversionMap(new HashMap<>());
+    // we set batchSize to 10 in order to get all messages from one partition within single replication cycle
+    int batchSize = 10;
+    StoreKeyConverter storeKeyConverter = mockStoreKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null, null,
+            remoteHost);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // Make mock network client return NetworkErrors
+    List<RemoteReplicaInfo> remoteReplicaInfos = replicasAndThread.getFirst().get(remoteHost.dataNodeId);
+    NetworkClient c = replicaThread.getNetworkClient();
+    assertNotNull(c);
+    MockNetworkClient mockNetworkClient = (MockNetworkClient) c;
+    mockNetworkClient.setExpectedGetResponseError(ServerErrorCode.Unknown_Error);
+
+    // Bad error in GetResponse won't stop ReplicaMetadataRequest, but it will stop replication
+    replicaThread.replicate();
+    List<ReplicaThread.ExchangeMetadataResponse> exchangeMetadataResponseList =
+        replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
+    assertEquals(remoteReplicaInfos.size(), exchangeMetadataResponseList.size());
+    for (ReplicaThread.ExchangeMetadataResponse metadata : exchangeMetadataResponseList) {
+      assertEquals(5, metadata.missingStoreMessages.size());
+      assertEquals(4, ((MockFindToken) metadata.remoteToken).getIndex());
+    }
+
+    Map<PartitionId, List<MessageInfo>> missingInfos = remoteHost.getMissingInfos(localHost.infosByPartition);
+    for (Map.Entry<PartitionId, List<MessageInfo>> entry : missingInfos.entrySet()) {
+      assertEquals("No infos should be missing", 5, entry.getValue().size());
+    }
+    Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
+    for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
+      assertEquals("No buffers should be missing", 5, entry.getValue().size());
+    }
+
+    mockNetworkClient.setExpectedGetResponseError(ServerErrorCode.No_Error);
+    replicaThread.replicate();
+
+    missingInfos = remoteHost.getMissingInfos(localHost.infosByPartition);
+    for (Map.Entry<PartitionId, List<MessageInfo>> entry : missingInfos.entrySet()) {
+      assertEquals("No infos should be missing", 0, entry.getValue().size());
+    }
+    missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
     for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
       assertEquals("No buffers should be missing", 0, entry.getValue().size());
     }
