@@ -632,12 +632,6 @@ public class ReplicaThread implements Runnable {
       DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
       ReplicaMetadataResponse response =
           getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode);
-      if (response.getError() != ServerErrorCode.No_Error) {
-        // Getting error for entire response, something unexpected happened.
-        logger.error("Remote node: {} Thread name: {} ServerError for ReplicaMetadataResponse {}", remoteNode,
-            threadName, response.getError());
-        throw new ReplicationException("ReplicaMetadataResponse unexpected error " + response.getError());
-      }
       return handleReplicaMetadataResponse(response, replicasToReplicatePerNode, remoteNode);
     } catch (Exception e) {
       if (e instanceof ReplicationException) {
@@ -815,12 +809,6 @@ public class ReplicaThread implements Runnable {
           getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
               remoteNode, remoteColoGetRequestForStandby);
       if (getResponse != null) {
-        if (getResponse.getError() != ServerErrorCode.No_Error) {
-          // Getting error for entire response, something unexpected happened.
-          logger.error("Remote node: {} Thread name: {} ServerError for GetResponse {}", remoteNode, threadName,
-              getResponse.getError());
-          throw new ReplicationException("GetResponse unexpected error " + getResponse.getError());
-        }
         handleGetResponse(getResponse, replicasToReplicatePerNode, exchangeMetadataResponseList, remoteNode,
             remoteColoGetRequestForStandby);
       }
