@@ -233,6 +233,9 @@ public class FrontendMetrics {
   public final Meter putWithAccountAndContainerHeaderRate;
   public final Meter putWithAccountAndContainerUriRate;
 
+  // Dataset
+  public final Counter unrecognizedDatasetNameCount;
+
   //Dataset Version
   public final Counter addDatasetVersionError;
   public final Counter getDatasetVersionError;
@@ -598,7 +601,11 @@ public class FrontendMetrics {
     putWithAccountAndContainerUriRate = metricRegistry.meter(
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerUriRate"));
 
-    //Dataset Version
+    // Dataset
+    unrecognizedDatasetNameCount =
+        metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "UnrecognizedDatasetNameCount"));
+
+    // Dataset Version
     addDatasetVersionError =
         metricRegistry.counter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionError"));
     getDatasetVersionError =

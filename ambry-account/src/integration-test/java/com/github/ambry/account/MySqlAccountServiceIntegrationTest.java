@@ -828,6 +828,16 @@ public class MySqlAccountServiceIntegrationTest {
     } catch (SQLException e) {
       // do nothing
     }
+
+    // Add dataset version which didn't follow the semantic format.
+    version = "1.2";
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+      fail("Add dataset version should fail with wrong format of semantic version");
+    } catch (IllegalArgumentException e) {
+      // do nothing
+    }
   }
 
   private Account makeTestAccountWithContainer() {

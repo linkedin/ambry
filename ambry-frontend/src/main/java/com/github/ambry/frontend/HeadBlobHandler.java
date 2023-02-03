@@ -69,7 +69,7 @@ public class HeadBlobHandler {
       throws RestServiceException {
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
-      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metrics.headBlobMetricsGroup);
+      accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest, metrics.headBlobMetricsGroup);
     }
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }

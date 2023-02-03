@@ -372,6 +372,12 @@ public class RestUtils {
     public static final String TARGET_CONTAINER_KEY = KEY_PREFIX + "target-container";
 
     /**
+     * The key for the target {@link com.github.ambry.account.Dataset} indicated by the request.
+     */
+    public static final String TARGET_DATASET_KEY = KEY_PREFIX + "target-dataset";
+
+
+    /**
      * The key for the metadata {@code Map<String, String>} to include in a signed ID. This argument should be non-null
      * to indicate that a signed ID should be created and returned to the requester on a POST request.
      */

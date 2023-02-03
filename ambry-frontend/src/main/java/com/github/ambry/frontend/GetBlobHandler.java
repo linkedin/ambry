@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -96,7 +97,7 @@ public class GetBlobHandler {
     RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metricsGroup);
+      accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest, metricsGroup);
     }
     restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
     new CallbackChain(restRequest, restResponseChannel, metricsGroup, requestPath, subResource, options,
@@ -328,9 +329,10 @@ public class GetBlobHandler {
       String datasetName = null;
       String version = null;
       try {
-        accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
-        containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
-        datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
+        Dataset dataset = (Dataset) restRequest.getArgs().get(InternalKeys.TARGET_DATASET_KEY);
+        accountName = dataset.getAccountName();
+        containerName = dataset.getContainerName();
+        datasetName = dataset.getDatasetName();
         version = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_VERSION, false);
         DatasetVersionRecord datasetVersionRecord =
             accountService.getDatasetVersion(accountName, containerName, datasetName, version);

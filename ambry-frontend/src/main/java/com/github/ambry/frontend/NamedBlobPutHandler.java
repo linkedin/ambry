@@ -324,7 +324,7 @@ public class NamedBlobPutHandler {
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
-      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
+      accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest,
           frontendMetrics.putBlobMetricsGroup);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
@@ -376,8 +376,7 @@ public class NamedBlobPutHandler {
     private Map<String, String> getDatasetUserTags(RestRequest restRequest) throws RestServiceException {
       Map<String, String> userTags = null;
       if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
-        //TODO: Can optimize by querying the user tags only.
-        Dataset dataset = getDataset();
+        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET_KEY);
         userTags = dataset.getUserTags();
       }
       return userTags;
@@ -500,17 +499,18 @@ public class NamedBlobPutHandler {
       String datasetName = null;
       String version = null;
       try {
-        accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
-        containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
-        datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
+        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET_KEY);
+        accountName = dataset.getAccountName();
+        containerName = dataset.getContainerName();
+        datasetName = dataset.getDatasetName();
         version = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_VERSION, false);
         long expirationTimeMs =
             Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
-        Dataset dataset =
-            accountService.addDatasetVersion(accountName, containerName, datasetName, version, expirationTimeMs);
+        accountService.addDatasetVersion(accountName, containerName, datasetName, version, expirationTimeMs);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
+        // TODO: support version is null.
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, version);
         frontendMetrics.addDatasetVersionProcessingTimeInMs.update(
             System.currentTimeMillis() - startAddDatasetVersionTime);
