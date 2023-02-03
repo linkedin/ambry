@@ -758,7 +758,7 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
 
     // Add a valid dataset version
-    String version = String.valueOf(1);
+    String version = "1";
     DatasetVersionRecord expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, -1);
     Dataset datasetFromMysql =
@@ -773,7 +773,7 @@ public class MySqlAccountServiceIntegrationTest {
         datasetVersionRecordFromMysql);
 
     // Add a valid dataset version with ttl and get from DB
-    version = String.valueOf(2);
+    version = "2";
     long expirationTimeMs = System.currentTimeMillis();
     expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, expirationTimeMs);
@@ -789,7 +789,7 @@ public class MySqlAccountServiceIntegrationTest {
     Dataset datasetWithTtl = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL,
         Dataset.VersionSchema.TIMESTAMP, expirationTimeMs).setUserTags(userTags).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), datasetWithTtl);
-    version = String.valueOf(3);
+    version = "3";
     expirationTimeMs = System.currentTimeMillis();
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),

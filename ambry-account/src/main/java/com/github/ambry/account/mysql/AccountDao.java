@@ -751,7 +751,13 @@ public class AccountDao {
     switch (versionSchema) {
       case TIMESTAMP:
       case MONOTONIC:
-        return Long.parseLong(version);
+        long versionToLong;
+        try {
+          versionToLong = Long.parseLong(version);
+        } catch (Exception e) {
+          throw new IllegalArgumentException("The version is not numeric, version: " + version);
+        }
+        return versionToLong;
       case SEMANTIC:
         //Given a version number MAJOR.MINOR.PATCH, increment the:
         //1.MAJOR version when you make incompatible API changes

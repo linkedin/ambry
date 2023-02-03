@@ -522,25 +522,5 @@ public class NamedBlobPutHandler {
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
-
-    /**
-     * @return requested dataset.
-     * @throws RestServiceException
-     */
-    private Dataset getDataset() throws RestServiceException {
-      String accountName = null;
-      String containerName = null;
-      String datasetName = null;
-      try {
-        accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
-        containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
-        datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
-        return accountService.getDataset(accountName, containerName, datasetName);
-      } catch (AccountServiceException ex) {
-        throw new RestServiceException(
-            "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "
-                + datasetName, RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
-      }
-    }
   }
 }
