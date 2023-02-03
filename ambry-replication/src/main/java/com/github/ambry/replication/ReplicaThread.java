@@ -2008,12 +2008,16 @@ public class ReplicaThread implements Runnable {
           // Deserialize the request from the given ResponseInfo
           DataInputStream dis = new NettyByteBufDataInputStream(responseInfo.content());
           ReplicaMetadataResponse response = ReplicaMetadataResponse.readFrom(dis, findTokenHelper, clusterMap);
-          if (response.getError() != ServerErrorCode.No_Error) {
+          if (response.getError() != ServerErrorCode.No_Error
+              || response.getReplicaMetadataResponseInfoList().size() != remoteReplicaInfos.size()) {
+            int replicaMetadataResponseInfoListSize = response.getReplicaMetadataResponseInfoList() == null ? 0
+                : response.getReplicaMetadataResponseInfoList().size();
             exchangeMetadataResponseList = Collections.emptyList();
             // Getting error for entire response, something unexpected happened.
             logger.error(
-                "Remote node: {} Thread name: {} RemoteReplicaGroup {} ServerError for ReplicaMetadataResponse {}",
-                remoteDataNode, threadName, id, response.getError());
+                "Remote node: {} Thread name: {} RemoteReplicaGroup {} ServerError for ReplicaMetadataResponse {} "
+                    + "ReplicaMetadataResponseInfoListSize: {} RemoteReplicaInfoSize: {}", remoteDataNode, threadName,
+                id, response.getError(), replicaMetadataResponseInfoListSize, remoteReplicaInfos.size());
             throw new ReplicationException("ReplicaMetadataResponse unexpected error " + response.getError());
           }
           exchangeMetadataResponseList =
