@@ -823,6 +823,15 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * Returns local replica mount path of the partition
+   * @param remoteReplicaInfo Info about remote replica
+   * @return Local replica mount path of the partition
+   */
+  protected String getLocalReplicaPath(RemoteReplicaInfo remoteReplicaInfo) {
+    return remoteReplicaInfo.getLocalReplicaId().getReplicaPath();
+  }
+
+  /**
    * Create a {@link ReplicaMetadataRequest} for given list of replicas in the {@code replicasToReplicaPerNode}.
    * @param replicasToReplicatePerNode The list of {@link RemoteReplicaInfo} that contains the remote replica ids and their tokens.
    * @param remoteNode The remote {@link DataNodeId}.
@@ -835,7 +844,7 @@ public class ReplicaThread implements Runnable {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
           new ReplicaMetadataRequestInfo(remoteReplicaInfo.getReplicaId().getPartitionId(),
               remoteReplicaInfo.getToken(), dataNodeId.getHostname(),
-              remoteReplicaInfo.getLocalReplicaId().getReplicaPath(), remoteReplicaInfo.getReplicaId().getReplicaType(),
+              getLocalReplicaPath(remoteReplicaInfo), remoteReplicaInfo.getReplicaId().getReplicaType(),
               replicationConfig.replicaMetadataRequestVersion);
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",

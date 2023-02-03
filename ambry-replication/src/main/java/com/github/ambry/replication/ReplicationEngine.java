@@ -252,7 +252,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         break;
       }
     }
-    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword)) {
+    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword) &&
+        !replicaPath.startsWith(BackupCheckerThread.DR_Verifier_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
