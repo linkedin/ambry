@@ -56,6 +56,9 @@ public class InMemAccountService implements AccountService {
   private final ScheduledExecutorService scheduler;
   private boolean shouldUpdateSucceed = true;
   private final Map<Pair<String, String>, Map<String, Dataset>> nameToDatasetMap = new HashMap<>();
+  private final Map<Pair<Short, Short>, Map<String, DatasetVersionRecord>> idToDatasetVersionMap = new HashMap<>();
+  private final Map<Pair<Short, Short>, Map<String, Dataset>> idToDatasetMap = new HashMap<>();
+  private Map<String, String> userTags;
 
   /**
    * Constructor.
@@ -123,6 +126,33 @@ public class InMemAccountService implements AccountService {
     account.updateContainerMap(createdContainers);
     updateAccounts(Collections.singletonList(account));
     return createdContainers;
+  }
+
+  @Override
+  public synchronized Dataset addDatasetVersion(String accountName, String containerName, String datasetName,
+      String version, long expirationTimeMs) {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
+    idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
+        .put(datasetName + version,
+            new DatasetVersionRecord(accountId, containerId, datasetName, version, expirationTimeMs));
+    Dataset dataset =
+        new DatasetBuilder(accountName, containerName, datasetName, Dataset.VersionSchema.TIMESTAMP, -1).setUserTags(
+            userTags).build();
+    idToDatasetMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
+    idToDatasetMap.get(new Pair<>(accountId, containerId)).put(dataset.getDatasetName(), dataset);
+    return dataset;
+  }
+
+  @Override
+  public synchronized DatasetVersionRecord getDatasetVersion(String accountName, String containerName,
+      String datasetName, String version) {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    return idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(datasetName + version);
   }
 
   @Override

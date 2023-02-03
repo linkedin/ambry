@@ -22,6 +22,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.Dataset;
 import com.github.ambry.account.DatasetVersionRecord;
+import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -43,6 +44,7 @@ import static com.github.ambry.utils.Utils.*;
 public class AccountDao {
 
   private final MySqlDataAccessor dataAccessor;
+  private final MySqlAccountServiceConfig mySqlAccountServiceConfig;
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   // Account table fields
@@ -92,6 +94,7 @@ public class AccountDao {
   // Dataset table query strings
   private final String insertDatasetSql;
   private final String getDatasetByNameSql;
+  private final String getVersionSchemaSql;
 
   /**
    * Types of MySql statements.
@@ -100,8 +103,9 @@ public class AccountDao {
     Select, Insert, Update, Delete
   }
 
-  public AccountDao(MySqlDataAccessor dataAccessor) {
+  public AccountDao(MySqlDataAccessor dataAccessor, MySqlAccountServiceConfig mySqlAccountServiceConfig) {
     this.dataAccessor = dataAccessor;
+    this.mySqlAccountServiceConfig = mySqlAccountServiceConfig;
     insertAccountsSql =
         String.format("insert into %s (%s, %s, %s, %s) values (?, ?, now(3), now(3))", ACCOUNT_TABLE, ACCOUNT_INFO,
             VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
@@ -136,6 +140,9 @@ public class AccountDao {
     getDatasetByNameSql =
         String.format("select %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
             VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID,
+            CONTAINER_ID, DATASET_NAME);
+    getVersionSchemaSql =
+        String.format("select %s from %s where %s = ? and %s = ? and %s = ?", VERSION_SCHEMA, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
     insertDatasetVersionSql = String.format("insert into %s (%s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?)",
         DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, LAST_MODIFIED_TIME, DELETE_TS);
@@ -306,16 +313,18 @@ public class AccountDao {
    * @throws SQLException
    */
   public synchronized Dataset addDatasetVersions(int accountId, int containerId, String accountName,
-      String containerName, String datasetName, long version, long expirationTimeMs) throws SQLException {
+      String containerName, String datasetName, String version, long expirationTimeMs) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
+      Dataset dataset =
+          getDatasetMetadata(accountId, containerId, accountName, containerName, datasetName, expirationTimeMs);
       dataAccessor.getDatabaseConnection(true);
       PreparedStatement insertDatasetVersionStatement =
           dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
-      Dataset dataset =
-          getDatasetMetadata(accountId, containerId, accountName, containerName, datasetName, expirationTimeMs);
-      executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, datasetName, version,
-          expirationTimeMs, dataset);
+      //TODO: if version == null, add the latest version from db + 1.
+      long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
+      executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, datasetName,
+          versionNumber, expirationTimeMs, dataset);
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
       return dataset;
     } catch (SQLException e) {
@@ -334,14 +343,20 @@ public class AccountDao {
    * @throws SQLException
    */
   public synchronized DatasetVersionRecord getDatasetVersions(short accountId, short containerId, String datasetName,
-      long version) throws SQLException {
+      String version) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
+      PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, false);
+      Dataset.VersionSchema versionSchema =
+          executeGetVersionSchema(getVersionSchemaStatement, accountId, containerId, datasetName);
       dataAccessor.getDatabaseConnection(false);
       PreparedStatement getDatasetVersionStatement =
           dataAccessor.getPreparedStatement(getDatasetVersionByNameSql, false);
+      //TODO: if version == null, get the latest version from db + 1.
+      long versionValue = getVersionBasedOnSchema(version, versionSchema);
       DatasetVersionRecord result =
-          executeGetDatasetVersionStatement(getDatasetVersionStatement, accountId, containerId, datasetName, version);
+          executeGetDatasetVersionStatement(getDatasetVersionStatement, accountId, containerId, datasetName,
+              versionValue, version);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return result;
     } catch (SQLException e) {
@@ -696,24 +711,121 @@ public class AccountDao {
   }
 
   /**
+   * Get version schema corresponding to the dataset.
+   * @param statement the mysql statement to get the version schema of the dataset.
+   * @param accountId the id of the parent account.
+   * @param containerId the if of the container.
+   * @param datasetName the name of the dataset.
+   * @return the name of the dataset.
+   * @throws SQLException
+   */
+  private Dataset.VersionSchema executeGetVersionSchema(PreparedStatement statement, int accountId, int containerId,
+      String datasetName) throws SQLException {
+    ResultSet resultSet = null;
+    Dataset.VersionSchema versionSchema;
+    try {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, datasetName);
+      resultSet = statement.executeQuery();
+      if (!resultSet.next()) {
+        throw new SQLException(
+            "Version Schema not found for account: " + accountId + " container: " + containerId + " dataset: "
+                + datasetName);
+      }
+      versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
+    } finally {
+      //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
+      closeQuietly(resultSet);
+    }
+    return versionSchema;
+  }
+
+  /**
+   * Convert string version to long value.
+   * @param version The string version.
+   * @param versionSchema The {@link com.github.ambry.account.Dataset.VersionSchema} of the dataset.
+   * @return the long value of version.
+   */
+  private long getVersionBasedOnSchema(String version, Dataset.VersionSchema versionSchema) {
+    switch (versionSchema) {
+      case TIMESTAMP:
+      case MONOTONIC:
+        long versionToLong;
+        try {
+          versionToLong = Long.parseLong(version);
+        } catch (Exception e) {
+          throw new IllegalArgumentException("The version is not numeric, version: " + version);
+        }
+        return versionToLong;
+      case SEMANTIC:
+        //Given a version number MAJOR.MINOR.PATCH, increment the:
+        //1.MAJOR version when you make incompatible API changes
+        //2.MINOR version when you add functionality in a backwards compatible manner
+        //3.PATCH version when you make backwards compatible bug fixes
+        //The MAJOR,MINOR and PATCH version are non-negative value.
+        return sanityCheckAndConvertSemanticVersion(version);
+      default:
+        throw new IllegalArgumentException("Unsupported version schema: " + versionSchema);
+    }
+  }
+
+  /**
+   * Sanity check for semantic version.
+   * @param version The version from request.
+   * @return the converted version which will be stored in DatasetVersions DB.
+   */
+  private long sanityCheckAndConvertSemanticVersion(String version) {
+    long majorVersion;
+    long minorVersion;
+    long patchVersion;
+    try {
+      String[] versionArray = version.split("[.]", 3);
+      patchVersion = Long.parseLong(versionArray[2]);
+      minorVersion = Long.parseLong(versionArray[1]);
+      majorVersion = Long.parseLong(versionArray[0]);
+      if (patchVersion < 0 || minorVersion < 0 || majorVersion < 0) {
+        throw new IllegalArgumentException(
+            "The major, minor or patch version is less than 0, major version: " + majorVersion + " minor version: "
+                + minorVersion + " patch version: " + patchVersion);
+      }
+      if (patchVersion > 999 || minorVersion > 999) {
+        throw new IllegalArgumentException(
+            "The minor or patch version exceeded max allowed number: 999, minor version: " + minorVersion
+                + " patch version: " + patchVersion);
+      }
+      //We set the max major version same as patch and minor version based on current use cases.
+      if (majorVersion > mySqlAccountServiceConfig.maxMajorVersionForSemanticSchemaDataset) {
+        throw new IllegalArgumentException("The major version exceeded max allowed number: "
+            + mySqlAccountServiceConfig.maxMajorVersionForSemanticSchemaDataset + " major version: " + majorVersion);
+      }
+    } catch (Exception e) {
+      throw new IllegalArgumentException(
+          "Version does not match the semantic version format MAJOR.MINOR.PATCH, version: " + version);
+    }
+    return majorVersion * 1000000 + minorVersion * 1000 + patchVersion;
+  }
+
+  /**
    * Execute the get dataset version statement to get the dataset version.
    * @param statement the mysql statement to get dataset version.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
    * @param datasetName the name of the dataset.
-   * @param version the version of the dataset.
+   * @param versionValue the version long value of the dataset.
+   * @param version the String type version of the dataset.
    * @return the {@link DatasetVersionRecord}
    * @throws SQLException
    */
   private DatasetVersionRecord executeGetDatasetVersionStatement(PreparedStatement statement, short accountId,
-      short containerId, String datasetName, long version) throws SQLException {
+      short containerId, String datasetName, long versionValue, String version) throws SQLException {
     ResultSet resultSet = null;
     Timestamp deletionTime;
     try {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
-      statement.setLong(4, version);
+      statement.setLong(4, versionValue);
       resultSet = statement.executeQuery();
       resultSet.next();
       deletionTime = resultSet.getTimestamp(DELETE_TS);

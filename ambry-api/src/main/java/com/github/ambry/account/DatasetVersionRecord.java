@@ -24,7 +24,7 @@ public class DatasetVersionRecord {
   private final int accountId;
   private final int containerId;
   private final String datasetName;
-  private final long version;
+  private final String version;
   private final long expirationTimeMs;
 
   /**
@@ -35,7 +35,7 @@ public class DatasetVersionRecord {
    * @param version the version of the dataset.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    */
-  public DatasetVersionRecord(int accountId, int containerId, String datasetName, long version, long expirationTimeMs) {
+  public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version, long expirationTimeMs) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.datasetName = datasetName;
@@ -67,7 +67,7 @@ public class DatasetVersionRecord {
   /**
    * @return the version of the dataset.
    */
-  public long getVersion() {
+  public String getVersion() {
     return version;
   }
 
@@ -88,7 +88,7 @@ public class DatasetVersionRecord {
     }
     DatasetVersionRecord record = (DatasetVersionRecord) o;
     return accountId == record.accountId && containerId == record.containerId && Objects.equals(datasetName,
-        record.datasetName) && version == record.version && expirationTimeMs == record.expirationTimeMs;
+        record.datasetName) && Objects.equals(version, record.version) && expirationTimeMs == record.expirationTimeMs;
   }
 
   @Override

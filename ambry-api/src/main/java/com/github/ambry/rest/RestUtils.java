@@ -170,6 +170,10 @@ public class RestUtils {
      */
     public final static String TARGET_DATASET_NAME = "x-ambry-target-dataset-name";
     /**
+     * for put or get dataset request; long; version of dataset.
+     */
+    public final static String TARGET_DATASET_VERSION = "x-ambry-target-dataset-version";
+    /**
      * optional in request; date string; default unset ("infinite ttl")
      */
     public final static String TTL = "x-ambry-ttl";
@@ -238,6 +242,10 @@ public class RestUtils {
      * stitched together.
      */
     public static final String CHUNK_UPLOAD = "x-ambry-chunk-upload";
+    /**
+     * Boolean field set to "true" to enable dataset version upload
+     */
+    public static final String DATASET_VERSION_UPLOAD = "x-ambry-dataset-version-upload";
     /**
      * It is set to a string that differentiate STITCH vs regular upload named blob. If it set to "STITCH", it indicate that this is the a stitch upload.
      */
@@ -362,6 +370,12 @@ public class RestUtils {
      * The key for the target {@link com.github.ambry.account.Container} indicated by the request.
      */
     public static final String TARGET_CONTAINER_KEY = KEY_PREFIX + "target-container";
+
+    /**
+     * The key for the target {@link com.github.ambry.account.Dataset} indicated by the request.
+     */
+    public static final String TARGET_DATASET_KEY = KEY_PREFIX + "target-dataset";
+
 
     /**
      * The key for the metadata {@code Map<String, String>} to include in a signed ID. This argument should be non-null
@@ -833,6 +847,16 @@ public class RestUtils {
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false);
+  }
+
+  /**
+   * Determine if {@link Headers#DATASET_VERSION_UPLOAD} is set in the request args.
+   * @param args The request arguments.
+   * @return {@code true} if {@link Headers#DATASET_VERSION_UPLOAD} is set.
+   * @throws RestServiceException
+   */
+  public static boolean isDatasetUpload(Map<String, Object> args) throws RestServiceException {
+    return getBooleanHeader(args, Headers.DATASET_VERSION_UPLOAD, false);
   }
 
   /**

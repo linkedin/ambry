@@ -413,6 +413,41 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
+  public Dataset addDatasetVersion(String accountName, String containerName, String datasetName, String version,
+      long expirationTimeMs) throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      return mySqlAccountStore.addDatasetVersion(accountId, containerId, accountName, containerName, datasetName,
+          version, expirationTimeMs);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public DatasetVersionRecord getDatasetVersion(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      return mySqlAccountStore.getDatasetVersion(accountId, containerId, datasetName, version);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
   protected void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
       throws AccountServiceException {
     try {

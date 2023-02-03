@@ -47,7 +47,7 @@ public class MySqlAccountStore {
   public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics,
       MySqlAccountServiceConfig config) throws SQLException {
     mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
-    accountDao = new AccountDao(mySqlDataAccessor);
+    accountDao = new AccountDao(mySqlDataAccessor, config);
     this.config = config;
   }
 
@@ -159,7 +159,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public Dataset addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
-      String datasetName, long version, long expirationTimeMs) throws SQLException {
+      String datasetName, String version, long expirationTimeMs) throws SQLException {
     return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
         expirationTimeMs);
   }
@@ -174,7 +174,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String datasetName,
-      long version) throws SQLException {
+      String version) throws SQLException {
     return  accountDao.getDatasetVersions(accountId, containerId, datasetName, version);
   }
 

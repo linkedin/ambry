@@ -168,7 +168,7 @@ class FrontendRestRequestService implements RestRequestService {
 
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
-            frontendMetrics, clusterMap, quotaManager);
+            frontendMetrics, clusterMap, quotaManager, accountService);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
             SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName, quotaManager);
@@ -188,8 +188,9 @@ class FrontendRestRequestService implements RestRequestService {
 
     namedBlobListHandler =
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
-    namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
-        accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager);
+    namedBlobPutHandler =
+        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, accountAndContainerInjector,
+            frontendConfig, frontendMetrics, clusterName, quotaManager, accountService);
 
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);

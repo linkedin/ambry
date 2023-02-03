@@ -68,6 +68,8 @@ public class MySqlAccountServiceIntegrationTest {
   private MySqlAccountService mySqlAccountService;
   private static final String DATASET_NAME = "testDataset";
   private static final String DATASET_NAME_WITH_TTL = "testDatasetWithTtl";
+  private static final String DATASET_NAME_WITH_SEMANTIC = "testDatasetWithSemantic";
+
 
   public MySqlAccountServiceIntegrationTest() throws Exception {
     mySqlConfigProps = Utils.loadPropsFromResource("mysql.properties");
@@ -749,15 +751,14 @@ public class MySqlAccountServiceIntegrationTest {
     Map<String, String> userTags = new HashMap<>();
     userTags.put("userTag", "tagValue");
 
-    Dataset dataset =
-        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME, Dataset.VersionSchema.SEMANTIC,
-            -1).setUserTags(userTags).build();
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME,
+        Dataset.VersionSchema.MONOTONIC, -1).setUserTags(userTags).build();
 
     // Add a dataset to db
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
 
     // Add a valid dataset version
-    int version = 1;
+    String version = "1";
     DatasetVersionRecord expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, -1);
     Dataset datasetFromMysql =
@@ -772,7 +773,7 @@ public class MySqlAccountServiceIntegrationTest {
         datasetVersionRecordFromMysql);
 
     // Add a valid dataset version with ttl and get from DB
-    version = 2;
+    version = "2";
     long expirationTimeMs = System.currentTimeMillis();
     expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, expirationTimeMs);
@@ -788,7 +789,7 @@ public class MySqlAccountServiceIntegrationTest {
     Dataset datasetWithTtl = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL,
         Dataset.VersionSchema.TIMESTAMP, expirationTimeMs).setUserTags(userTags).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), datasetWithTtl);
-    version = 3;
+    version = "3";
     expirationTimeMs = System.currentTimeMillis();
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
@@ -798,13 +799,45 @@ public class MySqlAccountServiceIntegrationTest {
       // do nothing
     }
     // Add a permanent dataset version, it should inherit from dataset level ttl.
-    version = 4;
+    version = String.valueOf(4);
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME_WITH_TTL, version, -1);
     DatasetVersionRecord datasetVersionRecordWithTtl =
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL, version);
     assertEquals("Mismatch in dataset expirationTimeMs", (long) datasetWithTtl.getExpirationTimeMs(),
         datasetVersionRecordWithTtl.getExpirationTimeMs());
+
+    //Test semantic version.
+    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC,
+        Dataset.VersionSchema.SEMANTIC, -1).setUserTags(userTags).build();
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+    version = "1.2.4";
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+    DatasetVersionRecord datasetVersionRecordWithSemanticVersion =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC,
+            version);
+    assertEquals("Mismatch in dataset version", version, datasetVersionRecordWithSemanticVersion.getVersion());
+
+    // Add dataset version for non-existing dataset.
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), "NonExistingDataset", version, -1);
+      fail("Add dataset version should fail without dataset");
+    } catch (SQLException e) {
+      // do nothing
+    }
+
+    // Add dataset version which didn't follow the semantic format.
+    version = "1.2";
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+      fail("Add dataset version should fail with wrong format of semantic version");
+    } catch (IllegalArgumentException e) {
+      // do nothing
+    }
   }
 
   private Account makeTestAccountWithContainer() {

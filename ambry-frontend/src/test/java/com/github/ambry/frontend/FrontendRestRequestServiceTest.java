@@ -42,6 +42,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.named.PutResult;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.QuotaMetrics;
@@ -69,6 +70,7 @@ import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.PutBlobOptions;
@@ -125,6 +127,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -136,6 +139,9 @@ import static org.mockito.Mockito.*;
 public class FrontendRestRequestServiceTest {
   private final static QuotaManager QUOTA_MANAGER;
   private final static String CLUSTER_NAME = "ambry-test";
+  private static final String NAMED_BLOB_PREFIX = "/named";
+  private static final String SLASH = "/";
+  private static final String DATASET_NAME = "testDataset";
 
   static {
     try {
@@ -180,7 +186,6 @@ public class FrontendRestRequestServiceTest {
   private AccountAndContainerInjector accountAndContainerInjector;
   private final String SECURE_PATH_PREFIX = "secure-path";
   private final int CONTENT_LENGTH = 1024;
-  private static final String DATASET_NAME = "testDataset";
 
   /**
    * Sets up the {@link FrontendRestRequestService} instance before a test.
@@ -509,6 +514,105 @@ public class FrontendRestRequestServiceTest {
         Container.DEFAULT_PUBLIC_CONTAINER);
     doPostGetHeadUpdateDeleteUndeleteTest(null, null, "unknown_service_id", true, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PRIVATE_CONTAINER);
+  }
+
+  /**
+   * Test add and get dataset version.
+   * @throws Exception
+   */
+  @Test
+  public void addAndGetDatasetVersionTest() throws Exception {
+    //Add dataset
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    Dataset.VersionSchema versionSchema = Dataset.VersionSchema.TIMESTAMP;
+    Map<String, String> userTags = new HashMap<>();
+    String userTagKey = USER_META_DATA_HEADER_PREFIX + "tag";
+    userTags.put(userTagKey, "tagValues");
+
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME, versionSchema, -1).setUserTags(
+            userTags).build();
+    byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    RestRequest restRequest =
+        createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+
+    // Add dataset version
+    Long version = System.currentTimeMillis();
+    String blobName = SLASH + DATASET_NAME;
+    String namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + blobName;
+    int contentLength = 10;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentLength));
+    body = new LinkedList<>();
+    body.add(content);
+    body.add(null);
+
+    long blobTtl = 7200;
+    String serviceId = "test";
+    String contentType = "application/octet-stream";
+    String ownerId = "owner";
+    String userMetadataKey = USER_META_DATA_ENCODED_HEADER_PREFIX + "userMetadata";
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, blobTtl, testContainer.isCacheable(), serviceId, contentType, ownerId, null, null,
+        null);
+    headers.put(RestUtils.Headers.TARGET_DATASET_VERSION, version);
+    headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
+    headers.put(userMetadataKey, "userMetadataValue");
+    restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+
+    List<? extends PartitionId> partitions = clusterMap.getWritablePartitionIds(null);
+    String blobId =
+        new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, testAccount.getId(),
+            testContainer.getId(), partitions.get(ThreadLocalRandom.current().nextInt(partitions.size())), false,
+            BlobId.BlobDataType.DATACHUNK).getID();
+
+    reset(namedBlobDb);
+    NamedBlobRecord namedBlobRecord =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName + SLASH + version, blobId, Utils.Infinite_Time);
+    when(namedBlobDb.put(any(), any(), any())).thenReturn(
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
+
+    // Issue put dataset version request
+    doOperation(restRequest, restResponseChannel);
+    String blobIdFromResponse = (String) restResponseChannel.getResponseHeaders().get(RestUtils.Headers.LOCATION);
+    Map<String, InMemoryRouter.InMemoryBlob> allBlobs = router.getActiveBlobs();
+    Map<String, String> userMetadataFromRouter =
+        RestUtils.buildUserMetadata(allBlobs.values().iterator().next().getUserMetadata());
+    assertEquals("Unexpected PUT /DatasetVersions response", blobId, blobIdFromResponse);
+    assertEquals("Unexpected userMetadata", userTags.get(userTagKey), userMetadataFromRouter.get(userTagKey));
+
+    // Prepare the input and mock class
+    BlobProperties blobProperties =
+        new BlobProperties(0, testAccount.getName(), "owner", "image/gif", false, Utils.Infinite_Time,
+            testAccount.getId(), testContainer.getId(), false, null, null, null);
+    ReadableStreamChannel byteBufferContent = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(contentLength));
+    String blobIdFromRouter =
+        router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
+    reset(namedBlobDb);
+    namedBlobRecord =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName + SLASH + version, blobIdFromRouter,
+            Utils.Infinite_Time);
+    when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.TARGET_DATASET_VERSION, version);
+    headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
+    restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri, headers, null);
+    restResponseChannel = new MockRestResponseChannel();
+
+    //Issue get dataset version request
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected GET /DatasetVersions response content length", contentLength,
+        restResponseChannel.getResponseBody().length);
   }
 
   /**

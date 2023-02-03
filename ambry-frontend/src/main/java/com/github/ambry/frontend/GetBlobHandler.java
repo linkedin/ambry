@@ -13,6 +13,10 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -26,7 +30,9 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -52,6 +58,8 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 public class GetBlobHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(GetBlobHandler.class);
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+  private static final String NAMED_BLOB_PREFIX = "/named";
+  private static final String SLASH = "/";
   static final String BLOB_CHUNK_IDS_KEY = "blobChunkIds";
 
   private final FrontendConfig frontendConfig;
@@ -63,10 +71,11 @@ public class GetBlobHandler {
   private final ClusterMap clusterMap;
   private final QuotaManager quotaManager;
   private final GetReplicasHandler getReplicasHandler;
+  private final AccountService accountService;
 
   GetBlobHandler(FrontendConfig frontendConfig, Router router, SecurityService securityService, IdConverter idConverter,
       AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
-      QuotaManager quotaManager) {
+      QuotaManager quotaManager, AccountService accountService) {
     this.frontendConfig = frontendConfig;
     this.router = router;
     this.securityService = securityService;
@@ -76,6 +85,7 @@ public class GetBlobHandler {
     this.clusterMap = clusterMap;
     this.quotaManager = quotaManager;
     getReplicasHandler = new GetReplicasHandler(metrics, clusterMap);
+    this.accountService = accountService;
   }
 
   void handle(RequestPath requestPath, RestRequest restRequest, RestResponseChannel restResponseChannel,
@@ -87,7 +97,7 @@ public class GetBlobHandler {
     RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-      accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest, metricsGroup);
+      accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest, metricsGroup);
     }
     restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
     new CallbackChain(restRequest, restResponseChannel, metricsGroup, requestPath, subResource, options,
@@ -134,7 +144,18 @@ public class GetBlobHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.getBlobSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = requestPath.getOperationOrBlobId(false);
+        String blobIdStr;
+        if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
+          try {
+            metrics.getDatasetVersionRate.mark();
+            blobIdStr = getDatasetVersion(restRequest);
+          } catch (RestServiceException e) {
+            metrics.getDatasetVersionError.inc();
+            throw e;
+          }
+        } else {
+          blobIdStr = requestPath.getOperationOrBlobId(false);
+        }
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -293,6 +314,42 @@ public class GetBlobHandler {
         }
       }
       return FrontendUtils.serializeJsonToChannel(jsonObject);
+    }
+
+    /**
+     * Support get dataset version queries before get the named blob.
+     * @param restRequest {@link RestRequest} representing the request.
+     * @return the named blob path uri corresponding to the dataset version.
+     * @throws RestServiceException
+     */
+    private String getDatasetVersion(RestRequest restRequest) throws RestServiceException {
+      long startGetDatasetVersionTime = System.currentTimeMillis();
+      String accountName = null;
+      String containerName = null;
+      String datasetName = null;
+      String version = null;
+      try {
+        Dataset dataset = (Dataset) restRequest.getArgs().get(InternalKeys.TARGET_DATASET_KEY);
+        accountName = dataset.getAccountName();
+        containerName = dataset.getContainerName();
+        datasetName = dataset.getDatasetName();
+        version = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_VERSION, false);
+        DatasetVersionRecord datasetVersionRecord =
+            accountService.getDatasetVersion(accountName, containerName, datasetName, version);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
+        metrics.getDatasetVersionProcessingTimeInMs.update(System.currentTimeMillis() - startGetDatasetVersionTime);
+        // If version is null, use the latest version + 1 from DatasetVersionRecord to construct named blob path.
+        return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
+            + datasetVersionRecord.getVersion();
+      } catch (AccountServiceException ex) {
+        throw new RestServiceException(
+            "Failed to get dataset version for accountName: " + accountName + " containerName: " + containerName
+                + " datasetName: " + datasetName + " version: " + version,
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      }
     }
   }
 }
