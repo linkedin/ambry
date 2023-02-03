@@ -179,6 +179,18 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Get the latest version value of the dataset versions.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @return the latest version of the dataset.
+   * @throws SQLException
+   */
+  public long getLatestVersion(short accountId, short containerId, String datasetName) throws SQLException {
+    return accountDao.getLatestVersion(accountId, containerId, datasetName);
+  }
+
+  /**
    * Helper method to close the active connection, if there is one.
    */
   public void closeConnection() {
