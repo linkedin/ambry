@@ -310,6 +310,7 @@ public class StorageManagerTest {
     storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).shutdown();
     try {
       mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+      fail("should fail due to disk is down");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
@@ -345,6 +346,16 @@ public class StorageManagerTest {
     assertTrue("There should be a bootstrap file because store is empty and probably recreated",
         localStore.isBootstrapInProgress());
     assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP, localStore.getCurrentState());
+
+    // 8. test that when an existing store is already leader or standby, state transition is not going to change it
+    // back to BOOTSTRAP
+    storageManager.getStore(localReplicas.get(0).getPartitionId()).setCurrentState(ReplicaState.STANDBY);
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
+    assertEquals("The store's current state should be STANDBY", ReplicaState.STANDBY, localStore.getCurrentState());
+    storageManager.getStore(localReplicas.get(0).getPartitionId()).setCurrentState(ReplicaState.LEADER);
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
+    assertEquals("The store's current state should be LEADER", ReplicaState.LEADER, localStore.getCurrentState());
+
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 

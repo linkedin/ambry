@@ -36,6 +36,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
@@ -104,8 +105,8 @@ public class HelixClusterManager implements ClusterMap {
   private final Map<String, ReplicaId> bootstrapReplicas = new ConcurrentHashMap<>();
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStoreInLocalDc = null;
   // The current xid currently does not change after instantiation. This can change in the future, allowing the cluster
-  // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
-  // reflects the current value.
+// manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
+// reflects the current value.
   private final AtomicLong currentXid;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private HelixAggregatedViewClusterInfo helixAggregatedViewClusterInfo = null;
@@ -1132,7 +1133,9 @@ public class HelixClusterManager implements ClusterMap {
         ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
         for (IdealState state : idealStates) {
           String resourceName = state.getResourceName();
-          state.getPartitionSet().forEach(partitionName -> partitionToResourceMap.put(partitionName, resourceName));
+          state.getPartitionSet()
+              .forEach(partitionName -> partitionToResourceMap.compute(partitionName,
+                  resourceNameReplaceFunc(resourceName)));
         }
         partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
       } else {
@@ -1152,17 +1155,51 @@ public class HelixClusterManager implements ClusterMap {
         logger.warn(
             "Partition to resource mapping for individual dc (non-aggregated view) would be built from ideal states");
       } else {
+        Map<String, Map<String, String>> partitionToDCToResourceNames = new HashMap<>();
         // Rebuild the partition-to-resource map across all data centers
-        ConcurrentHashMap<String, Set<String>> partitionToResourceNames = new ConcurrentHashMap<>();
         for (ExternalView externalView : externalViews) {
           String resourceName = externalView.getResourceName();
-          externalView.getPartitionSet().forEach(partitionName -> {
-            Set<String> resourceNames = partitionToResourceNames.computeIfAbsent(partitionName, k -> new HashSet<>());
-            resourceNames.add(resourceName);
-          });
+          for (String partitionId : externalView.getPartitionSet()) {
+            // This is a map from instanceName to state
+            Map<String, String> stateMap = externalView.getStateMap(partitionId);
+            for (String instanceName : stateMap.keySet()) {
+              AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
+              if (dataNode != null) {
+                String dc = dataNode.getDatacenterName();
+                partitionToDCToResourceNames.computeIfAbsent(partitionId, k -> new HashMap<>())
+                    .compute(dc, resourceNameReplaceFunc(resourceName));
+              }
+            }
+          }
+        }
+        ConcurrentHashMap<String, Set<String>> partitionToResourceNames = new ConcurrentHashMap<>();
+        for (Map.Entry<String, Map<String, String>> entry : partitionToDCToResourceNames.entrySet()) {
+          partitionToResourceNames.put(entry.getKey(), new HashSet<>(entry.getValue().values()));
         }
         globalPartitionToResourceNamesRef.set(partitionToResourceNames);
       }
+    }
+
+    /**
+     * Return a BiFunction to replace resource name for partition.
+     * @param resourceName The new resource name.
+     * @param <K> The Key of the map.
+     * @return A BiFunction to replace resource name for partition.
+     */
+    private <K> BiFunction<K, String, String> resourceNameReplaceFunc(String resourceName) {
+      return (k, s) -> {
+        if (s == null || s.equals(resourceName)) {
+          return resourceName;
+        }
+        try {
+          int newId = Integer.valueOf(resourceName);
+          int oldId = Integer.valueOf(s);
+          return newId > oldId ? resourceName : s;
+        } catch (Exception e) {
+          logger.error("Failed to parse resource name to an integer", e);
+          throw new IllegalArgumentException("Failed to parse resource name to an integer", e);
+        }
+      };
     }
 
     /**

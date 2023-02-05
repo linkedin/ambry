@@ -292,6 +292,11 @@ public class MockHelixAdmin implements HelixAdmin {
     triggerInstanceConfigChangeNotification(tagAsInit);
   }
 
+  void removeResourceIdealState(String clusterName, String resourceName) {
+    resourcesToIdealStates.remove(resourceName);
+    resourceToResourceInfoMap.remove(resourceName);
+  }
+
   /**
    * Add new resource and its associated ideal state into cluster (Note that, each dc has its own HelixAdmin so resource
    * is actually added into dc where current HelixAdmin sits). This would trigger ideal state change which should be captured
