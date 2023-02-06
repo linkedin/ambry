@@ -545,6 +545,7 @@ public class HelixParticipantTest {
     }
     instanceConfig.getRecord().setMapFields(mountPathToDiskInfos);
     instanceConfig.getRecord().setListField(SEALED_STR, new ArrayList<>(dataNodeConfig.getSealedReplicas()));
+    instanceConfig.getRecord().setListField(PARTIALLY_SEALED_STR, new ArrayList<>(dataNodeConfig.getSealedReplicas()));
     instanceConfig.getRecord().setListField(STOPPED_REPLICAS_STR, new ArrayList<>(dataNodeConfig.getStoppedReplicas()));
     instanceConfig.getRecord()
         .setListField(DISABLED_REPLICAS_STR, new ArrayList<>(dataNodeConfig.getDisabledReplicas()));
