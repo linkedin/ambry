@@ -158,7 +158,7 @@ public class MySqlAccountStore {
    * @return the corresponding {@link Dataset}
    * @throws SQLException
    */
-  public Dataset addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
+  public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
       String datasetName, String version, long expirationTimeMs) throws SQLException {
     return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
         expirationTimeMs);

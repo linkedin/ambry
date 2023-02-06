@@ -546,7 +546,7 @@ public class FrontendRestRequestServiceTest {
 
     // Add dataset version
     Long version = System.currentTimeMillis();
-    String blobName = SLASH + DATASET_NAME;
+    String blobName = SLASH + DATASET_NAME + SLASH + version;
     String namedBlobPathUri =
         NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + blobName;
     int contentLength = 10;
@@ -563,7 +563,6 @@ public class FrontendRestRequestServiceTest {
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, blobTtl, testContainer.isCacheable(), serviceId, contentType, ownerId, null, null,
         null);
-    headers.put(RestUtils.Headers.TARGET_DATASET_VERSION, version);
     headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
     headers.put(userMetadataKey, "userMetadataValue");
     restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
@@ -590,7 +589,21 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Unexpected PUT /DatasetVersions response", blobId, blobIdFromResponse);
     assertEquals("Unexpected userMetadata", userTags.get(userTagKey), userMetadataFromRouter.get(userTagKey));
 
+    // Add a dataset version without version specified.
+    namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + DATASET_NAME;
+    try {
+      restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
+      restResponseChannel = new MockRestResponseChannel();
+      doOperation(restRequest, restResponseChannel);
+      fail("Should fail due to version has not been provided.");
+    } catch (Exception e) {
+      // no op
+    }
+
     // Prepare the input and mock class
+    namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + blobName;
     BlobProperties blobProperties =
         new BlobProperties(0, testAccount.getName(), "owner", "image/gif", false, Utils.Infinite_Time,
             testAccount.getId(), testContainer.getId(), false, null, null, null);
@@ -604,7 +617,6 @@ public class FrontendRestRequestServiceTest {
     when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
 
     headers = new JSONObject();
-    headers.put(RestUtils.Headers.TARGET_DATASET_VERSION, version);
     headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
     restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri, headers, null);
     restResponseChannel = new MockRestResponseChannel();

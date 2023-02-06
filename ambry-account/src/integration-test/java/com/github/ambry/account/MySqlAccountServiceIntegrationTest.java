@@ -764,13 +764,13 @@ public class MySqlAccountServiceIntegrationTest {
     versions.add(versionNumber);
     DatasetVersionRecord expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, -1);
-    Dataset datasetFromMysql =
+    DatasetVersionRecord datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME, version, -1);
-    assertEquals("Mismatch in dataset read from db", dataset, datasetFromMysql);
+    assertEquals("Mismatch in dataset read from db", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     // Get the dataset version
-    DatasetVersionRecord datasetVersionRecordFromMysql =
+    datasetVersionRecordFromMysql =
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, version);
     assertEquals("Mismatch in dataset version read from db", expectedDatasetVersionRecord,
         datasetVersionRecordFromMysql);

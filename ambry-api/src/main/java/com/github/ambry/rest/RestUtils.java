@@ -59,7 +59,6 @@ public class RestUtils {
    * The default extension to add to blob id returned back to client.
    */
   public static final String DEFAULT_EXTENSION = "bin";
-
   /**
    * Ambry specific HTTP headers.
    */
@@ -376,6 +375,10 @@ public class RestUtils {
      */
     public static final String TARGET_DATASET_KEY = KEY_PREFIX + "target-dataset";
 
+    /**
+     * The key for the target dataset version indicated by the request.
+     */
+    public static final String TARGET_DATASET_VERSION_KEY = KEY_PREFIX + "target-dataset-version-key";
 
     /**
      * The key for the metadata {@code Map<String, String>} to include in a signed ID. This argument should be non-null
@@ -855,7 +858,7 @@ public class RestUtils {
    * @return {@code true} if {@link Headers#DATASET_VERSION_UPLOAD} is set.
    * @throws RestServiceException
    */
-  public static boolean isDatasetUpload(Map<String, Object> args) throws RestServiceException {
+  public static boolean isDatasetVersionUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.DATASET_VERSION_UPLOAD, false);
   }
 

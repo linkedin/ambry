@@ -145,7 +145,7 @@ public class GetBlobHandler {
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.getBlobSecurityProcessRequestMetrics, result -> {
         String blobIdStr;
-        if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
+        if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
           try {
             metrics.getDatasetVersionRate.mark();
             blobIdStr = getDatasetVersion(restRequest);
@@ -333,9 +333,10 @@ public class GetBlobHandler {
         accountName = dataset.getAccountName();
         containerName = dataset.getContainerName();
         datasetName = dataset.getDatasetName();
-        version = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_VERSION, false);
+        version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION_KEY);
         DatasetVersionRecord datasetVersionRecord =
             accountService.getDatasetVersion(accountName, containerName, datasetName, version);
+        FrontendUtils.refreshRequestPathWithNewOperationOrBlobIdIfNeeded(restRequest, datasetVersionRecord, version);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
