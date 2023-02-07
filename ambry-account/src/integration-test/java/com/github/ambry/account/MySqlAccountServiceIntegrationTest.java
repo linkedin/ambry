@@ -36,8 +36,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -63,6 +66,10 @@ public class MySqlAccountServiceIntegrationTest {
   private MySqlAccountStore mySqlAccountStore;
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
+  private static final String DATASET_NAME = "testDataset";
+  private static final String DATASET_NAME_WITH_TTL = "testDatasetWithTtl";
+  private static final String DATASET_NAME_WITH_SEMANTIC = "testDatasetWithSemantic";
+
 
   public MySqlAccountServiceIntegrationTest() throws Exception {
     mySqlConfigProps = Utils.loadPropsFromResource("mysql.properties");
@@ -711,6 +718,139 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
   }
 
+  /**
+   * Test adding and getting dataset.
+   * @throws Exception
+   */
+  @Test
+  public void testAddAndGetDatasets() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Map<String, String> userTags = new HashMap<>();
+    userTags.put("userTag", "tagValue");
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME,
+        Dataset.VersionSchema.TIMESTAMP, -1).setUserTags(userTags).build();
+    // Add dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // query db and check
+    Dataset datasetFromMysql =
+        mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME);
+
+    assertEquals("Mistmatch in dataset read from db", dataset, datasetFromMysql);
+  }
+
+  /**
+   * Test add and get dataset version with different input.
+   */
+  @Test
+  public void testAddAndGetDatasetVersion() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Map<String, String> userTags = new HashMap<>();
+    List<Long> versions = new ArrayList<>();
+    userTags.put("userTag", "tagValue");
+
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME,
+        Dataset.VersionSchema.MONOTONIC, -1).setUserTags(userTags).build();
+
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // Add a valid dataset version
+    long versionNumber = 1;
+    String version = String.valueOf(versionNumber);
+    versions.add(versionNumber);
+    DatasetVersionRecord expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, -1);
+    Dataset datasetFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version, -1);
+    assertEquals("Mismatch in dataset read from db", dataset, datasetFromMysql);
+
+    // Get the dataset version
+    DatasetVersionRecord datasetVersionRecordFromMysql =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, version);
+    assertEquals("Mismatch in dataset version read from db", expectedDatasetVersionRecord,
+        datasetVersionRecordFromMysql);
+
+    // Add a valid dataset version with ttl and get from DB
+    versionNumber = 2;
+    version = String.valueOf(versionNumber);
+    versions.add(versionNumber);
+    long expirationTimeMs = System.currentTimeMillis();
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, expirationTimeMs);
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME, version, expirationTimeMs);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, version);
+    assertEquals("Mismatch in dataset version read from db", expectedDatasetVersionRecord,
+        datasetVersionRecordFromMysql);
+
+    // Add a dataset with ttl (set to a past timestamp) and add a dataset version with current ttl, expect to be failed.
+    expirationTimeMs = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(10);
+    Dataset datasetWithTtl = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL,
+        Dataset.VersionSchema.TIMESTAMP, expirationTimeMs).setUserTags(userTags).build();
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), datasetWithTtl);
+    version = "3";
+    expirationTimeMs = System.currentTimeMillis();
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_TTL, version, expirationTimeMs);
+      fail("Add dataset version should fail with ttl larger than dataset level");
+    } catch (SQLException e) {
+      // do nothing
+    }
+    // Add a permanent dataset version, it should inherit from dataset level ttl.
+    version = String.valueOf(4);
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_TTL, version, -1);
+    DatasetVersionRecord datasetVersionRecordWithTtl =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL, version);
+    assertEquals("Mismatch in dataset expirationTimeMs", (long) datasetWithTtl.getExpirationTimeMs(),
+        datasetVersionRecordWithTtl.getExpirationTimeMs());
+
+    Collections.reverse(versions);
+    long expectedLatestVersion = versions.get(0);
+    long latestVersionFromMysql =
+        mySqlAccountStore.getLatestVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME);
+    assertEquals("Unexpected latest version", expectedLatestVersion, latestVersionFromMysql);
+
+    //Test semantic version.
+    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC,
+        Dataset.VersionSchema.SEMANTIC, -1).setUserTags(userTags).build();
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+    version = "1.2.4";
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+    DatasetVersionRecord datasetVersionRecordWithSemanticVersion =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC,
+            version);
+    assertEquals("Mismatch in dataset version", version, datasetVersionRecordWithSemanticVersion.getVersion());
+
+    // Add dataset version for non-existing dataset.
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), "NonExistingDataset", version, -1);
+      fail("Add dataset version should fail without dataset");
+    } catch (SQLException e) {
+      // do nothing
+    }
+
+    // Add dataset version which didn't follow the semantic format.
+    version = "1.2";
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+      fail("Add dataset version should fail with wrong format of semantic version");
+    } catch (IllegalArgumentException e) {
+      // do nothing
+    }
+  }
+
   private Account makeTestAccountWithContainer() {
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
@@ -740,5 +880,7 @@ public class MySqlAccountServiceIntegrationTest {
     Statement statement = dbConnection.createStatement();
     statement.executeUpdate("DELETE FROM " + AccountDao.ACCOUNT_TABLE);
     statement.executeUpdate("DELETE FROM " + AccountDao.CONTAINER_TABLE);
+    statement.executeUpdate("DELETE FROM " + AccountDao.DATASET_TABLE);
+    statement.executeUpdate("DELETE FROM " + AccountDao.DATASET_VERSION_TABLE);
   }
 }

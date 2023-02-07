@@ -16,6 +16,8 @@ package com.github.ambry.account.mysql;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
@@ -45,7 +47,7 @@ public class MySqlAccountStore {
   public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics,
       MySqlAccountServiceConfig config) throws SQLException {
     mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
-    accountDao = new AccountDao(mySqlDataAccessor);
+    accountDao = new AccountDao(mySqlDataAccessor, config);
     this.config = config;
   }
 
@@ -64,6 +66,32 @@ public class MySqlAccountStore {
    */
   public void updateAccounts(List<AccountUpdateInfo> accountsInfo) throws SQLException {
     accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize);
+  }
+
+  /**
+   * Add dataset to the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param dataset the {@link Dataset}.
+   * @throws SQLException
+   */
+  public void addDataset(short accountId, short containerId, Dataset dataset) throws SQLException {
+    accountDao.addDataset(accountId, containerId, dataset);
+  }
+
+  /**
+   * Get dataset from the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param accountName the name of the {@link Account}.
+   * @param containerName the name of the {@link Container}
+   * @param datasetName the name of the dataset.
+   * @return the {@link Dataset}
+   * @throws SQLException
+   */
+  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
+      String datasetName) throws SQLException {
+    return accountDao.getDataset(accountId, containerId, accountName, containerName, datasetName);
   }
 
   /**
@@ -116,6 +144,50 @@ public class MySqlAccountStore {
    */
   public Container getContainerById(int accountId, int containerId) throws SQLException {
     return accountDao.getContainerById(accountId, containerId);
+  }
+
+  /**
+   * Add a version of {@link Dataset}
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @param expirationTimeMs the expiration time of the version of the dataset.
+   * @return the corresponding {@link Dataset}
+   * @throws SQLException
+   */
+  public Dataset addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
+      String datasetName, String version, long expirationTimeMs) throws SQLException {
+    return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
+        expirationTimeMs);
+  }
+
+  /**
+   * Get a version of {@link Dataset}
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @return the {@link DatasetVersionRecord}
+   * @throws SQLException
+   */
+  public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String datasetName,
+      String version) throws SQLException {
+    return  accountDao.getDatasetVersions(accountId, containerId, datasetName, version);
+  }
+
+  /**
+   * Get the latest version value of the dataset versions.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @return the latest version of the dataset.
+   * @throws SQLException
+   */
+  public long getLatestVersion(short accountId, short containerId, String datasetName) throws SQLException {
+    return accountDao.getLatestVersion(accountId, containerId, datasetName);
   }
 
   /**

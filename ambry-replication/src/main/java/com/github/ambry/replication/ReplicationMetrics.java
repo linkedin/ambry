@@ -111,8 +111,10 @@ public class ReplicationMetrics {
   public final Histogram plainTextIntraColoBatchStoreWriteTime;
   public final Map<String, Histogram> sslInterColoBatchStoreWriteTime = new HashMap<String, Histogram>();
   public final Histogram sslIntraColoBatchStoreWriteTime;
-  public final Map<String, Histogram> interColoTotalReplicationTime = new HashMap<String, Histogram>();
+  public final Map<String, Histogram> interColoTotalReplicationTime = new HashMap<>();
+  public final Map<String, Histogram> interColoOneCycleReplicationTime = new HashMap<>();
   public final Histogram intraColoTotalReplicationTime;
+  public final Histogram intraColoOneCycleReplicationTime;
   public final Map<String, Histogram> plainTextInterColoTotalReplicationTime = new HashMap<String, Histogram>();
   public final Histogram plainTextIntraColoTotalReplicationTime;
   public final Map<String, Histogram> sslInterColoTotalReplicationTime = new HashMap<String, Histogram>();
@@ -239,6 +241,8 @@ public class ReplicationMetrics {
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "SslIntraColoBatchStoreWriteTime"));
     intraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoTotalReplicationTime"));
+    intraColoOneCycleReplicationTime =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "IntraColoOneCycleReplicationTime"));
     plainTextIntraColoTotalReplicationTime =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "PlainTextIntraColoTotalReplicationTime"));
     sslIntraColoTotalReplicationTime =
@@ -369,6 +373,9 @@ public class ReplicationMetrics {
     Histogram interColoTotalReplicationTimePerDC =
         registry.histogram(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-TotalReplicationTime"));
     interColoTotalReplicationTime.put(datacenter, interColoTotalReplicationTimePerDC);
+    Histogram interColoOneCycleReplicationTimePerDC = registry.histogram(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-OneCycleReplicationTime"));
+    interColoOneCycleReplicationTime.put(datacenter, interColoOneCycleReplicationTimePerDC);
     Histogram plainTextInterColoTotalReplicationTimePerDC = registry.histogram(
         MetricRegistry.name(ReplicaThread.class, "PlainTextInter-" + datacenter + "-TotalReplicationTime"));
     plainTextInterColoTotalReplicationTime.put(datacenter, plainTextInterColoTotalReplicationTimePerDC);
@@ -603,6 +610,14 @@ public class ReplicationMetrics {
       sslReplicationErrors.inc();
     } else {
       plainTextReplicationErrors.inc();
+    }
+  }
+
+  public void updateOneCycleReplicationTime(long replicationTime, boolean remoteColo, String datacenter) {
+    if (remoteColo) {
+      interColoOneCycleReplicationTime.get(datacenter).update(replicationTime);
+    } else {
+      intraColoOneCycleReplicationTime.update(replicationTime);
     }
   }
 

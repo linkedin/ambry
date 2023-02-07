@@ -24,6 +24,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverterFactory;
@@ -81,7 +82,7 @@ public class MockReplicationManager extends ReplicationManager {
       StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant)
       throws ReplicationException {
     this(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap, dataNodeId,
-        storeKeyConverterFactory, clusterParticipant, null, null, BlobIdTransformer.class.getName(),
+        storeKeyConverterFactory, clusterParticipant, null, null, null, BlobIdTransformer.class.getName(),
         new StoreKeyFactory() {
           @Override
           public StoreKey getStoreKey(DataInputStream stream) {
@@ -98,10 +99,10 @@ public class MockReplicationManager extends ReplicationManager {
   public MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
       StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant,
-      ConnectionPool connectionPool, FindTokenHelper findTokenHelper, String transformerClassName,
-      StoreKeyFactory storeKeyFactory, Time time) throws ReplicationException {
+      ConnectionPool connectionPool, NetworkClientFactory factory, FindTokenHelper findTokenHelper,
+      String transformerClassName, StoreKeyFactory storeKeyFactory, Time time) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory, clusterMap, null,
-        dataNodeId, connectionPool, null, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
+        dataNodeId, connectionPool, factory, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, null, findTokenHelper, time);
     reset();
   }

@@ -18,6 +18,10 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.ResponseHandler;
@@ -51,6 +55,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -74,7 +79,7 @@ public class TtlUpdateManagerTest {
   private static final byte[] PUT_CONTENT = new byte[1000];
   private static final int BLOBS_COUNT = 5;
   private static final String UPDATE_SERVICE_ID = "update-service-id";
-  private static final String LOCAL_DC = "DC1";
+  private String localDc;
   private final NonBlockingRouter router;
   private final TtlUpdateManager ttlUpdateManager;
   private final SocketNetworkClient networkClient;
@@ -95,6 +100,7 @@ public class TtlUpdateManagerTest {
    */
   public TtlUpdateManagerTest() throws Exception {
     assertTrue("Server count has to be at least 9", serverCount >= 9);
+    localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
     VerifiableProperties vProps =
         new VerifiableProperties(getNonBlockingRouterProperties(DEFAULT_SUCCESS_TARGET, DEFAULT_PARALLELISM));
     RouterConfig routerConfig = new RouterConfig(vProps);
@@ -109,7 +115,8 @@ public class TtlUpdateManagerTest {
       ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(PUT_CONTENT));
       BlobProperties putBlobProperties = new BlobProperties(-1, "serviceId", "memberId", "contentType", false, TTL_SECS,
           Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
-      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
     }
     ttlUpdateManager =
@@ -162,9 +169,9 @@ public class TtlUpdateManagerTest {
   public void singleBlobThroughTtlManagerTest() throws Exception {
     for (String blobId : blobIds) {
       assertTtl(router, Collections.singleton(blobId), TTL_SECS);
-      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true);
+      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true, false);
       // ok to do it again
-      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true);
+      executeOpAndVerify(Collections.singleton(blobId), null, false, false, false, true, false);
     }
   }
 
@@ -177,8 +184,16 @@ public class TtlUpdateManagerTest {
     // configure failure for the metadata chunk
     serverLayout.getMockServers()
         .forEach(mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(0), ServerErrorCode.Unknown_Error));
-    executeOpAndVerify(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false,
+    executeOpAndVerifyWithInfinity(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false,
         blobIds.subList(1, blobIds.size()));
+  }
+
+  /**
+   * Test for the case when delete operation fails due to quota compliance.
+   */
+  @Test
+  public void testQuotaRejected() throws Exception {
+    executeOpAndVerify(blobIds, RouterErrorCode.TooManyRequests, false, true, true, false, true);
   }
 
   /**
@@ -188,9 +203,9 @@ public class TtlUpdateManagerTest {
   @Test
   public void batchedThroughTtlManagerTest() throws Exception {
     assertTtl(router, blobIds, TTL_SECS);
-    executeOpAndVerify(blobIds, null, false, false, false, true);
+    executeOpAndVerify(blobIds, null, false, false, false, true, false);
     // ok to do it again
-    executeOpAndVerify(blobIds, null, false, false, false, true);
+    executeOpAndVerify(blobIds, null, false, false, false, true, false);
   }
 
   /**
@@ -204,7 +219,7 @@ public class TtlUpdateManagerTest {
     serverLayout.getMockServers()
         .forEach(
             mockServer -> mockServer.setErrorCodeForBlob(blobIds.get(BLOBS_COUNT / 2), ServerErrorCode.Unknown_Error));
-    executeOpAndVerify(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false, false);
+    executeOpAndVerify(blobIds, RouterErrorCode.UnexpectedInternalError, false, false, false, false, false);
   }
 
   /**
@@ -216,7 +231,11 @@ public class TtlUpdateManagerTest {
     Map<ServerErrorCode, RouterErrorCode> errorCodeMap = new HashMap<>();
     errorCodeMap.put(ServerErrorCode.Blob_Deleted, RouterErrorCode.BlobDeleted);
     errorCodeMap.put(ServerErrorCode.Blob_Expired, RouterErrorCode.BlobExpired);
-    errorCodeMap.put(ServerErrorCode.Blob_Not_Found, RouterErrorCode.BlobDoesNotExist);
+    // In production, disk_unavailable usually means disk is bad with I/O errors. For now, the only way to fix this is
+    // to replace disk and relies on replication to restore data. If all replicas return disk unavailable (should be
+    // extremely rare in real world), it means blob is no long present and it's should be ok to return BlobDoesNotExist.
+    // But for simplicity, we will return AmbryUnavailable. Once disks are replaced, we will begin to return
+    // BlobDoesNotExist.
     errorCodeMap.put(ServerErrorCode.Disk_Unavailable, RouterErrorCode.AmbryUnavailable);
     errorCodeMap.put(ServerErrorCode.Replica_Unavailable, RouterErrorCode.AmbryUnavailable);
     errorCodeMap.put(ServerErrorCode.Blob_Update_Not_Allowed, RouterErrorCode.BlobUpdateNotAllowed);
@@ -226,18 +245,14 @@ public class TtlUpdateManagerTest {
         continue;
       }
       ArrayList<ServerErrorCode> serverErrorCodes =
-          new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found));
+          new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IO_Error));
       // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
       serverErrorCodes.set(3, errorCode);
       serverErrorCodes.set(5, errorCode);
       Collections.shuffle(serverErrorCodes);
       setServerErrorCodes(serverErrorCodes, serverLayout);
-      // In production, disk_unavailable usually means disk is bad with I/O errors. For now, the only way to fix this is
-      // to replace disk and relies on replication to restore data. If all replicas return disk unavailable (should be
-      // extremely rare in real world), it means blob is no long present and it's ok to return BlobDoesNotExist.
-      RouterErrorCode expected = errorCode == ServerErrorCode.Disk_Unavailable ? RouterErrorCode.BlobDoesNotExist
-          : errorCodeMap.getOrDefault(errorCode, RouterErrorCode.UnexpectedInternalError);
-      executeOpAndVerify(blobIds, expected, false, true, true, false);
+      RouterErrorCode expected = errorCodeMap.getOrDefault(errorCode, RouterErrorCode.UnexpectedInternalError);
+      executeOpAndVerify(blobIds, expected, false, true, true, false, false);
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
     assertTtl(router, blobIds, TTL_SECS);
@@ -288,7 +303,7 @@ public class TtlUpdateManagerTest {
   public void responseTimeoutTest() throws Exception {
     // configure servers to not respond to requests
     serverLayout.getMockServers().forEach(mockServer -> mockServer.setShouldRespond(false));
-    executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, true, true, false);
+    executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, true, true, false, false);
   }
 
   /**
@@ -302,7 +317,7 @@ public class TtlUpdateManagerTest {
         continue;
       }
       mockSelectorState.set(state);
-      executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, true, true, false);
+      executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, true, true, false, false);
     }
   }
 
@@ -314,12 +329,145 @@ public class TtlUpdateManagerTest {
   public void duplicateBlobIdsTest() throws RouterException {
     blobIds.add(blobIds.get(1));
     try {
-      ttlUpdateManager.submitTtlUpdateOperation(blobIds.get(0), blobIds.subList(1, blobIds.size()), UPDATE_SERVICE_ID, Utils.Infinite_Time, new FutureResult<>(),
-          new TestCallback<>(), quotaChargeCallback);
+      ttlUpdateManager.submitTtlUpdateOperation(blobIds.get(0), blobIds.subList(1, blobIds.size()), UPDATE_SERVICE_ID,
+          Utils.Infinite_Time, new FutureResult<>(), new TestCallback<>(), quotaChargeCallback);
       fail("Should have failed to submit operation because the provided blob id list contains duplicates");
     } catch (IllegalArgumentException e) {
       // expected. Nothing to do.
     }
+  }
+
+  /**
+   * Test the case when some of the replicas in originating DC are unavailable, we should return AmbryUnavailable.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcUnavailability() throws Exception {
+    // Default all replicas to return not found.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDc)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    for (String blob : blobIds) {
+      BlobId blobId = RouterUtils.getBlobIdFromString(blob, clusterMap);
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDc))
+          .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+          .findFirst()
+          .get();
+      partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    }
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    executeOpAndVerify(blobIds, RouterErrorCode.AmbryUnavailable, false, true, true, false, false);
+  }
+
+  /**
+   * Test the case when all of the replicas in originating DC return NotFound, we should return BlobNotFound.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcNotFound() throws Exception {
+    // Default all replicas to return IO error.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.IO_Error);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDc)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    executeOpAndVerify(blobIds, RouterErrorCode.BlobDoesNotExist, false, true, true, false, false);
+  }
+
+  /**
+   * Test the case when error precedence is maintained with unavailability in originating DC.
+   * @throws Exception
+   */
+  @Test
+  public void testErrorPrecedenceWithOrigDcUnavailability() throws Exception {
+    // Default all replicas to return not found.
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDc)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    for (String blob : blobIds) {
+      BlobId blobId = RouterUtils.getBlobIdFromString(blob, clusterMap);
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDc))
+          .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+          .findFirst()
+          .get();
+      partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    }
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+
+    // Set two remote servers to return Blob_Update_Not_Allowed
+    List<MockServer> serversInRemoteDc = new ArrayList<>(serverLayout.getMockServers());
+    serversInRemoteDc.removeAll(serversInLocalDc);
+    serversInRemoteDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Update_Not_Allowed);
+    serversInRemoteDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Update_Not_Allowed);
+
+    executeOpAndVerify(blobIds, RouterErrorCode.BlobUpdateNotAllowed, false, true, true, false, false);
+  }
+
+  /**
+   * Test the case when there is 2 success in originating data center, we should return success.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcSuccess() throws Exception {
+    int serverCount = serverLayout.getMockServers().size();
+    List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
+    setServerErrorCodes(serverErrorCodes, serverLayout);
+
+    // Set 1 not found from bootstrap, 2 not found from standby in originating dc
+    List<MockServer> serversInLocalDc = new ArrayList<>();
+    serverLayout.getMockServers().forEach(mockServer -> {
+      if (mockServer.getDataCenter().equals(localDc)) {
+        serversInLocalDc.add(mockServer);
+      }
+    });
+    for (String blob : blobIds) {
+      BlobId blobId = RouterUtils.getBlobIdFromString(blob, clusterMap);
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      ReplicaId boostrapReplica = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDc))
+          .filter(replicaId -> replicaId.getDataNodeId().getHostname().equals(serversInLocalDc.get(0).getHostName()))
+          .findFirst()
+          .get();
+      partitionId.setReplicaState(boostrapReplica, ReplicaState.BOOTSTRAP);
+    }
+    serversInLocalDc.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
+    serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.No_Error);
+    executeOpAndVerify(blobIds, null, false, true, true, false, false);
   }
 
   /**
@@ -332,19 +480,21 @@ public class TtlUpdateManagerTest {
    *                                   request not sent in this execution of the function
    * @param verifyNoNotificationsOnFailure if {@code true}, verifies that there are no notifications on failure.
    * @param verifyTtlAfterUpdate if {@code true}, verify the TTL after the update succeeds/fails
+   * @param isQuotaRejected if {@code true}, return quota rejected ResponseInfo back to op.
    * @throws Exception
    */
   private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime,
-      boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure, boolean verifyTtlAfterUpdate)
-      throws Exception {
+      boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure, boolean verifyTtlAfterUpdate,
+      boolean isQuotaRejected) throws Exception {
     FutureResult<Void> future = new FutureResult<>();
     TestCallback<Void> callback = new TestCallback<>();
     notificationSystem.reset();
     List<String> chunkIds = new ArrayList<>(ids);
     router.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
+    ttlUpdateManager.close();
     ttlUpdateManager.submitTtlUpdateOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UPDATE_SERVICE_ID,
         Utils.Infinite_Time, future, callback, quotaChargeCallback);
-    sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests);
+    sendRequestsGetResponses(future, ttlUpdateManager, advanceTime, ignoreUnrecognizedRequests, isQuotaRejected);
     long expectedTtlSecs = TTL_SECS;
     if (expectedErrorCode == null) {
       assertTrue("Future should be complete", future.isDone());
@@ -380,12 +530,12 @@ public class TtlUpdateManagerTest {
    * @param verifyTtlUpdatedList the collection of chunk ids for which ttl should be verified to have been applied.
    * @throws Exception
    */
-  private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime,
-      boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure,
+  private void executeOpAndVerifyWithInfinity(Collection<String> ids, RouterErrorCode expectedErrorCode,
+      boolean advanceTime, boolean ignoreUnrecognizedRequests, boolean verifyNoNotificationsOnFailure,
       Collection<String> verifyTtlUpdatedList) throws Exception {
-    executeOpAndVerify(
-        ids, expectedErrorCode, advanceTime, ignoreUnrecognizedRequests, verifyNoNotificationsOnFailure, false);
-      assertTtl(router, verifyTtlUpdatedList, Utils.Infinite_Time);
+    executeOpAndVerify(ids, expectedErrorCode, advanceTime, ignoreUnrecognizedRequests, verifyNoNotificationsOnFailure,
+        false, false);
+    assertTtl(router, verifyTtlUpdatedList, Utils.Infinite_Time);
   }
 
   // helpers
@@ -398,9 +548,10 @@ public class TtlUpdateManagerTest {
    * @param advanceTime if {@code true}, advances time after each poll and handleResponse iteration
    * @param ignoreUnrecognizedRequests if {@code true}, doesn't throw an exception if a response is received for a
    *                                   request not sent in this execution of the function
+   * @param isQuotaRejected if {@code true}, return quota rejected ResponseInfo back to op.
    */
   private void sendRequestsGetResponses(FutureResult<Void> futureResult, TtlUpdateManager manager, boolean advanceTime,
-      boolean ignoreUnrecognizedRequests) {
+      boolean ignoreUnrecognizedRequests, boolean isQuotaRejected) {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     Set<Integer> requestsToDrop = new HashSet<>();
     Set<RequestInfo> requestAcks = new HashSet<>();
@@ -409,11 +560,17 @@ public class TtlUpdateManagerTest {
       manager.poll(requestInfoList, requestsToDrop);
       referenceRequestInfos.addAll(requestInfoList);
       List<ResponseInfo> responseInfoList = new ArrayList<>();
-      try {
-        responseInfoList = networkClient.sendAndPoll(requestInfoList, requestsToDrop, AWAIT_TIMEOUT_MS);
-      } catch (RuntimeException | Error e) {
-        if (!advanceTime) {
-          throw e;
+      if (isQuotaRejected) {
+        responseInfoList = requestInfoList.stream()
+            .map(requestInfo -> new ResponseInfo(requestInfo, true))
+            .collect(Collectors.toList());
+      } else {
+        try {
+          responseInfoList = networkClient.sendAndPoll(requestInfoList, requestsToDrop, AWAIT_TIMEOUT_MS);
+        } catch (RuntimeException | Error e) {
+          if (!advanceTime) {
+            throw e;
+          }
         }
       }
       for (ResponseInfo responseInfo : responseInfoList) {
@@ -455,7 +612,7 @@ public class TtlUpdateManagerTest {
   private Properties getNonBlockingRouterProperties(int successTarget, int parallelism) {
     Properties properties = new Properties();
     properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", LOCAL_DC);
+    properties.setProperty("router.datacenter.name", localDc);
     properties.setProperty("router.ttl.update.success.target", Integer.toString(successTarget));
     properties.setProperty("router.ttl.update.request.parallelism", Integer.toString(parallelism));
     return properties;
@@ -472,7 +629,7 @@ public class TtlUpdateManagerTest {
       ServerErrorCode errorCodeToReturn) throws Exception {
     List<MockServer> serversInLocalDc = new ArrayList<>();
     serverLayout.getMockServers().forEach(mockServer -> {
-      if (mockServer.getDataCenter().equals(LOCAL_DC)) {
+      if (mockServer.getDataCenter().equals(localDc)) {
         serversInLocalDc.add(mockServer);
       }
     });
@@ -481,11 +638,19 @@ public class TtlUpdateManagerTest {
     }
     List<ServerErrorCode> serverErrorCodes = Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found);
     setServerErrorCodes(serverErrorCodes, serverLayout);
-    for (int i = 0; i < successfulResponsesCount; i++) {
-      serversInLocalDc.get(i).setServerErrorForAllRequests(errorCodeToReturn);
+    if (successfulResponsesCount > 0) {
+      for (int i = 0; i < successfulResponsesCount; i++) {
+        serversInLocalDc.get(i).setServerErrorForAllRequests(errorCodeToReturn);
+      }
+      // Set error code from other local dc servers as Disk_Unavailable since it is not practical that we get 1 found
+      // and 2 not found from healthy local dc servers.
+      for (int i = successfulResponsesCount; i < serversInLocalDc.size(); i++) {
+        serversInLocalDc.get(i).setServerErrorForAllRequests(ServerErrorCode.Disk_Unavailable);
+      }
     }
-    RouterErrorCode expectedErrorCode = (successfulResponsesCount > 0) ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.BlobDoesNotExist;
-    executeOpAndVerify(blobIds, shouldSucceed ? null : expectedErrorCode, false, true, true, false);
+    RouterErrorCode expectedErrorCode =
+        (successfulResponsesCount > 0) ? RouterErrorCode.AmbryUnavailable : RouterErrorCode.BlobDoesNotExist;
+    executeOpAndVerify(blobIds, shouldSucceed ? null : expectedErrorCode, false, true, true, false, false);
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
   }
 
@@ -503,7 +668,7 @@ public class TtlUpdateManagerTest {
       throw new IllegalStateException("Cannot run test because there aren't enough servers for the given codes");
     }
     List<ServerErrorCode> serverErrorCodes =
-        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.Blob_Not_Found));
+        new ArrayList<>(Collections.nCopies(serverCount, ServerErrorCode.IO_Error));
     List<RouterErrorCode> expected = new ArrayList<>(codesToSetAndTest.size());
     // fill in the array with all the error codes that need resolution and knock them off one by one
     // has to be repeated because the op tracker returns failure if it sees 8/9 failures and the success target is 2
@@ -514,49 +679,20 @@ public class TtlUpdateManagerTest {
       expected.add(entry.getValue());
       serverIdx += 2;
     }
-    expected.add(RouterErrorCode.BlobDoesNotExist);
+    expected.add(RouterErrorCode.UnexpectedInternalError);
     for (int i = 0; i < expected.size(); i++) {
       List<ServerErrorCode> shuffled = new ArrayList<>(serverErrorCodes);
       Collections.shuffle(shuffled);
       setServerErrorCodes(shuffled, serverLayout);
-      RouterErrorCode expectedRouterError = resolveRouterErrorCode(serverErrorCodes, expected.get(i));
-      executeOpAndVerify(blobIds, expectedRouterError, false, true, true, false);
+      executeOpAndVerify(blobIds, expected.get(i), false, true, true, false, false);
       if (i * 2 + 1 < serverErrorCodes.size()) {
-        serverErrorCodes.set(i * 2, ServerErrorCode.Blob_Not_Found);
-        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.Blob_Not_Found);
+        serverErrorCodes.set(i * 2, ServerErrorCode.IO_Error);
+        serverErrorCodes.set(i * 2 + 1, ServerErrorCode.IO_Error);
       }
     }
     serverLayout.getMockServers().forEach(MockServer::resetServerErrors);
     assertTtl(router, blobIds, TTL_SECS);
   }
-
-  /**
-   * Helper method to resolve router error code. This accounts for combined disk_unavailable and not_found situation.
-   * @param serverErrorCodes a list of error code which servers will return.
-   * @param routerErrorCode the router error code solely decided by getPrecedenceLevel() method (which might be overridden)
-   * @return the resolved router error code.
-   */
-  private RouterErrorCode resolveRouterErrorCode(List<ServerErrorCode> serverErrorCodes,
-      RouterErrorCode routerErrorCode) {
-    RouterErrorCode resolvedErrorCode = routerErrorCode;
-    if (routerErrorCode == RouterErrorCode.AmbryUnavailable) {
-      int diskDownCount = 0;
-      int notFoundCount = 0;
-      for (ServerErrorCode errorCode : serverErrorCodes) {
-        if (errorCode == ServerErrorCode.Disk_Unavailable) {
-          diskDownCount++;
-        } else if (errorCode == ServerErrorCode.Blob_Not_Found) {
-          notFoundCount++;
-        }
-      }
-      if (diskDownCount + notFoundCount > serverCount - 2) {
-        resolvedErrorCode = RouterErrorCode.BlobDoesNotExist;
-      }
-    }
-    return resolvedErrorCode;
-  }
-
-  // routerErrorCodeResolutionTest() helpers
 
   static {
     TestUtils.RANDOM.nextBytes(PUT_CONTENT);

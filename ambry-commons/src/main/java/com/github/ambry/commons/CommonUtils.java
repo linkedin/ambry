@@ -16,13 +16,10 @@ package com.github.ambry.commons;
 
 import com.github.ambry.config.HelixPropertyStoreConfig;
 import java.util.List;
-import org.apache.helix.manager.zk.ZNRecordSerializer;
-import org.apache.helix.manager.zk.ZkBaseDataAccessor;
-import org.apache.helix.manager.zk.ZkClient;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
-import org.apache.helix.zookeeper.api.client.ZkClientType;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
+import org.apache.helix.zookeeper.datamodel.serializer.ZNRecordSerializer;
 
 
 public class CommonUtils {
@@ -38,15 +35,11 @@ public class CommonUtils {
     if (zkServers == null || zkServers.isEmpty() || propertyStoreConfig == null) {
       throw new IllegalArgumentException("Invalid arguments, cannot create HelixPropertyStore");
     }
-    ZkClient zkClient = new ZkClient(zkServers, propertyStoreConfig.zkClientSessionTimeoutMs,
-        propertyStoreConfig.zkClientConnectionTimeoutMs, new ZNRecordSerializer());
-    return new ZkHelixPropertyStore<>(new ZkBaseDataAccessor<>(zkClient), propertyStoreConfig.rootPath,
-        subscribedPaths);
+    return createHelixPropertyStore(zkServers, propertyStoreConfig.rootPath, subscribedPaths);
   }
 
   /**
    * Create an instance of {@link HelixPropertyStore}, using non-deprecated APIs.
-   * TODO replace usages of the other method with this one once verified to be stable.
    * @param zkAddress the ZooKeeper server address.
    * @param rootPath the root path for this {@link HelixPropertyStore}.
    * @param subscribedPaths the paths to subscribe to for change notification. Note that these should be absolute paths,
@@ -55,10 +48,6 @@ public class CommonUtils {
    */
   public static HelixPropertyStore<ZNRecord> createHelixPropertyStore(String zkAddress, String rootPath,
       List<String> subscribedPaths) {
-    ZkBaseDataAccessor<ZNRecord> baseDataAccessor =
-        new ZkBaseDataAccessor.Builder<ZNRecord>().setZkClientType(ZkClientType.DEDICATED)
-            .setZkAddress(zkAddress)
-            .build();
-    return new ZkHelixPropertyStore<>(baseDataAccessor, rootPath, subscribedPaths);
+    return new ZkHelixPropertyStore<ZNRecord>(zkAddress, new ZNRecordSerializer(), rootPath, subscribedPaths);
   }
 }

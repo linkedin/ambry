@@ -99,7 +99,7 @@ public class NamedBlobListHandler {
         RestRequestMetrics requestMetrics =
             frontendMetrics.getAccountsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
         restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-        accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
+        accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest,
             frontendMetrics.getBlobMetricsGroup);
         if (namedBlobDb == null) {
           throw new RestServiceException("Named blob support not enabled", RestServiceErrorCode.BadRequest);

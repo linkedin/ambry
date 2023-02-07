@@ -67,7 +67,7 @@ class NamedBlobGetHandler {
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
     RequestPath requestPath = getRequestPath(restRequest);
-    accountAndContainerInjector.injectAccountAndContainerForNamedBlob(restRequest,
+    accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest,
         getMetricsGroupForGet(metrics, requestPath.getSubResource()));
 
     // Get blob id and reconstruct RequestPath

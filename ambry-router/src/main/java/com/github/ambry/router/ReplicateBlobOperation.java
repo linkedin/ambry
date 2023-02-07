@@ -290,6 +290,8 @@ class ReplicateBlobOperation {
     switch (serverErrorCode) {
       case Blob_Authorization_Failure:
         return RouterErrorCode.BlobAuthorizationFailure;
+      case Blob_Deleted:
+        return RouterErrorCode.BlobDeleted;
       case Blob_Expired:
         return RouterErrorCode.BlobExpired;
       case Blob_Not_Found:
@@ -351,18 +353,20 @@ class ReplicateBlobOperation {
     switch (routerErrorCode) {
       case BlobAuthorizationFailure:
         return 1;
-      case BlobExpired:
+      case BlobDeleted:
         return 2;
-      case TooManyRequests:
+      case BlobExpired:
         return 3;
-      case AmbryUnavailable:
+      case TooManyRequests:
         return 4;
-      case UnexpectedInternalError:
+      case AmbryUnavailable:
         return 5;
-      case OperationTimedOut:
+      case UnexpectedInternalError:
         return 6;
-      case BlobDoesNotExist:
+      case OperationTimedOut:
         return 7;
+      case BlobDoesNotExist:
+        return 8;
       default:
         return Integer.MIN_VALUE;
     }

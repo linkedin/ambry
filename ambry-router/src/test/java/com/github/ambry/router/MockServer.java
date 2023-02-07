@@ -386,6 +386,12 @@ class MockServer {
         }
         byteBuffer = ByteBuffer.allocate(0);
         byteBufferSize = 0;
+      } else if (processedError == ServerErrorCode.Replica_Unavailable) {
+        if (partitionError == ServerErrorCode.No_Error) {
+          partitionError = ServerErrorCode.Replica_Unavailable;
+        }
+        byteBuffer = ByteBuffer.allocate(0);
+        byteBufferSize = 0;
       } else {
         if (partitionError == ServerErrorCode.No_Error) {
           partitionError = ServerErrorCode.Blob_Not_Found;

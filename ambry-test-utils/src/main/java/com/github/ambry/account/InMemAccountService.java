@@ -15,6 +15,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.quota.QuotaResourceType;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -54,6 +55,10 @@ public class InMemAccountService implements AccountService {
   private final Set<Consumer<Collection<Account>>> accountUpdateConsumers = new HashSet<>();
   private final ScheduledExecutorService scheduler;
   private boolean shouldUpdateSucceed = true;
+  private final Map<Pair<String, String>, Map<String, Dataset>> nameToDatasetMap = new HashMap<>();
+  private final Map<Pair<Short, Short>, Map<String, DatasetVersionRecord>> idToDatasetVersionMap = new HashMap<>();
+  private final Map<Pair<Short, Short>, Map<String, Dataset>> idToDatasetMap = new HashMap<>();
+  private Map<String, String> userTags;
 
   /**
    * Constructor.
@@ -124,6 +129,33 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
+  public synchronized Dataset addDatasetVersion(String accountName, String containerName, String datasetName,
+      String version, long expirationTimeMs) {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
+    idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
+        .put(datasetName + version,
+            new DatasetVersionRecord(accountId, containerId, datasetName, version, expirationTimeMs));
+    Dataset dataset =
+        new DatasetBuilder(accountName, containerName, datasetName, Dataset.VersionSchema.TIMESTAMP, -1).setUserTags(
+            userTags).build();
+    idToDatasetMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
+    idToDatasetMap.get(new Pair<>(accountId, containerId)).put(dataset.getDatasetName(), dataset);
+    return dataset;
+  }
+
+  @Override
+  public synchronized DatasetVersionRecord getDatasetVersion(String accountName, String containerName,
+      String datasetName, String version) {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    return idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(datasetName + version);
+  }
+
+  @Override
   public synchronized boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
     Objects.requireNonNull(accountUpdateConsumer, "accountUpdateConsumer to subscribe cannot be null");
     return accountUpdateConsumers.add(accountUpdateConsumer);
@@ -138,6 +170,20 @@ public class InMemAccountService implements AccountService {
   @Override
   public synchronized Collection<Account> getAllAccounts() {
     return idToAccountMap.values();
+  }
+
+  @Override
+  public synchronized void addDataset(Dataset dataset) {
+    String accountName = dataset.getAccountName();
+    String containerName = dataset.getContainerName();
+    nameToDatasetMap.putIfAbsent(new Pair<>(accountName, containerName), new HashMap<>());
+    nameToDatasetMap.get(new Pair<>(accountName, containerName)).put(dataset.getDatasetName(), dataset);
+  }
+
+  @Override
+  public synchronized Dataset getDataset(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
+    return nameToDatasetMap.get(new Pair<>(accountName, containerName)).get(datasetName);
   }
 
   @Override

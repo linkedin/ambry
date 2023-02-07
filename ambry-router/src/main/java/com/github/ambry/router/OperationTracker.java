@@ -55,21 +55,18 @@ interface OperationTracker {
   boolean hasSucceeded();
 
   /**
-   * Return {@code true} if the blob is not found in available replicas, and there are offline replicas where blob might
-   * have existed.
-   *
-   * @return {@code true} if the operation failed because of eligible replicas' {@link TrackedRequestFinalState#NOT_FOUND} and
-   * some replicas being offline.
-   */
-  boolean maybeFailedDueToOfflineReplicas();
-
-  /**
-   * Return {@code true} only if the number of NOT_FOUND responses from originating DC passes the threshold.
-   * It also means hasSucceeded would return {@code false}.
+   * Return {@code true} only if the number of NOT_FOUND responses from originating DC passes the threshold. It also
+   * means hasSucceeded would return {@code false}.
    *
    * @return {@code true} if the operation failed because of {@link TrackedRequestFinalState#NOT_FOUND}.
    */
   boolean hasFailedOnNotFound();
+
+  /**
+   * @return {@code true} if any of replicas are not up in originating DC. This method can be used to check if there
+   * are any unavailable replicas when a operation has failed.
+   */
+  boolean hasSomeUnavailability();
 
   /**
    * Check if any replica returned NOT_FOUND response.

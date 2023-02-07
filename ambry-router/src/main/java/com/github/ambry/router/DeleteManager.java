@@ -103,7 +103,7 @@ class DeleteManager {
     }
     DeleteOperation deleteOperation =
         new DeleteOperation(clusterMap, routerConfig, routerMetrics, responseHandler, blobId, serviceId, callback, time,
-            futureResult, quotaChargeCallback);
+            futureResult, quotaChargeCallback, nonBlockingRouter);
     deleteOperations.add(deleteOperation);
   }
 

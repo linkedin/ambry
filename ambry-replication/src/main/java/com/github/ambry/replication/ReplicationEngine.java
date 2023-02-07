@@ -79,20 +79,20 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected final StoreConfig storeConfig;
   protected final ClusterMap clusterMap;
   protected final ScheduledExecutorService scheduler;
-  private final AtomicInteger correlationIdGenerator;
-  private final ConnectionPool connectionPool;
-  private final NetworkClientFactory networkClientFactory;
-  private final NotificationSystem notification;
+  protected final AtomicInteger correlationIdGenerator;
+  protected final ConnectionPool connectionPool;
+  protected final NetworkClientFactory networkClientFactory;
+  protected final NotificationSystem notification;
   // RemoteReplicaInfo are managed by replicaThread.
   protected final Map<String, List<ReplicaThread>> replicaThreadPoolByDc;
   protected final Map<DataNodeId, ReplicaThread> dataNodeIdToReplicaThread;
   protected final Map<String, AtomicInteger> nextReplicaThreadIndexByDc;
-  private final StoreKeyFactory storeKeyFactory;
-  private final List<String> sslEnabledDatacenters;
+  protected final StoreKeyFactory storeKeyFactory;
+  protected final List<String> sslEnabledDatacenters;
   protected final ClusterMapConfig clusterMapConfig;
   protected final StoreKeyConverterFactory storeKeyConverterFactory;
-  private final String transformerClassName;
-  private final Predicate<MessageInfo> skipPredicate;
+  protected final String transformerClassName;
+  protected final Predicate<MessageInfo> skipPredicate;
   protected final DataNodeId dataNodeId;
   protected final MetricRegistry metricRegistry;
   protected final ReplicationMetrics replicationMetrics;
@@ -109,7 +109,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   protected static final short Replication_Delay_Multiplier = 5;
   protected static final String replicaTokenFileName = "replicaTokens";
-  private final Time time;
+  protected final Time time;
   protected LeaderBasedReplicationAdmin leaderBasedReplicationAdmin = null;
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
@@ -252,7 +252,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         break;
       }
     }
-    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword)) {
+    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword) &&
+        !replicaPath.startsWith(BackupCheckerThread.DR_Verifier_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
@@ -340,7 +341,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * @param startThread If thread needs to be started when create.
    * @return List of {@link ReplicaThread}s. Return null if number of replication thread in config is 0 for this DC.
    */
-  private List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread) {
+  protected List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread) {
     int numOfThreadsInPool =
         datacenter.equals(dataNodeId.getDatacenterName()) ? replicationConfig.replicationNumOfIntraDCReplicaThreads
             : replicationConfig.replicationNumOfInterDCReplicaThreads;
@@ -352,12 +353,28 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   }
 
   /**
+   * Returns replication thread
+   */
+  protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
+      NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics,
+      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
+      MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
+      Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+          connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
+          storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
+          responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+  }
+
+  /**
    * Create thread pool for a datacenter.
    * @param datacenter The datacenter String.
    * @param numberOfThreads Number of threads to create for the thread pool.
    * @param startThread If thread needs to be started when create.
    */
-  private List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread) {
+  protected List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread) {
     nextReplicaThreadIndexByDc.put(datacenter, new AtomicInteger(0));
     List<ReplicaThread> replicaThreads = new ArrayList<>();
     logger.info("Number of replica threads to replicate from {}: {}", datacenter, numberOfThreads);
@@ -370,9 +387,13 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         StoreKeyConverter threadSpecificKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
         Transformer threadSpecificTransformer =
             Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
-        NetworkClient networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
+        NetworkClient networkClient = null;
+        if (!dataNodeId.getDatacenterName().equals(datacenter)
+            && replicationConfig.replicationUsingNonblockingNetworkClientForRemoteColo) {
+          networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
+        }
         ReplicaThread replicaThread =
-            new ReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+            getReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
                 connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
                 threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
                 responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);

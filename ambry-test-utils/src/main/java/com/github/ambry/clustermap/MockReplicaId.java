@@ -156,7 +156,7 @@ public class MockReplicaId implements ReplicaId {
 
   @Override
   public String toString() {
-    return "Mount Path " + mountPath + " Replica Path " + replicaPath;
+    return dataNodeId.toString();
   }
 
   @Override

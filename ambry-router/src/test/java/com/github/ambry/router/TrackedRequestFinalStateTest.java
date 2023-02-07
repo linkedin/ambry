@@ -34,8 +34,6 @@ public class TrackedRequestFinalStateTest {
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(RouterErrorCode.OperationTimedOut));
     Assert.assertEquals(TrackedRequestFinalState.NOT_FOUND,
         TrackedRequestFinalState.fromRouterErrorCodeToFinalState(RouterErrorCode.BlobDoesNotExist));
-    Assert.assertEquals(TrackedRequestFinalState.QUOTA_REJECTED,
-        TrackedRequestFinalState.fromRouterErrorCodeToFinalState(RouterErrorCode.TooManyRequests));
 
     Set<RouterErrorCode> checkedErrorCodes = new HashSet<>(
         Arrays.asList(RouterErrorCode.OperationTimedOut, RouterErrorCode.BlobDoesNotExist,

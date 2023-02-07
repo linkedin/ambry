@@ -102,6 +102,7 @@ public abstract class AbstractAccountService implements AccountService {
   protected void maybeUnsubscribeChangeTopic() {
     if (notifier != null) {
       notifier.unsubscribe(ACCOUNT_METADATA_CHANGE_TOPIC, changeTopicListener);
+      notifier.close();
     }
   }
 

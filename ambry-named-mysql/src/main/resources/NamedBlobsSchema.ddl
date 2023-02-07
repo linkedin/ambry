@@ -5,10 +5,11 @@ CREATE TABLE IF NOT EXISTS named_blobs_v2 (
     blob_name varchar(191) NOT NULL,
     version bigint NOT NULL,
     blob_id varbinary(50) NOT NULL,
-    deleted_ts datetime(6) DEFAULT NULL,
     blob_state smallint NOT NULL,
+    deleted_ts datetime(6) DEFAULT NULL,
     PRIMARY KEY (account_id, container_id, blob_name, version)
 )
+
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_bin

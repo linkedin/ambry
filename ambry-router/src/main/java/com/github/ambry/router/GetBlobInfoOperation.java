@@ -94,10 +94,10 @@ class GetBlobInfoOperation extends GetOperation {
    * @param nonBlockingRouter The non-blocking router object
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options,
-      Callback<GetBlobResult> callback, RouterCallback routerCallback, KeyManagementService kms,
-      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted,
-      QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
+      ResponseHandler responseHandler, BlobId blobId, GetBlobOptionsInternal options, Callback<GetBlobResult> callback,
+      RouterCallback routerCallback, KeyManagementService kms, CryptoService cryptoService,
+      CryptoJobHandler cryptoJobHandler, Time time, boolean isEncrypted, QuotaChargeCallback quotaChargeCallback,
+      NonBlockingRouter nonBlockingRouter) {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobId, options, callback, kms, cryptoService,
         cryptoJobHandler, time, isEncrypted);
     this.routerCallback = routerCallback;
@@ -369,6 +369,7 @@ class GetBlobInfoOperation extends GetOperation {
   private void processQuotaRejectedResponse(int correlationId, ReplicaId replicaId) {
     logger.trace("GetBlobInfoRequest with response correlationId {} was rejected because quota was exceeded.",
         correlationId);
+    operationCompleted = true;
     onErrorResponse(replicaId, new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests), false);
     checkAndMaybeComplete();
   }
@@ -492,9 +493,15 @@ class GetBlobInfoOperation extends GetOperation {
     if (progressTracker.isDone()) {
       if (progressTracker.hasSucceeded()) {
         operationException.set(null);
-      } else if (operationTracker.hasFailedOnNotFound()) {
-        operationException.set(new RouterException("GetBlobInfoOperation failed because of BlobNotFound",
-            RouterErrorCode.BlobDoesNotExist));
+      } else {
+        if (operationTracker.hasFailedOnNotFound()) {
+          operationException.set(new RouterException("GetBlobInfoOperation failed because of BlobNotFound",
+              RouterErrorCode.BlobDoesNotExist));
+        } else if (operationTracker.hasSomeUnavailability()) {
+          setOperationException(
+              new RouterException("GetBlobInfoOperation failed possibly because some replicas are unavailable",
+                  RouterErrorCode.AmbryUnavailable));
+        }
       }
       operationCompleted = true;
     }

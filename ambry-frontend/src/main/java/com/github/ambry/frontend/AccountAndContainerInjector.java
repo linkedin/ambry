@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobProperties;
@@ -86,14 +87,15 @@ public class AccountAndContainerInjector {
   }
 
   /**
-   * Injects target {@link Account} and {@link Container} for named blob requests. This will treat the request path as
-   * a named blob path that includes the account and container names.
+   * Injects target {@link Account}, {@link Container} for named blob requests.
+   * Injects target {@link Dataset} for named blob request if it's dataset upload.
+   * This will treat the request path as a named blob path that includes the account and container names.
    * @param restRequest The Put {@link RestRequest}.
    * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
    *                     if {@link ContainerMetrics} instantiation is not needed.
    * @throws RestServiceException
    */
-  public void injectAccountAndContainerForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
+  public void injectAccountContainerAndDatasetForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
       throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
 
@@ -127,6 +129,7 @@ public class AccountAndContainerInjector {
           RestServiceErrorCode.BadRequest);
     }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
+    setTargetDatasetInRestRequestIfNeeded(restRequest, namedBlobPath);
   }
 
   /**
@@ -326,6 +329,30 @@ public class AccountAndContainerInjector {
         restRequest.getMetricsTracker()
             .injectContainerMetrics(
                 metricsGroup.getContainerMetrics(targetAccount.getName(), targetContainer.getName()));
+      }
+    }
+  }
+
+  /**
+   * Set target {@link Dataset} objects in the {@link RestRequest}.
+   * @param restRequest The {@link RestRequest} to set.
+   * @param namedBlobPath the {@link NamedBlobPath} to get account, container and dataset name.
+   * @throws RestServiceException
+   */
+  private void setTargetDatasetInRestRequestIfNeeded(RestRequest restRequest, NamedBlobPath namedBlobPath)
+      throws RestServiceException {
+    if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
+      String accountName = namedBlobPath.getAccountName();
+      String containerName = namedBlobPath.getContainerName();
+      String datasetName = namedBlobPath.getBlobName();
+      try {
+        Dataset dataset = accountService.getDataset(accountName, containerName, datasetName);
+        restRequest.setArg(InternalKeys.TARGET_DATASET_KEY, dataset);
+      } catch (AccountServiceException e) {
+        frontendMetrics.unrecognizedDatasetNameCount.inc();
+        throw new RestServiceException(
+            "Failed to get dataset: " + datasetName + " from account: " + accountName + " container: " + containerName,
+            RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
       }
     }
   }

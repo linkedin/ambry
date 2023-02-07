@@ -1424,7 +1424,8 @@ class PutOperation {
     void checkAndMaybeComplete() {
       boolean done = false;
       // Now, check if this chunk is done.
-      if (operationTracker.isDone()) {
+      if (operationTracker.isDone() || (chunkException != null
+          && chunkException.getErrorCode() == RouterErrorCode.TooManyRequests)) {
         if (!operationTracker.hasSucceeded()) {
           failedAttempts++;
           appendSlippedPutBlobId(chunkBlobId);
@@ -1432,6 +1433,7 @@ class PutOperation {
             logger.trace("{}: Attempt to put chunk with id: {} failed, attempting slipped put ", loggingContext,
                 chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
+            chunkException = null;
             prepareForSending();
           } else {
             // this chunk could not be successfully put. The whole operation has to fail.
@@ -1695,7 +1697,7 @@ class PutOperation {
       logger.debug("{}: PutRequest with response correlationId {} was rejected because quota was exceeded.",
           loggingContext, correlationId);
       setChunkException(new RouterException("QuotaExceeded", RouterErrorCode.TooManyRequests));
-      onErrorResponse(replicaId, TrackedRequestFinalState.QUOTA_REJECTED, false);
+      onErrorResponse(replicaId, TrackedRequestFinalState.FAILURE, false);
       checkAndMaybeComplete();
     }
 

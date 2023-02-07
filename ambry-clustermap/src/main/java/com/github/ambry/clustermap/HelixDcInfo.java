@@ -17,6 +17,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import org.apache.helix.HelixManager;
+import org.apache.helix.spectator.RoutingTableProvider;
 
 
 /**
@@ -26,21 +27,26 @@ import org.apache.helix.HelixManager;
 class HelixDcInfo extends DcInfo {
   final HelixManager helixManager;
   private final DataNodeConfigSource dataNodeConfigSource;
+  private RoutingTableProvider routingTableProvider;
 
   /**
    * Construct a HelixDcInfo object with the given parameters.
-   * @param dcName the associated datacenter name.
-   * @param dcZkInfo the {@link ClusterMapUtils.DcZkInfo} associated with the DC.
-   * @param helixManager the associated {@link HelixManager} for this datacenter. This can be null if the datacenter is
-   *                     not managed by helix.
+   *
+   * @param dcName               the associated datacenter name.
+   * @param dcZkInfo             the {@link ClusterMapUtils.DcZkInfo} associated with the DC.
+   * @param helixManager         the associated {@link HelixManager} for this datacenter. This can be null if the
+   *                             datacenter is not managed by helix.
    * @param clusterChangeHandler the associated {@link HelixClusterChangeHandler} for this datacenter.
    * @param dataNodeConfigSource the {@link DataNodeConfigSource} for this datacenter.
+   * @param routingTableProvider a helix helper class to provide snapshot of the cluster.
    */
   HelixDcInfo(String dcName, ClusterMapUtils.DcZkInfo dcZkInfo, HelixManager helixManager,
-      HelixClusterChangeHandler clusterChangeHandler, DataNodeConfigSource dataNodeConfigSource) {
+      HelixClusterChangeHandler clusterChangeHandler, DataNodeConfigSource dataNodeConfigSource,
+      RoutingTableProvider routingTableProvider) {
     super(dcName, dcZkInfo, clusterChangeHandler);
     this.helixManager = helixManager;
     this.dataNodeConfigSource = dataNodeConfigSource;
+    this.routingTableProvider = routingTableProvider;
   }
 
   @Override
@@ -51,6 +57,7 @@ class HelixDcInfo extends DcInfo {
       }
     } finally {
       dataNodeConfigSource.close();
+      routingTableProvider.shutdown();
     }
   }
 }

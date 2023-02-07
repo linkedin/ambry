@@ -85,6 +85,7 @@ public class CommonUtilsTest {
     // Verify record
     ZNRecord result = propertyStore.get(path, null, AccessOption.PERSISTENT);
     assertEquals("Mismatch in list content", new HashSet<>(list), new HashSet<>(result.getListField("AmbryList")));
+    propertyStore.stop();
     zkInfo.shutdown();
   }
 }

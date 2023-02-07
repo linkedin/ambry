@@ -21,6 +21,8 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlUtils.DbEndpoint;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
@@ -30,18 +32,26 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
   private final String localDatacenter;
   private final MetricRegistry metricRegistry;
   private final AccountService accountService;
+  private final Time time;
 
   public MySqlNamedBlobDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      AccountService accountService) {
+      AccountService accountService, Time time) {
     config = new MySqlNamedBlobDbConfig(verifiableProperties);
     localDatacenter = verifiableProperties.getString(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME);
     this.metricRegistry = metricRegistry;
     this.accountService = accountService;
+    this.time = time;
+  }
+
+  public MySqlNamedBlobDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      AccountService accountService) {
+    this(verifiableProperties, metricRegistry, accountService, SystemTime.getInstance());
   }
 
   @Override
   public MySqlNamedBlobDb getNamedBlobDb() {
-    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter, metricRegistry);
+    return new MySqlNamedBlobDb(accountService, config, this::buildDataSource, localDatacenter, metricRegistry,
+        this.time);
   }
 
   /**

@@ -29,6 +29,8 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String DB_EXECUTE_BATCH_SIZE = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.execute.batch.size";
   public static final String ZK_CLIENT_CONNECT_STRING_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "zk.client.connect.string";
   public static final String WRITE_CACHE_AFTER_UPDATE = MYSQL_ACCOUNT_SERVICE_PREFIX + "write.cache.after.update";
+  public static final String MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET =
+      MYSQL_ACCOUNT_SERVICE_PREFIX + "max.major.version.for.semantic.schema.dataset";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -123,6 +125,10 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Config(ZK_CLIENT_CONNECT_STRING_KEY)
   public final String zkClientConnectString;
 
+  @Config(MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET)
+  @Default("999")
+  public final int maxMajorVersionForSemanticSchemaDataset;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -136,5 +142,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     dbExecuteBatchSize = verifiableProperties.getIntInRange(DB_EXECUTE_BATCH_SIZE, 50, 1, Integer.MAX_VALUE);
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY, null);
     writeCacheAfterUpdate = verifiableProperties.getBoolean(WRITE_CACHE_AFTER_UPDATE, true);
+    maxMajorVersionForSemanticSchemaDataset =
+        verifiableProperties.getIntInRange(MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET, 999, 1, Integer.MAX_VALUE);
   }
 }

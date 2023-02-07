@@ -126,7 +126,15 @@ public class RouterConfig {
       "router.update.op.metadata.reliance.timestamp.in.ms";
   public static final String ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE =
       "router.unavailable.due.to.success.count.is.non.zero.for.delete";
+  // repair the blob with the on-demand replication on ttlupdate
+  public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_TTLUPDATE_ENABLED =
+      "router.repair.with.replicate.blob.enabled";
+  // repair the blob with the on-demand replication on deletion
+  public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED =
+      "router.repair.with.replicate.blob.on.delete.enabled";
   public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED = "router.repair.with.replicate.blob.enabled";
+  public static final String ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND =
+      "router.operation.tracker.check.all.originating.replicas.for.not.found";
 
   /**
    * Number of independent scaling units for the router.
@@ -649,12 +657,44 @@ public class RouterConfig {
   public final long routerUpdateOpMetadataRelianceTimestampInMs;
 
   /**
-   * If this config is set to {@code true}, when operation fails because of not enough replicas having replicated the Blob,
+   * If this config is set to {@code true}, when ttlupdate fails because of not enough replicas having replicated the Blob,
    * the operation will trigger the on-demand replication to replicate the Blob to more replicas and then retry the request.
    */
-  @Config(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED)
-  @Default("false")
-  public final boolean routerRepairWithReplicateBlobEnabled;
+  @Config(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_TTLUPDATE_ENABLED)
+  public final boolean routerRepairWithReplicateBlobOnTtlUpdateEnabled;
+
+  /**
+   * If this config is set to {@code true}, when deletion fails because of not enough replicas having replicated the Blob,
+   * the operation will trigger the on-demand replication to replicate the Blob to more replicas and then retry the request.
+   */
+  @Config(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED)
+  public final boolean routerRepairWithReplicateBlobOnDeleteEnabled;
+
+  /**
+   * The maximum duration in seconds to retry. If the get blob operation takes more than this duration, we would not retry.
+   */
+  @Config(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC)
+  public final int routerGetBlobRetryLimitInSec;
+  public static final String ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC = "router.get.blob.retry.limit.in.sec";
+  public static final int ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX = 300;
+
+  /**
+   * The maximum number of retries for get blob. The default value is 0, which means no retry for get blob.
+   */
+  @Config(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT)
+  public final int routerGetBlobRetryLimitCount;
+  public static final String ROUTER_GET_BLOB_RETRY_LIMIT_COUNT = "router.get.blob.retry.limit.count";
+  public static final int ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX = 100;
+
+  /*
+   * If this config is set to {@code true} the operation tracker would make sure all replicas in originating data center
+   * are up and respond with BLOB_NOT_FOUND before concluding that blob is not present. Else, it would check in
+   * total_originating_dc_replicas - put_success_target + 1 replicas.
+   */
+  @Config(ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND)
+  @Default("true")
+  public final boolean routerOperationTrackerCheckAllOriginatingReplicasForNotFound;
+
 
   // Group compression-related configs in the CompressConfig class.
   private final CompressionConfig compressionConfig;
@@ -798,12 +838,21 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE, true);
     routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
-    routerUpdateOpMetadataRelianceTimestampInMs = verifiableProperties.getLong(
-        ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS, DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
-    routerRepairWithReplicateBlobEnabled =
-        verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED, false);
+    routerUpdateOpMetadataRelianceTimestampInMs =
+        verifiableProperties.getLong(ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS,
+            DEFAULT_ROUTER_UPDATE_OP_METADATA_RELIANCE_TIMESTAMP_IN_MS);
+    routerRepairWithReplicateBlobOnTtlUpdateEnabled =
+        verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_TTLUPDATE_ENABLED, false);
+    routerRepairWithReplicateBlobOnDeleteEnabled =
+        verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED, false);
+    routerGetBlobRetryLimitInSec = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, 0, 0,
+        ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX);
+    routerGetBlobRetryLimitCount = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT, 0, 0,
+        ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX);
 
     compressionConfig = new CompressionConfig(verifiableProperties);
+    routerOperationTrackerCheckAllOriginatingReplicasForNotFound =
+        verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND, true);
   }
 
   /**

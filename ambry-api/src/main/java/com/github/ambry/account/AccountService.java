@@ -157,6 +157,57 @@ public interface AccountService extends Closeable {
     return selectedContainers;
   }
 
+  /**
+   * Add a {@link Dataset} based on the supplied properties.
+   * @param dataset The name of the dataset.
+   * @throws AccountServiceException
+   */
+  default void addDataset(Dataset dataset) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * Add the dataset version based on the supplied properties.
+   * @param accountName The name for the parent account.
+   * @param containerName The name for the container.
+   * @param datasetName The name of the dataset.
+   * @param version The version of the dataset.
+   * @param expirationTimeMs the expiration time of the version of the dataset.
+   * @return the {@link Dataset} which contains the metadata.
+   * @throws AccountServiceException
+   */
+  default Dataset addDatasetVersion(String accountName, String containerName, String datasetName, String version,
+      long expirationTimeMs) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * Get a {@link Dataset} based on the supplied properties.
+   * @param accountName The name of the parent account.
+   * @param containerName The name of the container.
+   * @param DatasetName The name of the dataset.
+   * @return The {@link Dataset}
+   * @throws AccountServiceException
+   */
+  default Dataset getDataset(String accountName, String containerName, String DatasetName)
+      throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * Get the dataset version based on the supplied properties.
+   * @param accountName The name for the parent account.
+   * @param containerName The name for the container.
+   * @param datasetName The name of the dataset.
+   * @param version The version of the dataset.
+   * @return the {@link DatasetVersionRecord}
+   * @throws AccountServiceException
+   */
+  default DatasetVersionRecord getDatasetVersion(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
   default void selectInactiveContainersAndMarkInStore(AggregatedAccountStorageStats aggregatedAccountStorageStats) {
     throw new UnsupportedOperationException("This method is not supported");
   }

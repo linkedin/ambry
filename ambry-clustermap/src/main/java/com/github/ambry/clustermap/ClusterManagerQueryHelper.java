@@ -37,7 +37,7 @@ interface ClusterManagerQueryHelper<R extends ReplicaId, D extends DiskId, P ext
    * @param partition the {@link PartitionId} for which to get the resource name.
    * @return the resource name associated with given partition.
    */
-  default String getResourceNameForPartition(P partition) {
+  default List<String> getResourceNamesForPartition(P partition) {
     return null;
   }
 

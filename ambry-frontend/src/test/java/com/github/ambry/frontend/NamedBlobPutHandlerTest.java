@@ -27,7 +27,6 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.named.MySqlNamedBlobDbFactory;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
 import com.github.ambry.quota.QuotaTestUtils;
@@ -70,7 +69,6 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
 
 
 public class NamedBlobPutHandlerTest {
@@ -481,7 +479,7 @@ public class NamedBlobPutHandlerTest {
     namedBlobPutHandler =
         new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb, idConverterFactory.getIdConverter(),
             idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
-            QuotaTestUtils.createDummyQuotaManager());
+            QuotaTestUtils.createDummyQuotaManager(), null);
   }
 
   /**

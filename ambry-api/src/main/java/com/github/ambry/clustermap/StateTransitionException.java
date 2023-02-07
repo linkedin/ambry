@@ -25,6 +25,12 @@ public class StateTransitionException extends RuntimeException {
     this.error = error;
   }
 
+  public StateTransitionException(String s, TransitionErrorCode error, Throwable throwable) {
+    super(s, throwable);
+    this.error = error;
+  }
+
+
   public TransitionErrorCode getErrorCode() {
     return error;
   }
@@ -62,6 +68,11 @@ public class StateTransitionException extends RuntimeException {
     /**
      * If updating cluster info in Helix fails at some point for specific replica.
      */
-    HelixUpdateFailure
+    HelixUpdateFailure,
+
+    /**
+     * If the resource name is not a numeric number.
+     */
+    InvalidResourceName
   }
 }
