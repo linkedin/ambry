@@ -86,7 +86,7 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.DELETE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes, MessageInfoType.DELETE);
+    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
   }
 
   /**
@@ -100,7 +100,7 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.TTL_UPDATE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes, MessageInfoType.TTL_UPDATE);
+    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
   }
 
   /**
@@ -114,7 +114,7 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.UNDELETE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes, MessageInfoType.UNDELETE);
+    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
   }
 
   /**
@@ -156,7 +156,7 @@ public class BackupCheckerThread extends ReplicaThread {
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         for (MessageInfo messageInfo: exchangeMetadataResponse.getMissingStoreMessages()) {
           // Check local store once before logging an error
-          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates, acceptableStoreErrorCodes, MessageInfoType.PUT);
+          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates, acceptableStoreErrorCodes);
         }
         // Advance token so that we make progress in spite of missing keys,
         // else the replication code will be stuck waiting for missing keys to appear in local store.
@@ -185,23 +185,25 @@ public class BackupCheckerThread extends ReplicaThread {
    * @param acceptableStoreErrorCodes Acceptable error codes when retrieving the blob from local-store
    */
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
-      EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes, MessageInfoType messageInfoType) {
+      EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
     try {
       EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
       // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
       // However, get() can also do this with additional and appropriate StoreGetOptions.
       MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
+      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
         logger.error(" | Missing {} | RemoteReplica = {} | BlobID = {} | RemoteBlobState = {} | LocalBlobState = {} | ",
-            messageInfoType, remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob));
+            acceptableLocalBlobStates, remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob));
       }
     } catch (StoreException e) {
       EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
+      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
         logger.error(" | Missing {} | RemoteReplica = {} | BlobID = {} | RemoteBlobState = {} | LocalBlobState = {} | ",
-            messageInfoType, remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode());
+            acceptableLocalBlobStates, remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode());
       }
     }
   }
