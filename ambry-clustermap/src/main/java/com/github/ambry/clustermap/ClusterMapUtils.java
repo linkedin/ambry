@@ -174,6 +174,48 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Returns the replica's {@link PartitionState} based on the specified {@link ReplicaSealStatus}.
+   * @param replicaSealStatus {@link ReplicaSealStatus} of the replica.
+   * @return PartitionState object.
+   */
+  public static PartitionState convertReplicaSealStatusToPartitionState(ReplicaSealStatus replicaSealStatus) {
+    PartitionState partitionState = null;
+    switch (replicaSealStatus) {
+      case SEALED:
+        partitionState = PartitionState.READ_ONLY;
+        break;
+      case PARTIALLY_SEALED:
+        partitionState = PartitionState.PARTIAL_READ_WRITE;
+        break;
+      case NOT_SEALED:
+        partitionState = PartitionState.READ_WRITE;
+        break;
+    }
+    return partitionState;
+  }
+
+  /**
+   * Returns the replica's {@link ReplicaSealStatus} based on the specified {@link PartitionState}.
+   * @param partitionState {@link PartitionState} object.
+   * @return ReplicaSealStatus object.
+   */
+  public static ReplicaSealStatus convertPartitionStateToReplicaSealSatus(PartitionState partitionState) {
+    ReplicaSealStatus replicaSealStatus = null;
+    switch (partitionState) {
+      case READ_ONLY:
+        replicaSealStatus = ReplicaSealStatus.SEALED;
+        break;
+      case PARTIAL_READ_WRITE:
+        replicaSealStatus = ReplicaSealStatus.PARTIALLY_SEALED;
+        break;
+      case READ_WRITE:
+        replicaSealStatus = ReplicaSealStatus.NOT_SEALED;
+        break;
+    }
+    return replicaSealStatus;
+  }
+
+  /**
    * Get the schema version associated with the given instance (if any).
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the schema version of the information stored. If the field is absent in the InstanceConfig, the version

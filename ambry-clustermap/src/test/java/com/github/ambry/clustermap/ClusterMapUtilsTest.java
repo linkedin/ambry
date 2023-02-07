@@ -220,7 +220,7 @@ public class ClusterMapUtilsTest {
     for (MockPartitionId partitionId : toReset) {
       for (ReplicaId replicaId : partitionId.getReplicaIds()) {
         ((MockReplicaId) replicaId).markReplicaDownStatus(false);
-        ((MockReplicaId) replicaId).setSealedState(false);
+        ((MockReplicaId) replicaId).setReplicaSealStatus(ReplicaSealStatus.NOT_SEALED);
       }
     }
   }
@@ -381,7 +381,7 @@ public class ClusterMapUtilsTest {
     allPartitionIds.add(testedPart2);
 
     // one partition of "classBeingTested" is READ_ONLY
-    ((MockReplicaId) testedPart1.getReplicaIds().get(0)).setSealedState(true);
+    ((MockReplicaId) testedPart1.getReplicaIds().get(0)).setReplicaSealStatus(ReplicaSealStatus.SEALED);
     allPartitionIds.remove(testedPart1);
     expectedReturnForClassBeingTested.remove(testedPart1);
     verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested, localDc);
@@ -389,7 +389,7 @@ public class ClusterMapUtilsTest {
         localDc);
 
     // all READ_ONLY
-    ((MockReplicaId) testedPart2.getReplicaIds().get(0)).setSealedState(true);
+    ((MockReplicaId) testedPart2.getReplicaIds().get(0)).setReplicaSealStatus(ReplicaSealStatus.SEALED);
     allPartitionIds.remove(testedPart2);
     expectedReturnForClassBeingTested.remove(testedPart2);
     verifyGetWritablePartition(psh, allPartitionIds, classBeingTested, expectedReturnForClassBeingTested, localDc);
@@ -401,8 +401,8 @@ public class ClusterMapUtilsTest {
     }
 
     //cleanup the cluster map
-    ((MockReplicaId) testedPart1.getReplicaIds().get(0)).setSealedState(false);
-    ((MockReplicaId) testedPart2.getReplicaIds().get(0)).setSealedState(false);
+    ((MockReplicaId) testedPart1.getReplicaIds().get(0)).setReplicaSealStatus(ReplicaSealStatus.NOT_SEALED);
+    ((MockReplicaId) testedPart2.getReplicaIds().get(0)).setReplicaSealStatus(ReplicaSealStatus.NOT_SEALED);
     allPartitionIds.add(testedPart1);
     allPartitionIds.add(testedPart2);
     expectedReturnForClassBeingTested.add(testedPart1);

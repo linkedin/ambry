@@ -39,7 +39,7 @@ class CloudServiceReplica extends AmbryReplica {
    */
   CloudServiceReplica(ClusterMapConfig clusterMapConfig, CloudServiceDataNode dataNode, AmbryPartition partition,
       long capacityBytes) throws Exception {
-    super(clusterMapConfig, partition, false, capacityBytes, false);
+    super(clusterMapConfig, partition, false, capacityBytes, ReplicaSealStatus.NOT_SEALED);
     this.dataNode = dataNode;
   }
 

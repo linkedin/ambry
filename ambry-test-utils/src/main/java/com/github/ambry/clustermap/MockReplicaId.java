@@ -33,7 +33,7 @@ public class MockReplicaId implements ReplicaId {
   private MockDiskId diskId;
   private boolean isMarkedDown = false;
   private ReplicaType replicaType;
-  private volatile boolean isSealed;
+  private volatile ReplicaSealStatus replicaSealStatus;
   private ReplicaState replicaState;
 
   public MockReplicaId(ReplicaType replicaType) {
@@ -65,7 +65,7 @@ public class MockReplicaId implements ReplicaId {
       replicaPath = replicaFile.getAbsolutePath();
       diskId = new MockDiskId(dataNodeId, mountPath);
     }
-    isSealed = partitionId.getPartitionState().equals(PartitionState.READ_ONLY);
+    replicaSealStatus = ClusterMapUtils.convertPartitionStateToReplicaSealSatus(partitionId.getPartitionState());
     this.replicaState = replicaState;
   }
 
@@ -124,7 +124,12 @@ public class MockReplicaId implements ReplicaId {
 
   @Override
   public boolean isSealed() {
-    return isSealed;
+    return replicaSealStatus == ReplicaSealStatus.SEALED;
+  }
+
+  @Override
+  public boolean isPartiallySealed() {
+    return replicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED;
   }
 
   @Override
@@ -136,7 +141,7 @@ public class MockReplicaId implements ReplicaId {
       snapshot.put(REPLICA_DISK, diskId.getMountPath());
     }
     snapshot.put(REPLICA_PATH, replicaPath);
-    snapshot.put(REPLICA_WRITE_STATE, isSealed() ? PartitionState.READ_ONLY.name() : PartitionState.READ_WRITE.name());
+    snapshot.put(REPLICA_WRITE_STATE, ClusterMapUtils.convertReplicaSealStatusToPartitionState(replicaSealStatus));
     String liveness = UP;
     if (isMarkedDown) {
       liveness = DOWN;
@@ -149,8 +154,12 @@ public class MockReplicaId implements ReplicaId {
     return snapshot;
   }
 
-  public void setSealedState(boolean isSealed) {
-    this.isSealed = isSealed;
+  /**
+   * Set the {@link ReplicaSealStatus} of this replica to the sepcified value.
+   * @param replicaSealStatus {@link ReplicaSealStatus} to set.
+   */
+  public void setReplicaSealStatus(ReplicaSealStatus replicaSealStatus) {
+    this.replicaSealStatus = replicaSealStatus;
     partitionId.resolvePartitionStatus();
   }
 
