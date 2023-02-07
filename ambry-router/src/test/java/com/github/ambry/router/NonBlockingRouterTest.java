@@ -3137,6 +3137,53 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Test Deletion first hits Not_FOUND. Then run ReplicateBlob.
+   * If the PutBlob is compacted already, ReplicateBlob may fail with ID_Deleted.
+   * @throws Exception
+   */
+  @Test
+  public void testReplicateBlobOnDeleteButPutBlobCompacted() throws Exception {
+    String serviceID = "delete-service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    String localDcName = "DC3";
+    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setOperationParams();
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+    // two local replicas are unavailable. Remote replica doesn't have the Blob.
+    DataNodeId sourceDataNode = null;
+    List<ServerErrorCode> serverErrors = new ArrayList<>();
+    serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+    serverErrors.add(ServerErrorCode.Blob_Deleted); // source PutBlob is compacted, replication fails with Blob_Deleted.
+    for (MockServer server : layout.getMockServers()) {
+      if (server.getDataCenter().equals(localDcName)) {
+        // local DC, return NO_ERROR for one replica. This replica will be the source replica of the ReplicateBlob.
+        if (sourceDataNode == null) {
+          sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+        } else {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      } else {
+        server.setServerErrors(serverErrors);
+      }
+    }
+
+    // ReplicateBlob fails, it returns the error of the delete operation.
+    try {
+      router.deleteBlob(blobId, serviceID).get();
+      fail("deleteBlob should fail since ReplicateBlob fails.");
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("AmbryUnavailable error is expected", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+    } finally {
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      router.getNotFoundCache().invalidateAll();
+      router.close();
+    }
+  }
+
+  /**
    * When a composite blob put fails, background deleter will kick off and delete all the data chunks.
    * Test On-Demand replication won't get triggered for the background deleter.
    */
