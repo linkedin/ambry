@@ -37,6 +37,8 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.OpenOption;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
@@ -67,6 +69,7 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String DR_Verifier_Keyword = "dr";
 
   protected final AmbryCache fileDescriptorCache;
+  private final String basePath = "/export/content/lid/logs/ambry-server/i001";
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -128,7 +131,7 @@ public class BackupCheckerThread extends ReplicaThread {
   /**
    * Checks if a blob from remote replica is present locally
    * We should not be here since we are overriding fixMissingStoreKeys but still need to override in case someone
-   * makes a change in the future and we end up here.
+   * makes a change in the future, and we end up here.
    * @param validMessageDetectionInputStream Stream of valid blob IDs
    * @param remoteReplicaInfo Info about remote replica from which we are replicating
    */
@@ -149,8 +152,7 @@ public class BackupCheckerThread extends ReplicaThread {
   @Override
   protected void fixMissingStoreKeys(
       ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby)
-      throws IOException {
+      List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby) {
     /**
      * Instead of over-riding applyPut, it is better to override fixMissingStoreKeys.
      * We already know the missing keys. We know they are not deleted or expired on the remote node.
@@ -184,17 +186,63 @@ public class BackupCheckerThread extends ReplicaThread {
     remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
     // reset stored metadata response for this replica so that we send next request for metadata
     remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
+    BufferedWriter bufferedWriter = getOrCreateStatusFileFd(remoteReplicaInfo);
+    String text = String.format("RemoteReplicaInfo = %s \nToken = %s \nlocalLagFromRemoteInBytes = %s \n",
+        remoteReplicaInfo, remoteReplicaInfo.getToken().toString(), exchangeMetadataResponse.localLagFromRemoteInBytes);
+    writeToFile(bufferedWriter, text, 0);
   }
 
-  protected BufferedWriter getOrCreateReportFd(RemoteReplicaInfo remoteReplicaInfo) throws IOException {
-    String basePath = "/export/content/lid/apps/ambry-server/i001/logs/" + remoteReplicaInfo.getReplicaId().getPartitionId().getId() + "/" + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
-    String missingKeysFile = basePath + "/" + "missingKeys";
-    FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(missingKeysFile);
+  protected boolean writeToFile(BufferedWriter bufferedWriter, String text, int offset) {
+    try {
+      bufferedWriter.write(text, offset, text.length());
+      return true;
+    } catch (IOException e) {
+      logger.error(e.toString());
+      return false;
+    }
+  }
+
+  protected boolean appendToFile(BufferedWriter bufferedWriter, String text) {
+    try {
+      bufferedWriter.write(text);
+      return true;
+    } catch (IOException e) {
+      logger.error(e.toString());
+      return false;
+    }
+  }
+
+  protected BufferedWriter getOrCreateStatusFileFd(RemoteReplicaInfo remoteReplicaInfo) {
+    String filePath = basePath
+        + File.separator + remoteReplicaInfo.getReplicaId().getPartitionId().getId()
+        + File.separator + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname()
+        + File.separator + "replicaCheckStatus";
+    return getOrCreateReportFd(filePath, true, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+  }
+  protected BufferedWriter getOrCreateMissingKeysFd(RemoteReplicaInfo remoteReplicaInfo) {
+    String filePath = basePath
+        + File.separator + remoteReplicaInfo.getReplicaId().getPartitionId().getId()
+        + File.separator + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname()
+        + File.separator + "missingKeys";
+    return getOrCreateReportFd(filePath, true, StandardOpenOption.APPEND);
+  }
+
+  protected BufferedWriter getOrCreateReportFd(String filePath, boolean createIfAbsent, OpenOption... options) {
+    FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(filePath);
     if (fileDescriptor == null) {
-      Files.createDirectories(Paths.get(basePath));
-      BufferedWriter bufferedWriter = Files.newBufferedWriter(Paths.get(missingKeysFile), StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.DSYNC);
-      fileDescriptor = new FileDescriptor(bufferedWriter);
-      fileDescriptorCache.putObject(missingKeysFile, fileDescriptor);
+      try {
+        Files.createDirectories(Paths.get(basePath));
+        Path path = Paths.get(filePath);
+        if (createIfAbsent && Files.exists(path) == false) {
+          Files.createFile(path);
+        }
+        BufferedWriter bufferedWriter = Files.newBufferedWriter(path, options);
+        fileDescriptor = new FileDescriptor(bufferedWriter);
+        fileDescriptorCache.putObject(filePath, fileDescriptor);
+      } catch (IOException e) {
+        logger.error("Path = {}, error = {}", filePath, e.toString());
+        return null;
+      }
     }
     return fileDescriptor.getBufferedWriter();
   }
@@ -208,31 +256,27 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
+    BufferedWriter bufferedWriter = getOrCreateMissingKeysFd(remoteReplicaInfo);
+    String errMsg = "%s | Missing %s | RemoteReplica = %s | BlobID = %s | RemoteBlobState = %s | LocalBlobState = %s \n";
     try {
-      BufferedWriter bufferedWriter = getOrCreateReportFd(remoteReplicaInfo);
-      String errMsg = "%s | Missing %s | RemoteReplica = %s | BlobID = %s | RemoteBlobState = %s | LocalBlobState = %s \n";
-      try {
-        EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
-        // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
-        // However, get() can also do this with additional and appropriate StoreGetOptions.
-        MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
-        // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-        messageInfoTypes.retainAll(getBlobStates(localBlob));
-        if (messageInfoTypes.isEmpty()) {
-          bufferedWriter.write(String.format(errMsg, System.currentTimeMillis(), acceptableLocalBlobStates,
-              remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
-        }
-      } catch (StoreException e) {
-        EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
-        // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-        storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
-        if (storeErrorCodes.isEmpty()) {
-          bufferedWriter.write(String.format(errMsg, System.currentTimeMillis(), acceptableLocalBlobStates,
-              remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
-        }
+      EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
+      // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
+      // However, get() can also do this with additional and appropriate StoreGetOptions.
+      MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
+      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
+      messageInfoTypes.retainAll(getBlobStates(localBlob));
+      if (messageInfoTypes.isEmpty()) {
+        appendToFile(bufferedWriter, String.format(errMsg, System.currentTimeMillis(), acceptableLocalBlobStates,
+            remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
       }
-    } catch (IOException e) {
-      logger.error(e.toString());
+    } catch (StoreException e) {
+      EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
+      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
+      storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
+      if (storeErrorCodes.isEmpty()) {
+        appendToFile(bufferedWriter, String.format(errMsg, System.currentTimeMillis(), acceptableLocalBlobStates,
+            remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
+      }
     }
   }
 
@@ -266,8 +310,10 @@ public class BackupCheckerThread extends ReplicaThread {
   @Override
   protected void logReplicationCaughtUp(RemoteReplicaInfo remoteReplicaInfo) {
     // This will help us know when to stop DR process for sealed partitions
-    logger.info("Local-store has caught up with remote-store. RemoteReplica = {}, Token = {}",
-        remoteReplicaInfo.toString(), remoteReplicaInfo.getToken().toString());
+    BufferedWriter bufferedWriter = getOrCreateStatusFileFd(remoteReplicaInfo);
+    String text = String.format("RemoteReplicaInfo = %s \nToken = %s \nLocal-store has caught up with remote-store \n",
+        remoteReplicaInfo, remoteReplicaInfo.getToken().toString());
+    writeToFile(bufferedWriter, text, 0);
   }
 
   /**
