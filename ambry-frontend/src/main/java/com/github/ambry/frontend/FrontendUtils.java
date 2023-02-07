@@ -149,7 +149,7 @@ class FrontendUtils {
    * @param datasetVersionRecord the {@link DatasetVersionRecord} which include the version info.
    * @throws RestServiceException
    */
-  static void refreshRequestPathWithNewOperationOrBlobIdIfNeeded(RestRequest restRequest,
+  static void replaceRequestPathWithNewOperationOrBlobIdIfNeeded(RestRequest restRequest,
       DatasetVersionRecord datasetVersionRecord, String version) throws RestServiceException {
     if (version.equals("LATEST") || version.equals("MAJOR") || version.equals("MINOR") || version.equals("PATCH")) {
       RequestPath originalRequestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
@@ -168,7 +168,6 @@ class FrontendUtils {
               originalRequestPath.getPathAfterPrefixes(), latestOperationOrBlobId, originalRequestPath.getSubResource(),
               originalRequestPath.getBlobSegmentIdx());
       restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
-      restRequest.setArg(RestUtils.InternalKeys.FILENAME_HINT, newRequestPath.getOperationOrBlobId(true));
     }
   }
 }

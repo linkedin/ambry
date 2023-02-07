@@ -45,7 +45,6 @@ public class AccountAndContainerInjector {
   private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
       new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
   private static final Logger logger = LoggerFactory.getLogger(AccountAndContainerInjector.class);
-  private static final String PATH_SEPARATOR_STRING = "/";
 
   private final AccountService accountService;
   private final FrontendMetrics frontendMetrics;
@@ -336,7 +335,7 @@ public class AccountAndContainerInjector {
   }
 
   /**
-   * Set target {@link Dataset} objects and it's version in the {@link RestRequest}.
+   * Set target {@link Dataset} objects and its version in the {@link RestRequest}.
    * @param restRequest The {@link RestRequest} to set.
    * @param namedBlobPath the {@link NamedBlobPath} to get account, container and dataset name.
    * @throws RestServiceException
@@ -360,8 +359,8 @@ public class AccountAndContainerInjector {
       String version = splitName[1];
       try {
         Dataset dataset = accountService.getDataset(accountName, containerName, datasetName);
-        restRequest.setArg(InternalKeys.TARGET_DATASET_KEY, dataset);
-        restRequest.setArg(InternalKeys.TARGET_DATASET_VERSION_KEY, version);
+        restRequest.setArg(InternalKeys.TARGET_DATASET, dataset);
+        restRequest.setArg(InternalKeys.TARGET_DATASET_VERSION, version);
       } catch (AccountServiceException e) {
         frontendMetrics.unrecognizedDatasetNameCount.inc();
         throw new RestServiceException(

@@ -59,6 +59,7 @@ public class RestUtils {
    * The default extension to add to blob id returned back to client.
    */
   public static final String DEFAULT_EXTENSION = "bin";
+  public static final String PATH_SEPARATOR_STRING = "/";
   /**
    * Ambry specific HTTP headers.
    */
@@ -373,12 +374,12 @@ public class RestUtils {
     /**
      * The key for the target {@link com.github.ambry.account.Dataset} indicated by the request.
      */
-    public static final String TARGET_DATASET_KEY = KEY_PREFIX + "target-dataset";
+    public static final String TARGET_DATASET = KEY_PREFIX + "target-dataset";
 
     /**
      * The key for the target dataset version indicated by the request.
      */
-    public static final String TARGET_DATASET_VERSION_KEY = KEY_PREFIX + "target-dataset-version-key";
+    public static final String TARGET_DATASET_VERSION = KEY_PREFIX + "target-dataset-version-key";
 
     /**
      * The key for the metadata {@code Map<String, String>} to include in a signed ID. This argument should be non-null

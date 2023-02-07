@@ -376,7 +376,7 @@ public class NamedBlobPutHandler {
     private Map<String, String> getDatasetUserTags(RestRequest restRequest) throws RestServiceException {
       Map<String, String> userTags = null;
       if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
-        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET_KEY);
+        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
         userTags = dataset.getUserTags();
       }
       return userTags;
@@ -500,16 +500,16 @@ public class NamedBlobPutHandler {
       String datasetName = null;
       String version = null;
       try {
-        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET_KEY);
+        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
         accountName = dataset.getAccountName();
         containerName = dataset.getContainerName();
         datasetName = dataset.getDatasetName();
-        version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION_KEY);
+        version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
         long expirationTimeMs =
             Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
         DatasetVersionRecord datasetVersionRecord =
             accountService.addDatasetVersion(accountName, containerName, datasetName, version, expirationTimeMs);
-        FrontendUtils.refreshRequestPathWithNewOperationOrBlobIdIfNeeded(restRequest, datasetVersionRecord, version);
+        FrontendUtils.replaceRequestPathWithNewOperationOrBlobIdIfNeeded(restRequest, datasetVersionRecord, version);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
