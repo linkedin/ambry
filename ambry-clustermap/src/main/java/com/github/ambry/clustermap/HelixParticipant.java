@@ -147,7 +147,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   @Override
-  public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+  public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
     if (!(replicaId instanceof AmbryReplica)) {
       throw new IllegalArgumentException(
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
@@ -156,10 +156,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       DataNodeConfig config = getDataNodeConfig();
       String partitionId = replicaId.getPartitionId().toPathString();
       boolean success = true;
-      if (!isSealed && config.getSealedReplicas().remove(partitionId)) {
+      // TODO Handle partial seal case.
+      if (replicaSealStatus != ReplicaSealStatus.SEALED && config.getSealedReplicas().remove(partitionId)) {
         logger.trace("Removing the partition {} from sealedReplicas list", partitionId);
         success = dataNodeConfigSource.set(config);
-      } else if (isSealed && config.getSealedReplicas().add(partitionId)) {
+      } else if (replicaSealStatus == ReplicaSealStatus.SEALED && config.getSealedReplicas().add(partitionId)) {
         logger.trace("Adding the partition {} to sealedReplicas list", partitionId);
         success = dataNodeConfigSource.set(config);
       }

@@ -179,20 +179,20 @@ public class HelixParticipantTest {
     //Check that invoking setReplicaSealedState with a non-AmbryReplica ReplicaId throws an IllegalArgumentException
     ReplicaId notAmbryReplica = createMockNotAmbryReplica(partitionIdStr);
     try {
-      helixParticipant.setReplicaSealedState(notAmbryReplica, true);
+      helixParticipant.setReplicaSealedState(notAmbryReplica, ReplicaSealStatus.SEALED);
       fail("Expected an IllegalArgumentException here");
     } catch (IllegalArgumentException e) {
       //Expected exception
     }
 
     //Check that invoking setReplicaSealedState adds the partition to the list of sealed replicas
-    helixParticipant.setReplicaSealedState(replicaId, true);
+    helixParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.SEALED);
     sealedReplicas = helixParticipant.getSealedReplicas();
     listIsExpectedSize(sealedReplicas, 1, listName);
     assertTrue(sealedReplicas.contains(partitionIdStr));
 
     //Seal another replicaId
-    helixParticipant.setReplicaSealedState(replicaId2, true);
+    helixParticipant.setReplicaSealedState(replicaId2, ReplicaSealStatus.SEALED);
     sealedReplicas = helixParticipant.getSealedReplicas();
     listIsExpectedSize(sealedReplicas, 2, listName);
     assertTrue(sealedReplicas.contains(partitionIdStr2));
@@ -201,28 +201,28 @@ public class HelixParticipantTest {
     //Check that sealed replica list doesn't take duplicates (and that dups are detected by partitionId comparison, not
     //replicaId object comparison
     ReplicaId dup = createMockAmbryReplica(partitionIdStr);
-    helixParticipant.setReplicaSealedState(dup, true);
-    helixParticipant.setReplicaSealedState(replicaId2, true);
+    helixParticipant.setReplicaSealedState(dup, ReplicaSealStatus.SEALED);
+    helixParticipant.setReplicaSealedState(replicaId2, ReplicaSealStatus.SEALED);
     sealedReplicas = helixParticipant.getSealedReplicas();
     listIsExpectedSize(sealedReplicas, 2, listName);
     assertTrue(sealedReplicas.contains(partitionIdStr2));
     assertTrue(sealedReplicas.contains(partitionIdStr));
 
     //Check that invoking setReplicaSealedState with isSealed == false removes partition from list of sealed replicas
-    helixParticipant.setReplicaSealedState(replicaId, false);
+    helixParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
     sealedReplicas = helixParticipant.getSealedReplicas();
     listIsExpectedSize(sealedReplicas, 1, listName);
     assertTrue(sealedReplicas.contains(partitionIdStr2));
     assertFalse(sealedReplicas.contains(partitionIdStr));
 
     //Removing a replicaId that's already been removed doesn't hurt anything
-    helixParticipant.setReplicaSealedState(replicaId, false);
+    helixParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
     sealedReplicas = helixParticipant.getSealedReplicas();
     listIsExpectedSize(sealedReplicas, 1, listName);
 
     //Removing all replicas yields expected behavior (and removal works by partitionId, not replicaId itself)
     dup = createMockAmbryReplica(partitionIdStr2);
-    helixParticipant.setReplicaSealedState(dup, false);
+    helixParticipant.setReplicaSealedState(dup, ReplicaSealStatus.NOT_SEALED);
     sealedReplicas = helixParticipant.getSealedReplicas();
     listIsExpectedSize(sealedReplicas, 0, listName);
     helixAdmin.close();

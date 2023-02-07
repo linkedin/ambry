@@ -100,8 +100,8 @@ public class MockHelixParticipant extends HelixParticipant {
   }
 
   @Override
-  public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
-    if (isSealed) {
+  public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
+    if (replicaSealStatus == ReplicaSealStatus.SEALED) {
       sealedReplicas.add(replicaId);
     } else {
       sealedReplicas.remove(replicaId);
