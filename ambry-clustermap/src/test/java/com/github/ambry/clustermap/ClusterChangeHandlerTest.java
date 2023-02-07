@@ -272,6 +272,7 @@ public class ClusterChangeHandlerTest {
     instanceConfig.getRecord()
         .setSimpleField(ClusterMapUtils.SCHEMA_VERSION_STR, Integer.toString(ClusterMapUtils.CURRENT_SCHEMA_VERSION));
     instanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, Collections.emptyList());
+    instanceConfig.getRecord().setListField(PARTIALLY_SEALED_STR, Collections.emptyList());
     instanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, Collections.emptyList());
 
     Map<String, Map<String, String>> diskInfos = new HashMap<>();

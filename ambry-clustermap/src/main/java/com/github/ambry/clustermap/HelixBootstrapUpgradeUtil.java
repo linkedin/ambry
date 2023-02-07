@@ -1387,6 +1387,7 @@ public class HelixBootstrapUpgradeUtil {
     instanceConfig.getRecord().setSimpleField(SCHEMA_VERSION_STR, Integer.toString(CURRENT_SCHEMA_VERSION));
 
     List<String> sealedPartitionsList = new ArrayList<>();
+    List<String> partiallySealedPartitionsList = new ArrayList<>();
     List<String> stoppedReplicasList = new ArrayList<>();
     List<String> disabledReplicasList = new ArrayList<>();
     if (instanceToDiskReplicasMap.containsKey(instanceName)) {
@@ -1425,10 +1426,12 @@ public class HelixBootstrapUpgradeUtil {
     // Set the fields that need to be preserved from the referenceInstanceConfig.
     if (referenceInstanceConfig != null) {
       sealedPartitionsList = ClusterMapUtils.getSealedReplicas(referenceInstanceConfig);
+      partiallySealedPartitionsList = ClusterMapUtils.getPartiallySealedReplicas(referenceInstanceConfig);
       stoppedReplicasList = ClusterMapUtils.getStoppedReplicas(referenceInstanceConfig);
       disabledReplicasList = ClusterMapUtils.getDisabledReplicas(referenceInstanceConfig);
     }
     instanceConfig.getRecord().setListField(SEALED_STR, sealedPartitionsList);
+    instanceConfig.getRecord().setListField(PARTIALLY_SEALED_STR, partiallySealedPartitionsList);
     instanceConfig.getRecord().setListField(STOPPED_REPLICAS_STR, stoppedReplicasList);
     instanceConfig.getRecord().setListField(DISABLED_REPLICAS_STR, disabledReplicasList);
     return instanceConfig;

@@ -74,6 +74,7 @@ public class ClusterMapUtils {
   public static final String HTTP2_PORT_STR = "http2Port";
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
+  static final String PARTIALLY_SEALED_STR = "PARTIALLY_SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";
   static final String DISABLED_REPLICAS_STR = "DISABLED";
   static final String AVAILABLE_STR = "AVAILABLE";
@@ -204,6 +205,17 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Get the list of partially sealed replicas on a given instance.
+   * This is guaranteed to return a non-null list. It would return an empty list if there are no sealed replicas or if
+   * the field itself is absent for this instance.
+   * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
+   * @return the list of partially sealed replicas.
+   */
+  static List<String> getPartiallySealedReplicas(InstanceConfig instanceConfig) {
+    return getPartiallySealedReplicas(instanceConfig.getRecord());
+  }
+
+  /**
    * Get the list of sealed replicas on a given instance. This is guaranteed to return a non-null list. It would return
    * an empty list if there are no sealed replicas or if the field itself is absent for this instance.
    * @param znRecord the {@link ZNRecord} associated with the interested instance.
@@ -212,6 +224,18 @@ public class ClusterMapUtils {
   static List<String> getSealedReplicas(ZNRecord znRecord) {
     List<String> sealedReplicas = znRecord.getListField(ClusterMapUtils.SEALED_STR);
     return sealedReplicas == null ? new ArrayList<>() : sealedReplicas;
+  }
+
+  /**
+   * Get the list of partially sealed replicas on a given instance. This is guaranteed to return a non-null list. It
+   * would return an empty list if there are no partially sealed replicas or if the field itself is absent for this
+   * instance.
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the list of partially sealed replicas.
+   */
+  static List<String> getPartiallySealedReplicas(ZNRecord znRecord) {
+    List<String> partiallySealedReplicas = znRecord.getListField(ClusterMapUtils.PARTIALLY_SEALED_STR);
+    return partiallySealedReplicas == null ? new ArrayList<>() : partiallySealedReplicas;
   }
 
   /**

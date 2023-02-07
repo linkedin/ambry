@@ -316,15 +316,24 @@ public class HelixBootstrapUpgradeToolTest {
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.SEALED_STR, sealedList);
     // set the field to null. The created InstanceConfig should not have null fields.
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, null);
+    referenceInstanceConfig.getRecord().setListField(PARTIALLY_SEALED_STR, null);
     instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
         new ConcurrentHashMap<>(), referenceInstanceConfig);
-    // Stopped replicas should be an empty list and not null, so set that in referenceInstanceConfig for comparison.
+    // Stopped replicas and partially sealed replicas should be an empty list and not null, so set that in referenceInstanceConfig for comparison.
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, Collections.emptyList());
+    referenceInstanceConfig.getRecord().setListField(PARTIALLY_SEALED_STR, Collections.emptyList());
     assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
 
     // Assert that stopped list being different does not affect equality
     List<String> stoppedReplicas = Arrays.asList("11", "15");
     referenceInstanceConfig.getRecord().setListField(ClusterMapUtils.STOPPED_REPLICAS_STR, stoppedReplicas);
+    instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
+        new ConcurrentHashMap<>(), referenceInstanceConfig);
+    assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());
+
+    // Assert that partially sealed list being different does not affect equality
+    List<String> partiallySealedReplicas = Arrays.asList("11", "15");
+    referenceInstanceConfig.getRecord().setListField(PARTIALLY_SEALED_STR, partiallySealedReplicas);
     instanceConfig = HelixBootstrapUpgradeUtil.createInstanceConfigFromStaticInfo(dataNode, partitionToInstances,
         new ConcurrentHashMap<>(), referenceInstanceConfig);
     assertEquals(instanceConfig.getRecord(), referenceInstanceConfig.getRecord());

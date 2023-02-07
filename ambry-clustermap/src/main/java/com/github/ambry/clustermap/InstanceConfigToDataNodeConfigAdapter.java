@@ -101,6 +101,7 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
           Integer.parseInt(instanceConfig.getPort()), getDcName(instanceConfig), getSslPortStr(instanceConfig),
           getHttp2PortStr(instanceConfig), getRackId(instanceConfig), getXid(instanceConfig));
       dataNodeConfig.getSealedReplicas().addAll(getSealedReplicas(instanceConfig));
+      dataNodeConfig.getPartiallySealedReplicas().addAll(getPartiallySealedReplicas(instanceConfig));
       dataNodeConfig.getStoppedReplicas().addAll(getStoppedReplicas(instanceConfig));
       dataNodeConfig.getDisabledReplicas().addAll(getDisabledReplicas(instanceConfig));
       instanceConfig.getRecord().getMapFields().forEach((mountPath, diskProps) -> {
@@ -157,6 +158,8 @@ public class InstanceConfigToDataNodeConfigAdapter implements DataNodeConfigSour
       }
       instanceConfig.getRecord().setIntField(SCHEMA_VERSION_STR, CURRENT_SCHEMA_VERSION);
       instanceConfig.getRecord().setListField(SEALED_STR, new ArrayList<>(dataNodeConfig.getSealedReplicas()));
+      instanceConfig.getRecord().setListField(PARTIALLY_SEALED_STR,
+          new ArrayList<>(dataNodeConfig.getPartiallySealedReplicas()));
       instanceConfig.getRecord()
           .setListField(STOPPED_REPLICAS_STR, new ArrayList<>(dataNodeConfig.getStoppedReplicas()));
       instanceConfig.getRecord()

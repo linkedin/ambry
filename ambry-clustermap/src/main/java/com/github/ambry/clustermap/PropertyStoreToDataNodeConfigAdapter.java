@@ -233,6 +233,7 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
           record.getIntField(PORT_FIELD, DataNodeId.UNKNOWN_PORT), getDcName(record), getSslPortStr(record),
           getHttp2PortStr(record), getRackId(record), DEFAULT_XID);
       dataNodeConfig.getSealedReplicas().addAll(getSealedReplicas(record));
+      dataNodeConfig.getPartiallySealedReplicas().addAll(getPartiallySealedReplicas(record));
       dataNodeConfig.getStoppedReplicas().addAll(getStoppedReplicas(record));
       dataNodeConfig.getDisabledReplicas().addAll(getDisabledReplicas(record));
       record.getMapFields().forEach((key, diskProps) -> {
@@ -278,6 +279,7 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
       }
       record.setSimpleField(RACKID_STR, dataNodeConfig.getRackId());
       record.setListField(SEALED_STR, new ArrayList<>(dataNodeConfig.getSealedReplicas()));
+      record.setListField(PARTIALLY_SEALED_STR, new ArrayList<>(dataNodeConfig.getPartiallySealedReplicas()));
       record.setListField(STOPPED_REPLICAS_STR, new ArrayList<>(dataNodeConfig.getStoppedReplicas()));
       record.setListField(DISABLED_REPLICAS_STR, new ArrayList<>(dataNodeConfig.getDisabledReplicas()));
       dataNodeConfig.getDiskConfigs().forEach((mountPath, diskConfig) -> {
