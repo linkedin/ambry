@@ -72,6 +72,7 @@ import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONObject;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -379,6 +380,7 @@ public class BlobStoreTest {
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     ReplicaStatusDelegate replicaStatusDelegate = mock(ReplicaStatusDelegate.class);
     when(replicaStatusDelegate.unseal(any())).thenReturn(true);
+    when(replicaStatusDelegate.partialSeal(any())).thenReturn(true);
     when(replicaStatusDelegate.seal(any())).thenReturn(true);
 
     //Restart store
@@ -406,7 +408,11 @@ public class BlobStoreTest {
 
     //Change config threshold to higher, see that it gets changed to unsealed on reset
     reloadStore(changeThreshold(99, 1, true), replicaId, Collections.singletonList(replicaStatusDelegate));
-    verify(replicaStatusDelegate, times(1)).unseal(replicaId);
+    if (isLogSegmented) {
+      verify(replicaStatusDelegate, times(1)).partialSeal(replicaId);
+    } else {
+      verify(replicaStatusDelegate, times(2)).partialSeal(replicaId);
+    }
     replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
 
     //Reset thresholds, verify that it changed back
@@ -431,12 +437,20 @@ public class BlobStoreTest {
       time.sleep(TimeUnit.DAYS.toMillis(8));
       store.compact(store.getCompactionDetails(new CompactAllPolicy(defaultConfig, time)),
           new byte[PUT_RECORD_SIZE * 2 + 1]);
-      verify(replicaStatusDelegate, times(2)).unseal(replicaId);
+      if (isLogSegmented) {
+        verify(replicaStatusDelegate, times(1)).partialSeal(replicaId);
+      } else {
+        verify(replicaStatusDelegate, times(2)).partialSeal(replicaId);
+      }
 
       //Test if replicaId is erroneously true that it updates the status upon startup
       replicaId.setSealedState(ReplicaSealStatus.SEALED);
       reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
-      verify(replicaStatusDelegate, times(3)).unseal(replicaId);
+      if(isLogSegmented) {
+        verify(replicaStatusDelegate, times(1)).partialSeal(replicaId);
+      } else {
+        verify(replicaStatusDelegate, times(3)).partialSeal(replicaId);
+      }
     }
     store.shutdown();
     properties.setProperty("store.set.local.partition.state.enabled", Boolean.toString(false));
@@ -468,6 +482,14 @@ public class BlobStoreTest {
       sealedReplicas2.remove((ReplicaId) invocation.getArgument(0));
       return true;
     }).when(mockDelegate2).unseal(any());
+    doAnswer(invocation -> {
+      sealedReplicas1.remove((ReplicaId) invocation.getArgument(0));
+      return true;
+    }).when(mockDelegate1).partialSeal(any());
+    doAnswer(invocation -> {
+      sealedReplicas2.remove((ReplicaId) invocation.getArgument(0));
+      return true;
+    }).when(mockDelegate2).partialSeal(any());
     doAnswer(
         invocation -> sealedReplicas1.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList()))
         .when(mockDelegate1)
@@ -2130,8 +2152,369 @@ public class BlobStoreTest {
     testStore.shutdown();
   }
 
+  @Test
+  public void testUpdateSealStatusWithSingleDelegate() throws Exception {
+    store.shutdown();
+    ReplicaStatusDelegate mockReplicaStatusDelegate = mock(ReplicaStatusDelegate.class);
+    when(mockReplicaStatusDelegate.seal(any())).thenReturn(true);
+    when(mockReplicaStatusDelegate.unseal(any())).thenReturn(true);
+    when(mockReplicaStatusDelegate.partialSeal(any())).thenReturn(true);
+    properties.setProperty("store.replica.status.delegate.enable", "true");
+    properties.setProperty("store.partial.write.enable.size.threshold.percentage", "50");
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    int storeUnsealPercentage = config.storePartialWriteEnableSizeThresholdPercentage
+        - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
+    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
+    BlobStore testStore =
+        createBlobStore(replicaId, config, Collections.singletonList(mockReplicaStatusDelegate), storeMetrics);
+    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+    testStore.index = mockPersistentIndex;
+    // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
+    // and replica is not sealed then seal should be attempted.
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage) / 100 + 1);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 0, 0, 0, 0, 0, storeMetrics);
+
+    // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
+    // and replica is already sealed then seal should not be attempted.
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 0, 0, 0, 0, 0, storeMetrics);
+
+    // When store has usage higher than StoreConfig#storePartialWriteEnableSizeThresholdPercentage
+    // and replica is not sealed then partial seal should be attempted.
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage) / 100 + 1);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 1, 0, 0, 0, 0, storeMetrics);
+
+    // When store has usage higher than StoreConfig#storePartialWriteEnableSizeThresholdPercentage
+    // and replica is sealed then partial seal should be attempted.
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 0, 0, 0, 0, storeMetrics);
+
+    // When store has usage higher than StoreConfig#storePartialWriteEnableSizeThresholdPercentage
+    // and replica is partially sealed then partial seal should not be attempted.
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 0, 0, 0, 0, storeMetrics);
+
+    // When store has usage lower than StoreConfig#storePartialWriteEnableSizeThresholdPercentage
+    // and replica is sealed then unseal should be attempted.
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage) / 100 - 1);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 1, 0, 0, 0, storeMetrics);
+
+    // When replica is partially sealed and store has usage lower than
+    // StoreConfig#storePartialWriteEnableSizeThresholdPercentage but the difference is less than
+    // StoreConfig#storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta then unseal should not
+    // be attempted.
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 1, 0, 0, 0, storeMetrics);
+
+    // When store has usage lower than StoreConfig#storePartialWriteEnableSizeThresholdPercentage
+    // and replica is partially sealed then unseal should be attempted.
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn((LOG_CAPACITY * storeUnsealPercentage) / 100 - 1);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 0, 0, 0, storeMetrics);
+
+    // Test for failure scenarios. For failures, the attempts should increase everytime.
+    when(mockReplicaStatusDelegate.seal(any())).thenReturn(false);
+    when(mockReplicaStatusDelegate.unseal(any())).thenReturn(false);
+    when(mockReplicaStatusDelegate.partialSeal(any())).thenReturn(false);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage) / 100 + 1);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 1, 0, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 1, 0, 0, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage) / 100 + 1);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 1, 1, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 1, 2, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 1, 2, 0, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage) / 100 - 1);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 1, 2, 1, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 1, 2, 1, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn((LOG_CAPACITY * storeUnsealPercentage) / 100 - 1);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(1, 2, 2, 1, 2, 2, storeMetrics);
+  }
+
+  @Test
+  public void testUpdateSealStatusWithMultipleDelegates() throws Exception {
+    store.shutdown();
+    ReplicaStatusDelegate mockReplicaStatusDelegate1 = mock(ReplicaStatusDelegate.class);
+    ReplicaStatusDelegate mockReplicaStatusDelegate2 = mock(ReplicaStatusDelegate.class);
+    when(mockReplicaStatusDelegate1.seal(any())).thenReturn(true);
+    when(mockReplicaStatusDelegate1.unseal(any())).thenReturn(true);
+    when(mockReplicaStatusDelegate1.partialSeal(any())).thenReturn(true);
+    when(mockReplicaStatusDelegate2.seal(any())).thenReturn(true);
+    when(mockReplicaStatusDelegate2.unseal(any())).thenReturn(true);
+    when(mockReplicaStatusDelegate2.partialSeal(any())).thenReturn(true);
+    properties.setProperty("store.replica.status.delegate.enable", "true");
+    properties.setProperty("store.partial.write.enable.size.threshold.percentage", "50");
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    int storeUnsealPercentage = config.storePartialWriteEnableSizeThresholdPercentage
+        - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
+    StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
+    List<ReplicaStatusDelegate> replicaStatusDelegates =
+        Arrays.asList(mockReplicaStatusDelegate1, mockReplicaStatusDelegate2);
+    StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
+    BlobStore testStore = createBlobStore(replicaId, config, replicaStatusDelegates, storeMetrics);
+    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+    testStore.index = mockPersistentIndex;
+    // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
+    // then replica seal status should be resolved as ReplicaSealStatus#Sealed.
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage) / 100 + 1);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 0, 0, 0, 0, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 0, 0, 0, 0, 0, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage) / 100 + 1);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 2, 0, 0, 0, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 4, 0, 0, 0, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 4, 0, 0, 0, 0, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage) / 100 - 1);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 4, 2, 0, 0, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 2, 0, 0, 0, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn((LOG_CAPACITY * storeUnsealPercentage) / 100 - 1);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 0, 0, 0, storeMetrics);
+
+    when(mockReplicaStatusDelegate1.seal(any())).thenReturn(false);
+    when(mockReplicaStatusDelegate1.unseal(any())).thenReturn(false);
+    when(mockReplicaStatusDelegate1.partialSeal(any())).thenReturn(false);
+    when(mockReplicaStatusDelegate2.seal(any())).thenReturn(false);
+    when(mockReplicaStatusDelegate2.unseal(any())).thenReturn(false);
+    when(mockReplicaStatusDelegate2.partialSeal(any())).thenReturn(false);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage) / 100 + 1);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 2, 0, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 4, 0, 0, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage) / 100 + 1);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 4, 2, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 4, 4, 0, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 4, 6, 0, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage) / 100 - 1);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 4, 6, 2, storeMetrics);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 4, 8, 2, storeMetrics);
+
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn((LOG_CAPACITY * storeUnsealPercentage) / 100 - 1);
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    testStore.updateSealedStatus();
+    verifySealMetrics(2, 6, 4, 4, 8, 4, storeMetrics);
+  }
+
+  /**
+   * Test sealing logic in {@link BlobStore#resolveReplicaSealStatusFromLogSize()}.
+   */
+  @Test
+  public void testResolveReplicaSealStatusFromLogSize() {
+    PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
+    StoreTestUtils.MockReplicaId replicaId = (StoreTestUtils.MockReplicaId) store.getReplicaId();
+    StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
+    store.index = mockPersistentIndex;
+    // When store has usage higher than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage
+    // then replica seal status should be resolved as ReplicaSealStatus#Sealed.
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 + 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+
+    // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
+    // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
+    // ReplicaSealStatus#UNSEALED then replica seal status should be resolved as ReplicaSealStatus#PartiallySealed.
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+
+    // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
+    // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
+    // ReplicaSealStatus#PARTIALLY_SELAED then replica seal status should be resolved as ReplicaSealStatus#PartiallySealed.
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+
+    // When store has usage is less than StoreConfig#storeReadOnlyEnableSizeThresholdPercentage but more than
+    // StoreConfig#storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta and replicas status is
+    // ReplicaSealStatus#SEALED then replica seal status should be resolved as ReplicaSealStatus#PartiallySealed.
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storeReadOnlyEnableSizeThresholdPercentage)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.SEALED);
+
+    // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
+    // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
+    // ReplicaSealStatus#SEALED then replica seal status should be resolved as ReplicaSealStatus#PartiallySealed.
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+
+    // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
+    // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
+    // ReplicaSealStatus#PARTIALLY_SEALED then replica seal status should be resolved as ReplicaSealStatus#PARTIALLY_SEALED.
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+
+    // When store has usage is greater than StoreConfig#storePartialWriteEnableSizeThresholdPercentage but less than
+    // StoreConfig#storeReadOnlyEnableSizeThresholdPercentage and replicas status is
+    // ReplicaSealStatus#PARTIALLY_SEALED then replica seal status should be resolved as ReplicaSealStatus#PARTIALLY_SEALED.
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 + 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.PARTIALLY_SEALED);
+
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * config.storePartialWriteEnableSizeThresholdPercentage)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+
+    long readWritePercentageLimit = config.storePartialWriteEnableSizeThresholdPercentage - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+
+    replicaId.setSealedState(ReplicaSealStatus.PARTIALLY_SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
+    when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
+        (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
+    Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
+  }
+
+  /**
+   * Test {@link BlobStore#mergeReplicaSealStatus(ReplicaSealStatus, ReplicaSealStatus)}.
+   */
+  @Test
+  public void testMergeReplicaSealStatus() {
+    ReplicaSealStatus[] replicaSealStatuses = ReplicaSealStatus.values();
+    for (ReplicaSealStatus replicaSealStatus1 : replicaSealStatuses) {
+      for (ReplicaSealStatus replicaSealStatus2 : replicaSealStatuses) {
+        ReplicaSealStatus mergedStatus = store.mergeReplicaSealStatus(replicaSealStatus1, replicaSealStatus2);
+        Assert.assertEquals(mergedStatus,
+            replicaSealStatuses[Math.max(replicaSealStatus1.ordinal(), replicaSealStatus2.ordinal())]);
+      }
+    }
+  }
+
   // helpers
   // general
+
+  /**
+   * Verify that the seal state related metrics match the values specified in the arguments.
+   * @param sealDoneCount seal done count.
+   * @param partialSealDoneCount partial seal done count.
+   * @param unsealDoneCount unseal done count.
+   * @param sealSetErrorCount seal set error count.
+   * @param partialSealSetErrorCount partial seal set error count.
+   * @param unsealSetErrorCount unseal set error count.
+   * @param storeMetrics {@link StoreMetrics} object.
+   */
+  private void verifySealMetrics(int sealDoneCount, int partialSealDoneCount, int unsealDoneCount,
+      int sealSetErrorCount, int partialSealSetErrorCount, int unsealSetErrorCount, StoreMetrics storeMetrics) {
+    assertEquals("Wrong seal done count", sealDoneCount, storeMetrics.sealDoneCount.getCount());
+    assertEquals("Wrong partial seal done count", partialSealDoneCount, storeMetrics.partialSealDoneCount.getCount());
+    assertEquals("Wrong unseal done count", unsealDoneCount, storeMetrics.unsealDoneCount.getCount());
+    assertEquals("Wrong seal set error count", sealSetErrorCount, storeMetrics.sealSetError.getCount());
+    assertEquals("Wrong partial seal set error count", partialSealSetErrorCount,
+        storeMetrics.partialSealSetError.getCount());
+    assertEquals("Wrong unseal set error count", unsealSetErrorCount, storeMetrics.unsealSetError.getCount());
+  }
 
   /**
    * Verify store method can capture store exception and correctly handle it. The method also verifies that if exception
@@ -3213,15 +3596,39 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Create {@link BlobStore} with the specified {@link ReplicaId}.
+   * @param replicaId The {@link ReplicaId} object.
+   * @return BlobStore object.
+   */
   private BlobStore createBlobStore(ReplicaId replicaId) {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     return createBlobStore(replicaId, config, null);
   }
 
+  /**
+   * Create {@link BlobStore} with the specified {@link ReplicaId}, {@link StoreConfig} and {@link ReplicaStatusDelegate}s.
+   * @param replicaId The {@link ReplicaId} object.
+   * @param config {@link StoreConfig} object.
+   * @param replicaStatusDelegates {@link List} of {@link ReplicaSealStatus} objects.
+   * @return BlobStore object.
+   */
   private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
       List<ReplicaStatusDelegate> replicaStatusDelegates) {
-    MetricRegistry registry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(registry);
+    return createBlobStore(replicaId, config, replicaStatusDelegates, new StoreMetrics(new MetricRegistry()));
+  }
+
+  /**
+   * Create {@link BlobStore} with the specified {@link ReplicaId}, {@link StoreConfig}, {@link ReplicaStatusDelegate}s
+   * and {@link StoreMetrics}.
+   * @param replicaId The {@link ReplicaId} object.
+   * @param config {@link StoreConfig} object.
+   * @param replicaStatusDelegates {@link List} of {@link ReplicaSealStatus} objects.
+   * @param metrics {@link StoreMetrics} object.
+   * @return BlobStore object.
+   */
+  private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
+      List<ReplicaStatusDelegate> replicaStatusDelegates, StoreMetrics metrics) {
     return new MockBlobStore(replicaId, config, replicaStatusDelegates, metrics);
   }
 
