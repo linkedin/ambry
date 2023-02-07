@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.commons.AmbryCache;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -32,7 +33,12 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -60,6 +66,8 @@ public class BackupCheckerThread extends ReplicaThread {
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   public static final String DR_Verifier_Keyword = "dr";
 
+  protected final AmbryCache fileDescriptorCache;
+
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
@@ -71,6 +79,7 @@ public class BackupCheckerThread extends ReplicaThread {
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
+    fileDescriptorCache = new AmbryCache("BackupCheckerFd", true, 10000, metricRegistry);
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -103,8 +112,7 @@ public class BackupCheckerThread extends ReplicaThread {
     checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
   }
 
-  /**
-   * This method checks if an un-deleted blob from remote on-prem server has been un-deleted from local-store
+  /**   * This method checks if an un-deleted blob from remote on-prem server has been un-deleted from local-store
    * @param remoteBlob the {@link MessageInfo} that will be transformed into an un-delete
    * @param remoteReplicaInfo The remote replica that is being replicated from
    */
@@ -141,7 +149,8 @@ public class BackupCheckerThread extends ReplicaThread {
   @Override
   protected void fixMissingStoreKeys(
       ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby) {
+      List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby)
+      throws IOException {
     /**
      * Instead of over-riding applyPut, it is better to override fixMissingStoreKeys.
      * We already know the missing keys. We know they are not deleted or expired on the remote node.
@@ -177,6 +186,19 @@ public class BackupCheckerThread extends ReplicaThread {
     remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
   }
 
+  protected BufferedWriter getOrCreateReportFd(RemoteReplicaInfo remoteReplicaInfo) throws IOException {
+    String basePath = "/export/content/lid/apps/ambry-server/i001/logs/" + remoteReplicaInfo.getReplicaId().getPartitionId().getId() + "/" + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
+    String missingKeysFile = basePath + "/" + "missingKeys";
+    FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(missingKeysFile);
+    if (fileDescriptor == null) {
+      Files.createDirectories(Paths.get(basePath));
+      BufferedWriter bufferedWriter = Files.newBufferedWriter(Paths.get(missingKeysFile), StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.DSYNC);
+      fileDescriptor = new FileDescriptor(bufferedWriter);
+      fileDescriptorCache.putObject(missingKeysFile, fileDescriptor);
+    }
+    return fileDescriptor.getBufferedWriter();
+  }
+
   /**
    * This method checks if the blob is in local store in an acceptable state or encounters an acceptable error code
    * @param remoteBlob the {@link MessageInfo} that will be checked for in the local-store
@@ -187,24 +209,30 @@ public class BackupCheckerThread extends ReplicaThread {
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
     try {
-      EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
-      // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
-      // However, get() can also do this with additional and appropriate StoreGetOptions.
-      MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
-      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-      messageInfoTypes.retainAll(getBlobStates(localBlob));
-      if (messageInfoTypes.isEmpty()) {
-        logger.error(" | Missing {} | RemoteReplica = {} | BlobID = {} | RemoteBlobState = {} | LocalBlobState = {} | ",
-            acceptableLocalBlobStates, remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob));
+      BufferedWriter bufferedWriter = getOrCreateReportFd(remoteReplicaInfo);
+      String errMsg = "%s | Missing %s | RemoteReplica = %s | BlobID = %s | RemoteBlobState = %s | LocalBlobState = %s \n";
+      try {
+        EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
+        // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
+        // However, get() can also do this with additional and appropriate StoreGetOptions.
+        MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
+        // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
+        messageInfoTypes.retainAll(getBlobStates(localBlob));
+        if (messageInfoTypes.isEmpty()) {
+          bufferedWriter.write(String.format(errMsg, System.currentTimeMillis(), acceptableLocalBlobStates,
+              remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
+        }
+      } catch (StoreException e) {
+        EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
+        // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
+        storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
+        if (storeErrorCodes.isEmpty()) {
+          bufferedWriter.write(String.format(errMsg, System.currentTimeMillis(), acceptableLocalBlobStates,
+              remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
+        }
       }
-    } catch (StoreException e) {
-      EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
-      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-      storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
-      if (storeErrorCodes.isEmpty()) {
-        logger.error(" | Missing {} | RemoteReplica = {} | BlobID = {} | RemoteBlobState = {} | LocalBlobState = {} | ",
-            acceptableLocalBlobStates, remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode());
-      }
+    } catch (IOException e) {
+      logger.error(e.toString());
     }
   }
 
