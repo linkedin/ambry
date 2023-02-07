@@ -86,7 +86,7 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.DELETE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes, MessageInfoType.DELETE);
   }
 
   /**
@@ -100,7 +100,7 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.TTL_UPDATE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes, MessageInfoType.TTL_UPDATE);
   }
 
   /**
@@ -114,7 +114,7 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.UNDELETE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes, MessageInfoType.UNDELETE);
   }
 
   /**
@@ -150,14 +150,31 @@ public class BackupCheckerThread extends ReplicaThread {
      */
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.PUT);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
-    for(ExchangeMetadataResponse exchangeMetadataResponse: exchangeMetadataResponseList) {
+    for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
+      ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
+      RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         for (MessageInfo messageInfo: exchangeMetadataResponse.getMissingStoreMessages()) {
           // Check local store once before logging an error
-          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates, acceptableStoreErrorCodes);
+          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates, acceptableStoreErrorCodes, MessageInfoType.PUT);
         }
+        // Advance token so that we make progress in spite of missing keys,
+        // else the replication code will be stuck waiting for missing keys to appear in local store.
+        advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
       }
     }
+  }
+
+  /**
+   * Advances local token to make progress on replication
+   * @param remoteReplicaInfo Remote replica info object
+   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   */
+  protected void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
+    remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
+    // reset stored metadata response for this replica so that we send next request for metadata
+    remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
   }
 
   /**
@@ -168,7 +185,7 @@ public class BackupCheckerThread extends ReplicaThread {
    * @param acceptableStoreErrorCodes Acceptable error codes when retrieving the blob from local-store
    */
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
-      EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
+      EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes, MessageInfoType messageInfoType) {
     try {
       EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
       // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
@@ -176,15 +193,15 @@ public class BackupCheckerThread extends ReplicaThread {
       MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
-        logger.error(String.format("RemoteReplica = %s, BlobID = %s, RemoteBlobState = %s, LocalBlobState = %s",
-            remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
+        logger.error(" | Missing {} | RemoteReplica = {} | BlobID = {} | RemoteBlobState = {} | LocalBlobState = {} | ",
+            messageInfoType, remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob));
       }
     } catch (StoreException e) {
       EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
-        logger.error(String.format("RemoteReplica = %s, BlobID = %s, RemoteBlobState = %s, LocalBlobState = %s",
-            remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
+        logger.error(" | Missing {} | RemoteReplica = {} | BlobID = {} | RemoteBlobState = {} | LocalBlobState = {} | ",
+            messageInfoType, remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode());
       }
     }
   }
