@@ -587,7 +587,7 @@ public class ClusterMapUtils {
     }
 
     /**
-     * Returns all the partitions that are in state {@link PartitionState#READ_WRITE} AND have the highest number of
+     * Returns all the partitions that are not in state {@link PartitionState#READ_ONLY} AND have the highest number of
      * replicas in the local datacenter for the given {@code partitionClass}.
      * <p/>
      * Also attempts to return only partitions with healthy replicas but if no such partitions are found, returns all
@@ -602,7 +602,7 @@ public class ClusterMapUtils {
       List<PartitionId> writablePartitions = new ArrayList<>();
       List<PartitionId> healthyWritablePartitions = new ArrayList<>();
       for (PartitionId partition : getPartitionsInClass(partitionClass, true)) {
-        if (partition.getPartitionState() == PartitionState.READ_WRITE) {
+        if (partition.getPartitionState() != PartitionState.READ_ONLY) {
           writablePartitions.add(partition);
           if (areAllReplicasForPartitionUp((partition))) {
             healthyWritablePartitions.add(partition);
@@ -615,8 +615,8 @@ public class ClusterMapUtils {
     }
 
     /**
-     * Returns a writable partition selected at random, that belongs to the specified partition class and that is in the
-     * state {@link PartitionState#READ_WRITE} AND has enough replicas up. In case none of the partitions have enough
+     * Returns a writable partition selected at random, that belongs to the specified partition class and that is not in
+     * the state {@link PartitionState#READ_ONLY} AND has enough replicas up. In case none of the partitions have enough
      * replicas up, any writable partition is returned. Enough replicas is considered to be all local replicas if such
      * information is available. In case localDatacenterName is not available, all of the partition's replicas should be up.
      * @param partitionClass the class of the partitions desired. Can be {@code null}.
@@ -636,7 +636,7 @@ public class ClusterMapUtils {
           PartitionId selected = partitionsInClass.get(randomIndex);
           if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(
               selected)) {
-            if (selected.getPartitionState() == PartitionState.READ_WRITE) {
+            if (selected.getPartitionState() != PartitionState.READ_ONLY) {
               anyWritablePartition = selected;
               if (hasEnoughEligibleWritableReplicas(selected)) {
                 return selected;
