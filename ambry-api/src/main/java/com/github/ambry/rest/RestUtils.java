@@ -379,7 +379,7 @@ public class RestUtils {
     /**
      * The key for the target dataset version indicated by the request.
      */
-    public static final String TARGET_DATASET_VERSION = KEY_PREFIX + "target-dataset-version-key";
+    public static final String TARGET_DATASET_VERSION = KEY_PREFIX + "target-dataset-version";
 
     /**
      * The key for the metadata {@code Map<String, String>} to include in a signed ID. This argument should be non-null

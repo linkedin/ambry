@@ -40,6 +40,7 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;
 
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
@@ -47,10 +48,6 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  * Common utility functions that will be used across frontend package
  */
 class FrontendUtils {
-  /**
-   * Path separator character for named blob uri.
-   */
-  private static final char PATH_SEPARATOR_CHAR = '/';
 
   /**
    * Fetches {@link BlobId} from the given string representation of BlobId
@@ -154,11 +151,11 @@ class FrontendUtils {
     if (version.equals("LATEST") || version.equals("MAJOR") || version.equals("MINOR") || version.equals("PATCH")) {
       RequestPath originalRequestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
       String originalOperationOrBlobId = originalRequestPath.getOperationOrBlobId(false);
-      int index = originalOperationOrBlobId.lastIndexOf(PATH_SEPARATOR_CHAR);
+      int index = originalOperationOrBlobId.lastIndexOf(PATH_SEPARATOR_STRING);
       String latestOperationOrBlobId;
       if (index != -1) {
         latestOperationOrBlobId =
-            originalOperationOrBlobId.substring(0, index) + PATH_SEPARATOR_CHAR + datasetVersionRecord.getVersion();
+            originalOperationOrBlobId.substring(0, index) + PATH_SEPARATOR_STRING + datasetVersionRecord.getVersion();
       } else {
         throw new RestServiceException("Failed to parse the originalOperationOrBlobId: " + originalOperationOrBlobId,
             RestServiceErrorCode.BadRequest);
