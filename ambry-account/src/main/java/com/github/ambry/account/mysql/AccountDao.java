@@ -314,10 +314,10 @@ public class AccountDao {
    * @param datasetName the name of the dataset.
    * @param version the version of the dataset.
    * @param expirationTimeMs the expiration time of the version of the dataset.
-   * @return the {@link Dataset} which contains the metadata.
+   * @return the {@link DatasetVersionRecord}.
    * @throws SQLException
    */
-  public synchronized Dataset addDatasetVersions(int accountId, int containerId, String accountName,
+  public synchronized DatasetVersionRecord addDatasetVersions(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, long expirationTimeMs) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -331,7 +331,7 @@ public class AccountDao {
       executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, datasetName,
           versionNumber, expirationTimeMs, dataset);
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
-      return dataset;
+      return new DatasetVersionRecord(accountId, containerId, datasetName, version, expirationTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
       throw e;

@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 
 /**
@@ -48,6 +49,13 @@ import java.util.Objects;
 @JsonDeserialize(builder = DatasetBuilder.class)
 public class Dataset {
   //constant
+
+  /**
+   * The pattern defining valid Dataset names in Ambry. Names must begin with an alphanumeric character, followed
+   * by up to 100 characters that are alphanumeric, {@code _} , {@code .} , or {@code -} (underscore, period,
+   * or hyphen).
+   */
+  private static final Pattern AMBRY_VALID_DATASET_NAME_PATTERN = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}");
 
   static final String ACCOUNT_NAME_KEY = "accountName";
   static final String CONTAINER_NAME_KEY = "containerName";
@@ -165,15 +173,20 @@ public class Dataset {
       VersionSchema versionSchema, Long expirationTimeMs) {
     if (accountName == null || containerName == null || datasetName == null || versionSchema == null
         || expirationTimeMs == null) {
-      throw new IllegalStateException(
+      throw new IllegalArgumentException(
           "At lease one of required fields accountName=" + accountName + " or containerName=" + containerName
               + " or datasetName=" + datasetName + " or versionSchema=" + versionSchema + " or expirationTimeMs="
               + expirationTimeMs + " is null");
     }
     if (accountName.isEmpty() || containerName.isEmpty() || datasetName.isEmpty()) {
-      throw new IllegalStateException(
+      throw new IllegalArgumentException(
           "At lease one of required fields accountName=" + accountName + " or containerName=" + containerName
               + " or datasetName=" + datasetName + " is empty");
+    }
+    if (!AMBRY_VALID_DATASET_NAME_PATTERN.matcher(datasetName).matches()) {
+      throw new IllegalArgumentException("Invalid name for an Ambry dataset: " + datasetName
+          + ". Valid names should only include alphanumeric characters, periods, underscores, and hyphens. The exact regex you must match is: "
+          + AMBRY_VALID_DATASET_NAME_PATTERN);
     }
   }
 

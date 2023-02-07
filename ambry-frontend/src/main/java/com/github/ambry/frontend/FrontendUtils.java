@@ -13,10 +13,13 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
+import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.commons.Callback;
@@ -36,6 +39,9 @@ import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;
+
+import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -132,5 +138,33 @@ class FrontendUtils {
       }
     }
     return group;
+  }
+
+  /**
+   * Refresh the OperationOrBlobId in request path with the specific latest version info.
+   * @param restRequest the {@link RestRequest}
+   * @param datasetVersionRecord the {@link DatasetVersionRecord} which include the version info.
+   * @throws RestServiceException
+   */
+  static void replaceRequestPathWithNewOperationOrBlobIdIfNeeded(RestRequest restRequest,
+      DatasetVersionRecord datasetVersionRecord, String version) throws RestServiceException {
+    if (version.equals("LATEST") || version.equals("MAJOR") || version.equals("MINOR") || version.equals("PATCH")) {
+      RequestPath originalRequestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
+      String originalOperationOrBlobId = originalRequestPath.getOperationOrBlobId(false);
+      int index = originalOperationOrBlobId.lastIndexOf(PATH_SEPARATOR_STRING);
+      String latestOperationOrBlobId;
+      if (index != -1) {
+        latestOperationOrBlobId =
+            originalOperationOrBlobId.substring(0, index) + PATH_SEPARATOR_STRING + datasetVersionRecord.getVersion();
+      } else {
+        throw new RestServiceException("Failed to parse the originalOperationOrBlobId: " + originalOperationOrBlobId,
+            RestServiceErrorCode.BadRequest);
+      }
+      RequestPath newRequestPath =
+          new RequestPath(originalRequestPath.getPrefix(), originalRequestPath.getClusterName(),
+              originalRequestPath.getPathAfterPrefixes(), latestOperationOrBlobId, originalRequestPath.getSubResource(),
+              originalRequestPath.getBlobSegmentIdx());
+      restRequest.setArg(RestUtils.InternalKeys.REQUEST_PATH, newRequestPath);
+    }
   }
 }

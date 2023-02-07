@@ -129,21 +129,16 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized Dataset addDatasetVersion(String accountName, String containerName, String datasetName,
-      String version, long expirationTimeMs) {
+  public synchronized DatasetVersionRecord addDatasetVersion(String accountName, String containerName,
+      String datasetName, String version, long expirationTimeMs) {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
     idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
-    idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
-        .put(datasetName + version,
-            new DatasetVersionRecord(accountId, containerId, datasetName, version, expirationTimeMs));
-    Dataset dataset =
-        new DatasetBuilder(accountName, containerName, datasetName, Dataset.VersionSchema.TIMESTAMP, -1).setUserTags(
-            userTags).build();
-    idToDatasetMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
-    idToDatasetMap.get(new Pair<>(accountId, containerId)).put(dataset.getDatasetName(), dataset);
-    return dataset;
+    DatasetVersionRecord datasetVersionRecord =
+        new DatasetVersionRecord(accountId, containerId, datasetName, version, expirationTimeMs);
+    idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).put(datasetName + version, datasetVersionRecord);
+    return datasetVersionRecord;
   }
 
   @Override

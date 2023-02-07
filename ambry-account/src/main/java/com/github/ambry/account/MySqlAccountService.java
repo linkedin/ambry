@@ -413,7 +413,7 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
-  public Dataset addDatasetVersion(String accountName, String containerName, String datasetName, String version,
+  public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName, String version,
       long expirationTimeMs) throws AccountServiceException {
     try {
       Container container = getContainerByName(accountName, containerName);

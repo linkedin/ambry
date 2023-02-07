@@ -17,6 +17,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
@@ -202,7 +203,7 @@ public class NamedBlobPutHandler {
               new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
-          if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
+          if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
@@ -236,9 +237,8 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
-              routerStitchBlobCallback(blobInfo),
-              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)), uri, LOGGER,
-          finalCallback);
+              routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)),
+          uri, LOGGER, finalCallback);
     }
 
     /**
@@ -352,8 +352,8 @@ public class NamedBlobPutHandler {
         restRequest.getMetricsTracker()
             .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
-      Map <String, Object> userMetadataFromRequest = restRequest.getArgs();
-      Map <String, String> userTags = getDatasetUserTags(restRequest);
+      Map<String, Object> userMetadataFromRequest = restRequest.getArgs();
+      Map<String, String> userTags = getDatasetUserTags(restRequest);
       if (userTags != null) {
         userTags.forEach((key, value) -> {
           if (!userMetadataFromRequest.containsKey(key)) {
@@ -375,8 +375,8 @@ public class NamedBlobPutHandler {
      */
     private Map<String, String> getDatasetUserTags(RestRequest restRequest) throws RestServiceException {
       Map<String, String> userTags = null;
-      if (RestUtils.isDatasetUpload(restRequest.getArgs())) {
-        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET_KEY);
+      if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
+        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
         userTags = dataset.getUserTags();
       }
       return userTags;
@@ -492,29 +492,30 @@ public class NamedBlobPutHandler {
      * @return the {@link Dataset}
      * @throws RestServiceException
      */
-    private Dataset addDatasetVersion(BlobProperties blobProperties, RestRequest restRequest) throws RestServiceException {
+    private void addDatasetVersion(BlobProperties blobProperties, RestRequest restRequest)
+        throws RestServiceException {
       long startAddDatasetVersionTime = System.currentTimeMillis();
       String accountName = null;
       String containerName = null;
       String datasetName = null;
       String version = null;
       try {
-        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET_KEY);
+        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
         accountName = dataset.getAccountName();
         containerName = dataset.getContainerName();
         datasetName = dataset.getDatasetName();
-        version = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_VERSION, false);
+        version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
         long expirationTimeMs =
             Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
-        accountService.addDatasetVersion(accountName, containerName, datasetName, version, expirationTimeMs);
+        DatasetVersionRecord datasetVersionRecord =
+            accountService.addDatasetVersion(accountName, containerName, datasetName, version, expirationTimeMs);
+        FrontendUtils.replaceRequestPathWithNewOperationOrBlobIdIfNeeded(restRequest, datasetVersionRecord, version);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
-        // TODO: support version is null.
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, version);
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
         frontendMetrics.addDatasetVersionProcessingTimeInMs.update(
             System.currentTimeMillis() - startAddDatasetVersionTime);
-        return dataset;
       } catch (AccountServiceException ex) {
         throw new RestServiceException(
             "Dataset version create failed for accountName: " + accountName + " containerName: " + containerName
