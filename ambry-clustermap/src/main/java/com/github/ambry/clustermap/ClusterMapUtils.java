@@ -81,6 +81,7 @@ public class ClusterMapUtils {
   static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String READ_ONLY_STR = "RO";
   static final String READ_WRITE_STR = "RW";
+  static final String PARTIAL_READ_WRITE_STR = "PRW";
   static final String ZKCONNECT_STR = "zkConnectStr";
   static final String ZKCONNECT_STR_DELIMITER = ",";
   static final String ZKINFO_STR = "zkInfo";
@@ -519,6 +520,45 @@ public class ClusterMapUtils {
     buffer.putShort(shortValue);
     buffer.putLong(longValue);
     return buffer.array();
+  }
+
+  /**
+   * Convert {@link PartitionState} object to str.
+   * @param partitionState {@link PartitionState} to convert.
+   * @return String representation for {@link PartitionState}.
+   */
+  public static String partitionStateToStr(PartitionState partitionState) {
+    String partitionStateStr = null;
+    switch (partitionState) {
+      case READ_WRITE:
+        partitionStateStr = READ_WRITE_STR;
+        break;
+      case PARTIAL_READ_WRITE:
+        partitionStateStr = PARTIAL_READ_WRITE_STR;
+        break;
+      case READ_ONLY:
+        partitionStateStr = READ_ONLY_STR;
+        break;
+      default:
+        throw new IllegalArgumentException(String.format("Invalid partition state %s", partitionState.name()));
+    }
+    return partitionStateStr;
+  }
+
+  /**
+   * Convert partition state string to {@link ReplicaSealStatus} object.
+   * @param partitionStateStr the partition state string to convert.
+   * @return ReplicaSealStatus object.
+   */
+  public static ReplicaSealStatus partitionStateStrToReplicaSealStatus(String partitionStateStr) {
+    if (partitionStateStr.equals(READ_WRITE_STR)) {
+      return ReplicaSealStatus.NOT_SEALED;
+    } else if (partitionStateStr.equals(PARTIAL_READ_WRITE_STR)) {
+      return ReplicaSealStatus.PARTIALLY_SEALED;
+    } else if (partitionStateStr.equals(READ_ONLY_STR)) {
+      return ReplicaSealStatus.SEALED;
+    }
+    throw new IllegalArgumentException(String.format("Invalid partition state str %s", partitionStateStr));
   }
 
   /**

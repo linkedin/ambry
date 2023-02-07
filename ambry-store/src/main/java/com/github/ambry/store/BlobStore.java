@@ -1257,7 +1257,7 @@ public class BlobStore implements Store {
       ReplicaSealStatus delegateSealStatus = sealedReplicas.contains(partitionName) ? ReplicaSealStatus.SEALED
           : (partiallySealedReplicas.contains(partitionName) ? ReplicaSealStatus.PARTIALLY_SEALED
               : ReplicaSealStatus.NOT_SEALED);
-      sealStatus = mergeReplicaSealStatus(sealStatus, delegateSealStatus);
+      sealStatus = ReplicaSealStatus.mergeReplicaSealStatus(sealStatus, delegateSealStatus);
     }
     boolean success = false;
     for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
@@ -1278,24 +1278,6 @@ public class BlobStore implements Store {
       replicaSealStatus.set(sealStatus);
     } else {
       logger.error("Failed on reconciling replica state to {} state", sealStatus.name());
-    }
-  }
-
-  /**
-   * Merge the specified {@link ReplicaSealStatus}es into a single {@link ReplicaSealStatus} by choosing the most restrictive
-   * seal status for the replica in the order
-   * {@link ReplicaSealStatus#SEALED} > {@link ReplicaSealStatus#PARTIALLY_SEALED} > {@link ReplicaSealStatus#NOT_SEALED}.
-   * @param sealStatus1 {@link ReplicaSealStatus} object to be merged.
-   * @param sealStatus2 {@link ReplicaSealStatus} object to be merged.
-   * @return The merged {@link ReplicaSealStatus} object.
-   */
-  ReplicaSealStatus mergeReplicaSealStatus(ReplicaSealStatus sealStatus1, ReplicaSealStatus sealStatus2) {
-    if (sealStatus1 == ReplicaSealStatus.SEALED || sealStatus2 == ReplicaSealStatus.SEALED) {
-      return ReplicaSealStatus.SEALED;
-    } else if (sealStatus1 == ReplicaSealStatus.PARTIALLY_SEALED || sealStatus2 == ReplicaSealStatus.PARTIALLY_SEALED) {
-      return ReplicaSealStatus.PARTIALLY_SEALED;
-    } else {
-      return ReplicaSealStatus.NOT_SEALED;
     }
   }
 

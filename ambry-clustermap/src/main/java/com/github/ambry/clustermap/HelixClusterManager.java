@@ -869,7 +869,9 @@ public class HelixClusterManager implements ClusterMap {
     long getPartitionReadWriteCount() {
       long count = 0;
       for (AmbryPartition partition : partitionMap.values()) {
-        if (partition.getPartitionState() == PartitionState.READ_WRITE) {
+        // TODO note that currently even partially read write partitions are treated as read write.
+        // once we start making the distinction, we should also change this metric.
+        if (partition.getPartitionState() != PartitionState.READ_ONLY) {
           count++;
         }
       }
@@ -883,6 +885,19 @@ public class HelixClusterManager implements ClusterMap {
       long count = 0;
       for (AmbryPartition partition : partitionMap.values()) {
         if (partition.getPartitionState() == PartitionState.READ_ONLY) {
+          count++;
+        }
+      }
+      return count;
+    }
+
+    /**
+     * @return the count of partitions that are in partially sealed (partial-read-write) state.
+     */
+    long getPartitionPartiallySealedCount() {
+      long count = 0;
+      for (AmbryPartition partition : partitionMap.values()) {
+        if (partition.getPartitionState() == PartitionState.PARTIAL_READ_WRITE) {
           count++;
         }
       }
@@ -1508,13 +1523,15 @@ public class HelixClusterManager implements ClusterMap {
      * @param partiallySealedReplicas {@link Collection} of partition names whose replicas are partially sealed.
      * @return ReplicaSealStatus object.
      */
-    private ReplicaSealStatus resolveReplicaSealStatus(String partitionName, Collection<String> sealedReplicas,
+    ReplicaSealStatus resolveReplicaSealStatus(String partitionName, Collection<String> sealedReplicas,
         Collection<String> partiallySealedReplicas) {
+      ReplicaSealStatus replicaSealStatus = ReplicaSealStatus.NOT_SEALED;
       if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
-        if (partitionOverrideInfoMap.get(partitionName)
-            .get(ClusterMapUtils.PARTITION_STATE)
-            .equals(ClusterMapUtils.READ_ONLY_STR)) {
-          return ReplicaSealStatus.SEALED;
+        replicaSealStatus =
+            ClusterMapUtils.partitionStateStrToReplicaSealStatus(partitionOverrideInfoMap.get(partitionName)
+                .get(ClusterMapUtils.PARTITION_STATE));
+        if (replicaSealStatus == ReplicaSealStatus.SEALED) {
+          return  replicaSealStatus;
         }
       } else {
         if (sealedReplicas.contains(partitionName)) {
@@ -1522,9 +1539,9 @@ public class HelixClusterManager implements ClusterMap {
         }
       }
       if (partiallySealedReplicas.contains(partitionName)) {
-        return ReplicaSealStatus.PARTIALLY_SEALED;
+        replicaSealStatus = ReplicaSealStatus.PARTIALLY_SEALED;
       }
-      return ReplicaSealStatus.NOT_SEALED;
+      return replicaSealStatus;
     }
   }
 

@@ -335,7 +335,7 @@ public class BlobStoreTest {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("storeDir-" + storeId);
     tempDirStr = tempDir.getAbsolutePath();
-    StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     long bufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     expiresAtMs = time.milliseconds() + bufferTimeMs + TimeUnit.HOURS.toMillis(1);
     setupTestState(true, true);
@@ -2540,21 +2540,6 @@ public class BlobStoreTest {
     when(mockPersistentIndex.getLogUsedCapacity()).thenReturn(
         (LOG_CAPACITY * readWritePercentageLimit)/100 - 1);
     Assert.assertEquals(store.resolveReplicaSealStatusFromLogSize(), ReplicaSealStatus.NOT_SEALED);
-  }
-
-  /**
-   * Test {@link BlobStore#mergeReplicaSealStatus(ReplicaSealStatus, ReplicaSealStatus)}.
-   */
-  @Test
-  public void testMergeReplicaSealStatus() {
-    ReplicaSealStatus[] replicaSealStatuses = ReplicaSealStatus.values();
-    for (ReplicaSealStatus replicaSealStatus1 : replicaSealStatuses) {
-      for (ReplicaSealStatus replicaSealStatus2 : replicaSealStatuses) {
-        ReplicaSealStatus mergedStatus = store.mergeReplicaSealStatus(replicaSealStatus1, replicaSealStatus2);
-        Assert.assertEquals(mergedStatus,
-            replicaSealStatuses[Math.max(replicaSealStatus1.ordinal(), replicaSealStatus2.ordinal())]);
-      }
-    }
   }
 
   /**

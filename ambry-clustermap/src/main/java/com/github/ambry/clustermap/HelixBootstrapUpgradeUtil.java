@@ -564,8 +564,7 @@ public class HelixBootstrapUpgradeUtil {
     for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
       String partitionName = partitionId.toPathString();
       Map<String, String> partitionProperties = new HashMap<>();
-      partitionProperties.put(PARTITION_STATE,
-          partitionId.getPartitionState() == PartitionState.READ_WRITE ? READ_WRITE_STR : READ_ONLY_STR);
+      partitionProperties.put(PARTITION_STATE, ClusterMapUtils.partitionStateToStr(partitionId.getPartitionState()));
       partitionOverrideInfos.put(partitionName, partitionProperties);
     }
     Map<String, Map<String, Map<String, String>>> partitionOverrideByDc = new HashMap<>();
@@ -1410,6 +1409,9 @@ public class HelixBootstrapUpgradeUtil {
               .append(REPLICAS_DELIM_STR);
           if (referenceInstanceConfig == null && replica.isSealed()) {
             sealedPartitionsList.add(Long.toString(replica.getPartition().getId()));
+          }
+          if (referenceInstanceConfig == null && replica.isPartiallySealed()) {
+            partiallySealedPartitionsList.add(Long.toString(replica.getPartition().getId()));
           }
           partitionToInstances.computeIfAbsent(Long.toString(replica.getPartition().getId()), k -> new HashSet<>())
               .add(instanceName);

@@ -193,18 +193,28 @@ public class AmbryPartition implements PartitionId {
     // if the lock could not be taken, that means the state is being updated in another thread. Avoid updating the
     // state in that case.
     if (currentCounterValue > lastUpdatedSealedStateChangeCounter && stateChangeLock.tryLock()) {
+      ReplicaSealStatus mergedReplicaSealStatus = ReplicaSealStatus.NOT_SEALED;
       try {
         lastUpdatedSealedStateChangeCounter = currentCounterValue;
-        boolean isSealed = false;
+        AmbryReplica partiallySealedReplica = null;
         for (AmbryReplica replica : clusterManagerQueryHelper.getReplicaIdsForPartition(this)) {
-          if (replica.isSealed()) {
-            LOGGER.trace("Partition {} is sealed because of replica {} is sealed at sealedStateChangeCounter {}", id,
+          mergedReplicaSealStatus =
+              ReplicaSealStatus.mergeReplicaSealStatus(mergedReplicaSealStatus, replica.getSealedStatus());
+          if (mergedReplicaSealStatus == ReplicaSealStatus.SEALED) {
+            LOGGER.trace("Partition {} is sealed because replica {} is sealed at sealedStateChangeCounter {}", id,
                 replica.getDataNodeId().toString(), lastUpdatedSealedStateChangeCounter);
-            isSealed = true;
             break;
           }
+          if (mergedReplicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED) {
+            partiallySealedReplica = replica;
+          }
         }
-        state = isSealed ? PartitionState.READ_ONLY : PartitionState.READ_WRITE;
+        if (mergedReplicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED) {
+          LOGGER.trace(
+              "Partition {} is partially sealed because replica {} is partially sealed at sealedStateChangeCounter {}",
+              id, partiallySealedReplica.getDataNodeId().toString(), lastUpdatedSealedStateChangeCounter);
+        }
+        state = ClusterMapUtils.convertReplicaSealStatusToPartitionState(mergedReplicaSealStatus);
       } finally {
         stateChangeLock.unlock();
       }

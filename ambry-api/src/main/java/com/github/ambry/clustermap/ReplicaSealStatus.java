@@ -24,5 +24,23 @@ package com.github.ambry.clustermap;
 public enum ReplicaSealStatus {
   NOT_SEALED,
   PARTIALLY_SEALED,
-  SEALED
+  SEALED;
+
+  /**
+   * Merge the specified {@link ReplicaSealStatus}es into a single {@link ReplicaSealStatus} by choosing the most restrictive
+   * seal status for the replica in the order
+   * {@link ReplicaSealStatus#SEALED} > {@link ReplicaSealStatus#PARTIALLY_SEALED} > {@link ReplicaSealStatus#NOT_SEALED}.
+   * @param sealStatus1 {@link ReplicaSealStatus} object to be merged.
+   * @param sealStatus2 {@link ReplicaSealStatus} object to be merged.
+   * @return The merged {@link ReplicaSealStatus} object.
+   */
+  public static ReplicaSealStatus mergeReplicaSealStatus(ReplicaSealStatus sealStatus1, ReplicaSealStatus sealStatus2) {
+    if (sealStatus1 == ReplicaSealStatus.SEALED || sealStatus2 == ReplicaSealStatus.SEALED) {
+      return ReplicaSealStatus.SEALED;
+    } else if (sealStatus1 == ReplicaSealStatus.PARTIALLY_SEALED || sealStatus2 == ReplicaSealStatus.PARTIALLY_SEALED) {
+      return ReplicaSealStatus.PARTIALLY_SEALED;
+    } else {
+      return ReplicaSealStatus.NOT_SEALED;
+    }
+  }
 }

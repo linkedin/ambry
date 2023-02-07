@@ -203,6 +203,36 @@ public class ClusterMapUtilsTest {
   }
 
   /**
+   * Test {@link ClusterMapUtils#partitionStateToStr(PartitionState)}.
+   */
+  @Test
+  public void testPartitionStateToStr() {
+    assertEquals(ClusterMapUtils.READ_ONLY_STR, ClusterMapUtils.partitionStateToStr(PartitionState.READ_ONLY));
+    assertEquals(ClusterMapUtils.READ_WRITE_STR, ClusterMapUtils.partitionStateToStr(PartitionState.READ_WRITE));
+    assertEquals(ClusterMapUtils.PARTIAL_READ_WRITE_STR,
+        ClusterMapUtils.partitionStateToStr(PartitionState.PARTIAL_READ_WRITE));
+  }
+
+  /**
+   * Test {@link ClusterMapUtils#partitionStateStrToReplicaSealStatus(String)}.
+   */
+  @Test
+  public void testPartitionStateStrToReplicaSealStatus() {
+    assertEquals(ReplicaSealStatus.NOT_SEALED,
+        ClusterMapUtils.partitionStateStrToReplicaSealStatus(ClusterMapUtils.READ_WRITE_STR));
+    assertEquals(ReplicaSealStatus.PARTIALLY_SEALED,
+        ClusterMapUtils.partitionStateStrToReplicaSealStatus(ClusterMapUtils.PARTIAL_READ_WRITE_STR));
+    assertEquals(ReplicaSealStatus.SEALED,
+        ClusterMapUtils.partitionStateStrToReplicaSealStatus(ClusterMapUtils.READ_ONLY_STR));
+    try {
+      ClusterMapUtils.partitionStateStrToReplicaSealStatus("garbage");
+    } catch (IllegalArgumentException ex) {
+      return;
+    }
+    fail("partitionStateStrToReplicaSealStatus with invalid argument should have failed.");
+  }
+
+  /**
    * @param hostname the host name of the {@link MockDataNodeId}.
    * @param dc the name of the dc of the {@link MockDataNodeId}.
    * @return a {@link MockDataNodeId} based on {@code hostname} and {@code dc}.

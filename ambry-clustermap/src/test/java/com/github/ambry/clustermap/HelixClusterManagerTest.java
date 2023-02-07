@@ -31,6 +31,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -60,6 +61,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
@@ -109,8 +111,15 @@ public class HelixClusterManagerTest {
   private final PartitionRangeCheckParams specialRw;
   private final PartitionRangeCheckParams defaultRo;
   private final PartitionRangeCheckParams specialRo;
+
+  private final PartitionRangeCheckParams defaultPrw;
+  private final PartitionRangeCheckParams specialPrw;
+  private final PartitionRangeCheckParams defaultRwForPrw;
   private final Map<String, Map<String, String>> partitionOverrideMap;
   private final ZNRecord znRecord;
+  private final int numOfPartialReadWrite = 3;
+  private int numOfReadOnly;
+  private int numOfReadWrite;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -177,6 +186,19 @@ public class HelixClusterManagerTest {
     specialRo =
         new PartitionRangeCheckParams(defaultRo.rangeEnd + 1, 5, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY);
     testPartitionLayout.addNewPartitions(specialRo.count, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY, localDc);
+    // add 5 PRW partitions for default class
+    defaultPrw =
+        new PartitionRangeCheckParams(specialRo.rangeEnd + 1, 5, DEFAULT_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE);
+    testPartitionLayout.addNewPartitions(defaultPrw.count, DEFAULT_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE, localDc);
+    // add 5 PRW partitions for special class
+    specialPrw =
+        new PartitionRangeCheckParams(defaultPrw.rangeEnd + 1, 5, SPECIAL_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE);
+    testPartitionLayout.addNewPartitions(specialPrw.count, SPECIAL_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE, localDc);
+    // add 3 RW partition for the default class (these will be overridden to PRW for tests)
+    defaultRwForPrw =
+        new PartitionRangeCheckParams(specialPrw.rangeEnd + 1, numOfPartialReadWrite, DEFAULT_PARTITION_CLASS,
+            PartitionState.READ_WRITE);
+    testPartitionLayout.addNewPartitions(defaultRwForPrw.count, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, localDc);
 
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
@@ -184,17 +206,20 @@ public class HelixClusterManagerTest {
 
     // Mock the override partition map
     Random rand = new Random();
-    int totalPartitionNum = testPartitionLayout.getPartitionCount();
-    int numOfReadOnly = rand.nextInt(totalPartitionNum / 2 - 1);
-    int numOfReadWrite = totalPartitionNum - numOfReadOnly;
+    int totalPartitionNum = testPartitionLayout.getPartitionCount() - numOfPartialReadWrite; // - numOfPartialReadWrite because last 3 partitions are reserved to be overrideen to PRW
+    numOfReadOnly = rand.nextInt(totalPartitionNum / 2 - 1);
+    numOfReadWrite = totalPartitionNum - numOfReadOnly;
     partitionOverrideMap = new HashMap<>();
     for (int i = 0; i < numOfReadWrite; ++i) {
       partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
-          .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_WRITE_STR);
+          .put(PARTITION_STATE, READ_WRITE_STR);
     }
     for (int i = numOfReadWrite; i < totalPartitionNum; ++i) {
+      partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>()).put(PARTITION_STATE, READ_ONLY_STR);
+    }
+    for (int i = totalPartitionNum; i < (totalPartitionNum + numOfPartialReadWrite); ++i) {
       partitionOverrideMap.computeIfAbsent(String.valueOf(i), k -> new HashMap<>())
-          .put(ClusterMapUtils.PARTITION_STATE, ClusterMapUtils.READ_ONLY_STR);
+          .put(PARTITION_STATE, PARTIAL_READ_WRITE_STR);
     }
     znRecord = new ZNRecord(PARTITION_OVERRIDE_STR);
     znRecord.setMapFields(partitionOverrideMap);
@@ -1088,7 +1113,7 @@ public class HelixClusterManagerTest {
     // Get the writable partitions in OverrideMap
     Set<String> writableInOverrideMap = new HashSet<>();
     for (Map.Entry<String, Map<String, String>> entry : partitionOverrideMap.entrySet()) {
-      if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
+      if (!entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(READ_ONLY_STR)) {
         writableInOverrideMap.add(entry.getKey());
       }
     }
@@ -1443,17 +1468,68 @@ public class HelixClusterManagerTest {
     // "good" cases for getPartitions() and getWritablePartitions() only
     // getPartitions(), class null
     List<? extends PartitionId> returnedPartitions = clusterManager.getAllPartitionIds(null);
-    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultRo, specialRw, specialRo));
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultRo, defaultPrw, specialRw, specialRo,
+        specialPrw, defaultRwForPrw));
     // getWritablePartitions(), class null
     returnedPartitions = clusterManager.getWritablePartitionIds(null);
-    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, specialRw));
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, specialRw, specialPrw, defaultPrw, defaultRwForPrw));
 
     // getPartitions(), class default
     returnedPartitions = clusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
-    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultRo));
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultRo, defaultPrw, defaultRwForPrw));
     // getWritablePartitions(), class default
     returnedPartitions = clusterManager.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
-    checkReturnedPartitions(returnedPartitions, Collections.singletonList(defaultRw));
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultPrw, defaultRwForPrw));
+
+    // getPartitions(), class special
+    returnedPartitions = clusterManager.getAllPartitionIds(SPECIAL_PARTITION_CLASS);
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(specialRw, specialRo, specialPrw));
+    // getWritablePartitions(), class special
+    returnedPartitions = clusterManager.getWritablePartitionIds(SPECIAL_PARTITION_CLASS);
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(specialRw, specialPrw));
+  }
+
+  /**
+   * Test {@link HelixClusterChangeHandler#resolveReplicaSealStatus(String, Collection, Collection)}.
+   */
+  @Test
+  public void testResolveReplicaSealStatus() {
+    assumeFalse(useComposite);
+    int firstPartitionId = numOfReadOnly + numOfReadWrite + numOfPartialReadWrite;
+    Set<String> sealedList = new HashSet<>();
+    Set<String> partiallySealedList = new HashSet<>();
+    HelixClusterChangeHandler helixClusterChangeHandler =
+        ((HelixClusterManager) clusterManager).getHelixClusterChangeHandler(localDc);
+
+    String partitionName1 = Integer.toString(firstPartitionId);
+    assertEquals(ReplicaSealStatus.NOT_SEALED,
+        helixClusterChangeHandler.resolveReplicaSealStatus(partitionName1, sealedList, partiallySealedList));
+    sealedList.add(partitionName1);
+    assertEquals(ReplicaSealStatus.SEALED,
+        helixClusterChangeHandler.resolveReplicaSealStatus(partitionName1, sealedList, partiallySealedList));
+    partiallySealedList.add(partitionName1);
+    assertEquals(ReplicaSealStatus.SEALED,
+        helixClusterChangeHandler.resolveReplicaSealStatus(partitionName1, sealedList, partiallySealedList));
+    String partitionName2 = Integer.toString(firstPartitionId + 1);
+    partiallySealedList.add(partitionName2);
+    assertEquals(ReplicaSealStatus.PARTIALLY_SEALED,
+        helixClusterChangeHandler.resolveReplicaSealStatus(partitionName2, sealedList, partiallySealedList));
+    String partitionName3 = Integer.toString(firstPartitionId + 4);
+    assertEquals(ReplicaSealStatus.NOT_SEALED,
+        helixClusterChangeHandler.resolveReplicaSealStatus(partitionName3, sealedList, partiallySealedList));
+
+    if (overrideEnabled) {
+      assertEquals(ReplicaSealStatus.SEALED,
+          helixClusterChangeHandler.resolveReplicaSealStatus(partitionName1, sealedList, partiallySealedList));
+      assertEquals(ReplicaSealStatus.PARTIALLY_SEALED,
+          helixClusterChangeHandler.resolveReplicaSealStatus(partitionName2, sealedList, partiallySealedList));
+      firstPartitionId = numOfReadOnly + numOfReadWrite;
+      assertEquals(ReplicaSealStatus.PARTIALLY_SEALED,
+          helixClusterChangeHandler.resolveReplicaSealStatus(Integer.toString(firstPartitionId), sealedList,
+              partiallySealedList));
+      assertEquals(ReplicaSealStatus.NOT_SEALED, helixClusterChangeHandler.resolveReplicaSealStatus(partitionName3,
+          sealedList, partiallySealedList));
+    }
   }
 
   // Helpers
