@@ -3158,7 +3158,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     serverErrors.add(ServerErrorCode.Blob_Deleted); // source PutBlob is compacted, replication fails with Blob_Deleted.
     for (MockServer server : layout.getMockServers()) {
       if (server.getDataCenter().equals(localDcName)) {
-        // local DC, return NO_ERROR for one replica,
+        // local DC, return NO_ERROR for one replica. This replica will be the source replica of the ReplicateBlob.
         if (sourceDataNode == null) {
           sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
         } else {
