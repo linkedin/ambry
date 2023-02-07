@@ -199,7 +199,7 @@ public class BlobStore implements Store {
     this.replicaStatusDelegates = config.storeReplicaStatusDelegateEnable ? replicaStatusDelegates : null;
     this.time = time;
     long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
-    long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
+    long delta = config.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta;
     this.thresholdBytesHigh = (long) (capacityInBytes * (threshold / 100.0));
     this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
     this.blobStoreStats = blobStoreStats; // Only in test will this be non-null

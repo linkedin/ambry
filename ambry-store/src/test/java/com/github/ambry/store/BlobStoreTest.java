@@ -3242,7 +3242,7 @@ public class BlobStoreTest {
     properties.setProperty(StoreConfig.storeReplicaStatusDelegateEnableName, Boolean.toString(delegateEnabled));
     properties.setProperty(StoreConfig.storeReadOnlyEnableSizeThresholdPercentageName,
         Integer.toString(readOnlyThreshold));
-    properties.setProperty(StoreConfig.storeReadWriteEnableSizeThresholdPercentageDeltaName,
+    properties.setProperty(StoreConfig.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDeltaName,
         Integer.toString(readWriteDeltaThreshold));
     return new StoreConfig(new VerifiableProperties(properties));
   }
