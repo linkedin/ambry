@@ -127,6 +127,11 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
+        public List<String> getPartiallySealedReplicas() {
+          return new ArrayList<>();
+        }
+
+        @Override
         public List<String> getStoppedReplicas() {
           return new ArrayList<>();
         }

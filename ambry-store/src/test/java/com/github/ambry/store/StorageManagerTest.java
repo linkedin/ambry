@@ -1342,6 +1342,7 @@ public class StorageManagerTest {
   class MockClusterParticipant extends HelixParticipant {
     Boolean updateNodeInfoReturnVal = null;
     Set<ReplicaId> sealedReplicas = new HashSet<>();
+    Set<ReplicaId> partiallySealedReplicas = new HashSet<>();
     Set<ReplicaId> stoppedReplicas = new HashSet<>();
     Set<ReplicaId> disabledReplicas = new HashSet<>();
     private Boolean setSealStateReturnVal;
@@ -1379,10 +1380,19 @@ public class StorageManagerTest {
       if (setSealStateReturnVal != null) {
         return setSealStateReturnVal;
       }
-      if (replicaSealStatus == ReplicaSealStatus.SEALED) {
-        sealedReplicas.add(replicaId);
-      } else {
-        sealedReplicas.remove(replicaId);
+      switch (replicaSealStatus) {
+        case SEALED:
+          sealedReplicas.add(replicaId);
+          partiallySealedReplicas.remove(replicaId);
+          break;
+        case PARTIALLY_SEALED:
+          partiallySealedReplicas.add(replicaId);
+          sealedReplicas.remove(replicaId);
+          break;
+        case NOT_SEALED:
+          partiallySealedReplicas.remove(replicaId);
+          sealedReplicas.remove(replicaId);
+          break;
       }
       return true;
     }
@@ -1412,6 +1422,11 @@ public class StorageManagerTest {
     @Override
     public List<String> getSealedReplicas() {
       return sealedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<String> getPartiallySealedReplicas() {
+      return partiallySealedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
     }
 
     @Override

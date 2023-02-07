@@ -45,6 +45,7 @@ public class ParticipantsConsistencyChecker implements Runnable {
       ClusterParticipant clusterParticipant = participants.get(0);
       Set<String> sealedReplicas1 = new HashSet<>(clusterParticipant.getSealedReplicas());
       Set<String> stoppedReplicas1 = new HashSet<>(clusterParticipant.getStoppedReplicas());
+      Set<String> partiallySealedReplicas1 = new HashSet<>(clusterParticipant.getPartiallySealedReplicas());
       for (int i = 1; i < participants.size(); ++i) {
         logger.debug("Checking sealed replica list");
         Set<String> sealedReplicas2 = new HashSet<>(participants.get(i).getSealedReplicas());
@@ -58,6 +59,13 @@ public class ParticipantsConsistencyChecker implements Runnable {
           logger.warn("Mismatch in stopped replicas. Set {} is different from set {}", stoppedReplicas1,
               stoppedReplicas2);
           metrics.stoppedReplicasMismatchCount.inc();
+        }
+        logger.debug("Checking partially sealed replica list");
+        Set<String> partiallySealedReplicas2 = new HashSet<>(participants.get(i).getPartiallySealedReplicas());
+        if (!partiallySealedReplicas1.equals(partiallySealedReplicas2)) {
+          logger.warn("Mismatch in partially sealed replicas. Set {} is different from set {}",
+              partiallySealedReplicas1, partiallySealedReplicas2);
+          metrics.partiallySealedReplicasMismatchCount.inc();
         }
       }
     } catch (Throwable t) {
