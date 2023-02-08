@@ -1532,20 +1532,5 @@ public class HelixClusterManager implements ClusterMap {
         }
       }
     }
-
-    /**
-     * Ensure that the given partition is absent on the given datanode. This is called as part of an inline validation
-     * done to ensure that two replicas of the same partition do not exist on the same datanode.
-     * @param partition the {@link AmbryPartition} to check.
-     * @param datanode the {@link AmbryDataNode} on which to check.
-     */
-    private void ensurePartitionPresenceOnNode(AmbryPartition partition, AmbryDataNode datanode) {
-      for (AmbryReplica replica : ambryPartitionToAmbryReplicas.get(partition)) {
-        if (replica.getDataNodeId().equals(datanode)) {
-          return;
-        }
-      }
-      throw new IllegalStateException("Replica doesn't exist on " + datanode + " for " + partition);
-    }
   }
 }
