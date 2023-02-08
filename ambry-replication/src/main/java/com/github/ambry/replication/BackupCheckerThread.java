@@ -119,7 +119,8 @@ public class BackupCheckerThread extends ReplicaThread {
     checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
   }
 
-  /**   * This method checks if an un-deleted blob from remote on-prem server has been un-deleted from local-store
+  /**
+   * This method checks if an un-deleted blob from remote on-prem server has been un-deleted from local-store
    * @param remoteBlob the {@link MessageInfo} that will be transformed into an un-delete
    * @param remoteReplicaInfo The remote replica that is being replicated from
    */
