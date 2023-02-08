@@ -69,7 +69,6 @@ public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   public static final String DR_Verifier_Keyword = "dr";
-
   protected final Cache<String, SeekableByteChannel> fileDescriptorCache;
   private final String basePath = "/export/content/lid/logs/ambry-server/i001";
 
@@ -206,7 +205,9 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   protected boolean writeToFile(SeekableByteChannel seekableByteChannel, String text, int offset) {
     try {
-      seekableByteChannel.position(offset);
+      if (offset >= 0) {
+        seekableByteChannel.position(offset);
+      }
       seekableByteChannel.write(ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8)));
       return true;
     } catch (IOException e) {
@@ -222,13 +223,7 @@ public class BackupCheckerThread extends ReplicaThread {
    * @return True if append was successful, false otherwise
    */
   protected boolean appendToFile(SeekableByteChannel seekableByteChannel, String text) {
-    try {
-      seekableByteChannel.write(ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8)));
-      return true;
-    } catch (IOException e) {
-      logger.error(e.toString());
-      return false;
-    }
+    return writeToFile(seekableByteChannel, text, -1);
   }
 
   /**
