@@ -363,6 +363,7 @@ public class BackupCheckerThread extends ReplicaThread {
   /**
    * Prints a log if local store has caught up with remote store
    * @param remoteReplicaInfo Info about remote replica
+   * @param exchangeMetadataResponse Metadata response object
    */
   @Override
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
