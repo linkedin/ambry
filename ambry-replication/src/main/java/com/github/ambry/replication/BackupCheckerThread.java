@@ -283,7 +283,6 @@ public class BackupCheckerThread extends ReplicaThread {
       Path path = Paths.get(filePath);
       try {
         seekableByteChannel = Files.newByteChannel(path, options);
-        logger.info("|snkt| Created file " + path);
       } catch (IOException e) {
         logger.error("Path = {}, Options = {}, Error creating file = {}", path, options, e.toString());
         return null;
