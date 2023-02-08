@@ -74,7 +74,7 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String DR_Verifier_Keyword = "dr";
   protected final AmbryCache fileDescriptorCache;
   private final String basePath = "/export/content/lid/logs/ambry-server/i001";
-  public static final DateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   protected class FileDescriptor implements AmbryCacheEntry {
 
@@ -323,7 +323,7 @@ public class BackupCheckerThread extends ReplicaThread {
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
-        appendToFile(seekableByteChannel, String.format(errMsg, dateFormat.format(new Date(System.currentTimeMillis())),
+        appendToFile(seekableByteChannel, String.format(errMsg, DATE_FORMAT.format(new Date(System.currentTimeMillis())),
             acceptableLocalBlobStates, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
       }
     } catch (StoreException e) {
@@ -331,7 +331,7 @@ public class BackupCheckerThread extends ReplicaThread {
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
-        appendToFile(seekableByteChannel, String.format(errMsg, dateFormat.format(new Date(System.currentTimeMillis())),
+        appendToFile(seekableByteChannel, String.format(errMsg, DATE_FORMAT.format(new Date(System.currentTimeMillis())),
             acceptableLocalBlobStates, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
       }
     }
