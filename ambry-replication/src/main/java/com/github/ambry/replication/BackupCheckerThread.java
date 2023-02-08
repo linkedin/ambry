@@ -371,7 +371,7 @@ public class BackupCheckerThread extends ReplicaThread {
     // This will help us know when to stop DR process for sealed partitions
     SeekableByteChannel seekableByteChannel = getOrCreateStatusFileFd(remoteReplicaInfo);
     String text = String.format("%s \nRemoteReplicaInfo = %s \nisSealed = %s \nToken = %s \nlocalLagFromRemoteInBytes = %s \n",
-        dateFormat.format(new Date(System.currentTimeMillis())), remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(),
+        DATE_FORMAT.format(new Date(System.currentTimeMillis())), remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(),
         remoteReplicaInfo.getToken().toString(), exchangeMetadataResponse.localLagFromRemoteInBytes);
     writeToFile(seekableByteChannel, text, 0);
   }
