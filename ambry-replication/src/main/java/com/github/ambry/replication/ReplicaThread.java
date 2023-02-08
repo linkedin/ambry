@@ -252,7 +252,8 @@ public class ReplicaThread implements Runnable {
    * Empty for current ReplicaThread but can be re-written in other cases to track progress.
    * @param remoteReplicaInfo
    */
-  protected void logReplicationCaughtUp(RemoteReplicaInfo remoteReplicaInfo) {
+  protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
+      ExchangeMetadataResponse exchangeMetadataResponse) {
   }
 
   @Override
@@ -713,7 +714,7 @@ public class ReplicaThread implements Runnable {
               remoteReplicaInfo.setReEnableReplicationTime(
                   time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
               syncedBackOffCount.inc();
-              logReplicationCaughtUp(remoteReplicaInfo);
+              logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
             }
 
             // There are no missing keys. We just advance the token

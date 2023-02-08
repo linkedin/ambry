@@ -17,6 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.commons.AmbryCache;
+import com.github.ambry.commons.AmbryCacheEntry;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -32,8 +34,6 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -43,7 +43,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Collections;
+import java.util.Date;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -69,8 +72,22 @@ public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   public static final String DR_Verifier_Keyword = "dr";
-  protected final Cache<String, SeekableByteChannel> fileDescriptorCache;
+  protected final AmbryCache fileDescriptorCache;
   private final String basePath = "/export/content/lid/logs/ambry-server/i001";
+  public static final DateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
+
+  protected class FileDescriptor implements AmbryCacheEntry {
+
+    SeekableByteChannel _seekableByteChannel;
+
+    public FileDescriptor(SeekableByteChannel seekableByteChannel) {
+      this._seekableByteChannel = seekableByteChannel;
+    }
+
+    public SeekableByteChannel getSeekableByteChannel() {
+      return _seekableByteChannel;
+    }
+  }
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -83,9 +100,7 @@ public class BackupCheckerThread extends ReplicaThread {
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
-    fileDescriptorCache = Caffeine.newBuilder()
-        .maximumSize(1000)
-        .build();
+    fileDescriptorCache = new AmbryCache("BackupCheckerFdCache", true, 1000, metricRegistry);
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -190,10 +205,7 @@ public class BackupCheckerThread extends ReplicaThread {
     remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
     // reset stored metadata response for this replica so that we send next request for metadata
     remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
-    SeekableByteChannel seekableByteChannel = getOrCreateStatusFileFd(remoteReplicaInfo);
-    String text = String.format("RemoteReplicaInfo = %s \nToken = %s \nlocalLagFromRemoteInBytes = %s \n",
-        remoteReplicaInfo, remoteReplicaInfo.getToken().toString(), exchangeMetadataResponse.localLagFromRemoteInBytes);
-    writeToFile(seekableByteChannel, text, 0);
+    logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
   }
 
   /**
@@ -263,8 +275,8 @@ public class BackupCheckerThread extends ReplicaThread {
    * @return Return a file descriptor of type SeekableByteChannel
    */
   protected SeekableByteChannel getOrCreateReportFd(String filePath, EnumSet<StandardOpenOption> options) {
-    SeekableByteChannel seekableByteChannel = fileDescriptorCache.getIfPresent(filePath);
-    if (seekableByteChannel == null) {
+    FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(filePath);
+    if (fileDescriptor == null) {
       // Create parent folders
       Path directories = Paths.get(filePath.substring(0, filePath.lastIndexOf(File.separator)));
       try {
@@ -277,16 +289,16 @@ public class BackupCheckerThread extends ReplicaThread {
       // Create file
       Path path = Paths.get(filePath);
       try {
-        seekableByteChannel = Files.newByteChannel(path, options);
+        fileDescriptor = new FileDescriptor(Files.newByteChannel(path, options));
       } catch (IOException e) {
         logger.error("Path = {}, Options = {}, Error creating file = {}", path, options, e.toString());
         return null;
       }
 
       // insert into cache
-      fileDescriptorCache.put(filePath, seekableByteChannel);
+      fileDescriptorCache.putObject(filePath, fileDescriptor);
     }
-    return seekableByteChannel;
+    return fileDescriptor.getSeekableByteChannel();
   }
 
   /**
@@ -299,7 +311,7 @@ public class BackupCheckerThread extends ReplicaThread {
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
     SeekableByteChannel seekableByteChannel = getOrCreateMissingKeysFd(remoteReplicaInfo);
-    String errMsg = "%s | Missing %s | RemoteReplica = %s | BlobID = %s | RemoteBlobState = %s | LocalBlobState = %s \n";
+    String errMsg = "%s | Missing %s | %s | RemoteBlobState = %s | LocalBlobState = %s \n";
     try {
       EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
       // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
@@ -308,16 +320,16 @@ public class BackupCheckerThread extends ReplicaThread {
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
-        appendToFile(seekableByteChannel, String.format(errMsg, System.currentTimeMillis(), acceptableLocalBlobStates,
-            remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
+        appendToFile(seekableByteChannel, String.format(errMsg, dateFormat.format(new Date(System.currentTimeMillis())),
+            acceptableLocalBlobStates, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
       }
     } catch (StoreException e) {
       EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
-        appendToFile(seekableByteChannel, String.format(errMsg, System.currentTimeMillis(), acceptableLocalBlobStates,
-            remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
+        appendToFile(seekableByteChannel, String.format(errMsg, dateFormat.format(new Date(System.currentTimeMillis())),
+            acceptableLocalBlobStates, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
       }
     }
   }
@@ -350,11 +362,13 @@ public class BackupCheckerThread extends ReplicaThread {
    * @param remoteReplicaInfo Info about remote replica
    */
   @Override
-  protected void logReplicationCaughtUp(RemoteReplicaInfo remoteReplicaInfo) {
+  protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
+      ExchangeMetadataResponse exchangeMetadataResponse) {
     // This will help us know when to stop DR process for sealed partitions
     SeekableByteChannel seekableByteChannel = getOrCreateStatusFileFd(remoteReplicaInfo);
-    String text = String.format("RemoteReplicaInfo = %s \nToken = %s \nLocal-store has caught up with remote-store \n",
-        remoteReplicaInfo, remoteReplicaInfo.getToken().toString());
+    String text = String.format("%s \nRemoteReplicaInfo = %s \nisSealed = %s \nToken = %s \nlocalLagFromRemoteInBytes = %s \n",
+        dateFormat.format(new Date(System.currentTimeMillis())), remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(),
+        remoteReplicaInfo.getToken().toString(), exchangeMetadataResponse.localLagFromRemoteInBytes);
     writeToFile(seekableByteChannel, text, 0);
   }
 
