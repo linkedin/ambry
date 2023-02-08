@@ -301,7 +301,7 @@ public class StoreConfig {
   public static final String storeReplicaStatusDelegateEnableName = "store.replica.status.delegate.enable";
 
   /**
-   * Specifies the size threshold (as percentage of maximum size) of a store for converting the chunk to RO from RW
+   * Specifies the size threshold (as percentage of maximum size) of a store for converting the store to RO from RW
    */
   @Config(storeReadOnlyEnableSizeThresholdPercentageName)
   @Default("95")
@@ -311,13 +311,34 @@ public class StoreConfig {
 
   /**
    * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will
-   * be converted from RO to RW
+   * be converted from RO to Partially Writable.
    */
-  @Config(storeReadWriteEnableSizeThresholdPercentageDeltaName)
+  @Config(storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDeltaName)
   @Default("5")
-  public final int storeReadWriteEnableSizeThresholdPercentageDelta;
-  public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
-      "store.read.write.enable.size.threshold.percentage.delta";
+  public final int storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta;
+  public static final String storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDeltaName =
+      "store.read.only.to.partial.write.enable.size.threshold.percentage.delta";
+
+  /**
+   * Specifies the size threshold (as percentage of maximum size) of a store for converting the replica and partition to
+   * partially writable from RW.
+   */
+  @Config(storePartialWriteEnableSizeThresholdPercentageName)
+  @Default("50")
+  public final int storePartialWriteEnableSizeThresholdPercentage;
+  public static final String storePartialWriteEnableSizeThresholdPercentageName =
+      "store.partial.write.enable.size.threshold.percentage";
+
+  /**
+   * Specifies the size threshold delta below {@link #storePartialWriteEnableSizeThresholdPercentageName} that a store will
+   * be converted from partially writable to RW
+   */
+  @Config(storePartialWriteToReadWriteEnableSizeThresholdPercentageDeltaName)
+  @Default("5")
+  public final int storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
+  public static final String storePartialWriteToReadWriteEnableSizeThresholdPercentageDeltaName =
+      "store.partial.write.to.read.write.enable.size.threshold.percentage.delta";
+
 
   /**
    * Specifies the minimum number of seconds before a blob's current expiry time (creation time + TTL) that the current
@@ -588,9 +609,14 @@ public class StoreConfig {
     storeReplicaStatusDelegateEnable = verifiableProperties.getBoolean(storeReplicaStatusDelegateEnableName, false);
     storeReadOnlyEnableSizeThresholdPercentage =
         verifiableProperties.getIntInRange(storeReadOnlyEnableSizeThresholdPercentageName, 95, 0, 100);
-    storeReadWriteEnableSizeThresholdPercentageDelta =
-        verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
+    storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta =
+        verifiableProperties.getIntInRange(storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
+    storePartialWriteEnableSizeThresholdPercentage =
+        verifiableProperties.getIntInRange(storePartialWriteEnableSizeThresholdPercentageName, 50, 0, 100);
+    storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta =
+        verifiableProperties.getIntInRange(storePartialWriteToReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
+            storePartialWriteEnableSizeThresholdPercentage);
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
     storeTtlUpdateBufferTimeSeconds =
         verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
