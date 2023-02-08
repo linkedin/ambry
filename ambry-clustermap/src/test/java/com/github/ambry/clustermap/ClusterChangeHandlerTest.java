@@ -44,6 +44,7 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -426,6 +427,76 @@ public class ClusterChangeHandlerTest {
   }
 
   /**
+   * Test removing instances from cluster dynamically. {@link HelixClusterManager} with
+   * {@link HelixClusterChangeHandler} should absorb the change and update in-mem cluster map.
+   */
+  @Test
+  @Ignore
+  private void removeInstancesTest() throws Exception {
+    // create a HelixClusterManager with DynamicClusterChangeHandler
+    Properties properties = new Properties();
+    properties.putAll(props);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+
+    // Before removing instances, let's first ensure current number of nodes is correct.
+    List<DataNode> dataNodesInLayout = new ArrayList<>();
+    testHardwareLayout.getHardwareLayout().getDatacenters().forEach(dc -> dataNodesInLayout.addAll(dc.getDataNodes()));
+    assertEquals("Number of data nodes is not expected", dataNodesInLayout.size(),
+        helixClusterManager.getDataNodeIds().size());
+
+    // Remove nodes from hardware layout and their corresponding replicas from partition layout
+    testHardwareLayout.removeDataNode();
+    List<DataNode> removedNodes = new ArrayList<>();
+    testHardwareLayout.getHardwareLayout().getDatacenters().forEach(dc -> removedNodes.addAll(dc.getDataNodes()));
+    removedNodes.removeAll(dataNodesInLayout);
+    for (DataNode removedNode : removedNodes) {
+      testPartitionLayout.removeReplicasOfDatanode(removedNode.getHostname(), removedNode.getPort());
+    }
+    // write new HardwareLayout and PartitionLayout into files
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+    // this triggers a InstanceConfig change notification.
+    // TODO: This doesn't call DataNodConfig change notification.
+    helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
+
+    // verify after InstanceConfig change, HelixClusterManager contains the one less node per dc.
+    assertEquals("Number of data nodes after instance addition is not correct",
+        testHardwareLayout.getAllExistingDataNodes().size(), helixClusterManager.getDataNodeIds().size());
+    // verify number of partitions in cluster manager is still same
+    assertEquals("Number of partitions after partition addition is not correct",
+        testPartitionLayout.getPartitionCount(), helixClusterManager.getAllPartitionIds(null).size());
+
+    // verify capacity stats are updated
+    HelixClusterManagerQueryHelper clusterManagerCallback = helixClusterManager.getManagerQueryHelper();
+    // note that we add removed one node from each dc, so the raw capacity is decreased by (# of nodes) * (# of disks) * (disk capacity)
+    long rawCapacityInStaticLayout =
+        testHardwareLayout.getAllExistingDataNodes().size() * testHardwareLayout.getDiskCount()
+            * testHardwareLayout.getDiskCapacityInBytes();
+    assertEquals("Raw capacity of entire cluster is not expected", rawCapacityInStaticLayout,
+        clusterManagerCallback.getRawCapacity());
+    // we have one less replica, so now the allocated raw capacity in cluster is 5 (partition count) * 5 * ReplicaCapacity
+    assertEquals("Allocated raw capacity of entire cluster is not correct",
+        testPartitionLayout.getAllocatedRawCapacityInBytes(), clusterManagerCallback.getAllocatedRawCapacity());
+    // verify usable capacity
+    assertEquals("Allocated usable capacity of entire cluster is not correct",
+        testPartitionLayout.getAllocatedUsableCapacityInBytes(), clusterManagerCallback.getAllocatedUsableCapacity());
+
+    // Verify there are no replicas, disks and resources etc for removed nodes.
+    for (DataNode newNode : removedNodes) {
+      AmbryDataNode ambryNode = helixClusterManager.getDataNodeId(newNode.getHostname(), newNode.getPort());
+      assertNull("Removed node should not exist in HelixClusterManager", ambryNode);
+      List<AmbryReplica> ambryReplicas = helixClusterManager.getReplicaIds(ambryNode);
+      assertEquals("There should be no replicas for this node", 0, ambryReplicas.size());
+      Set<AmbryDisk> ambryDisks = new HashSet<>(clusterManagerCallback.getDisks(ambryNode));
+      assertEquals("There should be no disks for this node", 0, ambryDisks.size());
+    }
+
+    helixClusterManager.close();
+  }
+
+  /**
    * Test the case where replica is added or removed and {@link PartitionSelectionHelper} is able to incorporate cluster
    * map changes.
    * Test setup: (1) remove one replica of Partition1 from local dc;
@@ -667,7 +738,7 @@ public class ClusterChangeHandlerTest {
         partitionInManager.getReplicaIds().size());
     // verify that the replica instance in HelixClusterManager is same with bootstrap replica instance
     ReplicaId replicaInManager = helixClusterManager.getReplicaIds(
-            helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
+        helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
         .stream()
         .filter(r -> r.getPartitionId().toPathString().equals(addedPartition2.toPathString()))
         .findFirst()
