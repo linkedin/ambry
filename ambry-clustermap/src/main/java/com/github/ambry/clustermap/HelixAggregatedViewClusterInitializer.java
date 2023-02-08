@@ -207,9 +207,19 @@ class HelixAggregatedViewClusterInitializer {
     logger.info(
         "Registering data node config change listeners for cluster {} in data center {} via Helix manager at {}",
         clusterMapConfig.clusterMapClusterName, dcZkInfo.getDcName(), zkConnectStr);
-    dataNodeConfigSource.addDataNodeConfigChangeListener(
-        configs -> clusterChangeHandler.handleDataNodeConfigChange(configs, dcName,
-            clusterMapConfig.clusterMapClusterName));
+    dataNodeConfigSource.addDataNodeConfigChangeListener(new DataNodeConfigChangeListener() {
+      // We could directly register HelixClusterChangeHandler as listener. But, in order to the pass data center name
+      // and helix cluster name for logging purpose, having an additional listener here.
+      @Override
+      public void onDataNodeConfigChange(Iterable<DataNodeConfig> configs) {
+        clusterChangeHandler.handleDataNodeConfigChange(configs, dcName, clusterMapConfig.clusterMapClusterName);
+      }
+
+      @Override
+      public void onDataNodeDelete(String instanceName) {
+        clusterChangeHandler.onDataNodeDelete(instanceName);
+      }
+    });
     dataNodeConfigSources.add(dataNodeConfigSource);
   }
 }

@@ -971,8 +971,7 @@ public class HelixClusterManager implements ClusterMap {
     /**
      * Handle any {@link DataNodeConfig} related change in current datacenter. Several events will trigger instance config
      * change: (1) replica's seal or stop state has changed; (2) new node or new partition is added; (3) new replica is
-     * added to existing node; (4) old replica is removed from existing node; (5) data node is deleted from cluster.
-     * For now, we support (1)~(4). We may consider supporting (5) in the future.
+     * added to existing node; (4) old replica is removed from existing node.
      * (The ZNode path of instance config in Helix is [AmbryClusterName]/CONFIGS/PARTICIPANT/[hostname_port])
      * @param configs all the {@link DataNodeConfig}(s) in current data center. (Note that PreFetch is enabled by default
      *                in Helix, which means all instance configs under "participants" ZNode will be sent to this method)
