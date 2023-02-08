@@ -251,6 +251,7 @@ public class BackupCheckerThread extends ReplicaThread {
     /**
      * NOTE: Working with these file options has been a pain. They do not work as advertised in documentation.
      * You need a WRITE or APPEND flag for the file to be created. Just CREATE does not work !
+     * And TRUNCATE_EXIST needs the file to exist !
      */
     return getOrCreateReportFd(filePath, EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE));
   }
