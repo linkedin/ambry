@@ -244,14 +244,16 @@ public class BackupCheckerThread extends ReplicaThread {
    * @return Return a file descriptor of type SeekableByteChannel
    */
   protected SeekableByteChannel getOrCreateStatusFileFd(RemoteReplicaInfo remoteReplicaInfo) {
-    String filePath = basePath
-        + File.separator + remoteReplicaInfo.getReplicaId().getPartitionId().getId()
-        + File.separator + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname()
-        + File.separator + "replicaCheckStatus";
+    String filePath = String.join(File.separator, basePath,
+        Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
+        "replicaCheckStatus");
     /**
-     * NOTE: Working with these file options has been a pain. They do not work as advertised in documentation.
-     * You need a WRITE or APPEND flag for the file to be created. Just CREATE does not work !
-     * And TRUNCATE_EXIST needs the file to exist !
+     * Certain combinations of the file-open flags do not work as expected.
+     * Just CREATE does not create the file. You need an additional WRITE or APPEND.
+     * Just WRITE or APPEND does not create the file.
+     * CREATE with TRUNCATE_EXISTING fails if the file does not exist because TRUNCATE_EXIST expects the file to exist.
+     * CREATE there has no effect.
      */
     return getOrCreateReportFd(filePath, EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE));
   }
@@ -262,10 +264,10 @@ public class BackupCheckerThread extends ReplicaThread {
    * @return Return a file descriptor of type SeekableByteChannel
    */
   protected SeekableByteChannel getOrCreateMissingKeysFd(RemoteReplicaInfo remoteReplicaInfo) {
-    String filePath = basePath
-        + File.separator + remoteReplicaInfo.getReplicaId().getPartitionId().getId()
-        + File.separator + remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname()
-        + File.separator + "missingKeys";
+    String filePath = String.join(File.separator, basePath,
+        Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
+        "missingKeys");
     return getOrCreateReportFd(filePath, EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.APPEND));
   }
 
