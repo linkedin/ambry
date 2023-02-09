@@ -64,6 +64,10 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String DR_Verifier_Keyword = "dr";
   public static final String MISSING_KEYS_FILE = "missingKeys";
   public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
+  /**
+   * To create a file, you need both CREATE + WRITE/APPEND and not just CREATE or just WRITE/APPEND.
+   * For TRUNCATE_EXISTING to work, the file must exist and CREATE does not seem to have any effect there.
+   */
   public static final EnumSet<StandardOpenOption> CREATE_TRUNC_WRITE = EnumSet.of(StandardOpenOption.CREATE,
       StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
   public static final EnumSet<StandardOpenOption> CREATE_APPEND = EnumSet.of(StandardOpenOption.CREATE,
