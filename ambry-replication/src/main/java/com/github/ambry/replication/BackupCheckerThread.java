@@ -63,8 +63,10 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String DR_Verifier_Keyword = "dr";
   public static final String MISSING_KEYS_FILE = "missingKeys";
   public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
-  public static final EnumSet<StandardOpenOption> CREATE_WRITE = EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-  public static final EnumSet<StandardOpenOption> CREATE_APPEND = EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+  public static final EnumSet<StandardOpenOption> CREATE_TRUNC_WRITE = EnumSet.of(StandardOpenOption.CREATE,
+      StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+  public static final EnumSet<StandardOpenOption> CREATE_APPEND = EnumSet.of(StandardOpenOption.CREATE,
+      StandardOpenOption.APPEND);
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -207,7 +209,7 @@ public class BackupCheckerThread extends ReplicaThread {
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), CREATE_APPEND,
+        fileManager.writeToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), CREATE_APPEND,
             String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
                 getBlobStates(remoteBlob), getBlobStates(localBlob)));
       }
@@ -216,7 +218,7 @@ public class BackupCheckerThread extends ReplicaThread {
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), CREATE_APPEND,
+        fileManager.writeToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), CREATE_APPEND,
             String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
                 getBlobStates(remoteBlob), e.getErrorCode()));
       }
@@ -258,7 +260,7 @@ public class BackupCheckerThread extends ReplicaThread {
     String text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
         remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
         exchangeMetadataResponse.localLagFromRemoteInBytes);
-    fileManager.writeToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), CREATE_WRITE, text, 0);
+    fileManager.writeToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), CREATE_TRUNC_WRITE, text);
   }
 
   /**

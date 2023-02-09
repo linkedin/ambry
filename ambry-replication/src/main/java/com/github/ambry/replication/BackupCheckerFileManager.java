@@ -34,22 +34,10 @@ public class BackupCheckerFileManager {
    * @param filePath Path of the file in the system
    * @param options File options to use when creating the file, if absent
    * @param text Text to append
-   * @param offset Offset to write to in the file
    * @return True if append was successful, false otherwise
    */
-  protected boolean writeToFile(String filePath, EnumSet<StandardOpenOption> options, String text, int offset) {
+  protected boolean writeToFile(String filePath, EnumSet<StandardOpenOption> options, String text) {
     logger.info(text);
     return true;
-  }
-
-  /**
-   * Appends to a given file
-   * @param filePath Path of the file in the system
-   * @param options File options to use when creating the file, if absent
-   * @param text Text to append
-   * @return True if append was successful, false otherwise
-   */
-  protected boolean appendToFile(String filePath, EnumSet<StandardOpenOption> options, String text) {
-    return writeToFile(filePath, options, text, -1);
   }
 }
