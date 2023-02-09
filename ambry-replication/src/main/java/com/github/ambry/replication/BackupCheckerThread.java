@@ -58,7 +58,7 @@ import org.slf4j.LoggerFactory;
  * TODO: Testing on sample partitions
  */
 public class BackupCheckerThread extends ReplicaThread {
-  
+
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   protected final BackupCheckerFileManager fileManager;
   public static final String DR_Verifier_Keyword = "dr";
