@@ -47,7 +47,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
   static final String CONFIG_PATH = "/DataNodeConfigs";
-  static final String SEPARATOR = "/";
+  static final String ZNODE_PATH_SEPARATOR = "/";
   static final int GET_CHILDREN_RETRY_COUNT = 3;
   static final int GET_CHILDREN_RETRY_INTERVAL = 0;
   private static final Logger LOGGER = LoggerFactory.getLogger(PropertyStoreToDataNodeConfigAdapter.class);
@@ -111,8 +111,8 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
    * @param instanceName the name of instance
    * @return path to ZNode
    */
-  private String getPath(String instanceName) {
-    return CONFIG_PATH + SEPARATOR + instanceName;
+  public String getPath(String instanceName) {
+    return CONFIG_PATH + ZNODE_PATH_SEPARATOR + instanceName;
   }
 
   /**
@@ -120,9 +120,9 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
    * @param path path to ZNode
    * @return the name of instance
    */
-  private String getInstanceName(String path) {
+  public String getInstanceName(String path) {
     // Instance name is the path after /DataNodeConfigs/
-    return path.substring(CONFIG_PATH.length() + SEPARATOR.length());
+    return path.substring(path.lastIndexOf(ZNODE_PATH_SEPARATOR) + 1);
   }
 
   private class Subscription implements HelixPropertyListener {
@@ -202,11 +202,11 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
 
     /**
      * Notify the listener about the node deletion. This should be called from the event executor thread.
-     * @param changedPath the path that was deleted.
+     * @param deletedPath the path that was deleted.
      */
-    private synchronized void delete(String changedPath) {
+    private synchronized void delete(String deletedPath) {
       // Sample path of deleted node: /DataNodeConfigs/lor1-app55891.prod.linkedin.com_15088.
-      String instanceName = getInstanceName(changedPath);
+      String instanceName = getInstanceName(deletedPath);
       listener.onDataNodeDelete(instanceName);
     }
 
