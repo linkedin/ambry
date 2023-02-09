@@ -30,7 +30,7 @@ public class BackupCheckerFileManager {
   }
 
   /**
-   * Write to a given file at a given offset
+   * Write to a given file
    * @param filePath Path of the file in the system
    * @param options File options to use when creating the file, if absent
    * @param text Text to append
