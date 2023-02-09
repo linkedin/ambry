@@ -55,7 +55,8 @@ public class RecoveryThread extends ReplicaThread {
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
     try {
-      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType, replicationConfig, metricRegistry);
+      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType,
+          "RecoveryThread" + threadName, replicationConfig, metricRegistry);
     } catch (ReflectiveOperationException e) {
       logger.error("Failed to create file manager. ", e.toString());
       throw new RuntimeException(e);
