@@ -75,8 +75,9 @@ public class BackupCheckerThread extends ReplicaThread {
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
     try {
-      // TODO: Move the fileManager up the hierarchy so that we have a single file mgr and a singe fd-cache
+      // TODO: Move the fileManager up the hierarchy so that we have a single file mgr and a single fd-cache
       // TODO: Or disable emitting metrics in the cache. One concern is we could be emitting too many metrics.
+      // TODO: ReplicaThreads do not operate on the same set of files so a shared fd-cache or individual one doesn't matter.
       fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType,
           "BackupCheckerThread" + threadName, replicationConfig, metricRegistry);
     } catch (ReflectiveOperationException e) {
