@@ -265,8 +265,15 @@ public class ReplicationConfig {
   @Config(REPLICATION_THREAD_TYPE)
   public final String replicationThreadType;
 
+  public static final String BACKUP_CHECKER_FILE_MANAGER_TYPE = "backup.checker.file.manager.type";
+  public static final String DEFAULT_BACKUP_CHECKER_FILE_MANAGER = "com.github.ambry.replication.BackupCheckerFileManager";
+  @Config(BACKUP_CHECKER_FILE_MANAGER_TYPE)
+  public final String backupCheckFileManagerType;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
+    backupCheckFileManagerType = verifiableProperties.getString(BACKUP_CHECKER_FILE_MANAGER_TYPE,
+        DEFAULT_BACKUP_CHECKER_FILE_MANAGER);
     replicationThreadType = verifiableProperties.getString(REPLICATION_THREAD_TYPE, DEFAULT_REPLICATION_THREAD);
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");

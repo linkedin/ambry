@@ -32,6 +32,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
@@ -76,7 +77,11 @@ public class BackupCheckerThread extends ReplicaThread {
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
-    fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
+    try {
+      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType, replicationConfig, metricRegistry);
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
