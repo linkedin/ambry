@@ -43,6 +43,7 @@ class HelixClusterManagerMetrics {
   public final Counter getDataNodeIdsMismatchCount;
   public final Counter ignoredUpdatesCount;
   public final Counter instanceConfigChangeErrorCount;
+  public final Counter instanceDeleteTriggerCount;
 
   public Gauge<Long> helixClusterManagerInstantiationFailed;
   public Gauge<Long> helixClusterManagerRemoteInstantiationFailed;
@@ -87,6 +88,8 @@ class HelixClusterManagerMetrics {
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceConfigChangeErrorCount"));
     routingTableQueryTime =
         registry.timer(MetricRegistry.name(HelixClusterManager.class, "routingTableQueryTime"));
+    instanceDeleteTriggerCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceDeleteTriggerCount"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated, final long instantiationExceptionCount) {

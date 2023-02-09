@@ -286,7 +286,8 @@ public class HelixClusterManager implements ClusterMap {
     if (!(dataNodeId instanceof AmbryDataNode)) {
       throw new IllegalArgumentException("Incompatible type passed in");
     }
-    return new ArrayList<>(ambryDataNodeToAmbryReplicas.get(dataNodeId).values());
+    ConcurrentHashMap<String, AmbryReplica> partitionToReplicaMap = ambryDataNodeToAmbryReplicas.get(dataNodeId);
+    return partitionToReplicaMap != null ? new ArrayList<>(partitionToReplicaMap.values()) : Collections.emptyList();
   }
 
   @Override
@@ -580,6 +581,20 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * Exposed for testing
+   * @param dcName data center name
+   * @return {@link HelixClusterChangeHandler} that handles cluster changes for a given data center. If aggregated view
+   * is enabled, same handler is used for all data centers.
+   */
+  HelixClusterChangeHandler getHelixClusterChangeHandler(String dcName) {
+    if (clusterMapConfig.clusterMapUseAggregatedView) {
+      return helixAggregatedViewClusterInfo.clusterChangeHandler;
+    } else {
+      return dcToDcInfo.get(dcName).clusterChangeHandler;
+    }
+  }
+
+  /**
    * @return {@link HelixClusterManagerQueryHelper} associated with this cluster manager.
    */
   HelixClusterManagerQueryHelper getManagerQueryHelper() {
@@ -800,7 +815,8 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
       if (dataNode != null) {
-        return ambryDataNodeToAmbryDisks.get(dataNode);
+        final Set<AmbryDisk> disks = ambryDataNodeToAmbryDisks.get(dataNode);
+        return disks != null ? disks : Collections.emptyList();
       }
       List<AmbryDisk> disksToReturn = new ArrayList<>();
       for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
@@ -939,6 +955,11 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     @Override
+    public void onDataNodeDelete(String instanceName) {
+      handleDataNodeDelete(instanceName);
+    }
+
+    @Override
     public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext) {
       handleIdealStateChange(idealState, dcName);
     }
@@ -956,8 +977,7 @@ public class HelixClusterManager implements ClusterMap {
     /**
      * Handle any {@link DataNodeConfig} related change in current datacenter. Several events will trigger instance config
      * change: (1) replica's seal or stop state has changed; (2) new node or new partition is added; (3) new replica is
-     * added to existing node; (4) old replica is removed from existing node; (5) data node is deleted from cluster.
-     * For now, we support (1)~(4). We may consider supporting (5) in the future.
+     * added to existing node; (4) old replica is removed from existing node.
      * (The ZNode path of instance config in Helix is [AmbryClusterName]/CONFIGS/PARTICIPANT/[hostname_port])
      * @param configs all the {@link DataNodeConfig}(s) in current data center. (Note that PreFetch is enabled by default
      *                in Helix, which means all instance configs under "participants" ZNode will be sent to this method)
@@ -1002,6 +1022,47 @@ public class HelixClusterManager implements ClusterMap {
       } catch (Throwable t) {
         errorCount.incrementAndGet();
         throw t;
+      }
+    }
+
+    /**
+     * Handle deletion of a node from cluster.
+     * @param instanceName instance that was deleted
+     */
+    void handleDataNodeDelete(String instanceName) {
+      synchronized (notificationLock) {
+        AmbryDataNode datanode = instanceNameToAmbryDataNode.get(instanceName);
+        if (datanode != null) {
+          // Remove disks and replicas on this node.
+          List<ReplicaId> removedReplicas = new ArrayList<>();
+          for (AmbryDisk disk : ambryDataNodeToAmbryDisks.get(datanode)) {
+            clusterWideRawCapacityBytes.getAndAdd(-disk.getRawCapacityInBytes());
+          }
+          for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(datanode).values()) {
+            removeReplicasFromPartition(replica.getPartitionId(), Collections.singletonList(replica));
+            removedReplicas.add(replica);
+          }
+          ambryDataNodeToAmbryDisks.remove(datanode);
+          ambryDataNodeToAmbryReplicas.remove(datanode);
+          // Remove datanode
+          dcToNodes.getOrDefault(datanode.getDatacenterName(), Collections.emptySet()).remove(datanode);
+          instanceNameToAmbryDataNode.remove(instanceName);
+          allInstances.remove(instanceName);
+          // Inform about removed replicas to cluster map change listeners
+          if (!removedReplicas.isEmpty()) {
+            for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
+              listener.onReplicaAddedOrRemoved(Collections.emptyList(), removedReplicas);
+            }
+          }
+          logger.info("Removed {} and its {} replicas from cluster map", instanceName, removedReplicas.size());
+          // Since the replicas on deleted hosts could be sealed, increase the sealed change counter so that latest
+          // partition state (RO or RW) is queried again in AmbryPartition#resolvePartitionState().
+          long counter = sealedStateChangeCounter.incrementAndGet();
+          logger.trace("SealedStateChangeCounter increase to {}", counter);
+        } else {
+          logger.info("Node {} already removed from cluster map", instanceName);
+        }
+        helixClusterManagerMetrics.instanceDeleteTriggerCount.inc();
       }
     }
 

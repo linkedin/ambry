@@ -47,6 +47,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
   static final String CONFIG_PATH = "/DataNodeConfigs";
+  static final String ZNODE_PATH_SEPARATOR = "/";
   static final int GET_CHILDREN_RETRY_COUNT = 3;
   static final int GET_CHILDREN_RETRY_INTERVAL = 0;
   private static final Logger LOGGER = LoggerFactory.getLogger(PropertyStoreToDataNodeConfigAdapter.class);
@@ -72,13 +73,13 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
   @Override
   public boolean set(DataNodeConfig config) {
     ZNRecord record = converter.convert(config);
-    String path = CONFIG_PATH + "/" + record.getId();
+    String path = getPath(record.getId());
     return propertyStore.set(path, record, AccessOption.PERSISTENT);
   }
 
   @Override
   public DataNodeConfig get(String instanceName) {
-    String path = CONFIG_PATH + "/" + instanceName;
+    String path = getPath(instanceName);
     ZNRecord record = propertyStore.get(path, new Stat(), AccessOption.PERSISTENT);
     return record != null ? converter.convert(record) : null;
   }
@@ -94,7 +95,7 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
    * @return {@code true} if the config was successfully removed.
    */
   public boolean remove(String instanceName) {
-    return propertyStore.remove(CONFIG_PATH + "/" + instanceName, AccessOption.PERSISTENT);
+    return propertyStore.remove(getPath(instanceName), AccessOption.PERSISTENT);
   }
 
   /**
@@ -103,6 +104,25 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
   public List<String> getAllDataNodeNames() {
     List<String> names = propertyStore.getChildNames(CONFIG_PATH, AccessOption.PERSISTENT);
     return names == null ? Collections.emptyList() : names;
+  }
+
+  /**
+   * Get path to ZNode
+   * @param instanceName the name of instance
+   * @return path to ZNode
+   */
+  public String getPath(String instanceName) {
+    return CONFIG_PATH + ZNODE_PATH_SEPARATOR + instanceName;
+  }
+
+  /**
+   * Get the name of instance
+   * @param path path to ZNode
+   * @return the name of instance
+   */
+  public String getInstanceName(String path) {
+    // Instance name is the path after /DataNodeConfigs/
+    return path.substring(path.lastIndexOf(ZNODE_PATH_SEPARATOR) + 1);
   }
 
   private class Subscription implements HelixPropertyListener {
@@ -142,12 +162,17 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
 
     @Override
     public void onDataDelete(String path) {
-      // TODO handle node deletions dynamically. Doing so requires further work in the ClusterChangeHandler impl
-      LOGGER.info("DataNodeConfig path {} deleted. This requires a restart to handle", path);
+      // Handle node deletions dynamically.
+      LOGGER.info("DataNodeConfig path {} deleted", path);
+      onPathDelete(path);
     }
 
     private void onPathChange(String path) {
       eventExecutor.execute(() -> updateOrInitialize(path));
+    }
+
+    private void onPathDelete(String path) {
+      eventExecutor.execute(() -> delete(path));
     }
 
     private Iterable<DataNodeConfig> lazyIterable(Collection<ZNRecord> records) {
@@ -173,6 +198,16 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
       } catch (Exception e) {
         LOGGER.error("Exception during DataNodeConfig change", e);
       }
+    }
+
+    /**
+     * Notify the listener about the node deletion. This should be called from the event executor thread.
+     * @param deletedPath the path that was deleted.
+     */
+    private synchronized void delete(String deletedPath) {
+      // Sample path of deleted node: /DataNodeConfigs/lor1-app55891.prod.linkedin.com_15088.
+      String instanceName = getInstanceName(deletedPath);
+      listener.onDataNodeDelete(instanceName);
     }
 
     /**

@@ -126,6 +126,27 @@ public class PropertyStoreToDataNodeConfigAdapterTest extends DataNodeConfigSour
   }
 
   /**
+   * Test {@link DataNodeConfigSource} remove method.
+   */
+  @Test
+  public void testRemoveListener() throws Exception {
+    // Add a data node config to property store
+    DataNodeConfig config = createConfig(1, 1);
+    source.set(config);
+
+    // Add a listener and verify current data node config is informed
+    DataNodeConfigChangeListener listener = mock(DataNodeConfigChangeListener.class);
+    source.addDataNodeConfigChangeListener(listener);
+    checkListenerCall(listener, Collections.singleton(config));
+
+    // Remove data node config from property store and verify listener is invoked.
+    reset(listener);
+    source.remove(config.getInstanceName());
+    verify(listener, timeout(500)).onDataNodeDelete(
+        argThat(instanceName -> instanceName.equals(config.getInstanceName())));
+  }
+
+  /**
    * Test handling of listener errors during initialization and updates.
    */
   @Test

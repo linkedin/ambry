@@ -668,7 +668,7 @@ public class ClusterChangeHandlerTest {
         partitionInManager.getReplicaIds().size());
     // verify that the replica instance in HelixClusterManager is same with bootstrap replica instance
     ReplicaId replicaInManager = helixClusterManager.getReplicaIds(
-            helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
+        helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
         .stream()
         .filter(r -> r.getPartitionId().toPathString().equals(addedPartition2.toPathString()))
         .findFirst()
@@ -700,6 +700,80 @@ public class ClusterChangeHandlerTest {
     partitionId = helixClusterManager.getAllPartitionIds(null).get(0);
     assertEquals("Mismatch in disk capacity", 500L * 1024 * 1024 * 1024,
         partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
+    helixClusterManager.close();
+  }
+
+  /**
+   * Test removing instances from cluster dynamically
+   */
+  @Test
+  public void removeInstancesTest() throws Exception {
+    // create a HelixClusterManager with DynamicClusterChangeHandler
+    Properties properties = new Properties();
+    properties.putAll(props);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+
+    // Pick up a nodes from hardware layout to remove
+    Set<DataNode> removedDataNodes = new HashSet<>();
+    for (Datacenter dc : testHardwareLayout.getHardwareLayout().getDatacenters()) {
+      removedDataNodes.add(dc.getDataNodes().iterator().next());
+    }
+
+    // Get the node information from HelixClusterManager before removal
+    Set<AmbryDataNode> removedAmbryDataNodes = new HashSet<>();
+    Set<AmbryReplica> removedReplicas = new HashSet<>();
+    for (DataNode removedNode : removedDataNodes) {
+      AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(removedNode.getHostname(), removedNode.getPort());
+      assertNotNull("Removed node should exist in HelixClusterManager", ambryDataNode);
+      removedAmbryDataNodes.add(ambryDataNode);
+      removedReplicas.addAll(helixClusterManager.getReplicaIds(ambryDataNode));
+    }
+
+    // Invoke the onDataNodeDelete() API to remove the node.
+    for (DataNode removedNode : removedDataNodes) {
+      HelixClusterChangeHandler clusterChangeHandler =
+          helixClusterManager.getHelixClusterChangeHandler(removedNode.getDatacenterName());
+      clusterChangeHandler.onDataNodeDelete(getInstanceName(removedNode.getHostname(), removedNode.getPort()));
+    }
+
+    // Verify HelixClusterManager contains the one less node per dc.
+    assertEquals("Number of data nodes after instance addition is not correct",
+        testHardwareLayout.getAllExistingDataNodes().size() - removedDataNodes.size(),
+        helixClusterManager.getDataNodeIds().size());
+    // Verify number of partitions in cluster manager is still same
+    assertEquals("Number of partitions after partition addition is not correct",
+        testPartitionLayout.getPartitionCount(), helixClusterManager.getAllPartitionIds(null).size());
+    // Verify capacity stats are updated
+    HelixClusterManagerQueryHelper clusterManagerCallback = helixClusterManager.getManagerQueryHelper();
+    // Since that we removed one node from each dc, so the raw capacity is decreased by (# of nodes) * (# of disks) * (disk capacity)
+    long rawCapacityInStaticLayout = (testHardwareLayout.getAllExistingDataNodes().size() - removedDataNodes.size())
+        * testHardwareLayout.getDiskCount() * testHardwareLayout.getDiskCapacityInBytes();
+    assertEquals("Raw capacity of entire cluster is not expected", rawCapacityInStaticLayout,
+        clusterManagerCallback.getRawCapacity());
+
+    // Verify nodes are not present in cluster map
+    for (DataNode removedDataNode : removedDataNodes) {
+      AmbryDataNode ambryNode =
+          helixClusterManager.getDataNodeId(removedDataNode.getHostname(), removedDataNode.getPort());
+      assertNull("Node should not be present", ambryNode);
+    }
+    // Verify replicas and disks of removed nodes are not present in cluster map
+    for (AmbryDataNode ambryNode : removedAmbryDataNodes) {
+      List<AmbryReplica> ambryReplicas = helixClusterManager.getReplicaIds(ambryNode);
+      assertEquals("There should be no replicas for this node", 0, ambryReplicas.size());
+      Set<AmbryDisk> ambryDisks = new HashSet<>(clusterManagerCallback.getDisks(ambryNode));
+      assertEquals("There should be no disks for this node", 0, ambryDisks.size());
+    }
+    // Verify replicas of removed nodes are not present in any partition
+    for (PartitionId updatedPartition : helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)) {
+      Set<ReplicaId> replicas = new HashSet<>(updatedPartition.getReplicaIds());
+      for (AmbryReplica removedReplica : removedReplicas) {
+        assertFalse("Removed replicas should be no longer present in any partition", replicas.contains(removedReplica));
+      }
+    }
+
     helixClusterManager.close();
   }
 
