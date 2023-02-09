@@ -41,7 +41,7 @@ public class RecoveryThread extends ReplicaThread {
   private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
   protected final BackupCheckerFileManager fileManager;
   protected final ReplicationConfig _replicationConfig;
-  public static final String RECOVERY_STATUS_FILE = "recoveryStatusFile";
+  public static final String RECOVERY_STATUS_FILE = "cloudReplicaRecoveryStatusFile";
 
   public RecoveryThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
