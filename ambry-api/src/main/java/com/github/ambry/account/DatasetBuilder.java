@@ -29,11 +29,12 @@ public class DatasetBuilder {
   private String accountName;
   private String containerName;
   private String datasetName;
+  // necessary for insert, not update.
   private Dataset.VersionSchema versionSchema;
-  private long expirationTimeMs;
-  // optional
-  private Integer retentionCount = RETENTION_COUNT_DEFAULT;
-  private Map<String, String> userTags = USER_TAGS_DEFAULT;
+  //optional
+  private Long expirationTimeMs = null;
+  private Integer retentionCount = null;
+  private Map<String, String> userTags = null;
 
   /**
    * Constructor for jackson to deserialize {@link Dataset}.
@@ -65,17 +66,11 @@ public class DatasetBuilder {
    * @param accountName The name of the account. Cannot be null.
    * @param containerName The name of the container. Cannot be null.
    * @param datasetName The name of the dataset. Cannot be null.
-   * @param versionSchema The schema of the version. Cannot be null.
-   * @param expirationTimeMs The expiration time in milliseconds since epoch, or -1 if the dataset should be permanent.
-   *                         Cannot be null.
    */
-  public DatasetBuilder(String accountName, String containerName, String datasetName, VersionSchema versionSchema,
-      long expirationTimeMs) {
+  public DatasetBuilder(String accountName, String containerName, String datasetName) {
     this.accountName = accountName;
     this.containerName = containerName;
     this.datasetName = datasetName;
-    this.versionSchema = versionSchema;
-    this.expirationTimeMs = expirationTimeMs;
   }
 
   /**

@@ -146,7 +146,7 @@ class PostAccountsHandler {
         ReadableStreamChannel outputChannel;
         if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
           logger.debug("Got request for {} with payload", ACCOUNTS_CONTAINERS_DATASETS);
-          addDataset(channel);
+          addOrUpdateDataset(channel);
           outputChannel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
         } else if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
           logger.debug("Got request for {} with payload", ACCOUNTS_CONTAINERS);
@@ -227,11 +227,11 @@ class PostAccountsHandler {
     }
 
     /**
-     * Process the request json and call {@link AccountService#addDataset} to add the dataset.
+     * Process the request json and call {@link AccountService#addDataset} to add or update the dataset.
      * @param channel The {@link RetainingAsyncWritableChannel} to read the bytes out
      * @throws RestServiceException
      */
-    private void addDataset(RetainingAsyncWritableChannel channel) throws RestServiceException {
+    private void addOrUpdateDataset(RetainingAsyncWritableChannel channel) throws RestServiceException {
       Dataset datasetToUpdate;
       String accountName = null;
       String containerName = null;
@@ -242,6 +242,19 @@ class PostAccountsHandler {
           throw new RestServiceException("The dataset is null after deserialize from given InputStream",
               RestServiceErrorCode.BadRequest);
         }
+
+        // version schema and expiration time has to be provided during dataset creation.
+        if (!RestUtils.isDatasetUpdate(restRequest.getArgs())) {
+          if (datasetToUpdate.getVersionSchema() == null) {
+            throw new RestServiceException("Version schema can't be null for dataset creation",
+                RestServiceErrorCode.BadRequest);
+          }
+          if (datasetToUpdate.getExpirationTimeMs() == null) {
+            throw new RestServiceException("ExpirationTimeMs can't be null for dataset creation",
+                RestServiceErrorCode.BadRequest);
+          }
+        }
+
         datasetName = datasetToUpdate.getDatasetName();
         String accountNameFromRequest =
             RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, false);
@@ -259,7 +272,11 @@ class PostAccountsHandler {
               "There is a mismatch between account name from header: " + containerNameFromRequest
                   + " and account name from dataset: " + containerName, RestServiceErrorCode.BadRequest);
         }
-        accountService.addDataset(datasetToUpdate);
+        if (RestUtils.isDatasetUpdate(restRequest.getArgs())) {
+          accountService.updateDataset(datasetToUpdate);
+        } else {
+          accountService.addDataset(datasetToUpdate);
+        }
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);

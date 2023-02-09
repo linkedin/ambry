@@ -80,6 +80,17 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Update dataset to the database.
+   * @param accountId the id of the {@link Account}
+   * @param containerId the id of the {@link Container}
+   * @param dataset the {@link Dataset}.
+   * @throws SQLException
+   */
+  public void updateDataset(short accountId, short containerId, Dataset dataset) throws SQLException {
+    accountDao.updateDataset(accountId, containerId, dataset);
+  }
+
+  /**
    * Get dataset from the database.
    * @param accountId the id of the {@link Account}.
    * @param containerId the id of the {@link Container}

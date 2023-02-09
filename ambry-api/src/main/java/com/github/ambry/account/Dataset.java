@@ -65,9 +65,6 @@ public class Dataset {
   static final String JSON_RETENTION_COUNT_KEY = "retentionCount";
   static final String JSON_USER_TAGS_KEY = "userTags";
 
-  static final Integer RETENTION_COUNT_DEFAULT = null;
-  static final Map<String, String> USER_TAGS_DEFAULT = Collections.emptyMap();
-
   @JsonProperty(ACCOUNT_NAME_KEY)
   private final String accountName;
   @JsonProperty(CONTAINER_NAME_KEY)
@@ -96,7 +93,7 @@ public class Dataset {
    */
   public Dataset(String accountName, String containerName, String datasetName, VersionSchema versionSchema,
       Long expirationTimeMs, Integer retentionCount, Map<String, String> userTags) {
-    checkPreconditions(accountName, containerName, datasetName, versionSchema, expirationTimeMs);
+    checkPreconditions(accountName, containerName, datasetName);
     this.accountName = accountName;
     this.containerName = containerName;
     this.datasetName = datasetName;
@@ -166,17 +163,12 @@ public class Dataset {
    * @param accountName The name of the account. Cannot be null.
    * @param containerName The name of the container. Cannot be null.
    * @param datasetName The name of the dataset. Cannot be null.
-   * @param versionSchema The schema of the version. Cannot be null.
-   * @param expirationTimeMs The expiration time in milliseconds since epoch, or -1 if the dataset should be permanent. Cannot be null.
    */
-  private void checkPreconditions(String accountName, String containerName, String datasetName,
-      VersionSchema versionSchema, Long expirationTimeMs) {
-    if (accountName == null || containerName == null || datasetName == null || versionSchema == null
-        || expirationTimeMs == null) {
-      throw new IllegalArgumentException(
+  private void checkPreconditions(String accountName, String containerName, String datasetName) {
+    if (accountName == null || containerName == null || datasetName == null) {
+      throw new IllegalStateException(
           "At lease one of required fields accountName=" + accountName + " or containerName=" + containerName
-              + " or datasetName=" + datasetName + " or versionSchema=" + versionSchema + " or expirationTimeMs="
-              + expirationTimeMs + " is null");
+              + " or datasetName=" + datasetName + " is null");
     }
     if (accountName.isEmpty() || containerName.isEmpty() || datasetName.isEmpty()) {
       throw new IllegalArgumentException(

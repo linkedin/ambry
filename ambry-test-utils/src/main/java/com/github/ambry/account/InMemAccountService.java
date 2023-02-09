@@ -176,6 +176,13 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
+  public synchronized void updateDataset(Dataset dataset) {
+    String accountName = dataset.getAccountName();
+    String containerName = dataset.getContainerName();
+    nameToDatasetMap.get(new Pair<>(accountName, containerName)).put(dataset.getDatasetName(), dataset);
+  }
+
+  @Override
   public synchronized Dataset getDataset(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
     return nameToDatasetMap.get(new Pair<>(accountName, containerName)).get(datasetName);

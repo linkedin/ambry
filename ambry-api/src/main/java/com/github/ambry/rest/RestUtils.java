@@ -247,6 +247,10 @@ public class RestUtils {
      */
     public static final String DATASET_VERSION_UPLOAD = "x-ambry-dataset-version-upload";
     /**
+     * Boolean field set to "true" to update dataset.
+     */
+    public static final String DATASET_UPDATE = "x-ambry-dataset-update";
+    /**
      * It is set to a string that differentiate STITCH vs regular upload named blob. If it set to "STITCH", it indicate that this is the a stitch upload.
      */
     public static final String UPLOAD_NAMED_BLOB_MODE = "x-ambry-upload-named-blob-mode";
@@ -861,6 +865,16 @@ public class RestUtils {
    */
   public static boolean isDatasetVersionUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.DATASET_VERSION_UPLOAD, false);
+  }
+
+  /**
+   * Determine if {@link Headers#DATASET_UPDATE} is set in the request args.
+   * @param args The request arguments.
+   * @return {@code true} if {@link Headers#DATASET_UPDATE} is set.
+   * @throws RestServiceException
+   */
+  public static boolean isDatasetUpdate(Map<String, Object> args) throws RestServiceException {
+    return getBooleanHeader(args, Headers.DATASET_UPDATE, false);
   }
 
   /**

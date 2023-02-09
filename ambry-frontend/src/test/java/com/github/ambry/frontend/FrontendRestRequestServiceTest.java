@@ -531,8 +531,10 @@ public class FrontendRestRequestServiceTest {
     userTags.put(userTagKey, "tagValues");
 
     Dataset dataset =
-        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME, versionSchema, -1).setUserTags(
-            userTags).build();
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
+            .setExpirationTimeMs(-1)
+            .setUserTags(userTags)
+            .build();
     byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
     List<ByteBuffer> body = new LinkedList<>();
     body.add(ByteBuffer.wrap(datasetsUpdateJson));
@@ -1134,7 +1136,9 @@ public class FrontendRestRequestServiceTest {
     Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
     Dataset.VersionSchema versionSchema = Dataset.VersionSchema.TIMESTAMP;
     Dataset dataset =
-        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME, versionSchema, -1).build();
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
+            .setExpirationTimeMs(-1)
+            .build();
     byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
     List<ByteBuffer> body = new LinkedList<>();
     body.add(ByteBuffer.wrap(datasetsUpdateJson));
@@ -1162,6 +1166,22 @@ public class FrontendRestRequestServiceTest {
         restResponseChannel.getHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME));
     assertEquals("Unexpected header", testContainer.getName(),
         restResponseChannel.getHeader(RestUtils.Headers.TARGET_CONTAINER_NAME));
+
+    //update dataset
+    Dataset datasetToUpdate = new DatasetBuilder(dataset).setRetentionCount(10).build();
+    datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(datasetToUpdate);
+    body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName())
+        .put(RestUtils.Headers.TARGET_DATASET_NAME, DATASET_NAME)
+        .put(RestUtils.Headers.DATASET_UPDATE, true);
+    restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Dataset not created correctly", datasetToUpdate,
+        accountService.getDataset(testAccount.getName(), testContainer.getName(), DATASET_NAME));
   }
 
   /**
