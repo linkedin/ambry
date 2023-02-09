@@ -250,6 +250,7 @@ public class ReplicaThread implements Runnable {
   /**
    * Logs replication progress of local node against some remote node
    * @param remoteReplicaInfo remote replica information
+   * @param exchangeMetadataResponse metadata response object
    */
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {

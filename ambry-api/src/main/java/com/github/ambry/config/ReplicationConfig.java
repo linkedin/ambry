@@ -266,6 +266,17 @@ public class ReplicationConfig {
   public final String replicationThreadType;
 
   /**
+   * The replication manager used to restore backups from cloud
+   * DEFAULT_REPLICATION_THREAD as the name suggests is the current one.
+   * BACKUP_CHECKER_THREAD is the one that checks for missing blobs in backup by comparing blobs from on-prem servers.
+   */
+  public static final String RECOVERY_THREAD_TYPE = "recovery.thread.type";
+  public static final String DEFAULT_RECOVERY_THREAD = "com.github.ambry.replication.ReplicaThread";
+  public static final String CUSTOM_RECOVERY_THREAD = "com.github.ambry.replication.RecoveryThread";
+  @Config(RECOVERY_THREAD_TYPE)
+  public final String recoveryThreadType;
+
+  /**
    * Config for file manager class for backup checker
    */
   public static final String BACKUP_CHECKER_FILE_MANAGER_TYPE = "backup.checker.file.manager.type";
@@ -297,6 +308,7 @@ public class ReplicationConfig {
         DEFAULT_BACKUP_CHECKER_REPORT_DIR);
     backupCheckFileManagerType = verifiableProperties.getString(BACKUP_CHECKER_FILE_MANAGER_TYPE,
         DEFAULT_BACKUP_CHECKER_FILE_MANAGER);
+    recoveryThreadType = verifiableProperties.getString(RECOVERY_THREAD_TYPE, DEFAULT_RECOVERY_THREAD);
     replicationThreadType = verifiableProperties.getString(REPLICATION_THREAD_TYPE, DEFAULT_REPLICATION_THREAD);
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");

@@ -124,7 +124,7 @@ public class ReplicationManager extends ReplicationEngine {
       NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
       MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
       Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+      LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     switch(replicationConfig.replicationThreadType) {
       case ReplicationConfig.BACKUP_CHECKER_THREAD:
         return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,

@@ -361,7 +361,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
       MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
       Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+      LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
       return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
           connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
           storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
@@ -574,7 +574,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   /**
    * To co-ordinate replication between leader and standby replicas of a partition during leader based replication.
    */
-  class LeaderBasedReplicationAdmin {
+  protected class LeaderBasedReplicationAdmin {
 
     //Maintains the list of leader partitions on local node and their corresponding peer leaders in remote data centers
     private final Map<String, Set<ReplicaId>> leaderPartitionToPeerLeaderReplicas = new HashMap<>();

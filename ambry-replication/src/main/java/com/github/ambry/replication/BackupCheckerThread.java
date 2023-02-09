@@ -34,7 +34,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -54,13 +53,12 @@ import org.slf4j.LoggerFactory;
  * 2> The backup may be ahead of the replica. This can happen if the replica is lagging behind its peers. If we recover
  * from such a backup, we'd still be consistent from the user's point of view. The lagging replica must catch up with
  * its peers and this checker will detect such lagging replicas as well.
- * TODO: Redirect to a different file
- * TODO: Testing on sample partitions
  */
 public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   protected final BackupCheckerFileManager fileManager;
+  protected final ReplicationConfig _replicationConfig;
   public static final String DR_Verifier_Keyword = "dr";
   public static final String MISSING_KEYS_FILE = "missingKeys";
   public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
@@ -82,6 +80,7 @@ public class BackupCheckerThread extends ReplicaThread {
       logger.error("Failed to create file manager. ", e.toString());
       throw new RuntimeException(e);
     }
+    this._replicationConfig = replicationConfig;
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -268,7 +267,7 @@ public class BackupCheckerThread extends ReplicaThread {
    * @return Returns a concatenated file path
    */
   protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
-    return String.join(File.separator,
+    return String.join(File.separator, this._replicationConfig.backupCheckerReportDir,
         Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
         remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
         fileName);

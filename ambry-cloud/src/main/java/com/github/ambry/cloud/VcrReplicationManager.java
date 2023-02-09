@@ -13,33 +13,48 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.HelixVcrUtil;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterParticipantListener;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.RecoveryThread;
 import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 
+import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -49,8 +64,10 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.helix.lock.DistributedLock;
 import org.apache.helix.lock.LockScope;
@@ -110,6 +127,32 @@ public class VcrReplicationManager extends ReplicationEngine {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }
     vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
+  }
+
+  /**
+   * Returns replication thread
+   */
+  @Override
+  protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
+      NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics,
+      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
+      MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
+      Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+    switch(replicationConfig.recoveryThreadType) {
+      case ReplicationConfig.CUSTOM_RECOVERY_THREAD:
+        return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+            connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
+            storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
+            responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+      case ReplicationConfig.DEFAULT_REPLICATION_THREAD:
+      default:
+        return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+            connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
+            storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
+            responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+    }
   }
 
   @Override
