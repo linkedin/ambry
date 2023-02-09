@@ -30,13 +30,27 @@ public class BackupCheckerFileManager {
   }
 
   /**
-   * Write to a given file
+   * Append to a given file.
+   * Creates the file if absent.
    * @param filePath Path of the file in the system
-   * @param options File options to use when creating the file, if absent
    * @param text Text to append
    * @return True if append was successful, false otherwise
    */
-  protected boolean writeToFile(String filePath, EnumSet<StandardOpenOption> options, String text) {
+  protected boolean appendToFile(String filePath, String text) {
+    // open-source impl
+    logger.info(text);
+    return true;
+  }
+
+  /**
+   * Truncates a file and then writes to it.
+   * Creates the file if absent.
+   * @param filePath Path of the file in the system
+   * @param text Text to append
+   * @return True if append was successful, false otherwise
+   */
+  protected boolean truncateAndWriteToFile(String filePath, String text) {
+    // open-source impl
     logger.info(text);
     return true;
   }
