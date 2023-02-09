@@ -87,6 +87,7 @@ public class BackupCheckerThread extends ReplicaThread {
     try {
       fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType, replicationConfig, metricRegistry);
     } catch (ReflectiveOperationException e) {
+      logger.error("Failed to create file manager. ", e.toString());
       throw new RuntimeException(e);
     }
     logger.info("Created BackupCheckerThread {}", threadName);
