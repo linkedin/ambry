@@ -248,9 +248,8 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Logs the fact that replication on local node has caught up with remote replica
-   * Empty for current ReplicaThread but can be re-written in other cases to track progress.
-   * @param remoteReplicaInfo
+   * Logs replication progress of local node against some remote node
+   * @param remoteReplicaInfo remote replica information
    */
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {
