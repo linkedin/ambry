@@ -17,8 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
-import com.github.ambry.commons.AmbryCache;
-import com.github.ambry.commons.AmbryCacheEntry;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -35,18 +33,8 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import java.io.File;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.SeekableByteChannel;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.Collections;
-import java.util.Date;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -69,25 +57,13 @@ import org.slf4j.LoggerFactory;
  * TODO: Testing on sample partitions
  */
 public class BackupCheckerThread extends ReplicaThread {
-
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
+  protected final BackupCheckerFileManager fileManager;
   public static final String DR_Verifier_Keyword = "dr";
-  protected final AmbryCache fileDescriptorCache;
-  private final String basePath = "/export/content/lid/logs/ambry-server/i001";
-  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
-
-  protected class FileDescriptor implements AmbryCacheEntry {
-
-    SeekableByteChannel _seekableByteChannel;
-
-    public FileDescriptor(SeekableByteChannel seekableByteChannel) {
-      this._seekableByteChannel = seekableByteChannel;
-    }
-
-    public SeekableByteChannel getSeekableByteChannel() {
-      return _seekableByteChannel;
-    }
-  }
+  public static final String MISSING_KEYS_FILE = "missingKeys";
+  public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
+  public static final EnumSet<StandardOpenOption> CREATE_WRITE = EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+  public static final EnumSet<StandardOpenOption> CREATE_APPEND = EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.APPEND);
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -100,7 +76,7 @@ public class BackupCheckerThread extends ReplicaThread {
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
-    fileDescriptorCache = new AmbryCache("BackupCheckerFdCache", true, 1000, metricRegistry);
+    fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -209,102 +185,6 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
-   * Write to a given file at a given offset
-   * @param seekableByteChannel File descriptor the file to append to
-   * @param text Text to append
-   * @param offset Offset to write to in the file
-   * @return True if append was successful, false otherwise
-   */
-  protected boolean writeToFile(SeekableByteChannel seekableByteChannel, String text, int offset) {
-    try {
-      if (offset >= 0) {
-        seekableByteChannel.position(offset);
-      }
-      seekableByteChannel.write(ByteBuffer.wrap(text.getBytes(StandardCharsets.UTF_8)));
-      return true;
-    } catch (IOException e) {
-      logger.error(e.toString());
-      return false;
-    }
-  }
-
-  /**
-   * Appends to a given file
-   * @param seekableByteChannel File descriptor the file to append to
-   * @param text Text to append
-   * @return True if append was successful, false otherwise
-   */
-  protected boolean appendToFile(SeekableByteChannel seekableByteChannel, String text) {
-    return writeToFile(seekableByteChannel, text, -1);
-  }
-
-  /**
-   * Creates or returns an existing file descriptor for file replicaCheckStatus
-   * @param remoteReplicaInfo The remote replica that is being replicated from
-   * @return Return a file descriptor of type SeekableByteChannel
-   */
-  protected SeekableByteChannel getOrCreateStatusFileFd(RemoteReplicaInfo remoteReplicaInfo) {
-    String filePath = String.join(File.separator, basePath,
-        Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
-        "replicaCheckStatus");
-    /**
-     * Certain combinations of the file-open flags do not work as expected.
-     * Just CREATE does not create the file. You need an additional WRITE or APPEND.
-     * Just WRITE or APPEND does not create the file.
-     * CREATE with TRUNCATE_EXISTING fails if the file does not exist because TRUNCATE_EXIST expects the file to exist.
-     * CREATE there has no effect.
-     */
-    return getOrCreateReportFd(filePath, EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE));
-  }
-
-  /**
-   * Creates or returns an existing file descriptor for file missingKeys
-   * @param remoteReplicaInfo The remote replica that is being replicated from
-   * @return Return a file descriptor of type SeekableByteChannel
-   */
-  protected SeekableByteChannel getOrCreateMissingKeysFd(RemoteReplicaInfo remoteReplicaInfo) {
-    String filePath = String.join(File.separator, basePath,
-        Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
-        "missingKeys");
-    return getOrCreateReportFd(filePath, EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.APPEND));
-  }
-
-  /**
-   * Creates or returns an existing file descriptor
-   * @param filePath Path of the file in the filesystem
-   * @param options File create options
-   * @return Return a file descriptor of type SeekableByteChannel
-   */
-  protected SeekableByteChannel getOrCreateReportFd(String filePath, EnumSet<StandardOpenOption> options) {
-    FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(filePath);
-    if (fileDescriptor == null) {
-      // Create parent folders
-      Path directories = Paths.get(filePath.substring(0, filePath.lastIndexOf(File.separator)));
-      try {
-        Files.createDirectories(directories);
-      } catch (IOException e) {
-        logger.error("Path = {}, Error creating folders = {}", directories, e.toString());
-        return null;
-      }
-
-      // Create file
-      Path path = Paths.get(filePath);
-      try {
-        fileDescriptor = new FileDescriptor(Files.newByteChannel(path, options));
-      } catch (IOException e) {
-        logger.error("Path = {}, Options = {}, Error creating file = {}", path, options, e.toString());
-        return null;
-      }
-
-      // insert into cache
-      fileDescriptorCache.putObject(filePath, fileDescriptor);
-    }
-    return fileDescriptor.getSeekableByteChannel();
-  }
-
-  /**
    * This method checks if the blob is in local store in an acceptable state or encounters an acceptable error code
    * @param remoteBlob the {@link MessageInfo} that will be checked for in the local-store
    * @param remoteReplicaInfo The remote replica that is being replicated from
@@ -313,7 +193,6 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
-    SeekableByteChannel seekableByteChannel = getOrCreateMissingKeysFd(remoteReplicaInfo);
     String errMsg = "%s | Missing %s | %s | RemoteBlobState = %s | LocalBlobState = %s \n";
     try {
       EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
@@ -323,16 +202,18 @@ public class BackupCheckerThread extends ReplicaThread {
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
-        appendToFile(seekableByteChannel, String.format(errMsg, DATE_FORMAT.format(new Date(System.currentTimeMillis())),
-            acceptableLocalBlobStates, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
+        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), CREATE_APPEND,
+            String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
+                getBlobStates(remoteBlob), getBlobStates(localBlob)));
       }
     } catch (StoreException e) {
       EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
-        appendToFile(seekableByteChannel, String.format(errMsg, DATE_FORMAT.format(new Date(System.currentTimeMillis())),
-            acceptableLocalBlobStates, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
+        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), CREATE_APPEND,
+            String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
+                getBlobStates(remoteBlob), e.getErrorCode()));
       }
     }
   }
@@ -369,11 +250,23 @@ public class BackupCheckerThread extends ReplicaThread {
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {
     // This will help us know when to stop DR process for sealed partitions
-    SeekableByteChannel seekableByteChannel = getOrCreateStatusFileFd(remoteReplicaInfo);
-    String text = String.format("%s \nRemoteReplicaInfo = %s \nisSealed = %s \nToken = %s \nlocalLagFromRemoteInBytes = %s \n",
-        DATE_FORMAT.format(new Date(System.currentTimeMillis())), remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(),
-        remoteReplicaInfo.getToken().toString(), exchangeMetadataResponse.localLagFromRemoteInBytes);
-    writeToFile(seekableByteChannel, text, 0);
+    String text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
+        remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
+        exchangeMetadataResponse.localLagFromRemoteInBytes);
+    fileManager.writeToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), CREATE_WRITE, text, 0);
+  }
+
+  /**
+   * Returns a concatenated file path
+   * @param remoteReplicaInfo Info about remote replica
+   * @param fileName Name of file to write text to
+   * @return Returns a concatenated file path
+   */
+  protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
+    return String.join(File.separator,
+        Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
+        fileName);
   }
 
   /**
