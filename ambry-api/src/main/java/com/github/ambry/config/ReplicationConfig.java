@@ -267,8 +267,8 @@ public class ReplicationConfig {
 
   /**
    * The replication manager used to restore backups from cloud
-   * DEFAULT_REPLICATION_THREAD as the name suggests is the current one.
-   * BACKUP_CHECKER_THREAD is the one that checks for missing blobs in backup by comparing blobs from on-prem servers.
+   * DEFAULT_RECOVERY_THREAD as the name suggests is the current one.
+   * CUSTOM_RECOVERY_THREAD reports the progress of recovery in addition to other things that replicaThread does.
    */
   public static final String RECOVERY_THREAD_TYPE = "recovery.thread.type";
   public static final String DEFAULT_RECOVERY_THREAD = "com.github.ambry.replication.ReplicaThread";
