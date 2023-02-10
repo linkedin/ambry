@@ -15,16 +15,11 @@ package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ReplicationConfig;
-import java.nio.file.StandardOpenOption;
-import java.util.EnumSet;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * File manager for BackupChecker, although it can be used for other purposes
  */
 public class BackupCheckerFileManager {
-  private final Logger logger = LoggerFactory.getLogger(BackupCheckerFileManager.class);
 
   public BackupCheckerFileManager(ReplicationConfig replicationConfig, MetricRegistry metricRegistry) {
   }
@@ -38,7 +33,6 @@ public class BackupCheckerFileManager {
    */
   protected boolean appendToFile(String filePath, String text) {
     // open-source impl
-    logger.info(text);
     return true;
   }
 
@@ -51,7 +45,6 @@ public class BackupCheckerFileManager {
    */
   protected boolean truncateAndWriteToFile(String filePath, String text) {
     // open-source impl
-    logger.info(text);
     return true;
   }
 }

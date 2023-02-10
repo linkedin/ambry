@@ -207,9 +207,10 @@ public class ReplicaThread implements Runnable {
     try {
       // ReplicaThreads do not operate on the same set of files so a shared fd-cache or individual one doesn't matter.
       fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType,
-          this.getClass().getName() + threadName, replicationConfig, metricRegistry);
+          "ReplicaThreadFileDescCache", replicationConfig, metricRegistry);
+      logger.info("Created file manager ", replicationConfig.backupCheckFileManagerType);
     } catch (ReflectiveOperationException e) {
-      logger.error("Failed to create file manager. ", e.toString());
+      logger.error("Failed to create file manager due to ", e.toString());
       throw new RuntimeException(e);
     }
   }
@@ -270,10 +271,12 @@ public class ReplicaThread implements Runnable {
   protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
     switch (remoteReplicaInfo.getReplicaId().getReplicaType()) {
       case CLOUD_BACKED:
+        // example: partitionId/fileName
         return String.join(File.separator, replicationConfig.backupCheckerReportDir,
             Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
             fileName);
       case DISK_BACKED:
+        // example: partitionId/hostname/fileName
         return String.join(File.separator, replicationConfig.backupCheckerReportDir,
             Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
             remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
@@ -292,16 +295,15 @@ public class ReplicaThread implements Runnable {
     switch (remoteReplicaInfo.getReplicaId().getReplicaType()) {
       case CLOUD_BACKED:
         // This will help us know when to stop recovery process
-        String text = String.format("%s | ReplicaType = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
-            remoteReplicaInfo, remoteReplicaInfo.getLocalReplicaId().getReplicaType(),
-            remoteReplicaInfo.getToken().toString(),
+        String text = String.format("%s | Token = %s | localLagFromVCRInBytes = %s \n",
+            remoteReplicaInfo, remoteReplicaInfo.getToken().toString(),
             exchangeMetadataResponse.localLagFromRemoteInBytes);
         fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, RECOVERY_STATUS_FILE), text);
         break;
       case DISK_BACKED:
-        // This will help us know when to stop DR process for sealed partitions
-        text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n", remoteReplicaInfo,
-            remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
+        // This will help us know when to stop backup-checker process
+        text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
+            remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
             exchangeMetadataResponse.localLagFromRemoteInBytes);
         fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), text);
         break;
