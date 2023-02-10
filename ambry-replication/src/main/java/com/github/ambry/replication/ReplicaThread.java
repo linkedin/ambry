@@ -135,8 +135,8 @@ public class ReplicaThread implements Runnable {
   // This is used in the test cases
   private Map<DataNodeId, List<ExchangeMetadataResponse>> exchangeMetadataResponsesInEachCycle = null;
 
-  public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
-  public static final String RECOVERY_STATUS_FILE = "cloudReplicaRecoveryStatusFile";
+  public static final String REPLICA_STATUS_FILE = "onPremReplicaCheckStatus";
+  public static final String RECOVERY_STATUS_FILE = "cloudReplicaRecoveryStatus";
   protected final BackupCheckerFileManager fileManager;
 
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -205,7 +205,10 @@ public class ReplicaThread implements Runnable {
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     try {
-      // ReplicaThreads do not operate on the same set of files so a shared fd-cache or individual one doesn't matter.
+      // ReplicaThreads do not operate on the same set of files so a shared fd-cache doesn't help.
+      // Further a shared cache up above would require changing a lot of ctors and test.
+      // In spite per-thread caches, we will get a cumulative metric indicating the total num of FDs across all threads
+      // because all caches have the same metric name - ReplicaThreadFileDescCache.<metric> .
       fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType,
           "ReplicaThreadFileDescCache", replicationConfig, metricRegistry);
       logger.info("Created file manager ", replicationConfig.backupCheckFileManagerType);
