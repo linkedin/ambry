@@ -460,15 +460,12 @@ public class AccountDao {
   public synchronized void updateDataset(int accountId, int containerId, Dataset dataset) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      try {
-        getDataset(accountId, containerId, dataset.getAccountName(), dataset.getContainerName(),
-            dataset.getDatasetName());
-      } catch (Exception e) {
-        throw new SQLException("Can't update the dataset if it does not exist. Dataset: " + dataset.toString());
-      }
       dataAccessor.getDatabaseConnection(true);
       PreparedStatement updateDatasetStatement = dataAccessor.getPreparedStatement(updateDatasetSql, true);
-      executeUpdateDatasetStatement(updateDatasetStatement, accountId, containerId, dataset);
+      int rowCount = executeUpdateDatasetStatement(updateDatasetStatement, accountId, containerId, dataset);
+      if (rowCount == 0) {
+        throw new SQLException("Can't update the dataset if it does not exist. Dataset: " + dataset);
+      }
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException e) {
       dataAccessor.onException(e, Write);
@@ -773,9 +770,10 @@ public class AccountDao {
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
    * @param dataset the {@link Dataset}
+   * @return the number of rows been updated.
    * @throws SQLException
    */
-  private void executeUpdateDatasetStatement(PreparedStatement statement, int accountId, int containerId,
+  private int executeUpdateDatasetStatement(PreparedStatement statement, int accountId, int containerId,
       Dataset dataset) throws SQLException {
     Dataset.VersionSchema versionSchema = dataset.getVersionSchema();
     if (versionSchema != null) {
@@ -803,7 +801,7 @@ public class AccountDao {
     statement.setInt(5, accountId);
     statement.setInt(6, containerId);
     statement.setString(7, dataset.getDatasetName());
-    statement.executeUpdate();
+    return statement.executeUpdate();
   }
 
   /**
