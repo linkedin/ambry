@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
@@ -62,6 +63,7 @@ import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -133,6 +135,10 @@ public class ReplicaThread implements Runnable {
   // This is used in the test cases
   private Map<DataNodeId, List<ExchangeMetadataResponse>> exchangeMetadataResponsesInEachCycle = null;
 
+  public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
+  public static final String RECOVERY_STATUS_FILE = "cloudReplicaRecoveryStatusFile";
+  protected final BackupCheckerFileManager fileManager;
+
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
@@ -198,6 +204,14 @@ public class ReplicaThread implements Runnable {
     }
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
+    try {
+      // ReplicaThreads do not operate on the same set of files so a shared fd-cache or individual one doesn't matter.
+      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType,
+          this.getClass().getName() + threadName, replicationConfig, metricRegistry);
+    } catch (ReflectiveOperationException e) {
+      logger.error("Failed to create file manager. ", e.toString());
+      throw new RuntimeException(e);
+    }
   }
 
   /**
@@ -248,11 +262,52 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * Returns a concatenated file path
+   * @param remoteReplicaInfo Info about remote replica
+   * @param fileName Name of file to write text to
+   * @return Returns a concatenated file path
+   */
+  protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
+    switch (remoteReplicaInfo.getReplicaId().getReplicaType()) {
+      case CLOUD_BACKED:
+        return String.join(File.separator, replicationConfig.backupCheckerReportDir,
+            Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
+            fileName);
+      case DISK_BACKED:
+        return String.join(File.separator, replicationConfig.backupCheckerReportDir,
+            Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
+            remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
+            fileName);
+      default:
+        throw new IllegalArgumentException("Invalid replica type " + remoteReplicaInfo.getReplicaId().getReplicaType());
+    }
+  }
+
+  /**
    * Logs replication progress of local node against some remote node
    * @param remoteReplicaInfo remote replica information
    */
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {
+    switch (remoteReplicaInfo.getReplicaId().getReplicaType()) {
+      case CLOUD_BACKED:
+        // This will help us know when to stop recovery process
+        String text = String.format("%s | ReplicaType = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
+            remoteReplicaInfo, remoteReplicaInfo.getLocalReplicaId().getReplicaType(),
+            remoteReplicaInfo.getToken().toString(),
+            exchangeMetadataResponse.localLagFromRemoteInBytes);
+        fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, RECOVERY_STATUS_FILE), text);
+        break;
+      case DISK_BACKED:
+        // This will help us know when to stop DR process for sealed partitions
+        text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n", remoteReplicaInfo,
+            remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
+            exchangeMetadataResponse.localLagFromRemoteInBytes);
+        fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), text);
+        break;
+      default:
+        throw new IllegalArgumentException("Invalid replica type " + remoteReplicaInfo.getReplicaId().getReplicaType());
+    }
   }
 
   @Override

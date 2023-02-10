@@ -60,10 +60,12 @@ import org.slf4j.LoggerFactory;
 public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
+<<<<<<< Updated upstream
   protected final BackupCheckerFileManager fileManager;
+=======
+>>>>>>> Stashed changes
   public static final String DR_Verifier_Keyword = "dr";
   public static final String MISSING_KEYS_FILE = "missingKeys";
-  public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -76,12 +78,15 @@ public class BackupCheckerThread extends ReplicaThread {
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
+<<<<<<< Updated upstream
     try {
       fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType, replicationConfig, metricRegistry);
     } catch (ReflectiveOperationException e) {
       logger.error("Failed to create file manager. ", e.toString());
       throw new RuntimeException(e);
     }
+=======
+>>>>>>> Stashed changes
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -247,6 +252,7 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
+<<<<<<< Updated upstream
    * Prints a log if local store has caught up with remote store
    * @param remoteReplicaInfo Info about remote replica
    * @param exchangeMetadataResponse Metadata response object
@@ -275,6 +281,8 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
+=======
+>>>>>>> Stashed changes
    * Returns local replica mount path of the partition
    * @param remoteReplicaInfo Info about remote replica
    * @return Local replica mount path of the partition
