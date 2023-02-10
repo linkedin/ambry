@@ -291,6 +291,10 @@ public class ReplicaThread implements Runnable {
    */
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {
+    if (replicationConfig.backupCheckFileManagerType.equals(replicationConfig.DEFAULT_BACKUP_CHECKER_FILE_MANAGER)) {
+      // optimization to not affect replication in servers
+      return;
+    }
     switch (remoteReplicaInfo.getReplicaId().getReplicaType()) {
       case CLOUD_BACKED:
         // This will help us know when to stop recovery process
