@@ -205,12 +205,7 @@ public class ReplicaThread implements Runnable {
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
     try {
-      // ReplicaThreads do not operate on the same set of files so a shared fd-cache doesn't help.
-      // Further a shared cache up above would require changing a lot of ctors and test.
-      // In spite per-thread caches, we will get a cumulative metric indicating the total num of FDs across all threads
-      // because all caches have the same metric name - ReplicaThreadFileDescCache.<metric> .
-      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType,
-          "ReplicaThreadFileDescCache", replicationConfig, metricRegistry);
+      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType, replicationConfig, metricRegistry);
       logger.info("Created file manager ", replicationConfig.backupCheckFileManagerType);
     } catch (ReflectiveOperationException e) {
       logger.error("Failed to create file manager due to ", e.toString());
