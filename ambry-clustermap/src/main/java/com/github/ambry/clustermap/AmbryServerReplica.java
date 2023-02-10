@@ -35,11 +35,11 @@ class AmbryServerReplica extends AmbryReplica {
    * @param disk the {@link AmbryDisk} on which this replica resides.
    * @param isReplicaStopped whether this replica is stopped or not.
    * @param capacityBytes the capacity in bytes for this replica.
-   * @param isSealed whether this replica is in sealed state.
+   * @param replicaSealStatus {@link ReplicaSealStatus} of the replica.
    */
   AmbryServerReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk,
-      boolean isReplicaStopped, long capacityBytes, boolean isSealed) throws Exception {
-    super(clusterMapConfig, partition, isReplicaStopped, capacityBytes, isSealed);
+      boolean isReplicaStopped, long capacityBytes, ReplicaSealStatus replicaSealStatus) throws Exception {
+    super(clusterMapConfig, partition, isReplicaStopped, capacityBytes, replicaSealStatus);
     this.disk = Objects.requireNonNull(disk, "null disk");
   }
 
@@ -78,7 +78,7 @@ class AmbryServerReplica extends AmbryReplica {
     snapshot.put(REPLICA_DISK, getDiskId().getMountPath());
     snapshot.put(REPLICA_PATH, getReplicaPath());
     snapshot.put(CAPACITY_BYTES, getCapacityInBytes());
-    snapshot.put(REPLICA_WRITE_STATE, isSealed() ? PartitionState.READ_ONLY.name() : PartitionState.READ_WRITE.name());
+    snapshot.put(REPLICA_WRITE_STATE, ClusterMapUtils.convertReplicaSealStatusToPartitionState(getSealedStatus()));
     String replicaLiveness = UP;
     if (dataNodeId.getState() == HardwareState.UNAVAILABLE) {
       replicaLiveness = NODE_DOWN;

@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaEventType;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.ReplicaType;
@@ -1508,7 +1509,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
    */
   private void changePartitionState(PartitionId id, boolean seal) {
     MockReplicaId replicaId = (MockReplicaId) findReplica(id);
-    replicaId.setSealedState(seal);
+    replicaId.setReplicaSealStatus(seal ? ReplicaSealStatus.SEALED : ReplicaSealStatus.NOT_SEALED);
     ((MockPartitionId) id).resolvePartitionStatus();
   }
 

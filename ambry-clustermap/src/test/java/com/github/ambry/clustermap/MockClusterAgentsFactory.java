@@ -105,7 +105,7 @@ public class MockClusterAgentsFactory implements ClusterAgentsFactory {
             throw new IllegalArgumentException("Not MockReplicaId");
           }
           MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
-          mockReplicaId.setSealedState(isSealed);
+          mockReplicaId.setReplicaSealStatus(isSealed ? ReplicaSealStatus.SEALED : ReplicaSealStatus.NOT_SEALED);
           return true;
         }
 

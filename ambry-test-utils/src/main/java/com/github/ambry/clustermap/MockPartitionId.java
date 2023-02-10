@@ -187,17 +187,25 @@ public class MockPartitionId implements PartitionId {
   }
 
   /**
-   * If all replicaIds == !isSealed, then partition status = Read-Write, else Read-Only
+   * Resolve the partition's status based on its replica's statuses.
+   * If any one replica of a partition is {@link ReplicaSealStatus#SEALED}, then the partition is READ_ONLY.
+   * If all the replicas are {@link ReplicaSealStatus#NOT_SEALED}, then the partition is READ_WRITE.
+   * Otherwise, the partition is PARTIAL_READ_WRITE.
    */
   public void resolvePartitionStatus() {
-    boolean isReadWrite = true;
+    boolean isPartiallySealed = false;
     for (ReplicaId replicaId : replicaIds) {
       if (replicaId.isSealed()) {
-        isReadWrite = false;
-        break;
+        // If at least one of the replicas of a partition is sealed then the entire parition is READ_ONLY.
+        partitionState = PartitionState.READ_ONLY;
+        return;
+      }
+      if (replicaId.isPartiallySealed()) {
+        isPartiallySealed = true;
       }
     }
-    partitionState = isReadWrite ? PartitionState.READ_WRITE : PartitionState.READ_ONLY;
+    // None of the partitions are sealed, so isPartiallySealed determines the state.
+    partitionState = isPartiallySealed ? PartitionState.PARTIAL_READ_WRITE : PartitionState.READ_WRITE;
   }
 
   @Override

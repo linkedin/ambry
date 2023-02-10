@@ -86,9 +86,14 @@ public interface ReplicaId extends Resource {
   boolean isDown();
 
   /**
-   * @return true if this replica is in sealed state.
+   * @return true if this replica's {@link ReplicaSealStatus} is {@link ReplicaSealStatus#SEALED}.
    */
   boolean isSealed();
+
+  /**
+   * @return true if this replica's {@link ReplicaSealStatus} is {@link ReplicaSealStatus#PARTIALLY_SEALED}.
+   */
+  boolean isPartiallySealed();
 
   /**
    * @return the {@code ReplicaType} for this replica.

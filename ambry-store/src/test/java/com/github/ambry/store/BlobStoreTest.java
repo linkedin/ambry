@@ -21,6 +21,7 @@ import com.github.ambry.clustermap.HelixFactory;
 import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
@@ -397,7 +398,7 @@ public class BlobStoreTest {
     verify(replicaStatusDelegate, times(1)).seal(replicaId);
 
     //Assumes ClusterParticipant sets replicaId status to true
-    replicaId.setSealedState(true);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
 
     //Change config threshold but with delegate disabled, verify that nothing happens (store doesn't get unsealed)
     reloadStore(changeThreshold(99, 1, false), replicaId, Collections.singletonList(replicaStatusDelegate));
@@ -406,12 +407,12 @@ public class BlobStoreTest {
     //Change config threshold to higher, see that it gets changed to unsealed on reset
     reloadStore(changeThreshold(99, 1, true), replicaId, Collections.singletonList(replicaStatusDelegate));
     verify(replicaStatusDelegate, times(1)).unseal(replicaId);
-    replicaId.setSealedState(false);
+    replicaId.setSealedState(ReplicaSealStatus.NOT_SEALED);
 
     //Reset thresholds, verify that it changed back
     reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
     verify(replicaStatusDelegate, times(2)).seal(replicaId);
-    replicaId.setSealedState(true);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
 
     //Remaining tests only relevant for segmented logs
     if (isLogSegmented) {
@@ -433,7 +434,7 @@ public class BlobStoreTest {
       verify(replicaStatusDelegate, times(2)).unseal(replicaId);
 
       //Test if replicaId is erroneously true that it updates the status upon startup
-      replicaId.setSealedState(true);
+      replicaId.setSealedState(ReplicaSealStatus.SEALED);
       reloadStore(defaultConfig, replicaId, Collections.singletonList(replicaStatusDelegate));
       verify(replicaStatusDelegate, times(3)).unseal(replicaId);
     }
@@ -483,7 +484,7 @@ public class BlobStoreTest {
     assertEquals("Sealed replica lists are different", sealedReplicas1, sealedReplicas2);
     assertEquals("Sealed replica is not correct", replicaId, sealedReplicas1.iterator().next());
     // try to bump the readonly threshold so as to unseal the replica
-    replicaId.setSealedState(true);
+    replicaId.setSealedState(ReplicaSealStatus.SEALED);
     reloadStore(changeThreshold(99, 1, true), replicaId, Arrays.asList(mockDelegate1, mockDelegate2));
     assertTrue("Replica should be unsealed", sealedReplicas1.isEmpty() && sealedReplicas2.isEmpty());
     assertEquals("After startup, store should be in STANDBY state", STANDBY, store.getCurrentState());

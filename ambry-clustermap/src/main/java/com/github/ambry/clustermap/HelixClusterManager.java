@@ -454,8 +454,9 @@ public class HelixClusterManager implements ClusterMap {
           // update disk capacity if bootstrap replica info contains disk capacity in bytes.
           targetDisk.setDiskCapacityInBytes(Long.parseLong(diskCapacityStr));
         }
-        bootstrapReplica =
-            new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity, false);
+        // A bootstrap replica is always ReplicaSealedStatus#NOT_SEALED.
+        bootstrapReplica = new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity,
+            ReplicaSealStatus.NOT_SEALED);
       } catch (Exception e) {
         logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
             instanceName, e);
@@ -1308,6 +1309,7 @@ public class HelixClusterManager implements ClusterMap {
       String instanceName = dataNodeConfig.getInstanceName();
       logger.info("Updating replicas info for existing node {}", instanceName);
       Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
+      Set<String> partiallySealedReplicas = dataNodeConfig.getPartiallySealedReplicas();
       Set<String> stoppedReplicas = dataNodeConfig.getStoppedReplicas();
       AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
       ConcurrentHashMap<String, AmbryReplica> currentReplicasOnNode = ambryDataNodeToAmbryReplicas.get(dataNode);
@@ -1344,7 +1346,8 @@ public class HelixClusterManager implements ClusterMap {
             // 1. directly add it into "replicasFromInstanceConfig" map
             replicasFromInstanceConfig.put(partitionName, existingReplica);
             // 2. update replica seal/stop state
-            updateReplicaStateAndOverrideIfNeeded(existingReplica, sealedReplicas, stoppedReplicas);
+            updateReplicaStateAndOverrideIfNeeded(existingReplica, sealedReplicas, partiallySealedReplicas,
+                stoppedReplicas);
           } else {
             // if this is a new replica and doesn't exist on node
             logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName, dcName);
@@ -1369,9 +1372,9 @@ public class HelixClusterManager implements ClusterMap {
             } else {
               replica = new AmbryServerReplica(clusterMapConfig, mappedPartition, disk,
                   stoppedReplicas.contains(partitionName), replicaConfig.getReplicaCapacityInBytes(),
-                  sealedReplicas.contains(partitionName));
+                  resolveReplicaSealStatus(partitionName, sealedReplicas, partiallySealedReplicas));
             }
-            updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
+            updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, partiallySealedReplicas, stoppedReplicas);
             // add new created replica to "replicasFromInstanceConfig" map
             replicasFromInstanceConfig.put(partitionName, replica);
             // Put new replica into partition-to-replica map temporarily (this is to avoid any exception thrown within the
@@ -1403,24 +1406,17 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     /**
-     * If partition override is enabled, we override replica SEAL/UNSEAL state based on partitionOverrideMap. If disabled,
-     * update replica state according to the info from {@link DataNodeConfig}.
+     * If partition override is enabled, we override replica's {@link ReplicaSealStatus} based on partitionOverrideMap.
+     * If disabled, update replica state according to the info from {@link DataNodeConfig}.
      * @param replica the {@link ReplicaId} whose states (seal,stop) should be updated.
      * @param sealedReplicas a collection of {@link ReplicaId}(s) that are in SEALED state.
+     * @param partiallySealedReplicas a collection of {@link ReplicaId}(s) that are in PARTIALLY_SEALED state.
      * @param stoppedReplicas a collection of {@link ReplicaId}(s) that are in STOPPED state.
      */
     private void updateReplicaStateAndOverrideIfNeeded(AmbryReplica replica, Collection<String> sealedReplicas,
-        Collection<String> stoppedReplicas) {
+        Collection<String> partiallySealedReplicas, Collection<String> stoppedReplicas) {
       String partitionName = replica.getPartitionId().toPathString();
-      boolean isSealed;
-      if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
-        isSealed = partitionOverrideInfoMap.get(partitionName)
-            .get(ClusterMapUtils.PARTITION_STATE)
-            .equals(ClusterMapUtils.READ_ONLY_STR);
-      } else {
-        isSealed = sealedReplicas.contains(partitionName);
-      }
-      replica.setSealedState(isSealed);
+      replica.setSealedStatus(resolveReplicaSealStatus(partitionName, sealedReplicas, partiallySealedReplicas));
       replica.setStoppedState(stoppedReplicas.contains(partitionName));
     }
 
@@ -1462,6 +1458,7 @@ public class HelixClusterManager implements ClusterMap {
         throws Exception {
       List<ReplicaId> addedReplicas = new ArrayList<>();
       Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
+      Set<String> partiallySealedReplicas = dataNodeConfig.getPartiallySealedReplicas();
       Set<String> stoppedReplicas = dataNodeConfig.getStoppedReplicas();
       ambryDataNodeToAmbryReplicas.put(datanode, new ConcurrentHashMap<>());
       ambryDataNodeToAmbryDisks.put(datanode, ConcurrentHashMap.newKeySet());
@@ -1487,17 +1484,10 @@ public class HelixClusterManager implements ClusterMap {
           ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode,
               replicaConfig.getReplicaCapacityInBytes());
           // Create replica associated with this node and this partition
-          boolean isSealed = sealedReplicas.contains(partitionName);
-          if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
-              partitionName)) {
-            // override sealed state if PartitionOverride is enabled.
-            isSealed = partitionOverrideInfoMap.get(partitionName)
-                .get(ClusterMapUtils.PARTITION_STATE)
-                .equals(ClusterMapUtils.READ_ONLY_STR);
-          }
           AmbryReplica replica =
               new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                  replicaConfig.getReplicaCapacityInBytes(), isSealed);
+                  replicaConfig.getReplicaCapacityInBytes(),
+                  resolveReplicaSealStatus(partitionName, sealedReplicas, partiallySealedReplicas));
           ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
           addReplicasToPartition(mappedPartition, Collections.singletonList(replica));
           addedReplicas.add(replica);
@@ -1541,6 +1531,32 @@ public class HelixClusterManager implements ClusterMap {
               + "the capacity of an existing replica " + replica.getCapacityInBytes());
         }
       }
+    }
+
+    /**
+     * Resolve the {@link ReplicaSealStatus} of the replica belonging to the partition with the specified partitionName.
+     * @param partitionName Name of the partition.
+     * @param sealedReplicas {@link Collection} of partition names whose replicas are sealed.
+     * @param partiallySealedReplicas {@link Collection} of partition names whose replicas are partially sealed.
+     * @return ReplicaSealStatus object.
+     */
+    private ReplicaSealStatus resolveReplicaSealStatus(String partitionName, Collection<String> sealedReplicas,
+        Collection<String> partiallySealedReplicas) {
+      if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
+        if(partitionOverrideInfoMap.get(partitionName)
+            .get(ClusterMapUtils.PARTITION_STATE)
+            .equals(ClusterMapUtils.READ_ONLY_STR)) {
+          return ReplicaSealStatus.SEALED;
+        }
+      } else {
+        if(sealedReplicas.contains(partitionName)) {
+          return ReplicaSealStatus.SEALED;
+        }
+      }
+      if (partiallySealedReplicas.contains(partitionName)) {
+        return ReplicaSealStatus.PARTIALLY_SEALED;
+      }
+      return ReplicaSealStatus.NOT_SEALED;
     }
   }
 }

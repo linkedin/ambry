@@ -28,7 +28,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 public abstract class AmbryReplica implements ReplicaId {
   private final AmbryPartition partition;
   private final long capacityBytes;
-  private volatile boolean isSealed;
+  private volatile ReplicaSealStatus replicaSealStatus;
   volatile boolean isStopped;
   final ResourceStatePolicy resourceStatePolicy;
 
@@ -38,13 +38,13 @@ public abstract class AmbryReplica implements ReplicaId {
    * @param partition the {@link AmbryPartition} of which this is a replica.
    * @param isReplicaStopped whether this replica is stopped or not.
    * @param capacityBytes the capacity in bytes for this replica.
-   * @param isSealed whether this replica is in sealed state.
+   * @param replicaSealStatus {@link ReplicaSealStatus} of this replica.
    */
   AmbryReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, boolean isReplicaStopped,
-      long capacityBytes, boolean isSealed) throws Exception {
+      long capacityBytes, ReplicaSealStatus replicaSealStatus) throws Exception {
     this.partition = Objects.requireNonNull(partition, "null partition");
     this.capacityBytes = capacityBytes;
-    this.isSealed = isSealed;
+    this.replicaSealStatus = replicaSealStatus;
     isStopped = isReplicaStopped;
     validateReplicaCapacityInBytes(capacityBytes);
     ResourceStatePolicyFactory resourceStatePolicyFactory =
@@ -76,17 +76,40 @@ public abstract class AmbryReplica implements ReplicaId {
 
   @Override
   public boolean isSealed() {
-    return isSealed;
+    return replicaSealStatus == ReplicaSealStatus.SEALED;
   }
 
-  void setSealedState(boolean isSealed) {
-    this.isSealed = isSealed;
+  @Override
+  public boolean isPartiallySealed() {
+    return replicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED;
   }
 
+  /**
+   * Set the {@link ReplicaSealStatus} of this replica.
+   * @param replicaSealStatus {@link ReplicaSealStatus} to set.
+   */
+  void setSealedStatus(ReplicaSealStatus replicaSealStatus) {
+    this.replicaSealStatus = replicaSealStatus;
+  }
+
+  /**
+   * @return ReplicaSealStatus of this replica.
+   */
+  ReplicaSealStatus getSealedStatus() {
+    return this.replicaSealStatus;
+  }
+
+  /**
+   * Set the stopped state of this replica.
+   * @param isStopped {@code true} to mark replica as stopped. {@code false} otherwise.
+   */
   void setStoppedState(boolean isStopped) {
     this.isStopped = isStopped;
   }
 
+  /**
+   * @return {@code true} is the replica is down. {@code false} otherwise.
+   */
   @Override
   public boolean isDown() {
     return resourceStatePolicy.isDown() || isStopped;
