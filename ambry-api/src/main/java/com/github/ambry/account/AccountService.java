@@ -167,6 +167,15 @@ public interface AccountService extends Closeable {
   }
 
   /**
+   * Update a {@link Dataset} based on the supplied properties.
+   * @param dataset The name of the dataset.
+   * @throws AccountServiceException
+   */
+  default void updateDataset(Dataset dataset) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
    * Add the dataset version based on the supplied properties.
    * @param accountName The name for the parent account.
    * @param containerName The name for the container.

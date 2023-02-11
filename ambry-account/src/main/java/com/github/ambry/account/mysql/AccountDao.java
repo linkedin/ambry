@@ -96,6 +96,7 @@ public class AccountDao {
   private final String insertDatasetSql;
   private final String getDatasetByNameSql;
   private final String getVersionSchemaSql;
+  private final String updateDatasetSql;
 
   /**
    * Types of MySql statements.
@@ -138,6 +139,14 @@ public class AccountDao {
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?)",
             DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT,
             USER_TAGS, DELETE_TS);
+    //update the dataset field, in order to support partial update, if one parameter is null, keep the original value.
+    //if the delete_ts parameter from input equals to Utils.Infinite_Time(-1), set the delete_ts to null.
+    updateDatasetSql = String.format(
+        "update %1$s set %2$s = now(3)," + "`retentionCount` = IFNULL(?, `retentionCount`), "
+            + "`userTags` = IFNULL(?, `userTags`),"
+            + "`delete_ts` = CASE WHEN ? = '-1' THEN NULL ELSE IFNULL(?, `delete_ts`) END"
+            + " where %6$s = ? and %7$s = ? and %8$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_COUNT,
+        USER_TAGS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getDatasetByNameSql =
         String.format("select %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
             VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID,
@@ -442,6 +451,29 @@ public class AccountDao {
   }
 
   /**
+   * Update {@link Dataset} based on the supplied properties.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param dataset the {@link Dataset}
+   * @throws SQLException
+   */
+  public synchronized void updateDataset(int accountId, int containerId, Dataset dataset) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(true);
+      PreparedStatement updateDatasetStatement = dataAccessor.getPreparedStatement(updateDatasetSql, true);
+      int rowCount = executeUpdateDatasetStatement(updateDatasetStatement, accountId, containerId, dataset);
+      if (rowCount == 0) {
+        throw new SQLException("Can't update the dataset if it does not exist. Dataset: " + dataset);
+      }
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
+
+  /**
    * Get {@link Dataset} based on the supplied properties.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
@@ -694,6 +726,13 @@ public class AccountDao {
   private void executeAddDatasetStatement(PreparedStatement statement, int accountId, int containerId, Dataset dataset)
       throws SQLException {
     String datasetName = dataset.getDatasetName();
+    if (dataset.getVersionSchema() == null) {
+      throw new SQLException("Must set the version schema info during dataset creation");
+    }
+    Long expirationTimeMs = dataset.getExpirationTimeMs();
+    if (expirationTimeMs == null) {
+      throw new SQLException("Must set the expiration time info during dataset creation");
+    }
     int schemaVersionOrdinal = dataset.getVersionSchema().ordinal();
     Integer retentionCount = dataset.getRetentionCount();
     Map<String, String> userTags = dataset.getUserTags();
@@ -723,6 +762,54 @@ public class AccountDao {
       statement.setTimestamp(7, null);
     }
     statement.executeUpdate();
+  }
+
+  /**
+   * Execute updateDatasetStatement to update Dataset.
+   * @param statement the mysql statement to update dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param dataset the {@link Dataset}
+   * @return the number of rows been updated.
+   * @throws SQLException
+   */
+  private int executeUpdateDatasetStatement(PreparedStatement statement, int accountId, int containerId,
+      Dataset dataset) throws SQLException {
+    Dataset.VersionSchema versionSchema = dataset.getVersionSchema();
+    if (versionSchema != null) {
+      throw new SQLException("version Schema can't be updated once the dataset has been created");
+    }
+    Map<String, String> userTags = dataset.getUserTags();
+    String userTagsInJson = null;
+    if (userTags != null) {
+      try {
+        userTagsInJson = objectMapper.writeValueAsString(userTags);
+      } catch (IOException e) {
+        throw new SQLException("Fail to serialize user tags : " + userTags, e);
+      }
+    }
+    Integer retentionCount = dataset.getRetentionCount();
+    if (retentionCount != null) {
+      statement.setInt(1, retentionCount);
+    } else {
+      statement.setObject(1, null);
+    }
+    statement.setString(2, userTagsInJson);
+    Long expirationTimeMs = dataset.getExpirationTimeMs();
+    if (expirationTimeMs == null) {
+      statement.setTimestamp(3, null);
+      statement.setTimestamp(4, null);
+    } else if (expirationTimeMs == -1) {
+      statement.setString(3, "-1");
+      statement.setString(4, "-1");
+    } else {
+      statement.setTimestamp(3, new Timestamp(expirationTimeMs));
+      statement.setTimestamp(4, new Timestamp(expirationTimeMs));
+    }
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setString(7, dataset.getDatasetName());
+    return statement.executeUpdate();
   }
 
   /**

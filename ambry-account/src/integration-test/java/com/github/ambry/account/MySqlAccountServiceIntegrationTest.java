@@ -67,6 +67,7 @@ public class MySqlAccountServiceIntegrationTest {
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
   private static final String DATASET_NAME = "testDataset";
+  private static final String DATASET_NAME_NOT_EXIST = "testDatasetNotExist";
   private static final String DATASET_NAME_WITH_TTL = "testDatasetWithTtl";
   private static final String DATASET_NAME_WITH_SEMANTIC = "testDatasetWithSemantic";
 
@@ -719,17 +720,22 @@ public class MySqlAccountServiceIntegrationTest {
   }
 
   /**
-   * Test adding and getting dataset.
+   * Test add, get and update dataset.
    * @throws Exception
    */
   @Test
-  public void testAddAndGetDatasets() throws Exception {
+  public void testAddGetAndUpdateDatasets() throws Exception {
     Account testAccount = makeTestAccountWithContainer();
     Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
     Map<String, String> userTags = new HashMap<>();
     userTags.put("userTag", "tagValue");
-    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME,
-        Dataset.VersionSchema.TIMESTAMP, -1).setUserTags(userTags).build();
+    int retentionCount = 5;
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
+            Dataset.VersionSchema.TIMESTAMP)
+        .setExpirationTimeMs(-1)
+        .setUserTags(userTags)
+        .setRetentionCount(retentionCount)
+        .build();
     // Add dataset to db
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
 
@@ -739,6 +745,69 @@ public class MySqlAccountServiceIntegrationTest {
             testContainer.getName(), DATASET_NAME);
 
     assertEquals("Mistmatch in dataset read from db", dataset, datasetFromMysql);
+
+    //update the retention count only.
+    int newRetentionCount = 10;
+    Dataset datasetForUpdate =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setRetentionCount(10).build();
+    mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
+    datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME);
+    assertEquals("Mismatch in updated retention count", (Integer) newRetentionCount,
+        datasetFromMysql.getRetentionCount());
+
+    //update the expiration time.
+    long expirationTimeInMs = Utils.addSecondsToEpochTime(System.currentTimeMillis(), 30);
+    datasetForUpdate =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setExpirationTimeMs(
+            expirationTimeInMs).build();
+    mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
+    datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME);
+    assertEquals("Mismatch in updated expirationTimeInMst", (Long) expirationTimeInMs,
+        datasetFromMysql.getExpirationTimeMs());
+
+    //update the user tags
+    userTags.clear();
+    userTags.put("userTagNew", "tagValueNew");
+    datasetForUpdate =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setUserTags(userTags).build();
+    mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
+    datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME);
+    assertEquals("Mismatch in user tags", userTags, datasetFromMysql.getUserTags());
+
+    //update dataset if the dataset does not exist (should fail)
+    datasetForUpdate =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_NOT_EXIST).setUserTags(userTags)
+            .build();
+    try {
+      mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
+      fail("should fail due to this dataset does not exist");
+    } catch (Exception e) {
+      //no op
+    }
+
+    //Add a dataset with limited ttl
+    expirationTimeInMs = Utils.addSecondsToEpochTime(System.currentTimeMillis(), 30);
+    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setVersionSchema(
+            Dataset.VersionSchema.TIMESTAMP)
+        .setExpirationTimeMs(expirationTimeInMs)
+        .setUserTags(userTags)
+        .setRetentionCount(retentionCount)
+        .build();
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    //update expiration to permanent.
+    expirationTimeInMs = -1;
+    datasetForUpdate =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setExpirationTimeMs(
+            expirationTimeInMs).build();
+    mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
+    datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_TTL);
+    assertEquals("Mismatch in updated expirationTimeInMst", (Long) expirationTimeInMs,
+        datasetFromMysql.getExpirationTimeMs());
   }
 
   /**
@@ -752,8 +821,11 @@ public class MySqlAccountServiceIntegrationTest {
     List<Long> versions = new ArrayList<>();
     userTags.put("userTag", "tagValue");
 
-    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME,
-        Dataset.VersionSchema.MONOTONIC, -1).setUserTags(userTags).build();
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME)
+        .setVersionSchema(Dataset.VersionSchema.MONOTONIC)
+        .setExpirationTimeMs(-1)
+        .setUserTags(userTags)
+        .build();
 
     // Add a dataset to db
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
@@ -791,8 +863,9 @@ public class MySqlAccountServiceIntegrationTest {
 
     // Add a dataset with ttl (set to a past timestamp) and add a dataset version with current ttl, expect to be failed.
     expirationTimeMs = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(10);
-    Dataset datasetWithTtl = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL,
-        Dataset.VersionSchema.TIMESTAMP, expirationTimeMs).setUserTags(userTags).build();
+    Dataset datasetWithTtl =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setVersionSchema(
+            Dataset.VersionSchema.TIMESTAMP).setExpirationTimeMs(expirationTimeMs).setUserTags(userTags).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), datasetWithTtl);
     version = "3";
     expirationTimeMs = System.currentTimeMillis();
@@ -819,8 +892,9 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Unexpected latest version", expectedLatestVersion, latestVersionFromMysql);
 
     //Test semantic version.
-    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC,
-        Dataset.VersionSchema.SEMANTIC, -1).setUserTags(userTags).build();
+    dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC).setVersionSchema(
+            Dataset.VersionSchema.SEMANTIC).setExpirationTimeMs(-1).setUserTags(userTags).build();
     // Add a dataset to db
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     version = "1.2.4";
