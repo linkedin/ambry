@@ -176,8 +176,7 @@ public class AmbryCache {
   private void initializeAmbryCacheStats() {
 
     HashMap<String, Gauge> metricMap = new HashMap<>();
-    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "Enabled"), (Gauge<Integer>) () ->
-        cacheEnabled ? 1 : 0);
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "Enabled"), (Gauge<Integer>) () -> cacheEnabled ? 1 : 0);
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "MaxNumCacheEntries"), (Gauge<Long>) () -> maxNumCacheEntries);
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "HitRate"), (Gauge<Double>) () -> ambryCache.stats().hitRate());
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "MissRate"), (Gauge<Double>) () -> ambryCache.stats().missRate());
