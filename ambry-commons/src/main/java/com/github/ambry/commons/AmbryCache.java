@@ -187,12 +187,14 @@ public class AmbryCache {
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "MissCount"), (Gauge<Long>) () -> ambryCache.stats().missCount());
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "RequestCount"), (Gauge<Long>) () -> ambryCache.stats().requestCount());
     for (Map.Entry<String, Gauge> entry : metricMap.entrySet()) {
-      try {
-        metricRegistry.register(entry.getKey(), entry.getValue());
-      } catch (IllegalArgumentException e) {
-        // This means someone else registered the metric with the same name before we could.
-        // No problem. We'll just use that metric.
-        logger.trace(e.toString());
+      if (metricRegistry.getMetrics().containsKey(entry.getKey()) == false) {
+        try {
+          metricRegistry.register(entry.getKey(), entry.getValue());
+        } catch (IllegalArgumentException e) {
+          // This means someone else registered the metric with the same name before we could.
+          // No problem. We'll just use that metric.
+          logger.trace(e.toString());
+        }
       }
     }
 
