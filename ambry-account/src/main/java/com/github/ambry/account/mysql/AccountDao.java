@@ -142,9 +142,9 @@ public class AccountDao {
     //update the dataset field, in order to support partial update, if one parameter is null, keep the original value.
     //if the delete_ts parameter from input equals to Utils.Infinite_Time(-1), set the delete_ts to null.
     updateDatasetSql = String.format(
-        "update %1$s set %2$s = now(3)," + "`retentionCount` = COALESCE(NULLIF(?, ''), `retentionCount`), "
-            + "`userTags` = COALESCE(NULLIF(?, ''), `userTags`),"
-            + "`delete_ts` = CASE WHEN ? = '-1' THEN NULL ELSE COALESCE(NULLIF(?, ''), `delete_ts`) END"
+        "update %1$s set %2$s = now(3)," + "`retentionCount` = IFNULL(?, `retentionCount`), "
+            + "`userTags` = IFNULL(?, `userTags`),"
+            + "`delete_ts` = CASE WHEN ? = '-1' THEN NULL ELSE IFNULL(?, `delete_ts`) END"
             + " where %6$s = ? and %7$s = ? and %8$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_COUNT,
         USER_TAGS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getDatasetByNameSql =
@@ -796,8 +796,16 @@ public class AccountDao {
     }
     statement.setString(2, userTagsInJson);
     Long expirationTimeMs = dataset.getExpirationTimeMs();
-    statement.setTimestamp(3, expirationTimeMs == null ? null : new Timestamp(expirationTimeMs));
-    statement.setTimestamp(4, expirationTimeMs == null ? null : new Timestamp(expirationTimeMs));
+    if (expirationTimeMs == null) {
+      statement.setTimestamp(3, null);
+      statement.setTimestamp(4, null);
+    } else if (expirationTimeMs == -1) {
+      statement.setString(3, "-1");
+      statement.setString(4, "-1");
+    } else {
+      statement.setTimestamp(3, new Timestamp(expirationTimeMs));
+      statement.setTimestamp(4, new Timestamp(expirationTimeMs));
+    }
     statement.setInt(5, accountId);
     statement.setInt(6, containerId);
     statement.setString(7, dataset.getDatasetName());

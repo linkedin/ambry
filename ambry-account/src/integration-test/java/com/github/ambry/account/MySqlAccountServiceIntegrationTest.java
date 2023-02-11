@@ -787,6 +787,27 @@ public class MySqlAccountServiceIntegrationTest {
     } catch (Exception e) {
       //no op
     }
+
+    //Add a dataset with limited ttl
+    expirationTimeInMs = Utils.addSecondsToEpochTime(System.currentTimeMillis(), 30);
+    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setVersionSchema(
+            Dataset.VersionSchema.TIMESTAMP)
+        .setExpirationTimeMs(expirationTimeInMs)
+        .setUserTags(userTags)
+        .setRetentionCount(retentionCount)
+        .build();
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    //update expiration to permanent.
+    expirationTimeInMs = -1;
+    datasetForUpdate =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setExpirationTimeMs(
+            expirationTimeInMs).build();
+    mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
+    datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_TTL);
+    assertEquals("Mismatch in updated expirationTimeInMst", (Long) expirationTimeInMs,
+        datasetFromMysql.getExpirationTimeMs());
   }
 
   /**
