@@ -250,9 +250,14 @@ public class ReplicaThread implements Runnable {
   /**
    * Logs replication progress of local node against some remote node
    * @param remoteReplicaInfo remote replica information
+   * @param exchangeMetadataResponse metadata information from remote node
    */
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {
+    logger.trace("ReplicationStatus | {} | {} | isSealed = {} | Token = {} | localLagFromRemoteInBytes = {}",
+        remoteReplicaInfo, remoteReplicaInfo.getReplicaId().getReplicaType(),
+        remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
+        exchangeMetadataResponse.localLagFromRemoteInBytes);
   }
 
   @Override
@@ -713,8 +718,10 @@ public class ReplicaThread implements Runnable {
               remoteReplicaInfo.setReEnableReplicationTime(
                   time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
               syncedBackOffCount.inc();
-              logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
             }
+
+            // trace replication status to track progress of recovery from cloud
+            logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
 
             // There are no missing keys. We just advance the token
             if (exchangeMetadataResponse.missingStoreMessages.size() == 0) {
