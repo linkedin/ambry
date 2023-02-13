@@ -135,10 +135,6 @@ public class ReplicaThread implements Runnable {
   // This is used in the test cases
   private Map<DataNodeId, List<ExchangeMetadataResponse>> exchangeMetadataResponsesInEachCycle = null;
 
-  public static final String REPLICA_STATUS_FILE = "onPremReplicaCheckStatus";
-  public static final String RECOVERY_STATUS_FILE = "cloudReplicaRecoveryStatus";
-  protected final BackupCheckerFileManager fileManager;
-
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
@@ -204,13 +200,6 @@ public class ReplicaThread implements Runnable {
     }
     this.maxReplicaCountPerRequest = replicationConfig.replicationMaxPartitionCountPerRequest;
     this.leaderBasedReplicationAdmin = leaderBasedReplicationAdmin;
-    try {
-      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType, replicationConfig, metricRegistry);
-      logger.info("Created file manager ", replicationConfig.backupCheckFileManagerType);
-    } catch (ReflectiveOperationException e) {
-      logger.error("Failed to create file manager due to ", e.toString());
-      throw new RuntimeException(e);
-    }
   }
 
   /**
@@ -261,59 +250,16 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Returns a concatenated file path
-   * @param remoteReplicaInfo Info about remote replica
-   * @param fileName Name of file to write text to
-   * @return Returns a concatenated file path
-   */
-  protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
-    switch (remoteReplicaInfo.getReplicaId().getReplicaType()) {
-      case CLOUD_BACKED:
-        // example: partitionId/fileName
-        return String.join(File.separator, replicationConfig.backupCheckerReportDir,
-            Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
-            fileName);
-      case DISK_BACKED:
-        // example: partitionId/hostname/fileName
-        return String.join(File.separator, replicationConfig.backupCheckerReportDir,
-            Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
-            remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
-            fileName);
-      default:
-        throw new IllegalArgumentException("Invalid replica type " + remoteReplicaInfo.getReplicaId().getReplicaType());
-    }
-  }
-
-  /**
    * Logs replication progress of local node against some remote node
    * @param remoteReplicaInfo remote replica information
    * @param exchangeMetadataResponse metadata information from remote node
    */
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {
-    if (replicationConfig.backupCheckFileManagerType.equals(replicationConfig.DEFAULT_BACKUP_CHECKER_FILE_MANAGER)) {
-      // optimization to not affect replication in servers in common case
-      // although the open source impl of file-mgr is empty, we don't want to go through all the string concats
-      return;
-    }
-    switch (remoteReplicaInfo.getReplicaId().getReplicaType()) {
-      case CLOUD_BACKED:
-        // This will help us know when to stop recovery process
-        String text = String.format("%s | Token = %s | localLagFromVCRInBytes = %s \n",
-            remoteReplicaInfo, remoteReplicaInfo.getToken().toString(),
-            exchangeMetadataResponse.localLagFromRemoteInBytes);
-        fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, RECOVERY_STATUS_FILE), text);
-        break;
-      case DISK_BACKED:
-        // This will help us know when to stop backup-checker process
-        text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
-            remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
-            exchangeMetadataResponse.localLagFromRemoteInBytes);
-        fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), text);
-        break;
-      default:
-        throw new IllegalArgumentException("Invalid replica type " + remoteReplicaInfo.getReplicaId().getReplicaType());
-    }
+    logger.trace("ReplicationStatus | {} | {} | isSealed = {} | Token = {} | localLagFromRemoteInBytes = {}",
+        remoteReplicaInfo, remoteReplicaInfo.getReplicaId().getReplicaType(),
+        remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
+        exchangeMetadataResponse.localLagFromRemoteInBytes);
   }
 
   @Override
