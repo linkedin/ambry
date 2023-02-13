@@ -192,7 +192,7 @@ public class AmbryCache {
         } catch (IllegalArgumentException e) {
           // This means someone else registered the metric with the same name before we could.
           // No problem. We'll just use that metric.
-          logger.trace(e.toString());
+          logger.warn(e.toString());
         }
       }
     }
