@@ -720,8 +720,10 @@ public class ReplicaThread implements Runnable {
               remoteReplicaInfo.setReEnableReplicationTime(
                   time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
               syncedBackOffCount.inc();
-              logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
             }
+
+            // trace replication status to track progress of recovery from cloud
+            logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
 
             // There are no missing keys. We just advance the token
             if (exchangeMetadataResponse.missingStoreMessages.size() == 0) {
