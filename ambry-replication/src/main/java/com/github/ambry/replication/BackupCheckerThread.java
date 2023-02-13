@@ -61,6 +61,7 @@ public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   protected final BackupCheckerFileManager fileManager;
+  protected final ReplicationConfig replicationConfig;
   public static final String DR_Verifier_Keyword = "dr";
   public static final String MISSING_KEYS_FILE = "missingKeys";
   public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
@@ -82,6 +83,7 @@ public class BackupCheckerThread extends ReplicaThread {
       logger.error("Failed to create file manager. ", e.toString());
       throw new RuntimeException(e);
     }
+    this.replicationConfig = replicationConfig;
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -268,7 +270,7 @@ public class BackupCheckerThread extends ReplicaThread {
    * @return Returns a concatenated file path
    */
   protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
-    return String.join(File.separator,
+    return String.join(File.separator, replicationConfig.backupCheckerReportDir,
         Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
         remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
         fileName);
