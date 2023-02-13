@@ -1825,41 +1825,25 @@ class PersistentIndex {
         // Get entries starting from the token Key in this index.
         startTimeInMs = time.milliseconds();
         StoreFindToken newToken;
-        long sizeSum = 0;
-        int messageEntryIndex = 0;
-        while (true) {
-          //if index based token points to the last entry of last index segment, and journal size cleaned up after last log
-          //segment auto close, we should return the original index based token instead of getting from journal.
-          if (isJournalEmptyAfterAutoClose() && indexBasedTokenPointsToLastEntryOfLastIndexSegment(storeToken,
-              indexSegments)) {
-            newToken = storeToken;
-          } else {
-            newToken =
-                findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
-                    new FindEntriesCondition(maxTotalSizeOfEntries - sizeSum), indexSegments,
-                    storeToken.getInclusive());
-          }
-          logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
-
-          startTimeInMs = time.milliseconds();
-          // UpdateState for the messageEntries that has not yet been updated
-          updateStateForMessages(messageEntries.subList(messageEntryIndex, messageEntries.size()));
-          logger.trace("Segment based token, Time used to update state: {}", (time.milliseconds() - startTimeInMs));
-
-          startTimeInMs = time.milliseconds();
-          eliminateDuplicates(messageEntries);
-          logger.trace("Segment based token, Time used to eliminate duplicates: {}",
-              (time.milliseconds() - startTimeInMs));
-          sizeSum = messageEntries.stream().mapToLong(MessageInfo::getSize).sum();
-          if (shouldStopScanning(messageEntries, newToken, maxTotalSizeOfEntries, sizeSum)) {
-            break;
-          }
-          logger.trace(
-              "Index {}: keep scanning index segment since new token is {}, number of MessageEntries {}, maxTotalSize {} and scanned total size {}",
-              dataDir, newToken, messageEntries.size(), maxTotalSizeOfEntries, sizeSum);
-          storeToken = newToken;
-          messageEntryIndex = messageEntries.size();
+        //if index based token points to the last entry of last index segment, and journal size cleaned up after last log
+        //segment auto close, we should return the original index based token instead of getting from journal.
+        if (isJournalEmptyAfterAutoClose() && indexBasedTokenPointsToLastEntryOfLastIndexSegment(storeToken,
+            indexSegments)) {
+          newToken = storeToken;
+        } else {
+          newToken = findEntriesFromSegmentStartOffset(storeToken.getOffset(), storeToken.getStoreKey(), messageEntries,
+              new FindEntriesCondition(maxTotalSizeOfEntries), indexSegments, storeToken.getInclusive());
         }
+        logger.trace("Segment based token, Time used to find entries: {}", (time.milliseconds() - startTimeInMs));
+
+        startTimeInMs = time.milliseconds();
+        updateStateForMessages(messageEntries);
+        logger.trace("Segment based token, Time used to update state: {}", (time.milliseconds() - startTimeInMs));
+
+        startTimeInMs = time.milliseconds();
+        eliminateDuplicates(messageEntries);
+        logger.trace("Segment based token, Time used to eliminate duplicates: {}",
+            (time.milliseconds() - startTimeInMs));
 
         long totalBytesRead = getTotalBytesRead(newToken, messageEntries, logEndOffsetBeforeFind, indexSegments);
         newToken.setBytesRead(totalBytesRead);
@@ -1871,32 +1855,6 @@ class PersistentIndex {
       throw new StoreException("Unknown error when finding entries for index " + dataDir, e,
           StoreErrorCodes.Unknown_Error);
     }
-  }
-
-  /**
-   * Return true to stop scanning the index segment files. We stop scanning when
-   * 1. storeDeletedPutAsDeleteInFindEntries is false or
-   * 2. No message entries was found in the last scan or
-   * 3. new Token is not IndexBased anymore or
-   * 4. the total size of returned message infos are already larger than the max total size of entries.
-   *
-   * If we are comparing the size of returned message infos, then we are treating a deleted Put Message
-   * as a Delete message.
-   * @param messageEntries the list of {@link MessageInfo} from scanning index segments
-   * @param newToken the new token after scanning
-   * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to
-   *                              return a list of entries whose total size is close to this value.
-   * @param messageInfoSizeSum the sum of message infos' sizes from the list.
-   * @return
-   */
-  private boolean shouldStopScanning(List<MessageInfo> messageEntries, StoreFindToken newToken,
-      long maxTotalSizeOfEntries, long messageInfoSizeSum) {
-    //@formatter:off
-    return !config.storeDeletedPutAsDeleteInFindEntries
-        || messageEntries.isEmpty()
-        || !newToken.getType().equals(FindTokenType.IndexBased)
-        || messageInfoSizeSum >= maxTotalSizeOfEntries;
-    //@formatter:on
   }
 
   /**

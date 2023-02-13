@@ -19,7 +19,6 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -1249,93 +1248,6 @@ public class IndexTest {
     findEntriesSinceInEmptyIndexTest(false);
     findEntriesSinceTtlUpdateCornerCaseTest();
     findEntriesSinceTtlUpdateAndPutInJournalTest();
-  }
-
-  @Test
-  public void findEntriesSinceDeletedPutAsDeleteTest() throws StoreException {
-    // first we have to change PUT and DELETE size, they are not the same as the real size.
-    assumeTrue(isLogSegmented && persistentIndexVersion == PersistentIndex.VERSION_4 && !addUndeletes);
-    state.closeAndClearIndex();
-
-    long oldPutSize = PUT_RECORD_SIZE;
-    long oldDeleteSize = DELETE_RECORD_SIZE;
-    try {
-      MockId id = state.getUniqueId();
-      DELETE_RECORD_SIZE = DeleteMessageFormatInputStream.getDeleteMessageFormatInputStreamSize(id);
-      PUT_RECORD_SIZE = DEFAULT_MAX_IN_MEM_ELEMENTS * DELETE_RECORD_SIZE;
-      state.properties.put("store.deleted.put.as.delete.in.find.entries", "true");
-      state.reloadIndex(false, false);
-
-      // Adding 10 PUT record, 5 for the first index segment, and 5 for the second index segment
-      List<IndexEntry> entries = state.addPutEntries(10, PUT_RECORD_SIZE, Utils.Infinite_Time);
-      // Delete all of them
-      for (IndexEntry entry : entries) {
-        state.addDeleteEntry((MockId) entry.getKey());
-      }
-
-      // Now use an uninitialized token, read the first PUT RECORD. Since this is a uninitialized token, we will return
-      // right after the first put.
-      StoreFindToken startToken = new StoreFindToken();
-      long maxSize = PUT_RECORD_SIZE;
-      MockId firstId = (MockId) state.referenceIndex.firstEntry().getValue().firstKey();
-      IndexSegment firstIndexSegment = state.index.getIndexSegments().get(state.referenceIndex.firstKey());
-      StoreFindToken expectedToken =
-          new StoreFindToken(firstId, state.referenceIndex.firstKey(), state.sessionId, state.incarnationId,
-              firstIndexSegment.getResetKey(), firstIndexSegment.getResetKeyType(),
-              firstIndexSegment.getResetKeyLifeVersion());
-      long byteRead = state.index.getAbsolutePositionInLogForOffset(state.referenceIndex.firstKey());
-      expectedToken.setBytesRead(byteRead);
-      doFindEntriesSinceTest(startToken, maxSize, Collections.singleton(firstId), expectedToken);
-
-      // Now use an index based token. The max size still is the size of the PUT, which is 5 * delete size.
-      // We set up this state by adding 10 Put records and delete all of them. The first Put record is already scanned
-      // by the first findEntriesSince, now we will scan up to 5 Put records even the max byte size is only one Put
-      // record size
-      startToken = expectedToken;
-      Set<MockId> expectedKeys = new HashSet<>();
-      // Add all mock keys from the first index segments
-      expectedKeys.addAll(state.referenceIndex.firstEntry().getValue().keySet());
-      // remove the first id because the index based token is exclusive
-      expectedKeys.remove(firstId);
-      Map.Entry<Offset, IndexSegment> secondIndexSegmentEntry =
-          state.index.getIndexSegments().higherEntry(firstIndexSegment.getStartOffset());
-      Offset secondIndexSegemtnOffset = secondIndexSegmentEntry.getKey();
-      IndexSegment secondIndexSegemnt = secondIndexSegmentEntry.getValue();
-      MockId firstKeyInSecondIndexSegement = state.referenceIndex.get(secondIndexSegemtnOffset).firstKey();
-      expectedKeys.add(firstKeyInSecondIndexSegement);
-
-      expectedToken = new StoreFindToken(firstKeyInSecondIndexSegement, secondIndexSegemtnOffset, state.sessionId,
-          state.incarnationId, secondIndexSegemnt.getResetKey(), secondIndexSegemnt.getResetKeyType(),
-          secondIndexSegemnt.getResetKeyLifeVersion());
-      byteRead = state.index.getAbsolutePositionInLogForOffset(secondIndexSegemtnOffset);
-      expectedToken.setBytesRead(byteRead);
-      doFindEntriesSinceTest(startToken, maxSize, expectedKeys, expectedToken);
-
-      // Add another PUT and DELETE, this new put and delete would be stored in the journal
-      Offset offsetOfLastEntryInJournal = state.index.journal.getLastOffset();
-      MockId newPutId = (MockId)state.addPutEntries(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0).getKey();
-      Offset putOffset = state.index.journal.getLastOffset();
-      MockId uniqueId = state.getUniqueId();
-      state.addDeleteEntry(uniqueId,
-          new MessageInfo(uniqueId, Integer.MAX_VALUE, state.time.milliseconds(), uniqueId.getAccountId(),
-              uniqueId.getContainerId(), state.time.milliseconds()));
-
-      // Now user journal based token, it will only read one Put Records
-      startToken =
-          new StoreFindToken(offsetOfLastEntryInJournal, state.sessionId, state.incarnationId, false, null, null,
-              UNINITIALIZED_RESET_KEY_VERSION);
-      expectedKeys.clear();
-      expectedKeys.add(newPutId);
-      IndexSegment lastSegment = state.index.getIndexSegments().lastEntry().getValue();
-      expectedToken =
-          new StoreFindToken(putOffset, state.sessionId, state.incarnationId, false, lastSegment.getResetKey(),
-              lastSegment.getResetKeyType(), lastSegment.getResetKeyLifeVersion());
-      expectedToken.setBytesRead(state.index.getAbsolutePositionInLogForOffset(state.index.journal.getLastOffset()));
-      doFindEntriesSinceTest(startToken, maxSize, expectedKeys, expectedToken);
-    } finally {
-      PUT_RECORD_SIZE = oldPutSize;
-      DELETE_RECORD_SIZE = oldDeleteSize;
-    }
   }
 
   /**
