@@ -145,6 +145,7 @@ class CuratedLogIndexState {
   private final Set<MockId> generatedKeys = new HashSet<>();
 
   private StoreMetrics metrics;
+  StoreConfig config;
 
   /**
    * Creates state in order to make sure all cases are represented and log-index tests don't need to do any setup
@@ -1050,7 +1051,7 @@ class CuratedLogIndexState {
    * @throws StoreException
    */
   void initIndex(ScheduledExecutorService newScheduler) throws StoreException {
-    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    config = new StoreConfig(new VerifiableProperties(properties));
     sessionId = UUID.randomUUID();
     metricRegistry = new MetricRegistry();
     metrics = new StoreMetrics(metricRegistry);
