@@ -531,19 +531,6 @@ public class StoreConfig {
   public static final String storeRebuildTokenBasedOnCompactionHistoryName =
       "store.rebuild.token.based.on.compaction.history";
 
-  /**
-   * If true, then in findEntriesSince method, use Delete entry's size for a deleted Put entry. This is useful for replication.
-   * In replication, when handling ReplicaMetadataRequest, server would scan through index segments. One Put entry could be
-   * as big as 4MB, but if this Put entry is already deleted, then in the requester server side it will do nothing. This is bad
-   * because we are using one roundtrip to bypass on blob id.
-   * Set this to true would help mitigate this issue. We know the put's final state is delete and the requester server won't
-   * do anything, then we just move on to scan more entries.
-   * @TODO: there is a but in the implementation that returns too many blob ids in one request.
-   */
-  @Config(storeDeletedPutAsDeleteInFindEntriesName)
-  public final boolean storeDeletedPutAsDeleteInFindEntries;
-  public static final String storeDeletedPutAsDeleteInFindEntriesName = "store.deleted.put.as.delete.in.find.entries";
-
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -675,8 +662,5 @@ public class StoreConfig {
       storePartitionsToRebuildTokenBasedOnCompactionHistory =
           Stream.of(partitions.split(",")).map(Long::parseLong).collect(Collectors.toList());
     }
-
-    storeDeletedPutAsDeleteInFindEntries =
-        verifiableProperties.getBoolean(storeDeletedPutAsDeleteInFindEntriesName, false);
   }
 }
