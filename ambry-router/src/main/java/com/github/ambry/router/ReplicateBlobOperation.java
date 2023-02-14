@@ -129,7 +129,7 @@ class ReplicateBlobOperation {
       requestRegistrationCallback.registerRequestToSend(this, requestInfo);
       replicaIterator.remove();
       if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
-        logger.info("Making request with correlationId {} to a remote replica {} in {} ",
+        logger.trace("Making request with correlationId {} to a remote replica {} in {} ",
             replicateBlobRequest.getCorrelationId(), replica.getDataNodeId(),
             replica.getDataNodeId().getDatacenterName());
         routerMetrics.crossColoRequestCount.inc();
