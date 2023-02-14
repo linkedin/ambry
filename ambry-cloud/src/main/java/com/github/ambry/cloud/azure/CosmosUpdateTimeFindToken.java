@@ -19,6 +19,8 @@ import com.github.ambry.replication.FindTokenType;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -37,6 +39,8 @@ public class CosmosUpdateTimeFindToken implements FindToken {
   private final long lastUpdateTime;
   private final Set<String> lastUpdateTimeReadBlobIds;
   private final long bytesRead;
+
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   /** Constructor for start token */
   public CosmosUpdateTimeFindToken() {
@@ -206,6 +210,7 @@ public class CosmosUpdateTimeFindToken implements FindToken {
     StringBuilder sb = new StringBuilder();
     sb.append("version: ").append(version);
     sb.append(" lastUpdateTime: ").append(lastUpdateTime);
+    sb.append(" lastUpdateDateTime: ").append(DATE_FORMAT.format(lastUpdateTime));
     sb.append(" bytesRead: ").append(bytesRead);
     sb.append(" lastUpdateTimeReadBlobIds: ").append(lastUpdateTimeReadBlobIds);
     return sb.toString();
