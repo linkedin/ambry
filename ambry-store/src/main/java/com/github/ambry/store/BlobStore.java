@@ -913,7 +913,7 @@ public class BlobStore implements Store {
         remoteTokenTracker.updateTokenFromPeerReplica(token, hostname, remoteReplicaPath);
       }
       FindInfo findInfo = index.findEntriesSince(token, maxTotalSizeOfEntries);
-      // We don't call onSuccess here because findEntries only involvs reading index entries from the index
+      // We don't call onSuccess here because findEntries only involves reading index entries from the index
       // files, which have already been loaded to memory, thus there is no disk operations.
       return findInfo;
     } catch (StoreException e) {
