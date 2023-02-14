@@ -356,6 +356,11 @@ class NonBlockingRouter implements Router {
     currentOperationsCount.incrementAndGet();
     routerMetrics.replicateBlobOperationRate.mark();
     routerMetrics.operationQueuingRate.mark();
+    if (serviceId.equals("DeleteOperation")) {
+      routerMetrics.replicateBlobOperationOnDeleteRate.mark();
+    } else if (serviceId.equals("TtlUpdateOperation")){
+      routerMetrics.replicateBlobOperationOnTtlUpdateRate.mark();
+    }
 
     FutureResult<Void> futureResult = new FutureResult<>();
     if (isOpen.get()) {
