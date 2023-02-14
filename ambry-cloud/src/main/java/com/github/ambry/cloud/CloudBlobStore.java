@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.commons.BlobId;
@@ -1255,7 +1254,7 @@ class CloudBlobStore implements Store {
   }
 
   @Override
-  public Set<StoreKey> findMissingKeys(List<StoreKey> keys, DataNodeId sourceDataNodeId) throws StoreException {
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
     // Check existence of keys in cloud metadata
     // Note that it is ok to refer cache here, because all we are doing is eliminating blobs that were seen before and
