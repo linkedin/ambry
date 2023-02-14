@@ -17,7 +17,6 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -34,7 +33,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -44,7 +42,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -161,7 +158,6 @@ class PersistentIndex {
   // If getBlobReadInfo happens after compaction's step 3, then the IndexValue returned by findKey method would reflect
   // the result of the compaction already, it will not point to any old log segment.
   private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
-  private Runnable getBlobReadInfoTestCallback = null;
 
   private volatile boolean shouldRebuildTokenBasedOnCompactionHistory = false;
   private volatile boolean sanityCheckFailed = false;
@@ -172,8 +168,7 @@ class PersistentIndex {
   // A map from the compaction start timestamp to the set of offsets in the before and after compaction index segment
   // offset map. This map will only be accessed in the compaction thread after startup.
   private final TreeMap<Long, Set<Offset>> compactionTimestampToIndexSegmentOffsets = new TreeMap<>();
-
-  private ConcurrentHashMap<String, LinkedList<Pair<Offset, Set<StoreKey>>>> cachedKeys = new ConcurrentHashMap<>();
+  private Runnable getBlobReadInfoTestCallback = null;
 
   /**
    * Creates a new persistent index
@@ -1451,273 +1446,8 @@ class PersistentIndex {
   }
 
   /**
-   * Returns the list of keys that are not found in the index from the given input keys. This is the same interface as
-   * {@link #findMissingKeys}, however, the implementation is slightly different. In this method, we leverage the locality
-   * of the input keys to make search faster.
-   *
-   * This method is primarily used in replication thread to find the keys that exist in remote peer, but not in the local
-   * store. There are several unique characteristics about this usage, that would make this method much faster than
-   * {@link #findMissingKeys}
-   * 1. The input keys are basically from the same index segment from remote peer, if they already exist locally, they are
-   *    likely to exist in the same index segment as well.
-   * 2. We don't need to deserialize the entire IndexValue from IndexSegment, we only need to check if the key exists or not.
-   * 3. Input keys are scanned from the beginning of the log in remote peer, so when we try to find they in local store,
-   *    we should do the same, not backwards.
-   *
-   * These three characteristics inspire the new implementation.
-   * 1. This method would keep a cache of several index segment's keys. For each key, we first search it in the cache.
-   * 2. If we can't find the key in the cache, this method would locate the next segment and try to find the key in it.
-   * 3. If we find the key in the next segment, then it will be cached. If not, we fall back to use findKey method. The
-   *    index segment returned by findKey method would then be cached.
-   * 4. We only keep limited amount of index segments in the cache.
-   *
-   * One thing we have to figure out with the cache is when to stop using it. The locality of the input keys only exist
-   * when we already replicated them before but somehow get reset due to compaction, or due to replication from a different
-   * host. We should stop using cache
-   * 1. We stop using cache when we hit unsealed index segment.
-   * 2. We stop using cached when we have more than enough misses from the cache.
-   * @param keys The list of keys that needs to be tested against the index
-   * @param dataNode The data node that we are replicating from, that calls this method.
-   * @return The list of keys that are not found in the index
-   * @throws StoreException
-   */
-  Set<StoreKey> findMissingKeysInBatch(List<StoreKey> keys, String dataNode) throws StoreException {
-    long startTime = System.currentTimeMillis();
-    Set<StoreKey> missingKeys = new HashSet<>();
-    LinkedList<Pair<Offset, Set<StoreKey>>> cachedKeysForDataNode =
-        cachedKeys.computeIfAbsent(dataNode, k -> new LinkedList<>());
-
-    FindMissingKeysCacheStats stats = new FindMissingKeysCacheStats();
-    stats.numberOfKeys = keys.size();
-    logger.trace("Index {}: in findMissingKeysInBatch for {}, starting find {} keys", dataDir, dataNode, keys.size());
-
-    int continuousMissingKeyFromCacheCount = 0;
-    int idx = 0;
-    for (; idx < keys.size(); idx++) {
-      StoreKey key = keys.get(idx);
-      // For each Key, we try these index segments first. We only care about if the key exists or not, we don't care
-      // about the final state of the key.
-      // What about compaction that removes this index segment? It's fine to keep these keys, because findMissingKeys
-      // should find the keys that never exist in the store. Key existing in the cache means it did exist in the store
-      // before the compaction.
-      if (cachedKeysForDataNode.stream().anyMatch(p -> p.getSecond().contains(key))) {
-        stats.numberOfCacheHit++;
-        continuousMissingKeyFromCacheCount = 0;
-        continue;
-      }
-
-      // Missing keys from cache
-      logger.trace("Index {}: In findMissingKeysInBatch for {}, can't find key {} in cache. Size of Cache: {}", dataDir,
-          dataNode, key, cachedKeysForDataNode.size());
-      continuousMissingKeyFromCacheCount++;
-      stats.numberOfCacheMiss++;
-      if (continuousMissingKeyFromCacheCount >= config.storeNumOfCacheMissForFindMissingKeysInBatchMode) {
-        logger.trace(
-            "Index {}: In findMissingKeysInBatch for {}, cache miss is more than the threshold. stop using cache",
-            dataDir, dataNode);
-        cachedKeysForDataNode.clear();
-        // Retry this key without cache
-        break;
-      }
-      boolean shouldUseCachedKeys;
-      if (cachedKeysForDataNode.size() > 0) {
-        shouldUseCachedKeys = findKeyInNextSegment(key, missingKeys, cachedKeysForDataNode, dataNode, stats);
-      } else {
-        shouldUseCachedKeys =
-            findKeyAndAddIndexSegmentToCache(key, missingKeys, cachedKeysForDataNode, dataNode, stats);
-      }
-
-      if (!shouldUseCachedKeys) {
-        logger.trace("Index {}: In findMissingKeyInBatch for {}, stop using cache after {}th key {}", dataDir, dataNode,
-            idx, key);
-        cachedKeysForDataNode.clear();
-        // We are breaking out here, but we should move to next key
-        idx++;
-        break;
-      }
-    }
-    if (idx < keys.size()) {
-      stats.cachedDisabled = true;
-      for (; idx < keys.size(); idx++) {
-        stats.numberOfFindKeyMethodCall++;
-        StoreKey key = keys.get(idx);
-        if (findKey(key) == null) {
-          missingKeys.add(key);
-        }
-      }
-    }
-    stats.numberOfMissingKeys = missingKeys.size();
-    stats.processingTimeInMs = System.currentTimeMillis() - startTime;
-    logger.trace("Index {}: In findMissingKeysInBatch for {}, The final stats: {}", dataDir, dataNode, stats);
-    return missingKeys;
-  }
-
-  /**
-   * Find the given {@code key} in by calling {@link #findKey} and try to add the IndexSegment that contains this key to
-   * the cache.
-   * @param key The input key
-   * @param missingKeys Set of missing keys. If we can't find the input key, add the input key to this set.
-   * @param cachedKeysForDataNode The cache that contains keys from index segments.
-   * @param dataNode The source data node
-   * @param stats The {@link FindMissingKeysCacheStats} object to keep track of stats.
-   * @return A boolean value to indicate if we should keep use cache anymore. False means clear cache and don't use it again.
-   * @throws StoreException
-   */
-  private boolean findKeyAndAddIndexSegmentToCache(StoreKey key, Set<StoreKey> missingKeys,
-      LinkedList<Pair<Offset, Set<StoreKey>>> cachedKeysForDataNode, String dataNode, FindMissingKeysCacheStats stats)
-      throws StoreException {
-    boolean shouldUseCachedKeys = true;
-    stats.numberOfFindKeyMethodCall++;
-    IndexValue value = findKey(key);
-    if (value != null) {
-      // Find the index segment for this value
-      Map.Entry<Offset, IndexSegment> entry = validIndexSegments.floorEntry(value.getOffset());
-      if (entry == null) {
-        // This could happen. Between calling findKey and floorEntry, we have a compaction just finished that removes
-        // the index segment for this value. If this is the case, don't cache and just return.
-        // This is not an error.
-        logger.info(
-            "Index {}: In findMissingKeysInBatch for {}, can't find the index segment that contains the value {}",
-            dataDir, dataNode, value);
-        return true;
-      }
-      IndexSegment segment = entry.getValue();
-      if (segment.isSealed()) {
-        Set<StoreKey> allStoreKeys = segment.getAllStoreKeys();
-        // Adding this index segment to the front of the list
-        logger.trace("Index {}: In findMissingKeysInbBatch for {}, adding new segment : {}", dataDir, dataNode,
-            segment.getStartOffset());
-        cachedKeysForDataNode.addFirst(new Pair<>(entry.getKey(), allStoreKeys));
-        if (cachedKeysForDataNode.size() > config.storeCacheSizeForFindMissingKeysInBatchMode) {
-          cachedKeysForDataNode.removeLast();
-        }
-      } else {
-        logger.trace(
-            "Index {}: In findMissingKeysInbBatch for {}, hitting unsealed index segment, stop using cache : {}",
-            dataDir, dataNode, segment.getStartOffset());
-        // We are hitting unsealed index segment, there is no need to cache keys anymore
-        shouldUseCachedKeys = false;
-      }
-    } else {
-      missingKeys.add(key);
-    }
-    return shouldUseCachedKeys;
-  }
-
-  /**
-   * Find the input key by searching it in latest cached index segment's next segment. If the next segment exists and it
-   * contains the input key, then add the next segment to the cache. Otherwise, use {@link #findKey} to find the input
-   * key.
-   * @param key The input key
-   * @paoram missingKeys Set of missing keys. If we can't find the input key, add the input key to this set.
-   * @param cachedKeysForDataNode The cache that contains keys from index segments.
-   * @param dataNode The source data node
-   * @param stats The {@link FindMissingKeysCacheStats} object to keep track of stats.
-   * @return A boolean value to indicate if we should keep use cache anymore. False means clear cache and don't use it again.
-   * @throws StoreException
-   */
-  private boolean findKeyInNextSegment(StoreKey key, Set<StoreKey> missingKeys,
-      LinkedList<Pair<Offset, Set<StoreKey>>> cachedKeysForDataNode, String dataNode, FindMissingKeysCacheStats stats)
-      throws StoreException {
-    boolean shouldUseCachedKeys = true;
-    Offset latestIndexSegmentOffset = cachedKeysForDataNode.get(0).getFirst();
-    Map.Entry<Offset, IndexSegment> entryAfter = validIndexSegments.higherEntry(latestIndexSegmentOffset);
-    if (entryAfter == null) {
-      // Sanity checking, this shouldn't happen
-      // We only cache sealed index segment, which means all cached index segment can't be the last one
-      logger.error(
-          "Index {}: In findMissingKeysInbBatch for {}, searching for next index segment returns null for offset: {}",
-          dataDir, dataNode, latestIndexSegmentOffset);
-      stats.numberOfFindKeyMethodCall++;
-      if (findKey(key) == null) {
-        missingKeys.add(key);
-      }
-    } else {
-      if (cachedKeysForDataNode.stream().map(Pair::getFirst).anyMatch(offset -> offset.equals(entryAfter.getKey()))) {
-        // if next index segment already in the cache, don't bother to search key in next index segment
-        logger.trace("Index {}: In findMissingKeysInBatch for {}, next segment {} already in the cache, skip searching",
-            dataDir, dataNode, entryAfter.getKey());
-        return findKeyAndAddIndexSegmentToCache(key, missingKeys, cachedKeysForDataNode, dataNode, stats);
-      }
-      stats.numberOfNextSegment++;
-      IndexSegment nextSegment = entryAfter.getValue();
-      NavigableSet<IndexValue> values = nextSegment.find(key);
-      if (values == null || values.isEmpty()) {
-        logger.trace("Index {}: In findMissingKeysInBatch for {}, can't find key {} in next segment {}", dataDir,
-            dataNode, key, nextSegment.getStartOffset());
-        shouldUseCachedKeys =
-            findKeyAndAddIndexSegmentToCache(key, missingKeys, cachedKeysForDataNode, dataNode, stats);
-      } else {
-        stats.numberOfNextSegmentHit++;
-        if (nextSegment.isSealed()) {
-          Set<StoreKey> allStoreKeys = nextSegment.getAllStoreKeys();
-          // Adding this index segment to the front of the list
-          logger.info("Index {}: In findMissingKeyInbBatch for {}, adding next segment : {}", dataDir, dataNode,
-              nextSegment.getStartOffset());
-          cachedKeysForDataNode.addFirst(new Pair<>(nextSegment.getStartOffset(), allStoreKeys));
-          if (cachedKeysForDataNode.size() > config.storeCacheSizeForFindMissingKeysInBatchMode) {
-            cachedKeysForDataNode.removeLast();
-          }
-        } else {
-          logger.trace(
-              "Index {}: In findMissingKeyInbBatch for {}, hitting unsealed index segment, stop using cache : {}",
-              dataDir, dataNode, nextSegment.getStartOffset());
-          // We are hitting unsealed index segment, there is no need to cache keys anymore
-          shouldUseCachedKeys = false;
-        }
-      }
-    }
-    return shouldUseCachedKeys;
-  }
-
-  private static class FindMissingKeysCacheStats {
-    int numberOfKeys = 0;
-    int numberOfFindKeyMethodCall = 0;
-    int numberOfCacheMiss = 0;
-    int numberOfCacheHit = 0;
-    int numberOfMissingKeys = 0;
-    int numberOfNextSegment = 0;
-    int numberOfNextSegmentHit = 0;
-    boolean cachedDisabled = false;
-    long processingTimeInMs = 0;
-
-    @Override
-    public String toString() {
-      StringBuilder sb = new StringBuilder();
-      sb.append("Stats[")
-          .append("numberOfKeys=")
-          .append(numberOfKeys)
-          .append(",numberOfFindKeyMethodCall=")
-          .append(numberOfFindKeyMethodCall)
-          .append(",numberOfCacheMiss=")
-          .append(numberOfCacheMiss)
-          .append(",numberOfCacheHit=")
-          .append(numberOfCacheHit)
-          .append(",numberOfMissingKeys=")
-          .append(numberOfMissingKeys)
-          .append(",numberOfNextSegment=")
-          .append(numberOfNextSegment)
-          .append(",numberOfNextSegmentHit=")
-          .append(numberOfNextSegmentHit)
-          .append(",cachedDisabled=")
-          .append(cachedDisabled)
-          .append(",processingTimeInMs=")
-          .append(processingTimeInMs)
-          .append("]");
-      return sb.toString();
-    }
-  }
-
-  /**
-   * @return CachedKeys, only used in test.
-   */
-  ConcurrentHashMap<String, LinkedList<Pair<Offset, Set<StoreKey>>>> getCachedKeys() {
-    return cachedKeys;
-  }
-
-  /**
    * Finds all the entries from the given start token(inclusive). The token defines the start position in the index from
-   * where entries need to be fetched
+   * where entries needs to be fetched
    * @param token The token that signifies the start position in the index from where entries need to be retrieved
    * @param maxTotalSizeOfEntries The maximum total size of entries that needs to be returned. The api will try to
    *                              return a list of entries whose total size is close to this value.

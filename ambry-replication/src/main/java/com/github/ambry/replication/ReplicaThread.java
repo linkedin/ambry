@@ -52,6 +52,7 @@ import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -938,9 +939,8 @@ public class ReplicaThread implements Runnable {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }
-    Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore()
-        .findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()),
-            remoteReplicaInfo.getReplicaId().getDataNodeId());
+    Set<StoreKey> convertedMissingStoreKeys =
+        remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()));
     Set<MessageInfo> missingRemoteMessages = new HashSet<>();
     remoteMessageToConvertedKeyNonNull.forEach((messageInfo, convertedKey) -> {
       if (convertedMissingStoreKeys.contains(convertedKey)) {
@@ -1610,8 +1610,7 @@ public class ReplicaThread implements Runnable {
 
         // Find the set of store keys that are still missing in the store
         Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore()
-            .findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()),
-                remoteReplicaInfo.getReplicaId().getDataNodeId());
+            .findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()));
 
         // Filter the remote messages whose keys are now found in store, i.e. not present in convertedMissingStoreKeys set.
         remoteMessageToConvertedKeyNonNull.forEach((messageInfo, convertedKey) -> {

@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
@@ -928,13 +927,11 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public Set<StoreKey> findMissingKeys(List<StoreKey> keys, DataNodeId sourceDataNodeId) throws StoreException {
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.findMissingKeysResponse.time();
     try {
-      Set<StoreKey> missingKeys =
-          config.storeEnableFindMissingKeysInBatchMode && sourceDataNodeId != null ? index.findMissingKeysInBatch(keys,
-              sourceDataNodeId.toString()) : index.findMissingKeys(keys);
+      Set<StoreKey> missingKeys = index.findMissingKeys(keys);
       return missingKeys;
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.IOError) {

@@ -13,7 +13,6 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.replication.FindToken;
 import java.util.EnumSet;
@@ -95,22 +94,10 @@ public interface Store {
   /**
    * Finds all the keys that are not present in the store from the input keys
    * @param keys The list of keys that need to be checked for existence
-   * @param sourceDataNodeId The {@link DataNodeId} that we are replicating from, that calls this method. Set to null if
-   *                         this is not called from a replication thread.
    * @return The list of keys that are not present in the store
    * @throws StoreException
    */
-  Set<StoreKey> findMissingKeys(List<StoreKey> keys, DataNodeId sourceDataNodeId) throws StoreException;
-
-  /**
-   * Finds all the keys that are not present in the store from the input keys
-   * @param keys The list of keys that need to be checked for existence
-   * @return The list of keys that are not present in the store
-   * @throws StoreException
-   */
-  default Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
-    return findMissingKeys(keys, null);
-  }
+  Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException;
 
   /**
    * Return {@link MessageInfo} of given key. This method will only be used in replication thread.

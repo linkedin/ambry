@@ -339,7 +339,6 @@ public class StoreConfig {
   public static final String storePartialWriteToReadWriteEnableSizeThresholdPercentageDeltaName =
       "store.partial.write.to.read.write.enable.size.threshold.percentage.delta";
 
-
   /**
    * Specifies the minimum number of seconds before a blob's current expiry time (creation time + TTL) that the current
    * time has to be in order for a TTL update operation on the blob to succeed.
@@ -484,27 +483,6 @@ public class StoreConfig {
   public final int storeDiskIoReservoirTimeWindowMs;
 
   /**
-   * True to enable batch mode in findMissingKeys.
-   * @TODO: There is a bug in the implementation that ignores some keys
-   */
-  @Config(storeEnableFindMissingKeysInBatchModeName)
-  @Default("false")
-  public final boolean storeEnableFindMissingKeysInBatchMode;
-  public static final String storeEnableFindMissingKeysInBatchModeName = "store.enable.find.missing.keys.in.batch.mode";
-
-  @Config(storeCacheSizeForFindMissingKeysInBatchModeName)
-  @Default("3")
-  public final int storeCacheSizeForFindMissingKeysInBatchMode;
-  public static final String storeCacheSizeForFindMissingKeysInBatchModeName =
-      "store.cache.size.for.find.missing.keys.in.batch.mode";
-
-  @Config(storeNumOfCacheMissForFindMissingKeysInBatchModeName)
-  @Default("5")
-  public final int storeNumOfCacheMissForFindMissingKeysInBatchMode;
-  public static final String storeNumOfCacheMissForFindMissingKeysInBatchModeName =
-      "store.num.of.cache.miss.for.find.missing.keys.in.batch.mode";
-
-  /**
    * How many days of compactionlogs we have to read from disk to build the compaction history
    */
   @Config(storeCompactionHistoryInDayName)
@@ -645,12 +623,6 @@ public class StoreConfig {
             Integer.MAX_VALUE);
     storeDiskIoReservoirTimeWindowMs =
         verifiableProperties.getIntInRange("store.disk.io.reservoir.time.window.ms", 200, 0, Integer.MAX_VALUE);
-    storeEnableFindMissingKeysInBatchMode =
-        verifiableProperties.getBoolean(storeEnableFindMissingKeysInBatchModeName, false);
-    storeCacheSizeForFindMissingKeysInBatchMode =
-        verifiableProperties.getIntInRange(storeCacheSizeForFindMissingKeysInBatchModeName, 3, 1, 100);
-    storeNumOfCacheMissForFindMissingKeysInBatchMode =
-        verifiableProperties.getIntInRange(storeNumOfCacheMissForFindMissingKeysInBatchModeName, 5, 3, 100);
     storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 21, 1, 365);
     storeRebuildTokenBasedOnCompactionHistory =
         verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);

@@ -615,7 +615,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public Set<StoreKey> findMissingKeys(List<StoreKey> keys, DataNodeId sourceDataNodeId) throws StoreException {
+    public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }
 

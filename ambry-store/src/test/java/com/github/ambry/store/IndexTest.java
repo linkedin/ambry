@@ -35,7 +35,6 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -83,7 +82,7 @@ public class IndexTest {
   private final boolean isLogSegmented;
   private final File tempDir;
   private final File tokenTestDir;
-  private CuratedLogIndexState state;
+  private final CuratedLogIndexState state;
   private final CuratedLogIndexState stateForTokenTest;
   private final short persistentIndexVersion;
   private final boolean addUndeletes;
@@ -359,7 +358,7 @@ public class IndexTest {
    */
   @Test
   public void findMissingKeysTest() throws StoreException {
-    List<StoreKey> idsToProvide = new ArrayList<>(state.allKeys.keySet());
+    List<StoreKey> idsToProvide = new ArrayList<StoreKey>(state.allKeys.keySet());
     Set<StoreKey> nonExistentIds = new HashSet<>();
     for (int i = 0; i < 10; i++) {
       nonExistentIds.add(state.getUniqueId());
@@ -368,95 +367,6 @@ public class IndexTest {
     Collections.shuffle(idsToProvide);
     Set<StoreKey> missingKeys = state.index.findMissingKeys(idsToProvide);
     assertEquals("Set of missing keys not as expected", nonExistentIds, missingKeys);
-  }
-
-  @Test
-  public void findMissingKeysInBatchTest() throws Exception {
-    Assume.assumeTrue(isLogSegmented);
-    Assume.assumeFalse(addUndeletes);
-    Assume.assumeTrue(persistentIndexVersion >= VERSION_3);
-    if (state != null) {
-      state.destroy();
-    }
-    state = new CuratedLogIndexState(true, tempDir, false, false, true, false, false, false);
-
-    final String dataNode = "remotedatanode1";
-    final int maxEntriesInOneIndexSegment = DEFAULT_MAX_IN_MEM_ELEMENTS;
-    final int numberOfIndexSegments = 10;
-    // Let's deal with DELETEs for now
-    List<StoreKey> deletedStoreKeys = new ArrayList<>(maxEntriesInOneIndexSegment * numberOfIndexSegments);
-    for (int i = 0; i < numberOfIndexSegments * maxEntriesInOneIndexSegment; i++) {
-      MockId p = state.getUniqueId();
-      state.addDeleteEntry(p, new MessageInfo(p, DELETE_RECORD_SIZE, true, false, p.getAccountId(), p.getContainerId(),
-          state.time.milliseconds()), (short) 0);
-      deletedStoreKeys.add(p);
-    }
-
-    // Make sure we persist the index and seal the index segments.
-    state.index.persistIndex();
-    List<Offset> indexSegmentOffsets = new ArrayList<>();
-    // referenceIndex is a tree map, it returns keys in order
-    state.referenceIndex.keySet().forEach(offset -> indexSegmentOffsets.add(offset));
-
-    // FindMissingKeysInBatch should only call findKey for the first key in first index segment
-    LinkedList<Offset> cachedKeysOffsets = new LinkedList<>();
-    Offset indexSegmentOffset = state.referenceIndex.firstKey();
-    boolean isFirst = true;
-    for (int i = 0; i < state.config.storeCacheSizeForFindMissingKeysInBatchMode; i++) {
-      cachedKeysOffsets.addFirst(indexSegmentOffset);
-      findMissingKeysInBatchForIndexSegmentAndVerify(indexSegmentOffset, isFirst ? 1L : 0, cachedKeysOffsets, dataNode);
-      indexSegmentOffset = state.referenceIndex.higherKey(indexSegmentOffset);
-      isFirst = false;
-    }
-
-    // Back to first index segment, it shouldn't call find key here
-    findMissingKeysInBatchForIndexSegmentAndVerify(state.referenceIndex.firstKey(), 0, cachedKeysOffsets, dataNode);
-    // Move on to fourth index segment, the first index segment would be removed from the cache
-    cachedKeysOffsets.removeLast();
-    cachedKeysOffsets.addFirst(indexSegmentOffset);
-    findMissingKeysInBatchForIndexSegmentAndVerify(indexSegmentOffset, 0, cachedKeysOffsets, dataNode);
-
-    Offset lastIndexSegmentOffset = state.referenceIndex.lastKey();
-    // Last index segment is not sealed, find missing keys in the last index segment would clear the cache.
-    StoreKey cacheClearKey = state.referenceIndex.get(lastIndexSegmentOffset).keySet().iterator().next();
-    Assert.assertEquals(0,
-        state.index.findMissingKeysInBatch(Collections.singletonList(cacheClearKey), dataNode).size());
-    Assert.assertEquals(0, state.index.getCachedKeys().get(dataNode).size());
-
-    // First key is in second index segment, and second key is in first index segment
-    List<StoreKey> keys = getRandomKeyFromIndexSegment(1, 0);
-    Assert.assertEquals(0, state.index.findMissingKeysInBatch(keys, dataNode).size());
-    LinkedList<Pair<Offset, Set<StoreKey>>> cachedKeys = state.index.getCachedKeys().get(dataNode);
-    Assert.assertEquals(2, cachedKeys.size());
-    Assert.assertEquals(indexSegmentOffsets.get(0), cachedKeys.get(0).getFirst());
-    Assert.assertEquals(indexSegmentOffsets.get(1), cachedKeys.get(1).getFirst());
-
-    // missing one key won't clear the cache
-    keys = Collections.singletonList(state.getUniqueId());
-    Assert.assertEquals(1, state.index.findMissingKeysInBatch(keys, dataNode).size());
-    Assert.assertEquals(2, state.index.getCachedKeys().get(dataNode).size());
-
-    // Trying a different datanode, it should not interfere with the existing datanode's cache
-    final String anotherDataNode = "anotherDataNode";
-    findMissingKeysInBatchForIndexSegmentAndVerify(indexSegmentOffsets.get(0), 1,
-        Collections.singletonList(indexSegmentOffsets.get(0)), anotherDataNode);
-    cachedKeys = state.index.getCachedKeys().get(dataNode);
-    Assert.assertEquals(2, cachedKeys.size());
-    Assert.assertEquals(indexSegmentOffsets.get(0), cachedKeys.get(0).getFirst());
-    Assert.assertEquals(indexSegmentOffsets.get(1), cachedKeys.get(1).getFirst());
-
-    // Back to first dataNode, missing several keys would clear the cache
-    int numKeys = DEFAULT_NUMBER_CACHE_MISS_IN_FIND_MISSING_KEY_IN_BATCH_MODE;
-    keys = new ArrayList<>(numKeys);
-    for (int i = 0; i < numKeys + 1; i++) {
-      keys.add(state.getUniqueId());
-    }
-    keys.addAll(getRandomKeyFromIndexSegment(0, 1));
-    long findKeyCallCountBefore = state.metrics.findTime.getCount();
-    Assert.assertEquals(numKeys + 1, state.index.findMissingKeysInBatch(keys, dataNode).size());
-    long findKeyCallCountAfter = state.metrics.findTime.getCount();
-    Assert.assertEquals(keys.size(), findKeyCallCountAfter - findKeyCallCountBefore);
-    Assert.assertEquals(0, state.index.getCachedKeys().get(dataNode).size());
   }
 
   /**
@@ -3999,47 +3909,5 @@ public class IndexTest {
       assertEquals("ContainerId mismatch for " + entry.getKey(), expectedValue.getContainerId(),
           value.getContainerId());
     }
-  }
-
-  /**
-   * Call {@link PersistentIndex#findMissingKeysInBatch} on all the keys from {@link IndexSegment} referenced by the given
-   * {@code offset}.
-   * @param offset The given offset referencing the IndexSegment.
-   * @param expectedFindKeyCallCount Expected findKey call count.
-   * @param expectedCachedKeysOffsets Expected cached keys offsets.
-   * @throws StoreException
-   */
-  private void findMissingKeysInBatchForIndexSegmentAndVerify(Offset offset, long expectedFindKeyCallCount,
-      List<Offset> expectedCachedKeysOffsets, String dataNode) throws StoreException {
-    List<StoreKey> indexSegmentKeys = new LinkedList<>(state.referenceIndex.get(offset).keySet());
-    long findKeyCallCountBefore = state.metrics.findTime.getCount();
-    Assert.assertEquals(0, state.index.findMissingKeysInBatch(indexSegmentKeys, dataNode).size());
-    long findKeyCallCountAfter = state.metrics.findTime.getCount();
-    Assert.assertEquals(expectedFindKeyCallCount, findKeyCallCountAfter - findKeyCallCountBefore);
-    if (expectedCachedKeysOffsets != null) {
-      LinkedList<Pair<Offset, Set<StoreKey>>> cachedKeys = state.index.getCachedKeys().get(dataNode);
-      Assert.assertEquals(expectedCachedKeysOffsets.size(), cachedKeys.size());
-      for (int j = 0; j < expectedCachedKeysOffsets.size(); j++) {
-        Assert.assertEquals(expectedCachedKeysOffsets.get(j), cachedKeys.get(j).getFirst());
-      }
-    }
-  }
-
-  /**
-   * Return random keys from the referenceIndex in curated log index state. the given indexes are the indexes of index
-   * segments, it starts with 0.
-   * @param indexes the list of indexes.
-   * @return A list of store keys.
-   */
-  private List<StoreKey> getRandomKeyFromIndexSegment(int... indexes) {
-    List<Offset> offsets = new ArrayList<>();
-    state.referenceIndex.keySet().forEach(offset -> offsets.add(offset));
-
-    List<StoreKey> results = new ArrayList<>(indexes.length);
-    for (int index : indexes) {
-      Offset offset = offsets.get(index);
-      results.add(state.referenceIndex.get(offset).keySet().iterator().next());
-    }
-    return results;
   }
 }

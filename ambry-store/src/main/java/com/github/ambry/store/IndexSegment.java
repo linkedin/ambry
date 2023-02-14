@@ -461,29 +461,6 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
-   * Return all the keys in the IndexSegment in a set.
-   * @return
-   */
-  Set<StoreKey> getAllStoreKeys() throws StoreException {
-    Set<StoreKey> keys = new HashSet<>();
-    rwLock.readLock().lock();
-    boolean isSealed = sealed.get();
-    NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
-    ByteBuffer buffer = serEntries;
-    rwLock.readLock().unlock();
-    if (isSealed) {
-      buffer = buffer.duplicate();
-      int numOfIndexEntries = numberOfEntries(buffer);
-      for (int i = 0; i < numOfIndexEntries; i++) {
-        keys.add(getKeyAt(buffer, i));
-      }
-    } else {
-      keys.addAll(indexCopy.keySet());
-    }
-    return keys;
-  }
-
-  /**
    * According to config, get the {@link ByteBuffer} of {@link StoreKey} for bloom filter. The store config specifies
    * whether to populate bloom filter with key's UUID only.
    * @param key the store key to use in bloom filter.
