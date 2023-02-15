@@ -1360,14 +1360,15 @@ class BlobStoreCompactor {
     if (remoteTokenTracker == null) {
       return false;
     }
-    for (Map.Entry<String, FindToken> entry : remoteTokenTracker.getPeerReplicaAndToken().entrySet()) {
-      FindToken token = srcIndex.resetTokenIfRequired((StoreFindToken) entry.getValue());
-      if (!token.equals(entry.getValue())) {
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : remoteTokenTracker.getPeerReplicaAndToken().entrySet()) {
+      Pair<Long, FindToken> pair = entry.getValue();
+      FindToken token = srcIndex.resetTokenIfRequired((StoreFindToken) pair.getSecond());
+      if (!token.equals(pair.getSecond())) {
         // incarnation id has changed or there is unclean shutdown
         return false;
       }
-      token = srcIndex.revalidateFindToken(entry.getValue());
-      if (!token.equals(entry.getValue())) {
+      token = srcIndex.revalidateFindToken(pair.getSecond());
+      if (!token.equals(pair.getSecond())) {
         // the log segment (token refers to) has been compacted already
         return false;
       }

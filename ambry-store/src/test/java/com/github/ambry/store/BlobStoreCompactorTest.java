@@ -28,13 +28,17 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
@@ -65,6 +69,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -117,6 +122,8 @@ public class BlobStoreCompactorTest {
 
   private byte[] bundleReadBuffer = new byte[((int) PUT_RECORD_SIZE * 2 + 1)];
 
+  List<String> peerReplicaMountPath = null;
+
   /**
    * Running for both direct IO compactor and general IO compactor.
    */
@@ -149,6 +156,12 @@ public class BlobStoreCompactorTest {
    */
   @After
   public void cleanup() throws Exception {
+    if (peerReplicaMountPath != null) {
+      for (String path : peerReplicaMountPath) {
+        FileUtils.deleteDirectory(new File(path));
+      }
+    }
+
     if (state != null) {
       state.destroy();
     }
@@ -473,7 +486,9 @@ public class BlobStoreCompactorTest {
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0));
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+    MockIdFactory keyFactory = new MockIdFactory();
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     // Generate tokens for peer replicas and make sure they are both past position of 1st delete tombstone and haven't
     // reached position of 2nd tombstone.
     MockId tombstone1 = state.permanentDeleteTombstones.get(0);
@@ -509,6 +524,8 @@ public class BlobStoreCompactorTest {
     } finally {
       compactor.close(0);
     }
+    tokenTracker.close();
+
     // the first delete tombstone should be compacted
     assertNull("Delete tombstone should be compacted", state.index.findKey(tombstone1));
     // the second delete tombstone should exist
@@ -552,7 +569,9 @@ public class BlobStoreCompactorTest {
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
     CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0));
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+    MockIdFactory keyFactory = new MockIdFactory();
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     MockId tombstone1 = state.permanentDeleteTombstones.get(0);
     MockId tombstone2 = state.permanentDeleteTombstones.get(1);
     IndexValue deleteIndexValue2 = state.index.findKey(tombstone2);
@@ -606,9 +625,336 @@ public class BlobStoreCompactorTest {
     } finally {
       compactor.close(0);
     }
+    tokenTracker.close();
+
     // both tombstones should be compacted
     assertNull("Delete tombstone should be compacted", state.index.findKey(tombstone1));
     assertNull("Delete tombstone should be compacted", state.index.findKey(tombstone2));
+  }
+
+  /**
+   * Tests RemoteTokenTracker persist the remote tokens in different case.
+   * @throws Exception
+   */
+  @Test
+  public void remoteTokenPersistTest() throws Exception {
+    assumeTrue(purgeDeleteTombstone);
+    refreshState(false, true, false);
+    List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
+    MockIdFactory keyFactory = new MockIdFactory();
+
+    // Prepare for the token to update
+    // Generate tokens for peer replicas and make sure they are both past position of 1st delete tombstone and haven't
+    // reached position of 2nd tombstone.
+    MockId tombstone1 = state.permanentDeleteTombstones.get(0);
+    MockId tombstone2 = state.permanentDeleteTombstones.get(1);
+    IndexValue deleteIndexValue1 = state.index.findKey(tombstone1);
+    IndexValue deleteIndexValue2 = state.index.findKey(tombstone2);
+    IndexSegment indexSegment1 = state.index.getIndexSegments().floorEntry(deleteIndexValue1.getOffset()).getValue();
+    IndexSegment indexSegment2 = state.index.getIndexSegments().floorEntry(deleteIndexValue2.getOffset()).getValue();
+    MockId keyInToken1 = (MockId) indexSegment1.iterator().next().getKey();
+    MockId keyInToken2 = (MockId) indexSegment2.iterator().next().getKey();
+    StoreFindToken peerToken1 =
+        new StoreFindToken(keyInToken1, indexSegment1.getStartOffset(), state.sessionId, state.incarnationId,
+            indexSegment1.getResetKey(), indexSegment1.getResetKeyType(), indexSegment1.getResetKeyLifeVersion());
+    StoreFindToken peerToken2 =
+        new StoreFindToken(keyInToken2, indexSegment2.getStartOffset(), state.sessionId, state.incarnationId,
+            indexSegment2.getResetKey(), indexSegment2.getResetKeyType(), indexSegment2.getResetKeyLifeVersion());
+    // update token associated with peer replica
+    MockReplicaId peerReplica1 = localAndPeerReplicas.get(1);
+    MockReplicaId peerReplica2 = localAndPeerReplicas.get(2);
+
+    // Case 1: Test token persist file doesn't exist
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    Map<String, Pair<Long, FindToken>> notPersistedToken = tokenTracker.getPeerReplicaAndToken();
+    assertEquals(2, notPersistedToken.size());
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : notPersistedToken.entrySet()) {
+      assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
+    }
+    assertEquals(true, tokenTracker.persistToken());    // persist the token
+
+    // Case 2: Although the file exist, no meaningful token content. The token timestamp should be the same as before
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    Map<String, Pair<Long, FindToken>> persistedEmptyToken = tokenTracker.getPeerReplicaAndToken();
+    assertEquals(2, persistedEmptyToken.size());
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : persistedEmptyToken.entrySet()) {
+      Pair<Long, FindToken> before = notPersistedToken.get(entry.getKey());
+      assertEquals(entry.getValue().getFirst(), before.getFirst());
+      assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
+    }
+    assertEquals(notPersistedToken, persistedEmptyToken);
+    // update peerReplica1's token
+    tokenTracker.updateTokenFromPeerReplica(peerToken1, peerReplica1.getDataNodeId().getHostname(),
+        peerReplica1.getReplicaPath());
+    assertEquals(true, tokenTracker.persistToken());
+
+    // Case 3: peerReplica1 should have the valid token
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    Map<String, Pair<Long, FindToken>> oneValidToken = tokenTracker.getPeerReplicaAndToken();
+    assertEquals(2, oneValidToken.size());
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : oneValidToken.entrySet()) {
+      Pair<Long, FindToken> before = persistedEmptyToken.get(entry.getKey());
+      if (entry.getKey().startsWith(peerReplica1.getDataNodeId().getHostname())) {
+        // token is updated
+        assertTrue(entry.getValue().getFirst() > before.getFirst());
+        assertEquals(entry.getValue().getSecond(), peerToken1);
+      } else {
+        assertEquals(entry.getValue().getFirst(), before.getFirst());
+        assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
+      }
+    }
+    // update peerReplica2's token as well
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath());
+    assertEquals(true, tokenTracker.persistToken());
+
+    // Case 4: both tokens are updated
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    Map<String, Pair<Long, FindToken>> twoValidTokens = tokenTracker.getPeerReplicaAndToken();
+    assertEquals(2, twoValidTokens.size());
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : twoValidTokens.entrySet()) {
+      Pair<Long, FindToken> before = oneValidToken.get(entry.getKey());
+      if (entry.getKey().startsWith(peerReplica2.getDataNodeId().getHostname())) {
+        // token is updated
+        assertTrue(entry.getValue().getFirst() > before.getFirst());
+        assertEquals(entry.getValue().getSecond(), peerToken2);
+      } else {
+        assertEquals(entry.getValue().getFirst(), before.getFirst());
+        assertEquals(entry.getValue().getSecond(), peerToken1);
+      }
+    }
+    // corrupt the persist file
+    String filePath = tokenTracker.getPersistFilePath();
+    File file = new File(filePath);
+    FileOutputStream fileStream = new FileOutputStream(file);
+    DataOutputStream writer = new DataOutputStream(fileStream);
+    // version part.
+    writer.writeShort(765);
+    fileStream.getChannel().force(true);
+    writer.close();
+
+    // Case 5: Corrupted the file
+    long currentTime = System.currentTimeMillis();
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    Map<String, Pair<Long, FindToken>> corrupted = tokenTracker.getPeerReplicaAndToken();
+    assertEquals(2, corrupted.size());
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : corrupted.entrySet()) {
+      assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
+      assertTrue(entry.getValue().getFirst() >= currentTime);
+    }
+    assertEquals(true, tokenTracker.persistToken());    // persist the token
+
+    // Case 6: The file is back to normal.
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    Map<String, Pair<Long, FindToken>> newToken = tokenTracker.getPeerReplicaAndToken();
+    assertEquals(2, newToken.size());
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : newToken.entrySet()) {
+      Pair<Long, FindToken> before = corrupted.get(entry.getKey());
+      assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
+      assertEquals(before.getFirst(), entry.getValue().getFirst());       // same time stamp
+    }
+    assertEquals(true, tokenTracker.persistToken());
+
+    // Case 7: Remove one replica
+    MockReplicaId modifiedLocalReplica = localAndPeerReplicas.get(0);
+    modifiedLocalReplica.setPeerReplicas(Collections.singletonList(peerReplica1));
+    tokenTracker = new RemoteTokenTracker(modifiedLocalReplica, null, keyFactory);
+    Map<String, Pair<Long, FindToken>> onePeerOnlyToken = tokenTracker.getPeerReplicaAndToken();
+    assertEquals(1, onePeerOnlyToken.size()); // only have one entry
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : onePeerOnlyToken.entrySet()) {
+      Pair<Long, FindToken> before = newToken.get(entry.getKey());
+      assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
+      assertEquals(before.getFirst(), entry.getValue().getFirst()); // same time stamp
+      assertTrue(entry.getKey().startsWith(peerReplica1.getDataNodeId().getHostname()));
+    }
+    assertEquals(true, tokenTracker.persistToken());
+  }
+
+  /**
+   * Tests tokens are persisted and
+   * permanent delete tombstone can be compacted once all peer tokens are past its position.
+   * @throws Exception
+   */
+  @Test
+  public void deleteTombstoneTokenPersistTest() throws Exception {
+    assumeTrue(purgeDeleteTombstone);
+    refreshState(false, true, false);
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+    MockIdFactory keyFactory = new MockIdFactory();
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    tokenTracker.close(); // stop the background persist. will explicitly call persistToken later.
+    // Generate tokens for peer replicas and make sure they are both past position of 1st delete tombstone and haven't
+    // reached position of 2nd tombstone.
+    MockId tombstone1 = state.permanentDeleteTombstones.get(0);
+    MockId tombstone2 = state.permanentDeleteTombstones.get(1);
+    IndexValue deleteIndexValue1 = state.index.findKey(tombstone1);
+    IndexValue deleteIndexValue2 = state.index.findKey(tombstone2);
+    IndexSegment indexSegment1 = state.index.getIndexSegments().floorEntry(deleteIndexValue1.getOffset()).getValue();
+    IndexSegment indexSegment2 = state.index.getIndexSegments().floorEntry(deleteIndexValue2.getOffset()).getValue();
+    // find a key that is behind tombstone1 and the other key that falls between tombstone1 and tombstone2
+    IndexSegment segmentBehindSegment1 =
+        state.index.getIndexSegments().higherEntry(indexSegment1.getStartOffset()).getValue();
+    MockId keyInToken1 = (MockId) segmentBehindSegment1.iterator().next().getKey();
+    MockId keyInToken2 = (MockId) indexSegment2.iterator().next().getKey();
+    StoreFindToken peerToken1 =
+        new StoreFindToken(keyInToken1, segmentBehindSegment1.getStartOffset(), state.sessionId, state.incarnationId,
+            segmentBehindSegment1.getResetKey(), segmentBehindSegment1.getResetKeyType(),
+            segmentBehindSegment1.getResetKeyLifeVersion());
+    StoreFindToken peerToken2 =
+        new StoreFindToken(keyInToken2, indexSegment2.getStartOffset(), state.sessionId, state.incarnationId,
+            indexSegment2.getResetKey(), indexSegment2.getResetKeyType(), indexSegment2.getResetKeyLifeVersion());
+    // update token associated with peer replica
+    MockReplicaId peerReplica1 = localAndPeerReplicas.get(1);
+    MockReplicaId peerReplica2 = localAndPeerReplicas.get(2);
+    tokenTracker.updateTokenFromPeerReplica(peerToken1, peerReplica1.getDataNodeId().getHostname(),
+        peerReplica1.getReplicaPath());
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath());
+    Map<String, Pair<Long, FindToken>> tokenBefore = tokenTracker.getPeerReplicaAndToken();
+    tokenTracker.persistToken();
+
+    // start a new RemoteTokenTracker. It'll pick up the persisted remote tokens.
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    Map<String, Pair<Long, FindToken>> tokenAfter = tokenTracker.getPeerReplicaAndToken();
+
+    // test if the file is not there.
+    assertEquals(tokenBefore, tokenAfter);
+    // initiate compaction
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+
+    // the first delete tombstone should be compacted
+    assertNull("Delete tombstone should be compacted", state.index.findKey(tombstone1));
+    // the second delete tombstone should exist
+    assertNotNull("Delete tombstone should be present as at least one token hasn't reached its position",
+        state.index.findKey(tombstone2));
+  }
+
+  /**
+   * Get the store token behind the tombstone
+   * @return the store token behind the tombstone
+   */
+  private StoreFindToken getTombstoneToken(int index) throws Exception {
+    if (index >= state.permanentDeleteTombstones.size()) {
+      return null;
+    }
+
+    MockId tombstone = state.permanentDeleteTombstones.get(index);
+    IndexValue deleteIndexValue = state.index.findKey(tombstone);
+    IndexSegment indexSegment = state.index.getIndexSegments().floorEntry(deleteIndexValue.getOffset()).getValue();
+    // find a key that is behind tombstone
+    IndexSegment segmentBehindSegment =
+        state.index.getIndexSegments().higherEntry(indexSegment.getStartOffset()).getValue();
+    MockId keyInToken1 = (MockId) segmentBehindSegment.iterator().next().getKey();
+    StoreFindToken peerToken =
+        new StoreFindToken(keyInToken1, segmentBehindSegment.getStartOffset(), state.sessionId, state.incarnationId,
+            segmentBehindSegment.getResetKey(), segmentBehindSegment.getResetKeyType(),
+            segmentBehindSegment.getResetKeyLifeVersion());
+    return peerToken;
+  }
+
+  /**
+   * Test the remote token persistor is disabled by default
+   * @throws Exception
+   */
+  @Test
+  public void testRemoteTokenPersistIsDisabled() throws Exception {
+    assumeTrue(purgeDeleteTombstone);
+    refreshState(false, true, false);
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+    MockIdFactory keyFactory = new MockIdFactory();
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    // Try to start the persistor. But by default, storePersistRemoteTokenIntervalInSeconds is zero and won't start it.
+    tokenTracker.start(config.storePersistRemoteTokenIntervalInSeconds);
+    Map<String, Pair<Long, FindToken>> emptyTokens = tokenTracker.getPeerReplicaAndToken();
+
+    // Generate one token
+    StoreFindToken tombstoneToken = getTombstoneToken(0);
+    // update token associated with peer replicas
+    tokenTracker.updateTokenFromPeerReplica(tombstoneToken, localAndPeerReplicas.get(1).getDataNodeId().getHostname(),
+        localAndPeerReplicas.get(1).getReplicaPath());
+    tokenTracker.updateTokenFromPeerReplica(tombstoneToken, localAndPeerReplicas.get(2).getDataNodeId().getHostname(),
+        localAndPeerReplicas.get(2).getReplicaPath());
+    Map<String, Pair<Long, FindToken>> validTokens = tokenTracker.getPeerReplicaAndToken();
+    tokenTracker.close();
+
+    // start a new RemoteTokenTracker. It'll be empty tokens since we didn't persist it in the last run.
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    Map<String, Pair<Long, FindToken>> tokenAfter = tokenTracker.getPeerReplicaAndToken();
+
+    // check the tokens
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : tokenAfter.entrySet()) {
+      Pair<Long, FindToken> afterToken = entry.getValue();
+      Pair<Long, FindToken> emptyToken = emptyTokens.get(entry.getKey());
+      Pair<Long, FindToken> validToken = validTokens.get(entry.getKey());
+
+      assertEquals(FindTokenType.Uninitialized, afterToken.getSecond().getType());
+      assertEquals(FindTokenType.Uninitialized, emptyToken.getSecond().getType());
+      assertEquals(tombstoneToken, validToken.getSecond());
+      assertTrue(validToken.getFirst() >= emptyToken.getFirst());
+      assertTrue(afterToken.getFirst() >= validToken.getFirst());
+    }
+  }
+
+  /**
+   * Test the remote token persist is enabled by the StoreConfig
+   * @throws Exception
+   */
+  @Test
+  public void testRemoteTokenPersistIsEnabled() throws Exception {
+    assumeTrue(purgeDeleteTombstone);
+    refreshState(false, true, false);
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+    MockIdFactory keyFactory = new MockIdFactory();
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    Properties properties = new Properties();
+    properties.setProperty(StoreConfig.storePersistRemoteTokenIntervalInSecondsName, "1");
+    StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
+
+    // Starting the persistor with the storeConfig
+    tokenTracker.start(storeConfig.storePersistRemoteTokenIntervalInSeconds);
+    Map<String, Pair<Long, FindToken>> emptyTokens = tokenTracker.getPeerReplicaAndToken();
+
+    // Generate one token
+    StoreFindToken tombstoneToken = getTombstoneToken(0);
+    // update token associated with peer replicas
+    tokenTracker.updateTokenFromPeerReplica(tombstoneToken, localAndPeerReplicas.get(1).getDataNodeId().getHostname(),
+        localAndPeerReplicas.get(1).getReplicaPath());
+    tokenTracker.updateTokenFromPeerReplica(tombstoneToken, localAndPeerReplicas.get(2).getDataNodeId().getHostname(),
+        localAndPeerReplicas.get(2).getReplicaPath());
+    Map<String, Pair<Long, FindToken>> validTokens = tokenTracker.getPeerReplicaAndToken();
+    tokenTracker.close();
+
+    // start a new RemoteTokenTracker. It'll pick up the persisted remote tokens.
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    Map<String, Pair<Long, FindToken>> tokenAfter = tokenTracker.getPeerReplicaAndToken();
+
+    // check the tokens
+    for (Map.Entry<String, Pair<Long, FindToken>> entry : tokenAfter.entrySet()) {
+      Pair<Long, FindToken> afterToken = entry.getValue();
+      Pair<Long, FindToken> emptyToken = emptyTokens.get(entry.getKey());
+      Pair<Long, FindToken> validToken = validTokens.get(entry.getKey());
+
+      assertEquals(FindTokenType.Uninitialized, emptyToken.getSecond().getType());
+      assertEquals(tombstoneToken, validToken.getSecond());
+      assertEquals(tombstoneToken, afterToken.getSecond());
+      assertTrue(emptyToken.getFirst() <= validToken.getFirst());
+      assertEquals(validToken.getFirst(), afterToken.getFirst());
+    }
   }
 
   /**
@@ -2868,12 +3214,25 @@ public class BlobStoreCompactorTest {
    */
   private List<MockReplicaId> generateLocalAndPeerReplicas() {
     Port port = new Port(6667, PortType.PLAINTEXT);
-    List<String> mountPaths = Arrays.asList("/mnt/u001", "/mnt/u002", "/mnt/u003");
+    // Use temp folder to create the mount point. /mnt/u001 may not exist or accessible.
+    peerReplicaMountPath = Arrays.asList(tempDir.getAbsolutePath() + "/u001", tempDir.getAbsolutePath() + "/u002",
+        tempDir.getAbsolutePath() + "/u003");
+
     // generate two peer replicas
-    MockDataNodeId peerNode1 = new MockDataNodeId("node1_host", Collections.singletonList(port), mountPaths, null);
-    MockDataNodeId peerNode2 = new MockDataNodeId("node2_host", Collections.singletonList(port), mountPaths, null);
-    MockDataNodeId localNode = new MockDataNodeId("local_host", Collections.singletonList(port), mountPaths, null);
+    MockDataNodeId peerNode1 =
+        new MockDataNodeId("node1_host", Collections.singletonList(port), peerReplicaMountPath, null);
+    MockDataNodeId peerNode2 =
+        new MockDataNodeId("node2_host", Collections.singletonList(port), peerReplicaMountPath, null);
+    MockDataNodeId localNode =
+        new MockDataNodeId("local_host", Collections.singletonList(port), peerReplicaMountPath, null);
     MockPartitionId mockPartitionId = new MockPartitionId(101L, MockClusterMap.DEFAULT_PARTITION_CLASS);
+
+    // create mount point for the local replica. MockReplicaId constructor will create replica folder under it.
+    for (String path : peerReplicaMountPath) {
+      File mountFile = new File(path);
+      mountFile.mkdir();
+      mountFile.deleteOnExit();
+    }
     MockReplicaId peerReplica1 = new MockReplicaId(port.getPort(), mockPartitionId, peerNode1, 0);
     MockReplicaId peerReplica2 = new MockReplicaId(port.getPort(), mockPartitionId, peerNode2, 1);
     MockReplicaId localReplica = new MockReplicaId(port.getPort(), mockPartitionId, localNode, 2);
