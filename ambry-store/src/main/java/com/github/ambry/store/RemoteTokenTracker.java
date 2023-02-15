@@ -18,6 +18,7 @@ import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Pair;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.DataInputStream;
@@ -30,6 +31,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -145,7 +147,8 @@ public class RemoteTokenTracker implements Closeable {
   public void start(int persistIntervalInSeconds) {
     if (persistIntervalInSeconds > 0) {
       if (this.scheduler != null) {
-        persistorFuture = this.scheduler.scheduleAtFixedRate(persistor, 0, persistIntervalInSeconds, TimeUnit.SECONDS);
+        persistorFuture = this.scheduler.scheduleAtFixedRate(persistor, new Random().nextInt(Time.SecsPerMin),
+            persistIntervalInSeconds, TimeUnit.SECONDS);
         logger.info("flush peer's remote token every {} seconds", persistIntervalInSeconds);
       } else {
         logger.error("scheduler is null, couldn't persist peer's remote token.");
@@ -170,7 +173,7 @@ public class RemoteTokenTracker implements Closeable {
     /**
      * Persist the remote peers and their tokens.
      */
-    protected void persist() throws IOException {
+    protected synchronized void persist() throws IOException {
       String localReplicaMountPath = localReplica.getReplicaPath();
       File temp = new File(localReplicaMountPath, REMOTE_TOKEN_FILE_NAME + ".tmp");
       File actual = new File(localReplicaMountPath, REMOTE_TOKEN_FILE_NAME);
