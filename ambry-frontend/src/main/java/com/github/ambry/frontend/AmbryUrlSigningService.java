@@ -178,8 +178,11 @@ public class AmbryUrlSigningService implements UrlSigningService {
     }
     RestMethod restMethodInUrl = RestMethod.valueOf(RestUtils.getHeader(args, RestUtils.Headers.URL_TYPE, true));
     if (!restRequest.getRestMethod().equals(restMethodInUrl)) {
-      throw new RestServiceException("Type of request being made not compatible with signed URL",
-          RestServiceErrorCode.Unauthorized);
+      // If the signed url is for download, we also want to support HEAD request against that signed url.
+      if (!(restRequest.getRestMethod().equals(RestMethod.HEAD) && restMethodInUrl.equals(RestMethod.GET))) {
+        throw new RestServiceException("Type of request being made not compatible with signed URL",
+            RestServiceErrorCode.Unauthorized);
+      }
     }
   }
 
