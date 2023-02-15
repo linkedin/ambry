@@ -205,7 +205,7 @@ public class BlobStore implements Store {
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
-    remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId);
+    remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId, taskScheduler, factory);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
@@ -267,6 +267,9 @@ public class BlobStore implements Store {
         metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats,
             config.storeEnableCurrentInvalidSizeMetric, config.storeEnableIndexDirectMemoryUsageMetric);
         checkCapacityAndUpdateReplicaStatusDelegate();
+        if (remoteTokenTracker != null) {
+          remoteTokenTracker.start(config.storePersistRemoteTokenIntervalInSeconds);
+        }
         logger.trace("The store {} is successfully started", storeId);
         onSuccess("START");
         isDisabled.set(false);
@@ -1157,6 +1160,9 @@ public class BlobStore implements Store {
         compactor.close(30);
         index.close(skipDiskFlush);
         log.close(skipDiskFlush);
+        if (remoteTokenTracker != null) {
+          remoteTokenTracker.close();
+        }
         metrics.deregisterMetrics(storeId);
         currentState = ReplicaState.OFFLINE;
         started = false;

@@ -509,6 +509,14 @@ public class StoreConfig {
   public static final String storeRebuildTokenBasedOnCompactionHistoryName =
       "store.rebuild.token.based.on.compaction.history";
 
+  /**
+   * If storePersistRemoteTokenIntervalInSeconds > 0, persist the remote token every storePersistRemoteTokenIntervalInSeconds seconds.
+   */
+  @Config(storePersistRemoteTokenIntervalInSecondsName)
+  public final int storePersistRemoteTokenIntervalInSeconds;
+  public static final String storePersistRemoteTokenIntervalInSecondsName =
+      "store.persist.remote.token.interval.in.seconds";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -634,5 +642,8 @@ public class StoreConfig {
       storePartitionsToRebuildTokenBasedOnCompactionHistory =
           Stream.of(partitions.split(",")).map(Long::parseLong).collect(Collectors.toList());
     }
+
+    storePersistRemoteTokenIntervalInSeconds =
+        verifiableProperties.getIntInRange(storePersistRemoteTokenIntervalInSecondsName, 0, 0, 60 * 60 * 24);
   }
 }
