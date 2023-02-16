@@ -1610,6 +1610,9 @@ public class HelixClusterManager implements ClusterMap {
     }
   }
 
+  /**
+   * Properties for Resource.
+   */
   static class ResourceProperty {
     final String name;
     final IdealState.RebalanceMode rebalanceMode;
