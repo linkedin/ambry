@@ -209,8 +209,8 @@ public class CosmosUpdateTimeFindToken implements FindToken {
   public String toString() {
     StringBuilder sb = new StringBuilder();
     sb.append("version: ").append(version);
-    sb.append(" lastUpdateTime: ").append(lastUpdateTime);
-    sb.append(" lastUpdateDateTime: ").append(DATE_FORMAT.format(lastUpdateTime));
+    sb.append(" lastUpdateTime (sec): ").append(lastUpdateTime);
+    sb.append(" lastUpdateDateTime: ").append(DATE_FORMAT.format(lastUpdateTime*1000));
     sb.append(" bytesRead: ").append(bytesRead);
     sb.append(" lastUpdateTimeReadBlobIds: ").append(lastUpdateTimeReadBlobIds);
     return sb.toString();
