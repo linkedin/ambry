@@ -434,6 +434,13 @@ public class FrontendIntegrationTest extends FrontendIntegrationTestBase {
     responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     verifyGetBlobResponse(responseParts, null, false, headers, !container.isCacheable(), content, account.getName(),
         container.getName(), container);
+
+    // Use URL to GET head
+    uri = new URI(signedGetUrl);
+    httpRequest = buildRequest(HttpMethod.HEAD, uri.getPath() + "?" + uri.getQuery(), null, null);
+    responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    response = getHttpResponse(responseParts);
+    verifyGetHeadResponse(response, headers, null, !container.isCacheable(), account.getName(), container.getName(), responseParts);
   }
 
   /**
