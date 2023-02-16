@@ -292,9 +292,10 @@ public class MockHelixAdmin implements HelixAdmin {
     triggerInstanceConfigChangeNotification(tagAsInit);
   }
 
-  void removeResourceIdealState(String clusterName, String resourceName) {
+  void removeResourceIdealState(String clusterName, String resourceName) throws Exception {
     resourcesToIdealStates.remove(resourceName);
     resourceToResourceInfoMap.remove(resourceName);
+    triggerIdealStateChangeNotification();
   }
 
   /**
