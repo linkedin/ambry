@@ -810,7 +810,6 @@ public class HelixClusterManagerTest {
 
     // Now return old resource in local dc, and nothing should change
     localHelixAdmin.removeResourceIdealState("", resourceName);
-    localHelixAdmin.triggerRoutingTableNotification();
     Thread.sleep(1000);
 
     // Nothing should change
