@@ -281,6 +281,40 @@ public class AccountAndContainerInjector {
   }
 
   /**
+   * Injects {@link Account},{@link Container} for the POST requests that carry the target account and
+   * container headers.
+   * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
+   * @param dataset the {@link Dataset}
+   * @throws RestServiceException
+   */
+  public void injectAccountAndContainerUsingDatasetBody(RestRequest restRequest, Dataset dataset) throws RestServiceException {
+    String accountName = dataset.getAccountName();
+    Account targetAccount = accountService.getAccountByName(accountName);
+    if (targetAccount == null) {
+      frontendMetrics.unrecognizedAccountNameCount.inc();
+      throw new RestServiceException("Account cannot be found for accountName=" + accountName
+          + " in put request with account and container headers.", RestServiceErrorCode.InvalidAccount);
+    }
+    ensureAccountNameMatch(targetAccount, restRequest);
+    String containerName = dataset.getContainerName();
+    Container targetContainer;
+    try {
+      targetContainer = accountService.getContainerByName(accountName, containerName);
+    } catch (AccountServiceException e) {
+      throw new RestServiceException("Failed to get container " + containerName + " from account " + accountName
+          + " for put request with account and container headers.",
+          RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+    }
+    if (targetContainer == null) {
+      frontendMetrics.unrecognizedContainerNameCount.inc();
+      throw new RestServiceException(
+          "Container cannot be found for accountName=" + accountName + " and containerName=" + containerName
+              + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
+    }
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, null);
+  }
+
+  /**
    * Sanity check for {@link RestRequest}. This check ensures that the specified service id, account and container name,
    * if they exist, should not be the same as the not-allowed values. It also makes sure certain headers must not be present.
    * @param restRequest The {@link RestRequest} to check.
