@@ -72,8 +72,7 @@ public class GetDatasetsHandler {
         frontendMetrics.getDatasetsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     // get dataset request have their account/container name in request header, so checks can be done at early stage.
-    accountAndContainerInjector.injectAccountAndContainerForPostRequest(restRequest,
-        frontendMetrics.getDatasetsMetricsGroup);
+    accountAndContainerInjector.injectAccountAndContainerForGetDatasetRequest(restRequest);
     new GetDatasetsHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 

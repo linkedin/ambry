@@ -109,8 +109,6 @@ public class PostDatasetsHandler {
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
       restRequest.readInto(channel, fetchDatasetUpdateBodyCallback(channel));
-      // Start the callback chain by performing request security processing.
-      securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
 
     /**
@@ -155,6 +153,8 @@ public class PostDatasetsHandler {
                 RestServiceErrorCode.BadRequest);
           }
           accountAndContainerInjector.injectAccountAndContainerUsingDatasetBody(restRequest, datasetToUpdate);
+          // Start the callback chain by performing request security processing.
+          securityService.processRequest(restRequest, securityProcessRequestCallback());
         } catch (IOException e) {
           throw new RestServiceException("Bad dataset update request body", e, RestServiceErrorCode.BadRequest);
         }
