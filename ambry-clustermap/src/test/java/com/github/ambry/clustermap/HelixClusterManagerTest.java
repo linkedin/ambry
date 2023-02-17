@@ -810,7 +810,6 @@ public class HelixClusterManagerTest {
 
     // Now return old resource in local dc, and nothing should change
     localHelixAdmin.removeResourceIdealState("", resourceName);
-    localHelixAdmin.triggerRoutingTableNotification();
     Thread.sleep(1000);
 
     // Nothing should change
@@ -848,6 +847,82 @@ public class HelixClusterManagerTest {
         assertEquals("Partition not changed, should have one resource", 1, entry.getValue().size());
         assertTrue(entry.getValue().contains(partitionToResourceBefore.get(pName)));
       }
+    }
+  }
+
+  /**
+   * Test {@link ClusterMap#isDataNodeInFullAutoMode}.
+   * @throws Exception
+   */
+  @Test
+  public void testHostFullAuto() throws Exception {
+    // For aggregated view, it will always return false
+    assumeTrue(!useComposite && !useAggregatedView);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
+
+    // By default, all the hosts are not in FULL_AUTO mode.
+    List<DataNode> allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertFalse("By default, local node should not on FULL_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+    }
+    List<DataNode> allRemoteDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(remoteDc);
+    for (DataNode dataNode : allRemoteDcDataNodes) {
+      assertFalse("By default, remote node should not on FULL_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+    }
+
+    // Should have only one Resource when bootup
+    List<String> resourceNames = helixCluster.getResources(localDc);
+    assertEquals("Should only have one resource when bootup", 1, resourceNames.size());
+
+    // Update the IdealState to CUSTOMIZED mode, this would keep all local data node as they were.
+    String resourceName = resourceNames.get(0);
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    // Update idealState here would impact the IdealState in the helixCluster since they reference to the same object
+    idealState.setRebalanceMode(IdealState.RebalanceMode.CUSTOMIZED);
+    helixCluster.refreshIdealState();
+    allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertFalse("Customized mode, local node should not on FULL_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+    }
+
+    // Now update resource to FULL_AUTO
+    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    helixCluster.refreshIdealState();
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertTrue("FULL_AUTO mode, local node should be on FULL_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+    }
+    // Remote data nodes should not be impacted
+    for (DataNode dataNode : allRemoteDcDataNodes) {
+      assertFalse("Local DC change, remote node should not on FULL_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+    }
+
+    // Now add new resource to the local dc, it will make hosts back to off FULL_AUTO.
+    // User MockHelixAdmin::addResource to add resource and external view
+    MockHelixAdmin localHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+    // 1. add new resource
+    // 2. update partition to resource map
+    // 3. generate different states for different instances for again
+    String newResourceName = String.valueOf(Integer.valueOf(resourceName) + 1000);
+    localHelixAdmin.addResource("", newResourceName, cloneIdealState(idealState, newResourceName));
+    helixCluster.refreshIdealState();
+
+    resourceNames = helixCluster.getResources(localDc);
+    assertEquals("Should have two resources after adding a new resource", 2, resourceNames.size());
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertFalse("More than one resources, local node should not on FULL_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+    }
+
+    helixCluster.removeResourceIdealState(newResourceName, localDc);
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertTrue("Back to one resource, local node should on FULL_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
     }
   }
 

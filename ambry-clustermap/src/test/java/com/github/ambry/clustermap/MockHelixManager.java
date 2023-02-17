@@ -247,11 +247,13 @@ class MockHelixManager implements HelixManager {
   }
 
   void triggerIdealStateNotification(boolean init) throws InterruptedException {
-    NotificationContext notificationContext = new NotificationContext(this);
-    if (init) {
-      notificationContext.setType(NotificationContext.Type.INIT);
+    if (idealStateChangeListener != null) {
+      NotificationContext notificationContext = new NotificationContext(this);
+      if (init) {
+        notificationContext.setType(NotificationContext.Type.INIT);
+      }
+      idealStateChangeListener.onIdealStateChange(localHelixAdmin.getIdealStates(), notificationContext);
     }
-    idealStateChangeListener.onIdealStateChange(localHelixAdmin.getIdealStates(), notificationContext);
   }
 
   void triggerRoutingTableNotification() {

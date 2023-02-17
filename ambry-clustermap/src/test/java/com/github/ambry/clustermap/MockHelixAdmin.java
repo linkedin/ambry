@@ -292,9 +292,17 @@ public class MockHelixAdmin implements HelixAdmin {
     triggerInstanceConfigChangeNotification(tagAsInit);
   }
 
-  void removeResourceIdealState(String clusterName, String resourceName) {
+  /**
+   * Remove ideal state for the given resource name. The {@code clusterName} is not used. It will trigger ideal state
+   * change notification.
+   * @param clusterName The name of the helix cluster, not used.
+   * @param resourceName The name of the resource.
+   * @throws Exception
+   */
+  void removeResourceIdealState(String clusterName, String resourceName) throws Exception {
     resourcesToIdealStates.remove(resourceName);
     resourceToResourceInfoMap.remove(resourceName);
+    triggerIdealStateChangeNotification();
   }
 
   /**
