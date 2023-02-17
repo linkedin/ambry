@@ -98,7 +98,7 @@ public class OperationQuotaCharger implements Chargeable {
   @Override
   public QuotaResource getQuotaResource() {
     if (Objects.isNull(quotaChargeCallback)) {
-      if (!operationName.equals("ReplicateBlobOperation")) {
+      if (!operationName.equals(ReplicateBlobOperation.class.getSimpleName())) {
         LOGGER.warn("quota charge callback is null for operation: {}", operationName);
       }
       return null;
@@ -120,7 +120,7 @@ public class OperationQuotaCharger implements Chargeable {
   @Override
   public QuotaMethod getQuotaMethod() {
     if (Objects.isNull(quotaChargeCallback)) {
-      if (!operationName.equals("ReplicateBlobOperation")) {
+      if (!operationName.equals(ReplicateBlobOperation.class.getSimpleName())) {
         LOGGER.warn("quota charge callback is null for operation: {}", operationName);
       }
       return null;
