@@ -112,6 +112,28 @@ public class PostDatasetsHandler {
     }
 
     /**
+     * After reading the body of the account update request, inject the account and container in request for access check.
+     * @param channel the {@link RetainingAsyncWritableChannel} to read data out of.
+     * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
+     */
+    private Callback<Long> fetchDatasetUpdateBodyCallback(RetainingAsyncWritableChannel channel) {
+      return buildCallback(frontendMetrics.postDatasetsReadRequestMetrics, bytesRead -> {
+        try {
+          datasetToUpdate = AccountCollectionSerde.datasetsFromInputStreamInJson(channel.consumeContentAsInputStream());
+          if (datasetToUpdate == null) {
+            throw new RestServiceException("The dataset is null after deserialize from given InputStream",
+                RestServiceErrorCode.BadRequest);
+          }
+          accountAndContainerInjector.injectAccountAndContainerUsingDatasetBody(restRequest, datasetToUpdate);
+          // Start the callback chain by performing request security processing.
+          securityService.processRequest(restRequest, securityProcessRequestCallback());
+        } catch (IOException e) {
+          throw new RestServiceException("Bad dataset update request body", e, RestServiceErrorCode.BadRequest);
+        }
+      }, uri, logger, finalCallback);
+    }
+
+    /**
      * After {@link SecurityService#processRequest} finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
@@ -136,28 +158,6 @@ public class PostDatasetsHandler {
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, outputChannel.getSize());
         finalCallback.onCompletion(outputChannel, null);
-      }, uri, logger, finalCallback);
-    }
-
-    /**
-     * After reading the body of the account update request, inject the account and container in request for access check.
-     * @param channel the {@link RetainingAsyncWritableChannel} to read data out of.
-     * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
-     */
-    private Callback<Long> fetchDatasetUpdateBodyCallback(RetainingAsyncWritableChannel channel) {
-      return buildCallback(frontendMetrics.postDatasetsReadRequestMetrics, bytesRead -> {
-        try {
-          datasetToUpdate = AccountCollectionSerde.datasetsFromInputStreamInJson(channel.consumeContentAsInputStream());
-          if (datasetToUpdate == null) {
-            throw new RestServiceException("The dataset is null after deserialize from given InputStream",
-                RestServiceErrorCode.BadRequest);
-          }
-          accountAndContainerInjector.injectAccountAndContainerUsingDatasetBody(restRequest, datasetToUpdate);
-          // Start the callback chain by performing request security processing.
-          securityService.processRequest(restRequest, securityProcessRequestCallback());
-        } catch (IOException e) {
-          throw new RestServiceException("Bad dataset update request body", e, RestServiceErrorCode.BadRequest);
-        }
       }, uri, logger, finalCallback);
     }
 

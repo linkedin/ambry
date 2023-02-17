@@ -625,7 +625,6 @@ public class FrontendMetrics {
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithServiceIdForAccountNameRate"));
     putWithAccountAndContainerHeaderRate = metricRegistry.meter(
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerHeaderRate"));
-
     putWithAccountAndContainerUriRate = metricRegistry.meter(
         MetricRegistry.name(FrontendRestRequestService.class, "PutWithAccountAndContainerUriRate"));
 
