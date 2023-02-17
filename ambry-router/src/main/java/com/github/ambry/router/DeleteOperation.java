@@ -429,7 +429,7 @@ class DeleteOperation {
 
       nonBlockingRouter.replicateBlob(blobId.getID(), this.getClass().getSimpleName(), sourceDataNode,
           replicateBlobCallback);
-      logger.trace("Start the on-demand replication {} {}.", replicateBlobCallback.getBlobId(),
+      logger.info("Start the on-demand replication {} {} on DeleteOperation.", replicateBlobCallback.getBlobId(),
           replicateBlobCallback.getSourceDataNode());
       return true;
     }

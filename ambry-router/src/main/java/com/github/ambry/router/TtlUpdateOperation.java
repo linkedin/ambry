@@ -424,7 +424,7 @@ class TtlUpdateOperation {
 
       nonBlockingRouter.replicateBlob(blobId.getID(), this.getClass().getSimpleName(), sourceDataNode,
           replicateBlobCallback);
-      LOGGER.trace("Start the on-demand replication {} {}.", replicateBlobCallback.getBlobId(),
+      LOGGER.info("Start the on-demand replication {} {} on TtlUpdateOperation.", replicateBlobCallback.getBlobId(),
           replicateBlobCallback.getSourceDataNode());
       return true;
     }
