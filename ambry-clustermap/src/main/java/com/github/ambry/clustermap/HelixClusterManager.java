@@ -516,11 +516,10 @@ public class HelixClusterManager implements ClusterMap {
       return false;
     }
     // Make sure all the resources turned on FULL_AUTO mode
-    for (String resourceName : resourceNames) {
-      ResourceProperty property = dcToResourceNameToResourceProperty.get(dcName).get(resourceName);
-      if (property == null || !property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
-        return false;
-      }
+    String resourceName = resourceNames.iterator().next();
+    ResourceProperty property = dcToResourceNameToResourceProperty.get(dcName).get(resourceNames);
+    if (property == null || !property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
+      return false;
     }
     return true;
   }
