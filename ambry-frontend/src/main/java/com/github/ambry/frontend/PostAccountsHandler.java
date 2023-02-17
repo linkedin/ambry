@@ -19,7 +19,6 @@ import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
-import com.github.ambry.account.Dataset;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
@@ -144,11 +143,7 @@ class PostAccountsHandler {
     private Callback<Long> fetchAccountUpdateBodyCallback(RetainingAsyncWritableChannel channel) {
       return buildCallback(frontendMetrics.postAccountsReadRequestMetrics, bytesRead -> {
         ReadableStreamChannel outputChannel;
-        if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
-          logger.debug("Got request for {} with payload", ACCOUNTS_CONTAINERS_DATASETS);
-          addOrUpdateDataset(channel);
-          outputChannel = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(0));
-        } else if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
+        if (RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS)) {
           logger.debug("Got request for {} with payload", ACCOUNTS_CONTAINERS);
           Pair<Account, Collection<Container>> accountAndUpdatedContainers = updateContainers(channel);
           outputChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(
@@ -223,69 +218,6 @@ class PostAccountsHandler {
       } catch (AccountServiceException ase) {
         throw new RestServiceException("Account update failed: " + ase.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ase.getErrorCode()));
-      }
-    }
-
-    /**
-     * Process the request json and call {@link AccountService#addDataset} to add or update the dataset.
-     * @param channel The {@link RetainingAsyncWritableChannel} to read the bytes out
-     * @throws RestServiceException
-     */
-    private void addOrUpdateDataset(RetainingAsyncWritableChannel channel) throws RestServiceException {
-      Dataset datasetToUpdate;
-      String accountName = null;
-      String containerName = null;
-      String datasetName = null;
-      try {
-        datasetToUpdate = AccountCollectionSerde.datasetsFromInputStreamInJson(channel.consumeContentAsInputStream());
-        if (datasetToUpdate == null) {
-          throw new RestServiceException("The dataset is null after deserialize from given InputStream",
-              RestServiceErrorCode.BadRequest);
-        }
-
-        // version schema and expiration time has to be provided during dataset creation.
-        if (!RestUtils.isDatasetUpdate(restRequest.getArgs())) {
-          if (datasetToUpdate.getVersionSchema() == null) {
-            throw new RestServiceException("Version schema can't be null for dataset creation",
-                RestServiceErrorCode.BadRequest);
-          }
-          if (datasetToUpdate.getExpirationTimeMs() == null) {
-            throw new RestServiceException("ExpirationTimeMs can't be null for dataset creation",
-                RestServiceErrorCode.BadRequest);
-          }
-        }
-
-        datasetName = datasetToUpdate.getDatasetName();
-        String accountNameFromRequest =
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, false);
-        String containerNameFromRequest =
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, false);
-        accountName = datasetToUpdate.getAccountName();
-        containerName = datasetToUpdate.getContainerName();
-        if (accountNameFromRequest != null && !accountNameFromRequest.equals(accountName)) {
-          throw new RestServiceException(
-              "There is a mismatch between account name from header: " + accountNameFromRequest
-                  + " and account name from dataset: " + accountName, RestServiceErrorCode.BadRequest);
-        }
-        if (containerNameFromRequest != null && !containerNameFromRequest.equals(containerName)) {
-          throw new RestServiceException(
-              "There is a mismatch between account name from header: " + containerNameFromRequest
-                  + " and account name from dataset: " + containerName, RestServiceErrorCode.BadRequest);
-        }
-        if (RestUtils.isDatasetUpdate(restRequest.getArgs())) {
-          accountService.updateDataset(datasetToUpdate);
-        } else {
-          accountService.addDataset(datasetToUpdate);
-        }
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
-      } catch (IOException e) {
-        throw new RestServiceException("Bad dataset update request body", e, RestServiceErrorCode.BadRequest);
-      } catch (AccountServiceException ex) {
-        throw new RestServiceException(
-            "Dataset update failed for accountName " + accountName + " containerName " + containerName + " datasetName "
-                + datasetName, RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
   }

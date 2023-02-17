@@ -44,6 +44,8 @@ public class AccountAndContainerInjector {
   private static final Set<String> requiredAmbryHeadersForPutWithServiceId = Collections.singleton(Headers.SERVICE_ID);
   private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
       new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
+  private static final Set<String> requiredAmbryHeadersForGetWithAccountAndContainerName = Collections.unmodifiableSet(
+      new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
   private static final Logger logger = LoggerFactory.getLogger(AccountAndContainerInjector.class);
 
   private final AccountService accountService;
@@ -80,6 +82,26 @@ public class AccountAndContainerInjector {
       String serviceId = getHeader(restRequest.getArgs(), Headers.SERVICE_ID, true);
       boolean isPrivate = isPrivate(restRequest.getArgs());
       injectAccountAndContainerUsingServiceId(restRequest, serviceId, isPrivate, metricsGroup);
+    } else {
+      throw new RestServiceException(
+          "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
+          RestServiceErrorCode.BadRequest);
+    }
+  }
+
+  /**
+   * Injects target {@link Account} and {@link Container} for GET datset requests. This method also ensures required the GET
+   * requests that carry both the {@code x-ambry-target-account} and {@code x-ambry-target-container} headers.
+   * @param restRequest The Get {@link RestRequest}.
+   * @throws RestServiceException
+   */
+  public void injectAccountAndContainerForGetDatasetRequest(RestRequest restRequest) throws RestServiceException {
+    accountAndContainerSanityCheck(restRequest);
+    if (getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false) != null
+        || getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false) != null) {
+      ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForGetWithAccountAndContainerName);
+      frontendMetrics.getDatasetWithAccountAndContainerHeaderRate.mark();
+      injectAccountAndContainerUsingAccountAndContainerHeaders(restRequest, null);
     } else {
       throw new RestServiceException(
           "Missing either " + Headers.TARGET_ACCOUNT_NAME + " or " + Headers.TARGET_CONTAINER_NAME + " header",
@@ -246,7 +268,7 @@ public class AccountAndContainerInjector {
   }
 
   /**
-   * Injects {@link Account} and {@link Container} for the PUT requests that carry the target account and container headers.
+   * Injects {@link Account} and {@link Container} for the PUT and GET requests that carry the target account and container headers.
    * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
    * @param metricsGroup The {@link RestRequestMetricsGroup} to use to set up {@link ContainerMetrics}, or {@code null}
    *                     if {@link ContainerMetrics} instantiation is not needed.
@@ -278,6 +300,41 @@ public class AccountAndContainerInjector {
               + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
     }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
+  }
+
+  /**
+   * Injects {@link Account},{@link Container} for the POST requests that carry the target account and
+   * container headers.
+   * @param restRequest The {@link RestRequest} to inject {@link Account} and {@link Container} object.
+   * @param dataset the {@link Dataset}
+   * @throws RestServiceException
+   */
+  public void injectAccountAndContainerUsingDatasetBody(RestRequest restRequest, Dataset dataset)
+      throws RestServiceException {
+    String accountName = dataset.getAccountName();
+    Account targetAccount = accountService.getAccountByName(accountName);
+    if (targetAccount == null) {
+      frontendMetrics.unrecognizedAccountNameCount.inc();
+      throw new RestServiceException("Account cannot be found for accountName=" + accountName
+          + " in put request with account and container headers.", RestServiceErrorCode.InvalidAccount);
+    }
+    ensureAccountNameMatch(targetAccount, restRequest);
+    String containerName = dataset.getContainerName();
+    Container targetContainer;
+    try {
+      targetContainer = accountService.getContainerByName(accountName, containerName);
+    } catch (AccountServiceException e) {
+      throw new RestServiceException("Failed to get container " + containerName + " from account " + accountName
+          + " for put request with account and container headers.",
+          RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+    }
+    if (targetContainer == null) {
+      frontendMetrics.unrecognizedContainerNameCount.inc();
+      throw new RestServiceException(
+          "Container cannot be found for accountName=" + accountName + " and containerName=" + containerName
+              + " in put request with account and container headers.", RestServiceErrorCode.InvalidContainer);
+    }
+    setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, null);
   }
 
   /**
