@@ -818,7 +818,7 @@ public class ReplicationMetrics {
    * @param timeInSeconds The replication lag in seconds
    */
   public void updateReplicationLagInSecondsForBlob(String datacenter, long timeInSeconds) {
-    if (dcToReplicaLagInSecondsForBlob.containsKey(datacenter)) {
+    if (datacenter != null && dcToReplicaLagInSecondsForBlob.containsKey(datacenter)) {
       dcToReplicaLagInSecondsForBlob.get(datacenter).update(timeInSeconds);
     }
   }
