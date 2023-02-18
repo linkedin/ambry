@@ -50,7 +50,7 @@ public class NamedBlobsCleanupRunner implements Runnable {
             router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
           } catch (Exception e) {
             if (!e.getMessage().contains(RouterErrorCode.BlobDoesNotExist.name())) {
-              logger.error("Failed to cleanup named stale blob case 2 {}", staleResult, e);
+              logger.error("Failed to cleanup named stale blob {}", staleResult, e);
               failedResults.add(staleResult);
             }
           }
