@@ -235,6 +235,16 @@ public class ReplicationConfig {
   public final boolean replicationUsingNonblockingNetworkClientForRemoteColo;
   public final static String REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO =
       "replication.using.nonblocking.network.client.for.remote.colo";
+
+  /**
+   * True to start using nonblocking network client for local colo replication.
+   */
+  @Config(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO)
+  @Default("false")
+  public final boolean replicationUsingNonblockingNetworkClientForLocalColo;
+  public final static String REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO =
+      "replication.using.nonblocking.network.client.for.local.colo";
+
   /**
    * Timeout in milliseconds for requests in nonblocking network client. This configuration is only useful when the
    * nonblocking network client is enabled.
@@ -265,8 +275,39 @@ public class ReplicationConfig {
   @Config(REPLICATION_THREAD_TYPE)
   public final String replicationThreadType;
 
+  /**
+   * Config for file manager class for backup checker
+   */
+  public static final String BACKUP_CHECKER_FILE_MANAGER_TYPE = "backup.checker.file.manager.type";
+  public static final String DEFAULT_BACKUP_CHECKER_FILE_MANAGER =
+      "com.github.ambry.replication.BackupCheckerFileManager";
+  @Config(BACKUP_CHECKER_FILE_MANAGER_TYPE)
+  public final String backupCheckFileManagerType;
+
+  /**
+   * Config for folder to store all results from backup checker
+   */
+  public static final String BACKUP_CHECKER_REPORT_DIR = "backup.checker.report.dir";
+  public static final String DEFAULT_BACKUP_CHECKER_REPORT_DIR = "/tmp";
+  @Config(BACKUP_CHECKER_REPORT_DIR)
+  public final String backupCheckerReportDir;
+
+  /**
+   * Config max number of file descriptors to be cached by backup-checker-file-manager
+   */
+  public static final String MAX_BACKUP_CHECKER_REPORT_FD = "max.backup.checker.report.fd";
+  public static final int DEFAULT_MAX_BACKUP_CHECKER_REPORT_FD = 1000;
+  @Config(BACKUP_CHECKER_REPORT_DIR)
+  public final int maxBackupCheckerReportFd;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
+    maxBackupCheckerReportFd =
+        verifiableProperties.getInt(MAX_BACKUP_CHECKER_REPORT_FD, DEFAULT_MAX_BACKUP_CHECKER_REPORT_FD);
+    backupCheckerReportDir =
+        verifiableProperties.getString(BACKUP_CHECKER_REPORT_DIR, DEFAULT_BACKUP_CHECKER_REPORT_DIR);
+    backupCheckFileManagerType =
+        verifiableProperties.getString(BACKUP_CHECKER_FILE_MANAGER_TYPE, DEFAULT_BACKUP_CHECKER_FILE_MANAGER);
     replicationThreadType = verifiableProperties.getString(REPLICATION_THREAD_TYPE, DEFAULT_REPLICATION_THREAD);
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
@@ -322,5 +363,7 @@ public class ReplicationConfig {
         verifiableProperties.getLong(REPLICATION_REQUEST_NETWORK_POLL_TIMEOUT_MS, 40);
     replicationUsingNonblockingNetworkClientForRemoteColo =
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
+    replicationUsingNonblockingNetworkClientForLocalColo =
+        verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO, false);
   }
 }

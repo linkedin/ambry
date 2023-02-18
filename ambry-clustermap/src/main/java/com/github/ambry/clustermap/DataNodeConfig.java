@@ -36,6 +36,7 @@ class DataNodeConfig {
   private final String rackId;
   private final long xid;
   private final Set<String> sealedReplicas = new HashSet<>();
+  private final Set<String> partiallySealedReplicas = new HashSet<>();
   private final Set<String> stoppedReplicas = new HashSet<>();
   private final Set<String> disabledReplicas = new HashSet<>();
   private final Map<String, DiskConfig> diskConfigs = new TreeMap<>();
@@ -128,6 +129,13 @@ class DataNodeConfig {
   }
 
   /**
+   * @return the set of partially sealed replicas on this server. This set is mutable.
+   */
+  Set<String> getPartiallySealedReplicas() {
+    return partiallySealedReplicas;
+  }
+
+  /**
    * @return the set of stopped replicas on this server. This set is mutable.
    */
   Set<String> getStoppedReplicas() {
@@ -164,7 +172,7 @@ class DataNodeConfig {
         + port + ", datacenterName='" + datacenterName + '\'' + ", sslPort=" + sslPort + ", http2Port=" + http2Port
         + ", rackId='" + rackId + '\'' + ", xid=" + xid + ", sealedReplicas=" + sealedReplicas + ", stoppedReplicas="
         + stoppedReplicas + ", disabledReplicas=" + disabledReplicas + ", diskConfigs=" + diskConfigs
-        + ", extraMapFields=" + extraMapFields + '}';
+        + ", extraMapFields=" + extraMapFields + ", partiallySealedReplicas=" + partiallySealedReplicas + '}';
   }
 
   @Override
@@ -182,7 +190,8 @@ class DataNodeConfig {
         datacenterName, that.datacenterName) && port == that.port && Objects.equals(sslPort, that.sslPort)
         && Objects.equals(http2Port, that.http2Port) && Objects.equals(rackId, that.rackId) && sealedReplicas.equals(
         that.sealedReplicas) && stoppedReplicas.equals(that.stoppedReplicas) && disabledReplicas.equals(
-        that.disabledReplicas) && diskConfigs.equals(that.diskConfigs);
+        that.disabledReplicas) && diskConfigs.equals(that.diskConfigs)
+        && partiallySealedReplicas.equals(this.partiallySealedReplicas);
   }
 
   /**

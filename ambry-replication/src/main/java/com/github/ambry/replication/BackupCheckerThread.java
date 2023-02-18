@@ -32,7 +32,11 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.nio.file.StandardOpenOption;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -58,7 +62,13 @@ import org.slf4j.LoggerFactory;
 public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
+  protected final BackupCheckerFileManager fileManager;
+  protected final ReplicationConfig replicationConfig;
   public static final String DR_Verifier_Keyword = "dr";
+  public static final String MISSING_KEYS_FILE = "missingKeys";
+  public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
+
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -71,6 +81,13 @@ public class BackupCheckerThread extends ReplicaThread {
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
+    try {
+      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType, replicationConfig, metricRegistry);
+    } catch (ReflectiveOperationException e) {
+      logger.error("Failed to create file manager. ", e.toString());
+      throw new RuntimeException(e);
+    }
+    this.replicationConfig = replicationConfig;
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -120,7 +137,7 @@ public class BackupCheckerThread extends ReplicaThread {
   /**
    * Checks if a blob from remote replica is present locally
    * We should not be here since we are overriding fixMissingStoreKeys but still need to override in case someone
-   * makes a change in the future and we end up here.
+   * makes a change in the future, and we end up here.
    * @param validMessageDetectionInputStream Stream of valid blob IDs
    * @param remoteReplicaInfo Info about remote replica from which we are replicating
    */
@@ -150,14 +167,32 @@ public class BackupCheckerThread extends ReplicaThread {
      */
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.PUT);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
-    for(ExchangeMetadataResponse exchangeMetadataResponse: exchangeMetadataResponseList) {
+    for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
+      ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
+      RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         for (MessageInfo messageInfo: exchangeMetadataResponse.getMissingStoreMessages()) {
           // Check local store once before logging an error
           checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates, acceptableStoreErrorCodes);
         }
+        // Advance token so that we make progress in spite of missing keys,
+        // else the replication code will be stuck waiting for missing keys to appear in local store.
+        advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
       }
     }
+  }
+
+  /**
+   * Advances local token to make progress on replication
+   * @param remoteReplicaInfo Remote replica info object
+   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   */
+  protected void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
+    remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
+    // reset stored metadata response for this replica so that we send next request for metadata
+    remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
+    logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
   }
 
   /**
@@ -169,22 +204,27 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
+    String errMsg = "%s | Missing %s | %s | Optime = %s | RemoteBlobState = %s | LocalBlobState = %s \n";
     try {
       EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
       // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
       // However, get() can also do this with additional and appropriate StoreGetOptions.
       MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
+      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
-        logger.error(String.format("RemoteReplica = %s, BlobID = %s, RemoteBlobState = %s, LocalBlobState = %s",
-            remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), getBlobStates(localBlob)));
+        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE),
+            String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
+                DATE_FORMAT.format(remoteBlob.getOperationTimeMs()), getBlobStates(remoteBlob), getBlobStates(localBlob)));
       }
     } catch (StoreException e) {
       EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
+      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
-        logger.error(String.format("RemoteReplica = %s, BlobID = %s, RemoteBlobState = %s, LocalBlobState = %s",
-            remoteReplicaInfo, remoteBlob.getStoreKey(), getBlobStates(remoteBlob), e.getErrorCode()));
+        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE),
+            String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
+                DATE_FORMAT.format(remoteBlob.getOperationTimeMs()), getBlobStates(remoteBlob), e.getErrorCode()));
       }
     }
   }
@@ -215,12 +255,29 @@ public class BackupCheckerThread extends ReplicaThread {
   /**
    * Prints a log if local store has caught up with remote store
    * @param remoteReplicaInfo Info about remote replica
+   * @param exchangeMetadataResponse Metadata response object
    */
   @Override
-  protected void logReplicationCaughtUp(RemoteReplicaInfo remoteReplicaInfo) {
+  protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
+      ExchangeMetadataResponse exchangeMetadataResponse) {
     // This will help us know when to stop DR process for sealed partitions
-    logger.info("Local-store has caught up with remote-store. RemoteReplica = {}, Token = {}",
-        remoteReplicaInfo.toString(), remoteReplicaInfo.getToken().toString());
+    String text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
+        remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
+        exchangeMetadataResponse.localLagFromRemoteInBytes);
+    fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), text);
+  }
+
+  /**
+   * Returns a concatenated file path
+   * @param remoteReplicaInfo Info about remote replica
+   * @param fileName Name of file to write text to
+   * @return Returns a concatenated file path
+   */
+  protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
+    return String.join(File.separator, replicationConfig.backupCheckerReportDir,
+        Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
+        fileName);
   }
 
   /**

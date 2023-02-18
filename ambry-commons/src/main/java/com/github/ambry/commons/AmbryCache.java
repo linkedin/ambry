@@ -21,6 +21,8 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.HashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -173,9 +175,28 @@ public class AmbryCache {
    */
   private void initializeAmbryCacheStats() {
 
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "Enabled"), (Gauge<Integer>) () ->
-        cacheEnabled ? 1 : 0);
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MaxNumCacheEntries"), (Gauge<Long>) () -> maxNumCacheEntries);
+    HashMap<String, Gauge> metricMap = new HashMap<>();
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "Enabled"), (Gauge<Integer>) () -> cacheEnabled ? 1 : 0);
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "MaxNumCacheEntries"), (Gauge<Long>) () -> maxNumCacheEntries);
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "HitRate"), (Gauge<Double>) () -> ambryCache.stats().hitRate());
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "MissRate"), (Gauge<Double>) () -> ambryCache.stats().missRate());
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "NumCacheEntries"), (Gauge<Long>) ambryCache::estimatedSize);
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "EvictionCount"), (Gauge<Long>) () -> ambryCache.stats().evictionCount());
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "HitCount"), (Gauge<Long>) () -> ambryCache.stats().hitCount());
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "MissCount"), (Gauge<Long>) () -> ambryCache.stats().missCount());
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "RequestCount"), (Gauge<Long>) () -> ambryCache.stats().requestCount());
+    for (Map.Entry<String, Gauge> entry : metricMap.entrySet()) {
+      if (metricRegistry.getMetrics().containsKey(entry.getKey()) == false) {
+        try {
+          metricRegistry.register(entry.getKey(), entry.getValue());
+        } catch (IllegalArgumentException e) {
+          // This means someone else registered the metric with the same name before we could.
+          // No problem. We'll just use that metric.
+          logger.warn(e.toString());
+        }
+      }
+    }
+
     getErrorCount = metricRegistry.counter(MetricRegistry.name(AmbryCache.class, cacheId + "GetErrorCount"));
     putErrorCount = metricRegistry.counter(MetricRegistry.name(AmbryCache.class, cacheId + "PutErrorCount"));
     deleteErrorCount = metricRegistry.counter(MetricRegistry.name(AmbryCache.class, cacheId + "DeleteErrorCount"));
@@ -185,13 +206,6 @@ public class AmbryCache {
     getRequestRate = metricRegistry.meter(MetricRegistry.name(AmbryCache.class, cacheId + "GetRequestRate"));
     putRequestRate = metricRegistry.meter(MetricRegistry.name(AmbryCache.class, cacheId + "PutRequestRate"));
     deleteRequestRate = metricRegistry.meter(MetricRegistry.name(AmbryCache.class, cacheId + "DeleteRequestRate"));
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "HitRate"), (Gauge<Double>) () -> ambryCache.stats().hitRate());
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MissRate"), (Gauge<Double>) () -> ambryCache.stats().missRate());
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "NumCacheEntries"), (Gauge<Long>) ambryCache::estimatedSize);
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "EvictionCount"), (Gauge<Long>) () -> ambryCache.stats().evictionCount());
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "HitCount"), (Gauge<Long>) () -> ambryCache.stats().hitCount());
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "MissCount"), (Gauge<Long>) () -> ambryCache.stats().missCount());
-    metricRegistry.register(MetricRegistry.name(AmbryCache.class, cacheId + "RequestCount"), (Gauge<Long>) () -> ambryCache.stats().requestCount());
     logger.info("[{}] Initialized metrics for cache", cacheId);
   }
 }

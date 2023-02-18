@@ -195,5 +195,13 @@ public class CompositeDataNodeConfigSource implements DataNodeConfigSource {
         configsSeen.put(config.getInstanceName(), config);
       }
     }
+
+    @Override
+    public void onDataNodeDelete(String instanceName) {
+      if (listener != null) {
+        listener.onDataNodeDelete(instanceName);
+      }
+      configsSeen.remove(instanceName);
+    }
   }
 }

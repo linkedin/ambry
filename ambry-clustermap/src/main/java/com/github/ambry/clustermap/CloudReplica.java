@@ -79,6 +79,11 @@ public class CloudReplica implements ReplicaId {
   }
 
   @Override
+  public boolean isPartiallySealed() {
+    return partitionId.getPartitionState().equals(PartitionState.PARTIAL_READ_WRITE);
+  }
+
+  @Override
   public JSONObject getSnapshot() {
     JSONObject snapshot = new JSONObject();
     snapshot.put(REPLICA_NODE, dataNodeId.getHostname() + ":" + dataNodeId.getPort());

@@ -121,6 +121,11 @@ class Replica implements ReplicaId {
   }
 
   @Override
+  public boolean isPartiallySealed() {
+    return partition.getPartitionState().equals(PartitionState.PARTIAL_READ_WRITE);
+  }
+
+  @Override
   public JSONObject getSnapshot() {
     JSONObject snapshot = new JSONObject();
     DataNodeId dataNodeId = getDataNodeId();
@@ -129,7 +134,8 @@ class Replica implements ReplicaId {
     snapshot.put(REPLICA_DISK, getDiskId().getMountPath());
     snapshot.put(REPLICA_PATH, getReplicaPath());
     snapshot.put(CAPACITY_BYTES, getCapacityInBytes());
-    snapshot.put(REPLICA_WRITE_STATE, isSealed() ? PartitionState.READ_ONLY.name() : PartitionState.READ_WRITE.name());
+    snapshot.put(REPLICA_WRITE_STATE,
+        ClusterMapUtils.convertPartitionStateToReplicaSealSatus(partition.partitionState));
     String replicaLiveness = UP;
     if (dataNodeId.getState() == HardwareState.UNAVAILABLE) {
       replicaLiveness = NODE_DOWN;

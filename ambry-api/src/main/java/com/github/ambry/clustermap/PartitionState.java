@@ -14,8 +14,17 @@
 package com.github.ambry.clustermap;
 
 /**
- * The valid states for a {@link PartitionId}.
+ * The valid states for a {@link PartitionId}. The state of a partition is resolved via the {@link ReplicaSealStatus}es
+ * of the partition's replicas. See ClusterMapUtils
+ *
+ * The state transition of a partition's state will always follow the following order:
+ * READ_WRITE <-> PARTIAL_READ_WRITE <-> READ_ONLY
  */
 public enum PartitionState {
-  READ_WRITE, READ_ONLY
+  /** The partition is available for all reads and writes */
+  READ_WRITE,
+  /** The partition is available for all reads but limited writes */
+  PARTIAL_READ_WRITE,
+  /** The partition is available for reads only. */
+  READ_ONLY
 }

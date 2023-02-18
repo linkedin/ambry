@@ -14,6 +14,7 @@
 
 package com.github.ambry.clustermap;
 
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -38,12 +39,32 @@ public class ReplicaStatusDelegate {
   }
 
   /**
+   * Sets replicaId to partially sealed status.
+   * @param replicaId the {@link ReplicaId} whose status would be set to partially sealed.
+   * @return {@code true} if replica is successfully partial-sealed. {@code false} if not.
+   */
+  public boolean partialSeal(ReplicaId replicaId) {
+    // TODO Under implementation.
+    return false;
+  }
+
+  /**
    * Sets replicaId to read-write status
    * @param replicaId the {@link ReplicaId} whose status would be set to read-write.
    * @return {@code true} if replica is successfully unsealed. {@code false} if not.
    */
   public boolean unseal(ReplicaId replicaId) {
     return clusterParticipant.setReplicaSealedState(replicaId, false);
+  }
+
+  /**
+   * Sets replicaId to partial-unsealed status. Unsealed replicas are READ_WRITE for all blobs.
+   * @param replicaId the {@link ReplicaId} whose status would be set to read write.
+   * @return {@code true} if replica is successfully unsealed. {@code false} if not.
+   */
+  public boolean partialUnseal(ReplicaId replicaId) {
+    // TODO Under implementation.
+    return false;
   }
 
   /**
@@ -92,6 +113,14 @@ public class ReplicaStatusDelegate {
    */
   public List<String> getSealedReplicas() {
     return clusterParticipant.getSealedReplicas();
+  }
+
+  /**
+   * @return a list of partially sealed replicas in InstanceConfig of local node.
+   */
+  public List<String> getPartiallySealedReplicas() {
+    // TODO get partial sealed replicas from HelixParticipant.
+    return new ArrayList<>();
   }
 
   /**

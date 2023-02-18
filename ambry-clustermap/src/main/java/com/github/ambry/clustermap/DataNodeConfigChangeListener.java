@@ -24,4 +24,10 @@ public interface DataNodeConfigChangeListener {
    * @param configs the new or updated configs.
    */
   void onDataNodeConfigChange(Iterable<DataNodeConfig> configs);
+
+  /**
+   * Called when a node is deleted. The node is identified by its instanceName.
+   * @param instanceName the deleted instance.
+   */
+  void onDataNodeDelete(String instanceName);
 }

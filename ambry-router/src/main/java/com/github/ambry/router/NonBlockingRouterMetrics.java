@@ -83,6 +83,8 @@ public class NonBlockingRouterMetrics {
   public final Meter undeleteBlobNotOriginateLocalOperationRate;
   public final Meter ttlUpdateBlobNotOriginateLocalOperationRate;
   public final Meter replicateBlobOperationRate;
+  public final Meter replicateBlobOperationOnDeleteRate;
+  public final Meter replicateBlobOperationOnTtlUpdateRate;
   public final Meter routerGetRequestRate;
   public final Meter routerPutRequestRate;
 
@@ -310,6 +312,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(TtlUpdateOperation.class, "UpdateBlobTtlOperationRate"));
     replicateBlobOperationRate =
         metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationRate"));
+    replicateBlobOperationOnDeleteRate =
+        metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationOnDeleteRate"));
+    replicateBlobOperationOnTtlUpdateRate =
+        metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationOnTtlUpdateRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
     operationDequeuingRate =
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationDequeuingRate"));

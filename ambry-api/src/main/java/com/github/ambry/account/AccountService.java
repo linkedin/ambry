@@ -167,17 +167,26 @@ public interface AccountService extends Closeable {
   }
 
   /**
+   * Update a {@link Dataset} based on the supplied properties.
+   * @param dataset The name of the dataset.
+   * @throws AccountServiceException
+   */
+  default void updateDataset(Dataset dataset) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
    * Add the dataset version based on the supplied properties.
    * @param accountName The name for the parent account.
    * @param containerName The name for the container.
    * @param datasetName The name of the dataset.
    * @param version The version of the dataset.
    * @param expirationTimeMs the expiration time of the version of the dataset.
-   * @return the {@link Dataset} which contains the metadata.
+   * @return the {@link DatasetVersionRecord}.
    * @throws AccountServiceException
    */
-  default Dataset addDatasetVersion(String accountName, String containerName, String datasetName, String version,
-      long expirationTimeMs) throws AccountServiceException {
+  default DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
+      String version, long expirationTimeMs) throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 

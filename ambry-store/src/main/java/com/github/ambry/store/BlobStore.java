@@ -15,7 +15,6 @@ package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
@@ -199,14 +198,14 @@ public class BlobStore implements Store {
     this.replicaStatusDelegates = config.storeReplicaStatusDelegateEnable ? replicaStatusDelegates : null;
     this.time = time;
     long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
-    long delta = config.storeReadWriteEnableSizeThresholdPercentageDelta;
+    long delta = config.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta;
     this.thresholdBytesHigh = (long) (capacityInBytes * (threshold / 100.0));
     this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
     this.blobStoreStats = blobStoreStats; // Only in test will this be non-null
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
-    remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId);
+    remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId, taskScheduler, factory);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
         config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
@@ -268,6 +267,9 @@ public class BlobStore implements Store {
         metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats,
             config.storeEnableCurrentInvalidSizeMetric, config.storeEnableIndexDirectMemoryUsageMetric);
         checkCapacityAndUpdateReplicaStatusDelegate();
+        if (remoteTokenTracker != null) {
+          remoteTokenTracker.start(config.storePersistRemoteTokenIntervalInSeconds);
+        }
         logger.trace("The store {} is successfully started", storeId);
         onSuccess("START");
         isDisabled.set(false);
@@ -928,13 +930,11 @@ public class BlobStore implements Store {
   }
 
   @Override
-  public Set<StoreKey> findMissingKeys(List<StoreKey> keys, DataNodeId sourceDataNodeId) throws StoreException {
+  public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
     final Timer.Context context = metrics.findMissingKeysResponse.time();
     try {
-      Set<StoreKey> missingKeys =
-          config.storeEnableFindMissingKeysInBatchMode && sourceDataNodeId != null ? index.findMissingKeysInBatch(keys,
-              sourceDataNodeId.toString()) : index.findMissingKeys(keys);
+      Set<StoreKey> missingKeys = index.findMissingKeys(keys);
       return missingKeys;
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.IOError) {
@@ -1160,6 +1160,9 @@ public class BlobStore implements Store {
         compactor.close(30);
         index.close(skipDiskFlush);
         log.close(skipDiskFlush);
+        if (remoteTokenTracker != null) {
+          remoteTokenTracker.close();
+        }
         metrics.deregisterMetrics(storeId);
         currentState = ReplicaState.OFFLINE;
         started = false;

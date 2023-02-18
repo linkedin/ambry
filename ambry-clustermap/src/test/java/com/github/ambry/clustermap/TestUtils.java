@@ -192,6 +192,10 @@ public class TestUtils {
     }
   }
 
+  private static void removeDataNodeInJsonArray(JSONArray dataNodeJsonArray) throws JSONException {
+    dataNodeJsonArray.remove(dataNodeJsonArray.length() - 1);
+  }
+
   /**
    * Update the given array of JSON data node objects by replacing original disks with given ones.
    * @param dataNodeJsonArray the datanode JSONArray to update
@@ -646,7 +650,8 @@ public class TestUtils {
       }
     }
 
-    protected JSONArray getDatacenters(boolean createNew, boolean updateDisks) throws JSONException {
+    protected JSONArray getDatacenters(boolean createNew, boolean updateDisks, boolean removeDataNode)
+        throws JSONException {
       List<String> names = new ArrayList<>(datacenterCount);
       if (createNew) {
         datanodeJSONArrays = new ArrayList<>(datacenterCount);
@@ -660,6 +665,8 @@ public class TestUtils {
         JSONArray disksArray = getDisks();
         if (createNew) {
           datanodeJSONArrays.add(i, getDataNodes(curBasePort, sslPort, http2Port, disksArray));
+        } else if (removeDataNode) {
+          removeDataNodeInJsonArray(datanodeJSONArrays.get(i));
         } else {
           updateDataNodeJsonArray(datanodeJSONArrays.get(i), curBasePort, sslPort, http2Port, disksArray);
         }
@@ -689,18 +696,24 @@ public class TestUtils {
       properties.setProperty("clustermap.host.name", "localhost");
       clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
       this.hardwareLayout =
-          new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(true, false)), clusterMapConfig);
+          new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(true, false, false)), clusterMapConfig);
     }
 
     void addNewDataNodes(int i) throws JSONException {
       this.dataNodeCount += i;
-      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false, false)),
+      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false, false, false)),
+          new ClusterMapConfig(new VerifiableProperties(properties)));
+    }
+
+    void removeDataNode() throws JSONException {
+      this.dataNodeCount--;
+      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false, false, true)),
           new ClusterMapConfig(new VerifiableProperties(properties)));
     }
 
     void updateDiskCapacity(long newCapacityInBytes) {
       diskCapacityInBytes = newCapacityInBytes;
-      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false, true)),
+      this.hardwareLayout = new HardwareLayout(getJsonHardwareLayout(clusterName, getDatacenters(false, true, false)),
           new ClusterMapConfig(new VerifiableProperties(properties)));
     }
 
@@ -979,6 +992,33 @@ public class TestUtils {
       jsonReplicas.remove(replicaIdx);
       jsonPartition.put("replicas", jsonReplicas);
       jsonPartitions.put(index, jsonPartition);
+      JSONObject jsonPartitionLayout =
+          getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
+              jsonPartitions);
+      this.partitionLayout =
+          new PartitionLayout(testHardwareLayout.getHardwareLayout(), jsonPartitionLayout, clusterMapConfig);
+    }
+
+    void removeReplicasOfDatanode(String hostname, int port) {
+      version += 1;
+      int index;
+      for (index = 0; index < jsonPartitions.length(); ++index) {
+        JSONObject jsonPartition = (JSONObject) jsonPartitions.get(index);
+        JSONArray jsonReplicas = (JSONArray) jsonPartition.get("replicas");
+        int replicaIdx;
+        for (replicaIdx = 0; replicaIdx < jsonReplicas.length(); ++replicaIdx) {
+          JSONObject jsonReplica = (JSONObject) jsonReplicas.get(replicaIdx);
+          String jsonHostname = (String) jsonReplica.get("jsonHostname");
+          int jsonPort = (int) jsonReplica.get("port");
+          if (jsonHostname.equals(hostname) && jsonPort == port) {
+            break;
+          }
+        }
+        // remove given replica from replicas
+        jsonReplicas.remove(replicaIdx);
+        jsonPartition.put("replicas", jsonReplicas);
+        jsonPartitions.put(index, jsonPartition);
+      }
       JSONObject jsonPartitionLayout =
           getJsonPartitionLayout(testHardwareLayout.getHardwareLayout().getClusterName(), version, partitionCount,
               jsonPartitions);

@@ -178,21 +178,24 @@ public class DynamicClusterManagerComponentsTest {
 
     // AmbryReplica tests
     try {
-      new AmbryServerReplica(clusterMapConfig1, null, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+      new AmbryServerReplica(clusterMapConfig1, null, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES,
+          ReplicaSealStatus.NOT_SEALED);
       fail("Replica initialization should fail with invalid arguments");
     } catch (NullPointerException e) {
       // OK
     }
 
     try {
-      new AmbryServerReplica(clusterMapConfig1, partition1, null, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+      new AmbryServerReplica(clusterMapConfig1, partition1, null, false, MAX_REPLICA_CAPACITY_IN_BYTES,
+          ReplicaSealStatus.NOT_SEALED);
       fail("Replica initialization should fail with invalid arguments");
     } catch (NullPointerException e) {
       // OK
     }
 
     try {
-      new AmbryServerReplica(clusterMapConfig1, partition1, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES + 1, false);
+      new AmbryServerReplica(clusterMapConfig1, partition1, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES + 1,
+          ReplicaSealStatus.NOT_SEALED);
       fail("Replica initialization should fail with invalid arguments");
     } catch (IllegalStateException e) {
       // OK
@@ -200,19 +203,24 @@ public class DynamicClusterManagerComponentsTest {
 
     // Create a few replicas and make the mockClusterManagerCallback aware of the association.
     AmbryReplica replica1 =
-        new AmbryServerReplica(clusterMapConfig1, partition1, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryServerReplica(clusterMapConfig1, partition1, disk1, false, MAX_REPLICA_CAPACITY_IN_BYTES,
+            ReplicaSealStatus.NOT_SEALED);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica1);
     AmbryReplica replica2 =
-        new AmbryServerReplica(clusterMapConfig1, partition2, disk1, false, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryServerReplica(clusterMapConfig1, partition2, disk1, false, MIN_REPLICA_CAPACITY_IN_BYTES,
+            ReplicaSealStatus.NOT_SEALED);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica2);
     AmbryReplica replica3 =
-        new AmbryServerReplica(clusterMapConfig2, partition1, disk2, false, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryServerReplica(clusterMapConfig2, partition1, disk2, false, MIN_REPLICA_CAPACITY_IN_BYTES,
+            ReplicaSealStatus.NOT_SEALED);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica3);
     AmbryReplica replica4 =
-        new AmbryServerReplica(clusterMapConfig2, partition2, disk2, false, MIN_REPLICA_CAPACITY_IN_BYTES, true);
+        new AmbryServerReplica(clusterMapConfig2, partition2, disk2, false, MIN_REPLICA_CAPACITY_IN_BYTES,
+            ReplicaSealStatus.SEALED);
     mockClusterManagerCallback.addReplicaToPartition(partition2, replica4);
     AmbryReplica replica5 =
-        new AmbryServerReplica(clusterMapConfig1, partition1, disk1, true, MIN_REPLICA_CAPACITY_IN_BYTES, false);
+        new AmbryServerReplica(clusterMapConfig1, partition1, disk1, true, MIN_REPLICA_CAPACITY_IN_BYTES,
+            ReplicaSealStatus.NOT_SEALED);
     mockClusterManagerCallback.addReplicaToPartition(partition1, replica5);
 
     sealedStateChangeCounter.incrementAndGet();
@@ -237,19 +245,19 @@ public class DynamicClusterManagerComponentsTest {
 
     assertEquals(partition1.getPartitionState(), PartitionState.READ_WRITE);
     assertEquals(partition2.getPartitionState(), PartitionState.READ_ONLY);
-    replica1.setSealedState(true);
+    replica1.setSealedStatus(ReplicaSealStatus.SEALED);
     sealedStateChangeCounter.incrementAndGet();
     assertEquals(partition1.getPartitionState(), PartitionState.READ_ONLY);
-    replica3.setSealedState(true);
+    replica3.setSealedStatus(ReplicaSealStatus.SEALED);
     sealedStateChangeCounter.incrementAndGet();
     assertEquals(partition1.getPartitionState(), PartitionState.READ_ONLY);
-    replica1.setSealedState(false);
+    replica1.setSealedStatus(ReplicaSealStatus.NOT_SEALED);
     sealedStateChangeCounter.incrementAndGet();
     assertEquals(partition1.getPartitionState(), PartitionState.READ_ONLY);
-    replica3.setSealedState(false);
+    replica3.setSealedStatus(ReplicaSealStatus.NOT_SEALED);
     sealedStateChangeCounter.incrementAndGet();
     assertEquals(partition1.getPartitionState(), PartitionState.READ_WRITE);
-    replica4.setSealedState(false);
+    replica4.setSealedStatus(ReplicaSealStatus.NOT_SEALED);
     sealedStateChangeCounter.incrementAndGet();
     assertEquals(partition2.getPartitionState(), PartitionState.READ_WRITE);
 

@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 
 /**
@@ -49,6 +50,13 @@ import java.util.Objects;
 public class Dataset {
   //constant
 
+  /**
+   * The pattern defining valid Dataset names in Ambry. Names must begin with an alphanumeric character, followed
+   * by up to 100 characters that are alphanumeric, {@code _} , {@code .} , or {@code -} (underscore, period,
+   * or hyphen).
+   */
+  private static final Pattern AMBRY_VALID_DATASET_NAME_PATTERN = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}");
+
   static final String ACCOUNT_NAME_KEY = "accountName";
   static final String CONTAINER_NAME_KEY = "containerName";
   static final String DATASET_NAME_KEY = "datasetName";
@@ -56,9 +64,6 @@ public class Dataset {
   static final String JSON_EXPIRATION_TIME_KEY = "expirationTimeMs";
   static final String JSON_RETENTION_COUNT_KEY = "retentionCount";
   static final String JSON_USER_TAGS_KEY = "userTags";
-
-  static final Integer RETENTION_COUNT_DEFAULT = null;
-  static final Map<String, String> USER_TAGS_DEFAULT = Collections.emptyMap();
 
   @JsonProperty(ACCOUNT_NAME_KEY)
   private final String accountName;
@@ -88,7 +93,7 @@ public class Dataset {
    */
   public Dataset(String accountName, String containerName, String datasetName, VersionSchema versionSchema,
       Long expirationTimeMs, Integer retentionCount, Map<String, String> userTags) {
-    checkPreconditions(accountName, containerName, datasetName, versionSchema, expirationTimeMs);
+    checkPreconditions(accountName, containerName, datasetName);
     this.accountName = accountName;
     this.containerName = containerName;
     this.datasetName = datasetName;
@@ -158,22 +163,22 @@ public class Dataset {
    * @param accountName The name of the account. Cannot be null.
    * @param containerName The name of the container. Cannot be null.
    * @param datasetName The name of the dataset. Cannot be null.
-   * @param versionSchema The schema of the version. Cannot be null.
-   * @param expirationTimeMs The expiration time in milliseconds since epoch, or -1 if the dataset should be permanent. Cannot be null.
    */
-  private void checkPreconditions(String accountName, String containerName, String datasetName,
-      VersionSchema versionSchema, Long expirationTimeMs) {
-    if (accountName == null || containerName == null || datasetName == null || versionSchema == null
-        || expirationTimeMs == null) {
+  private void checkPreconditions(String accountName, String containerName, String datasetName) {
+    if (accountName == null || containerName == null || datasetName == null) {
       throw new IllegalStateException(
           "At lease one of required fields accountName=" + accountName + " or containerName=" + containerName
-              + " or datasetName=" + datasetName + " or versionSchema=" + versionSchema + " or expirationTimeMs="
-              + expirationTimeMs + " is null");
+              + " or datasetName=" + datasetName + " is null");
     }
     if (accountName.isEmpty() || containerName.isEmpty() || datasetName.isEmpty()) {
-      throw new IllegalStateException(
+      throw new IllegalArgumentException(
           "At lease one of required fields accountName=" + accountName + " or containerName=" + containerName
               + " or datasetName=" + datasetName + " is empty");
+    }
+    if (!AMBRY_VALID_DATASET_NAME_PATTERN.matcher(datasetName).matches()) {
+      throw new IllegalArgumentException("Invalid name for an Ambry dataset: " + datasetName
+          + ". Valid names should only include alphanumeric characters, periods, underscores, and hyphens. The exact regex you must match is: "
+          + AMBRY_VALID_DATASET_NAME_PATTERN);
     }
   }
 

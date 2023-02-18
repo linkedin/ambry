@@ -75,12 +75,10 @@ class CuratedLogIndexState {
   static final long DELAY_BETWEEN_LAST_MODIFIED_TIMES_MS = 10 * Time.MsPerSec;
   static final StoreKeyFactory STORE_KEY_FACTORY;
   // deliberately do not divide the capacities perfectly.
-  static long PUT_RECORD_SIZE = 53;
-  static long DELETE_RECORD_SIZE = 29;
+  static final long PUT_RECORD_SIZE = 53;
+  static final long DELETE_RECORD_SIZE = 29;
   static final long TTL_UPDATE_RECORD_SIZE = 37;
   static final long UNDELETE_RECORD_SIZE = 29;
-
-  static final int DEFAULT_NUMBER_CACHE_MISS_IN_FIND_MISSING_KEY_IN_BATCH_MODE = 3;
 
   static final int deleteRetentionHour = 1;
 
@@ -126,10 +124,6 @@ class CuratedLogIndexState {
   MessageStoreRecovery recovery = new DummyMessageStoreRecovery();
   // The MessageStoreHardDelete that is used with the index
   MessageStoreHardDelete hardDelete = new MockMessageStoreHardDelete();
-  // The metrics
-  StoreMetrics metrics;
-  // The StoreConfig
-  StoreConfig config;
   // The Log which has the data
   Log log;
   // The index of the log
@@ -149,6 +143,9 @@ class CuratedLogIndexState {
   private final String tempDirStr;
   // used by getUniqueId() to make sure keys are never regenerated in a single test run.
   private final Set<MockId> generatedKeys = new HashSet<>();
+
+  private StoreMetrics metrics;
+  StoreConfig config;
 
   /**
    * Creates state in order to make sure all cases are represented and log-index tests don't need to do any setup
@@ -212,8 +209,6 @@ class CuratedLogIndexState {
     properties.put("store.deleted.message.retention.hours", Integer.toString(CuratedLogIndexState.deleteRetentionHour));
     properties.put("store.rebuild.token.based.on.reset.key", Boolean.toString(enableResetKey));
     properties.put("store.auto.close.last.log.segment.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
-    properties.put(StoreConfig.storeNumOfCacheMissForFindMissingKeysInBatchModeName,
-        String.valueOf(DEFAULT_NUMBER_CACHE_MISS_IN_FIND_MISSING_KEY_IN_BATCH_MODE));
     if (addUndeletes) {
       // If we have undelete, than we need undelete filter
       properties.put("store.compaction.filter",

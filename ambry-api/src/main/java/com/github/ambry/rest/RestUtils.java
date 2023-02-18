@@ -59,7 +59,7 @@ public class RestUtils {
    * The default extension to add to blob id returned back to client.
    */
   public static final String DEFAULT_EXTENSION = "bin";
-
+  public static final String PATH_SEPARATOR_STRING = "/";
   /**
    * Ambry specific HTTP headers.
    */
@@ -247,6 +247,10 @@ public class RestUtils {
      */
     public static final String DATASET_VERSION_UPLOAD = "x-ambry-dataset-version-upload";
     /**
+     * Boolean field set to "true" to update dataset.
+     */
+    public static final String DATASET_UPDATE = "x-ambry-dataset-update";
+    /**
      * It is set to a string that differentiate STITCH vs regular upload named blob. If it set to "STITCH", it indicate that this is the a stitch upload.
      */
     public static final String UPLOAD_NAMED_BLOB_MODE = "x-ambry-upload-named-blob-mode";
@@ -374,8 +378,12 @@ public class RestUtils {
     /**
      * The key for the target {@link com.github.ambry.account.Dataset} indicated by the request.
      */
-    public static final String TARGET_DATASET_KEY = KEY_PREFIX + "target-dataset";
+    public static final String TARGET_DATASET = KEY_PREFIX + "target-dataset";
 
+    /**
+     * The key for the target dataset version indicated by the request.
+     */
+    public static final String TARGET_DATASET_VERSION = KEY_PREFIX + "target-dataset-version";
 
     /**
      * The key for the metadata {@code Map<String, String>} to include in a signed ID. This argument should be non-null
@@ -855,8 +863,18 @@ public class RestUtils {
    * @return {@code true} if {@link Headers#DATASET_VERSION_UPLOAD} is set.
    * @throws RestServiceException
    */
-  public static boolean isDatasetUpload(Map<String, Object> args) throws RestServiceException {
+  public static boolean isDatasetVersionUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.DATASET_VERSION_UPLOAD, false);
+  }
+
+  /**
+   * Determine if {@link Headers#DATASET_UPDATE} is set in the request args.
+   * @param args The request arguments.
+   * @return {@code true} if {@link Headers#DATASET_UPDATE} is set.
+   * @throws RestServiceException
+   */
+  public static boolean isDatasetUpdate(Map<String, Object> args) throws RestServiceException {
+    return getBooleanHeader(args, Headers.DATASET_UPDATE, false);
   }
 
   /**

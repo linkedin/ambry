@@ -80,6 +80,17 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Update dataset to the database.
+   * @param accountId the id of the {@link Account}
+   * @param containerId the id of the {@link Container}
+   * @param dataset the {@link Dataset}.
+   * @throws SQLException
+   */
+  public void updateDataset(short accountId, short containerId, Dataset dataset) throws SQLException {
+    accountDao.updateDataset(accountId, containerId, dataset);
+  }
+
+  /**
    * Get dataset from the database.
    * @param accountId the id of the {@link Account}.
    * @param containerId the id of the {@link Container}
@@ -158,7 +169,7 @@ public class MySqlAccountStore {
    * @return the corresponding {@link Dataset}
    * @throws SQLException
    */
-  public Dataset addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
+  public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
       String datasetName, String version, long expirationTimeMs) throws SQLException {
     return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
         expirationTimeMs);

@@ -307,9 +307,11 @@ public class AccountContainerTest {
     for (int i = 0; i < DATASET_COUNT; i++) {
       // build a dataset with arguments supplied
       Dataset datasetFromBuilder = buildDatasetWithOtherFields(
-          new DatasetBuilder(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i),
-              refDatasetVersionSchemas.get(i), refDatasetExpirationTimeMs.get(i)).setRetentionCount(
-              refDatasetRetentionCounts.get(i)).setUserTags(refDatasetUserTags.get(i)), refDatasets.get(i));
+          new DatasetBuilder(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i))
+              .setVersionSchema(refDatasetVersionSchemas.get(i))
+              .setExpirationTimeMs(refDatasetExpirationTimeMs.get(i))
+              .setRetentionCount(refDatasetRetentionCounts.get(i))
+              .setUserTags(refDatasetUserTags.get(i)), refDatasets.get(i));
       assertDataset(datasetFromBuilder, i);
       // build a dataset from existing container
       Dataset anotherDatasetFromBuilder = new DatasetBuilder(datasetFromBuilder).build();

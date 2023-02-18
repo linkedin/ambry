@@ -248,11 +248,16 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Logs the fact that replication on local node has caught up with remote replica
-   * Empty for current ReplicaThread but can be re-written in other cases to track progress.
-   * @param remoteReplicaInfo
+   * Logs replication progress of local node against some remote node
+   * @param remoteReplicaInfo remote replica information
+   * @param exchangeMetadataResponse metadata information from remote node
    */
-  protected void logReplicationCaughtUp(RemoteReplicaInfo remoteReplicaInfo) {
+  protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
+      ExchangeMetadataResponse exchangeMetadataResponse) {
+    logger.trace("ReplicationStatus | {} | {} | isSealed = {} | Token = {} | localLagFromRemoteInBytes = {}",
+        remoteReplicaInfo, remoteReplicaInfo.getReplicaId().getReplicaType(),
+        remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
+        exchangeMetadataResponse.localLagFromRemoteInBytes);
   }
 
   @Override
@@ -713,8 +718,10 @@ public class ReplicaThread implements Runnable {
               remoteReplicaInfo.setReEnableReplicationTime(
                   time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
               syncedBackOffCount.inc();
-              logReplicationCaughtUp(remoteReplicaInfo);
             }
+
+            // trace replication status to track progress of recovery from cloud
+            logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
 
             // There are no missing keys. We just advance the token
             if (exchangeMetadataResponse.missingStoreMessages.size() == 0) {
@@ -844,9 +851,8 @@ public class ReplicaThread implements Runnable {
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
           new ReplicaMetadataRequestInfo(remoteReplicaInfo.getReplicaId().getPartitionId(),
-              remoteReplicaInfo.getToken(), dataNodeId.getHostname(),
-              getLocalReplicaPath(remoteReplicaInfo), remoteReplicaInfo.getReplicaId().getReplicaType(),
-              replicationConfig.replicaMetadataRequestVersion);
+              remoteReplicaInfo.getToken(), dataNodeId.getHostname(), getLocalReplicaPath(remoteReplicaInfo),
+              remoteReplicaInfo.getReplicaId().getReplicaType(), replicationConfig.replicaMetadataRequestVersion);
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
           remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
@@ -931,9 +937,8 @@ public class ReplicaThread implements Runnable {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
     }
-    Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore()
-        .findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()),
-            remoteReplicaInfo.getReplicaId().getDataNodeId());
+    Set<StoreKey> convertedMissingStoreKeys =
+        remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()));
     Set<MessageInfo> missingRemoteMessages = new HashSet<>();
     remoteMessageToConvertedKeyNonNull.forEach((messageInfo, convertedKey) -> {
       if (convertedMissingStoreKeys.contains(convertedKey)) {
@@ -1268,8 +1273,14 @@ public class ReplicaThread implements Runnable {
                 if (messageInfo.isTtlUpdated()) {
                   applyTtlUpdate(messageInfo, remoteReplicaInfo);
                 }
-                replicationMetrics.updateReplicationLagInSecondsForBlob(datacenterName,
-                    (time.milliseconds() - messageInfo.getOperationTimeMs()) / Time.MsPerSec);
+                StoreKey key = messageInfo.getStoreKey();
+                if (key instanceof BlobId) {
+                  BlobId blobId = (BlobId) key;
+                  // Replication Lag should be recorded against the originating datacenter
+                  replicationMetrics.updateReplicationLagInSecondsForBlob(
+                      clusterMap.getDatacenterName(blobId.getDatacenterId()),
+                      (time.milliseconds() - messageInfo.getOperationTimeMs()) / Time.MsPerSec);
+                }
               }
               totalBlobsFixed += messageInfoList.size();
 
@@ -1603,8 +1614,7 @@ public class ReplicaThread implements Runnable {
 
         // Find the set of store keys that are still missing in the store
         Set<StoreKey> convertedMissingStoreKeys = remoteReplicaInfo.getLocalStore()
-            .findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()),
-                remoteReplicaInfo.getReplicaId().getDataNodeId());
+            .findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()));
 
         // Filter the remote messages whose keys are now found in store, i.e. not present in convertedMissingStoreKeys set.
         remoteMessageToConvertedKeyNonNull.forEach((messageInfo, convertedKey) -> {

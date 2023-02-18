@@ -74,6 +74,7 @@ public class ClusterMapUtils {
   public static final String HTTP2_PORT_STR = "http2Port";
   static final String RACKID_STR = "rackId";
   static final String SEALED_STR = "SEALED";
+  static final String PARTIALLY_SEALED_STR = "PARTIALLY_SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";
   static final String DISABLED_REPLICAS_STR = "DISABLED";
   static final String AVAILABLE_STR = "AVAILABLE";
@@ -173,6 +174,48 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Returns the replica's {@link PartitionState} based on the specified {@link ReplicaSealStatus}.
+   * @param replicaSealStatus {@link ReplicaSealStatus} of the replica.
+   * @return PartitionState object.
+   */
+  public static PartitionState convertReplicaSealStatusToPartitionState(ReplicaSealStatus replicaSealStatus) {
+    PartitionState partitionState = null;
+    switch (replicaSealStatus) {
+      case SEALED:
+        partitionState = PartitionState.READ_ONLY;
+        break;
+      case PARTIALLY_SEALED:
+        partitionState = PartitionState.PARTIAL_READ_WRITE;
+        break;
+      case NOT_SEALED:
+        partitionState = PartitionState.READ_WRITE;
+        break;
+    }
+    return partitionState;
+  }
+
+  /**
+   * Returns the replica's {@link ReplicaSealStatus} based on the specified {@link PartitionState}.
+   * @param partitionState {@link PartitionState} object.
+   * @return ReplicaSealStatus object.
+   */
+  public static ReplicaSealStatus convertPartitionStateToReplicaSealSatus(PartitionState partitionState) {
+    ReplicaSealStatus replicaSealStatus = null;
+    switch (partitionState) {
+      case READ_ONLY:
+        replicaSealStatus = ReplicaSealStatus.SEALED;
+        break;
+      case PARTIAL_READ_WRITE:
+        replicaSealStatus = ReplicaSealStatus.PARTIALLY_SEALED;
+        break;
+      case READ_WRITE:
+        replicaSealStatus = ReplicaSealStatus.NOT_SEALED;
+        break;
+    }
+    return replicaSealStatus;
+  }
+
+  /**
    * Get the schema version associated with the given instance (if any).
    * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
    * @return the schema version of the information stored. If the field is absent in the InstanceConfig, the version
@@ -204,6 +247,17 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Get the list of partially sealed replicas on a given instance.
+   * This is guaranteed to return a non-null list. It would return an empty list if there are no sealed replicas or if
+   * the field itself is absent for this instance.
+   * @param instanceConfig the {@link InstanceConfig} associated with the interested instance.
+   * @return the list of partially sealed replicas.
+   */
+  static List<String> getPartiallySealedReplicas(InstanceConfig instanceConfig) {
+    return getPartiallySealedReplicas(instanceConfig.getRecord());
+  }
+
+  /**
    * Get the list of sealed replicas on a given instance. This is guaranteed to return a non-null list. It would return
    * an empty list if there are no sealed replicas or if the field itself is absent for this instance.
    * @param znRecord the {@link ZNRecord} associated with the interested instance.
@@ -212,6 +266,18 @@ public class ClusterMapUtils {
   static List<String> getSealedReplicas(ZNRecord znRecord) {
     List<String> sealedReplicas = znRecord.getListField(ClusterMapUtils.SEALED_STR);
     return sealedReplicas == null ? new ArrayList<>() : sealedReplicas;
+  }
+
+  /**
+   * Get the list of partially sealed replicas on a given instance. This is guaranteed to return a non-null list. It
+   * would return an empty list if there are no partially sealed replicas or if the field itself is absent for this
+   * instance.
+   * @param znRecord the {@link ZNRecord} associated with the interested instance.
+   * @return the list of partially sealed replicas.
+   */
+  static List<String> getPartiallySealedReplicas(ZNRecord znRecord) {
+    List<String> partiallySealedReplicas = znRecord.getListField(ClusterMapUtils.PARTIALLY_SEALED_STR);
+    return partiallySealedReplicas == null ? new ArrayList<>() : partiallySealedReplicas;
   }
 
   /**
@@ -563,7 +629,7 @@ public class ClusterMapUtils {
     }
 
     /**
-     * Returns all the partitions that are in state {@link PartitionState#READ_WRITE} AND have the highest number of
+     * Returns all the partitions that are not in state {@link PartitionState#READ_ONLY} AND have the highest number of
      * replicas in the local datacenter for the given {@code partitionClass}.
      * <p/>
      * Also attempts to return only partitions with healthy replicas but if no such partitions are found, returns all
@@ -578,7 +644,7 @@ public class ClusterMapUtils {
       List<PartitionId> writablePartitions = new ArrayList<>();
       List<PartitionId> healthyWritablePartitions = new ArrayList<>();
       for (PartitionId partition : getPartitionsInClass(partitionClass, true)) {
-        if (partition.getPartitionState() == PartitionState.READ_WRITE) {
+        if (partition.getPartitionState() != PartitionState.READ_ONLY) {
           writablePartitions.add(partition);
           if (areAllReplicasForPartitionUp((partition))) {
             healthyWritablePartitions.add(partition);
@@ -591,8 +657,8 @@ public class ClusterMapUtils {
     }
 
     /**
-     * Returns a writable partition selected at random, that belongs to the specified partition class and that is in the
-     * state {@link PartitionState#READ_WRITE} AND has enough replicas up. In case none of the partitions have enough
+     * Returns a writable partition selected at random, that belongs to the specified partition class and that is not in
+     * the state {@link PartitionState#READ_ONLY} AND has enough replicas up. In case none of the partitions have enough
      * replicas up, any writable partition is returned. Enough replicas is considered to be all local replicas if such
      * information is available. In case localDatacenterName is not available, all of the partition's replicas should be up.
      * @param partitionClass the class of the partitions desired. Can be {@code null}.
@@ -612,7 +678,7 @@ public class ClusterMapUtils {
           PartitionId selected = partitionsInClass.get(randomIndex);
           if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(
               selected)) {
-            if (selected.getPartitionState() == PartitionState.READ_WRITE) {
+            if (selected.getPartitionState() != PartitionState.READ_ONLY) {
               anyWritablePartition = selected;
               if (hasEnoughEligibleWritableReplicas(selected)) {
                 return selected;

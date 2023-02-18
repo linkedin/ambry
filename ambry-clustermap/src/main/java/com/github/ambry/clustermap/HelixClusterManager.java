@@ -93,6 +93,10 @@ public class HelixClusterManager implements ClusterMap {
   // Routing table snapshot reference used in aggregated cluster view.
   private final AtomicReference<RoutingTableSnapshot> globalRoutingTableSnapshotRef = new AtomicReference<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
+  private final Map<String, ConcurrentHashMap<String, Set<String>>> dcToInstanceNameToResources =
+      new ConcurrentHashMap<>();
+  private final Map<String, ConcurrentHashMap<String, ResourceProperty>> dcToResourceNameToResourceProperty =
+      new ConcurrentHashMap<>();
   private final AtomicLong errorCount = new AtomicLong(0);
   private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
   private final AtomicLong clusterWideAllocatedRawCapacityBytes = new AtomicLong(0);
@@ -105,8 +109,8 @@ public class HelixClusterManager implements ClusterMap {
   private final Map<String, ReplicaId> bootstrapReplicas = new ConcurrentHashMap<>();
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStoreInLocalDc = null;
   // The current xid currently does not change after instantiation. This can change in the future, allowing the cluster
-// manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
-// reflects the current value.
+  // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
+  // reflects the current value.
   private final AtomicLong currentXid;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private HelixAggregatedViewClusterInfo helixAggregatedViewClusterInfo = null;
@@ -286,7 +290,8 @@ public class HelixClusterManager implements ClusterMap {
     if (!(dataNodeId instanceof AmbryDataNode)) {
       throw new IllegalArgumentException("Incompatible type passed in");
     }
-    return new ArrayList<>(ambryDataNodeToAmbryReplicas.get(dataNodeId).values());
+    ConcurrentHashMap<String, AmbryReplica> partitionToReplicaMap = ambryDataNodeToAmbryReplicas.get(dataNodeId);
+    return partitionToReplicaMap != null ? new ArrayList<>(partitionToReplicaMap.values()) : Collections.emptyList();
   }
 
   @Override
@@ -453,8 +458,9 @@ public class HelixClusterManager implements ClusterMap {
           // update disk capacity if bootstrap replica info contains disk capacity in bytes.
           targetDisk.setDiskCapacityInBytes(Long.parseLong(diskCapacityStr));
         }
-        bootstrapReplica =
-            new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity, false);
+        // A bootstrap replica is always ReplicaSealedStatus#NOT_SEALED.
+        bootstrapReplica = new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity,
+            ReplicaSealStatus.NOT_SEALED);
       } catch (Exception e) {
         logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
             instanceName, e);
@@ -485,6 +491,37 @@ public class HelixClusterManager implements ClusterMap {
         helixDcInfo.clusterChangeHandler.registerClusterMapListener(clusterMapChangeListener);
       }
     }
+  }
+
+  @Override
+  public boolean isDataNodeInFullAutoMode(String hostname, int port) {
+    if (clusterMapConfig.clusterMapUseAggregatedView) {
+      // Aggregated view don't include IdealState now, we are not getting IdealState from Helix, just return false.
+      // TODO: Pulling IdealState from helix managers in all datacenters
+      return false;
+    }
+    String instanceName = getInstanceName(hostname, port);
+    DataNodeId dataNodeId = instanceNameToAmbryDataNode.get(instanceName);
+    if (dataNodeId == null) {
+      throw new IllegalArgumentException("Host " + hostname + " Port " + port + " doesn't exist");
+    }
+    String dcName = dataNodeId.getDatacenterName();
+    Set<String> resourceNames = dcToInstanceNameToResources.get(dcName).get(instanceName);
+    if (resourceNames == null || resourceNames.isEmpty()) {
+      logger.trace("DataNode {} doesn't have any resources", instanceName);
+      return false;
+    }
+    // Before turn on FULL_AUTO, we have to make sure each host only stores partitions from one resource
+    if (resourceNames.size() != 1) {
+      return false;
+    }
+    // Make sure all the resources turned on FULL_AUTO mode
+    String resourceName = resourceNames.iterator().next();
+    ResourceProperty property = dcToResourceNameToResourceProperty.get(dcName).get(resourceName);
+    if (property == null || !property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -577,6 +614,20 @@ public class HelixClusterManager implements ClusterMap {
    */
   Map<String, ReplicaId> getBootstrapReplicaMap() {
     return Collections.unmodifiableMap(bootstrapReplicas);
+  }
+
+  /**
+   * Exposed for testing
+   * @param dcName data center name
+   * @return {@link HelixClusterChangeHandler} that handles cluster changes for a given data center. If aggregated view
+   * is enabled, same handler is used for all data centers.
+   */
+  HelixClusterChangeHandler getHelixClusterChangeHandler(String dcName) {
+    if (clusterMapConfig.clusterMapUseAggregatedView) {
+      return helixAggregatedViewClusterInfo.clusterChangeHandler;
+    } else {
+      return dcToDcInfo.get(dcName).clusterChangeHandler;
+    }
   }
 
   /**
@@ -800,7 +851,8 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public Collection<AmbryDisk> getDisks(AmbryDataNode dataNode) {
       if (dataNode != null) {
-        return ambryDataNodeToAmbryDisks.get(dataNode);
+        final Set<AmbryDisk> disks = ambryDataNodeToAmbryDisks.get(dataNode);
+        return disks != null ? disks : Collections.emptyList();
       }
       List<AmbryDisk> disksToReturn = new ArrayList<>();
       for (Set<AmbryDisk> disks : ambryDataNodeToAmbryDisks.values()) {
@@ -939,6 +991,11 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     @Override
+    public void onDataNodeDelete(String instanceName) {
+      handleDataNodeDelete(instanceName);
+    }
+
+    @Override
     public void onIdealStateChange(List<IdealState> idealState, NotificationContext changeContext) {
       handleIdealStateChange(idealState, dcName);
     }
@@ -956,8 +1013,7 @@ public class HelixClusterManager implements ClusterMap {
     /**
      * Handle any {@link DataNodeConfig} related change in current datacenter. Several events will trigger instance config
      * change: (1) replica's seal or stop state has changed; (2) new node or new partition is added; (3) new replica is
-     * added to existing node; (4) old replica is removed from existing node; (5) data node is deleted from cluster.
-     * For now, we support (1)~(4). We may consider supporting (5) in the future.
+     * added to existing node; (4) old replica is removed from existing node.
      * (The ZNode path of instance config in Helix is [AmbryClusterName]/CONFIGS/PARTICIPANT/[hostname_port])
      * @param configs all the {@link DataNodeConfig}(s) in current data center. (Note that PreFetch is enabled by default
      *                in Helix, which means all instance configs under "participants" ZNode will be sent to this method)
@@ -1002,6 +1058,47 @@ public class HelixClusterManager implements ClusterMap {
       } catch (Throwable t) {
         errorCount.incrementAndGet();
         throw t;
+      }
+    }
+
+    /**
+     * Handle deletion of a node from cluster.
+     * @param instanceName instance that was deleted
+     */
+    void handleDataNodeDelete(String instanceName) {
+      synchronized (notificationLock) {
+        AmbryDataNode datanode = instanceNameToAmbryDataNode.get(instanceName);
+        if (datanode != null) {
+          // Remove disks and replicas on this node.
+          List<ReplicaId> removedReplicas = new ArrayList<>();
+          for (AmbryDisk disk : ambryDataNodeToAmbryDisks.get(datanode)) {
+            clusterWideRawCapacityBytes.getAndAdd(-disk.getRawCapacityInBytes());
+          }
+          for (AmbryReplica replica : ambryDataNodeToAmbryReplicas.get(datanode).values()) {
+            removeReplicasFromPartition(replica.getPartitionId(), Collections.singletonList(replica));
+            removedReplicas.add(replica);
+          }
+          ambryDataNodeToAmbryDisks.remove(datanode);
+          ambryDataNodeToAmbryReplicas.remove(datanode);
+          // Remove datanode
+          dcToNodes.getOrDefault(datanode.getDatacenterName(), Collections.emptySet()).remove(datanode);
+          instanceNameToAmbryDataNode.remove(instanceName);
+          allInstances.remove(instanceName);
+          // Inform about removed replicas to cluster map change listeners
+          if (!removedReplicas.isEmpty()) {
+            for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
+              listener.onReplicaAddedOrRemoved(Collections.emptyList(), removedReplicas);
+            }
+          }
+          logger.info("Removed {} and its {} replicas from cluster map", instanceName, removedReplicas.size());
+          // Since the replicas on deleted hosts could be sealed, increase the sealed change counter so that latest
+          // partition state (RO or RW) is queried again in AmbryPartition#resolvePartitionState().
+          long counter = sealedStateChangeCounter.incrementAndGet();
+          logger.trace("SealedStateChangeCounter increase to {}", counter);
+        } else {
+          logger.info("Node {} already removed from cluster map", instanceName);
+        }
+        helixClusterManagerMetrics.instanceDeleteTriggerCount.inc();
       }
     }
 
@@ -1131,12 +1228,26 @@ public class HelixClusterManager implements ClusterMap {
       if (dcName != null) {
         // Rebuild the entire partition-to-resource map in current dc
         ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> instanceNameToResourceNames = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, ResourceProperty> resourceNameToProperty = new ConcurrentHashMap<>();
         for (IdealState state : idealStates) {
           String resourceName = state.getResourceName();
-          state.getPartitionSet()
-              .forEach(partitionName -> partitionToResourceMap.compute(partitionName,
-                  resourceNameReplaceFunc(resourceName)));
+          for (String partitionName : state.getPartitionSet()) {
+            String mappedResourceName =
+                partitionToResourceMap.compute(partitionName, resourceNameReplaceFunc(resourceName));
+            if (mappedResourceName.equals(resourceName)) {
+              ResourceProperty resourceProperty = new ResourceProperty(resourceName, state.getRebalanceMode());
+              resourceNameToProperty.put(resourceName, resourceProperty);
+
+              for (String instanceName : state.getInstanceSet(partitionName)) {
+                instanceNameToResourceNames.computeIfAbsent(instanceName, k -> ConcurrentHashMap.newKeySet())
+                    .add(resourceName);
+              }
+            }
+          }
         }
+        dcToResourceNameToResourceProperty.put(dcName, resourceNameToProperty);
+        dcToInstanceNameToResources.put(dcName, instanceNameToResourceNames);
         partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
       } else {
         logger.warn("Partition to resource mapping for aggregated cluster view would be built from external view");
@@ -1247,6 +1358,7 @@ public class HelixClusterManager implements ClusterMap {
       String instanceName = dataNodeConfig.getInstanceName();
       logger.info("Updating replicas info for existing node {}", instanceName);
       Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
+      Set<String> partiallySealedReplicas = dataNodeConfig.getPartiallySealedReplicas();
       Set<String> stoppedReplicas = dataNodeConfig.getStoppedReplicas();
       AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
       ConcurrentHashMap<String, AmbryReplica> currentReplicasOnNode = ambryDataNodeToAmbryReplicas.get(dataNode);
@@ -1283,7 +1395,8 @@ public class HelixClusterManager implements ClusterMap {
             // 1. directly add it into "replicasFromInstanceConfig" map
             replicasFromInstanceConfig.put(partitionName, existingReplica);
             // 2. update replica seal/stop state
-            updateReplicaStateAndOverrideIfNeeded(existingReplica, sealedReplicas, stoppedReplicas);
+            updateReplicaStateAndOverrideIfNeeded(existingReplica, sealedReplicas, partiallySealedReplicas,
+                stoppedReplicas);
           } else {
             // if this is a new replica and doesn't exist on node
             logger.info("Adding new replica {} to existing node {} in {}", partitionName, instanceName, dcName);
@@ -1308,9 +1421,9 @@ public class HelixClusterManager implements ClusterMap {
             } else {
               replica = new AmbryServerReplica(clusterMapConfig, mappedPartition, disk,
                   stoppedReplicas.contains(partitionName), replicaConfig.getReplicaCapacityInBytes(),
-                  sealedReplicas.contains(partitionName));
+                  resolveReplicaSealStatus(partitionName, sealedReplicas, partiallySealedReplicas));
             }
-            updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, stoppedReplicas);
+            updateReplicaStateAndOverrideIfNeeded(replica, sealedReplicas, partiallySealedReplicas, stoppedReplicas);
             // add new created replica to "replicasFromInstanceConfig" map
             replicasFromInstanceConfig.put(partitionName, replica);
             // Put new replica into partition-to-replica map temporarily (this is to avoid any exception thrown within the
@@ -1342,24 +1455,17 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     /**
-     * If partition override is enabled, we override replica SEAL/UNSEAL state based on partitionOverrideMap. If disabled,
-     * update replica state according to the info from {@link DataNodeConfig}.
+     * If partition override is enabled, we override replica's {@link ReplicaSealStatus} based on partitionOverrideMap.
+     * If disabled, update replica state according to the info from {@link DataNodeConfig}.
      * @param replica the {@link ReplicaId} whose states (seal,stop) should be updated.
      * @param sealedReplicas a collection of {@link ReplicaId}(s) that are in SEALED state.
+     * @param partiallySealedReplicas a collection of {@link ReplicaId}(s) that are in PARTIALLY_SEALED state.
      * @param stoppedReplicas a collection of {@link ReplicaId}(s) that are in STOPPED state.
      */
     private void updateReplicaStateAndOverrideIfNeeded(AmbryReplica replica, Collection<String> sealedReplicas,
-        Collection<String> stoppedReplicas) {
+        Collection<String> partiallySealedReplicas, Collection<String> stoppedReplicas) {
       String partitionName = replica.getPartitionId().toPathString();
-      boolean isSealed;
-      if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
-        isSealed = partitionOverrideInfoMap.get(partitionName)
-            .get(ClusterMapUtils.PARTITION_STATE)
-            .equals(ClusterMapUtils.READ_ONLY_STR);
-      } else {
-        isSealed = sealedReplicas.contains(partitionName);
-      }
-      replica.setSealedState(isSealed);
+      replica.setSealedStatus(resolveReplicaSealStatus(partitionName, sealedReplicas, partiallySealedReplicas));
       replica.setStoppedState(stoppedReplicas.contains(partitionName));
     }
 
@@ -1401,6 +1507,7 @@ public class HelixClusterManager implements ClusterMap {
         throws Exception {
       List<ReplicaId> addedReplicas = new ArrayList<>();
       Set<String> sealedReplicas = dataNodeConfig.getSealedReplicas();
+      Set<String> partiallySealedReplicas = dataNodeConfig.getPartiallySealedReplicas();
       Set<String> stoppedReplicas = dataNodeConfig.getStoppedReplicas();
       ambryDataNodeToAmbryReplicas.put(datanode, new ConcurrentHashMap<>());
       ambryDataNodeToAmbryDisks.put(datanode, ConcurrentHashMap.newKeySet());
@@ -1426,17 +1533,10 @@ public class HelixClusterManager implements ClusterMap {
           ensurePartitionAbsenceOnNodeAndValidateCapacity(mappedPartition, datanode,
               replicaConfig.getReplicaCapacityInBytes());
           // Create replica associated with this node and this partition
-          boolean isSealed = sealedReplicas.contains(partitionName);
-          if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(
-              partitionName)) {
-            // override sealed state if PartitionOverride is enabled.
-            isSealed = partitionOverrideInfoMap.get(partitionName)
-                .get(ClusterMapUtils.PARTITION_STATE)
-                .equals(ClusterMapUtils.READ_ONLY_STR);
-          }
           AmbryReplica replica =
               new AmbryServerReplica(clusterMapConfig, mappedPartition, disk, stoppedReplicas.contains(partitionName),
-                  replicaConfig.getReplicaCapacityInBytes(), isSealed);
+                  replicaConfig.getReplicaCapacityInBytes(),
+                  resolveReplicaSealStatus(partitionName, sealedReplicas, partiallySealedReplicas));
           ambryDataNodeToAmbryReplicas.get(datanode).put(mappedPartition.toPathString(), replica);
           addReplicasToPartition(mappedPartition, Collections.singletonList(replica));
           addedReplicas.add(replica);
@@ -1480,6 +1580,45 @@ public class HelixClusterManager implements ClusterMap {
               + "the capacity of an existing replica " + replica.getCapacityInBytes());
         }
       }
+    }
+
+    /**
+     * Resolve the {@link ReplicaSealStatus} of the replica belonging to the partition with the specified partitionName.
+     * @param partitionName Name of the partition.
+     * @param sealedReplicas {@link Collection} of partition names whose replicas are sealed.
+     * @param partiallySealedReplicas {@link Collection} of partition names whose replicas are partially sealed.
+     * @return ReplicaSealStatus object.
+     */
+    private ReplicaSealStatus resolveReplicaSealStatus(String partitionName, Collection<String> sealedReplicas,
+        Collection<String> partiallySealedReplicas) {
+      if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
+        if (partitionOverrideInfoMap.get(partitionName)
+            .get(ClusterMapUtils.PARTITION_STATE)
+            .equals(ClusterMapUtils.READ_ONLY_STR)) {
+          return ReplicaSealStatus.SEALED;
+        }
+      } else {
+        if (sealedReplicas.contains(partitionName)) {
+          return ReplicaSealStatus.SEALED;
+        }
+      }
+      if (partiallySealedReplicas.contains(partitionName)) {
+        return ReplicaSealStatus.PARTIALLY_SEALED;
+      }
+      return ReplicaSealStatus.NOT_SEALED;
+    }
+  }
+
+  /**
+   * Properties for Resource.
+   */
+  static class ResourceProperty {
+    final String name;
+    final IdealState.RebalanceMode rebalanceMode;
+
+    ResourceProperty(String name, IdealState.RebalanceMode rebalanceMode) {
+      this.name = name;
+      this.rebalanceMode = rebalanceMode;
     }
   }
 }

@@ -301,7 +301,7 @@ public class StoreConfig {
   public static final String storeReplicaStatusDelegateEnableName = "store.replica.status.delegate.enable";
 
   /**
-   * Specifies the size threshold (as percentage of maximum size) of a store for converting the chunk to RO from RW
+   * Specifies the size threshold (as percentage of maximum size) of a store for converting the store to RO from RW
    */
   @Config(storeReadOnlyEnableSizeThresholdPercentageName)
   @Default("95")
@@ -311,13 +311,33 @@ public class StoreConfig {
 
   /**
    * Specifies the size threshold delta below {@link #storeReadOnlyEnableSizeThresholdPercentageName} that a store will
-   * be converted from RO to RW
+   * be converted from RO to Partially Writable.
    */
-  @Config(storeReadWriteEnableSizeThresholdPercentageDeltaName)
+  @Config(storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDeltaName)
   @Default("5")
-  public final int storeReadWriteEnableSizeThresholdPercentageDelta;
-  public static final String storeReadWriteEnableSizeThresholdPercentageDeltaName =
-      "store.read.write.enable.size.threshold.percentage.delta";
+  public final int storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta;
+  public static final String storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDeltaName =
+      "store.read.only.to.partial.write.enable.size.threshold.percentage.delta";
+
+  /**
+   * Specifies the size threshold (as percentage of maximum size) of a store for converting the replica and partition to
+   * partially writable from RW.
+   */
+  @Config(storePartialWriteEnableSizeThresholdPercentageName)
+  @Default("50")
+  public final int storePartialWriteEnableSizeThresholdPercentage;
+  public static final String storePartialWriteEnableSizeThresholdPercentageName =
+      "store.partial.write.enable.size.threshold.percentage";
+
+  /**
+   * Specifies the size threshold delta below {@link #storePartialWriteEnableSizeThresholdPercentageName} that a store will
+   * be converted from partially writable to RW
+   */
+  @Config(storePartialWriteToReadWriteEnableSizeThresholdPercentageDeltaName)
+  @Default("5")
+  public final int storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
+  public static final String storePartialWriteToReadWriteEnableSizeThresholdPercentageDeltaName =
+      "store.partial.write.to.read.write.enable.size.threshold.percentage.delta";
 
   /**
    * Specifies the minimum number of seconds before a blob's current expiry time (creation time + TTL) that the current
@@ -463,27 +483,6 @@ public class StoreConfig {
   public final int storeDiskIoReservoirTimeWindowMs;
 
   /**
-   * True to enable batch mode in findMissingKeys.
-   * @TODO: There is a bug in the implementation that ignores some keys
-   */
-  @Config(storeEnableFindMissingKeysInBatchModeName)
-  @Default("false")
-  public final boolean storeEnableFindMissingKeysInBatchMode;
-  public static final String storeEnableFindMissingKeysInBatchModeName = "store.enable.find.missing.keys.in.batch.mode";
-
-  @Config(storeCacheSizeForFindMissingKeysInBatchModeName)
-  @Default("3")
-  public final int storeCacheSizeForFindMissingKeysInBatchMode;
-  public static final String storeCacheSizeForFindMissingKeysInBatchModeName =
-      "store.cache.size.for.find.missing.keys.in.batch.mode";
-
-  @Config(storeNumOfCacheMissForFindMissingKeysInBatchModeName)
-  @Default("5")
-  public final int storeNumOfCacheMissForFindMissingKeysInBatchMode;
-  public static final String storeNumOfCacheMissForFindMissingKeysInBatchModeName =
-      "store.num.of.cache.miss.for.find.missing.keys.in.batch.mode";
-
-  /**
    * How many days of compactionlogs we have to read from disk to build the compaction history
    */
   @Config(storeCompactionHistoryInDayName)
@@ -511,17 +510,12 @@ public class StoreConfig {
       "store.rebuild.token.based.on.compaction.history";
 
   /**
-   * If true, then in findEntriesSince method, use Delete entry's size for a deleted Put entry. This is useful for replication.
-   * In replication, when handling ReplicaMetadataRequest, server would scan through index segments. One Put entry could be
-   * as big as 4MB, but if this Put entry is already deleted, then in the requester server side it will do nothing. This is bad
-   * because we are using one roundtrip to bypass on blob id.
-   * Set this to true would help mitigate this issue. We know the put's final state is delete and the requester server won't
-   * do anything, then we just move on to scan more entries.
-   * @TODO: there is a but in the implementation that returns too many blob ids in one request.
+   * If storePersistRemoteTokenIntervalInSeconds > 0, persist the remote token every storePersistRemoteTokenIntervalInSeconds seconds.
    */
-  @Config(storeDeletedPutAsDeleteInFindEntriesName)
-  public final boolean storeDeletedPutAsDeleteInFindEntries;
-  public static final String storeDeletedPutAsDeleteInFindEntriesName = "store.deleted.put.as.delete.in.find.entries";
+  @Config(storePersistRemoteTokenIntervalInSecondsName)
+  public final int storePersistRemoteTokenIntervalInSeconds;
+  public static final String storePersistRemoteTokenIntervalInSecondsName =
+      "store.persist.remote.token.interval.in.seconds";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -588,9 +582,14 @@ public class StoreConfig {
     storeReplicaStatusDelegateEnable = verifiableProperties.getBoolean(storeReplicaStatusDelegateEnableName, false);
     storeReadOnlyEnableSizeThresholdPercentage =
         verifiableProperties.getIntInRange(storeReadOnlyEnableSizeThresholdPercentageName, 95, 0, 100);
-    storeReadWriteEnableSizeThresholdPercentageDelta =
-        verifiableProperties.getIntInRange(storeReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
+    storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta =
+        verifiableProperties.getIntInRange(storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
             storeReadOnlyEnableSizeThresholdPercentage);
+    storePartialWriteEnableSizeThresholdPercentage =
+        verifiableProperties.getIntInRange(storePartialWriteEnableSizeThresholdPercentageName, 50, 0, 100);
+    storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta =
+        verifiableProperties.getIntInRange(storePartialWriteToReadWriteEnableSizeThresholdPercentageDeltaName, 5, 0,
+            storePartialWriteEnableSizeThresholdPercentage);
     storeValidateAuthorization = verifiableProperties.getBoolean("store.validate.authorization", false);
     storeTtlUpdateBufferTimeSeconds =
         verifiableProperties.getIntInRange(storeTtlUpdateBufferTimeSecondsName, 60 * 60 * 24, 0, Integer.MAX_VALUE);
@@ -632,12 +631,6 @@ public class StoreConfig {
             Integer.MAX_VALUE);
     storeDiskIoReservoirTimeWindowMs =
         verifiableProperties.getIntInRange("store.disk.io.reservoir.time.window.ms", 200, 0, Integer.MAX_VALUE);
-    storeEnableFindMissingKeysInBatchMode =
-        verifiableProperties.getBoolean(storeEnableFindMissingKeysInBatchModeName, false);
-    storeCacheSizeForFindMissingKeysInBatchMode =
-        verifiableProperties.getIntInRange(storeCacheSizeForFindMissingKeysInBatchModeName, 3, 1, 100);
-    storeNumOfCacheMissForFindMissingKeysInBatchMode =
-        verifiableProperties.getIntInRange(storeNumOfCacheMissForFindMissingKeysInBatchModeName, 5, 3, 100);
     storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 21, 1, 365);
     storeRebuildTokenBasedOnCompactionHistory =
         verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);
@@ -650,7 +643,7 @@ public class StoreConfig {
           Stream.of(partitions.split(",")).map(Long::parseLong).collect(Collectors.toList());
     }
 
-    storeDeletedPutAsDeleteInFindEntries =
-        verifiableProperties.getBoolean(storeDeletedPutAsDeleteInFindEntriesName, false);
+    storePersistRemoteTokenIntervalInSeconds =
+        verifiableProperties.getIntInRange(storePersistRemoteTokenIntervalInSecondsName, 0, 0, 60 * 60 * 24);
   }
 }

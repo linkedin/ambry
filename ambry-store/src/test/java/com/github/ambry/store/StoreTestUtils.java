@@ -20,6 +20,7 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -79,7 +80,7 @@ class StoreTestUtils {
     private long capacity;
     private String filePath;
     private PartitionId partitionId;
-    private boolean isSealed = false;
+    private ReplicaSealStatus replicaSealStatus = ReplicaSealStatus.NOT_SEALED;
 
     MockReplicaId(String storeId, long capacity, String filePath) {
       this.capacity = capacity;
@@ -131,7 +132,12 @@ class StoreTestUtils {
 
     @Override
     public boolean isSealed() {
-      return isSealed;
+      return replicaSealStatus == ReplicaSealStatus.SEALED;
+    }
+
+    @Override
+    public boolean isPartiallySealed() {
+      return replicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED;
     }
 
     @Override
@@ -154,8 +160,12 @@ class StoreTestUtils {
       return ReplicaType.DISK_BACKED;
     }
 
-    public void setSealedState(boolean isSealed) {
-      this.isSealed = isSealed;
+    /**
+     * Set the {@link ReplicaSealStatus} for this replica.
+     * @param replicaSealStatus {@link ReplicaSealStatus} to set.
+     */
+    public void setSealedState(ReplicaSealStatus replicaSealStatus) {
+      this.replicaSealStatus = replicaSealStatus;
     }
   }
 

@@ -41,6 +41,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getSignedUrlMetricsGroup;
   public final RestRequestMetricsGroup getClusterMapSnapshotMetricsGroup;
   public final RestRequestMetricsGroup getAccountsMetricsGroup;
+  public final RestRequestMetricsGroup getDatasetsMetricsGroup;
   public final RestRequestMetricsGroup getStatsReportMetricsGroup;
   // HEAD
   public final RestRequestMetricsGroup headBlobMetricsGroup;
@@ -49,6 +50,8 @@ public class FrontendMetrics {
   // POST
   public final RestRequestMetricsGroup postBlobMetricsGroup;
   public final RestRequestMetricsGroup postAccountsMetricsGroup;
+  public final RestRequestMetricsGroup postDatasetsMetricsGroup;
+
   // PUT
   public final RestRequestMetricsGroup updateBlobTtlMetricsGroup;
   public final RestRequestMetricsGroup undeleteBlobMetricsGroup;
@@ -112,12 +115,19 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics getAccountsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getAccountsSecurityPostProcessRequestMetrics;
 
+  public final AsyncOperationTracker.Metrics getDatasetsSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getDatasetsSecurityPostProcessRequestMetrics;
+
   public final AsyncOperationTracker.Metrics getStatsReportSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getStatsReportSecurityPostProcessRequestMetrics;
 
   public final AsyncOperationTracker.Metrics postAccountsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postAccountsSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics postAccountsReadRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics postDatasetsSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics postDatasetsSecurityPostProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics postDatasetsReadRequestMetrics;
 
   public final AsyncOperationTracker.Metrics getPreProcessingMetrics;
   public final AsyncOperationTracker.Metrics headPreProcessingMetrics;
@@ -235,6 +245,7 @@ public class FrontendMetrics {
 
   // Dataset
   public final Counter unrecognizedDatasetNameCount;
+  public final Meter getDatasetWithAccountAndContainerHeaderRate;
 
   //Dataset Version
   public final Counter addDatasetVersionError;
@@ -279,6 +290,8 @@ public class FrontendMetrics {
             frontendConfig);
     getAccountsMetricsGroup =
         new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, metricRegistry, frontendConfig);
+    getDatasetsMetricsGroup =
+        new RestRequestMetricsGroup(GetDatasetsHandler.class, "GetDatasets", false, metricRegistry, frontendConfig);
     getStatsReportMetricsGroup =
         new RestRequestMetricsGroup(GetStatsReportHandler.class, "GetStatsReport", false, metricRegistry,
             frontendConfig);
@@ -294,6 +307,8 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "PostBlob", true, metricRegistry, frontendConfig);
     postAccountsMetricsGroup =
         new RestRequestMetricsGroup(PostAccountsHandler.class, "PostAccounts", false, metricRegistry, frontendConfig);
+    postDatasetsMetricsGroup =
+        new RestRequestMetricsGroup(PostDatasetsHandler.class, "PostDatasets", false, metricRegistry, frontendConfig);
     // PUT
     updateBlobTtlMetricsGroup =
         new RestRequestMetricsGroup(TtlUpdateHandler.class, "UpdateBlobTtl", false, metricRegistry, frontendConfig);
@@ -399,6 +414,11 @@ public class FrontendMetrics {
     getAccountsSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetAccountsHandler.class, "SecurityPostProcessRequest", metricRegistry);
 
+    getDatasetsSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityProcessRequest", metricRegistry);
+    getDatasetsSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityPostProcessRequest", metricRegistry);
+
     getStatsReportSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetStatsReportHandler.class, "SecurityProcessRequest", metricRegistry);
     getStatsReportSecurityPostProcessRequestMetrics =
@@ -410,6 +430,13 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(PostAccountsHandler.class, "SecurityPostProcessRequest", metricRegistry);
     postAccountsReadRequestMetrics =
         new AsyncOperationTracker.Metrics(PostAccountsHandler.class, "ReadRequest", metricRegistry);
+
+    postDatasetsSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(PostDatasetsHandler.class, "SecurityProcessRequest", metricRegistry);
+    postDatasetsSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(PostDatasetsHandler.class, "SecurityPostProcessRequest", metricRegistry);
+    postDatasetsReadRequestMetrics =
+        new AsyncOperationTracker.Metrics(PostDatasetsHandler.class, "ReadRequest", metricRegistry);
 
     getPreProcessingMetrics =
         new AsyncOperationTracker.Metrics(FrontendRestRequestService.class, "GetPreProcessing", metricRegistry);
@@ -604,6 +631,8 @@ public class FrontendMetrics {
     // Dataset
     unrecognizedDatasetNameCount =
         metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "UnrecognizedDatasetNameCount"));
+    getDatasetWithAccountAndContainerHeaderRate = metricRegistry.meter(
+        MetricRegistry.name(FrontendRestRequestService.class, "GetDatasetWithAccountAndContainerHeaderRate"));
 
     // Dataset Version
     addDatasetVersionError =

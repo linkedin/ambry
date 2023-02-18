@@ -252,8 +252,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         break;
       }
     }
-    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword) &&
-        !replicaPath.startsWith(BackupCheckerThread.DR_Verifier_Keyword)) {
+    if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword) && !replicaPath.startsWith(
+        BackupCheckerThread.DR_Verifier_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
@@ -362,10 +362,10 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
       Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-          connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
-          storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
-          responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+    return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool,
+        networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
+        metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+        leaderBasedReplicationAdmin);
   }
 
   /**
@@ -388,9 +388,16 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         Transformer threadSpecificTransformer =
             Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
         NetworkClient networkClient = null;
-        if (!dataNodeId.getDatacenterName().equals(datacenter)
-            && replicationConfig.replicationUsingNonblockingNetworkClientForRemoteColo) {
-          networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
+        if (!dataNodeId.getDatacenterName().equals(datacenter)) {
+          // Inter-DC replication
+          if (replicationConfig.replicationUsingNonblockingNetworkClientForRemoteColo) {
+            networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
+          }
+        } else {
+          // Intra-DC replication
+          if (replicationConfig.replicationUsingNonblockingNetworkClientForLocalColo) {
+            networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
+          }
         }
         ReplicaThread replicaThread =
             getReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
