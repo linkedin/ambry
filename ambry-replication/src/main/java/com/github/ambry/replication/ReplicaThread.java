@@ -52,7 +52,6 @@ import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -852,9 +851,8 @@ public class ReplicaThread implements Runnable {
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
           new ReplicaMetadataRequestInfo(remoteReplicaInfo.getReplicaId().getPartitionId(),
-              remoteReplicaInfo.getToken(), dataNodeId.getHostname(),
-              getLocalReplicaPath(remoteReplicaInfo), remoteReplicaInfo.getReplicaId().getReplicaType(),
-              replicationConfig.replicaMetadataRequestVersion);
+              remoteReplicaInfo.getToken(), dataNodeId.getHostname(), getLocalReplicaPath(remoteReplicaInfo),
+              remoteReplicaInfo.getReplicaId().getReplicaType(), replicationConfig.replicaMetadataRequestVersion);
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
           remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
@@ -1275,8 +1273,14 @@ public class ReplicaThread implements Runnable {
                 if (messageInfo.isTtlUpdated()) {
                   applyTtlUpdate(messageInfo, remoteReplicaInfo);
                 }
-                replicationMetrics.updateReplicationLagInSecondsForBlob(datacenterName,
-                    (time.milliseconds() - messageInfo.getOperationTimeMs()) / Time.MsPerSec);
+                StoreKey key = messageInfo.getStoreKey();
+                if (key instanceof BlobId) {
+                  BlobId blobId = (BlobId) key;
+                  // Replication Lag should be recorded against the originating datacenter
+                  replicationMetrics.updateReplicationLagInSecondsForBlob(
+                      clusterMap.getDatacenterName(blobId.getDatacenterId()),
+                      (time.milliseconds() - messageInfo.getOperationTimeMs()) / Time.MsPerSec);
+                }
               }
               totalBlobsFixed += messageInfoList.size();
 
