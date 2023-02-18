@@ -478,6 +478,35 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   /**
+   * Test behavior with blob cleanup for good blob case
+   * Case 5, two rows created for the same blobId more than staleDataRetentionDays ago,
+   * one is In Progress, the other is Ready & Largest
+   */
+  @Test
+  public void testCleanupBlobGoodCase5() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long staleCutoffTime = calendar.getTimeInMillis();
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "good/" + "case3" + "/more path segments--";
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
+
+    time.setCurrentMilliseconds(staleCutoffTime);
+    namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, false).get();
+    namedBlobDb.put(record, NamedBlobState.READY, true).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+    final Set<String> validBlobIds = namedBlobDb.pullValidBlobIds().get();
+
+    assertEquals("Good blob case 5 pull stale blob result should be empty!", 0,
+        staleNamedBlobs.stream().filter(s -> !validBlobIds.contains(s.getBlobId())).count());
+  }
+
+  /**
    * Get a sample blob ID.
    * @param account the account of the blob.
    * @param container the container of the blob.
