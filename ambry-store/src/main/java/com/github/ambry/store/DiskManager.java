@@ -84,7 +84,7 @@ public class DiskManager {
   private final AccountService accountService;
   private final DiskManagerConfig diskManagerConfig;
   private boolean running = false;
-  private DiskHealthStatus diskHealthStatus = DiskHealthStatus.MOUNT_NOT_ACCESSIBLE;
+  private DiskHealthStatus diskHealthStatus;
   private final DiskHealthCheck diskHealthCheck;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -534,7 +534,7 @@ public class DiskManager {
    */
   private void checkMountPathAccessible() throws StoreException {
     File mountPath = new File(disk.getMountPath());
-    if (!mountPath.exists()) {
+    if (!mountPath.exists() && diskHealthStatus != DiskHealthStatus.MOUNT_NOT_ACCESSIBLE) {
       metrics.diskMountPathFailures.inc();
       throw new StoreException("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk",
           StoreErrorCodes.Initialization_Error);
