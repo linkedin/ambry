@@ -2187,7 +2187,8 @@ public class ReplicaThread implements Runnable {
         final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
         List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
         // Add response for dropped request because there is no guarantee that sendAndPoll would return a response for
-        // dropped requests.
+        // dropped requests. Even if the network client returns response infos for dropped requests, onResponse should
+        // still be able to handle duplicate response infos for the same request.
         responseInfos.addAll(responseInfosForTimedOutRequests);
         onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
       }
