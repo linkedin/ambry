@@ -44,8 +44,8 @@ public class ReplicaStatusDelegate {
    * @return {@code true} if replica is successfully partial-sealed. {@code false} if not.
    */
   public boolean partialSeal(ReplicaId replicaId) {
-    // TODO Under implementation.
-    return false;
+    // TODO Once the partial seal logic is complete end to end, this should set the partial seal state.
+    return clusterParticipant.setReplicaSealedState(replicaId, false);
   }
 
   /**
@@ -55,16 +55,6 @@ public class ReplicaStatusDelegate {
    */
   public boolean unseal(ReplicaId replicaId) {
     return clusterParticipant.setReplicaSealedState(replicaId, false);
-  }
-
-  /**
-   * Sets replicaId to partial-unsealed status. Unsealed replicas are READ_WRITE for all blobs.
-   * @param replicaId the {@link ReplicaId} whose status would be set to read write.
-   * @return {@code true} if replica is successfully unsealed. {@code false} if not.
-   */
-  public boolean partialUnseal(ReplicaId replicaId) {
-    // TODO Under implementation.
-    return false;
   }
 
   /**

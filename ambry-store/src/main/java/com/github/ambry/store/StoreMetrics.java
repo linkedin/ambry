@@ -53,8 +53,10 @@ public class StoreMetrics {
   public final Counter overflowReadError;
   public final Counter sealSetError;
   public final Counter unsealSetError;
+  public final Counter partialSealSetError;
   public final Counter sealDoneCount;
   public final Counter unsealDoneCount;
+  public final Counter partialSealDoneCount;
   public final Counter indexBasedTokenResetCount;
   public final Counter journalBasedTokenResetCount;
   public final Counter resetKeyFoundInCurrentIndex;
@@ -155,8 +157,10 @@ public class StoreMetrics {
     overflowReadError = registry.counter(MetricRegistry.name(Log.class, name + "OverflowReadError"));
     sealSetError = registry.counter(MetricRegistry.name(BlobStore.class, name + "SealSetError"));
     unsealSetError = registry.counter(MetricRegistry.name(BlobStore.class, name + "UnsealSetError"));
+    partialSealSetError = registry.counter(MetricRegistry.name(BlobStore.class, name + "PartialSealSetError"));
     sealDoneCount = registry.counter(MetricRegistry.name(BlobStore.class, name + "SealDoneCount"));
     unsealDoneCount = registry.counter(MetricRegistry.name(BlobStore.class, name + "UnsealDoneCount"));
+    partialSealDoneCount = registry.counter(MetricRegistry.name(BlobStore.class, name + "PartialSealDoneCount"));
     indexBasedTokenResetCount =
         registry.counter(MetricRegistry.name(PersistentIndex.class, name + "IndexBasedTokenResetCount"));
     journalBasedTokenResetCount =

@@ -324,7 +324,7 @@ public class StoreConfig {
    * partially writable from RW.
    */
   @Config(storePartialWriteEnableSizeThresholdPercentageName)
-  @Default("50")
+  @Default("95")
   public final int storePartialWriteEnableSizeThresholdPercentage;
   public static final String storePartialWriteEnableSizeThresholdPercentageName =
       "store.partial.write.enable.size.threshold.percentage";

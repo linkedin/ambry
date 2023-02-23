@@ -16,6 +16,7 @@ package com.github.ambry.store;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.config.StoreConfig;
@@ -49,6 +50,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,8 +86,10 @@ public class BlobStore implements Store {
   private final UUID sessionId = UUID.randomUUID();
   private final ReplicaId replicaId;
   private final List<ReplicaStatusDelegate> replicaStatusDelegates;
-  private final long thresholdBytesHigh;
-  private final long thresholdBytesLow;
+  private final long sealThresholdBytesHigh;
+  private final long sealThresholdBytesLow;
+  private final long partialSealThresholdBytesHigh;
+  private final long partialSealThresholdBytesLow;
   private final long ttlUpdateBufferTimeMs;
   private final RemoteTokenTracker remoteTokenTracker;
   private final AtomicInteger errorCount;
@@ -98,7 +102,8 @@ public class BlobStore implements Store {
   private volatile ReplicaState currentState;
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
-  private AtomicBoolean isSealed = new AtomicBoolean(false);
+  private AtomicReference<ReplicaSealStatus> replicaSealStatus =
+      new AtomicReference<>(ReplicaSealStatus.NOT_SEALED);
   private AtomicBoolean isDisabled = new AtomicBoolean(false);
   protected PersistentIndex index;
 
@@ -197,18 +202,26 @@ public class BlobStore implements Store {
     this.accountService = accountService;
     this.replicaStatusDelegates = config.storeReplicaStatusDelegateEnable ? replicaStatusDelegates : null;
     this.time = time;
-    long threshold = config.storeReadOnlyEnableSizeThresholdPercentage;
-    long delta = config.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta;
-    this.thresholdBytesHigh = (long) (capacityInBytes * (threshold / 100.0));
-    this.thresholdBytesLow = (long) (capacityInBytes * ((threshold - delta) / 100.0));
+    this.sealThresholdBytesHigh =
+        (long) (capacityInBytes * (config.storeReadOnlyEnableSizeThresholdPercentage / 100.0));
+    this.sealThresholdBytesLow = (long) (capacityInBytes * (
+        (config.storeReadOnlyEnableSizeThresholdPercentage
+            - config.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta) / 100.0));
+    this.partialSealThresholdBytesHigh =
+        (long) (capacityInBytes * (config.storePartialWriteEnableSizeThresholdPercentage / 100.0));
+    this.partialSealThresholdBytesLow = (long) (capacityInBytes * (
+        (config.storePartialWriteEnableSizeThresholdPercentage
+            - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta) / 100.0));
     this.blobStoreStats = blobStoreStats; // Only in test will this be non-null
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
     remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId, taskScheduler, factory);
     logger.debug(
-        "The enable state of replicaStatusDelegate is {} on store {}. The high threshold is {} bytes and the low threshold is {} bytes",
-        config.storeReplicaStatusDelegateEnable, storeId, this.thresholdBytesHigh, this.thresholdBytesLow);
+        "The enable state of replicaStatusDelegate is {} on store {}. The high threshold for seal is {} bytes and the"
+            + "low threshold for seal is {} bytes. The high threshold for partial seal is {} bytes and low threshold of"
+            + "partial seal is {} bytes", config.storeReplicaStatusDelegateEnable, storeId, this.sealThresholdBytesHigh,
+        this.sealThresholdBytesLow, this.partialSealThresholdBytesHigh, this.partialSealThresholdBytesLow);
     // if there is a decommission file in store dir, that means previous decommission didn't complete successfully.
     recoverFromDecommission = isDecommissionInProgress();
   }
@@ -416,57 +429,9 @@ public class BlobStore implements Store {
     if (replicaStatusDelegates != null) {
       logger.debug("The current used capacity is {} bytes on store {}", index.getLogUsedCapacity(),
           replicaId.getPartitionId());
-      // In two zk clusters case, "replicaId.isSealed()" might be true in first cluster but is still unsealed in second
-      // cluster, as server only spectates the first cluster. To guarantee both clusters have consistent seal/unseal
-      // state, we bypass "isSealed()" check if there are more than one replicaStatusDelegates.
-      if (index.getLogUsedCapacity() > thresholdBytesHigh && (!replicaId.isSealed() || (
-          replicaStatusDelegates.size() > 1 && !isSealed.getAndSet(true)))) {
-        for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
-          if (!replicaStatusDelegate.seal(replicaId)) {
-            metrics.sealSetError.inc();
-            logger.warn("Could not set the partition as read-only status on {}", replicaId);
-            isSealed.set(false);
-          } else {
-            metrics.sealDoneCount.inc();
-            logger.info(
-                "Store is successfully sealed for partition : {} because current used capacity : {} bytes exceeds ReadOnly threshold : {} bytes",
-                replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesHigh);
-          }
-        }
-      } else if (index.getLogUsedCapacity() <= thresholdBytesLow && (replicaId.isSealed() || (
-          replicaStatusDelegates.size() > 1 && isSealed.getAndSet(false)))) {
-        for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
-          if (!replicaStatusDelegate.unseal(replicaId)) {
-            metrics.unsealSetError.inc();
-            logger.warn("Could not set the partition as read-write status on {}", replicaId);
-            isSealed.set(true);
-          } else {
-            metrics.unsealDoneCount.inc();
-            logger.info(
-                "Store is successfully unsealed for partition : {} because current used capacity : {} bytes is below ReadWrite threshold : {} bytes",
-                replicaId.getPartitionId(), index.getLogUsedCapacity(), thresholdBytesLow);
-          }
-        }
-      }
-      // During startup, we also need to reconcile the replica state from both ZK clusters.
-      if (!started && replicaStatusDelegates.size() > 1 && thresholdBytesLow < index.getLogUsedCapacity()
-          && index.getLogUsedCapacity() <= thresholdBytesHigh) {
-        // reconcile the state by reading sealing state from both clusters
-        boolean sealed = false;
-        String partitionName = replicaId.getPartitionId().toPathString();
-        for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
-          Set<String> sealedReplicas = new HashSet<>(replicaStatusDelegate.getSealedReplicas());
-          sealed |= sealedReplicas.contains(partitionName);
-        }
-        for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
-          boolean success = sealed ? replicaStatusDelegate.seal(replicaId) : replicaStatusDelegate.unseal(replicaId);
-          if (success) {
-            logger.info("Succeeded in reconciling replica state to {} state", sealed ? "sealed" : "unsealed");
-            isSealed.set(sealed);
-          } else {
-            logger.error("Failed on reconciling replica state to {} state", sealed ? "sealed" : "unsealed");
-          }
-        }
+      updateSealedStatus();
+      if(!started && replicaStatusDelegates.size() > 1) {
+        reconcileSealedStatus();
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
     } else {
@@ -1143,6 +1108,146 @@ public class BlobStore implements Store {
   @Override
   public void shutdown() throws StoreException {
     shutdown(false);
+  }
+
+  /**
+   * Update the sealed status of the replica.
+   */
+  void updateSealedStatus() {
+    // In two zk clusters case, "replicaId.isSealed()" might be true in first cluster but is still unsealed in second
+    // cluster, as server only spectates the first cluster. To guarantee both clusters have consistent seal/unseal
+    // state, we bypass "isSealed()" check if there are more than one replicaStatusDelegates.
+    ReplicaSealStatus oldReplicaSealStatus = replicaSealStatus.get();
+    ReplicaSealStatus resolvedReplicaSealStatus = resolveReplicaSealStatusFromLogSize();
+    if (resolvedReplicaSealStatus == ReplicaSealStatus.SEALED && ((replicaStatusDelegates.size() > 1
+        && replicaSealStatus.getAndSet(ReplicaSealStatus.SEALED) != ReplicaSealStatus.SEALED)
+        || !replicaId.isSealed())) {
+      for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+        if (!replicaStatusDelegate.seal(replicaId)) {
+          metrics.sealSetError.inc();
+          logger.warn("Could not set the partition as read-only status on {}", replicaId);
+          replicaSealStatus.set(oldReplicaSealStatus);
+        } else {
+          metrics.sealDoneCount.inc();
+          logger.info(
+              "Store is successfully sealed for partition : {} because current used capacity : {} bytes exceeds ReadOnly threshold : (low : {}, high : {}) bytes",
+              replicaId.getPartitionId(), index.getLogUsedCapacity(), sealThresholdBytesLow, sealThresholdBytesHigh);
+        }
+      }
+    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED && (
+        (replicaStatusDelegates.size() > 1
+            && replicaSealStatus.getAndSet(ReplicaSealStatus.PARTIALLY_SEALED) != ReplicaSealStatus.PARTIALLY_SEALED)
+            || !replicaId.isPartiallySealed())) {
+      for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+        if (!replicaStatusDelegate.partialSeal(replicaId)) {
+          metrics.partialSealSetError.inc();
+          logger.warn("Could not set the partition as partially-sealed status on {}", replicaId);
+          replicaSealStatus.set(oldReplicaSealStatus);
+        } else {
+          metrics.partialSealDoneCount.inc();
+          logger.info(
+              "Store is successfully partial-sealed for partition : {} because current used capacity : {} bytes is exceeds Partial Read threshold : (low : {}, high : {}) bytes",
+              replicaId.getPartitionId(), index.getLogUsedCapacity(), partialSealThresholdBytesLow,
+              partialSealThresholdBytesHigh);
+        }
+      }
+    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.NOT_SEALED && (
+        (replicaStatusDelegates.size() > 1
+            && replicaSealStatus.getAndSet(ReplicaSealStatus.NOT_SEALED) != ReplicaSealStatus.NOT_SEALED)
+            || !replicaId.isUnsealed())) {
+      for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+        if (!replicaStatusDelegate.unseal(replicaId)) {
+          metrics.unsealSetError.inc();
+          logger.warn("Could not set the partition as not sealed on {}", replicaId);
+          replicaSealStatus.set(oldReplicaSealStatus);
+        } else {
+          metrics.unsealDoneCount.inc();
+          logger.info(
+              "Store is successfully unsealed for partition : {} because current used capacity : {} bytes is below Read Write threshold : {} bytes",
+              replicaId.getPartitionId(), index.getLogUsedCapacity(), partialSealThresholdBytesHigh);
+        }
+      }
+    }
+  }
+
+  /**
+   * Reconcile the sealed status of the replica during startup.
+   */
+  void reconcileSealedStatus() {
+    // During startup, we also need to reconcile the replica state from both ZK clusters.
+    // reconcile the state by reading sealing state from both clusters
+    ReplicaSealStatus sealStatus = resolveReplicaSealStatusFromLogSize();
+    String partitionName = replicaId.getPartitionId().toPathString();
+    for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+      Set<String> sealedReplicas = new HashSet<>(replicaStatusDelegate.getSealedReplicas());
+      Set<String> partiallySealedReplicas = new HashSet<>(replicaStatusDelegate.getPartiallySealedReplicas());
+      ReplicaSealStatus delegateSealStatus = sealedReplicas.contains(partitionName) ? ReplicaSealStatus.SEALED
+          : (partiallySealedReplicas.contains(partitionName) ? ReplicaSealStatus.PARTIALLY_SEALED
+              : ReplicaSealStatus.NOT_SEALED);
+      sealStatus = mergeReplicaSealStatus(sealStatus, delegateSealStatus);
+    }
+    boolean success = false;
+    for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
+      switch (sealStatus) {
+        case SEALED:
+          success = replicaStatusDelegate.seal(replicaId);
+          break;
+        case PARTIALLY_SEALED:
+          success = replicaStatusDelegate.partialSeal(replicaId);
+          break;
+        case NOT_SEALED:
+          success = replicaStatusDelegate.unseal(replicaId);
+          break;
+      }
+    }
+    if (success) {
+      logger.info("Succeeded in reconciling replica state to {} state", sealStatus.name());
+      replicaSealStatus.set(sealStatus);
+    } else {
+      logger.error("Failed on reconciling replica state to {} state", sealStatus.name());
+    }
+  }
+
+  /**
+   * Merge the specified {@link ReplicaSealStatus}es into a single {@link ReplicaSealStatus} by choosing the most restrictive
+   * seal status for the replica in the order
+   * {@link ReplicaSealStatus#SEALED} > {@link ReplicaSealStatus#PARTIALLY_SEALED} > {@link ReplicaSealStatus#NOT_SEALED}.
+   * @param sealStatus1 {@link ReplicaSealStatus} object to be merged.
+   * @param sealStatus2 {@link ReplicaSealStatus} object to be merged.
+   * @return The merged {@link ReplicaSealStatus} object.
+   */
+  ReplicaSealStatus mergeReplicaSealStatus(ReplicaSealStatus sealStatus1, ReplicaSealStatus sealStatus2) {
+    if (sealStatus1 == ReplicaSealStatus.SEALED || sealStatus2 == ReplicaSealStatus.SEALED) {
+      return ReplicaSealStatus.SEALED;
+    } else if (sealStatus1 == ReplicaSealStatus.PARTIALLY_SEALED || sealStatus2 == ReplicaSealStatus.PARTIALLY_SEALED) {
+      return ReplicaSealStatus.PARTIALLY_SEALED;
+    } else {
+      return ReplicaSealStatus.NOT_SEALED;
+    }
+  }
+
+
+  /**
+   * Resolve the {@link ReplicaSealStatus} of this store's replica based on the current {@link ReplicaSealStatus} and
+   * current log used capacity.
+   * @return ReplicaSealStatus object.
+   */
+  ReplicaSealStatus resolveReplicaSealStatusFromLogSize() {
+    // If the size of log exceeds seal high threshold then the log should be marked as sealed.
+    // If the log is already sealed, but the size exceeds low threshold, then we will wait for size to go below low
+    // threshold before changing the replica state to partially_sealed.
+    if (index.getLogUsedCapacity() > sealThresholdBytesHigh ||
+        (replicaId.isSealed() && index.getLogUsedCapacity() >= sealThresholdBytesLow)) {
+      return ReplicaSealStatus.SEALED;
+    }
+    // If the size of log exceeds partial seal high threshold then the log should be marked as partially sealed.
+    // If the log is already partially sealed, but the size exceeds low threshold, then we will wait for size to go
+    // below low threshold before changing the replica state to partially_sealed.
+    if (index.getLogUsedCapacity() > partialSealThresholdBytesHigh ||
+        (replicaId.isPartiallySealed() && index.getLogUsedCapacity() >= partialSealThresholdBytesLow)) {
+      return ReplicaSealStatus.PARTIALLY_SEALED;
+    }
+    return ReplicaSealStatus.NOT_SEALED;
   }
 
   /**
