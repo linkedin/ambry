@@ -96,6 +96,13 @@ public interface ReplicaId extends Resource {
   boolean isPartiallySealed();
 
   /**
+   * @return true if this replica's {@link ReplicaSealStatus} is {@link ReplicaSealStatus#NOT_SEALED}.
+   */
+  default boolean isUnsealed() {
+    return !(isSealed() || isPartiallySealed());
+  }
+
+  /**
    * @return the {@code ReplicaType} for this replica.
    */
   ReplicaType getReplicaType();

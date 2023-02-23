@@ -18,6 +18,7 @@ import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 
@@ -103,4 +104,9 @@ public interface NamedBlobDb {
    * Cleanup the stale blobs records
    */
   CompletableFuture<Integer> cleanupStaleData(List<StaleNamedBlob> staleRecords);
+
+  /**
+   * Pull current valid blob ids
+   */
+  CompletableFuture<Set<String>> pullValidBlobIds();
 }

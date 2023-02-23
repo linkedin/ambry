@@ -104,7 +104,6 @@ class IndexSegment implements Iterable<IndexEntry> {
   private final AtomicLong lastModifiedTimeSec = new AtomicLong(0);
   private int indexSizeExcludingEntries;
   private int firstKeyRelativeOffset;
-  private ByteBuffer serEntries = null;
   private IFilter bloomFilter = null;
   private int valueSize;
   private int persistedEntrySize;
@@ -113,6 +112,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   // reset key refers to the first StoreKey that is added to the index segment
   private ResetKeyInfo resetKeyInfo = null;
   private NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> index = null;
+  SealedIndexSegment sealedIndex = new SealedIndexSegment();
 
   /**
    * Creates a new segment
@@ -178,38 +178,8 @@ class IndexSegment implements Iterable<IndexEntry> {
         logger.info("{} is successfully deleted and will be rebuilt based on index segment", bloomFile);
       }
       if (sealed) {
-        map();
-        if (!bloomFile.exists()) {
-          generateBloomFilterAndPersist();
-        } else {
-          // Load the bloom filter for this index
-          // We need to load the bloom filter only for mapped indexes
-          boolean rebuildBloomFilter = false;
-          CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
-          try (DataInputStream stream = new DataInputStream(crcBloom)) {
-            bloomFilter = FilterFactory.deserialize(stream, config.storeBloomFilterMaximumPageCount);
-            long crcValue = crcBloom.getValue();
-            if (crcValue != stream.readLong()) {
-              // TODO metrics
-              bloomFilter = null;
-              throw new IllegalStateException(
-                  "IndexSegment : " + indexFile.getAbsolutePath() + " error validating crc for bloom filter");
-            }
-          } catch (Exception e) {
-            logger.error("Encountered exception when loading bloom filter {}", bloomFile.getAbsolutePath(), e);
-            rebuildBloomFilter = true;
-          }
-          if (rebuildBloomFilter) {
-            metrics.bloomRebuildOnLoadFailureCount.inc();
-            logger.info("Rebuilding bloom filter for index segment: {}", indexFile.getAbsolutePath());
-            Utils.deleteFileOrDirectory(bloomFile);
-            generateBloomFilterAndPersist();
-            logger.info("Bloom filter for index segment: {} is generated", indexFile.getAbsolutePath());
-          }
-        }
-        if (config.storeSetFilePermissionEnabled) {
-          Utils.setFilesPermission(Arrays.asList(this.indexFile, bloomFile), config.storeDataFilePermission);
-        }
+        sealedIndex.map();
+        sealedIndex.loadBloomFile();
       } else {
         index = new ConcurrentSkipListMap<>();
         bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
@@ -278,7 +248,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     rwLock.readLock().lock();
     try {
       if (sealed.get()) {
-        return numberOfEntries(serEntries);
+        return sealedIndex.getNumberOfEntries();
       } else {
         return numberOfItems.get();
       }
@@ -356,8 +326,8 @@ class IndexSegment implements Iterable<IndexEntry> {
   long getDirectMemoryUsage() {
     rwLock.readLock().lock();
     try {
-      if (sealed.get() && config.storeIndexMemState == IndexMemState.IN_DIRECT_MEM) {
-        return serEntries.capacity();
+      if (sealed.get()) {
+        return sealedIndex.getDirectMemoryUsage();
       } else {
         return 0;
       }
@@ -400,56 +370,7 @@ class IndexSegment implements Iterable<IndexEntry> {
           toReturn = values.clone();
         }
       } else {
-        if (bloomFilter != null) {
-          metrics.bloomAccessedCount.inc();
-        }
-        if (bloomFilter == null || bloomFilter.isPresent(getStoreKeyBytes(keyToFind))) {
-          if (bloomFilter == null) {
-            logger.trace("IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {}",
-                indexFile.getAbsolutePath(), startOffset, keyToFind);
-          } else {
-            metrics.bloomPositiveCount.inc();
-            logger.trace("IndexSegment {} found in bloom filter for index with start offset {} and for key {} ",
-                indexFile.getAbsolutePath(), startOffset, keyToFind);
-          }
-          if (config.storeIndexMemState == IndexMemState.MMAP_WITH_FORCE_LOAD
-              || config.storeIndexMemState == IndexMemState.MMAP_WITHOUT_FORCE_LOAD) {
-            // isLoaded() will be true only if the entire buffer is in memory - so it being false does not necessarily
-            // mean that the pages in the scope of the search need to be loaded from disk.
-            // Secondly, even if it returned true (or false), by the time the actual lookup is done,
-            // the situation may be different.
-            if (((MappedByteBuffer) serEntries).isLoaded()) {
-              metrics.mappedSegmentIsLoadedDuringFindCount.inc();
-            } else {
-              metrics.mappedSegmentIsNotLoadedDuringFindCount.inc();
-            }
-          }
-          // binary search on the mapped file
-          ByteBuffer duplicate = serEntries.duplicate();
-          int low = 0;
-          int totalEntries = numberOfEntries(duplicate);
-          int high = totalEntries - 1;
-          logger.trace("binary search low : {} high : {}", low, high);
-          while (low <= high) {
-            int mid = (int) (Math.ceil(high / 2.0 + low / 2.0));
-            StoreKey found = getKeyAt(duplicate, mid);
-            logger.trace("Index Segment {} binary search - key found on iteration {}", indexFile.getAbsolutePath(),
-                found);
-            int result = found.compareTo(keyToFind);
-            if (result == 0) {
-              toReturn = new TreeSet<>();
-              getAllValuesFromMmap(duplicate, keyToFind, mid, totalEntries, toReturn);
-              break;
-            } else if (result < 0) {
-              low = mid + 1;
-            } else {
-              high = mid - 1;
-            }
-          }
-          if (bloomFilter != null && toReturn == null) {
-            metrics.bloomFalsePositiveCount.inc();
-          }
-        }
+        toReturn = sealedIndex.find(keyToFind);
       }
     } catch (StoreException e) {
       throw new StoreException(String.format("IndexSegment %s : %s", indexFile.getAbsolutePath(), e.getMessage()), e,
@@ -469,120 +390,6 @@ class IndexSegment implements Iterable<IndexEntry> {
   private ByteBuffer getStoreKeyBytes(StoreKey key) {
     return config.storeUuidBasedBloomFilterEnabled ? ByteBuffer.wrap(key.getUuidBytesArray())
         : ByteBuffer.wrap(key.toBytes());
-  }
-
-  /**
-   * Generate bloom filter by walking through all index entries in this segment and persist it.
-   * @throws StoreException
-   */
-  private void generateBloomFilterAndPersist() throws StoreException {
-    int numOfIndexEntries = numberOfEntries(serEntries);
-    // This is a workaround since we found higher than intended false positive rates with small bloom filter sizes. Note
-    // that the number of entries in each index segment varies (from hundreds to thousands), the workaround ensures bloom
-    // filter uses at least storeIndexMaxNumberOfInmemElements for creation to achieve decent performance.
-    bloomFilter = FilterFactory.getFilter(Math.max(numOfIndexEntries, config.storeIndexMaxNumberOfInmemElements),
-        config.storeIndexBloomMaxFalsePositiveProbability, config.storeBloomFilterMaximumPageCount);
-    for (int i = 0; i < numOfIndexEntries; i++) {
-      StoreKey key = getKeyAt(serEntries, i);
-      bloomFilter.add(getStoreKeyBytes(key));
-    }
-    persistBloomFilter();
-  }
-
-  /**
-   * Persist the bloom filter.
-   * @throws StoreException
-   */
-  private void persistBloomFilter() throws StoreException {
-    try {
-      CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
-      DataOutputStream stream = new DataOutputStream(crcStream);
-      FilterFactory.serialize(bloomFilter, stream);
-      long crcValue = crcStream.getValue();
-      stream.writeLong(crcValue);
-      stream.close();
-      if (config.storeSetFilePermissionEnabled) {
-        Files.setPosixFilePermissions(bloomFile.toPath(), config.storeDataFilePermission);
-      }
-    } catch (IOException e) {
-      metrics.bloomPersistFailureCount.inc();
-      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
-    }
-  }
-
-  /**
-   * Gets values for all matches for {@code keyToFind} at and in the vicinity of {@code positiveMatchInd}.
-   * @param mmap the serEntries to read values off of
-   * @param keyToFind the needle {@link StoreKey}
-   * @param positiveMatchInd the index of a confirmed positive match
-   * @param totalEntries the total number of entries in the index
-   * @param values the set to which the {@link IndexValue}s will be added
-   * @return a pair consisting of the lowest index that matched the key and the highest
-   * @throws StoreException if there are problems reading from the mmap
-   */
-  private Pair<Integer, Integer> getAllValuesFromMmap(ByteBuffer mmap, StoreKey keyToFind, int positiveMatchInd,
-      int totalEntries, NavigableSet<IndexValue> values) throws StoreException {
-    byte[] buf = new byte[valueSize];
-    // add the value at the positive match and anything after that matches
-    int end = positiveMatchInd;
-    for (; end < totalEntries && getKeyAt(mmap, end).equals(keyToFind); end++) {
-      logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), keyToFind, end);
-      mmap.get(buf);
-      values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
-    }
-    end--;
-
-    // add any values before the match
-    int start = positiveMatchInd - 1;
-    for (; start >= 0 && getKeyAt(mmap, start).equals(keyToFind); start--) {
-      logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), keyToFind, start);
-      mmap.get(buf);
-      values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
-    }
-    return new Pair<>(start, end);
-  }
-
-  private int numberOfEntries(ByteBuffer mmap) {
-    return (mmap.capacity() - indexSizeExcludingEntries) / persistedEntrySize;
-  }
-
-  private StoreKey getKeyAt(ByteBuffer mmap, int index) throws StoreException {
-    StoreKey storeKey = null;
-    try {
-      mmap.position(firstKeyRelativeOffset + index * persistedEntrySize);
-      storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
-    } catch (InternalError e) {
-      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException("Internal " + errorCode.toString() + " while trying to get store key", e, errorCode);
-    } catch (IOException e) {
-      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException(errorCode.toString() + " while trying to get store key", e, errorCode);
-    } catch (Throwable t) {
-      throw new StoreException("Unknown error while trying to get store key ", t, StoreErrorCodes.Unknown_Error);
-    }
-    return storeKey;
-  }
-
-  private int findIndex(StoreKey keyToFind, ByteBuffer mmap) throws StoreException {
-    // binary search on the mapped file
-    int low = 0;
-    int high = numberOfEntries(mmap) - 1;
-    logger.trace("IndexSegment {} binary search low : {} high : {}", indexFile.getAbsolutePath(), low, high);
-    while (low <= high) {
-      int mid = (int) (Math.ceil(high / 2.0 + low / 2.0));
-      StoreKey found = getKeyAt(mmap, mid);
-      logger.trace("IndexSegment {} binary search - key found on iteration {}", indexFile.getAbsolutePath(), found);
-      int result = found.compareTo(keyToFind);
-      if (result == 0) {
-        return mid;
-      } else if (result < 0) {
-        low = mid + 1;
-      } else {
-        high = mid - 1;
-      }
-    }
-    return -1;
   }
 
   /**
@@ -850,7 +657,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     rwLock.writeLock().lock();
     try {
       sealed.set(true);
-      map();
+      sealedIndex.map();
     } catch (StoreException e) {
       sealed.set(false);
       throw e;
@@ -858,7 +665,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       rwLock.writeLock().unlock();
     }
     // we should be fine reading bloom filter here without synchronization as the index is read only
-    persistBloomFilter();
+    sealedIndex.persistBloomFilter();
   }
 
   /**
@@ -871,25 +678,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     boolean isSealed = sealed.get();
     rwLock.readLock().unlock();
     if (isSealed) {
-      ByteBuffer readBuf = serEntries.duplicate();
-      int numOfIndexEntries = numberOfEntries(readBuf);
-      NavigableSet<IndexValue> values = new TreeSet<>();
-      for (int i = 0; i < numOfIndexEntries; i++) {
-        StoreKey key = getKeyAt(readBuf, i);
-        values.clear();
-        getAllValuesFromMmap(readBuf, key, i, numOfIndexEntries, values);
-        for (IndexValue indexValue : values) {
-          // FLAGS_DEFAULT_VALUE means PUT record
-          if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
-              || indexValue.compareTo(indexValueOfLastPut) > 0)) {
-            indexValueOfLastPut = indexValue;
-            // note that values set contains all entries associated with specific key, so there are at most 3 entries in
-            // this set (one PUT, one TTL Update and one DELETE). Due to nature of log, PUT always comes first. And if we
-            // already find PUT, we can jump out of the inner loop.
-            break;
-          }
-        }
-      }
+      indexValueOfLastPut = sealedIndex.getIndexValueOfLastPut();
     } else {
       for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : indexCopy.entrySet()) {
         for (IndexValue indexValue : entry.getValue()) {
@@ -903,100 +692,6 @@ class IndexSegment implements Iterable<IndexEntry> {
       }
     }
     return indexValueOfLastPut;
-  }
-
-  /**
-   * Maps the segment of index either as a memory map or a in memory buffer depending on config.
-   * @throws StoreException if there are problems with the index
-   */
-  private void map() throws StoreException {
-    try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
-      switch (config.storeIndexMemState) {
-        case IN_DIRECT_MEM:
-          serEntries = readFileIntoBuffer(raf, true);
-          break;
-        case IN_HEAP_MEM:
-          serEntries = readFileIntoBuffer(raf, false);
-          break;
-        default:
-          MappedByteBuffer buf = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
-          if (config.storeIndexMemState == IndexMemState.MMAP_WITH_FORCE_LOAD) {
-            buf.load();
-          }
-          serEntries = buf;
-          break;
-      }
-      checkDataIntegrity();
-      serEntries.position(0);
-      setVersion(serEntries.getShort());
-      StoreKey storeKey;
-      int keySize;
-      PersistentIndex.IndexEntryType resetKeyType;
-      short resetKeyLifeVersion = UNINITIALIZED_RESET_KEY_VERSION;
-      switch (getVersion()) {
-        case PersistentIndex.VERSION_0:
-          indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
-              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
-          keySize = serEntries.getInt();
-          valueSize = serEntries.getInt();
-          persistedEntrySize = keySize + valueSize;
-          endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
-          lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
-          firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
-          break;
-        case PersistentIndex.VERSION_1:
-          keySize = serEntries.getInt();
-          valueSize = serEntries.getInt();
-          persistedEntrySize = keySize + valueSize;
-          endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
-          lastModifiedTimeSec.set(serEntries.getLong());
-          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
-          resetKeyType = PersistentIndex.IndexEntryType.values()[serEntries.getShort()];
-          resetKeyInfo = new ResetKeyInfo(storeKey, resetKeyType, resetKeyLifeVersion);
-          indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
-              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH
-              + storeKey.sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
-          firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
-          break;
-        case PersistentIndex.VERSION_2:
-        case PersistentIndex.VERSION_3:
-          persistedEntrySize = serEntries.getInt();
-          valueSize = serEntries.getInt();
-          endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
-          lastModifiedTimeSec.set(serEntries.getLong());
-          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
-          resetKeyType = PersistentIndex.IndexEntryType.values()[serEntries.getShort()];
-          resetKeyInfo = new ResetKeyInfo(storeKey, resetKeyType, resetKeyLifeVersion);
-          indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
-              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH
-              + storeKey.sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
-          firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
-          break;
-        case PersistentIndex.VERSION_4:
-          persistedEntrySize = serEntries.getInt();
-          valueSize = serEntries.getInt();
-          endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
-          lastModifiedTimeSec.set(serEntries.getLong());
-          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
-          resetKeyType = PersistentIndex.IndexEntryType.values()[serEntries.getShort()];
-          resetKeyLifeVersion = serEntries.getShort();
-          resetKeyInfo = new ResetKeyInfo(storeKey, resetKeyType, resetKeyLifeVersion);
-          indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
-              + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH
-              + storeKey.sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH + RESET_KEY_VERSION_FIELD_LENGTH;
-          firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
-          break;
-        default:
-          throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " unknown version in index file",
-              StoreErrorCodes.Index_Version_Error);
-      }
-      index = null;
-    } catch (FileNotFoundException e) {
-      throw new StoreException("File not found while mapping the segment of index", e, StoreErrorCodes.File_Not_Found);
-    } catch (IOException e) {
-      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException(errorCode.toString() + " while mapping the segment of index", e, errorCode);
-    }
   }
 
   /**
@@ -1116,24 +811,6 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
-   * Check data integrity of index file (represented by byte buffer). This methods computes crc of byte buffer and
-   * compares it with crc value at the end of file.
-   * @throws StoreException
-   */
-  private void checkDataIntegrity() throws StoreException {
-    serEntries.position(0);
-    serEntries.limit(serEntries.capacity() - CRC_FIELD_LENGTH);
-    CRC32 crc = new CRC32();
-    crc.update(serEntries.slice());
-    // reset the limit
-    serEntries.limit(serEntries.capacity());
-    if (crc.getValue() != serEntries.getLong(serEntries.capacity() - CRC_FIELD_LENGTH)) {
-      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
-          StoreErrorCodes.Index_Creation_Failure);
-    }
-  }
-
-  /**
    * Gets all the entries upto maxEntries from the start of a given key (whether to include this key depends on variable
    * inclusive) or all entries if key is null, till maxTotalSizeOfEntriesInBytes
    * @param key The key from where to start retrieving entries.
@@ -1184,7 +861,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     if (!isSealed) {
       return new UnsealedIndexSegmentEntryIterator(indexCopy);
     }
-    return new SealedIndexSegmentEntryIterator(serEntries);
+    return new SealedIndexSegmentEntryIterator();
   }
 
   /**
@@ -1214,7 +891,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     if (!isSealed) {
       return new UnsealedIndexSegmentEntryListIterator(indexCopy, idx);
     }
-    return new SealedIndexSegmentEntryListIterator(serEntries, idx);
+    return new SealedIndexSegmentEntryListIterator(idx);
   }
 
   /**
@@ -1239,37 +916,14 @@ class IndexSegment implements Iterable<IndexEntry> {
 
     // These variables would change with sealed boolean
     NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
-    NavigableSet<IndexValue> values = new TreeSet<>();
     List<IndexEntry> entriesLocal = new ArrayList<>();
     rwLock.readLock().lock();
     boolean isSealed = sealed.get();
     rwLock.readLock().unlock();
     if (isSealed) {
-      int index = 0;
-      if (key != null) {
-        index = findIndex(key, serEntries.duplicate());
-      }
-      if (index != -1) {
-        ByteBuffer readBuf = serEntries.duplicate();
-        int totalEntries = numberOfEntries(readBuf);
-        while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())
-            && index < totalEntries) {
-          StoreKey newKey = getKeyAt(readBuf, index);
-          // we include the key in the final list if it is not the initial key or if the initial key was null
-          if (key == null || newKey.compareTo(key) != 0 || inclusive) {
-            values.clear();
-            index = getAllValuesFromMmap(readBuf, newKey, index, totalEntries, values).getSecond();
-            for (IndexValue value : values) {
-              entriesLocal.add(new IndexEntry(newKey, value));
-              currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
-            }
-          }
-          index++;
-        }
-      } else {
-        logger.error("IndexSegment : {} index not found for key {}", indexFile.getAbsolutePath(), key);
-        metrics.keyInFindEntriesAbsent.inc();
-      }
+      // the output will be in the entriesLocal.
+      sealedIndex.getIndexEntriesSince(key, findEntriesCondition, entriesLocal, currentTotalSizeOfEntriesInBytes,
+          inclusive);
     } else if (key == null || indexCopy.containsKey(key)) {
       NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> tempMap = indexCopy;
       if (key != null) {
@@ -1306,8 +960,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       if (!sealed.get()) {
         throw new IllegalStateException("Index segment {} is not sealed, not able to determine the first key.");
       }
-      ByteBuffer readBuf = serEntries.duplicate();
-      return getKeyAt(readBuf, 0);
+      return sealedIndex.getFirstKeyInSealedSegment();
     } finally {
       rwLock.readLock().unlock();
     }
@@ -1389,6 +1042,431 @@ class IndexSegment implements Iterable<IndexEntry> {
     return new Offset(LogSegmentName.fromString(logSegmentName), Long.parseLong(startOffsetValue));
   }
 
+  // Sealed buffer based index and entry size
+  private class SealedIndexSegment {
+    private ByteBuffer serEntries = null;
+
+    /**
+     * Generate bloom filter by walking through all index entries in this segment and persist it.
+     * @throws StoreException
+     */
+    private void generateBloomFilterAndPersist() throws StoreException {
+      int numOfIndexEntries = numberOfEntries(serEntries);
+      // This is a workaround since we found higher than intended false positive rates with small bloom filter sizes. Note
+      // that the number of entries in each index segment varies (from hundreds to thousands), the workaround ensures bloom
+      // filter uses at least storeIndexMaxNumberOfInmemElements for creation to achieve decent performance.
+      bloomFilter = FilterFactory.getFilter(Math.max(numOfIndexEntries, config.storeIndexMaxNumberOfInmemElements),
+          config.storeIndexBloomMaxFalsePositiveProbability, config.storeBloomFilterMaximumPageCount);
+      for (int i = 0; i < numOfIndexEntries; i++) {
+        StoreKey key = getKeyAt(serEntries, i);
+        bloomFilter.add(getStoreKeyBytes(key));
+      }
+      persistBloomFilter();
+    }
+
+    /**
+     * Persist the bloom filter.
+     * @throws StoreException
+     */
+    private void persistBloomFilter() throws StoreException {
+      try {
+        CrcOutputStream crcStream = new CrcOutputStream(new FileOutputStream(bloomFile));
+        DataOutputStream stream = new DataOutputStream(crcStream);
+        FilterFactory.serialize(bloomFilter, stream);
+        long crcValue = crcStream.getValue();
+        stream.writeLong(crcValue);
+        stream.close();
+        if (config.storeSetFilePermissionEnabled) {
+          Files.setPosixFilePermissions(bloomFile.toPath(), config.storeDataFilePermission);
+        }
+      } catch (IOException e) {
+        metrics.bloomPersistFailureCount.inc();
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+        throw new StoreException(errorCode.toString() + " while trying to persist bloom filter", e, errorCode);
+      }
+    }
+
+    /**
+     * Gets values for all matches for {@code keyToFind} at and in the vicinity of {@code positiveMatchInd}.
+     * @param mmap the serEntries to read values off of
+     * @param keyToFind the needle {@link StoreKey}
+     * @param positiveMatchInd the index of a confirmed positive match
+     * @param totalEntries the total number of entries in the index
+     * @param values the set to which the {@link IndexValue}s will be added
+     * @return a pair consisting of the lowest index that matched the key and the highest
+     * @throws StoreException if there are problems reading from the mmap
+     */
+    private Pair<Integer, Integer> getAllValuesFromMmap(ByteBuffer mmap, StoreKey keyToFind, int positiveMatchInd,
+        int totalEntries, NavigableSet<IndexValue> values) throws StoreException {
+      byte[] buf = new byte[valueSize];
+      // add the value at the positive match and anything after that matches
+      int end = positiveMatchInd;
+      for (; end < totalEntries && getKeyAt(mmap, end).equals(keyToFind); end++) {
+        logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), keyToFind, end);
+        mmap.get(buf);
+        values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
+      }
+      end--;
+
+      // add any values before the match
+      int start = positiveMatchInd - 1;
+      for (; start >= 0 && getKeyAt(mmap, start).equals(keyToFind); start--) {
+        logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), keyToFind, start);
+        mmap.get(buf);
+        values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
+      }
+      return new Pair<>(start, end);
+    }
+
+    private int numberOfEntries(ByteBuffer mmap) { // remove this function
+      return (mmap.capacity() - indexSizeExcludingEntries) / persistedEntrySize;
+    }
+
+    private int getNumberOfEntries() {
+      return numberOfEntries(serEntries);
+    }
+
+    private StoreKey getKeyAt(ByteBuffer mmap, int index) throws StoreException {
+      StoreKey storeKey = null;
+      try {
+        mmap.position(firstKeyRelativeOffset + index * persistedEntrySize);
+        storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
+      } catch (InternalError e) {
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+        throw new StoreException("Internal " + errorCode.toString() + " while trying to get store key", e, errorCode);
+      } catch (IOException e) {
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+        throw new StoreException(errorCode.toString() + " while trying to get store key", e, errorCode);
+      } catch (Throwable t) {
+        throw new StoreException("Unknown error while trying to get store key ", t, StoreErrorCodes.Unknown_Error);
+      }
+      return storeKey;
+    }
+
+    private int findIndex(StoreKey keyToFind, ByteBuffer mmap) throws StoreException {
+      // binary search on the mapped file
+      int low = 0;
+      int high = numberOfEntries(mmap) - 1;
+      logger.trace("IndexSegment {} binary search low : {} high : {}", indexFile.getAbsolutePath(), low, high);
+      while (low <= high) {
+        int mid = (int) (Math.ceil(high / 2.0 + low / 2.0));
+        StoreKey found = getKeyAt(mmap, mid);
+        logger.trace("IndexSegment {} binary search - key found on iteration {}", indexFile.getAbsolutePath(), found);
+        int result = found.compareTo(keyToFind);
+        if (result == 0) {
+          return mid;
+        } else if (result < 0) {
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      return -1;
+    }
+
+    /**
+     * Maps the segment of index either as a memory map or a in memory buffer depending on config.
+     * @throws StoreException if there are problems with the index
+     */
+    private void map() throws StoreException {
+      try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
+        switch (config.storeIndexMemState) {
+          case IN_DIRECT_MEM:
+            serEntries = readFileIntoBuffer(raf, true);
+            break;
+          case IN_HEAP_MEM:
+            serEntries = readFileIntoBuffer(raf, false);
+            break;
+          default:
+            MappedByteBuffer buf = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, indexFile.length());
+            if (config.storeIndexMemState == IndexMemState.MMAP_WITH_FORCE_LOAD) {
+              buf.load();
+            }
+            serEntries = buf;
+            break;
+        }
+        checkDataIntegrity();
+        serEntries.position(0);
+        setVersion(serEntries.getShort());
+        StoreKey storeKey;
+        int keySize;
+        PersistentIndex.IndexEntryType resetKeyType;
+        short resetKeyLifeVersion = UNINITIALIZED_RESET_KEY_VERSION;
+        switch (getVersion()) {
+          case PersistentIndex.VERSION_0:
+            indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
+                + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
+            keySize = serEntries.getInt();
+            valueSize = serEntries.getInt();
+            persistedEntrySize = keySize + valueSize;
+            endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
+            lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
+            firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
+            break;
+          case PersistentIndex.VERSION_1:
+            keySize = serEntries.getInt();
+            valueSize = serEntries.getInt();
+            persistedEntrySize = keySize + valueSize;
+            endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
+            lastModifiedTimeSec.set(serEntries.getLong());
+            storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
+            resetKeyType = PersistentIndex.IndexEntryType.values()[serEntries.getShort()];
+            resetKeyInfo = new ResetKeyInfo(storeKey, resetKeyType, resetKeyLifeVersion);
+            indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
+                + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH
+                + storeKey.sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
+            firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
+            break;
+          case PersistentIndex.VERSION_2:
+          case PersistentIndex.VERSION_3:
+            persistedEntrySize = serEntries.getInt();
+            valueSize = serEntries.getInt();
+            endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
+            lastModifiedTimeSec.set(serEntries.getLong());
+            storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
+            resetKeyType = PersistentIndex.IndexEntryType.values()[serEntries.getShort()];
+            resetKeyInfo = new ResetKeyInfo(storeKey, resetKeyType, resetKeyLifeVersion);
+            indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
+                + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH
+                + storeKey.sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH;
+            firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
+            break;
+          case PersistentIndex.VERSION_4:
+            persistedEntrySize = serEntries.getInt();
+            valueSize = serEntries.getInt();
+            endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
+            lastModifiedTimeSec.set(serEntries.getLong());
+            storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
+            resetKeyType = PersistentIndex.IndexEntryType.values()[serEntries.getShort()];
+            resetKeyLifeVersion = serEntries.getShort();
+            resetKeyInfo = new ResetKeyInfo(storeKey, resetKeyType, resetKeyLifeVersion);
+            indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
+                + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH
+                + storeKey.sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH + RESET_KEY_VERSION_FIELD_LENGTH;
+            firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
+            break;
+          default:
+            throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " unknown version in index file",
+                StoreErrorCodes.Index_Version_Error);
+        }
+        index = null;
+      } catch (FileNotFoundException e) {
+        throw new StoreException("File not found while mapping the segment of index", e,
+            StoreErrorCodes.File_Not_Found);
+      } catch (IOException e) {
+        StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+        throw new StoreException(errorCode.toString() + " while mapping the segment of index", e, errorCode);
+      }
+    }
+
+    /**
+     * Check data integrity of index file (represented by byte buffer). This methods computes crc of byte buffer and
+     * compares it with crc value at the end of file.
+     * @throws StoreException
+     */
+    private void checkDataIntegrity() throws StoreException {
+      serEntries.position(0);
+      serEntries.limit(serEntries.capacity() - CRC_FIELD_LENGTH);
+      CRC32 crc = new CRC32();
+      crc.update(serEntries.slice());
+      // reset the limit
+      serEntries.limit(serEntries.capacity());
+      if (crc.getValue() != serEntries.getLong(serEntries.capacity() - CRC_FIELD_LENGTH)) {
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
+            StoreErrorCodes.Index_Creation_Failure);
+      }
+    }
+
+    /**
+     * @return the first key (in lexicographical order) of sealed index segment
+     */
+    StoreKey getFirstKeyInSealedSegment() throws StoreException {
+      ByteBuffer readBuf = serEntries.duplicate();
+      return getKeyAt(readBuf, 0);
+    }
+
+    /**
+     * Load the bloom filter file.
+     */
+    private void loadBloomFile() throws StoreException, IOException {
+      if (!bloomFile.exists()) {
+        generateBloomFilterAndPersist();
+      } else {
+        // Load the bloom filter for this index
+        // We need to load the bloom filter only for mapped indexes
+        boolean rebuildBloomFilter = false;
+        CrcInputStream crcBloom = new CrcInputStream(new FileInputStream(bloomFile));
+        try (DataInputStream stream = new DataInputStream(crcBloom)) {
+          bloomFilter = FilterFactory.deserialize(stream, config.storeBloomFilterMaximumPageCount);
+          long crcValue = crcBloom.getValue();
+          if (crcValue != stream.readLong()) {
+            // TODO metrics
+            bloomFilter = null;
+            throw new IllegalStateException(
+                "IndexSegment : " + indexFile.getAbsolutePath() + " error validating crc for bloom filter");
+          }
+        } catch (Exception e) {
+          logger.error("Encountered exception when loading bloom filter {}", bloomFile.getAbsolutePath(), e);
+          rebuildBloomFilter = true;
+        }
+        if (rebuildBloomFilter) {
+          metrics.bloomRebuildOnLoadFailureCount.inc();
+          logger.info("Rebuilding bloom filter for index segment: {}", indexFile.getAbsolutePath());
+          Utils.deleteFileOrDirectory(bloomFile);
+          generateBloomFilterAndPersist();
+          logger.info("Bloom filter for index segment: {} is generated", indexFile.getAbsolutePath());
+        }
+      }
+      if (config.storeSetFilePermissionEnabled) {
+        Utils.setFilesPermission(Arrays.asList(indexFile, bloomFile), config.storeDataFilePermission);
+      }
+    }
+
+    /**
+     * Gets all the index entries upto maxEntries from the start of a given key (whether to include this key depends on
+     * inclusive variable) or all entries if key is null, till maxTotalSizeOfEntriesInBytes
+     * @param key The key from where to start retrieving entries.
+     *            If the key is null, all entries are retrieved up to max entries
+     * @param findEntriesCondition The condition that determines when to stop fetching entries.
+     * @param entries The input entries list that needs to be filled. The entries list can have existing entries
+     * @param currentTotalSizeOfEntriesInBytes The current total size in bytes of the entries
+     * @param inclusive whether to include entries associated with given key in returned result.
+     * @throws StoreException
+     */
+    void getIndexEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<IndexEntry> entries,
+        AtomicLong currentTotalSizeOfEntriesInBytes, boolean inclusive) throws StoreException {
+      int index = 0;
+      NavigableSet<IndexValue> values = new TreeSet<>();
+      if (key != null) {
+        index = findIndex(key, serEntries.duplicate());
+      }
+      if (index != -1) {
+        ByteBuffer readBuf = serEntries.duplicate();
+        int totalEntries = numberOfEntries(readBuf);
+        while (findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())
+            && index < totalEntries) {
+          StoreKey newKey = getKeyAt(readBuf, index);
+          // we include the key in the final list if it is not the initial key or if the initial key was null
+          if (key == null || newKey.compareTo(key) != 0 || inclusive) {
+            values.clear();
+            index = getAllValuesFromMmap(readBuf, newKey, index, totalEntries, values).getSecond();
+            for (IndexValue value : values) {
+              entries.add(new IndexEntry(newKey, value));
+              currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
+            }
+          }
+          index++;
+        }
+      } else {
+        logger.error("IndexSegment : {} index not found for key {}", indexFile.getAbsolutePath(), key);
+        metrics.keyInFindEntriesAbsent.inc();
+      }
+    }
+
+    /**
+     * @return index value of last PUT record in this index segment. Return {@code null} if no PUT is found
+     */
+    IndexValue getIndexValueOfLastPut() throws StoreException {
+      IndexValue indexValueOfLastPut = null;
+      ByteBuffer readBuf = serEntries.duplicate();
+      int numOfIndexEntries = numberOfEntries(readBuf);
+      NavigableSet<IndexValue> values = new TreeSet<>();
+      for (int i = 0; i < numOfIndexEntries; i++) {
+        StoreKey key = getKeyAt(readBuf, i);
+        values.clear();
+        getAllValuesFromMmap(readBuf, key, i, numOfIndexEntries, values);
+        for (IndexValue indexValue : values) {
+          // FLAGS_DEFAULT_VALUE means PUT record
+          if (indexValue.getFlags() == IndexValue.FLAGS_DEFAULT_VALUE && (indexValueOfLastPut == null
+              || indexValue.compareTo(indexValueOfLastPut) > 0)) {
+            indexValueOfLastPut = indexValue;
+            // note that values set contains all entries associated with specific key, so there are at most 3 entries in
+            // this set (one PUT, one TTL Update and one DELETE). Due to nature of log, PUT always comes first. And if we
+            // already find PUT, we can jump out of the inner loop.
+            break;
+          }
+        }
+      }
+      return indexValueOfLastPut;
+    }
+
+    /**
+     * Finds an entry given a key. Does a binary search on the mapped persistent segment
+     * @param keyToFind The key to find
+     * @return The blob index value that represents the key or null if not found
+     * @throws StoreException
+     */
+    NavigableSet<IndexValue> find(StoreKey keyToFind) throws StoreException {
+      NavigableSet<IndexValue> toReturn = null;
+      if (bloomFilter != null) {
+        metrics.bloomAccessedCount.inc();
+      }
+      if (bloomFilter == null || bloomFilter.isPresent(getStoreKeyBytes(keyToFind))) {
+        if (bloomFilter == null) {
+          logger.trace("IndexSegment {} bloom filter empty. Searching file with start offset {} and for key {}",
+              indexFile.getAbsolutePath(), startOffset, keyToFind);
+        } else {
+          metrics.bloomPositiveCount.inc();
+          logger.trace("IndexSegment {} found in bloom filter for index with start offset {} and for key {} ",
+              indexFile.getAbsolutePath(), startOffset, keyToFind);
+        }
+        if (config.storeIndexMemState == IndexMemState.MMAP_WITH_FORCE_LOAD
+            || config.storeIndexMemState == IndexMemState.MMAP_WITHOUT_FORCE_LOAD) {
+          // isLoaded() will be true only if the entire buffer is in memory - so it being false does not necessarily
+          // mean that the pages in the scope of the search need to be loaded from disk.
+          // Secondly, even if it returned true (or false), by the time the actual lookup is done,
+          // the situation may be different.
+          if (((MappedByteBuffer) serEntries).isLoaded()) {
+            metrics.mappedSegmentIsLoadedDuringFindCount.inc();
+          } else {
+            metrics.mappedSegmentIsNotLoadedDuringFindCount.inc();
+          }
+        }
+        // binary search on the mapped file
+        ByteBuffer duplicate = serEntries.duplicate();
+        int low = 0;
+        int totalEntries = numberOfEntries(duplicate);
+        int high = totalEntries - 1;
+        logger.trace("binary search low : {} high : {}", low, high);
+        while (low <= high) {
+          int mid = (int) (Math.ceil(high / 2.0 + low / 2.0));
+          StoreKey found = getKeyAt(duplicate, mid);
+          logger.trace("Index Segment {} binary search - key found on iteration {}", indexFile.getAbsolutePath(),
+              found);
+          int result = found.compareTo(keyToFind);
+          if (result == 0) {
+            toReturn = new TreeSet<>();
+            getAllValuesFromMmap(duplicate, keyToFind, mid, totalEntries, toReturn);
+            break;
+          } else if (result < 0) {
+            low = mid + 1;
+          } else {
+            high = mid - 1;
+          }
+        }
+        if (bloomFilter != null && toReturn == null) {
+          metrics.bloomFalsePositiveCount.inc();
+        }
+      }
+      return toReturn;
+    }
+
+    /**
+     * @return The direct memory usage for this Index Segment in bytes.
+     */
+    long getDirectMemoryUsage() {
+      if (config.storeIndexMemState == IndexMemState.IN_DIRECT_MEM) {
+        return serEntries.capacity();
+      } else {
+        return 0;
+      }
+    }
+
+    ByteBuffer getSealedIndexDuplicate() {
+      return serEntries.duplicate();
+    }
+  }
+
   /**
    * A data structure to hold info associated with reset key of index segment.
    */
@@ -1425,9 +1503,9 @@ class IndexSegment implements Iterable<IndexEntry> {
     protected final int numberOfEntries;
     protected byte[] valueBuf = new byte[valueSize];
 
-    SealedIndexSegmentEntryIterator(ByteBuffer serEntries) {
-      mmap = serEntries.duplicate();
-      numberOfEntries = numberOfEntries(mmap);
+    SealedIndexSegmentEntryIterator() {
+      mmap = sealedIndex.getSealedIndexDuplicate();
+      numberOfEntries = sealedIndex.getNumberOfEntries();
     }
 
     @Override
@@ -1441,7 +1519,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         throw new NoSuchElementException();
       }
       try {
-        StoreKey key = getKeyAt(mmap, cursor);
+        StoreKey key = sealedIndex.getKeyAt(mmap, cursor);
         mmap.get(valueBuf);
         return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
       } catch (Exception e) {
@@ -1459,8 +1537,8 @@ class IndexSegment implements Iterable<IndexEntry> {
   private class SealedIndexSegmentEntryListIterator extends SealedIndexSegmentEntryIterator
       implements ListIterator<IndexEntry> {
 
-    SealedIndexSegmentEntryListIterator(ByteBuffer serEntries, int currentIndex) {
-      super(serEntries);
+    SealedIndexSegmentEntryListIterator(int currentIndex) {
+      super();
       this.cursor = currentIndex;
     }
 
@@ -1476,7 +1554,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       }
       try {
         int i = cursor - 1;
-        StoreKey key = getKeyAt(mmap, i);
+        StoreKey key = sealedIndex.getKeyAt(mmap, i);
         mmap.get(valueBuf);
         return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
       } catch (Exception e) {

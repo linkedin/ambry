@@ -16,10 +16,13 @@ package com.github.ambry.frontend;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.StaleNamedBlob;
 import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterErrorCode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 /**
  * Pull out stale named blob records, delete those blobs, and soft delete the MySQL db rows
@@ -39,13 +42,18 @@ public class NamedBlobsCleanupRunner implements Runnable {
     logger.info("Named Blobs Cleanup Runner is initiated");
     try {
       List<StaleNamedBlob> staleResultList = namedBlobDb.pullStaleBlobs().get();
+      Set<String> validBlobIds = namedBlobDb.pullValidBlobIds().get();
       List<StaleNamedBlob> failedResults = new ArrayList<>();
       for (StaleNamedBlob staleResult : staleResultList) {
-        try {
-          router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
-        } catch (Exception e) {
-          logger.error("Failed to cleanup named stale blob {}", staleResult.toString(), e);
-          failedResults.add(staleResult);
+        if (!validBlobIds.contains(staleResult.getBlobId())) {
+          try {
+            router.deleteBlob(staleResult.getBlobId(), "ambry-named-blobs-cleanup-runner").get();
+          } catch (Exception e) {
+            if (!e.getMessage().contains(RouterErrorCode.BlobDoesNotExist.name())) {
+              logger.error("Failed to cleanup named stale blob {}", staleResult, e);
+              failedResults.add(staleResult);
+            }
+          }
         }
       }
       staleResultList.removeAll(failedResults);

@@ -2178,10 +2178,18 @@ public class ReplicaThread implements Runnable {
         }
         List<RequestInfo> requestInfos =
             pollRemoteReplicaGroups(remoteReplicaGroups, correlationIdToRequestInfo, correlationIdToReplicaGroup);
-        Set<Integer> requestsToDrop = filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
+        List<ResponseInfo> responseInfosForTimedOutRequests =
+            filterTimedOutRequests(correlationIdToRequestInfo, correlationIdToReplicaGroup);
+        Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
+            .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
+            .collect(Collectors.toSet());
 
         final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
         List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
+        // Add response for dropped request because there is no guarantee that sendAndPoll would return a response for
+        // dropped requests. Even if the network client returns response infos for dropped requests, onResponse should
+        // still be able to handle duplicate response infos for the same request.
+        responseInfos.addAll(responseInfosForTimedOutRequests);
         onResponses(responseInfos, correlationIdToRequestInfo, correlationIdToReplicaGroup);
       }
       logger.trace("Thread name: {} Finish all RemoteReplicaGroup replication", threadName);
@@ -2238,16 +2246,16 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
-   * Filter requests that are timed out and return corresponding correlation id for them. This method would also remove
+   * Filter requests that are timed out and return corresponding response info for them. This method would also remove
    * the timed out request form the map.
    * @param correlationIdToRequest The map from correlation id to request.
    * @param correlationIdToRemoteReplicaGroup The map from correlation id to RemoteReplicaGroup
-   * @return A set of correlation id for the timed out requests.
+   * @return A list of {@link ResponseInfo} for timed out requests.
    */
-  private Set<Integer> filterTimedOutRequests(Map<Integer, RequestInfo> correlationIdToRequest,
+  private List<ResponseInfo> filterTimedOutRequests(Map<Integer, RequestInfo> correlationIdToRequest,
       Map<Integer, RemoteReplicaGroup> correlationIdToRemoteReplicaGroup) {
     logger.trace("Thread Name: {} Trying to filter out timed out requests", threadName);
-    Set<Integer> timedOutCorrelationId = new HashSet<>();
+    List<ResponseInfo> responseInfosForTimedOutRequests = new ArrayList<>();
     Iterator<Map.Entry<Integer, RequestInfo>> inFlightRequestIterator = correlationIdToRequest.entrySet().iterator();
     while (inFlightRequestIterator.hasNext()) {
       Map.Entry<Integer, RequestInfo> entry = inFlightRequestIterator.next();
@@ -2255,15 +2263,15 @@ public class ReplicaThread implements Runnable {
       long currentTimeInMs = time.milliseconds();
       if (currentTimeInMs > requestInfo.getRequestCreateTime() + replicationConfig.replicationRequestNetworkTimeoutMs) {
         inFlightRequestIterator.remove();
-        timedOutCorrelationId.add(requestInfo.getRequest().getCorrelationId());
-        RemoteReplicaGroup group = correlationIdToRemoteReplicaGroup.remove(entry.getKey());
+        responseInfosForTimedOutRequests.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.TimeoutError, null));
+        RemoteReplicaGroup group = correlationIdToRemoteReplicaGroup.get(entry.getKey());
         if (group != null) {
-          logger.trace(
+          logger.error(
               "Remote node: {} Thread name: {} RemoteReplicaGroup {} Request {} timed out, it was issued at {}",
               group.getRemoteDataNode(), threadName, group.getId(), entry.getKey(), requestInfo.getRequestCreateTime());
         } else {
           // This shouldn't happen
-          logger.trace("Thread name: {} Request {} timed out", threadName, entry.getKey());
+          logger.error("Thread name: {} Request {} timed out", threadName, entry.getKey());
         }
       } else {
         // The correlationIdToRequest should be a LinkedHashMap that has a predictable iteration order based on insertion.
@@ -2272,8 +2280,11 @@ public class ReplicaThread implements Runnable {
         break;
       }
     }
-    logger.trace("Thread Name: {} There are {} requests timed out", threadName, timedOutCorrelationId.size());
-    return timedOutCorrelationId;
+    if (!responseInfosForTimedOutRequests.isEmpty()) {
+      logger.error("Thread Name: {} There are {} requests timed out", threadName,
+          responseInfosForTimedOutRequests.size());
+    }
+    return responseInfosForTimedOutRequests;
   }
 
   /**
@@ -2293,7 +2304,7 @@ public class ReplicaThread implements Runnable {
         responseHandler.onConnectionTimeout(dataNodeId);
       } else {
         int correlationId = requestInfo.getRequest().getCorrelationId();
-        // Request comes back, from this request from the map
+        // Request comes back, remove this request from the map
         correlationIdToRequest.remove(correlationId);
         RemoteReplicaGroup remoteReplicaGroup = correlationIdToReplicaGroup.remove(correlationId);
         // This correlation id might be removed because the corresponding request timed out. But later we get the response

@@ -282,7 +282,7 @@ public class ReplicationConfig {
   public static final String DEFAULT_BACKUP_CHECKER_FILE_MANAGER =
       "com.github.ambry.replication.BackupCheckerFileManager";
   @Config(BACKUP_CHECKER_FILE_MANAGER_TYPE)
-  public final String backupCheckFileManagerType;
+  public final String backupCheckerFileManagerType;
 
   /**
    * Config for folder to store all results from backup checker
@@ -306,7 +306,7 @@ public class ReplicationConfig {
         verifiableProperties.getInt(MAX_BACKUP_CHECKER_REPORT_FD, DEFAULT_MAX_BACKUP_CHECKER_REPORT_FD);
     backupCheckerReportDir =
         verifiableProperties.getString(BACKUP_CHECKER_REPORT_DIR, DEFAULT_BACKUP_CHECKER_REPORT_DIR);
-    backupCheckFileManagerType =
+    backupCheckerFileManagerType =
         verifiableProperties.getString(BACKUP_CHECKER_FILE_MANAGER_TYPE, DEFAULT_BACKUP_CHECKER_FILE_MANAGER);
     replicationThreadType = verifiableProperties.getString(REPLICATION_THREAD_TYPE, DEFAULT_REPLICATION_THREAD);
     replicationStoreTokenFactory =
