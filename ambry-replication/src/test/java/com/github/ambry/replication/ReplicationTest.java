@@ -2234,6 +2234,64 @@ public class ReplicationTest extends ReplicationTestHelper {
     }
   }
 
+  /**
+   * Test replication when the requests are timing out.
+   */
+  @Test
+  public void testTimedOutNetworkClientError() throws Exception {
+    assumeTrue(shouldUseNetworkClient);
+    MockClusterMap clusterMap = new MockClusterMap();
+    Pair<MockHost, MockHost> localAndRemoteHosts = getLocalAndRemoteHosts(clusterMap);
+    MockHost localHost = localAndRemoteHosts.getFirst();
+    MockHost remoteHost = localAndRemoteHosts.getSecond();
+
+    List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
+    for (PartitionId partitionId : partitionIds) {
+      // add 5 messages into each partition and place it on remote host only
+      addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 5);
+    }
+
+    StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
+    MockStoreKeyConverterFactory mockStoreKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    mockStoreKeyConverterFactory.setReturnInputIfAbsent(true);
+    mockStoreKeyConverterFactory.setConversionMap(new HashMap<>());
+    // we set batchSize to 10 in order to get all messages from one partition within single replication cycle
+    int batchSize = 10;
+    StoreKeyConverter storeKeyConverter = mockStoreKeyConverterFactory.getStoreKeyConverter();
+    Transformer transformer = new ValidatingTransformer(storeKeyFactory, storeKeyConverter);
+    Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+        getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null, null,
+            remoteHost);
+    ReplicaThread replicaThread = replicasAndThread.getSecond();
+
+    // Make mock network client return NetworkErrors
+    NetworkClient c = replicaThread.getNetworkClient();
+    assertNotNull(c);
+    MockNetworkClient mockNetworkClient = (MockNetworkClient) c;
+    mockNetworkClient.setSendAndPollCallback(() -> {
+      // in callback, sleep for more than the timeout it will make all the requests time out
+      time.sleep(replicationConfig.replicationRequestNetworkTimeoutMs + 1000);
+      // Don't return any response for timed out requests
+      mockNetworkClient.setShouldReturnResponseForDroppedRequests(false);
+    });
+
+    replicaThread.replicate();
+    List<ReplicaThread.ExchangeMetadataResponse> exchangeMetadataResponseList =
+        replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
+    assertEquals(0, exchangeMetadataResponseList.size());
+
+    mockNetworkClient.setSendAndPollCallback(() -> {
+      // in callback, sleep for more than the timeout it will make all the requests time out
+      time.sleep(replicationConfig.replicationRequestNetworkTimeoutMs + 1000);
+      // Return response for timed out requests
+      mockNetworkClient.setShouldReturnResponseForDroppedRequests(true);
+    });
+
+    replicaThread.replicate();
+    exchangeMetadataResponseList = replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
+    assertEquals(0, exchangeMetadataResponseList.size());
+  }
+
   @Test
   public void replicaThreadSleepTest() throws Exception {
     MockClusterMap clusterMap = new MockClusterMap();
