@@ -52,6 +52,8 @@ public class MockNetworkClient implements NetworkClient {
   private volatile NetworkClientErrorCode expectedNetworkClientErrorCode = null;
   private volatile ServerErrorCode expectedReplicaMetadataResponseError = ServerErrorCode.No_Error;
   private volatile ServerErrorCode expectedGetResponseError = ServerErrorCode.No_Error;
+  private volatile boolean shouldReturnResponseForDroppedRequests = true;
+  private Runnable sendAndPoolCallback = null;
 
   public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
       FindTokenHelper findTokenHelper) {
@@ -74,6 +76,14 @@ public class MockNetworkClient implements NetworkClient {
     expectedGetResponseError = code;
   }
 
+  void setShouldReturnResponseForDroppedRequests(boolean flag) {
+    shouldReturnResponseForDroppedRequests = flag;
+  }
+
+  void setSendAndPollCallback(Runnable callback) {
+    sendAndPoolCallback = callback;
+  }
+
   @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
@@ -82,7 +92,7 @@ public class MockNetworkClient implements NetworkClient {
     for (Integer correlationId : requestsToDrop) {
       NetworkClientErrorCode errorCode = NetworkClientErrorCode.TimeoutError;
       RequestInfo requestInfo = correlationIdToRequestInfos.remove(correlationId);
-      if (requestInfo != null) {
+      if (requestInfo != null && shouldReturnResponseForDroppedRequests) {
         responseInfos.add(new ResponseInfo(requestInfo, errorCode, null));
       }
     }
@@ -153,7 +163,9 @@ public class MockNetworkClient implements NetworkClient {
         correlationIdToRequestInfos.put(correlationId, requestInfo);
       }
     }
-
+    if (sendAndPoolCallback != null) {
+      sendAndPoolCallback.run();
+    }
     return responseInfos;
   }
 
