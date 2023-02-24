@@ -143,6 +143,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH_VERSION);
 
   /**
+   * Set named blob state to be READY and delete timestamp to null for TtlUpdate case
+   */
+  private static final String TTL_UPDATE_QUERY =
+      String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
+
+  /**
    * Pull the stale blobs that need to be cleaned up
    * It will pull out any stale record (limit to be config.queryStaleDataMaxResults [Default 1000] records at most)
    * meeting below conditions:
@@ -310,7 +316,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert, Boolean isTtlUpdate) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = this.time.milliseconds();
@@ -331,7 +337,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                   record.getContainerName(), record.getBlobName());
             }
           }
-          PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
+          PutResult putResult = run_put_v2(record, state, isTtlUpdate, accountId, containerId, connection);
           metricsRecoder.namedBlobPutTimeInMs.update(this.time.milliseconds() - startTime);
           return putResult;
         }, null);
@@ -609,9 +615,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }
   }
 
-  private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId, Connection connection)
+  private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, Boolean isTtlUpdate, short accountId, short containerId, Connection connection)
       throws Exception {
-    // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
+    if (isTtlUpdate && state == NamedBlobState.READY) {
+      logger.info("Applying TTL Update for Named Blob: {}", record);
+      return apply_ttl_update(record, accountId, containerId, connection);
+    }
     try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
@@ -624,6 +633,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       }
       statement.setLong(6, buildVersion());
       statement.setInt(7, state.ordinal());
+      statement.executeUpdate();
+    }
+    return new PutResult(record);
+  }
+
+  private PutResult apply_ttl_update(NamedBlobRecord record, short accountId, short containerId, Connection connection)
+      throws Exception{
+    try (PreparedStatement statement = connection.prepareStatement(TTL_UPDATE_QUERY)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, record.getBlobName());
+      statement.setLong(4, record.getVersion());
       statement.executeUpdate();
     }
     return new PutResult(record);

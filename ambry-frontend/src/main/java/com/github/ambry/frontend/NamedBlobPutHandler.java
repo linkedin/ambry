@@ -301,7 +301,7 @@ public class NamedBlobPutHandler {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time);
-        namedBlobDb.put(record, NamedBlobState.READY, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).get();
+        namedBlobDb.put(record, NamedBlobState.READY, RestUtils.isUpsertForNamedBlob(restRequest.getArgs()), true).get();
 
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
