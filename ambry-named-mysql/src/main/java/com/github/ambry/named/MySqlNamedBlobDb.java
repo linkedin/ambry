@@ -316,7 +316,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert, Boolean isTtlUpdate) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = this.time.milliseconds();
@@ -337,9 +337,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                   record.getContainerName(), record.getBlobName());
             }
           }
-          PutResult putResult = run_put_v2(record, state, isTtlUpdate, accountId, containerId, connection);
+          PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
           metricsRecoder.namedBlobPutTimeInMs.update(this.time.milliseconds() - startTime);
           return putResult;
+        }, null);
+  }
+
+  @Override
+  public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
+    return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
+        (accountId, containerId, connection) -> {
+          logger.info("Updating to READY for Named Blob: {}", record);
+          return apply_ttl_update(record, accountId, containerId, connection);
         }, null);
   }
 
@@ -615,12 +624,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     }
   }
 
-  private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, Boolean isTtlUpdate, short accountId, short containerId, Connection connection)
+  private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId, Connection connection)
       throws Exception {
-    if (isTtlUpdate && state == NamedBlobState.READY) {
-      logger.info("Applying TTL Update for Named Blob: {}", record);
-      return apply_ttl_update(record, accountId, containerId, connection);
-    }
     try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);

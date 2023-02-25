@@ -528,7 +528,7 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     time.setCurrentMilliseconds(staleCutoffTime);
     namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
-    namedBlobDb.put(record, NamedBlobState.READY, true, true).get();
+    namedBlobDb.updateBlobStateToReady(record).get();
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 

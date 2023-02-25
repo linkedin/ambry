@@ -29,7 +29,6 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
-import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -301,7 +300,7 @@ public class NamedBlobPutHandler {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time);
-        namedBlobDb.put(record, NamedBlobState.READY, RestUtils.isUpsertForNamedBlob(restRequest.getArgs()), true).get();
+        namedBlobDb.updateBlobStateToReady(record).get();
 
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);

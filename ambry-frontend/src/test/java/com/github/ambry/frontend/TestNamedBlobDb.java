@@ -128,13 +128,25 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert, Boolean isTtlUpdate) {
+  public CompletableFuture<PutResult> put(NamedBlobRecord record, NamedBlobState state, Boolean isUpsert) {
     CompletableFuture<PutResult> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);
       return future;
     }
     putInternal(record, state, 0L);
+    future.complete(new PutResult(record));
+    return future;
+  }
+
+  @Override
+  public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
+    CompletableFuture<PutResult> future = new CompletableFuture<>();
+    if (exception != null) {
+      future.completeExceptionally(exception);
+      return future;
+    }
+    putInternal(record, NamedBlobState.READY, 0L);
     future.complete(new PutResult(record));
     return future;
   }
