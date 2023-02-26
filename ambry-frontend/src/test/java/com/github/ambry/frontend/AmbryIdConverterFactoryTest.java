@@ -49,6 +49,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static com.github.ambry.commons.BlobId.*;
+import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -265,7 +266,7 @@ public class AmbryIdConverterFactoryTest {
 
     @Override
     public void onCompletion(String result, Exception exception) {
-      this.result = result;
+      this.result = result == null ? null : result.split(NAMED_BLOBID_VERSION_SEPARATOR)[0];
       this.exception = exception;
     }
 

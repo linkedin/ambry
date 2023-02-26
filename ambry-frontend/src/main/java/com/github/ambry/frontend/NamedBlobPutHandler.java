@@ -60,6 +60,7 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -260,7 +261,8 @@ public class NamedBlobPutHandler {
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
-      return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
+      return buildCallback(frontendMetrics.putIdConversionMetrics, blobIdVersion -> {
+        String convertedBlobId = blobIdVersion.split(NAMED_BLOBID_VERSION_SEPARATOR)[0];
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
         if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
@@ -269,7 +271,7 @@ public class NamedBlobPutHandler {
           retryExecutor.runWithRetries(retryPolicy,
               callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
-              routerTtlUpdateCallback(blobInfo, blobId));
+              routerTtlUpdateCallback(blobInfo, blobId, blobIdVersion));
         } else {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());
@@ -291,15 +293,17 @@ public class NamedBlobPutHandler {
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
      * @param blobInfo the {@link BlobInfo} to use for security checks.
      * @param blobId the {@link String} to use for blob id.
+     * @param blobIdVersion the {@link String} for the combination of named blobId and version.
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl(String, String, long)}.
      */
-    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
+    private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId, String blobIdVersion) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
+        long version = Long.valueOf(blobIdVersion.split(Utils.NAMED_BLOBID_VERSION_SEPARATOR)[1]);
         // Set the named blob state to be 'READY' after the Ttl update succeed
         String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time);
+            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, version);
         namedBlobDb.updateBlobStateToReady(record).get();
 
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
