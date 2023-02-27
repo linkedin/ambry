@@ -394,35 +394,17 @@ public class ClusterChangeHandlerTest {
           helixClusterManager.getReplicaForPartitionOnNode(ambryNode, "0"));
     }
     // trigger IdealState change and refresh partition-to-resource mapping (bring in the new partition in resource map)
-    if (!useAggregatedView) {
-      helixCluster.refreshIdealState();
-      Map<String, String> partitionNameToResource = helixClusterManager.getPartitionToResourceMapByDC().get(localDc);
-      List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
-      // verify all partitions (including the new added one) are present in partition-to-resource map
-      Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
-      assertEquals("Some partitions are not present in partition-to-resource map", partitionNames,
-          partitionNameToResource.keySet());
-      // verify all partitions are able to get their resource name
-      helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
-          .forEach(partitionId -> assertEquals("Resource name is not expected",
-              partitionNameToResource.get(partitionId.toPathString()), partitionId.getResourceNames().get(0)));
-    } else {
-      helixCluster.getHelixAdminFromDc(localDc).triggerRoutingTableNotification();
-      // Wait for some time to get the routing table notification
-      Thread.sleep(1000);
-      Map<String, Set<String>> globalPartitionNameToResourcesMap =
-          helixClusterManager.getGlobalPartitionToResourceMap();
-      List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
-      // verify all partitions (including the new added one) are present in partition-to-resource map
-      Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
-      assertEquals("Some partitions are not present in partition-to-resource map", partitionNames,
-          globalPartitionNameToResourcesMap.keySet());
-      // verify all partitions are able to get their resource name
-      helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
-          .forEach(partitionId -> assertEquals("Resource name is not expected",
-              globalPartitionNameToResourcesMap.get(partitionId.toPathString()).iterator().next(),
-              partitionId.getResourceNames().get(0)));
-    }
+    helixCluster.refreshIdealState();
+    Map<String, String> partitionNameToResource = helixClusterManager.getPartitionToResourceMapByDC().get(localDc);
+    List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
+    // verify all partitions (including the new added one) are present in partition-to-resource map
+    Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
+    assertEquals("Some partitions are not present in partition-to-resource map", partitionNames,
+        partitionNameToResource.keySet());
+    // verify all partitions are able to get their resource name
+    helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
+        .forEach(partitionId -> assertEquals("Resource name is not expected",
+            partitionNameToResource.get(partitionId.toPathString()), partitionId.getResourceNames().get(0)));
     helixClusterManager.close();
   }
 

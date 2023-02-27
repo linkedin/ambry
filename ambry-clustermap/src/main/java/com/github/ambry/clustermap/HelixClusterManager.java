@@ -87,9 +87,6 @@ public class HelixClusterManager implements ClusterMap {
   private final Map<String, ConcurrentHashMap<String, String>> partitionToResourceNameByDc = new ConcurrentHashMap<>();
   private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef =
       new ConcurrentHashMap<>();
-  // A map of partition to resource names used in aggregated cluster view.
-  private final AtomicReference<ConcurrentHashMap<String, Set<String>>> globalPartitionToResourceNamesRef =
-      new AtomicReference<>(new ConcurrentHashMap<>());
   // Routing table snapshot reference used in aggregated cluster view.
   private final AtomicReference<RoutingTableSnapshot> globalRoutingTableSnapshotRef = new AtomicReference<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
@@ -495,11 +492,6 @@ public class HelixClusterManager implements ClusterMap {
 
   @Override
   public boolean isDataNodeInFullAutoMode(String hostname, int port) {
-    if (clusterMapConfig.clusterMapUseAggregatedView) {
-      // Aggregated view don't include IdealState now, we are not getting IdealState from Helix, just return false.
-      // TODO: Pulling IdealState from helix managers in all datacenters
-      return false;
-    }
     String instanceName = getInstanceName(hostname, port);
     DataNodeId dataNodeId = instanceNameToAmbryDataNode.get(instanceName);
     if (dataNodeId == null) {
@@ -518,10 +510,7 @@ public class HelixClusterManager implements ClusterMap {
     // Make sure all the resources turned on FULL_AUTO mode
     String resourceName = resourceNames.iterator().next();
     ResourceProperty property = dcToResourceNameToResourceProperty.get(dcName).get(resourceName);
-    if (property == null || !property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
-      return false;
-    }
-    return true;
+    return property != null && property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO);
   }
 
   /**
@@ -574,14 +563,6 @@ public class HelixClusterManager implements ClusterMap {
    */
   Map<String, Map<String, String>> getPartitionToResourceMapByDC() {
     return Collections.unmodifiableMap(partitionToResourceNameByDc);
-  }
-
-  /**
-   * Exposed for testing
-   * @return a map of partition to its corresponding resources in all data centers.
-   */
-  Map<String, Set<String>> getGlobalPartitionToResourceMap() {
-    return Collections.unmodifiableMap(globalPartitionToResourceNamesRef.get());
   }
 
   /**
@@ -733,19 +714,17 @@ public class HelixClusterManager implements ClusterMap {
 
     @Override
     public List<String> getResourceNamesForPartition(AmbryPartition partition) {
-      if (clusterMapConfig.clusterMapUseAggregatedView) {
-        return new ArrayList<>(
-            globalPartitionToResourceNamesRef.get().getOrDefault(partition.toPathString(), Collections.emptySet()));
-      } else {
-        // go through all datacenters in case that partition resides in one datacenter only
-        for (String dcName : partitionToResourceNameByDc.keySet()) {
-          String resourceName = partitionToResourceNameByDc.get(dcName).get(partition.toPathString());
-          if (resourceName != null) {
-            return Collections.singletonList(resourceName);
-          }
+      // Go through all datacenters since:
+      //  1. A partition can reside in one datacenter only or
+      //  2. A partition can belong to different resources in different data centers.
+      Set<String> resourceNames = new HashSet<>();
+      for (String dcName : partitionToResourceNameByDc.keySet()) {
+        String resourceName = partitionToResourceNameByDc.get(dcName).get(partition.toPathString());
+        if (resourceName != null) {
+          resourceNames.add(resourceName);
         }
-        return Collections.emptyList();
       }
+      return new ArrayList<>(resourceNames);
     }
 
     /**
@@ -758,36 +737,20 @@ public class HelixClusterManager implements ClusterMap {
       Timer.Context operationTimer = helixClusterManagerMetrics.routingTableQueryTime.time();
       long startTime = SystemTime.getInstance().milliseconds();
       Set<AmbryReplica> replicas = new HashSet<>();
-      if (clusterMapConfig.clusterMapUseAggregatedView) {
-        String partitionPath = partition.toPathString();
-        // A partition can be under different resources in different data centers. Due to that, when using aggregated
-        // view, get replicas for all {Resource, partition} pairs.
-        Set<String> resourceNames =
-            globalPartitionToResourceNamesRef.get().getOrDefault(partitionPath, Collections.emptySet());
-        RoutingTableSnapshot globalRoutingTableSnapshot = globalRoutingTableSnapshotRef.get();
-        for (String resourceName : resourceNames) {
-          globalRoutingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
-              .stream()
-              .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-              .filter(dataNode -> dcName == null || dataNode.getDatacenterName().equals(dcName))
-              .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-              .filter(Objects::nonNull)
-              .forEach(replicas::add);
-        }
-      } else {
-        List<String> dcs = dcName != null ? Collections.singletonList(dcName)
-            : dcToDcInfo.values().stream().map(dcInfo -> dcInfo.dcName).collect(Collectors.toList());
-        for (String dc : dcs) {
-          String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
-          RoutingTableSnapshot routingTableSnapshot = dcToRoutingTableSnapshotRef.get(dc).get();
-          String partitionPath = partition.toPathString();
-          routingTableSnapshot.getInstancesForResource(resourceName, partitionPath, state.name())
-              .stream()
-              .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-              .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-              .filter(Objects::nonNull)
-              .forEach(replicas::add);
-        }
+      List<String> dcs = dcName != null ? Collections.singletonList(dcName)
+          : dcToDcInfo.values().stream().map(dcInfo -> dcInfo.dcName).collect(Collectors.toList());
+      for (String dc : dcs) {
+        String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
+        RoutingTableSnapshot routingTableSnapshot =
+            clusterMapConfig.clusterMapUseAggregatedView ? globalRoutingTableSnapshotRef.get()
+                : dcToRoutingTableSnapshotRef.get(dc).get();
+        routingTableSnapshot.getInstancesForResource(resourceName, partition.toPathString(), state.name())
+            .stream()
+            .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
+            .filter(dataNode -> dataNode.getDatacenterName().equals(dc))
+            .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
+            .filter(Objects::nonNull)
+            .forEach(replicas::add);
       }
       logger.debug("Replicas for partition {} with state {} in dc {} are {}. Query time in Ms {}",
           partition.toPathString(), state.name(), dcName != null ? dcName : "", replicas,
@@ -1118,8 +1081,6 @@ public class HelixClusterManager implements ClusterMap {
       }
       logger.debug("Detailed ideal states from helix cluster {} in dc {} are: {}", helixClusterName, dcName,
           idealStates);
-      // For CURRENT_STATE based Routing table provider (used in for non-aggregated view), we are not able to get
-      // external view snapshot. So, we rely on IDEAL STATES to build partition-to-resource mapping.
       updatePartitionResourceMappingFromIdealStates(idealStates, dcName);
       helixClusterManagerMetrics.idealStateChangeTriggerCount.inc();
     }
@@ -1179,11 +1140,6 @@ public class HelixClusterManager implements ClusterMap {
      */
     public void setRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot) {
       if (isAggregatedViewHandler) {
-        // When updating the routing table snapshot in aggregated view, we also update the partition-to-resource
-        // mapping since the EXTERNAL_VIEW based RoutingTableProvider provides us this mapping. For non-aggregated view,
-        // we use CURRENT_STATE based RoutingTableProvider which don't have this mapping. For it, we rely on ideal
-        // states to update the mapping.
-        updatePartitionResourcesMappingFromExternalView(routingTableSnapshot.getExternalViews(), null);
         globalRoutingTableSnapshotRef.getAndSet(routingTableSnapshot);
       } else {
         dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>())
@@ -1251,43 +1207,6 @@ public class HelixClusterManager implements ClusterMap {
         partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
       } else {
         logger.warn("Partition to resource mapping for aggregated cluster view would be built from external view");
-      }
-    }
-
-    /**
-     * Update partition to resource mapping from External view.
-     * @param externalViews list of external view for various resources.
-     * @param dcName data center for which this mapping corresponds to. Since the partition to resource mapping for
-     *               non-aggregated view is built from IDEAL STATES currently, this value would always be null today.
-     */
-    private void updatePartitionResourcesMappingFromExternalView(Collection<ExternalView> externalViews,
-        String dcName) {
-      if (dcName != null) {
-        logger.warn(
-            "Partition to resource mapping for individual dc (non-aggregated view) would be built from ideal states");
-      } else {
-        Map<String, Map<String, String>> partitionToDCToResourceNames = new HashMap<>();
-        // Rebuild the partition-to-resource map across all data centers
-        for (ExternalView externalView : externalViews) {
-          String resourceName = externalView.getResourceName();
-          for (String partitionId : externalView.getPartitionSet()) {
-            // This is a map from instanceName to state
-            Map<String, String> stateMap = externalView.getStateMap(partitionId);
-            for (String instanceName : stateMap.keySet()) {
-              AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
-              if (dataNode != null) {
-                String dc = dataNode.getDatacenterName();
-                partitionToDCToResourceNames.computeIfAbsent(partitionId, k -> new HashMap<>())
-                    .compute(dc, resourceNameReplaceFunc(resourceName));
-              }
-            }
-          }
-        }
-        ConcurrentHashMap<String, Set<String>> partitionToResourceNames = new ConcurrentHashMap<>();
-        for (Map.Entry<String, Map<String, String>> entry : partitionToDCToResourceNames.entrySet()) {
-          partitionToResourceNames.put(entry.getKey(), new HashSet<>(entry.getValue().values()));
-        }
-        globalPartitionToResourceNamesRef.set(partitionToResourceNames);
       }
     }
 

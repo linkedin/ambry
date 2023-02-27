@@ -25,6 +25,7 @@ import java.util.Map;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.PropertyType;
+import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.spectator.RoutingTableProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,10 +114,10 @@ class HelixAggregatedViewClusterInitializer {
             true);
 
     // Ambry needs below information from Helix:
-    // 1. Topology information list of hosts, disks in each host, partitions on each disk, etc. This is stored in helix
-    //    "PROPERTYSTORE/DataNodeConfigs" znodes.
-    // 2. External view: This tells the current states of various replicas in the cluster. For ex, list of replicas in
-    //    leader state in a given partition.
+    // 1. Data node configuration: This gives the host configs such as disks on each host, replicas on each disk, etc.
+    //    This is stored in helix "PROPERTYSTORE/DataNodeConfigs" ZNodes.
+    // 2. Ideal states: This tells the assigned mapping of partition to replicas.
+    // 2. External view: This tells the current mapping of partition to replicas along with their states.
     // 3. Live instances: This tells the list of live hosts in cluster so that we can mark the hosts as down.
 
     // Currently, Helix only provides aggregated view of External view and Live instances. So, we will have to
@@ -132,9 +133,10 @@ class HelixAggregatedViewClusterInitializer {
         // are completely deprecated.
         continue;
       }
-      Thread thread = Utils.newThread("helix-aggregated-view-datanode-config-init-dc-" + dcName, () -> {
+      Thread thread = Utils.newThread("helix-aggregated-view-init-dc-" + dcName, () -> {
         try {
-          registerForDataNodeConfigsChanges(dcName);
+          registerIdealStateChangeListener(dcName);
+          registerDataNodeConfigChangeListener(dcName);
         } catch (Exception e) {
           exception = e;
         }
@@ -195,7 +197,7 @@ class HelixAggregatedViewClusterInitializer {
    * Register for data node configs from Helix Property store.
    * @param dcName data center for which we are interested in data node configs.
    */
-  private void registerForDataNodeConfigsChanges(String dcName) throws Exception {
+  private void registerDataNodeConfigChangeListener(String dcName) throws Exception {
     DcZkInfo dcZkInfo = dataCenterToZkAddress.get(dcName);
     String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
     DataNodeConfigSource dataNodeConfigSource =
@@ -221,5 +223,22 @@ class HelixAggregatedViewClusterInitializer {
       }
     });
     dataNodeConfigSources.add(dataNodeConfigSource);
+  }
+
+  /**
+   * Register for ideal state changes from a given data center.
+   * @param dcName data center for which we are interested in ideal state changes.
+   * @throws Exception
+   */
+  private void registerIdealStateChangeListener(String dcName) throws Exception {
+    String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+    HelixManager manager =
+        helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
+            InstanceType.SPECTATOR, zkConnectStr);
+    manager.addIdealStateChangeListener(
+        (IdealStateChangeListener) (idealState, changeContext) -> clusterChangeHandler.handleIdealStateChange(
+            idealState, dcName));
+    logger.info("Registered ideal state change listeners for cluster {} via Helix manager at {}",
+        clusterMapConfig.clusterMapClusterName, zkConnectStr);
   }
 }
