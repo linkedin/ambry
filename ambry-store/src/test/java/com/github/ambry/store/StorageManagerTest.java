@@ -31,6 +31,7 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.StateTransitionException;
@@ -1374,11 +1375,11 @@ public class StorageManagerTest {
     }
 
     @Override
-    public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+    public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
       if (setSealStateReturnVal != null) {
         return setSealStateReturnVal;
       }
-      if (isSealed) {
+      if (replicaSealStatus == ReplicaSealStatus.SEALED) {
         sealedReplicas.add(replicaId);
       } else {
         sealedReplicas.remove(replicaId);

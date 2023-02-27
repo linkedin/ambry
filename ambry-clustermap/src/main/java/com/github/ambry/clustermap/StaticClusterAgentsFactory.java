@@ -106,7 +106,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+        public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
           return false;
         }
 

@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.MockClusterAgentsFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.commons.Callback;
@@ -148,7 +149,7 @@ public class ParticipantsConsistencyTest {
     // add 1 sealed replica to participant1
     ReplicaId mockReplica1 = Mockito.mock(ReplicaId.class);
     when(mockReplica1.getReplicaPath()).thenReturn("12");
-    participant1.setReplicaSealedState(mockReplica1, true);
+    participant1.setReplicaSealedState(mockReplica1, ReplicaSealStatus.SEALED);
     // add 1 stopped replica to participant2
     ReplicaId mockReplica2 = Mockito.mock(ReplicaId.class);
     when(mockReplica2.getReplicaPath()).thenReturn("4");
@@ -184,8 +185,8 @@ public class ParticipantsConsistencyTest {
     }
 
     @Override
-    public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
-      if (isSealed) {
+    public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
+      if (replicaSealStatus == ReplicaSealStatus.SEALED) {
         sealedReplicas.add(replicaId.getReplicaPath());
       }
       return true;

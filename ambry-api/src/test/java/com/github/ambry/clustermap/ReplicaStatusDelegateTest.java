@@ -37,10 +37,10 @@ public class ReplicaStatusDelegateTest {
     //Checks that the right underlying ClusterParticipant methods are called
     verifyZeroInteractions(clusterParticipant);
     delegate.seal(replicaId);
-    verify(clusterParticipant).setReplicaSealedState(replicaId, true);
+    verify(clusterParticipant).setReplicaSealedState(replicaId, ReplicaSealStatus.SEALED);
     verifyNoMoreInteractions(clusterParticipant);
     delegate.unseal(replicaId);
-    verify(clusterParticipant).setReplicaSealedState(replicaId, false);
+    verify(clusterParticipant).setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
     verifyNoMoreInteractions(clusterParticipant);
     delegate.markStopped(replicaIds);
     verify(clusterParticipant).setReplicaStoppedState(replicaIds, true);
