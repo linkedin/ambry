@@ -636,10 +636,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       } else {
         statement.setTimestamp(5, null);
       }
-
-      final long newVersion = buildVersion();
-      record.setVersion(newVersion);
-      statement.setLong(6, newVersion);
+      statement.setLong(6, buildVersion());
       statement.setInt(7, state.ordinal());
       statement.executeUpdate();
     }

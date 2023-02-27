@@ -40,8 +40,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
 
-import static com.github.ambry.utils.Utils.NAMED_BLOBID_VERSION_SEPARATOR;
-
 
 /**
  * Factory that instantiates an {@link IdConverter} implementation for the frontend.
@@ -134,7 +132,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private <T> void completeConversion(T conversionResult, Exception exception, CompletableFuture<T> completableFuture,
         Callback<T> callback) {
       if (exception == null) {
-        completableFuture.complete((T) ((String) conversionResult).split(NAMED_BLOBID_VERSION_SEPARATOR)[0]);
+        completableFuture.complete(conversionResult);
       } else {
         completableFuture.completeExceptionally(exception);
       }
@@ -183,8 +181,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
           state = NamedBlobState.IN_PROGRESS;
         }
-        conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(
-            result -> result.getInsertedRecord().getBlobId() + NAMED_BLOBID_VERSION_SEPARATOR + result.getInsertedRecord().getVersion());
+        conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(result -> result.getInsertedRecord().getBlobId());
       } else {
         String decryptedInput =
             parseSignedIdIfRequired(restRequest, input.startsWith("/") ? input.substring(1) : input);
