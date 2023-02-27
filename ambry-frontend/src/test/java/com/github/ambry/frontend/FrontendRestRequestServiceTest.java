@@ -129,7 +129,6 @@ import org.mockito.Mockito;
 
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.utils.TestUtils.*;
-import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -3207,9 +3206,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
-      boolean isNamedBlobPut = restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
-          .matchesOperation(Operations.NAMED_BLOB);
-      return completeOperation(isNamedBlobPut ? input + NAMED_BLOBID_VERSION_SEPARATOR + 0L: input, blobInfo, callback);
+      return completeOperation(input, blobInfo, callback);
     }
 
     @Override
@@ -3225,7 +3222,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
      * @return the created {@link Future}.
      */
     private Future<String> completeOperation(String input, BlobInfo blobInfo, Callback<String> callback) {
-      lastInput = parseBlobId(input);
+      lastInput = input;
       lastBlobInfo = blobInfo;
       if (exceptionToThrow != null) {
         throw exceptionToThrow;
@@ -3235,16 +3232,12 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if (exceptionToReturn == null) {
         toReturn = translation == null ? returnInputIfTranslationNull ? input : null : translation;
       }
-      lastConvertedId = parseBlobId(toReturn);
-      futureResult.done(parseBlobId(toReturn), exceptionToReturn);
+      lastConvertedId = toReturn;
+      futureResult.done(toReturn, exceptionToReturn);
       if (callback != null) {
         callback.onCompletion(toReturn, exceptionToReturn);
       }
       return futureResult;
-    }
-
-    private String parseBlobId(String input) {
-      return input == null ? null : input.split(NAMED_BLOBID_VERSION_SEPARATOR)[0];
     }
   }
 }
