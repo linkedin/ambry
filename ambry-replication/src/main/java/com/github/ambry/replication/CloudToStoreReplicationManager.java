@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.StaticVcrClustermap;
 import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -37,6 +38,7 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -55,9 +57,11 @@ import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
+import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.config.CloudConfig.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -116,9 +120,29 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
   @Override
   public void start() {
-    // Add listener for vcr instance config changes
-    vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListenerImpl());
-    vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListenerImpl());
+    if (vcrClusterSpectator != null) {
+      // Add listener for vcr instance config changes
+      vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListenerImpl());
+      vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListenerImpl());
+    } else {
+      // vcrClusterSpectator is null when vcrClusterAgentsFactory is set to StaticVcrClusterAgentsFactory
+      // Static VCR cluster-map
+      try {
+        StaticVcrClustermap staticVcrClustermap = new StaticVcrClustermap(new JSONObject(readStringFromFile(replicationConfig.staticVcrClustermapFile)),
+            clusterMapConfig);
+        // Get vcr nodes
+        vcrNodes.set(staticVcrClustermap.getCloudDataNodes());
+        for (String partition : replicationConfig.replicationVcrRecoveryPartitions) {
+          // add vcr node
+          addCloudReplica(partition);
+        }
+      } catch (IOException e) {
+        logger.error("Failed to read {} due to {}", replicationConfig.staticVcrClustermapFile, e.toString());
+      } catch (ReplicationException e) {
+        logger.error("Failed to add cloud replica due to {}", e.toString());
+        throw new RuntimeException(e);
+      }
+    }
 
     // Add listener for new coming assigned partition
     clusterParticipant.registerPartitionStateChangeListener(

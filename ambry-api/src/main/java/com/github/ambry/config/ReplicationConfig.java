@@ -300,8 +300,14 @@ public class ReplicationConfig {
   @Config(BACKUP_CHECKER_REPORT_DIR)
   public final int maxBackupCheckerReportFd;
 
+  public static final String STATIC_VCR_CLUSTERMAP_FILE = "static.vcr.clustermap.file";
+  public static final String DEFAULT_STATIC_VCR_CLUSTERMAP_FILE = "";
+  @Config(STATIC_VCR_CLUSTERMAP_FILE)
+  public final String staticVcrClustermapFile;
+
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
+    staticVcrClustermapFile = verifiableProperties.getString(STATIC_VCR_CLUSTERMAP_FILE, DEFAULT_STATIC_VCR_CLUSTERMAP_FILE);
     maxBackupCheckerReportFd =
         verifiableProperties.getInt(MAX_BACKUP_CHECKER_REPORT_FD, DEFAULT_MAX_BACKUP_CHECKER_REPORT_FD);
     backupCheckerReportDir =
