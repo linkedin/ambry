@@ -13,9 +13,12 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONArray;
@@ -44,7 +47,7 @@ import org.slf4j.LoggerFactory;
  *   ]
  * }
  */
-public class StaticVcrClustermap {
+public class StaticVcrClustermap implements ClusterMap {
   public static final String HOSTNAME = "hostname";
   public static final String PLAINTEXT_PORT = "plaintext_port";
   public static final String SSL_PORT = "ssl_port";
@@ -84,4 +87,88 @@ public class StaticVcrClustermap {
     return cloudDataNodes;
   }
 
+  @Override
+  public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
+    return null;
+  }
+
+  @Override
+  public PartitionId getPartitionIdByName(String partitionIdStr) {
+    return null;
+  }
+
+  @Override
+  public List<? extends PartitionId> getWritablePartitionIds(String partitionClass) {
+    return null;
+  }
+
+  @Override
+  public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    return null;
+  }
+
+  @Override
+  public List<? extends PartitionId> getAllPartitionIds(String partitionClass) {
+    return null;
+  }
+
+  @Override
+  public boolean hasDatacenter(String datacenterName) {
+    return false;
+  }
+
+  @Override
+  public byte getLocalDatacenterId() {
+    return 0;
+  }
+
+  @Override
+  public String getDatacenterName(byte id) {
+    return null;
+  }
+
+  @Override
+  public DataNodeId getDataNodeId(String hostname, int port) {
+    return null;
+  }
+
+  @Override
+  public List<? extends ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
+    return null;
+  }
+
+  @Override
+  public List<? extends DataNodeId> getDataNodeIds() {
+    return null;
+  }
+
+  @Override
+  public MetricRegistry getMetricRegistry() {
+    return null;
+  }
+
+  @Override
+  public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
+
+  }
+
+  @Override
+  public JSONObject getSnapshot() {
+    return null;
+  }
+
+  @Override
+  public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
+    return null;
+  }
+
+  @Override
+  public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+
+  }
+
+  @Override
+  public void close() {
+
+  }
 }
