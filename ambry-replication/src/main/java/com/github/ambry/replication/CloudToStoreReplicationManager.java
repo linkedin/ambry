@@ -138,6 +138,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         }
       } catch (IOException e) {
         logger.error("Failed to read {} due to {}", replicationConfig.staticVcrClustermapFile, e.toString());
+        throw new RuntimeException(e);
       } catch (ReplicationException e) {
         logger.error("Failed to add cloud replica due to {}", e.toString());
         throw new RuntimeException(e);
