@@ -280,7 +280,7 @@ public class MySqlDataAccessor {
    * @param e the {@link SQLException} encountered.
    * @param operationType type of mysql operation
    */
-  public void onException(SQLException e, OperationType operationType) {
+  public void onException(Exception e, OperationType operationType) {
 
     // Record errors.
     if (operationType == OperationType.Write) {

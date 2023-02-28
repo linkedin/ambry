@@ -420,9 +420,10 @@ public class AccountAndContainerInjector {
         restRequest.setArg(InternalKeys.TARGET_DATASET_VERSION, version);
       } catch (AccountServiceException e) {
         frontendMetrics.unrecognizedDatasetNameCount.inc();
-        throw new RestServiceException(
-            "Failed to get dataset: " + datasetName + " from account: " + accountName + " container: " + containerName,
-            RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+        logger.error(
+            "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "
+                + datasetName);
+        throw new RestServiceException(e.getMessage(), RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
       }
     }
   }

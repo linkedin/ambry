@@ -44,5 +44,9 @@ public enum AccountServiceErrorCode {
   /**
    * Updates to the account service are disabled.
    */
-  UpdateDisabled
+  UpdateDisabled,
+  /**
+   * Entity has been deleted in underlying metadata store.
+   */
+  Deleted
 }
