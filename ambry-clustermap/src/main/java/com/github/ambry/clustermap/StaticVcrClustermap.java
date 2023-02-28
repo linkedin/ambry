@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -55,22 +56,23 @@ public class StaticVcrClustermap {
   protected List<CloudDataNode> cloudDataNodes;
 
   public StaticVcrClustermap(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) {
-    this.cloudDataNodes = null;
+    this.cloudDataNodes = new ArrayList<>();
     JSONArray datacenters = jsonObject.getJSONArray(DATACENTERS);
     for (int i = 0; i < datacenters.length(); ++i) {
-      String datacenter = jsonObject.getString(DATACENTER);
-      JSONArray vcrNodes = jsonObject.getJSONArray(VCR_NODES);
+      JSONObject datacenter = datacenters.getJSONObject(i);
+      String datacenterName = datacenter.getString(DATACENTER);
+      JSONArray vcrNodes = datacenter.getJSONArray(VCR_NODES);
       for (int j = 0; j < vcrNodes.length(); ++j) {
         JSONObject vcrNode = vcrNodes.getJSONObject(j);
         CloudDataNode cloudDataNode = new CloudDataNode(vcrNode.getString(HOSTNAME),
             new Port(vcrNode.getInt(PLAINTEXT_PORT), PortType.PLAINTEXT),
             new Port(vcrNode.getInt(SSL_PORT), PortType.SSL),
             new Port(vcrNode.getInt(HTTP2_PORT), PortType.HTTP2),
-            datacenter, clusterMapConfig);
+            datacenterName, clusterMapConfig);
         cloudDataNodes.add(cloudDataNode);
         logger.info("Read vcr node info {}", cloudDataNode);
       }
-      logger.info("Done reading static vcr clustermap");
+      logger.info("Done reading static vcr cluster-map");
     }
   }
 
