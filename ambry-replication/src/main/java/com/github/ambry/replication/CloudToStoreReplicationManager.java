@@ -128,8 +128,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       // vcrClusterSpectator is null when vcrClusterAgentsFactory is set to StaticVcrClusterAgentsFactory
       // Static VCR cluster-map
       try {
-        StaticVcrClustermap staticVcrClustermap = new StaticVcrClustermap(new JSONObject(readStringFromFile(replicationConfig.staticVcrClustermapFile)),
-            clusterMapConfig);
+        StaticVcrClustermap staticVcrClustermap = new StaticVcrClustermap(
+            new JSONObject(readStringFromFile(replicationConfig.staticVcrClustermapFile)), clusterMapConfig);
         // Get vcr nodes
         vcrNodes.set(staticVcrClustermap.getCloudDataNodes());
         for (String partition : replicationConfig.replicationVcrRecoveryPartitions) {

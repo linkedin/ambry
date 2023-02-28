@@ -25,9 +25,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Class to parse and store static vcr clustermap, useful for debugging vcr node issues.
  * {
- *   datacenter: [
+ *   datacenters: [
  *    {
- *      datacenter_name: "ei4",
+ *      datacenter: "ei4",
  *      vcr_nodes: [
  *        {
  *          hostname: "..",
@@ -48,17 +48,17 @@ public class StaticVcrClustermap {
   public static final String PLAINTEXT_PORT = "plaintext_port";
   public static final String SSL_PORT = "ssl_port";
   public static final String HTTP2_PORT = "http2_port";
+  public static final String DATACENTERS = "datacenters";
   public static final String DATACENTER = "datacenter";
-  public static final String DATACENTER_NAME = "datacenter_name";
   public static final String VCR_NODES = "vcr_nodes";
   private static final Logger logger = LoggerFactory.getLogger(StaticVcrClustermap.class);
   protected List<CloudDataNode> cloudDataNodes;
 
   public StaticVcrClustermap(JSONObject jsonObject, ClusterMapConfig clusterMapConfig) {
     this.cloudDataNodes = null;
-    JSONArray datacenters = jsonObject.getJSONArray(DATACENTER);
+    JSONArray datacenters = jsonObject.getJSONArray(DATACENTERS);
     for (int i = 0; i < datacenters.length(); ++i) {
-      String datacenter = jsonObject.getString(DATACENTER_NAME);
+      String datacenter = jsonObject.getString(DATACENTER);
       JSONArray vcrNodes = jsonObject.getJSONArray(VCR_NODES);
       for (int j = 0; j < vcrNodes.length(); ++j) {
         JSONObject vcrNode = vcrNodes.getJSONObject(j);
