@@ -265,9 +265,7 @@ public class BlobStore implements Store {
         index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
-        if (config.storeRebuildTokenBasedOnCompactionHistory || (replicaId != null
-            && config.storePartitionsToRebuildTokenBasedOnCompactionHistory.contains(
-            replicaId.getPartitionId().getId()))) {
+        if (config.storeRebuildTokenBasedOnCompactionHistory) {
           compactor.enablePersistIndexSegmentOffsets();
           index.enableRebuildTokenBasedOnCompactionHistory();
           buildCompactionHistory();
