@@ -242,6 +242,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     public final Counter namedDataErrorPutCount;
 
+    public final Counter namedTtlupdateErrorCount;
+
     public final Histogram namedBlobGetTimeInMs;
     public final Histogram namedBlobListTimeInMs;
     public final Histogram namedBlobPutTimeInMs;
@@ -249,6 +251,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     public final Histogram namedBlobPullStaleTimeInMs;
     public final Histogram namedBlobCleanupTimeInMs;
+
+    public final Histogram namedTtlupdateTimeInMs;
 
     /**
      * Constructor to create the Metrics.
@@ -275,6 +279,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       namedDataErrorPutCount = metricRegistry.counter(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorPutCount"));
 
+      namedTtlupdateErrorCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateErrorCount"));
+
       namedBlobGetTimeInMs = metricRegistry.histogram(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobGetTimeInMs"));
       namedBlobListTimeInMs = metricRegistry.histogram(
@@ -288,6 +295,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPullStaleTimeInMs"));
       namedBlobCleanupTimeInMs = metricRegistry.histogram(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobCleanupTimeInMs"));
+
+      namedTtlupdateTimeInMs = metricRegistry.histogram(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateTimeInMs"));
     }
   }
 
@@ -347,8 +357,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
-          logger.info("Updating to READY for Named Blob: {}", record);
-          return apply_ttl_update(record, accountId, containerId, connection);
+          long startTime = this.time.milliseconds();
+          logger.trace("Updating to READY for Named Blob: {}", record);
+          PutResult result = apply_ttl_update(record, accountId, containerId, connection);
+          metricsRecoder.namedTtlupdateTimeInMs.update(this.time.milliseconds() - startTime);
+          return result;
         }, null);
   }
 
@@ -652,7 +665,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setInt(2, containerId);
       statement.setString(3, record.getBlobName());
       statement.setLong(4, record.getVersion());
-      statement.executeUpdate();
+      int rowCount = statement.executeUpdate();
+      if (rowCount == 0) {
+        metricsRecoder.namedTtlupdateErrorCount.inc();
+        throw buildException("TTL Update: Blob not found", RestServiceErrorCode.NotFound, record.getAccountName(),
+            record.getContainerName(),record.getBlobName());
+      }
     }
     return new PutResult(record);
   }
