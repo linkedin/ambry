@@ -25,6 +25,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
@@ -34,12 +35,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -61,6 +64,7 @@ public class MySqlNamedBlobDbTest {
   private final List<String> datacenters = Arrays.asList("dc3", "dc2", "dc1");
   private static final Set<String> notFoundDatacenters = new HashSet<>();
   private final String localDatacenter = "dc1";
+  private final String foundDatacenter = "dc3";
   private final MockDataSourceFactory dataSourceFactory = new MockDataSourceFactory();
   private final InMemAccountService accountService = new InMemAccountService(false, false);
   private final MySqlNamedBlobDb namedBlobDb;
@@ -141,6 +145,25 @@ public class MySqlNamedBlobDbTest {
     namedBlobDb.cleanupStaleData(staleNamedBlobs);
   }
 
+  @Test
+  public void testUpdateBlobStateToReady() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, 10);
+
+    dataSourceFactory.setLocalDatacenter(foundDatacenter);
+    dataSourceFactory.triggerDataResultSet(datacenters);
+
+    long expirationTimeMs = calendar.getTimeInMillis() + 5000;
+    final NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), "blobName", id, expirationTimeMs);
+    PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
+
+    record.setVersion(putResult.getInsertedRecord().getVersion());
+    namedBlobDb.updateBlobStateToReady(record).get();
+
+    NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
+    assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());
+  }
+
   /**
    * @param callable an async call, where the {@link Future} is expected to be completed with an exception.
    * @param errorCode the expected {@link RestServiceErrorCode}.
@@ -212,6 +235,26 @@ public class MySqlNamedBlobDbTest {
             when(connection.prepareStatement(any())).thenReturn(statement);
             when(dataSource.getConnection()).thenReturn(connection);
           }
+        } catch (SQLException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+
+    private void triggerDataResultSet(List<String> datacenters) {
+      for (String datacenter : datacenters) {
+        try {
+          DataSource dataSource = dataSources.get(datacenter);
+          reset(dataSource);
+          PreparedStatement statement = mock(PreparedStatement.class);
+          ResultSet resultSet = mock(ResultSet.class);
+          when(resultSet.next()).thenReturn(true);
+          when(resultSet.getBytes(1)).thenReturn(Base64.decodeBase64(id));
+          when(statement.executeQuery()).thenReturn(resultSet);
+          Connection connection = mock(Connection.class);
+          when(connection.prepareStatement(any())).thenReturn(statement);
+          when(dataSource.getConnection()).thenReturn(connection);
+          when(statement.executeUpdate()).thenReturn(1);
         } catch (SQLException e) {
           throw new RuntimeException(e);
         }

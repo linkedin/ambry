@@ -3206,6 +3206,10 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
+      if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+          .matchesOperation(Operations.NAMED_BLOB)) {
+        restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
+      }
       return completeOperation(input, blobInfo, callback);
     }
 

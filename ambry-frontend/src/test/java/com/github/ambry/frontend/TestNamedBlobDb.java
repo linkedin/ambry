@@ -140,6 +140,18 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
+  public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
+    CompletableFuture<PutResult> future = new CompletableFuture<>();
+    if (exception != null) {
+      future.completeExceptionally(exception);
+      return future;
+    }
+    putInternal(record, NamedBlobState.READY, 0L);
+    future.complete(new PutResult(record));
+    return future;
+  }
+
+  @Override
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     CompletableFuture<DeleteResult> future = new CompletableFuture<>();
     if (exception != null) {
