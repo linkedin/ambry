@@ -81,7 +81,9 @@ public class ParticipantsConsistencyTest {
     props.setProperty("server.participants.consistency.checker.period.sec", Long.toString(0L));
     List<ClusterParticipant> participants = new ArrayList<>();
     for (int i = 0; i < 2; ++i) {
-      participants.add(new MockClusterParticipant(Collections.emptyList(), Collections.emptyList(), null, null));
+      participants.add(
+          new MockClusterParticipant(Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), null,
+              null, null));
     }
     clusterAgentsFactory.setClusterParticipants(participants);
     server = new AmbryServer(new VerifiableProperties(props), clusterAgentsFactory, notificationSystem, time);
@@ -98,12 +100,15 @@ public class ParticipantsConsistencyTest {
   public void participantsWithNoMismatchTest() throws Exception {
     List<String> sealedReplicas = new ArrayList<>(Arrays.asList("10", "1", "4"));
     List<String> stoppedReplicas = new ArrayList<>();
+    List<String> partiallySealedReplicas = new ArrayList<>();
     List<ClusterParticipant> participants = new ArrayList<>();
     // create a latch with init value = 2 to ensure both getSealedReplicas and getStoppedReplicas get called at least once
     CountDownLatch invocationLatch = new CountDownLatch(2);
     MockClusterParticipant participant1 =
-        new MockClusterParticipant(sealedReplicas, stoppedReplicas, invocationLatch, null);
-    MockClusterParticipant participant2 = new MockClusterParticipant(sealedReplicas, stoppedReplicas, null, null);
+        new MockClusterParticipant(sealedReplicas, partiallySealedReplicas, stoppedReplicas, invocationLatch, null,
+            null);
+    MockClusterParticipant participant2 =
+        new MockClusterParticipant(sealedReplicas, partiallySealedReplicas, stoppedReplicas, null, null, null);
     participants.add(participant1);
     participants.add(participant2);
     clusterAgentsFactory.setClusterParticipants(participants);
@@ -112,9 +117,14 @@ public class ParticipantsConsistencyTest {
     server.startup();
     assertTrue("The latch didn't count to zero within 5 secs", invocationLatch.await(5, TimeUnit.SECONDS));
     // verify that: 1. checker is instantiated 2.no mismatch event is emitted.
-    assertNotNull("The mismatch metric should be created", server.getServerMetrics().sealedReplicasMismatchCount);
+    assertNotNull("The mismatch metric should be created",
+        server.getServerMetrics().sealedReplicasMismatchCount);
+    assertNotNull("The partial seal mismatch metric should be created",
+        server.getServerMetrics().partiallySealedReplicasMismatchCount);
     assertEquals("Sealed replicas mismatch count should be 0", 0,
         server.getServerMetrics().sealedReplicasMismatchCount.getCount());
+    assertEquals("Partially sealed replicas mismatch count should be 0", 0,
+        server.getServerMetrics().partiallySealedReplicasMismatchCount.getCount());
     assertEquals("Stopped replicas mismatch count should be 0", 0,
         server.getServerMetrics().stoppedReplicasMismatchCount.getCount());
     server.shutdown();
@@ -128,10 +138,12 @@ public class ParticipantsConsistencyTest {
   public void participantsWithMismatchTest() throws Exception {
     List<ClusterParticipant> participants = new ArrayList<>();
     // create a latch with init value = 2 and add it to second participant. This latch will count down under certain condition
-    CountDownLatch invocationLatch = new CountDownLatch(2);
-    MockClusterParticipant participant1 = new MockClusterParticipant(new ArrayList<>(), new ArrayList<>(), null, null);
+    CountDownLatch invocationLatch = new CountDownLatch(3);
+    MockClusterParticipant participant1 =
+        new MockClusterParticipant(new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), null, null, null);
     MockClusterParticipant participant2 =
-        new MockClusterParticipant(new ArrayList<>(), new ArrayList<>(), null, invocationLatch);
+        new MockClusterParticipant(new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), null, null,
+            invocationLatch);
     participants.add(participant1);
     participants.add(participant2);
     clusterAgentsFactory.setClusterParticipants(participants);
@@ -140,9 +152,14 @@ public class ParticipantsConsistencyTest {
     server.startup();
     // initially, two participants have consistent sealed/stopped replicas. Verify that:
     // 1. checker is instantiated 2. no mismatch event is emitted.
-    assertNotNull("The mismatch metric should be created", server.getServerMetrics().sealedReplicasMismatchCount);
+    assertNotNull("The mismatch metric should be created",
+        server.getServerMetrics().sealedReplicasMismatchCount);
+    assertNotNull("The mismatch metric should be created",
+        server.getServerMetrics().partiallySealedReplicasMismatchCount);
     assertEquals("Sealed replicas mismatch count should be 0", 0,
         server.getServerMetrics().sealedReplicasMismatchCount.getCount());
+    assertEquals("Sealed replicas mismatch count should be 0", 0,
+        server.getServerMetrics().partiallySealedReplicasMismatchCount.getCount());
     assertEquals("Stopped replicas mismatch count should be 0", 0,
         server.getServerMetrics().stoppedReplicasMismatchCount.getCount());
     // induce mismatch for sealed and stopped replica list
@@ -154,9 +171,15 @@ public class ParticipantsConsistencyTest {
     ReplicaId mockReplica2 = Mockito.mock(ReplicaId.class);
     when(mockReplica2.getReplicaPath()).thenReturn("4");
     participant2.setReplicaStoppedState(Collections.singletonList(mockReplica2), true);
+    // add 1 partially sealed replica to participant2
+    ReplicaId mockReplica3 = Mockito.mock(ReplicaId.class);
+    when(mockReplica2.getReplicaPath()).thenReturn("5");
+    participant2.setReplicaSealedState(mockReplica3, ReplicaSealStatus.PARTIALLY_SEALED);
     assertTrue("The latch didn't count to zero within 5 secs", invocationLatch.await(5, TimeUnit.SECONDS));
     assertTrue("Sealed replicas mismatch count should be non-zero",
         server.getServerMetrics().sealedReplicasMismatchCount.getCount() > 0);
+    assertTrue("Partially sealed replicas mismatch count should be non-zero",
+        server.getServerMetrics().partiallySealedReplicasMismatchCount.getCount() > 0);
     assertTrue("Stopped replicas mismatch count should be non-zero",
         server.getServerMetrics().stoppedReplicasMismatchCount.getCount() > 0);
     server.shutdown();
@@ -167,15 +190,20 @@ public class ParticipantsConsistencyTest {
    */
   private static class MockClusterParticipant implements ClusterParticipant {
     List<String> sealedReplicas;
+    List<String> partiallySealedReplicas;
     List<String> stoppedReplicas;
     CountDownLatch getSealedReplicaLatch;
+    CountDownLatch getPartiallySealedReplicaLatch;
     CountDownLatch getStoppedReplicaLatch;
 
-    public MockClusterParticipant(List<String> sealedReplicas, List<String> stoppedReplicas,
-        CountDownLatch getSealedReplicaLatch, CountDownLatch getStoppedReplicaLatch) {
+    public MockClusterParticipant(List<String> sealedReplicas, List<String> partiallySealedReplicas,
+        List<String> stoppedReplicas, CountDownLatch getSealedReplicaLatch,
+        CountDownLatch getPartiallySealedReplicaLatch, CountDownLatch getStoppedReplicaLatch) {
       this.sealedReplicas = sealedReplicas;
+      this.partiallySealedReplicas = partiallySealedReplicas;
       this.stoppedReplicas = stoppedReplicas;
       this.getSealedReplicaLatch = getSealedReplicaLatch;
+      this.getPartiallySealedReplicaLatch = getPartiallySealedReplicaLatch;
       this.getStoppedReplicaLatch = getStoppedReplicaLatch;
     }
 
@@ -186,8 +214,19 @@ public class ParticipantsConsistencyTest {
 
     @Override
     public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
-      if (replicaSealStatus == ReplicaSealStatus.SEALED) {
-        sealedReplicas.add(replicaId.getReplicaPath());
+      String replicaPath = replicaId.getReplicaPath();
+      switch (replicaSealStatus) {
+        case SEALED:
+          sealedReplicas.add(replicaPath);
+          partiallySealedReplicas.remove(replicaPath);
+          break;
+        case PARTIALLY_SEALED:
+          partiallySealedReplicas.add(replicaPath);
+          sealedReplicas.remove(replicaPath);
+          break;
+        case NOT_SEALED:
+          partiallySealedReplicas.remove(replicaPath);
+          sealedReplicas.remove(replicaPath);
       }
       return true;
     }
@@ -206,6 +245,14 @@ public class ParticipantsConsistencyTest {
         getSealedReplicaLatch.countDown();
       }
       return sealedReplicas;
+    }
+
+    @Override
+    public List<String> getPartiallySealedReplicas() {
+      if (getPartiallySealedReplicaLatch != null) {
+        getPartiallySealedReplicaLatch.countDown();
+      }
+      return partiallySealedReplicas;
     }
 
     @Override

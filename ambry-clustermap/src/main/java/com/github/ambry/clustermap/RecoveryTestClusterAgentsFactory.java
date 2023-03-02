@@ -111,6 +111,11 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
+        public List<String> getPartiallySealedReplicas() {
+          return Collections.emptyList();
+        }
+
+        @Override
         public List<String> getStoppedReplicas() {
           return Collections.emptyList();
         }

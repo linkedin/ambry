@@ -44,6 +44,7 @@ public class MockHelixParticipant extends HelixParticipant {
   ReplicaId currentReplica = null;
   ReplicaSyncUpManager replicaSyncUpService = null;
   private Set<ReplicaId> sealedReplicas = new HashSet<>();
+  private Set<ReplicaId> partiallySealedReplicas = new HashSet<>();
   private Set<ReplicaId> stoppedReplicas = new HashSet<>();
   private Set<ReplicaId> disabledReplicas = new HashSet<>();
   private PartitionStateChangeListener mockReplicationManagerListener;
@@ -101,10 +102,19 @@ public class MockHelixParticipant extends HelixParticipant {
 
   @Override
   public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
-    if (replicaSealStatus == ReplicaSealStatus.SEALED) {
-      sealedReplicas.add(replicaId);
-    } else {
-      sealedReplicas.remove(replicaId);
+    switch (replicaSealStatus) {
+      case SEALED:
+        sealedReplicas.add(replicaId);
+        partiallySealedReplicas.remove(replicaId);
+        break;
+      case PARTIALLY_SEALED:
+        partiallySealedReplicas.add(replicaId);
+        sealedReplicas.remove(replicaId);
+        break;
+      case NOT_SEALED:
+        partiallySealedReplicas.remove(replicaId);
+        sealedReplicas.remove(replicaId);
+        break;
     }
     return true;
   }
@@ -143,6 +153,11 @@ public class MockHelixParticipant extends HelixParticipant {
   @Override
   public List<String> getSealedReplicas() {
     return sealedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
+  }
+
+  @Override
+  public List<String> getPartiallySealedReplicas() {
+    return partiallySealedReplicas.stream().map(r -> r.getPartitionId().toPathString()).collect(Collectors.toList());
   }
 
   @Override

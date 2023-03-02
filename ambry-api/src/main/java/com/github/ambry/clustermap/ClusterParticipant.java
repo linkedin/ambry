@@ -19,7 +19,6 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -74,10 +73,7 @@ public interface ClusterParticipant extends AutoCloseable {
    * Get a list of replicas that are marked as partially sealed.
    * @return a list of all partially sealed replicas.
    */
-  default List<String> getPartiallySealedReplicas() {
-    // TODO Add implementations.
-    return new ArrayList<>();
-  }
+  List<String> getPartiallySealedReplicas();
 
   /**
    * Get a list of replicas that are marked as stopped.

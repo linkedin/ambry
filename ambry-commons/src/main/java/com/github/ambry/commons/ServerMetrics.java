@@ -266,6 +266,7 @@ public class ServerMetrics {
   public final Counter ttlUpdateRejectedError;
   public final Counter replicationResponseMessageSizeTooHigh;
   public Counter sealedReplicasMismatchCount = null;
+  public Counter partiallySealedReplicasMismatchCount = null;
   public Counter stoppedReplicasMismatchCount = null;
   // AmbryServerSecurityService
   public final Counter serverValidateConnectionSuccess;
@@ -628,6 +629,8 @@ public class ServerMetrics {
   public void registerParticipantsMismatchMetrics() {
     sealedReplicasMismatchCount =
         registry.counter(MetricRegistry.name(ServerMetrics.class, "SealedReplicasMismatchCount"));
+    partiallySealedReplicasMismatchCount =
+        registry.counter(MetricRegistry.name(ServerMetrics.class, "PartiallySealedReplicasMismatchCount"));
     stoppedReplicasMismatchCount =
         registry.counter(MetricRegistry.name(ServerMetrics.class, "StoppedReplicasMismatchCount"));
   }
