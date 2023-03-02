@@ -3208,7 +3208,7 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       }
       if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
           .matchesOperation(Operations.NAMED_BLOB)) {
-        restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1);
+        restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
       }
       return completeOperation(input, blobInfo, callback);
     }
