@@ -75,6 +75,7 @@ public class AccountDao {
   public static final String VERSION = "version";
   public static final String CREATION_TIME = "creationTime";
   public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
+  private static final String CURRENT_TIME = "CURRENT_TIMESTAMP(6)";
 
   // Account table query strings
   private final String insertAccountsSql;
@@ -99,7 +100,7 @@ public class AccountDao {
   private final String getDatasetByNameSql;
   private final String getVersionSchemaSql;
   private final String updateDatasetSql;
-
+  private final String deleteDatasetByIdSql;
   /**
    * Types of MySql statements.
    */
@@ -153,6 +154,9 @@ public class AccountDao {
         String.format("select %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
             VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
+    deleteDatasetByIdSql =
+        String.format("update %s set %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
+            DATASET_TABLE, DELETE_TS, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getVersionSchemaSql =
         String.format("select %s from %s where %s = ? and %s = ? and %s = ?", VERSION_SCHEMA, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
@@ -483,6 +487,27 @@ public class AccountDao {
       return dataset;
     } catch (SQLException | AccountServiceException e) {
       dataAccessor.onException(e, Read);
+      throw e;
+    }
+  }
+
+  /**
+   * Delete {@link Dataset} based on the supplied properties.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @throws SQLException
+   */
+  public synchronized void deleteDataset(int accountId, int containerId, String datasetName)
+      throws SQLException, AccountServiceException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(true);
+      PreparedStatement deleteDatasetStatement = dataAccessor.getPreparedStatement(deleteDatasetByIdSql, true);
+      executeDeleteDatasetStatement(deleteDatasetStatement, accountId, containerId, datasetName);
+      dataAccessor.onSuccess(Delete, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException | AccountServiceException e) {
+      dataAccessor.onException(e, Delete);
       throw e;
     }
   }
@@ -856,6 +881,26 @@ public class AccountDao {
     }
     return new Dataset(accountName, containerName, datasetName, versionSchema, timestampToMs(deletionTime),
         retentionCount, userTags);
+  }
+
+  /**
+   * Execute deleteDatasetStatement to delete Dataset.
+   * @param statement the mysql statement to delete dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   */
+  private void executeDeleteDatasetStatement(PreparedStatement statement, int accountId, int containerId,
+      String datasetName) throws AccountServiceException, SQLException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, datasetName);
+    int count = statement.executeUpdate();
+    if (count <= 0) {
+      throw new AccountServiceException(
+          "Dataset not found qualified record for deletion for account: " + accountId + " container: " + containerId
+              + " dataset: " + datasetName, AccountServiceErrorCode.NotFound);
+    }
   }
 
   /**

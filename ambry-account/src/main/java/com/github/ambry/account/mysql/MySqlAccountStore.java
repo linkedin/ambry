@@ -109,6 +109,19 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Delete dataset from the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param datasetName the name of the dataset.
+   * @throws AccountServiceException
+   * @throws SQLException
+   */
+  public void deleteDataset(short accountId, short containerId, String datasetName)
+      throws AccountServiceException, SQLException {
+    accountDao.deleteDataset(accountId, containerId, datasetName);
+  }
+
+  /**
    * Gets all {@link Account}s that have been created or modified since the specified time.
    * @param updatedSince the last modified time used to filter.
    * @return a collection of {@link Account}s
