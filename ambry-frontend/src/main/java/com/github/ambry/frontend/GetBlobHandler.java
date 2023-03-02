@@ -346,9 +346,10 @@ public class GetBlobHandler {
         return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
             + datasetVersionRecord.getVersion();
       } catch (AccountServiceException ex) {
-        throw new RestServiceException(
+        LOGGER.error(
             "Failed to get dataset version for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + version,
+                + " datasetName: " + datasetName + " version: " + version);
+        throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }

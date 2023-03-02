@@ -194,9 +194,11 @@ public class PostDatasetsHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
       } catch (AccountServiceException ex) {
-        throw new RestServiceException(
+        logger.error(
             "Dataset update failed for accountName " + accountName + " containerName " + containerName + " datasetName "
-                + datasetName, RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+                + datasetName);
+        throw new RestServiceException(ex.getMessage(),
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
   }

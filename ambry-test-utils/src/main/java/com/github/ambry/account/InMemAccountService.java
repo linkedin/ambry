@@ -31,6 +31,8 @@ import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
+import static com.github.ambry.utils.Utils.*;
+
 
 /**
  * Implementation of {@link AccountService} for test. This implementation synchronizes on all methods.
@@ -135,8 +137,15 @@ public class InMemAccountService implements AccountService {
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
     idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
+    Dataset dataset = getDataset(accountName, containerName, datasetName);
+    long updatedExpirationTimeMs = expirationTimeMs;
+    if (expirationTimeMs == Infinite_Time || dataset.getExpirationTimeMs() == Infinite_Time) {
+      updatedExpirationTimeMs = expirationTimeMs == Infinite_Time ? dataset.getExpirationTimeMs() : expirationTimeMs;
+    } else if (dataset.getExpirationTimeMs() <= expirationTimeMs) {
+      updatedExpirationTimeMs = dataset.getExpirationTimeMs();
+    }
     DatasetVersionRecord datasetVersionRecord =
-        new DatasetVersionRecord(accountId, containerId, datasetName, version, expirationTimeMs);
+        new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs);
     idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).put(datasetName + version, datasetVersionRecord);
     return datasetVersionRecord;
   }
@@ -183,8 +192,7 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized Dataset getDataset(String accountName, String containerName, String datasetName)
-      throws AccountServiceException {
+  public synchronized Dataset getDataset(String accountName, String containerName, String datasetName) {
     return nameToDatasetMap.get(new Pair<>(accountName, containerName)).get(datasetName);
   }
 

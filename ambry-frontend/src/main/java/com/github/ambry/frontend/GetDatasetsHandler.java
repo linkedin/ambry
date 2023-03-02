@@ -151,9 +151,11 @@ public class GetDatasetsHandler {
         datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
         return accountService.getDataset(accountName, containerName, datasetName);
       } catch (AccountServiceException ex) {
-        throw new RestServiceException(
+        LOGGER.error(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "
-                + datasetName, RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+                + datasetName);
+        throw new RestServiceException(ex.getMessage(),
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
   }

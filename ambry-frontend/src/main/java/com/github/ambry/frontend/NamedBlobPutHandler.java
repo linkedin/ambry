@@ -48,6 +48,7 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -357,9 +358,9 @@ public class NamedBlobPutHandler {
         restRequest.getMetricsTracker()
             .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
-      Map<String, Object> userMetadataFromRequest = restRequest.getArgs();
+      Map<String, Object> userMetadataFromRequest = new HashMap<>(restRequest.getArgs());
       Map<String, String> userTags = getDatasetUserTags(restRequest);
-      if (userTags != null) {
+      if (!userTags.isEmpty()) {
         userTags.forEach((key, value) -> {
           if (!userMetadataFromRequest.containsKey(key)) {
             userMetadataFromRequest.put(key, value);
@@ -379,12 +380,15 @@ public class NamedBlobPutHandler {
      * @throws RestServiceException
      */
     private Map<String, String> getDatasetUserTags(RestRequest restRequest) throws RestServiceException {
-      Map<String, String> userTags = null;
+      Map<String, String> modifiedUserTags = new HashMap<>();
       if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
         Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
-        userTags = dataset.getUserTags();
+        Map<String, String> userTags = dataset.getUserTags();
+        for (Map.Entry<String, String> entry : userTags.entrySet()) {
+          modifiedUserTags.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + entry.getKey(), entry.getValue());
+        }
       }
-      return userTags;
+      return modifiedUserTags;
     }
 
     /**
@@ -519,12 +523,15 @@ public class NamedBlobPutHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
+        long newExpirationTimeMs = datasetVersionRecord.getExpirationTimeMs();
+        blobProperties.setTimeToLiveInSeconds(newExpirationTimeMs);
         frontendMetrics.addDatasetVersionProcessingTimeInMs.update(
             System.currentTimeMillis() - startAddDatasetVersionTime);
       } catch (AccountServiceException ex) {
-        throw new RestServiceException(
+        LOGGER.error(
             "Dataset version create failed for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + version,
+                + " datasetName: " + datasetName + " version: " + version);
+        throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }
