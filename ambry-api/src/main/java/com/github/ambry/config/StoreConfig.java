@@ -16,11 +16,7 @@ package com.github.ambry.config;
 import com.github.ambry.store.IndexMemState;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.util.Collections;
-import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 /**
@@ -491,16 +487,6 @@ public class StoreConfig {
   public static final String storeCompactionHistoryInDayName = "store.compaction.history.in.day";
 
   /**
-   * Partition id to enable rebuild token based on compaction history. To enable this feature for all partitions in
-   * this host, use {@link #storeRebuildTokenBasedOnCompactionHistory}.
-   */
-  @Config(storePartitionsToRebuildTokenBasedOnCompactionHistoryName)
-  @Default("")
-  public List<Long> storePartitionsToRebuildTokenBasedOnCompactionHistory;
-  public static final String storePartitionsToRebuildTokenBasedOnCompactionHistoryName =
-      "store.partitions.to.rebuild.token.based.on.compaction.history";
-
-  /**
    * True to enable rebuilding replication token based on compaction history for all partitions in this host.
    */
   @Config(storeRebuildTokenBasedOnCompactionHistoryName)
@@ -634,15 +620,6 @@ public class StoreConfig {
     storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 21, 1, 365);
     storeRebuildTokenBasedOnCompactionHistory =
         verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);
-    String partitions =
-        verifiableProperties.getString(storePartitionsToRebuildTokenBasedOnCompactionHistoryName, "").trim();
-    if (partitions.isEmpty()) {
-      storePartitionsToRebuildTokenBasedOnCompactionHistory = Collections.emptyList();
-    } else {
-      storePartitionsToRebuildTokenBasedOnCompactionHistory =
-          Stream.of(partitions.split(",")).map(Long::parseLong).collect(Collectors.toList());
-    }
-
     storePersistRemoteTokenIntervalInSeconds =
         verifiableProperties.getIntInRange(storePersistRemoteTokenIntervalInSecondsName, 0, 0, 60 * 60 * 24);
   }
