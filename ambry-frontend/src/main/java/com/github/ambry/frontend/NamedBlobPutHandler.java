@@ -299,9 +299,9 @@ public class NamedBlobPutHandler {
         if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
           throw new RestServiceException(
               "Internal key " + RestUtils.InternalKeys.NAMED_BLOB_VERSION + " is required in Named Blob TTL update callback!",
-              RestServiceErrorCode.InvalidArgs);
+              RestServiceErrorCode.InternalServerError);
         }
-        long namedBlobVersion = Long.parseLong(restRequest.getArgs().get(RestUtils.InternalKeys.NAMED_BLOB_VERSION).toString());
+        long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
         String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
