@@ -13,7 +13,6 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.tools.util.ToolUtils;
 import java.util.ArrayList;
@@ -32,8 +31,7 @@ import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOp
 /**
  * This tool takes the hardware layout, partition layout and the Zk hosts information json files as input,
  * and updates the ZK hosts with the contents of the layout files. It adds all partitions and hosts that have not
- * previously been added (so, initially this will bootstrap the cluster information and on an ongoing basis, this can
- * add new nodes and partitions).
+ * previously been added (so, initially this will bootstrap the cluster by adding new nodes and partitions).
  *
  * The existing hardware and partition layout json files will be read in as is.
  *
@@ -152,7 +150,8 @@ public class HelixBootstrapUpgradeTool {
         .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> maxPartitionsInOneResourceOpt = parser.accepts("maxPartitionsInOneResource",
-        "(Optional argument) The maximum number of partitions that should be grouped under a Helix resource")
+        "(Optional argument) The maximum number of partitions that should be grouped under a Helix resource. "
+              + "If the resources are reconstructed to be FULL_AUTO compatible, then this option would be ignored")
         .withRequiredArg()
         .describedAs("max_partitions_in_one_resource")
         .ofType(String.class);
@@ -231,6 +230,15 @@ public class HelixBootstrapUpgradeTool {
     OptionSpecBuilder overrideReplicaStatus = parser.accepts("overrideReplicaStatus",
         "(Optional argument) whether to override replica status lists (i.e. sealed/stopped/disabled lists) in instance(datanode) config");
 
+    ArgumentAcceptingOptionSpec<Integer> maxInstancesInOneResourceForFullAutoOpt = parser.accepts("maxInstancesInOneResourceForFullAuto",
+            "Maximum number of instance in a resource when the resources are constructed as FULL_AUTO compatible "
+            + "or the cluster is empty without any resources.\n"
+            + "This is only required when bootstrapping a cluster or update ideal state, or validating a cluster\n\n"
+            + "When the cluster is empty, if you provide 0 to this option, this tool would create resources in the old way, not full auto compatible way")
+        .withRequiredArg()
+        .describedAs("max_instances_in_one_resource_for_full_auto")
+        .ofType(Integer.class);
+
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
     String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
@@ -244,6 +252,7 @@ public class HelixBootstrapUpgradeTool {
     String hostname = options.valueOf(hostnameOpt);
     String partitionName = options.valueOf(partitionIdOpt);
     String portStr = options.valueOf(portOpt);
+    Integer maxInstancesInOneResourceForFullAuto = options.valueOf(maxInstancesInOneResourceForFullAutoOpt);
     int maxPartitionsInOneResource =
         options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
             : Integer.parseInt(options.valueOf(maxPartitionsInOneResourceOpt));
@@ -280,8 +289,10 @@ public class HelixBootstrapUpgradeTool {
       Integer portNum = portStr == null ? null : Integer.parseInt(portStr);
       switch (operation) {
         case ValidateCluster:
+          listOpt.add(maxInstancesInOneResourceForFullAutoOpt);
+          ToolUtils.ensureOrExit(listOpt, options, parser);
           HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
-              dcs, stateModelDef, dataNodeConfigSourceType);
+              dcs, stateModelDef, dataNodeConfigSourceType, maxInstancesInOneResourceForFullAuto.intValue());
           break;
         case ListSealedPartition:
           HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
@@ -308,10 +319,12 @@ public class HelixBootstrapUpgradeTool {
           // the tool goes to default branch and extracts removed replicas from static clustermap to disable them
           // automatically.
         default:
+          listOpt.add(maxInstancesInOneResourceForFullAutoOpt);
+          ToolUtils.ensureOrExit(listOpt, options, parser);
           HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
               clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove), null,
               options.has(enableValidatingClusterManager), stateModelDef, operation, dataNodeConfigSourceType,
-              options.has(overrideReplicaStatus));
+              options.has(overrideReplicaStatus), maxInstancesInOneResourceForFullAuto.intValue());
       }
     }
     System.out.println("======== HelixBootstrapUpgradeTool completed successfully! ========");
