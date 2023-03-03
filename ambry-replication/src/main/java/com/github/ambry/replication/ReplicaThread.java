@@ -847,6 +847,7 @@ public class ReplicaThread implements Runnable {
    */
   ReplicaMetadataRequest createReplicaMetadataRequest(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       DataNodeId remoteNode) {
+    boolean allLocalStoreInBootstrap = true;
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<>();
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
@@ -856,11 +857,20 @@ public class ReplicaThread implements Runnable {
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
           remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
+      if (remoteReplicaInfo.getLocalStore().getCurrentState() != ReplicaState.BOOTSTRAP) {
+        allLocalStoreInBootstrap = false;
+      }
+    }
+    long fetchSize = replicationConfig.replicationFetchSizeInBytes;
+    if (allLocalStoreInBootstrap && !replicatingFromRemoteColo) {
+      fetchSize = replicationConfig.replicationFetchSizeInBytesForBootstrapIntraColo;
+      logger.trace(
+          "All local stores are at bootstrap mode, and this is intro colo replication, set the fetch size to {}",
+          fetchSize);
     }
     return new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName() + "]",
-        replicaMetadataRequestInfoList, replicationConfig.replicationFetchSizeInBytes,
-        replicationConfig.replicaMetadataRequestVersion);
+        replicaMetadataRequestInfoList, fetchSize, replicationConfig.replicaMetadataRequestVersion);
   }
 
   /**
