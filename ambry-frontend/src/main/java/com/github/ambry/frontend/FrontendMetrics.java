@@ -31,6 +31,8 @@ public class FrontendMetrics {
   // RestRequestMetricsGroup
   // DELETE
   public final RestRequestMetricsGroup deleteBlobMetricsGroup;
+  public final RestRequestMetricsGroup deleteDatasetsMetricsGroup;
+
   // GET
   public final RestRequestMetricsGroup getBlobMetricsGroup;
   public final RestRequestMetricsGroup getBlobInfoMetricsGroup;
@@ -117,6 +119,9 @@ public class FrontendMetrics {
 
   public final AsyncOperationTracker.Metrics getDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getDatasetsSecurityPostProcessRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics deleteDatasetsSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics deleteDatasetsSecurityPostProcessRequestMetrics;
 
   public final AsyncOperationTracker.Metrics getStatsReportSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getStatsReportSecurityPostProcessRequestMetrics;
@@ -246,6 +251,7 @@ public class FrontendMetrics {
   // Dataset
   public final Counter unrecognizedDatasetNameCount;
   public final Meter getDatasetWithAccountAndContainerHeaderRate;
+  public final Meter deleteDatasetWithAccountAndContainerHeaderRate;
 
   //Dataset Version
   public final Counter addDatasetVersionError;
@@ -265,6 +271,9 @@ public class FrontendMetrics {
     // DELETE
     deleteBlobMetricsGroup =
         new RestRequestMetricsGroup(FrontendRestRequestService.class, "DeleteBlob", false, metricRegistry,
+            frontendConfig);
+    deleteDatasetsMetricsGroup =
+        new RestRequestMetricsGroup(FrontendRestRequestService.class, "DeleteDataset", false, metricRegistry,
             frontendConfig);
     // GET
     getBlobMetricsGroup =
@@ -418,6 +427,11 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityProcessRequest", metricRegistry);
     getDatasetsSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityPostProcessRequest", metricRegistry);
+
+    deleteDatasetsSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(DeleteDatasetHandler.class, "SecurityProcessRequest", metricRegistry);
+    deleteDatasetsSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(DeleteDatasetHandler.class, "SecurityPostProcessRequest", metricRegistry);
 
     getStatsReportSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetStatsReportHandler.class, "SecurityProcessRequest", metricRegistry);
@@ -633,6 +647,8 @@ public class FrontendMetrics {
         metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "UnrecognizedDatasetNameCount"));
     getDatasetWithAccountAndContainerHeaderRate = metricRegistry.meter(
         MetricRegistry.name(FrontendRestRequestService.class, "GetDatasetWithAccountAndContainerHeaderRate"));
+    deleteDatasetWithAccountAndContainerHeaderRate = metricRegistry.meter(
+        MetricRegistry.name(FrontendRestRequestService.class, "DeleteDatasetWithAccountAndContainerHeaderRate"));
 
     // Dataset Version
     addDatasetVersionError =

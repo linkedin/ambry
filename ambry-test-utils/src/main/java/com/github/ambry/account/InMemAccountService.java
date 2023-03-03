@@ -132,7 +132,7 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized DatasetVersionRecord addDatasetVersion(String accountName, String containerName,
-      String datasetName, String version, long expirationTimeMs) {
+      String datasetName, String version, long expirationTimeMs) throws AccountServiceException {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
@@ -192,8 +192,18 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized Dataset getDataset(String accountName, String containerName, String datasetName) {
-    return nameToDatasetMap.get(new Pair<>(accountName, containerName)).get(datasetName);
+  public synchronized Dataset getDataset(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
+    Dataset dataset = nameToDatasetMap.get(new Pair<>(accountName, containerName)).get(datasetName);
+    if (dataset == null) {
+      throw new AccountServiceException("Dataset has been deleted", AccountServiceErrorCode.Deleted);
+    }
+    return dataset;
+  }
+
+  @Override
+  public synchronized void deleteDataset(String accountName, String containerName, String datasetName) {
+    nameToDatasetMap.get(new Pair<>(accountName, containerName)).remove(datasetName);
   }
 
   @Override

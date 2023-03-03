@@ -204,6 +204,18 @@ public interface AccountService extends Closeable {
   }
 
   /**
+   * Delete a {@link Dataset} based on the supplied properties.
+   * @param accountName The name of the parent account.
+   * @param containerName The name of the container.
+   * @param DatasetName The name of the dataset.
+   * @throws AccountServiceException
+   */
+  default void deleteDataset(String accountName, String containerName, String DatasetName)
+      throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
    * Get the dataset version based on the supplied properties.
    * @param accountName The name for the parent account.
    * @param containerName The name for the container.

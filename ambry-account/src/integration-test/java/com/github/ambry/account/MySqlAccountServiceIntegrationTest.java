@@ -758,6 +758,14 @@ public class MySqlAccountServiceIntegrationTest {
 
     assertEquals("Mistmatch in dataset read from db", dataset, datasetFromMysql);
 
+    // Add dataset again, should fail due to already exist.
+    try {
+      mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+      fail("Should fail due to dataset already exist");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected ErrorCode", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
+    }
+
     //update the retention count only.
     int newRetentionCount = 10;
     Dataset datasetForUpdate =
@@ -824,20 +832,26 @@ public class MySqlAccountServiceIntegrationTest {
 
     //delete a permanent dataset.
     mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL);
-    datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME_WITH_TTL);
-    assertNotNull("Expiration time should not be null", datasetFromMysql.getExpirationTimeMs());
+    try {
+      mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_TTL);
+      fail("Should fail due to the dataset already expired");
+    } catch (AccountServiceException e) {
+      assertEquals("Mistmatch on error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
 
     //delete a dataset with future expirationTimeMs
     long oldExpirationTime =
         mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME).getExpirationTimeMs();
     mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME);
-    datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME);
-    assertNotNull("Expiration time should not be null", datasetFromMysql.getExpirationTimeMs());
-    assertNotEquals("Expect the expiration time changes", Optional.of(oldExpirationTime),
-        datasetFromMysql.getExpirationTimeMs());
+    try {
+      mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME);
+      fail("Should fail due to the dataset already expired");
+    } catch (AccountServiceException e) {
+      assertEquals("Mistmatch on error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
 
     //delete a dataset which already expired, should fail.
     expirationTimeInMs = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
@@ -856,7 +870,9 @@ public class MySqlAccountServiceIntegrationTest {
       assertEquals("Mistmatch on error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
     }
 
-    //add dataset with same name.
+    //add new dataset with same primary key after it has been deleted.
+    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_EXPIRED).setVersionSchema(
+        Dataset.VersionSchema.TIMESTAMP).setExpirationTimeMs(-1).setRetentionCount(retentionCount).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
   }
 

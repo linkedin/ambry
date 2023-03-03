@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,7 +76,6 @@ public class AccountDao {
   public static final String VERSION = "version";
   public static final String CREATION_TIME = "creationTime";
   public static final String LAST_MODIFIED_TIME = "lastModifiedTime";
-  private static final String CURRENT_TIME = "CURRENT_TIMESTAMP(6)";
 
   // Account table query strings
   private final String insertAccountsSql;
@@ -100,6 +100,7 @@ public class AccountDao {
   private final String getDatasetByNameSql;
   private final String getVersionSchemaSql;
   private final String updateDatasetSql;
+  private final String updateDatasetSqlIfExpired;
   private final String deleteDatasetByIdSql;
   /**
    * Types of MySql statements.
@@ -142,6 +143,10 @@ public class AccountDao {
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?)",
             DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT,
             USER_TAGS, DELETE_TS);
+    updateDatasetSqlIfExpired = String.format(
+        "update %s set %s = ?, %s = now(3), %s = ?, %s = ?, %s = ? where %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
+        DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, USER_TAGS, DELETE_TS, ACCOUNT_ID,
+        CONTAINER_ID, DATASET_NAME);
     //update the dataset field, in order to support partial update, if one parameter is null, keep the original value.
     //if the delete_ts parameter from input equals to Utils.Infinite_Time(-1), set the delete_ts to null.
     updateDatasetSql = String.format(
@@ -427,13 +432,24 @@ public class AccountDao {
    */
   public synchronized void addDataset(int accountId, int containerId, Dataset dataset)
       throws SQLException, AccountServiceException {
+    long startTimeMs = System.currentTimeMillis();
     try {
-      long startTimeMs = System.currentTimeMillis();
       dataAccessor.getDatabaseConnection(true);
       PreparedStatement insertDatasetStatement = dataAccessor.getPreparedStatement(insertDatasetSql, true);
       executeAddDatasetStatement(insertDatasetStatement, accountId, containerId, dataset);
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException | AccountServiceException e) {
+      if (e instanceof SQLIntegrityConstraintViolationException) {
+        PreparedStatement updateDatasetSqlIfExpiredStatement =
+            dataAccessor.getPreparedStatement(updateDatasetSqlIfExpired, true);
+        if (executeUpdateDatasetSqlIfExpiredStatement(updateDatasetSqlIfExpiredStatement, accountId, containerId,
+            dataset) <= 0) {
+          throw new AccountServiceException("The dataset already exist", AccountServiceErrorCode.ResourceConflict);
+        } else {
+          dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+          return;
+        }
+      }
       dataAccessor.onException(e, Write);
       throw e;
     }
@@ -780,6 +796,60 @@ public class AccountDao {
   }
 
   /**
+   * Execute updateDatasetSqlIfExpired statement.
+   * @param statement the updateDatasetSqlIfExpired statement.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param dataset the {@link Dataset}.
+   * @return the number of rows been updated.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private int executeUpdateDatasetSqlIfExpiredStatement(PreparedStatement statement, int accountId, int containerId, Dataset dataset)
+      throws SQLException, AccountServiceException {
+    String datasetName = dataset.getDatasetName();
+    if (dataset.getVersionSchema() == null) {
+      throw new AccountServiceException("Must set the version schema info during dataset creation",
+          AccountServiceErrorCode.BadRequest);
+    }
+    Long expirationTimeMs = dataset.getExpirationTimeMs();
+    if (expirationTimeMs == null) {
+      throw new AccountServiceException("Must set the expiration time info during dataset creation",
+          AccountServiceErrorCode.BadRequest);
+    }
+    int schemaVersionOrdinal = dataset.getVersionSchema().ordinal();
+    Integer retentionCount = dataset.getRetentionCount();
+    Map<String, String> userTags = dataset.getUserTags();
+    String userTagsInJson;
+    try {
+      userTagsInJson = objectMapper.writeValueAsString(userTags);
+    } catch (IOException e) {
+      throw new AccountServiceException("Fail to serialize user tags : " + userTags.toString(),
+          AccountServiceErrorCode.BadRequest);
+    }
+    statement.setInt(1, schemaVersionOrdinal);
+    if (retentionCount != null) {
+      statement.setInt(2, retentionCount);
+    } else {
+      statement.setObject(2, null);
+    }
+    if (userTags != null) {
+      statement.setString(3, userTagsInJson);
+    } else {
+      statement.setString(3, null);
+    }
+    if (dataset.getExpirationTimeMs() != Utils.Infinite_Time) {
+      statement.setTimestamp(4, new Timestamp(dataset.getExpirationTimeMs()));
+    } else {
+      statement.setTimestamp(4, null);
+    }
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setString(7, datasetName);
+    return statement.executeUpdate();
+  }
+
+  /**
    * Execute updateDatasetStatement to update Dataset.
    * @param statement the mysql statement to update dataset.
    * @param accountId the id for the parent account.
@@ -898,7 +968,7 @@ public class AccountDao {
     int count = statement.executeUpdate();
     if (count <= 0) {
       throw new AccountServiceException(
-          "Dataset not found qualified record for deletion for account: " + accountId + " container: " + containerId
+          "Dataset not found qualified record to delete for account: " + accountId + " container: " + containerId
               + " dataset: " + datasetName, AccountServiceErrorCode.NotFound);
     }
   }

@@ -240,6 +240,7 @@ public enum RestServiceErrorCode {
       case UpdateDisabled:
         return ServiceUnavailable;
       case ResourceHasGone:
+      case Deleted:
         return Deleted;
       case MethodNotAllowed:
         return NotAllowed;
