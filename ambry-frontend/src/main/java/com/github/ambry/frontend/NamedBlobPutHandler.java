@@ -526,6 +526,8 @@ public class NamedBlobPutHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
         long newExpirationTimeMs = datasetVersionRecord.getExpirationTimeMs();
+        // expirationTimeMs = ttl + creationTime. If dataset version inherit the expirationTimeMs from dataset level
+        // the ttl should be updated.
         if (expirationTimeMs != Utils.Infinite_Time || expirationTimeMs != newExpirationTimeMs) {
           blobProperties.setTimeToLiveInSeconds(
               TimeUnit.MILLISECONDS.toSeconds(newExpirationTimeMs - blobProperties.getCreationTimeInMs()));
