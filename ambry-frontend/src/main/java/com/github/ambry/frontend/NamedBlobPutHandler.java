@@ -384,8 +384,10 @@ public class NamedBlobPutHandler {
       if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
         Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
         Map<String, String> userTags = dataset.getUserTags();
-        for (Map.Entry<String, String> entry : userTags.entrySet()) {
-          modifiedUserTags.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + entry.getKey(), entry.getValue());
+        if (userTags != null) {
+          for (Map.Entry<String, String> entry : userTags.entrySet()) {
+            modifiedUserTags.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + entry.getKey(), entry.getValue());
+          }
         }
       }
       return modifiedUserTags;
@@ -524,7 +526,12 @@ public class NamedBlobPutHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
         long newExpirationTimeMs = datasetVersionRecord.getExpirationTimeMs();
-        blobProperties.setTimeToLiveInSeconds(newExpirationTimeMs);
+        // expirationTimeMs = ttl + creationTime. If dataset version inherit the expirationTimeMs from dataset level
+        // the ttl should be updated.
+        if (expirationTimeMs != Utils.Infinite_Time || expirationTimeMs != newExpirationTimeMs) {
+          blobProperties.setTimeToLiveInSeconds(
+              TimeUnit.MILLISECONDS.toSeconds(newExpirationTimeMs - blobProperties.getCreationTimeInMs()));
+        }
         frontendMetrics.addDatasetVersionProcessingTimeInMs.update(
             System.currentTimeMillis() - startAddDatasetVersionTime);
       } catch (AccountServiceException ex) {

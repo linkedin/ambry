@@ -142,6 +142,7 @@ public class FrontendRestRequestServiceTest {
   private static final String NAMED_BLOB_PREFIX = "/named";
   private static final String SLASH = "/";
   private static final String DATASET_NAME = "testDataset";
+  private static final String DATASET_NAME_WITHOUT_USER_TAGS = "testDatasetWithoutUserTags";
 
   static {
     try {
@@ -594,7 +595,7 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Unexpected PUT /DatasetVersions response", blobId, blobIdFromResponse);
     assertEquals("Unexpected userMetadata", userTags.get(userTagKey),
         userMetadataFromRouter.get(USER_META_DATA_HEADER_PREFIX + userTagKey));
-    assertEquals("Unexpected ttl", expirationTimeInMs, expectedBlobProperties.getTimeToLiveInSeconds());
+    assertNotEquals("Ttl should be updated", blobTtl, expectedBlobProperties.getTimeToLiveInSeconds());
 
     // Add a dataset version without version specified.
     namedBlobPathUri =
@@ -611,8 +612,8 @@ public class FrontendRestRequestServiceTest {
     // Prepare the input and mock class
     namedBlobPathUri = NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + blobName;
     BlobProperties blobProperties =
-        new BlobProperties(0, testAccount.getName(), "owner", "image/gif", false, expirationTimeInMs,
-            testAccount.getId(), testContainer.getId(), false, null, null, null);
+        new BlobProperties(0, testAccount.getName(), "owner", "image/gif", false, blobTtl, testAccount.getId(),
+            testContainer.getId(), false, null, null, null);
     ReadableStreamChannel byteBufferContent = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(contentLength));
     String blobIdFromRouter =
         router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
@@ -630,6 +631,59 @@ public class FrontendRestRequestServiceTest {
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected GET /DatasetVersions response content length", contentLength,
         restResponseChannel.getResponseBody().length);
+
+    //Add dataset without user tags
+    versionSchema = Dataset.VersionSchema.MONOTONIC;
+
+    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(),
+        DATASET_NAME_WITHOUT_USER_TAGS).setVersionSchema(versionSchema).setExpirationTimeMs(-1).build();
+    datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+
+    //Add a dataset version
+    version = System.currentTimeMillis();
+    blobName = SLASH + DATASET_NAME_WITHOUT_USER_TAGS + SLASH + version;
+    namedBlobPathUri = NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + blobName;
+    contentLength = 10;
+    content = ByteBuffer.wrap(TestUtils.getRandomBytes(contentLength));
+    body = new LinkedList<>();
+    body.add(content);
+    body.add(null);
+
+    blobTtl = 7200;
+    serviceId = "test";
+    contentType = "application/octet-stream";
+    ownerId = "owner";
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, blobTtl, testContainer.isCacheable(), serviceId, contentType, ownerId, null, null,
+        null);
+    headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
+    restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+
+    blobProperties =
+        new BlobProperties(0, testAccount.getName(), "owner", "image/gif", false, blobTtl, testAccount.getId(),
+            testContainer.getId(), false, null, null, null);
+    byteBufferContent = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(contentLength));
+    blobIdFromRouter =
+        router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
+    reset(namedBlobDb);
+    namedBlobRecord = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName + SLASH + version,
+        blobIdFromRouter, Utils.Infinite_Time);
+    when(namedBlobDb.put(any(), any(), any())).thenReturn(
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
+
+    // Issue put dataset version request, should not throw null point exception.
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected ttl", blobTtl,
+        allBlobs.get(blobIdFromRouter).getBlobProperties().getTimeToLiveInSeconds());
   }
 
   /**
