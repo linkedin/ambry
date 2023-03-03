@@ -329,7 +329,7 @@ public class BlobStoreTest {
     this.isLogSegmented = isLogSegmented;
     tempDir = StoreTestUtils.createTempDirectory("storeDir-" + storeId);
     tempDirStr = tempDir.getAbsolutePath();
-    StoreConfig config = new StoreConfig(new VerifiableProperties(new Properties()));
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     long bufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     expiresAtMs = time.milliseconds() + bufferTimeMs + TimeUnit.HOURS.toMillis(1);
     setupTestState(true, true);
