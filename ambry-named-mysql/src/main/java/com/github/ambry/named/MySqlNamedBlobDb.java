@@ -183,19 +183,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       VERSION);
   // @formatter:on
 
-  // @formatter:off
-  private static final String GET_VALID_BLOBIDS_QUERY = String.format(""
-      + "SELECT %s FROM %s WHERE (%s is NULL or %s>%s) and version in "
-      + "(SELECT max(version) as version FROM %s WHERE blob_state=1 GROUP BY account_id, container_id, blob_name)",
-      BLOB_ID,
-      NAMED_BLOBS_V2,
-      DELETED_TS,
-      DELETED_TS,
-      CURRENT_TIME,
-      NAMED_BLOBS_V2
-  );
-  // @formatter:on
-
   private final AccountService accountService;
   private final String localDatacenter;
   private final List<String> remoteDatacenters;
@@ -398,25 +385,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       metricsRecoder.namedBlobCleanupTimeInMs.update(this.time.milliseconds() - startTime);
       return staleRecords.size();
     }, null);
-  }
-
-
-  @Override
-  public CompletableFuture<Set<String>> pullValidBlobIds() {
-    TransactionStateTracker transactionStateTracker =
-        new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
-    return executeGenericTransactionAsync(true, (connection) -> {
-      try (PreparedStatement statement = connection.prepareStatement(GET_VALID_BLOBIDS_QUERY)) {
-        try (ResultSet resultSet = statement.executeQuery()) {
-          Set<String> blobIds = new HashSet<>();
-          while (resultSet.next()) {
-            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-            blobIds.add(blobId);
-          }
-          return blobIds;
-        }
-      }
-    }, transactionStateTracker);
   }
 
   /**
