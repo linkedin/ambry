@@ -240,35 +240,6 @@ public class TestNamedBlobDb implements NamedBlobDb {
     return future;
   }
 
-  @Override
-  public CompletableFuture<Set<String>> pullValidBlobIds() {
-    CompletableFuture<Set<String>> future = new CompletableFuture<>();
-
-    Set<String> blobIds = new HashSet<>();
-    for (String accountName : allRecords.keySet()) {
-      Map<String, TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>>> recordsPerAccount =
-          allRecords.get(accountName);
-      for (String containerName : recordsPerAccount.keySet()) {
-        TreeMap<String, List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>>> recordsPerContainer =
-            recordsPerAccount.get(containerName);
-        for (String blobName : recordsPerContainer.keySet()) {
-          List<Pair<NamedBlobRecord, Pair<NamedBlobState, Long>>> recordList = recordsPerContainer.get(blobName);
-          long maxVersion = recordList.stream().filter(s -> s.getSecond().getFirst().equals(NamedBlobState.READY))
-              .mapToLong(s -> s.getFirst().getVersion()).max().getAsLong();
-
-          blobIds.addAll(
-              recordList.stream()
-                  .filter(
-                      s -> s.getFirst().getVersion() == maxVersion && s.getSecond().getSecond() < time.milliseconds()
-                  )
-                  .map(s -> s.getFirst().getBlobId()).collect(Collectors.toSet()));
-        }
-      }
-    }
-    future.complete(blobIds);
-    return future;
-  }
-
   private Pair<NamedBlobRecord, Long> getInternal(String accountName, String containerName, String blobName) {
     if (allRecords.containsKey(accountName)) {
       if (allRecords.get(accountName).containsKey(containerName)) {

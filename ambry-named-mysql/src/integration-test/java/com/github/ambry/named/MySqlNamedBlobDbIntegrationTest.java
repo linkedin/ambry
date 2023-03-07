@@ -496,14 +496,14 @@ public class MySqlNamedBlobDbIntegrationTest {
         new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, Utils.Infinite_Time);
 
     time.setCurrentMilliseconds(staleCutoffTime);
-    namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, false).get();
-    namedBlobDb.put(record, NamedBlobState.READY, true).get();
+    PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, false).get();
+    record.setVersion(putResult.getInsertedRecord().getVersion());
+    namedBlobDb.updateBlobStateToReady(record).get();
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
-    final Set<String> validBlobIds = namedBlobDb.pullValidBlobIds().get();
 
     assertEquals("Good blob case 5 pull stale blob result should be empty!", 0,
-        staleNamedBlobs.stream().filter(s -> !validBlobIds.contains(s.getBlobId())).count());
+        staleNamedBlobs.size());
   }
 
 
