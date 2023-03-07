@@ -148,6 +148,15 @@ public class ReplicationMetrics {
 
   // A map from dcname to a histogram. This histogram records the replication lag in seconds for PUT records.
   private final Map<String, Histogram> dcToReplicaLagInSecondsForBlob = new ConcurrentHashMap<>();
+  // A map from dcname to a counter to record the replication error.
+  private final Map<String, Counter> dcToReplicationError = new ConcurrentHashMap<>();
+  private final Counter intraColoReplicationErrorCount;
+  private final Map<String, Counter> dcToTimeoutRequestError = new ConcurrentHashMap<>();
+  private final Counter intraColoTimeoutRequestErrorCount;
+  private final Map<String, Counter> dcToRequestNetworkError = new ConcurrentHashMap<>();
+  private final Counter intraColoRequestNetworkErrorCount;
+  private final Map<String, Counter> dcToResponseError = new ConcurrentHashMap<>();
+  private final Counter intraColoResponseErrorCount;
 
   // Metric to track number of cross colo replication get requests sent by standby replicas. This is applicable during
   // leader-based replication.
@@ -270,6 +279,14 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(CloudToStoreReplicationManager.class, "AddCloudPartitionErrorCount"));
     cloudTokenReloadWarnCount =
         registry.counter(MetricRegistry.name(CloudToStoreReplicationManager.class, "CloudTokenReloadWarnCount"));
+    intraColoReplicationErrorCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationErrorCount"));
+    intraColoTimeoutRequestErrorCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoTimeoutRequestErrorCount"));
+    intraColoRequestNetworkErrorCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoRequestNetworkErrorCount"));
+    intraColoResponseErrorCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoResponseErrorCount"));
     this.registry = registry;
     populateInvalidMessageMetricForReplicas(replicaIds);
   }
@@ -395,6 +412,18 @@ public class ReplicationMetrics {
     Histogram replicationLagInSecondsForBlob = registry.histogram(
         MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationLagInSecondsForBlob"));
     dcToReplicaLagInSecondsForBlob.put(datacenter, replicationLagInSecondsForBlob);
+    Counter replicationError =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ReplicationErrorCount"));
+    dcToReplicationError.put(datacenter, replicationError);
+    Counter timeoutRequestError =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-TimeoutRequestErrorCount"));
+    dcToTimeoutRequestError.put(datacenter, timeoutRequestError);
+    Counter requestNetworkError =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-RequestNetworkErrorCount"));
+    dcToRequestNetworkError.put(datacenter, requestNetworkError);
+    Counter responseError =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ResponseErrorCount"));
+    dcToResponseError.put(datacenter, responseError);
   }
 
   /**
@@ -610,6 +639,36 @@ public class ReplicationMetrics {
       sslReplicationErrors.inc();
     } else {
       plainTextReplicationErrors.inc();
+    }
+  }
+
+  public void incrementTimeoutRequestErrorCount(int errorCount, boolean remoteColo, String datacenter) {
+    if (remoteColo) {
+      dcToTimeoutRequestError.get(datacenter).inc(errorCount);
+      dcToReplicationError.get(datacenter).inc(errorCount);
+    } else {
+      intraColoTimeoutRequestErrorCount.inc(errorCount);
+      intraColoReplicationErrorCount.inc(errorCount);
+    }
+  }
+
+  public void incrementRequestNetworkErrorCount(boolean remoteColo, String datacenter) {
+    if (remoteColo) {
+      dcToRequestNetworkError.get(datacenter).inc();
+      dcToReplicationError.get(datacenter).inc();
+    } else {
+      intraColoRequestNetworkErrorCount.inc();
+      intraColoReplicationErrorCount.inc();
+    }
+  }
+
+  public void incrementResponseErrorCount(boolean remoteColo, String datacenter) {
+    if (remoteColo) {
+      dcToResponseError.get(datacenter).inc();
+      dcToReplicationError.get(datacenter).inc();
+    } else {
+      intraColoResponseErrorCount.inc();
+      intraColoReplicationErrorCount.inc();
     }
   }
 
