@@ -29,7 +29,6 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -183,7 +182,7 @@ class FrontendRestRequestService implements RestRequestService {
             clusterMap, quotaManager);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
-            clusterMap, quotaManager);
+            clusterMap, quotaManager, accountService);
     deleteDatasetHandler =
         new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     headBlobHandler =

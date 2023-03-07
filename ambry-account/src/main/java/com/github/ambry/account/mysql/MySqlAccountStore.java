@@ -202,7 +202,21 @@ public class MySqlAccountStore {
    */
   public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String datasetName,
       String version) throws SQLException, AccountServiceException {
-    return  accountDao.getDatasetVersions(accountId, containerId, datasetName, version);
+    return accountDao.getDatasetVersions(accountId, containerId, datasetName, version);
+  }
+
+  /**
+   * Delete a version of {@link Dataset}
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  public void deleteDatasetVersion(short accountId, short containerId, String datasetName, String version)
+      throws SQLException, AccountServiceException {
+    accountDao.deleteDatasetVersion(accountId, containerId, datasetName, version);
   }
 
   /**

@@ -887,11 +887,8 @@ public class MySqlAccountServiceIntegrationTest {
     List<Long> versions = new ArrayList<>();
     userTags.put("userTag", "tagValue");
     long expirationTimeMs1 = Utils.addSecondsToEpochTime(SystemTime.getInstance().milliseconds(), 3600L);
-    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME)
-        .setVersionSchema(Dataset.VersionSchema.MONOTONIC)
-        .setExpirationTimeMs(expirationTimeMs1)
-        .setUserTags(userTags)
-        .build();
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
+        Dataset.VersionSchema.MONOTONIC).setExpirationTimeMs(expirationTimeMs1).setUserTags(userTags).build();
 
     // Add a dataset to db
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
@@ -982,6 +979,23 @@ public class MySqlAccountServiceIntegrationTest {
     } catch (AccountServiceException e) {
       assertEquals("Unexpected ErrorCode", AccountServiceErrorCode.NotFound, e.getErrorCode());
     }
+
+    //add same dataset version, should fail
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+      fail("Should fail due to dataset version already exist");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
+    }
+
+    //Delete dataset version
+    mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC,
+        version);
+
+    //add dataset version again, should succeed.
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
 
     // Add dataset version which didn't follow the semantic format.
     version = "1.2";

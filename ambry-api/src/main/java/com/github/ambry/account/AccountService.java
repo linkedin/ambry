@@ -229,6 +229,19 @@ public interface AccountService extends Closeable {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
+  /**
+   * Delete the dataset version based on the supplied properties.
+   * @param accountName The name for the parent account.
+   * @param containerName The name for the container.
+   * @param datasetName The name of the dataset.
+   * @param version The version of the dataset.
+   * @throws AccountServiceException
+   */
+  default void deleteDatasetVersion(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
   default void selectInactiveContainersAndMarkInStore(AggregatedAccountStorageStats aggregatedAccountStorageStats) {
     throw new UnsupportedOperationException("This method is not supported");
   }
