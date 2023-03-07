@@ -847,6 +847,7 @@ public class ReplicaThread implements Runnable {
    */
   ReplicaMetadataRequest createReplicaMetadataRequest(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       DataNodeId remoteNode) {
+    boolean allLocalStoreInBootstrap = true;
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<>();
     for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
       ReplicaMetadataRequestInfo replicaMetadataRequestInfo =
@@ -856,11 +857,20 @@ public class ReplicaThread implements Runnable {
       replicaMetadataRequestInfoList.add(replicaMetadataRequestInfo);
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token going to be sent to remote: {} ",
           remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
+      if (remoteReplicaInfo.getLocalStore().getCurrentState() != ReplicaState.BOOTSTRAP) {
+        allLocalStoreInBootstrap = false;
+      }
+    }
+    long fetchSize = replicationConfig.replicationFetchSizeInBytes;
+    if (allLocalStoreInBootstrap && !replicatingFromRemoteColo) {
+      fetchSize = replicationConfig.replicationFetchSizeInBytesForBootstrapIntraColo;
+      logger.trace(
+          "All local stores are at bootstrap mode, and this is intro colo replication, set the fetch size to {}",
+          fetchSize);
     }
     return new ReplicaMetadataRequest(correlationIdGenerator.incrementAndGet(),
         "replication-metadata-" + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName() + "]",
-        replicaMetadataRequestInfoList, replicationConfig.replicationFetchSizeInBytes,
-        replicationConfig.replicaMetadataRequestVersion);
+        replicaMetadataRequestInfoList, fetchSize, replicationConfig.replicaMetadataRequestVersion);
   }
 
   /**
@@ -2031,6 +2041,7 @@ public class ReplicaThread implements Runnable {
               || response.getReplicaMetadataResponseInfoList().size() != remoteReplicaInfos.size()) {
             int replicaMetadataResponseInfoListSize = response.getReplicaMetadataResponseInfoList() == null ? 0
                 : response.getReplicaMetadataResponseInfoList().size();
+            replicationMetrics.incrementResponseErrorCount(replicatingFromRemoteColo, datacenterName);
             exchangeMetadataResponseList = Collections.emptyList();
             // Getting error for entire response, something unexpected happened.
             logger.error(
@@ -2053,6 +2064,9 @@ public class ReplicaThread implements Runnable {
         }
       } else {
         // We have a network client error here, mark all the replicas int request with this error.
+        if (networkClientErrorCode != NetworkClientErrorCode.TimeoutError) {
+          replicationMetrics.incrementRequestNetworkErrorCount(replicatingFromRemoteColo, datacenterName);
+        }
         exchangeMetadataResponseList = Collections.emptyList();
         remoteReplicaInfos.forEach(r -> responseHandler.onEvent(r.getReplicaId(), networkClientErrorCode));
         setException(new IOException("NetworkClientErrorCode: " + networkClientErrorCode),
@@ -2084,6 +2098,7 @@ public class ReplicaThread implements Runnable {
           GetResponse response = GetResponse.readFrom(dis, clusterMap);
           if (response.getError() != ServerErrorCode.No_Error) {
             // Getting error for entire response, something unexpected happened.
+            replicationMetrics.incrementResponseErrorCount(replicatingFromRemoteColo, datacenterName);
             logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} ServerError for GetResponse {}",
                 remoteDataNode, threadName, id, response.getError());
             throw new ReplicationException("GetResponse unexpected error " + response.getError());
@@ -2100,6 +2115,9 @@ public class ReplicaThread implements Runnable {
           setException(e, "GetResponse unexpected error");
         }
       } else {
+        if (networkClientErrorCode != NetworkClientErrorCode.TimeoutError) {
+          replicationMetrics.incrementRequestNetworkErrorCount(replicatingFromRemoteColo, datacenterName);
+        }
         remoteReplicaInfos.forEach(r -> responseHandler.onEvent(r.getReplicaId(), networkClientErrorCode));
         setException(new IOException("NetworkClientErrorCode: " + networkClientErrorCode), "Failed to send GetRequest");
       }
@@ -2183,7 +2201,10 @@ public class ReplicaThread implements Runnable {
         Set<Integer> requestsToDrop = responseInfosForTimedOutRequests.stream()
             .map(r -> r.getRequestInfo().getRequest().getCorrelationId())
             .collect(Collectors.toSet());
-
+        if (!requestsToDrop.isEmpty()) {
+          replicationMetrics.incrementTimeoutRequestErrorCount(requestsToDrop.size(), replicatingFromRemoteColo,
+              datacenterName);
+        }
         final int pollTimeoutMs = (int) replicationConfig.replicationRequestNetworkPollTimeoutMs;
         List<ResponseInfo> responseInfos = networkClient.sendAndPoll(requestInfos, requestsToDrop, pollTimeoutMs);
         // Add response for dropped request because there is no guarantee that sendAndPoll would return a response for

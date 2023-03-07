@@ -96,7 +96,7 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
         }
 
         @Override
-        public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+        public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
           return false;
         }
 
@@ -107,6 +107,11 @@ public class RecoveryTestClusterAgentsFactory implements ClusterAgentsFactory {
 
         @Override
         public List<String> getSealedReplicas() {
+          return Collections.emptyList();
+        }
+
+        @Override
+        public List<String> getPartiallySealedReplicas() {
           return Collections.emptyList();
         }
 

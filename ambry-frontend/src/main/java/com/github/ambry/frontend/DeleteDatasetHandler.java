@@ -11,22 +11,20 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
+
 package com.github.ambry.frontend;
 
-import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Dataset;
-import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.ReadableStreamChannel;
-import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,11 +32,8 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.frontend.FrontendUtils.*;
 
 
-/**
- * Handle requests to get dataset using {@link AccountService}.
- */
-public class GetDatasetsHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(GetDatasetsHandler.class);
+public class DeleteDatasetHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(DeleteDatasetHandler.class);
 
   private final SecurityService securityService;
   private final AccountService accountService;
@@ -46,13 +41,13 @@ public class GetDatasetsHandler {
   private final AccountAndContainerInjector accountAndContainerInjector;
 
   /**
-   * Constructs a handler for handling requests for getting dataset.
+   * Constructs a handler for handling requests deleting dataset.
    * @param securityService the {@link SecurityService} to use.
    * @param accountService the {@link AccountService} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    */
-  GetDatasetsHandler(SecurityService securityService, AccountService accountService, FrontendMetrics frontendMetrics,
+  DeleteDatasetHandler(SecurityService securityService, AccountService accountService, FrontendMetrics frontendMetrics,
       AccountAndContainerInjector accountAndContainerInjector) {
     this.securityService = securityService;
     this.accountService = accountService;
@@ -61,19 +56,20 @@ public class GetDatasetsHandler {
   }
 
   /**
-   * Asynchronously get account metadata.
+   * Asynchronously delete account metadata.
    * @param restRequest the {@link RestRequest} that contains the request parameters and body.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<ReadableStreamChannel> callback) throws RestServiceException {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+      throws RestServiceException {
     RestRequestMetrics requestMetrics =
-        frontendMetrics.getDatasetsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+        frontendMetrics.deleteDatasetsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     // get dataset request have their account/container name in request header, so checks can be done at early stage.
     accountAndContainerInjector.injectAccountAndContainerForDatasetRequest(restRequest);
-    new GetDatasetsHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
+    restRequest.getMetricsTracker().injectMetrics(requestMetrics);
+    new DeleteDatasetHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
   /**
@@ -83,7 +79,7 @@ public class GetDatasetsHandler {
     private final RestRequest restRequest;
     private final String uri;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<ReadableStreamChannel> finalCallback;
+    private final Callback<Void> finalCallback;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -91,7 +87,7 @@ public class GetDatasetsHandler {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<ReadableStreamChannel> finalCallback) {
+        Callback<Void> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
@@ -112,7 +108,7 @@ public class GetDatasetsHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
     private Callback<Void> securityProcessRequestCallback() {
-      return buildCallback(frontendMetrics.getDatasetsSecurityProcessRequestMetrics,
+      return buildCallback(frontendMetrics.deleteDatasetsSecurityProcessRequestMetrics,
           securityCheckResult -> securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback()),
           uri, LOGGER, finalCallback);
     }
@@ -122,26 +118,17 @@ public class GetDatasetsHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
      */
     private Callback<Void> securityPostProcessRequestCallback() {
-      return buildCallback(frontendMetrics.getDatasetsSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        byte[] serialized;
-        LOGGER.debug("Received request for getting single dataset with arguments: {}", restRequest.getArgs());
-        Dataset dataset = getDataset();
-        serialized = AccountCollectionSerde.serializeDatasetsInJson(dataset);
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, dataset.getAccountName());
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, dataset.getContainerName());
-        ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(serialized));
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
-        finalCallback.onCompletion(channel, null);
+      return buildCallback(frontendMetrics.deleteDatasetsSecurityPostProcessRequestMetrics, securityCheckResult -> {
+        deleteDataset();
+        finalCallback.onCompletion(null, null);
       }, uri, LOGGER, finalCallback);
     }
 
     /**
-     * @return requested dataset.
+     * Delete the dataset.
      * @throws RestServiceException
      */
-    private Dataset getDataset() throws RestServiceException {
+    private void deleteDataset() throws RestServiceException {
       String accountName = null;
       String containerName = null;
       String datasetName = null;
@@ -149,7 +136,10 @@ public class GetDatasetsHandler {
         accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
         containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
         datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
-        return accountService.getDataset(accountName, containerName, datasetName);
+        accountService.deleteDataset(accountName, containerName, datasetName);
+        restResponseChannel.setStatus(ResponseStatus.Accepted);
+        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "

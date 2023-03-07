@@ -143,6 +143,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String.format("UPDATE %s SET %s = ? WHERE %s", NAMED_BLOBS_V2, DELETED_TS, PK_MATCH_VERSION);
 
   /**
+   * Set named blob state to be READY and delete timestamp to null for TtlUpdate case
+   */
+  private static final String TTL_UPDATE_QUERY =
+      String.format("UPDATE %s SET %s, %s = NULL WHERE %s", NAMED_BLOBS_V2, STATE_MATCH, DELETED_TS, PK_MATCH_VERSION);
+
+  /**
    * Pull the stale blobs that need to be cleaned up
    * It will pull out any stale record (limit to be config.queryStaleDataMaxResults [Default 1000] records at most)
    * meeting below conditions:
@@ -236,6 +242,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     public final Counter namedDataErrorPutCount;
 
+    public final Counter namedTtlupdateErrorCount;
+
     public final Histogram namedBlobGetTimeInMs;
     public final Histogram namedBlobListTimeInMs;
     public final Histogram namedBlobPutTimeInMs;
@@ -243,6 +251,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
     public final Histogram namedBlobPullStaleTimeInMs;
     public final Histogram namedBlobCleanupTimeInMs;
+
+    public final Histogram namedTtlupdateTimeInMs;
 
     /**
      * Constructor to create the Metrics.
@@ -269,6 +279,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       namedDataErrorPutCount = metricRegistry.counter(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorPutCount"));
 
+      namedTtlupdateErrorCount = metricRegistry.counter(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateErrorCount"));
+
       namedBlobGetTimeInMs = metricRegistry.histogram(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobGetTimeInMs"));
       namedBlobListTimeInMs = metricRegistry.histogram(
@@ -282,6 +295,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPullStaleTimeInMs"));
       namedBlobCleanupTimeInMs = metricRegistry.histogram(
           MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobCleanupTimeInMs"));
+
+      namedTtlupdateTimeInMs = metricRegistry.histogram(
+          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateTimeInMs"));
     }
   }
 
@@ -334,6 +350,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
           metricsRecoder.namedBlobPutTimeInMs.update(this.time.milliseconds() - startTime);
           return putResult;
+        }, null);
+  }
+
+  @Override
+  public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
+    return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
+        (accountId, containerId, connection) -> {
+          long startTime = this.time.milliseconds();
+          logger.trace("Updating to READY for Named Blob: {}", record);
+          PutResult result = apply_ttl_update(record, accountId, containerId, connection);
+          metricsRecoder.namedTtlupdateTimeInMs.update(this.time.milliseconds() - startTime);
+          return result;
         }, null);
   }
 
@@ -611,7 +639,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId, Connection connection)
       throws Exception {
-    // 1. Attempt to insert into the table. This is attempted first since it is the most common case.
     try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
@@ -622,9 +649,28 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       } else {
         statement.setTimestamp(5, null);
       }
-      statement.setLong(6, buildVersion());
+      final long newVersion = buildVersion();
+      record.setVersion(newVersion);
+      statement.setLong(6, newVersion);
       statement.setInt(7, state.ordinal());
       statement.executeUpdate();
+    }
+    return new PutResult(record);
+  }
+
+  private PutResult apply_ttl_update(NamedBlobRecord record, short accountId, short containerId, Connection connection)
+      throws Exception{
+    try (PreparedStatement statement = connection.prepareStatement(TTL_UPDATE_QUERY)) {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, record.getBlobName());
+      statement.setLong(4, record.getVersion());
+      int rowCount = statement.executeUpdate();
+      if (rowCount == 0) {
+        metricsRecoder.namedTtlupdateErrorCount.inc();
+        throw buildException("TTL Update: Blob not found", RestServiceErrorCode.NotFound, record.getAccountName(),
+            record.getContainerName(),record.getBlobName());
+      }
     }
     return new PutResult(record);
   }

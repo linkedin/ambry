@@ -147,7 +147,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   }
 
   @Override
-  public boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed) {
+  public boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus) {
     if (!(replicaId instanceof AmbryReplica)) {
       throw new IllegalArgumentException(
           "HelixParticipant only works with the AmbryReplica implementation of ReplicaId");
@@ -155,13 +155,34 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     synchronized (helixAdministrationLock) {
       DataNodeConfig config = getDataNodeConfig();
       String partitionId = replicaId.getPartitionId().toPathString();
-      boolean success = true;
-      if (!isSealed && config.getSealedReplicas().remove(partitionId)) {
-        logger.trace("Removing the partition {} from sealedReplicas list", partitionId);
-        success = dataNodeConfigSource.set(config);
-      } else if (isSealed && config.getSealedReplicas().add(partitionId)) {
-        logger.trace("Adding the partition {} to sealedReplicas list", partitionId);
-        success = dataNodeConfigSource.set(config);
+      boolean success = false;
+      boolean configChanged;
+      switch (replicaSealStatus) {
+        case NOT_SEALED:
+          configChanged = config.getSealedReplicas().remove(partitionId);
+          configChanged = config.getPartiallySealedReplicas().remove(partitionId) || configChanged;
+          if (configChanged) {
+            logger.trace("Removing partition {} from sealed lists to mark it as NOT_SEALED", partitionId);
+            success = dataNodeConfigSource.set(config);
+          }
+          break;
+        case PARTIALLY_SEALED:
+          configChanged = config.getPartiallySealedReplicas().add(partitionId);
+          configChanged = config.getSealedReplicas().remove(partitionId) || configChanged;
+          if (configChanged) {
+            logger.trace("Adding the partition {} to partially sealed list to mark it as PARTIALLY_SEALED",
+                partitionId);
+            success = dataNodeConfigSource.set(config);
+          }
+          break;
+        case SEALED:
+          configChanged = config.getSealedReplicas().add(partitionId);
+          configChanged = config.getPartiallySealedReplicas().remove(partitionId) || configChanged;
+          if (configChanged) {
+            logger.trace("Adding the partition {} to sealedReplicas list", partitionId);
+            success = dataNodeConfigSource.set(config);
+          }
+          break;
       }
       logger.trace("Set sealed state of partition {} is completed", partitionId);
       return success;
@@ -213,6 +234,11 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   public List<String> getSealedReplicas() {
     // TODO refactor these getter methods to return set instead of list.
     return new ArrayList<>(getDataNodeConfig().getSealedReplicas());
+  }
+
+  @Override
+  public List<String> getPartiallySealedReplicas() {
+    return new ArrayList<>(getDataNodeConfig().getPartiallySealedReplicas());
   }
 
   /**

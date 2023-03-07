@@ -19,7 +19,6 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -42,24 +41,12 @@ public interface ClusterParticipant extends AutoCloseable {
       Callback<AggregatedAccountStorageStats> callback) throws IOException;
 
   /**
-   * Set or reset the sealed state of the given replica.
-   * @param replicaId the {@link ReplicaId} whose sealed state will be updated.
-   * @param isSealed if true, the replica will be marked as sealed; otherwise it will be marked as read-write.
+   * Set the sealed state of the given replica.
+   * @param replicaId         the {@link ReplicaId} whose sealed state will be updated.
+   * @param replicaSealStatus {@link ReplicaSealStatus} to be set.
    * @return {@code true} if set replica sealed state was successful. {@code false} if not.
    */
-  boolean setReplicaSealedState(ReplicaId replicaId, boolean isSealed);
-
-  /**
-   * Set or reset the partial-sealed state of the given replica.
-   * @param replicaId the {@link ReplicaId} whose sealed state will be updated.
-   * @param isPartiallySealed if {@code true}, the replica will be marked as partially sealed. if {@code false} the
-   *                          replica will become unsealed.
-   * @return {@code true} if set replica partial sealed state was successful. {@code false} if not.
-   */
-  default boolean setReplicaPartialSealedState(ReplicaId replicaId, boolean isPartiallySealed) {
-    // TODO add implementation.
-    return false;
-  }
+  boolean setReplicaSealedState(ReplicaId replicaId, ReplicaSealStatus replicaSealStatus);
 
   /**
    * Set or reset the stopped state of the given replica.
@@ -86,10 +73,7 @@ public interface ClusterParticipant extends AutoCloseable {
    * Get a list of replicas that are marked as partially sealed.
    * @return a list of all partially sealed replicas.
    */
-  default List<String> getPartiallySealedReplicas() {
-    // TODO Add implementations.
-    return new ArrayList<>();
-  }
+  List<String> getPartiallySealedReplicas();
 
   /**
    * Get a list of replicas that are marked as stopped.

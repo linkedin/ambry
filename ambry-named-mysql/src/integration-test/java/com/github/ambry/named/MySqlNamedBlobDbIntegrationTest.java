@@ -506,6 +506,47 @@ public class MySqlNamedBlobDbIntegrationTest {
         staleNamedBlobs.stream().filter(s -> !validBlobIds.contains(s.getBlobId())).count());
   }
 
+
+
+  /**
+   * Test behavior with blob cleanup for good blob case
+   * Case 6, one row created for a blobId more than staleDataRetentionDays ago via TTL Update process,
+   * Initially it's created with IN_PROGRESS state, later its state updated to be READY
+   */
+  @Test
+  public void testCleanupBlobGoodCase6() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
+    long staleCutoffTime = calendar.getTimeInMillis();
+
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+    String blobId = getBlobId(account, container);
+    String blobName = "good/" + "case6" + "/more path segments--";
+    NamedBlobRecord record =
+        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, staleCutoffTime + TimeUnit.HOURS.toMillis(1));
+
+    time.setCurrentMilliseconds(staleCutoffTime);
+    PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
+    checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()),
+        RestServiceErrorCode.NotFound);
+    PutResult updateResult = namedBlobDb.updateBlobStateToReady(record).get();
+
+    List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
+
+    NamedBlobRecord recordFromDb = namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()).get();
+
+    assertEquals("AccountName: TTL Updated record should match with get record", recordFromDb.getAccountName(), updateResult.getInsertedRecord().getAccountName());
+    assertEquals("ContainerName: TTL Updated record should match with get record", recordFromDb.getContainerName(), updateResult.getInsertedRecord().getContainerName());
+    assertEquals("BlobName: TTL Updated record should match with get record", recordFromDb.getBlobName(), updateResult.getInsertedRecord().getBlobName());
+    assertEquals("BlobId: TTL Updated record should match with get record", recordFromDb.getBlobId(), updateResult.getInsertedRecord().getBlobId());
+    assertEquals("Version: TTL Updated record should match with get record", recordFromDb.getVersion(), updateResult.getInsertedRecord().getVersion());
+    assertEquals("TTL Updated record should have Infinite_Time (-1) as expiration time", -1, recordFromDb.getExpirationTimeMs());
+
+    assertEquals("Updated row's version should match with original put row", putResult.getInsertedRecord().getVersion(), updateResult.getInsertedRecord().getVersion());
+    assertTrue("Good blob case 6 pull stale blob result should be empty!", staleNamedBlobs.isEmpty());
+  }
+
   /**
    * Get a sample blob ID.
    * @param account the account of the blob.

@@ -197,8 +197,8 @@ public class QuotaAwareOperationController extends OperationController {
             break;
           case REJECT:
             quotaAvailable = false;
-            logger.warn(
-                "Rejecting request for quota resource {} because of reject recommendation.", quotaResource.toString());
+            logger.warn("Rejecting request for quota resource {} because of reject recommendation.",
+                quotaResource.toString());
             routerMetrics.rejectedRequestRate.mark();
             nonCompliantRequests.add(requestInfo);
             requestQueue.get(quotaResource).removeFirst();
@@ -224,7 +224,7 @@ public class QuotaAwareOperationController extends OperationController {
     Collections.shuffle(quotaResources);
     while (!requestQueue.isEmpty()) {
       Iterator<QuotaResource> iter = quotaResources.listIterator();
-      while(iter.hasNext()) {
+      while (iter.hasNext()) {
         QuotaResource quotaResource = iter.next();
         RequestInfo requestInfo = requestQueue.get(quotaResource).getFirst();
         QuotaAction quotaAction = requestInfo.getChargeable().checkAndCharge(true);
@@ -252,8 +252,11 @@ public class QuotaAwareOperationController extends OperationController {
 
   @Override
   protected List<ResponseInfo> getNonQuotaCompliantResponses() {
-    List<ResponseInfo> nonCompliantResponses = nonCompliantRequests.
-        stream().map(requestInfo -> new ResponseInfo(requestInfo, true)).collect(Collectors.toList());
+    List<ResponseInfo> nonCompliantResponses = nonCompliantRequests.stream().map(requestInfo -> {
+      // Release the Netty ByteBuf here since they are not sent out to Network layer.
+      requestInfo.getRequest().release();
+      return new ResponseInfo(requestInfo, true);
+    }).collect(Collectors.toList());
     nonCompliantRequests.clear();
     return nonCompliantResponses;
   }

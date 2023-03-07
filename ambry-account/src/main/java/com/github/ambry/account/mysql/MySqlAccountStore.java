@@ -14,6 +14,7 @@
 package com.github.ambry.account.mysql;
 
 import com.github.ambry.account.Account;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.Dataset;
@@ -75,7 +76,8 @@ public class MySqlAccountStore {
    * @param dataset the {@link Dataset}.
    * @throws SQLException
    */
-  public void addDataset(short accountId, short containerId, Dataset dataset) throws SQLException {
+  public void addDataset(short accountId, short containerId, Dataset dataset)
+      throws SQLException, AccountServiceException {
     accountDao.addDataset(accountId, containerId, dataset);
   }
 
@@ -86,7 +88,8 @@ public class MySqlAccountStore {
    * @param dataset the {@link Dataset}.
    * @throws SQLException
    */
-  public void updateDataset(short accountId, short containerId, Dataset dataset) throws SQLException {
+  public void updateDataset(short accountId, short containerId, Dataset dataset)
+      throws SQLException, AccountServiceException {
     accountDao.updateDataset(accountId, containerId, dataset);
   }
 
@@ -101,8 +104,21 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
-      String datasetName) throws SQLException {
+      String datasetName) throws SQLException, AccountServiceException {
     return accountDao.getDataset(accountId, containerId, accountName, containerName, datasetName);
+  }
+
+  /**
+   * Delete dataset from the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param datasetName the name of the dataset.
+   * @throws AccountServiceException
+   * @throws SQLException
+   */
+  public void deleteDataset(short accountId, short containerId, String datasetName)
+      throws AccountServiceException, SQLException {
+    accountDao.deleteDataset(accountId, containerId, datasetName);
   }
 
   /**
@@ -170,7 +186,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
-      String datasetName, String version, long expirationTimeMs) throws SQLException {
+      String datasetName, String version, long expirationTimeMs) throws SQLException, AccountServiceException {
     return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
         expirationTimeMs);
   }
@@ -185,7 +201,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String datasetName,
-      String version) throws SQLException {
+      String version) throws SQLException, AccountServiceException {
     return  accountDao.getDatasetVersions(accountId, containerId, datasetName, version);
   }
 
@@ -197,7 +213,8 @@ public class MySqlAccountStore {
    * @return the latest version of the dataset.
    * @throws SQLException
    */
-  public long getLatestVersion(short accountId, short containerId, String datasetName) throws SQLException {
+  public long getLatestVersion(short accountId, short containerId, String datasetName)
+      throws SQLException, AccountServiceException {
     return accountDao.getLatestVersion(accountId, containerId, datasetName);
   }
 

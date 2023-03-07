@@ -158,27 +158,27 @@ public class NamedBlobPutHandlerTest {
     properties.setProperty(FrontendConfig.FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, "false");
     initNamedBlobPutHandler(properties);
     // ok
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1);
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1, true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired, true);
     // not ok
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, Utils.Infinite_Time);
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, Utils.Infinite_Time, true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1, true);
 
     // ttl required in container, config asks to fail. If TTL does not conform, look for failure
     properties.setProperty(FrontendConfig.FAIL_IF_TTL_REQUIRED_BUT_NOT_PROVIDED_KEY, "true");
     initNamedBlobPutHandler(properties);
     // ok
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1);
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1, true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired, true);
     // not ok
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, Utils.Infinite_Time);
-    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, Utils.Infinite_Time, false);
+    doTtlRequiredEnforcementTest(REF_CONTAINER_WITH_TTL_REQUIRED, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1, false);
 
     // ttl not required in container, any ttl works and no exceptions or warnings
-    doTtlRequiredEnforcementTest(REF_CONTAINER, Utils.Infinite_Time);
-    doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1);
-    doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired);
-    doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1);
+    doTtlRequiredEnforcementTest(REF_CONTAINER, Utils.Infinite_Time, false);
+    doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1, true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired, true);
+    doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1, false);
   }
 
   /**
@@ -267,7 +267,7 @@ public class NamedBlobPutHandlerTest {
    * @param blobTtlSecs the TTL to set for the blob
    * @throws Exception
    */
-  private void doTtlRequiredEnforcementTest(Container container, long blobTtlSecs) throws Exception {
+  private void doTtlRequiredEnforcementTest(Container container, long blobTtlSecs, boolean hasNamedBlobVersion) throws Exception {
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !container.isCacheable(), SERVICE_ID,
         CONTENT_TYPE, OWNER_ID, null, null, null);
@@ -293,6 +293,13 @@ public class NamedBlobPutHandlerTest {
       }
     } else {
       verifySuccessResponseOnTtlEnforcement(future, content, blobTtlSecs, restResponseChannel, false);
+    }
+
+    if (hasNamedBlobVersion && request.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(request)
+        .matchesOperation(Operations.NAMED_BLOB)) {
+      assertTrue(request.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION));
+    } else {
+      assertFalse(request.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION));
     }
   }
 

@@ -84,7 +84,7 @@ public class DiskManager {
   private final AccountService accountService;
   private final DiskManagerConfig diskManagerConfig;
   private boolean running = false;
-  private DiskHealthStatus diskHealthStatus = DiskHealthStatus.MOUNT_NOT_ACCESSIBLE;
+  private DiskHealthStatus diskHealthStatus;
   private final DiskHealthCheck diskHealthCheck;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
@@ -531,14 +531,17 @@ public class DiskManager {
 
   /**
    * @throws StoreException if the disk's mount path is inaccessible.
+   *
+   * @return bool - True if mount is accessible otherwise False
    */
-  private void checkMountPathAccessible() throws StoreException {
+  private boolean checkMountPathAccessible() throws StoreException {
     File mountPath = new File(disk.getMountPath());
-    if (!mountPath.exists()) {
+    if (!mountPath.exists() && diskHealthStatus != DiskHealthStatus.MOUNT_NOT_ACCESSIBLE) {
       metrics.diskMountPathFailures.inc();
       throw new StoreException("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk",
           StoreErrorCodes.Initialization_Error);
     }
+    return mountPath.exists();
   }
 
   /**
@@ -677,7 +680,9 @@ public class DiskManager {
      */
     private AsynchronousFileChannel createFileChannel() {
       try {
-        checkMountPathAccessible();
+        if (!checkMountPathAccessible()) {
+          return null;
+        }
         Path path = Paths.get(disk.getMountPath(), "temp");
         AsynchronousFileChannel fileChannel =
             AsynchronousFileChannel.open(path, StandardOpenOption.WRITE, StandardOpenOption.READ,

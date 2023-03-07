@@ -741,7 +741,6 @@ class PersistentIndex {
   private boolean needToRollOverIndex(IndexEntry entry) {
     Offset offset = entry.getValue().getOffset();
     int thisValueSize = entry.getValue().getBytes().capacity();
-    int thisEntrySize = entry.getKey().sizeInBytes() + thisValueSize;
     if (validIndexSegments.size() == 0) {
       logger.info("Creating first segment with start offset {}", offset);
       return true;
@@ -768,12 +767,6 @@ class PersistentIndex {
       logger.info(
           "Index: {} Rolling over from {} to {} because the number of items in the last segment: {} >= maxInMemoryNumElements {}",
           dataDir, lastSegment.getStartOffset(), offset, lastSegment.getNumberOfItems(), maxInMemoryNumElements);
-      return true;
-    }
-    if (lastSegment.getPersistedEntrySize() < thisEntrySize) {
-      logger.info(
-          "Index: {} Rolling over from {} to {} because the segment persisted entry size: {} is less than the size of this entry: {}",
-          dataDir, lastSegment.getStartOffset(), offset, lastSegment.getPersistedEntrySize(), thisEntrySize);
       return true;
     }
     if (lastSegment.getValueSize() != thisValueSize) {

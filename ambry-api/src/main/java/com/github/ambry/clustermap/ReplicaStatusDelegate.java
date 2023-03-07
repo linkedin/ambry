@@ -35,7 +35,7 @@ public class ReplicaStatusDelegate {
    * @return {@code true} if replica is successfully sealed. {@code false} if not.
    */
   public boolean seal(ReplicaId replicaId) {
-    return clusterParticipant.setReplicaSealedState(replicaId, true);
+    return clusterParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.SEALED);
   }
 
   /**
@@ -45,7 +45,7 @@ public class ReplicaStatusDelegate {
    */
   public boolean partialSeal(ReplicaId replicaId) {
     // TODO Once the partial seal logic is complete end to end, this should set the partial seal state.
-    return clusterParticipant.setReplicaSealedState(replicaId, false);
+    return clusterParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
   }
 
   /**
@@ -54,7 +54,7 @@ public class ReplicaStatusDelegate {
    * @return {@code true} if replica is successfully unsealed. {@code false} if not.
    */
   public boolean unseal(ReplicaId replicaId) {
-    return clusterParticipant.setReplicaSealedState(replicaId, false);
+    return clusterParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
   }
 
   /**

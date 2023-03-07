@@ -424,6 +424,11 @@ public class RestUtils {
      * may not be the same as the value in this key.
      */
     public static final String FILENAME_HINT = KEY_PREFIX + "filename-hint";
+
+    /**
+     * The version for the NamedBlob record in MySQL DB
+     */
+    public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
   }
 
   /**

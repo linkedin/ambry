@@ -1910,9 +1910,10 @@ public class IndexTest {
   }
 
   /**
-   * Tests index segment rollover behavior with respect to key size changes. For the current version
-   * ({@link PersistentIndex#VERSION_2}), a change in key size should cause a rollover only if the persistedEntrySize of
-   * the active segment is smaller than the entry size of the incoming entry.
+   * Tests index segment rollover behavior with respect to key size changes.
+   * For the current version, we don't reply on the config.storeIndexPersistedEntryMinBytes.
+   * We dynamically monitor the max entry size and add the padding if needed.
+   * A change in key size shouldn't cause a rollover.
    * Also test index segment rollover with respect to a value size change.
    * @throws StoreException
    * @throws IOException
@@ -1928,79 +1929,74 @@ public class IndexTest {
 
     List<IndexEntry> indexEntries = new ArrayList<>();
     int indexCount = state.index.getIndexSegments().size();
-    int serOverheadBytes = state.getUniqueId(10).sizeInBytes() - 10;
+    // get the overhead of the key besides the String ID.
+    int keyOverheadBytes = state.getUniqueId(10).sizeInBytes() - 10;
 
-    int latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
     // add first entry with size under storeIndexPersistedEntryMinBytes.
     int indexValueSize =
         PersistentIndex.CURRENT_VERSION >= PersistentIndex.VERSION_3 ? IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V3_V4
             : IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
-    int keySize = config.storeIndexPersistedEntryMinBytes / 2 - indexValueSize - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
+    int keySize = config.storeIndexPersistedEntryMinBytes / 2 - indexValueSize - keyOverheadBytes;
+    int expectedEntrySize = keySize + indexValueSize + keyOverheadBytes;
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, expectedEntrySize, false);
 
-    // Now, the active segment consists of one element. Add 2nd element of a smaller key size; and entry size still under
-    // storeIndexPersistedEntryMinBytes.
+    // Now, the active segment consists of one element. Add 2nd element of a smaller key size; entry size remains.
     keySize = keySize / 2;
-    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize, false);
+    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, expectedEntrySize, false);
 
     // 3rd element with key size greater than the first entry, but still under storeIndexPersistedEntryMinBytes.
     keySize = keySize * 3;
-    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize, false);
+    expectedEntrySize = keySize + indexValueSize + keyOverheadBytes;
+    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, expectedEntrySize, false);
 
-    // 4th element with key size increase, and entry size at exactly storeIndexPersistedEntryMinBytes.
-    // This should also not cause a rollover.
-    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, latestSegmentExpectedEntrySize, false);
+    // 4th element key size increase, and above storeIndexPersistedEntryMinBytes. Won't cause rollover.
+    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - keyOverheadBytes + 1;
+    expectedEntrySize = config.storeIndexPersistedEntryMinBytes + 1;
+    addEntriesAndAssert(indexEntries, keySize, 1, indexCount, expectedEntrySize, false);
 
-    // 5th element key size increase, and above storeIndexPersistedEntryMinBytes. This continues to be supported via
-    // a rollover.
-    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - serOverheadBytes + 1;
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, ++latestSegmentExpectedEntrySize, false);
-
-    // 2nd and 3rd element in the next segment of original size. This should be accommodated in the same segment.
-    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 2, indexCount, latestSegmentExpectedEntrySize, false);
+    // more elements in the next segment. This should be accommodated in the same segment.
+    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - keyOverheadBytes;
+    addEntriesAndAssert(indexEntries, keySize, 2, indexCount, expectedEntrySize, false);
 
     // verify index values
     verifyIndexValues(indexEntries);
 
-    // Verify that a decrease in the config value for persistedEntryMinBytes does not affect the loaded segment.
+    // Verify that a decrease in the config value for persistedEntryMinBytes does not affect the persisted segment.
     // Now close and reload index with a change in the minPersistedBytes.
     state.properties.put("store.index.persisted.entry.min.bytes", Long.toString(persistedEntryMinBytes / 2));
     state.reloadIndex(true, false);
-    keySize = latestSegmentExpectedEntrySize - indexValueSize - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 7, indexCount, latestSegmentExpectedEntrySize, false);
+    keySize = (expectedEntrySize - indexValueSize - keyOverheadBytes) / 2;
+    addEntriesAndAssert(indexEntries, keySize, 4, indexCount, expectedEntrySize, false);
 
-    // At this point, index will rollover due to max number of entries being reached. Verify that the new segment that is
-    // created honors the new config value.
-    config = new StoreConfig(new VerifiableProperties(state.properties));
-    latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
-    keySize = config.storeIndexPersistedEntryMinBytes - indexValueSize - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
+    // At this point, index will rollover due to max number of entries being reached.
+    // Verify that the new segment that is created honors the entry size.
+    keySize = 10;
+    expectedEntrySize = keySize + indexValueSize + keyOverheadBytes;
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, expectedEntrySize, false);
 
     // verify index values
     verifyIndexValues(indexEntries);
 
-    // Verify that an increase in the config value for persistedEntryMinBytes does not affect the loaded segment.
+    // Verify that an increase in the config value for persistedEntryMinBytes does not affect anything.
     // Now close and reload index with a change in the minPersistedBytes.
     state.properties.put("store.index.persisted.entry.min.bytes", Long.toString(persistedEntryMinBytes * 2));
     state.reloadIndex(true, false);
     // Make sure we add entries that can fit in the latest segment.
-    keySize = latestSegmentExpectedEntrySize - indexValueSize - serOverheadBytes;
-    addEntriesAndAssert(indexEntries, keySize, 9, indexCount, latestSegmentExpectedEntrySize, false);
+    keySize = expectedEntrySize - indexValueSize - keyOverheadBytes;
+    addEntriesAndAssert(indexEntries, keySize, 9, indexCount, expectedEntrySize, false);
 
     // At this point, index will rollover due to max number of entries being reached. Verify that the new segment that is
     // created has the new entry size.
-    config = new StoreConfig(new VerifiableProperties(state.properties));
-    keySize = latestSegmentExpectedEntrySize - indexValueSize - serOverheadBytes;
-    latestSegmentExpectedEntrySize = config.storeIndexPersistedEntryMinBytes;
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, false);
+    keySize = 20;
+    expectedEntrySize = keySize + indexValueSize + keyOverheadBytes;
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, expectedEntrySize, false);
 
     // verify index values
     verifyIndexValues(indexEntries);
 
     // Verify that a value size change will cause a rollover
-    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, latestSegmentExpectedEntrySize, true);
+    expectedEntrySize = keySize + keyOverheadBytes + IndexValue.INDEX_VALUE_SIZE_IN_BYTES_V0;
+    addEntriesAndAssert(indexEntries, keySize, 1, ++indexCount, expectedEntrySize, true);
     verifyIndexValues(indexEntries);
   }
 

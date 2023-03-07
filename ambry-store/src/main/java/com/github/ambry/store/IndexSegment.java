@@ -76,7 +76,6 @@ class IndexSegment implements Iterable<IndexEntry> {
   static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
   static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
 
-  private final static int ENTRY_SIZE_INVALID_VALUE = -1;
   private final static int VALUE_SIZE_INVALID_VALUE = -1;
   private static final Logger logger = LoggerFactory.getLogger(IndexSegment.class);
   private final int VERSION_FIELD_LENGTH = 2;
@@ -105,8 +104,8 @@ class IndexSegment implements Iterable<IndexEntry> {
   private int indexSizeExcludingEntries;
   private int firstKeyRelativeOffset;
   private IFilter bloomFilter = null;
-  private int valueSize;
-  private int persistedEntrySize;
+  private int valueSize = VALUE_SIZE_INVALID_VALUE;
+  private int maxEntrySize = 0;
   private short version;
   private Offset prevSafeEndPoint = null;
   // reset key refers to the first StoreKey that is added to the index segment
@@ -133,11 +132,18 @@ class IndexSegment implements Iterable<IndexEntry> {
     this.factory = factory;
     this.metrics = metrics;
     this.time = time;
+    // When PersistentIndex tries to add one IndexEntry and it decides to create a new IndexSegment,
+    // it provides that new IndexEntry's valueSize and entrySize for the IndexSegment.
+    // Inside one IndexSegment, all the index entries have the same valueSize.
+    // PersistentIndex will rollover to a new IndexSegment if valueSize changes. Refer to needToRollOverIndex.
     this.valueSize = valueSize;
+    // For key size, we decided to allow different key sizes when we introduce V2 blob ids.
+    // https://github.com/linkedin/ambry/pull/698
+    // Instead of pre set a pretty big entry size for different key blob version, we monitor the max entry size.
+    this.maxEntrySize = entrySize;
     endOffset = new AtomicReference<>(startOffset);
     index = new ConcurrentSkipListMap<>();
     version = PersistentIndex.CURRENT_VERSION;
-    persistedEntrySize = Math.max(config.storeIndexPersistedEntryMinBytes, entrySize);
     bloomFilter = FilterFactory.getFilter(config.storeIndexMaxNumberOfInmemElements,
         config.storeIndexBloomMaxFalsePositiveProbability, config.storeBloomFilterMaximumPageCount);
     lastModifiedTimeSec.set(time.seconds());
@@ -177,6 +183,11 @@ class IndexSegment implements Iterable<IndexEntry> {
         }
         logger.info("{} is successfully deleted and will be rebuilt based on index segment", bloomFile);
       }
+      // In this constructor, we initialize an existing segment.
+      // If it's sealed, we get the persistedEntrySize and persistedValueSize in sealedIndex.map. Both won't change.
+      // If it's not sealed, we get the maxEntrySize and valueSize in readFromFile function.
+      //  maxEntrySize may increase if we hit one new entry with bigger key size.
+      //  valueSize won't change. It's guaranteed by PersistentIndex.needToRollOverIndex
       if (sealed) {
         sealedIndex.map();
         sealedIndex.loadBloomFile();
@@ -258,17 +269,24 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
-   * @return The persisted entry size of this segment
+   * @return The entry size of this segment
+   * It's for testing purpose only.
    */
   int getPersistedEntrySize() {
-    return persistedEntrySize;
+    rwLock.readLock().lock();
+    int sz = sealed.get() ? sealedIndex.getPersistedEntrySize() : maxEntrySize;
+    rwLock.readLock().unlock();
+    return sz;
   }
 
   /**
    * @return The value size in this segment
    */
   int getValueSize() {
-    return valueSize;
+    rwLock.readLock().lock();
+    int sz = sealed.get() ? sealedIndex.getPersistedValueSize() : valueSize;
+    rwLock.readLock().unlock();
+    return sz;
   }
 
   /**
@@ -432,13 +450,11 @@ class IndexSegment implements Iterable<IndexEntry> {
         logger.info("IndexSegment : {} setting value size to {} for index with start offset {}",
             indexFile.getAbsolutePath(), valueSize, startOffset);
       }
-      if (persistedEntrySize == ENTRY_SIZE_INVALID_VALUE) {
-        StoreKey key = entry.getKey();
-        persistedEntrySize =
-            getVersion() >= PersistentIndex.VERSION_2 ? Math.max(config.storeIndexPersistedEntryMinBytes,
-                key.sizeInBytes() + valueSize) : key.sizeInBytes() + valueSize;
+      int keySize = entry.getKey().sizeInBytes();
+      if (keySize + valueSize > maxEntrySize) {
+        maxEntrySize = keySize + valueSize;
         logger.info("IndexSegment : {} setting persisted entry size to {} of key {} for index with start offset {}",
-            indexFile.getAbsolutePath(), persistedEntrySize, key.getLongForm(), startOffset);
+            indexFile.getAbsolutePath(), maxEntrySize, entry.getKey().getLongForm(), startOffset);
       }
     } finally {
       rwLock.writeLock().unlock();
@@ -588,10 +604,10 @@ class IndexSegment implements Iterable<IndexEntry> {
       try (DataOutputStream writer = new DataOutputStream(crc)) {
         writer.writeShort(getVersion());
         if (getVersion() >= PersistentIndex.VERSION_2) {
-          writer.writeInt(getPersistedEntrySize());
+          writer.writeInt(maxEntrySize);
         } else {
           // write the key size
-          writer.writeInt(getPersistedEntrySize() - getValueSize());
+          writer.writeInt(maxEntrySize - getValueSize());
         }
         writer.writeInt(getValueSize());
         writer.writeLong(safeEndPoint.getOffset());
@@ -608,7 +624,7 @@ class IndexSegment implements Iterable<IndexEntry> {
 
         byte[] maxPaddingBytes = null;
         if (getVersion() >= PersistentIndex.VERSION_2) {
-          maxPaddingBytes = new byte[persistedEntrySize - valueSize];
+          maxPaddingBytes = new byte[maxEntrySize - valueSize];
         }
         if (index != null) {
           for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : index.entrySet()) {
@@ -618,7 +634,7 @@ class IndexSegment implements Iterable<IndexEntry> {
                 writer.write(value.getBytes().array());
                 if (getVersion() >= PersistentIndex.VERSION_2) {
                   // Add padding if necessary
-                  writer.write(maxPaddingBytes, 0, persistedEntrySize - (entry.getKey().sizeInBytes() + valueSize));
+                  writer.write(maxPaddingBytes, 0, maxEntrySize - (entry.getKey().sizeInBytes() + valueSize));
                 }
                 logger.trace("IndexSegment : {} writing key - {} value - offset {} size {} fileEndOffset {}",
                     getFile().getAbsolutePath(), entry.getKey(), value.getOffset(), value.getSize(), safeEndPoint);
@@ -645,7 +661,8 @@ class IndexSegment implements Iterable<IndexEntry> {
       } finally {
         rwLock.readLock().unlock();
       }
-      logger.trace("IndexSegment : {} completed writing index to file", indexFile.getAbsolutePath());
+      logger.trace("IndexSegment : {} completed writing index to file {} {}", indexFile.getAbsolutePath(), valueSize,
+          maxEntrySize);
     }
   }
 
@@ -702,6 +719,10 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @throws FileNotFoundException
    */
   private void readFromFile(File fileToRead, Journal journal) throws StoreException, FileNotFoundException {
+    // tmpEntrySize is a local variable. If the readFromfile is successful, will set maxEntrySize with it.
+    // tmpValueSize is a local variable. If the readFromfile is successful, will set valueSize with it.
+    int tmpEntrySize;
+    int tmpValueSize;
     logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();
     CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
@@ -711,16 +732,16 @@ class IndexSegment implements Iterable<IndexEntry> {
         case PersistentIndex.VERSION_0:
         case PersistentIndex.VERSION_1:
           int keySize = stream.readInt();
-          valueSize = stream.readInt();
-          persistedEntrySize = keySize + valueSize;
+          tmpValueSize = stream.readInt();
+          tmpEntrySize = keySize + tmpValueSize;
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
               + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
           break;
         case PersistentIndex.VERSION_2:
         case PersistentIndex.VERSION_3:
         case PersistentIndex.VERSION_4:
-          persistedEntrySize = stream.readInt();
-          valueSize = stream.readInt();
+          tmpEntrySize = stream.readInt();
+          tmpValueSize = stream.readInt();
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
               + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
           break;
@@ -747,13 +768,13 @@ class IndexSegment implements Iterable<IndexEntry> {
       firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
       logger.trace("IndexSegment : {} reading log end offset {} from file", indexFile.getAbsolutePath(), logEndOffset);
       long maxEndOffset = Long.MIN_VALUE;
-      byte[] padding = new byte[persistedEntrySize - valueSize];
+      byte[] padding = new byte[tmpEntrySize - tmpValueSize];
       while (stream.available() > CRC_FIELD_LENGTH) {
         StoreKey key = factory.getStoreKey(stream);
-        byte[] value = new byte[valueSize];
+        byte[] value = new byte[tmpValueSize];
         stream.readFully(value);
         if (getVersion() >= PersistentIndex.VERSION_2) {
-          stream.readFully(padding, 0, persistedEntrySize - (key.sizeInBytes() + valueSize));
+          stream.readFully(padding, 0, tmpEntrySize - (key.sizeInBytes() + tmpValueSize));
         }
         IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value), getVersion());
         long offsetInLogSegment = blobValue.getOffset().getOffset();
@@ -778,7 +799,7 @@ class IndexSegment implements Iterable<IndexEntry> {
           }
           journal.addEntry(blobValue.getOffset(), key);
           // sizeWritten is only used for in-memory segments, and for those the padding does not come into picture.
-          sizeWritten.addAndGet(key.sizeInBytes() + valueSize);
+          sizeWritten.addAndGet(key.sizeInBytes() + tmpValueSize);
           numberOfItems.incrementAndGet();
           if (offsetInLogSegment + blobValue.getSize() > maxEndOffset) {
             maxEndOffset = offsetInLogSegment + blobValue.getSize();
@@ -795,13 +816,16 @@ class IndexSegment implements Iterable<IndexEntry> {
       long crc = crcStream.getValue();
       if (crc != stream.readLong()) {
         // reset structures
-        persistedEntrySize = ENTRY_SIZE_INVALID_VALUE;
+        maxEntrySize = 0;
         valueSize = VALUE_SIZE_INVALID_VALUE;
         endOffset.set(startOffset);
         index.clear();
         bloomFilter.clear();
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
             StoreErrorCodes.Index_Creation_Failure);
+      } else {
+        maxEntrySize = tmpEntrySize;
+        valueSize = tmpValueSize;
       }
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
@@ -1045,6 +1069,8 @@ class IndexSegment implements Iterable<IndexEntry> {
   // Sealed buffer based index and entry size
   private class SealedIndexSegment {
     private ByteBuffer serEntries = null;
+    private int persistedEntrySize;
+    private int persistedValueSize;
 
     /**
      * Generate bloom filter by walking through all index entries in this segment and persist it.
@@ -1098,7 +1124,7 @@ class IndexSegment implements Iterable<IndexEntry> {
      */
     private Pair<Integer, Integer> getAllValuesFromMmap(ByteBuffer mmap, StoreKey keyToFind, int positiveMatchInd,
         int totalEntries, NavigableSet<IndexValue> values) throws StoreException {
-      byte[] buf = new byte[valueSize];
+      byte[] buf = new byte[persistedValueSize];
       // add the value at the positive match and anything after that matches
       int end = positiveMatchInd;
       for (; end < totalEntries && getKeyAt(mmap, end).equals(keyToFind); end++) {
@@ -1118,12 +1144,20 @@ class IndexSegment implements Iterable<IndexEntry> {
       return new Pair<>(start, end);
     }
 
-    private int numberOfEntries(ByteBuffer mmap) { // remove this function
+    private int numberOfEntries(ByteBuffer mmap) {
       return (mmap.capacity() - indexSizeExcludingEntries) / persistedEntrySize;
     }
 
     private int getNumberOfEntries() {
       return numberOfEntries(serEntries);
+    }
+
+    private int getPersistedEntrySize() {
+      return persistedEntrySize;
+    }
+
+    private int getPersistedValueSize() {
+      return persistedValueSize;
     }
 
     private StoreKey getKeyAt(ByteBuffer mmap, int index) throws StoreException {
@@ -1197,16 +1231,16 @@ class IndexSegment implements Iterable<IndexEntry> {
             indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
                 + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH;
             keySize = serEntries.getInt();
-            valueSize = serEntries.getInt();
-            persistedEntrySize = keySize + valueSize;
+            persistedValueSize = serEntries.getInt();
+            persistedEntrySize = keySize + persistedValueSize;
             endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
             lastModifiedTimeSec.set(indexFile.lastModified() / 1000);
             firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
             break;
           case PersistentIndex.VERSION_1:
             keySize = serEntries.getInt();
-            valueSize = serEntries.getInt();
-            persistedEntrySize = keySize + valueSize;
+            persistedValueSize = serEntries.getInt();
+            persistedEntrySize = keySize + persistedValueSize;
             endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
             lastModifiedTimeSec.set(serEntries.getLong());
             storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
@@ -1220,7 +1254,7 @@ class IndexSegment implements Iterable<IndexEntry> {
           case PersistentIndex.VERSION_2:
           case PersistentIndex.VERSION_3:
             persistedEntrySize = serEntries.getInt();
-            valueSize = serEntries.getInt();
+            persistedValueSize = serEntries.getInt();
             endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
             lastModifiedTimeSec.set(serEntries.getLong());
             storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
@@ -1233,7 +1267,7 @@ class IndexSegment implements Iterable<IndexEntry> {
             break;
           case PersistentIndex.VERSION_4:
             persistedEntrySize = serEntries.getInt();
-            valueSize = serEntries.getInt();
+            persistedValueSize = serEntries.getInt();
             endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
             lastModifiedTimeSec.set(serEntries.getLong());
             storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
@@ -1501,7 +1535,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     protected int cursor = 0;
     protected final ByteBuffer mmap;
     protected final int numberOfEntries;
-    protected byte[] valueBuf = new byte[valueSize];
+    protected byte[] valueBuf = new byte[sealedIndex.getPersistedValueSize()];
 
     SealedIndexSegmentEntryIterator() {
       mmap = sealedIndex.getSealedIndexDuplicate();

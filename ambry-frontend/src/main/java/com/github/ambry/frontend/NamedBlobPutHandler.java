@@ -29,7 +29,6 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
-import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -49,6 +48,7 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -297,11 +297,17 @@ public class NamedBlobPutHandler {
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
         // Set the named blob state to be 'READY' after the Ttl update succeed
+        if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
+          throw new RestServiceException(
+              "Internal key " + RestUtils.InternalKeys.NAMED_BLOB_VERSION + " is required in Named Blob TTL update callback!",
+              RestServiceErrorCode.InternalServerError);
+        }
+        long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
         String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time);
-        namedBlobDb.put(record, NamedBlobState.READY, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).get();
+            namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
+        namedBlobDb.updateBlobStateToReady(record).get();
 
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
@@ -352,9 +358,9 @@ public class NamedBlobPutHandler {
         restRequest.getMetricsTracker()
             .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
-      Map<String, Object> userMetadataFromRequest = restRequest.getArgs();
+      Map<String, Object> userMetadataFromRequest = new HashMap<>(restRequest.getArgs());
       Map<String, String> userTags = getDatasetUserTags(restRequest);
-      if (userTags != null) {
+      if (!userTags.isEmpty()) {
         userTags.forEach((key, value) -> {
           if (!userMetadataFromRequest.containsKey(key)) {
             userMetadataFromRequest.put(key, value);
@@ -374,12 +380,17 @@ public class NamedBlobPutHandler {
      * @throws RestServiceException
      */
     private Map<String, String> getDatasetUserTags(RestRequest restRequest) throws RestServiceException {
-      Map<String, String> userTags = null;
+      Map<String, String> modifiedUserTags = new HashMap<>();
       if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
         Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
-        userTags = dataset.getUserTags();
+        Map<String, String> userTags = dataset.getUserTags();
+        if (userTags != null) {
+          for (Map.Entry<String, String> entry : userTags.entrySet()) {
+            modifiedUserTags.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + entry.getKey(), entry.getValue());
+          }
+        }
       }
-      return userTags;
+      return modifiedUserTags;
     }
 
     /**
@@ -514,12 +525,20 @@ public class NamedBlobPutHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
+        long newExpirationTimeMs = datasetVersionRecord.getExpirationTimeMs();
+        // expirationTimeMs = ttl + creationTime. If dataset version inherit the expirationTimeMs from dataset level
+        // the ttl should be updated.
+        if (expirationTimeMs != Utils.Infinite_Time || expirationTimeMs != newExpirationTimeMs) {
+          blobProperties.setTimeToLiveInSeconds(
+              TimeUnit.MILLISECONDS.toSeconds(newExpirationTimeMs - blobProperties.getCreationTimeInMs()));
+        }
         frontendMetrics.addDatasetVersionProcessingTimeInMs.update(
             System.currentTimeMillis() - startAddDatasetVersionTime);
       } catch (AccountServiceException ex) {
-        throw new RestServiceException(
+        LOGGER.error(
             "Dataset version create failed for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + version,
+                + " datasetName: " + datasetName + " version: " + version);
+        throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
     }

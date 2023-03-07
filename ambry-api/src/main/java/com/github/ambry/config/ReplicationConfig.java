@@ -118,6 +118,12 @@ public class ReplicationConfig {
   @Default("1048576")
   public final long replicationFetchSizeInBytes;
 
+  @Config(replicationFetchSizeInBytesForBootstrapIntraColoName)
+  @Default("1048576")
+  public final long replicationFetchSizeInBytesForBootstrapIntraColo;
+  public static final String replicationFetchSizeInBytesForBootstrapIntraColoName =
+      "replication.fetch.size.in.bytes.for.bootstrap.intra.colo";
+
   /**
    * The maximum number of partitions on remote node can be replicated within a single replication request. If local
    * node shares more partitions than this number with peer node, the partitions will be split into several lists (with
@@ -335,6 +341,9 @@ public class ReplicationConfig {
         verifiableProperties.getLongInRange("replication.synced.replica.backoff.duration.ms", 0, 0, Long.MAX_VALUE);
     replicationFetchSizeInBytes =
         verifiableProperties.getLongInRange("replication.fetch.size.in.bytes", 1048576, 1, Long.MAX_VALUE);
+    replicationFetchSizeInBytesForBootstrapIntraColo =
+        verifiableProperties.getLongInRange(replicationFetchSizeInBytesForBootstrapIntraColoName, 1048576, 1,
+            Long.MAX_VALUE);
     replicationMaxPartitionCountPerRequest =
         verifiableProperties.getIntInRange("replication.max.partition.count.per.request", 20, 0, Integer.MAX_VALUE);
     replicationIncludeAll = verifiableProperties.getBoolean("replication.include.all", true);

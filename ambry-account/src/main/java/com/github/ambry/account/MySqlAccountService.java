@@ -599,6 +599,23 @@ public class MySqlAccountService extends AbstractAccountService {
     }
   }
 
+  @Override
+  public void deleteDataset(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      mySqlAccountStore.deleteDataset(accountId, containerId, datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
   /**
    * Updates MySql DB with added or modified {@link Account}s
    * @param accounts collection of {@link Account}s

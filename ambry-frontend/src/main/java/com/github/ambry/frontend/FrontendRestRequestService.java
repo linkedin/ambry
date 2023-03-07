@@ -90,6 +90,7 @@ class FrontendRestRequestService implements RestRequestService {
   private PostBlobHandler postBlobHandler;
   private TtlUpdateHandler ttlUpdateHandler;
   private DeleteBlobHandler deleteBlobHandler;
+  private DeleteDatasetHandler deleteDatasetHandler;
   private HeadBlobHandler headBlobHandler;
   private UndeleteHandler undeleteHandler;
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
@@ -183,6 +184,8 @@ class FrontendRestRequestService implements RestRequestService {
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
+    deleteDatasetHandler =
+        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     headBlobHandler =
         new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager);
@@ -332,9 +335,15 @@ class FrontendRestRequestService implements RestRequestService {
   @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-        submitResponse(restRequest, restResponseChannel, null, e);
-      });
+      if (requestPath.matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
+        deleteDatasetHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+          submitResponse(restRequest, restResponseChannel, null, e);
+        });
+      } else {
+        deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+          submitResponse(restRequest, restResponseChannel, null, e);
+        });
+      }
     };
     preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.deletePreProcessingMetrics,
         routingAction);

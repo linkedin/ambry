@@ -86,6 +86,14 @@ public interface NamedBlobDb {
   }
 
   /**
+   * Update a {@link NamedBlobRecord}'s state to READY in the database.
+   * @param record the {@link NamedBlobRecord}
+   * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
+   *         occurred.
+   */
+  CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record);
+
+  /**
    * Delete a record for a blob in the database.
    * @param accountName the name of the account.
    * @param containerName the name of the container.
