@@ -599,6 +599,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public void forceDelete(List<MessageInfo> infos) throws StoreException {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public short undelete(MessageInfo info) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }

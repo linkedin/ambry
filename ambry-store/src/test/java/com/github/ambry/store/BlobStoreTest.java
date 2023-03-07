@@ -2492,6 +2492,141 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Tests Store.forceDelete operation.
+   * And verify the following get/ttlUpdate/delete/forceDelete/undelete return expected status.
+   * @throws Exception
+   */
+  @Test
+  public void forceDeleteBasicTest() throws Exception {
+    MockId id = getUniqueId();
+
+    // Blob doesn't exist. Both delete and get fail with ID_Not_Found.
+    verifyDeleteFailure(id, StoreErrorCodes.ID_Not_Found);
+    verifyGetFailure(id, StoreErrorCodes.ID_Not_Found);
+
+    // force delete this Blob ID.
+    // If the request is from frontend and lifeVersion is LIFE_VERSION_FROM_FRONTEND, it should fail.
+    MessageInfo info =
+        new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+            MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+    try {
+      store.forceDelete(Collections.singletonList(info));
+      fail("Store FORCE DELETE should have failed");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Unknown_Error, e.getErrorCode());
+    }
+    // If the request is from replication and lifeVersion is valid, it should succeed.
+    short lifeVersion = 0; // shouldn't be LIFE_VERSION_FROM_FRONTEND. It is supposed to get from replication
+    info = new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+        lifeVersion);
+    store.forceDelete(Collections.singletonList(info));
+
+    // Now all the following command should recognize the force delete record.
+
+    // No matter what the GetOption is, store.get should return ID_Deleted.
+    // with StoreGetOptions.none
+    try {
+      store.get(Collections.singletonList(id), EnumSet.noneOf(StoreGetOptions.class));
+      fail("Should not be able to GET " + id);
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+    }
+    // with StoreGetOptions.Store_Include_Deleted. When PutBlob is compacted or doesn't exists, it throws ID_Deleted.
+    try {
+      store.get(Collections.singletonList(id), EnumSet.of(StoreGetOptions.Store_Include_Deleted));
+      fail("Should not be able to GET " + id);
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+    }
+    // with all StoreGetOptions. When PutBlob is compacted or doesn't exists, it throws ID_Deleted.
+    try {
+      store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
+      fail("Should not be able to GET " + id);
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+    }
+
+    // ttlUpdate from the frontend should fail with ID_Deleted
+    verifyTtlUpdateFailure(id, Utils.Infinite_Time, StoreErrorCodes.ID_Deleted);
+    // ttlUpdate from the replication fails with ID_Deleted
+    short newLifeVersion = 2;
+    info = new MessageInfo(id, TTL_UPDATE_RECORD_SIZE, false, true, false, Utils.Infinite_Time, null, id.getAccountId(),
+        id.getContainerId(), time.milliseconds(), newLifeVersion);
+    try {
+      store.updateTtl(Collections.singletonList(info));
+      fail("Store TTL UPDATE should have failed");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+    }
+
+    // undelete from the frontend should fail with ID_Deleted_Permanently
+    verifyUndeleteFailure(id, StoreErrorCodes.ID_Deleted_Permanently);
+    // undelete from the replication also fails with ID_Deleted_Permanently
+    info = new MessageInfo(id, UNDELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+        newLifeVersion);
+    try {
+      store.undelete(info);
+      fail("Store UNDELETE should have failed for key " + id);
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted_Permanently, e.getErrorCode());
+    }
+
+    // deletion from the frontend should fail with ID_Deleted
+    verifyDeleteFailure(id, StoreErrorCodes.ID_Deleted);
+    // deletion from the replication with the same lifeVersion fails with StoreErrorCodes.ID_Deleted
+    info = new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+        lifeVersion);
+    try {
+      store.delete(Collections.singletonList(info));
+      fail("Store DELETE should have failed");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+    }
+    // deletion from the replication with different lifeVersion is successful
+    info = new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+        newLifeVersion);
+    store.delete(Collections.singletonList(info));
+
+    // force delete again with the same lifeVersion will fail if the blob ID exists no matter what record it has.
+    info = new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds(),
+        lifeVersion);
+    try {
+      store.forceDelete(Collections.singletonList(info));
+      fail("Store FORCE DELETE should have failed");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Already_Exist, e.getErrorCode());
+    }
+    // force delete again with different timestamp and life version, fail with Already_Exist
+    info = new MessageInfo(id, DELETE_RECORD_SIZE, id.getAccountId(), id.getContainerId(), time.milliseconds() + 1,
+        newLifeVersion);
+    try {
+      store.forceDelete(Collections.singletonList(info));
+      fail("Store FORCE DELETE should have failed");
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.Already_Exist, e.getErrorCode());
+    }
+
+    // By current design, when the blob exists, the put will return success immediately. But the read should still fail
+    long crc = random.nextLong();
+    info = new MessageInfo(id, PUT_RECORD_SIZE, false, false, false, expiresAtMs, crc, id.getAccountId(),
+        id.getContainerId(), Utils.Infinite_Time, (short) 0);
+    MessageWriteSet writeSet =
+        new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
+    store.put(writeSet);
+    try {
+      store.get(Collections.singletonList(id), EnumSet.allOf(StoreGetOptions.class));
+      fail("Should not be able to GET " + id);
+    } catch (StoreException e) {
+      assertEquals("Unexpected StoreErrorCode", StoreErrorCodes.ID_Deleted, e.getErrorCode());
+    }
+  }
+
+  // FORCE_DELETE_TODO: test the compaction when hits the forceDelete
+  // FORCE_DELETE_TODO: test replicate thread try to replicate PutBlob, DeleteBlob, Undelete blob when we have the forceDelete.
+  // FORCE_DELETE_TODO: do we need more test like deleteLifeVersionTest
+  // FORCE_DELETE_TODO: store.forceDelete call with a list of BlobIDs.
+
   // helpers
   // general
 
