@@ -36,6 +36,9 @@ public class MySqlMetrics {
   public static final String BATCH_UPDATE_TIME_MSEC = "BatchUpdateTimeInMs";
   public static final String BATCH_UPDATE_SUCCESS_COUNT = "BatchUpdateSuccessCount";
   public static final String BATCH_UPDATE_FAILURE_COUNT = "BatchUpdateFailureCount";
+  public static final String DELETE_TIME_MSEC = "DeleteTimeInMs";
+  public static final String DELETE_SUCCESS_COUNT = "DeleteSuccessCount";
+  public static final String DELETE_FAILURE_COUNT = "DeleteFailureCount";
   public static final String CONNECTION_SUCCESS_COUNT = "ConnectionSuccessCount";
   public static final String CONNECTION_FAILURE_COUNT = "ConnectionFailureCount";
 
@@ -55,6 +58,10 @@ public class MySqlMetrics {
   public final Counter batchUpdateSuccessCount;
   public final Counter batchUpdateFailureCount;
 
+  public final Histogram deleteTimeMs;
+  public final Counter deleteSuccessCount;
+  public final Counter deleteFailureCount;
+
   public final Counter connectionSuccessCount;
   public final Counter connectionFailureCount;
 
@@ -63,6 +70,7 @@ public class MySqlMetrics {
     readTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, READ_TIME_MSEC));
     copyTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, COPY_TIME_MSEC));
     batchUpdateTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, BATCH_UPDATE_TIME_MSEC));
+    deleteTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, DELETE_TIME_MSEC));
     writeSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, WRITE_SUCCESS_COUNT));
     writeFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, WRITE_FAILURE_COUNT));
     readSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, READ_SUCCESS_COUNT));
@@ -71,6 +79,8 @@ public class MySqlMetrics {
     copyFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, COPY_FAILURE_COUNT));
     batchUpdateSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, BATCH_UPDATE_SUCCESS_COUNT));
     batchUpdateFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, BATCH_UPDATE_FAILURE_COUNT));
+    deleteSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, DELETE_SUCCESS_COUNT));
+    deleteFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, DELETE_FAILURE_COUNT));
     connectionSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, CONNECTION_SUCCESS_COUNT));
     connectionFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, CONNECTION_FAILURE_COUNT));
   }

@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import org.apache.zookeeper.Op;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,7 +63,7 @@ public class MySqlDataAccessor {
    * List of operation types on the mysql store.
    */
   public enum OperationType {
-    Write, Read, Copy, BatchUpdate
+    Write, Read, Copy, BatchUpdate, Delete
   }
 
   /** Production constructor */
@@ -291,6 +292,8 @@ public class MySqlDataAccessor {
       metrics.copyFailureCount.inc();
     } else if (operationType == OperationType.BatchUpdate) {
       metrics.batchUpdateFailureCount.inc();
+    } else if (operationType == OperationType.Delete) {
+      metrics.deleteFailureCount.inc();
     }
 
     // Close connection for all non transient sql exceptions.
@@ -318,6 +321,9 @@ public class MySqlDataAccessor {
     } else if (operationType == OperationType.BatchUpdate) {
       metrics.batchUpdateSuccessCount.inc();
       metrics.batchUpdateTimeMs.update(operationTimeInMs);
+    } else if (operationType == OperationType.Delete) {
+      metrics.deleteSuccessCount.inc();
+      metrics.deleteTimeMs.update(operationTimeInMs);
     }
   }
 

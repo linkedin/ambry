@@ -21,6 +21,7 @@ import com.github.ambry.account.Dataset;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
@@ -44,8 +45,9 @@ public class AccountAndContainerInjector {
   private static final Set<String> requiredAmbryHeadersForPutWithServiceId = Collections.singleton(Headers.SERVICE_ID);
   private static final Set<String> requiredAmbryHeadersForPutWithAccountAndContainerName = Collections.unmodifiableSet(
       new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
-  private static final Set<String> requiredAmbryHeadersForGetWithAccountAndContainerName = Collections.unmodifiableSet(
-      new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
+  private static final Set<String> requiredAmbryHeadersForGetOrDeleteWithAccountAndContainerName =
+      Collections.unmodifiableSet(
+          new HashSet<>(Arrays.asList(Headers.TARGET_ACCOUNT_NAME, Headers.TARGET_CONTAINER_NAME)));
   private static final Logger logger = LoggerFactory.getLogger(AccountAndContainerInjector.class);
 
   private final AccountService accountService;
@@ -90,17 +92,21 @@ public class AccountAndContainerInjector {
   }
 
   /**
-   * Injects target {@link Account} and {@link Container} for GET datset requests. This method also ensures required the GET
-   * requests that carry both the {@code x-ambry-target-account} and {@code x-ambry-target-container} headers.
+   * Injects target {@link Account} and {@link Container} for GET or Delete datset requests. This method also ensures required
+   * the GET or Delete requests that carry both the {@code x-ambry-target-account} and {@code x-ambry-target-container} headers.
    * @param restRequest The Get {@link RestRequest}.
    * @throws RestServiceException
    */
-  public void injectAccountAndContainerForGetDatasetRequest(RestRequest restRequest) throws RestServiceException {
+  public void injectAccountAndContainerForDatasetRequest(RestRequest restRequest) throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
     if (getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false) != null
         || getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false) != null) {
-      ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForGetWithAccountAndContainerName);
-      frontendMetrics.getDatasetWithAccountAndContainerHeaderRate.mark();
+      ensureRequiredHeadersOrThrow(restRequest, requiredAmbryHeadersForGetOrDeleteWithAccountAndContainerName);
+      if (restRequest.getRestMethod().equals(RestMethod.GET)) {
+        frontendMetrics.getDatasetWithAccountAndContainerHeaderRate.mark();
+      } else {
+        frontendMetrics.deleteDatasetWithAccountAndContainerHeaderRate.mark();
+      }
       injectAccountAndContainerUsingAccountAndContainerHeaders(restRequest, null);
     } else {
       throw new RestServiceException(

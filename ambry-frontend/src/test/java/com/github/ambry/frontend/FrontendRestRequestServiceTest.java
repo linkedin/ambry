@@ -70,7 +70,6 @@ import com.github.ambry.router.ByteRanges;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
-import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.PutBlobOptions;
@@ -1184,11 +1183,11 @@ public class FrontendRestRequestServiceTest {
   }
 
   /**
-   * Test add and get {@link Dataset}.
+   * Test add, get and delete {@link Dataset}.
    * @throws Exception
    */
   @Test
-  public void addAndGetDatasetTest() throws Exception {
+  public void addGetAndDeleteDatasetTest() throws Exception {
     Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
     Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
     Dataset.VersionSchema versionSchema = Dataset.VersionSchema.TIMESTAMP;
@@ -1239,6 +1238,19 @@ public class FrontendRestRequestServiceTest {
     doOperation(restRequest, restResponseChannel);
     assertEquals("Dataset not created correctly", datasetToUpdate,
         accountService.getDataset(testAccount.getName(), testContainer.getName(), DATASET_NAME));
+
+    //delete dataset
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName())
+        .put(RestUtils.Headers.TARGET_DATASET_NAME, DATASET_NAME);
+    restRequest = createRestRequest(RestMethod.DELETE, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, null);
+    verifyDeleteAccepted(restRequest);
+
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName())
+        .put(RestUtils.Headers.TARGET_DATASET_NAME, DATASET_NAME);
+    restRequest = createRestRequest(RestMethod.GET, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, null);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
   }
 
   /**
