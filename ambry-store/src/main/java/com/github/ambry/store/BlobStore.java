@@ -683,6 +683,20 @@ public class BlobStore implements Store {
         }
       }
       synchronized (storeWriteLock) {
+        // findKey again with the file span from the previous end offset to the new end offset
+        // to make sure there is no new entry is added while we acquire the lock.
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          for (MessageInfo info : infosToDelete) {
+            IndexValue value = index.findKey(info.getStoreKey(), fileSpan);
+            if (value != null) {
+              throw new StoreException("Cannot force delete id " + info.getStoreKey() + " since the id exists",
+                  StoreErrorCodes.Already_Exist);
+            }
+          }
+        }
+
         List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
         List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
 

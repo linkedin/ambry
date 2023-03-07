@@ -204,22 +204,28 @@ public class BlobStoreTest {
   }
 
   /**
-   * Deletes a blob.
+   * Deletes a blob. Either a normal deleter or a force deleter.
    */
   private class Deleter implements Callable<CallableResult> {
 
     final MockId id;
+    boolean forceDelete;
 
     /**
      * @param id the {@link MockId} to delete.
      */
-    Deleter(MockId id) {
+    Deleter(MockId id, boolean forceDelete) {
       this.id = id;
+      this.forceDelete = forceDelete;
     }
 
     @Override
     public CallableResult call() throws Exception {
-      delete(id);
+      if (forceDelete) {
+        forceDelete(id);
+      } else {
+        delete(id);
+      }
       return EMPTY_RESULT;
     }
   }
@@ -712,12 +718,71 @@ public class BlobStoreTest {
     put(extraBlobCount, PUT_RECORD_SIZE, Utils.Infinite_Time);
     List<Deleter> deleters = new ArrayList<>(liveKeys.size());
     for (MockId id : liveKeys) {
-      deleters.add(new Deleter(id));
+      deleters.add(new Deleter(id, false));
     }
     ExecutorService executorService = Executors.newFixedThreadPool(deleters.size());
     try {
       List<Future<CallableResult>> futures = executorService.invokeAll(deleters);
       verifyDeleteFutures(deleters, futures);
+    } finally {
+      executorService.shutdownNow();
+    }
+  }
+
+  /**
+   * Tests the case where there are many concurrent FORCE DELETEs on different Blob IDs or on same BLob ID.
+   * @throws Exception
+   */
+  @Test
+  public void concurrentForceDeleteTest() throws Exception {
+    // concurrent force delete with different IDs.
+    int blobCount = 2000 / PUT_RECORD_SIZE + 1;
+    assertTrue(blobCount >= 2);
+    List<Deleter> deleters = new ArrayList<>(blobCount);
+    for (int i = 0; i < blobCount; i++) {
+      MockId id = getUniqueId();
+      deleters.add(new Deleter(id, true));
+    }
+
+    ExecutorService executorService = Executors.newFixedThreadPool(deleters.size());
+    try {
+      List<Future<CallableResult>> futures = executorService.invokeAll(deleters);
+      verifyDeleteFutures(deleters, futures);
+    } finally {
+      executorService.shutdownNow();
+    }
+
+    // concurrent force delete with the same ID.
+    deleters.clear();
+    deleters = new ArrayList<>(blobCount);
+    MockId id = getUniqueId();
+    for (int i = 0; i < blobCount; i++) {
+      deleters.add(new Deleter(id, true));
+    }
+
+    executorService = Executors.newFixedThreadPool(deleters.size());
+    int failedCount = 0;
+    int successCount = 0;
+    try {
+      List<Future<CallableResult>> futures = executorService.invokeAll(deleters);
+      for (int i = 0; i < deleters.size(); i++) {
+        Future<CallableResult> future = futures.get(i);
+        try {
+          future.get(1, TimeUnit.SECONDS);
+          // one future is successful.
+          verifyGetFailure(id, StoreErrorCodes.ID_Deleted);
+          successCount++;
+        } catch (ExecutionException e) {
+          // all the others fail.
+          failedCount++;
+          assertTrue(e.getCause() instanceof StoreException);
+          assertEquals(StoreErrorCodes.Already_Exist, ((StoreException) e.getCause()).getErrorCode());
+        }
+      }
+      // one is successful, all the others fails.
+      assertEquals(successCount, 1);
+      assertTrue(failedCount > 0);
+      assertEquals(failedCount + successCount, futures.size());
     } finally {
       executorService.shutdownNow();
     }
@@ -954,7 +1019,7 @@ public class BlobStoreTest {
     List<MockId> idsToDelete = put(deleteBlobCount, PUT_RECORD_SIZE, Utils.Infinite_Time);
     List<Deleter> deleters = new ArrayList<>(deleteBlobCount);
     for (MockId id : idsToDelete) {
-      deleters.add(new Deleter(id));
+      deleters.add(new Deleter(id, false));
     }
     callables.addAll(deleters);
 
@@ -2623,8 +2688,7 @@ public class BlobStoreTest {
   }
 
   // FORCE_DELETE_TODO: test the compaction when hits the forceDelete
-  // FORCE_DELETE_TODO: test replicate thread try to replicate PutBlob, DeleteBlob, Undelete blob when we have the forceDelete.
-  // FORCE_DELETE_TODO: do we need more test like deleteLifeVersionTest
+  // FORCE_DELETE_TODO: test replication thread try to replicate PutBlob, DeleteBlob, Undelete blob when we have the forceDelete.
   // FORCE_DELETE_TODO: store.forceDelete call with a list of BlobIDs.
 
   // helpers
@@ -2821,22 +2885,41 @@ public class BlobStoreTest {
    * @throws StoreException
    */
   private MessageInfo delete(MockId idToDelete) throws StoreException {
-    return delete(idToDelete, time.milliseconds());
+    return delete(idToDelete, time.milliseconds(), false);
+  }
+
+  /**
+   * Force Deletes a blob
+   * @param idToDelete the {@link MockId} of the blob to FORCE DELETE.
+   * @return the {@link MessageInfo} associated with the FORCE DELETE.
+   * @throws StoreException
+   */
+  private MessageInfo forceDelete(MockId idToDelete) throws StoreException {
+    return delete(idToDelete, time.milliseconds(), true);
   }
 
   /**
    * Deletes a blob with a given operationTimeMs
    * @param idToDelete the {@link MockId} of the blob to DELETE.
    * @param operationTimeMs the operationTimeMs in {@link MessageInfo}.
+   * @param forceDelete true if it's a force delete, false if it's a normal delete.
    * @return the {@link MessageInfo} associated with the DELETE.
    * @throws StoreException
    */
-  private MessageInfo delete(MockId idToDelete, long operationTimeMs) throws StoreException {
-    MessageInfo putMsgInfo = allKeys.get(idToDelete).getFirst();
-    MessageInfo info =
-        new MessageInfo(idToDelete, DELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
-            operationTimeMs, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
-    store.delete(Collections.singletonList(info));
+  private MessageInfo delete(MockId idToDelete, long operationTimeMs, boolean forceDelete) throws StoreException {
+    MessageInfo info;
+    if (!forceDelete) {
+      MessageInfo putMsgInfo = allKeys.get(idToDelete).getFirst();
+      info = new MessageInfo(idToDelete, DELETE_RECORD_SIZE, putMsgInfo.getAccountId(), putMsgInfo.getContainerId(),
+          operationTimeMs, MessageInfo.LIFE_VERSION_FROM_FRONTEND);
+      store.delete(Collections.singletonList(info));
+    } else {
+      short lifeVersion = 0;
+      info = new MessageInfo(idToDelete, DELETE_RECORD_SIZE, idToDelete.getAccountId(), idToDelete.getContainerId(),
+          operationTimeMs, lifeVersion);
+      store.forceDelete(Collections.singletonList(info));
+    }
+
     deletedKeys.add(idToDelete);
     undeletedKeys.remove(idToDelete);
     liveKeys.remove(idToDelete);
@@ -3081,7 +3164,7 @@ public class BlobStoreTest {
     // 1 Put entry and 1 delete that should be compacted
     MockId addedId = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
     idsByLogSegment.get(2).add(addedId);
-    delete(addedId, (long) 0);
+    delete(addedId, (long) 0, false);
     deletedAndShouldBeCompactedKeys.add(addedId);
     return PUT_RECORD_SIZE + DELETE_RECORD_SIZE;
   }
