@@ -869,8 +869,8 @@ public class HelixClusterManager implements ClusterMap {
     long getPartitionReadWriteCount() {
       long count = 0;
       for (AmbryPartition partition : partitionMap.values()) {
-        // TODO note that currently even partially read write partitions are treated as read write.
-        // once we start making the distinction, we should also change this metric.
+        // TODO Efficient_Metadata_Operations_TODO Note that currently even partially read write partitions are treated
+        //  as read write once we start making the distinction, we should also change this metric.
         if (partition.getPartitionState() != PartitionState.READ_ONLY) {
           count++;
         }

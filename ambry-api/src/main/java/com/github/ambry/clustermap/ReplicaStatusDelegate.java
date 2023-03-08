@@ -44,7 +44,8 @@ public class ReplicaStatusDelegate {
    * @return {@code true} if replica is successfully partial-sealed. {@code false} if not.
    */
   public boolean partialSeal(ReplicaId replicaId) {
-    // TODO Once the partial seal logic is complete end to end, this should set the partial seal state.
+    // TODO Efficient_Metadata_Operations_TODO Once the partial seal logic is complete end to end, this should set the
+    //  partial seal state.
     return clusterParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
   }
 
@@ -109,7 +110,7 @@ public class ReplicaStatusDelegate {
    * @return a list of partially sealed replicas in InstanceConfig of local node.
    */
   public List<String> getPartiallySealedReplicas() {
-    // TODO get partial sealed replicas from HelixParticipant.
+    // TODO Efficient_Metadata_Operations_TODO get partial sealed replicas from HelixParticipant.
     return new ArrayList<>();
   }
 
