@@ -1161,7 +1161,7 @@ class PersistentIndex {
     long size = fileSpan.getEndOffset().getOffset() - fileSpan.getStartOffset().getOffset();
     IndexValue newValue;
     if (value == null) {
-      // It is possible that the PUT has been cleaned by compaction
+      // It is possible that the PUT has been cleaned by compaction or forceDelete by the replication
       if (!hasLifeVersion) {
         throw new StoreException("MessageInfo of delete carries invalid lifeVersion",
             StoreErrorCodes.Initialization_Error);

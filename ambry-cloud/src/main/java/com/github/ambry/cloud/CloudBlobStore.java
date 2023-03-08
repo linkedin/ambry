@@ -645,6 +645,11 @@ class CloudBlobStore implements Store {
     }
   }
 
+  @Override
+  public void forceDelete(List<MessageInfo> infosToDelete) throws StoreException {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
   /**
    * Deletes all the messages in the list from the store asynchronously. When the lifeVersion is
    * {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND}, this method is invoked by the responding to the frontend request.

@@ -666,6 +666,81 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public void forceDelete(List<MessageInfo> infosToDelete) throws StoreException {
+    checkStarted();
+    checkDuplicates(infosToDelete);
+    final Timer.Context context = metrics.deleteResponse.time();
+    try {
+      Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      // If the PubBlob exists, we are supposed to call BlobStore.delete.
+      // forceDelete is supposed to use when the blob doesn't exist.
+      for (MessageInfo info : infosToDelete) {
+        IndexValue value =
+            index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
+        if (value != null) {
+          throw new StoreException("Cannot force delete id " + info.getStoreKey() + " since the id exists",
+              StoreErrorCodes.Already_Exist);
+        }
+      }
+      synchronized (storeWriteLock) {
+        // findKey again with the file span from the previous end offset to the new end offset
+        // to make sure there is no new entry is added while we acquire the lock.
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          for (MessageInfo info : infosToDelete) {
+            IndexValue value = index.findKey(info.getStoreKey(), fileSpan);
+            if (value != null) {
+              throw new StoreException("Cannot force delete id " + info.getStoreKey() + " since the id exists",
+                  StoreErrorCodes.Already_Exist);
+            }
+          }
+        }
+
+        List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
+        List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
+
+        for (MessageInfo info : infosToDelete) {
+          MessageFormatInputStream stream =
+              new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), info.getLifeVersion());
+          updatedInfos.add(
+              new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), info.getLifeVersion()));
+          inputStreams.add(stream);
+        }
+
+        Offset endOffsetOfLastMessage = log.getEndOffset();
+        MessageFormatWriteSet writeSet =
+            new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), updatedInfos,
+                false);
+        writeSet.writeTo(log);
+        logger.trace("Store : {} force delete mark written to log", dataDir);
+        for (MessageInfo info : updatedInfos) {
+          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
+          index.markAsDeleted(info.getStoreKey(), fileSpan, info, info.getOperationTimeMs(), info.getLifeVersion());
+          endOffsetOfLastMessage = fileSpan.getEndOffset();
+          // FORCE_DELETE_TODO: Do we need update blobStoreStats? We don't have PutBlob to compact.
+          //blobStoreStats.handleNewDeleteEntry(info.getStoreKey(), deleteIndexValue,
+          //    originalPuts.get(correspondingPutIndex), indexValuesPriorToDelete.get(correspondingPutIndex));
+        }
+        logger.trace("Store : {} force delete has been marked in the index ", dataDir);
+      }
+      onSuccess("DELETE");
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
+    } catch (Exception e) {
+      throw new StoreException("Unknown error while trying to force delete blobs from store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Override
   public void updateTtl(List<MessageInfo> infosToUpdate) throws StoreException {
     checkStarted();
     checkDuplicates(infosToUpdate);
