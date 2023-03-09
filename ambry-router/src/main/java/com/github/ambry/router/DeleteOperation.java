@@ -296,6 +296,13 @@ class DeleteOperation {
         onErrorResponse(requestInfo.getReplicaId(),
             RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(), blobId));
         requestRegistrationCallback.registerRequestToDrop(correlationId);
+        if (routerRequestExpiryReason == RouterUtils.RouterRequestExpiryReason.ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT) {
+          // Since the network timeout value can change based on load, record it in metrics.
+          routerMetrics.dynamicRequestNetworkTimeoutMs.update(requestInfo.getNetworkTimeOutMs());
+          routerMetrics.requestNetworkTimeoutCount.inc();
+        } else if (routerRequestExpiryReason == RouterUtils.RouterRequestExpiryReason.ROUTER_REQUEST_TIMEOUT) {
+          routerMetrics.requestFinalTimeoutCount.inc();
+        }
       } else {
         // Note: Even though the requests are ordered by correlation id and their creation time, we cannot break out of
         // the while loop here. This is because time outs for all requests may not be equal now.
