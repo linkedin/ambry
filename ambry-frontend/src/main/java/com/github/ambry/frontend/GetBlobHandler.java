@@ -145,7 +145,7 @@ public class GetBlobHandler {
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.getBlobSecurityProcessRequestMetrics, result -> {
         String blobIdStr;
-        if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           try {
             metrics.getDatasetVersionRate.mark();
             blobIdStr = getDatasetVersion(restRequest);

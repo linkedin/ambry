@@ -152,11 +152,25 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized DatasetVersionRecord getDatasetVersion(String accountName, String containerName,
+      String datasetName, String version) throws AccountServiceException {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    DatasetVersionRecord datasetVersionRecord =
+        idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(datasetName + version);
+    if (datasetVersionRecord == null) {
+      throw new AccountServiceException("Dataset version has been deleted", AccountServiceErrorCode.Deleted);
+    }
+    return datasetVersionRecord;
+  }
+
+  @Override
+  public synchronized void deleteDatasetVersion(String accountName, String containerName,
       String datasetName, String version) {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
-    return idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(datasetName + version);
+    idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).remove(datasetName + version);
   }
 
   @Override

@@ -93,6 +93,8 @@ public class AccountDao {
   // Dataset version table query strings.
   private final String insertDatasetVersionSql;
   private final String getDatasetVersionByNameSql;
+  private final String deleteDatasetVersionByIdSql;
+  private final String updateDatasetVersionIfExpiredSql;
   private final String listVersionSql;
 
   // Dataset table query strings
@@ -100,7 +102,7 @@ public class AccountDao {
   private final String getDatasetByNameSql;
   private final String getVersionSchemaSql;
   private final String updateDatasetSql;
-  private final String updateDatasetSqlIfExpired;
+  private final String updateDatasetIfExpiredSql;
   private final String deleteDatasetByIdSql;
   /**
    * Types of MySql statements.
@@ -143,7 +145,7 @@ public class AccountDao {
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?)",
             DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT,
             USER_TAGS, DELETE_TS);
-    updateDatasetSqlIfExpired = String.format(
+    updateDatasetIfExpiredSql = String.format(
         "update %s set %s = ?, %s = now(3), %s = ?, %s = ?, %s = ? where %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
         DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, USER_TAGS, DELETE_TS, ACCOUNT_ID,
         CONTAINER_ID, DATASET_NAME);
@@ -159,9 +161,9 @@ public class AccountDao {
         String.format("select %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
             VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
-    deleteDatasetByIdSql =
-        String.format("update %s set %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
-            DATASET_TABLE, DELETE_TS, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    deleteDatasetByIdSql = String.format(
+        "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
+        DATASET_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getVersionSchemaSql =
         String.format("select %s from %s where %s = ? and %s = ? and %s = ?", VERSION_SCHEMA, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
@@ -174,6 +176,13 @@ public class AccountDao {
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
+    deleteDatasetVersionByIdSql = String.format(
+        "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? and %s = ?",
+        DATASET_VERSION_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
+        DATASET_NAME, VERSION);
+    updateDatasetVersionIfExpiredSql = String.format(
+        "update %s set %s = ?, %s = now(3), %s = ? where %s = ? and %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
+        DATASET_VERSION_TABLE, VERSION, LAST_MODIFIED_TIME, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
   }
 
   /**
@@ -340,21 +349,36 @@ public class AccountDao {
   public synchronized DatasetVersionRecord addDatasetVersions(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, long expirationTimeMs)
       throws SQLException, AccountServiceException {
+    long startTimeMs = System.currentTimeMillis();
+    long versionNumber = 0;
+    Dataset dataset = null;
     try {
-      long startTimeMs = System.currentTimeMillis();
-      Dataset dataset =
-          getDataset(accountId, containerId, accountName, containerName, datasetName);
+      dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
       dataAccessor.getDatabaseConnection(true);
       PreparedStatement insertDatasetVersionStatement =
           dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
       //TODO: if version == null, add the latest version from db + 1.
-      long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
+      versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
       long newExpirationTimeMs =
           executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, datasetName,
               versionNumber, expirationTimeMs, dataset);
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
       return new DatasetVersionRecord(accountId, containerId, datasetName, version, newExpirationTimeMs);
     } catch (SQLException | AccountServiceException e) {
+      if (e instanceof SQLIntegrityConstraintViolationException) {
+        PreparedStatement updateDatasetSqlIfExpiredStatement =
+            dataAccessor.getPreparedStatement(updateDatasetVersionIfExpiredSql, true);
+        try {
+          long newExpirationTimeMs =
+              executeUpdateDatasetVersionIfExpiredSqlStatement(updateDatasetSqlIfExpiredStatement, accountId,
+                  containerId, datasetName, versionNumber, expirationTimeMs, dataset);
+          dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+          return new DatasetVersionRecord(accountId, containerId, datasetName, version, newExpirationTimeMs);
+        } catch (SQLException | AccountServiceException ex) {
+          dataAccessor.onException(ex, Write);
+          throw ex;
+        }
+      }
       dataAccessor.onException(e, Write);
       throw e;
     }
@@ -393,6 +417,33 @@ public class AccountDao {
   }
 
   /**
+   * Delete {@link Dataset} based on the supplied properties.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @throws SQLException
+   */
+  public synchronized void deleteDatasetVersion(int accountId, int containerId, String datasetName, String version)
+      throws SQLException, AccountServiceException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, false);
+      Dataset.VersionSchema versionSchema =
+          executeGetVersionSchema(getVersionSchemaStatement, accountId, containerId, datasetName);
+      dataAccessor.getDatabaseConnection(true);
+      PreparedStatement deleteDatasetVersionStatement =
+          dataAccessor.getPreparedStatement(deleteDatasetVersionByIdSql, true);
+      long versionValue = getVersionBasedOnSchema(version, versionSchema);
+      executeDeleteDatasetVersionStatement(deleteDatasetVersionStatement, accountId, containerId, datasetName,
+          versionValue);
+      dataAccessor.onSuccess(Delete, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException | AccountServiceException e) {
+      dataAccessor.onException(e, Delete);
+      throw e;
+    }
+  }
+
+  /**
    * Execute insert dataset version statement to add a dataset version.
    * @param statement the mysql statement to add dataset version.
    * @param accountId the id for the parent account.
@@ -424,6 +475,68 @@ public class AccountDao {
   }
 
   /**
+   * Execute deleteDatasetVersionStatement to delete Dataset version.
+   * @param statement the mysql statement to delete dataset version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param versionValue the version value of the dataset.
+   * @throws SQLException the {@link Dataset} including the metadata.
+   * @throws AccountServiceException
+   */
+  private void executeDeleteDatasetVersionStatement(PreparedStatement statement, int accountId,
+      int containerId, String datasetName, long versionValue) throws SQLException, AccountServiceException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, datasetName);
+    statement.setLong(4, versionValue);
+    int count = statement.executeUpdate();
+    if (count <= 0) {
+      throw new AccountServiceException(
+          "Dataset not found qualified record to delete for account: " + accountId + " container: " + containerId
+              + " dataset: " + datasetName + " version: " + versionValue, AccountServiceErrorCode.NotFound);
+    }
+  }
+
+  /**
+   * Execute updateDatasetSqlIfExpiredStatement to update dataset version if it gets expired.
+   * @param statement the mysql statement to update dataset version if it gets expired.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version value of the dataset.
+   * @param expirationTimeMs the expiration time in milliseconds.
+   * @param dataset the {@link Dataset} including the metadata.
+   * @return
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private long executeUpdateDatasetVersionIfExpiredSqlStatement(PreparedStatement statement,
+      int accountId, int containerId, String datasetName, long version, long expirationTimeMs, Dataset dataset)
+      throws SQLException, AccountServiceException {
+    statement.setLong(1, version);
+    long updatedExpirationTimeMs = expirationTimeMs;
+    if (expirationTimeMs == Infinite_Time && dataset.getExpirationTimeMs() == Infinite_Time) {
+      statement.setTimestamp(2, null);
+    } else if (expirationTimeMs == Infinite_Time || dataset.getExpirationTimeMs() == Infinite_Time) {
+      updatedExpirationTimeMs = expirationTimeMs == Infinite_Time ? dataset.getExpirationTimeMs() : expirationTimeMs;
+      statement.setTimestamp(2, new Timestamp(updatedExpirationTimeMs));
+    } else {
+      updatedExpirationTimeMs = Math.min(dataset.getExpirationTimeMs(), expirationTimeMs);
+      statement.setTimestamp(2, new Timestamp(updatedExpirationTimeMs));
+    }
+    statement.setInt(3, accountId);
+    statement.setInt(4, containerId);
+    statement.setString(5, datasetName);
+    statement.setLong(6, version);
+    int count = statement.executeUpdate();
+    if (count <= 0) {
+      throw new AccountServiceException("The dataset version already exist", AccountServiceErrorCode.ResourceConflict);
+    }
+    return updatedExpirationTimeMs;
+  }
+
+  /**
    * Add {@link Dataset} based on the supplied properties.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
@@ -441,7 +554,7 @@ public class AccountDao {
     } catch (SQLException | AccountServiceException e) {
       if (e instanceof SQLIntegrityConstraintViolationException) {
         PreparedStatement updateDatasetSqlIfExpiredStatement =
-            dataAccessor.getPreparedStatement(updateDatasetSqlIfExpired, true);
+            dataAccessor.getPreparedStatement(updateDatasetIfExpiredSql, true);
         if (executeUpdateDatasetSqlIfExpiredStatement(updateDatasetSqlIfExpiredStatement, accountId, containerId,
             dataset) <= 0) {
           throw new AccountServiceException("The dataset already exist", AccountServiceErrorCode.ResourceConflict);

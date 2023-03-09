@@ -40,6 +40,7 @@ import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.named.DeleteResult;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.named.PutResult;
@@ -566,7 +567,7 @@ public class FrontendRestRequestServiceTest {
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, blobTtl, testContainer.isCacheable(), serviceId, contentType, ownerId, null, null,
         null);
-    headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     headers.put(userMetadataKey, "userMetadataValue");
     restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
     restResponseChannel = new MockRestResponseChannel();
@@ -622,7 +623,7 @@ public class FrontendRestRequestServiceTest {
     when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
 
     headers = new JSONObject();
-    headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri, headers, null);
     restResponseChannel = new MockRestResponseChannel();
 
@@ -663,7 +664,7 @@ public class FrontendRestRequestServiceTest {
     headers = new JSONObject();
     setAmbryHeadersForPut(headers, blobTtl, testContainer.isCacheable(), serviceId, contentType, ownerId, null, null,
         null);
-    headers.put(RestUtils.Headers.DATASET_VERSION_UPLOAD, true);
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
     restResponseChannel = new MockRestResponseChannel();
 
@@ -683,6 +684,23 @@ public class FrontendRestRequestServiceTest {
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected ttl", blobTtl,
         allBlobs.get(blobIdFromRouter).getBlobProperties().getTimeToLiveInSeconds());
+
+    //delete the dataset version
+    reset(namedBlobDb);
+    when(namedBlobDb.delete(any(), any(), any())).thenReturn(
+        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
+    when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    restRequest = createRestRequest(RestMethod.DELETE, namedBlobPathUri, headers, null);
+    verifyDeleteAccepted(restRequest);
+
+    //delete the dataset version
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri, headers, null);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
   }
 
   /**
