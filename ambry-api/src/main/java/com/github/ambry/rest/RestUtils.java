@@ -245,7 +245,7 @@ public class RestUtils {
     /**
      * Boolean field set to "true" to enable dataset version upload
      */
-    public static final String DATASET_VERSION_UPLOAD = "x-ambry-dataset-version-upload";
+    public static final String DATASET_VERSION_QUERY_ENABLED = "x-ambry-dataset-version-query-enabled";
     /**
      * Boolean field set to "true" to update dataset.
      */
@@ -863,13 +863,13 @@ public class RestUtils {
   }
 
   /**
-   * Determine if {@link Headers#DATASET_VERSION_UPLOAD} is set in the request args.
+   * Determine if {@link Headers#DATASET_VERSION_QUERY_ENABLED} is set in the request args.
    * @param args The request arguments.
-   * @return {@code true} if {@link Headers#DATASET_VERSION_UPLOAD} is set.
+   * @return {@code true} if {@link Headers#DATASET_VERSION_QUERY_ENABLED} is set.
    * @throws RestServiceException
    */
-  public static boolean isDatasetVersionUpload(Map<String, Object> args) throws RestServiceException {
-    return getBooleanHeader(args, Headers.DATASET_VERSION_UPLOAD, false);
+  public static boolean isDatasetVersionQueryEnabled(Map<String, Object> args) throws RestServiceException {
+    return getBooleanHeader(args, Headers.DATASET_VERSION_QUERY_ENABLED, false);
   }
 
   /**

@@ -16,7 +16,6 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Dataset;
-import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -156,7 +155,7 @@ public class DeleteBlobHandler {
      */
     private Callback<Void> routerCallback() {
       return buildCallback(metrics.deleteBlobRouterMetrics, result -> {
-        if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           try {
             metrics.deleteDatasetVersionRate.mark();
             deleteDatasetVersion(restRequest);

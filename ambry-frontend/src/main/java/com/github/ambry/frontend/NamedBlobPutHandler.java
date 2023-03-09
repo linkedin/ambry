@@ -203,7 +203,7 @@ public class NamedBlobPutHandler {
               new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
-          if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
+          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
@@ -381,7 +381,7 @@ public class NamedBlobPutHandler {
      */
     private Map<String, String> getDatasetUserTags(RestRequest restRequest) throws RestServiceException {
       Map<String, String> modifiedUserTags = new HashMap<>();
-      if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
+      if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
         Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
         Map<String, String> userTags = dataset.getUserTags();
         if (userTags != null) {

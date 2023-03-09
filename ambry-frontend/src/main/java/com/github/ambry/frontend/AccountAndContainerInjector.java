@@ -405,7 +405,7 @@ public class AccountAndContainerInjector {
    */
   private void setTargetDatasetAndVersionInRestRequestIfNeeded(RestRequest restRequest, NamedBlobPath namedBlobPath)
       throws RestServiceException {
-    if (RestUtils.isDatasetVersionUpload(restRequest.getArgs())) {
+    if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
       String accountName = namedBlobPath.getAccountName();
       String containerName = namedBlobPath.getContainerName();
       String blobName = namedBlobPath.getBlobName();
