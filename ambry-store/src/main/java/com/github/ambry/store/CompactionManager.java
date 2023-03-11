@@ -32,8 +32,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsible for managing compaction of a {@link BlobStore}.
  */
-class CompactionManager {
-  static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
+public class CompactionManager {
+  public static final String THREAD_NAME_PREFIX = "StoreCompactionThread-";
 
   private enum Trigger {
     PERIODIC, ADMIN

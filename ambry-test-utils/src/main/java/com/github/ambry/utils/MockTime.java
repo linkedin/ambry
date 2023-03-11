@@ -14,6 +14,7 @@
 package com.github.ambry.utils;
 
 import java.util.Collection;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
@@ -27,6 +28,9 @@ import java.util.concurrent.locks.Condition;
  */
 public class MockTime extends Time {
   private final Set<String> timeSuspendedThreads = ConcurrentHashMap.newKeySet();
+  // sleep returns right away. Provide a way for the thread to really wait
+  // <String pref, long millisecond>, key is the prefix of the thread's name, value is sleep time in milliseconds.
+  private final Map<String, Long> sleepOnWaitThreads = new ConcurrentHashMap<>();
   private volatile boolean suspend = false;
   private long currentNanoSeconds;
   private final AtomicReference<Semaphore> sleepCallsAllowed = new AtomicReference<>(null);
@@ -64,8 +68,24 @@ public class MockTime extends Time {
         throw new RuntimeException("Caught interrupted exception", e);
       }
     }
-    if (!suspend && !timeSuspendedThreads.contains(Thread.currentThread().getName())) {
+    boolean suspendTime = suspend;
+    for (String prefix : timeSuspendedThreads) {
+      if (Thread.currentThread().getName().startsWith(prefix)) {
+        suspendTime = true;
+        break;
+      }
+    }
+    if (!suspendTime) {
       currentNanoSeconds += TimeUnit.MILLISECONDS.toNanos(ms);
+    }
+
+    for (Map.Entry<String, Long> entry : sleepOnWaitThreads.entrySet()) {
+      if (Thread.currentThread().getName().startsWith(entry.getKey())) {
+        try {
+          Thread.sleep(entry.getValue());
+        } catch (InterruptedException e) {
+        }
+      }
     }
   }
 
@@ -99,6 +119,20 @@ public class MockTime extends Time {
       suspend = true;
     } else {
       timeSuspendedThreads.addAll(threadNames);
+    }
+  }
+
+  /**
+   * Suspends the passage of time when {@link #sleep(long)} and sleep some time.
+   * @param threadNamesPrefix the prefix of the thread's name
+   * @param sleepTimeInMilliseconds sleep time in milli-seconds
+   * @param addOrRemove true to add to the sleep list. false to remove from the sleep list.
+   */
+  public void sleepOnWait(String threadNamesPrefix, long sleepTimeInMilliseconds, boolean addOrRemove) {
+    if (addOrRemove) {
+      sleepOnWaitThreads.put(threadNamesPrefix, sleepTimeInMilliseconds);
+    } else {
+      sleepOnWaitThreads.remove(threadNamesPrefix);
     }
   }
 

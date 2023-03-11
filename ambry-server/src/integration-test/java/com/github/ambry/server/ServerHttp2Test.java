@@ -22,6 +22,7 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.store.CompactionManager;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
@@ -30,6 +31,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import org.junit.After;
@@ -91,7 +93,46 @@ public class ServerHttp2Test {
     http2Cluster =
         new MockCluster(serverSSLProps, false, new MockTime(SystemTime.getInstance().milliseconds()), 9, 3, 3);
     notificationSystem = new MockNotificationSystem(http2Cluster.getClusterMap());
-    http2Cluster.initializeServers(notificationSystem);
+    http2Cluster.initializeServers(notificationSystem, false);
+    http2Cluster.startServers();
+  }
+
+  public static void initializeTestsWithCompaction() throws Exception {
+    File trustStoreFile = File.createTempFile("truststore", ".jks");
+
+    Properties clientSSLProps = new Properties();
+    TestSSLUtils.addSSLProperties(clientSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile,
+        "http2-blocking-channel-client");
+    TestSSLUtils.addHttp2Properties(clientSSLProps, SSLFactory.Mode.CLIENT, false);
+    clientSSLConfig1 = new SSLConfig(new VerifiableProperties(clientSSLProps));
+    clientSSLConfig2 = new SSLConfig(new VerifiableProperties(clientSSLProps));
+    clientSSLConfig3 = new SSLConfig(new VerifiableProperties(clientSSLProps));
+
+    // Router
+    routerProps = new Properties();
+    routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
+    routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
+    routerProps.setProperty(RouterConfig.ROUTER_ENABLE_HTTP2_NETWORK_CLIENT, "true");
+    TestSSLUtils.addHttp2Properties(routerProps, SSLFactory.Mode.CLIENT, false);
+    TestSSLUtils.addSSLProperties(routerProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
+
+    // Server
+    Properties serverSSLProps;
+    serverSSLProps = new Properties();
+    TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
+    TestSSLUtils.addHttp2Properties(serverSSLProps, SSLFactory.Mode.SERVER, false);
+    serverSSLProps.setProperty("clustermap.enable.http2.replication", "true");
+
+    MockTime time = new MockTime(SystemTime.getInstance().milliseconds());
+    // switch off time movement for the compaction thread. Otherwise time moves too fast.
+    time.suspend(Collections.singleton(CompactionManager.THREAD_NAME_PREFIX));
+    // avoid compaction threads runs forever, each wait will sleep 1 seconds.
+    time.sleepOnWait(CompactionManager.THREAD_NAME_PREFIX, 1000, true);
+
+    http2Cluster = new MockCluster(serverSSLProps, false, time, 9, 1, 1);
+
+    notificationSystem = new MockNotificationSystem(http2Cluster.getClusterMap());
+    http2Cluster.initializeServers(notificationSystem, true);
     http2Cluster.startServers();
   }
 
@@ -129,6 +170,15 @@ public class ServerHttp2Test {
     boolean writeRepair = false;
     ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, routerProps, testEncryption,
         notificationSystem, writeRepair);
+  }
+
+  @Test
+  public void replicateIndexTest() throws Exception {
+    cleanup();
+    initializeTestsWithCompaction();
+
+    ServerTestUtil.replicateUpdateRecordTest(http2Cluster, clientSSLConfig1, routerProps, testEncryption,
+        notificationSystem);
   }
 
   @Test

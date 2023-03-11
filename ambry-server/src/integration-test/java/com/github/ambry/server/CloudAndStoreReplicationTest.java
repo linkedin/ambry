@@ -185,7 +185,7 @@ public class CloudAndStoreReplicationTest {
     for (MockDataNodeId serverNode : allRecoveryNodes) {
       AmbryServer server = recoveryCluster.initializeServer(serverNode, recoveryProperties, false, notificationSystem,
           SystemTime.getInstance(),
-          serverNode.equals(partitionLeaderRecoveryNode) ? leaderMockClusterAgentsFactory : null);
+          serverNode.equals(partitionLeaderRecoveryNode) ? leaderMockClusterAgentsFactory : null, false);
       recoveryCluster.addServer(server);
     }
 

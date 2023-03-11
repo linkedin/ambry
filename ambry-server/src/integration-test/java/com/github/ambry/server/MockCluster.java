@@ -156,8 +156,10 @@ public class MockCluster {
   /**
    * Initialize servers in the cluster.
    * @param notificationSystem {@link NotificationSystem} object.
+   * @param enableCompaction  if true, enable compaction
    */
-  public void initializeServers(NotificationSystem notificationSystem) throws InstantiationException {
+  public void initializeServers(NotificationSystem notificationSystem, boolean enableCompaction)
+      throws InstantiationException {
     this.notificationSystem = notificationSystem;
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     for (int i = 0; i < dataNodes.size(); i++) {
@@ -166,9 +168,18 @@ public class MockCluster {
       }
       dataNodes.get(i).setEnableHttp2Replication(enableHttp2Replication);
       AmbryServer server =
-          initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, notificationSystem, time, null);
+          initializeServer(dataNodes.get(i), sslProps, enableHardDeletes, notificationSystem, time, null,
+              enableCompaction);
       serverList.add(server);
     }
+  }
+
+  /**
+   * Initialize servers in the cluster.
+   * @param notificationSystem {@link NotificationSystem} object.
+   */
+  public void initializeServers(NotificationSystem notificationSystem) throws InstantiationException {
+    initializeServers(notificationSystem, false);
   }
 
   /**
@@ -245,10 +256,11 @@ public class MockCluster {
    * @param dataNodeId {@link DataNodeId} object of the server initialized.
    * @param enableHardDeletes {@code enableHardDeletes} flag.
    * @param sslProperties {@link Properties} object.
+   * @param enableCompaction true if compaction is enabled
    * @return {@link VerifiableProperties} object.
    */
   private VerifiableProperties createInitProperties(DataNodeId dataNodeId, boolean enableHardDeletes,
-      Properties sslProperties) {
+      Properties sslProperties, boolean enableCompaction) {
     Properties props = new Properties();
     props.setProperty("host.name", dataNodeId.getHostname());
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
@@ -266,8 +278,50 @@ public class MockCluster {
     props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
+
+    if (enableCompaction) {
+      // set compaction properties.
+      props.setProperty("store.compaction.policy.factory", "com.github.ambry.store.CompactAllPolicyFactory");
+      props.setProperty("store.compaction.triggers", "Admin,Periodic");
+      props.setProperty("store.min.used.capacity.to.trigger.compaction.in.percentage", "2");
+      props.setProperty("store.compaction.check.frequency.in.hours", "1");
+
+      // set journal properties: set small journal, compaction won't start if the log is covered by the journal
+      props.setProperty("store.index.max.number.of.inmem.elements", "10");
+      props.setProperty("store.max.number.of.entries.to.return.from.journal", "10");
+
+      // set small log segment size, compaction won't start if we only have one log segment.
+      props.setProperty("store.segment.size.in.bytes", "1000000");
+    }
+
     props.putAll(sslProperties);
     return new VerifiableProperties(props);
+  }
+
+  /**
+   * Initialize {@link AmbryServer} node.
+   * @param dataNodeId {@link DataNodeId} object of the server initialized.
+   * @param sslProperties {@link Properties} object.
+   * @param enableHardDeletes {@code enableHardDeletes} flag.
+   * @param notificationSystem {@link NotificationSystem} object.
+   * @param time {@link Time} object.
+   * @param mockClusterAgentsFactory {@link MockClusterAgentsFactory} object. If null, use the member {@code mockClusterAgentsFactory}.
+   * @param enableCompaction if true, enable compaction
+   * @return {@link AmbryServer} object.
+   */
+  public AmbryServer initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
+      NotificationSystem notificationSystem, Time time, MockClusterAgentsFactory mockClusterAgentsFactory,
+      boolean enableCompaction)
+      throws InstantiationException {
+    AmbryServer server;
+    if (mockClusterAgentsFactory != null) {
+      server = new AmbryServer(createInitProperties(dataNodeId, enableHardDeletes, sslProperties, enableCompaction),
+          mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time, null);
+    } else {
+      server = new AmbryServer(createInitProperties(dataNodeId, enableHardDeletes, sslProperties, enableCompaction),
+          this.mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time, null);
+    }
+    return server;
   }
 
   /**
@@ -283,16 +337,8 @@ public class MockCluster {
   public AmbryServer initializeServer(DataNodeId dataNodeId, Properties sslProperties, boolean enableHardDeletes,
       NotificationSystem notificationSystem, Time time, MockClusterAgentsFactory mockClusterAgentsFactory)
       throws InstantiationException {
-    AmbryServer server;
-    if (mockClusterAgentsFactory != null) {
-      server =
-          new AmbryServer(createInitProperties(dataNodeId, enableHardDeletes, sslProperties), mockClusterAgentsFactory,
-              mockClusterSpectatorFactory, notificationSystem, time, null);
-    } else {
-      server = new AmbryServer(createInitProperties(dataNodeId, enableHardDeletes, sslProperties),
-          this.mockClusterAgentsFactory, mockClusterSpectatorFactory, notificationSystem, time, null);
-    }
-    return server;
+    return initializeServer(dataNodeId, sslProperties, enableHardDeletes, notificationSystem, time,
+        mockClusterAgentsFactory, false);
   }
 
   /**
