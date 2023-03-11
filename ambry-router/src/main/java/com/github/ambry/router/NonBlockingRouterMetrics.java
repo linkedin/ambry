@@ -272,6 +272,13 @@ public class NonBlockingRouterMetrics {
   Map<Resource, CachedHistogram> putBlobResourceToLatency = new HashMap<>();
 
   public final CompressionMetrics compressionMetrics;
+  // Waiting time for a request to get response from network before timing out. Since we increase or decrease the
+  // timeout value based on load, we track the distribution of wait times.
+  public final Histogram requestWaitTimeBeforeExpiryOnNetworkTimeoutMs;
+  // Number of requests timed out waiting for response from network
+  public final Counter requestExpiryOnNetworkTimeoutCount;
+  // Number of requests timed out due to not being able to sent to network
+  public final Counter requestExpiryOnFinalTimeoutCount;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -629,6 +636,12 @@ public class NonBlockingRouterMetrics {
         metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "PollExceedAllowedRequestTime"));
 
     compressionMetrics = new CompressionMetrics(metricRegistry);
+    requestWaitTimeBeforeExpiryOnNetworkTimeoutMs = metricRegistry.histogram(
+        MetricRegistry.name(NonBlockingRouter.class, "RequestWaitTimeBeforeExpiryOnNetworkTimeoutMs"));
+    requestExpiryOnNetworkTimeoutCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RequestExpiryOnNetworkTimeoutCount"));
+    requestExpiryOnFinalTimeoutCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RequestExpiryOnFinalTimeoutCount"));
   }
 
   /**
