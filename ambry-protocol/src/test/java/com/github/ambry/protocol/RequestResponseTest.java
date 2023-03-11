@@ -1027,6 +1027,32 @@ public class RequestResponseTest {
   }
 
   /**
+   * Tests the ser/de of {@link ForceDeleteAdminRequest} and checks for equality of fields with reference data.
+   * @throws IOException
+   */
+  @Test
+  public void forceDeleteAdminRequestTest() throws IOException {
+    MockClusterMap clusterMap = new MockClusterMap();
+    int correlationId = 1;
+    String clientId = "ambry-forceDeleter";
+    BlobId blobId = new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
+        ClusterMap.UNKNOWN_DATACENTER_ID, Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM),
+        clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
+        BlobId.BlobDataType.DATACHUNK);
+    AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.ForceDelete, null, correlationId, clientId);
+    ForceDeleteAdminRequest forceDeleteAdminRequest = new ForceDeleteAdminRequest(blobId, adminRequest);
+    DataInputStream requestStream = serAndPrepForRead(forceDeleteAdminRequest, -1, true);
+    AdminRequest deserializedAdminRequest =
+        deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
+            AdminRequestOrResponseType.ForceDelete, null);
+    ForceDeleteAdminRequest deserialized =
+        ForceDeleteAdminRequest.readFrom(requestStream, deserializedAdminRequest, new BlobIdFactory(clusterMap));
+    Assert.assertEquals(blobId.getID(), deserialized.getStoreKey().getID());
+    forceDeleteAdminRequest.release();
+  }
+
+  /**
    * Tests for {@link TtlUpdateRequest} and {@link TtlUpdateResponse}.
    * @throws IOException
    */
