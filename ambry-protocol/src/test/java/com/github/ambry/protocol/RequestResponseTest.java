@@ -1040,8 +1040,9 @@ public class RequestResponseTest {
         Utils.getRandomShort(TestUtils.RANDOM),
         clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0), false,
         BlobId.BlobDataType.DATACHUNK);
+    short lifeVersion = 2;
     AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.ForceDelete, null, correlationId, clientId);
-    ForceDeleteAdminRequest forceDeleteAdminRequest = new ForceDeleteAdminRequest(blobId, adminRequest);
+    ForceDeleteAdminRequest forceDeleteAdminRequest = new ForceDeleteAdminRequest(blobId, lifeVersion, adminRequest);
     DataInputStream requestStream = serAndPrepForRead(forceDeleteAdminRequest, -1, true);
     AdminRequest deserializedAdminRequest =
         deserAdminRequestAndVerify(requestStream, clusterMap, correlationId, clientId,
@@ -1049,6 +1050,7 @@ public class RequestResponseTest {
     ForceDeleteAdminRequest deserialized =
         ForceDeleteAdminRequest.readFrom(requestStream, deserializedAdminRequest, new BlobIdFactory(clusterMap));
     Assert.assertEquals(blobId.getID(), deserialized.getStoreKey().getID());
+    Assert.assertEquals(lifeVersion, deserialized.getLifeVersion());
     forceDeleteAdminRequest.release();
   }
 

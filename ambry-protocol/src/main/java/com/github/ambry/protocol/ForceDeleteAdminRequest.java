@@ -1,3 +1,16 @@
+/**
+ * Copyright 2023 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.protocol;
 
 import com.github.ambry.store.StoreKey;
@@ -13,6 +26,7 @@ import java.io.IOException;
 public class ForceDeleteAdminRequest extends AdminRequest {
   private static final short VERSION_1 = 1;
   private final StoreKey storeKey;  // Blob Id
+  private final short lifeVersion;  // life version
   private final long sizeInBytes;   // request size in bytes
 
   /**
@@ -30,27 +44,37 @@ public class ForceDeleteAdminRequest extends AdminRequest {
       throw new IllegalStateException("Unrecognized version for ForceDeleteAdminRequest: " + versionId);
     }
     StoreKey storeKey = factory.getStoreKey(stream);
-    return new ForceDeleteAdminRequest(storeKey, adminRequest);
+    short lifeVersion = stream.readShort();
+    return new ForceDeleteAdminRequest(storeKey, lifeVersion, adminRequest);
   }
 
   /**
    * Constructor for {@link ForceDeleteAdminRequest}.
    * @param key The {@link StoreKey}.
+   * @param lifeVersion life version of the Blob
    * @param adminRequest the {@link AdminRequest} that contains common admin request related information.
    */
-  public ForceDeleteAdminRequest(StoreKey key, AdminRequest adminRequest) {
+  public ForceDeleteAdminRequest(StoreKey key, short lifeVersion, AdminRequest adminRequest) {
     super(AdminRequestOrResponseType.ForceDelete, adminRequest.getPartitionId(), adminRequest.getCorrelationId(),
         adminRequest.getClientId());
     this.storeKey = key;
-    // Header + Version + StoreKey
-    this.sizeInBytes = super.sizeInBytes() + Short.BYTES + storeKey.sizeInBytes();
+    this.lifeVersion = lifeVersion;
+    // Header + format version + StoreKey + lifeVersion
+    this.sizeInBytes = super.sizeInBytes() + Short.BYTES + storeKey.sizeInBytes() + Short.BYTES;
   }
 
   /**
-   * @return the BlobId in string format
+   * @return the store key
    */
   public StoreKey getStoreKey() {
     return storeKey;
+  }
+
+  /**
+   * @return the lifeVersion
+   */
+  public short getLifeVersion() {
+    return lifeVersion;
   }
 
   @Override
@@ -67,7 +91,9 @@ public class ForceDeleteAdminRequest extends AdminRequest {
         .append(", CorrelationId=")
         .append(correlationId)
         .append(", Key=")
-        .append(storeKey.getID());
+        .append(storeKey.getID())
+        .append(", lifeVersion=")
+        .append(lifeVersion);
     return sb.toString();
   }
 
@@ -76,5 +102,6 @@ public class ForceDeleteAdminRequest extends AdminRequest {
     super.prepareBuffer();
     bufferToSend.writeShort(VERSION_1);
     bufferToSend.writeBytes(storeKey.toBytes());
+    bufferToSend.writeShort(lifeVersion);
   }
 }
