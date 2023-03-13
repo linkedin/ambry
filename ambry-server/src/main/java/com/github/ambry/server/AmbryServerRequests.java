@@ -557,6 +557,12 @@ public class AmbryServerRequests extends AmbryRequests {
   private AdminResponse handleForceDeleteRequest(DataInputStream requestStream, AdminRequest adminRequest) {
     final int correlationId = adminRequest.getCorrelationId();
     final String clientId = adminRequest.getClientId();
+    // check if the force delete request is enabled.
+    if (!serverConfig.serverHandleForceDeleteRequestEnabled) {
+      logger.error("ForceDelete request is disabled");
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.Bad_Request);
+    }
+
     ForceDeleteAdminRequest forceDeleteAdminRequest;
     try {
       forceDeleteAdminRequest = ForceDeleteAdminRequest.readFrom(requestStream, adminRequest, storeKeyFactory);
@@ -588,7 +594,7 @@ public class AmbryServerRequests extends AmbryRequests {
       store.forceDelete(Collections.singletonList(info));
       return new AdminResponse(correlationId, clientId, ServerErrorCode.No_Error);
     } catch (StoreException e) {
-      logger.error("ForceDeleteAdminRequest Failed to find all message infos for given key {}", blobId, e);
+      logger.error("ForceDeleteAdminRequest failed to execute on given key {}", blobId, e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         return new AdminResponse(correlationId, clientId, Blob_Already_Exists);
       }

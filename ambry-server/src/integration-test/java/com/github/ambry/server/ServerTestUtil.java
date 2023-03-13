@@ -460,7 +460,6 @@ final class ServerTestUtil {
       adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
       jsonBytes = adminResponseWithContent.getContent();
-      objectMapper = new ObjectMapper();
       messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
       });
       assertEquals(0, messages.size());
@@ -505,8 +504,6 @@ final class ServerTestUtil {
       assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.No_Error,
           adminResponseWithContent.getError());
       jsonBytes = adminResponseWithContent.getContent();
-      objectMapper = new ObjectMapper();
-      StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
       messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {});
       // We should have one message info
       assertEquals(1, messages.size());
