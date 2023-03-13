@@ -582,14 +582,12 @@ public class AmbryServerRequests extends AmbryRequests {
       PartitionId partitionId = blobId.getPartition();
       Store store = storeManager.getStore(partitionId);
       if (store == null) {
-        logger.error("ForceDeleteAdminRequest BlobId {}'s partition[{}] doesn't exist or stopped in this host", blobId, partitionId.getId());
+        logger.error("ForceDeleteAdminRequest BlobId {}'s partition[{}] doesn't exist or stopped in this host", blobId,
+            partitionId.getId());
         return new AdminResponse(correlationId, clientId, ServerErrorCode.Replica_Unavailable);
       }
-      // Get the size of the delete record
-      MessageFormatInputStream stream =
-          new DeleteMessageFormatInputStream(storeKey, accountId, containerId, operationTimeMs, lifeVersion);
-      // Generate the MessageInfo
-      MessageInfo info = new MessageInfo(storeKey, stream.getSize(), accountId, containerId, operationTimeMs, lifeVersion);
+      // MessageInfo.size is supposed to be DeleteMessageFormatInputStream.size(). store.forceDelete will recalculate it.
+      MessageInfo info = new MessageInfo(storeKey, 0, accountId, containerId, operationTimeMs, lifeVersion);
 
       store.forceDelete(Collections.singletonList(info));
       return new AdminResponse(correlationId, clientId, ServerErrorCode.No_Error);
