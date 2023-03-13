@@ -80,6 +80,12 @@ public class ServerConfig {
   public final boolean serverHandleUndeleteRequestEnabled;
 
   /**
+   * True to enable ambry server handling ForceDelete requests.
+   */
+  @Config("server.handle.force.delete.request.enabled")
+  public final boolean serverHandleForceDeleteRequestEnabled;
+
+  /**
    * Implementation class for accountServiceFactory
    */
   @Config("server.account.service.factory")
@@ -115,6 +121,8 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.validate.request.based.on.store.state", false);
     serverHandleUndeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.undelete.request.enabled", false);
+    serverHandleForceDeleteRequestEnabled =
+        verifiableProperties.getBoolean("server.handle.force.delete.request.enabled", false);
     serverAccountServiceFactory = verifiableProperties.getString("server.account.service.factory",
         "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
     serverParticipantsConsistencyCheckerPeriodSec =

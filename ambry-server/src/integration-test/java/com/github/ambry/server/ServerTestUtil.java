@@ -78,6 +78,7 @@ import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.ForceDeleteAdminRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -203,6 +204,10 @@ final class ServerTestUtil {
       BlobId blobId5 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
           BlobId.BlobDataType.DATACHUNK);
+      BlobId blobId6 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionIds.get(0), false,
+          BlobId.BlobDataType.DATACHUNK);
+
       // put blob 1
       PutRequest putRequest =
           new PutRequest(1, "client1", blobId1, properties, ByteBuffer.wrap(userMetadata), Unpooled.wrappedBuffer(data),
@@ -455,7 +460,6 @@ final class ServerTestUtil {
       adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
       jsonBytes = adminResponseWithContent.getContent();
-      objectMapper = new ObjectMapper();
       messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
       });
       assertEquals(0, messages.size());
@@ -478,6 +482,70 @@ final class ServerTestUtil {
       adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.Bad_Request, adminResponseWithContent.getError());
+
+      //
+      // Start the test of ForceDeleteAdminRequest
+      //
+      // Force delete on a blob which doesn't exist.
+      short lifeVersion = 1;
+      long nowTime = System.currentTimeMillis();
+      ForceDeleteAdminRequest forceDeleteAdminRequest = new ForceDeleteAdminRequest(blobId6, lifeVersion,
+          new AdminRequest(AdminRequestOrResponseType.ForceDelete, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(forceDeleteAdminRequest).getInputStream();
+      AdminResponse adminResponse = AdminResponse.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.No_Error, adminResponse.getError());
+      // Use BlobIndexAdminRequest to verify we have one message info.
+      blobIndexAdminRequest = new BlobIndexAdminRequest(blobId6,
+          new AdminRequest(AdminRequestOrResponseType.BlobIndex, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(blobIndexAdminRequest).getInputStream();
+      adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.No_Error,
+          adminResponseWithContent.getError());
+      jsonBytes = adminResponseWithContent.getContent();
+      messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {});
+      // We should have one message info
+      assertEquals(1, messages.size());
+      MessageInfo deleteRecordInfo = messages.values().stream().findFirst().get();
+      // it is delete tombstone
+      assertEquals(accountId, deleteRecordInfo.getAccountId());
+      assertEquals(containerId, deleteRecordInfo.getContainerId());
+      assertEquals(true, deleteRecordInfo.isDeleted());
+      assertEquals(false, deleteRecordInfo.isTtlUpdated());
+      assertEquals(false, deleteRecordInfo.isUndeleted());
+      assertEquals(false, deleteRecordInfo.isExpired());
+      assertEquals(-1, deleteRecordInfo.getExpirationTimeInMs());
+      assertEquals(lifeVersion, deleteRecordInfo.getLifeVersion());
+      assertTrue(deleteRecordInfo.getOperationTimeMs() >= Utils.getTimeInMsToTheNearestSec(nowTime));
+      assertEquals(null, deleteRecordInfo.getCrc());
+
+      // Do this test for blob id 1, it's a PutBlob. Force delete should return Blob_Already_Exists
+      forceDeleteAdminRequest = new ForceDeleteAdminRequest(blobId1, lifeVersion,
+          new AdminRequest(AdminRequestOrResponseType.ForceDelete, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(forceDeleteAdminRequest).getInputStream();
+      adminResponse = AdminResponse.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Blob_Already_Exists, adminResponse.getError());
+
+      // Do this test for a fake partition
+      forceDeleteAdminRequest = new ForceDeleteAdminRequest(fakeBlobId, lifeVersion,
+          new AdminRequest(AdminRequestOrResponseType.ForceDelete, fakePartition, 1, "clientid2"));
+      stream = channel.sendAndReceive(forceDeleteAdminRequest).getInputStream();
+      adminResponse = AdminResponse.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Bad_Request, adminResponse.getError());
+
+      // Do this test for a mal-formatted blobid
+      forceDeleteAdminRequest = new ForceDeleteAdminRequest(new MockId("malformat-id"), lifeVersion,
+          new AdminRequest(AdminRequestOrResponseType.ForceDelete, partitionIds.get(0), 1, "clientid2"));
+      stream = channel.sendAndReceive(forceDeleteAdminRequest).getInputStream();
+      adminResponse = AdminResponse.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Bad_Request, adminResponse.getError());
+      //
+      // End the test of forceDeleteAdminRequest
+      //
 
       // fetch blob that does not exist
       // get blob properties
@@ -502,7 +570,7 @@ final class ServerTestUtil {
       BlobStoreControlAdminRequest controlRequest =
           new BlobStoreControlAdminRequest((short) 0, BlobStoreControlAction.StopStore, adminRequest);
       stream = channel.sendAndReceive(controlRequest).getInputStream();
-      AdminResponse adminResponse = AdminResponse.readFrom(stream);
+      adminResponse = AdminResponse.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
       assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
 
@@ -543,6 +611,14 @@ final class ServerTestUtil {
       adminResponseWithContent = AdminResponseWithContent.readFrom(stream);
       releaseNettyBufUnderneathStream(stream);
       assertEquals(ServerErrorCode.Replica_Unavailable, adminResponseWithContent.getError());
+
+      // force delete a blob from a stopped store
+      forceDeleteAdminRequest = new ForceDeleteAdminRequest(blobId2, lifeVersion,
+          new AdminRequest(AdminRequestOrResponseType.ForceDelete, blobId2.getPartition(), 1, "clientid2"));
+      stream = channel.sendAndReceive(forceDeleteAdminRequest).getInputStream();
+      adminResponse = AdminResponse.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.Replica_Unavailable, adminResponse.getError());
 
       // start the store via AdminRequest
       System.out.println("Begin to restart the BlobStore");

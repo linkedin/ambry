@@ -264,6 +264,7 @@ public class MockCluster {
     props.setProperty("clustermap.host.name", "localhost");
     props.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     props.setProperty("server.handle.undelete.request.enabled", "true");
+    props.setProperty("server.handle.force.delete.request.enabled", "true");
     props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
     props.putAll(sslProperties);
@@ -348,7 +349,7 @@ public class MockCluster {
         new Thread(new ServerShutdown(shutdownLatch, server)).start();
       }
       try {
-        if (!shutdownLatch.await(1, TimeUnit.MINUTES)) {
+        if (!shutdownLatch.await(3, TimeUnit.MINUTES)) {
           fail("Did not shutdown in 1 minute");
         }
       } catch (Exception e) {

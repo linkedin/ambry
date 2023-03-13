@@ -31,6 +31,8 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.ServerConfig;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
@@ -44,6 +46,7 @@ import com.github.ambry.protocol.BlobIndexAdminRequest;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
+import com.github.ambry.protocol.ForceDeleteAdminRequest;
 import com.github.ambry.protocol.ReplicationControlAdminRequest;
 import com.github.ambry.protocol.RequestControlAdminRequest;
 import com.github.ambry.protocol.RequestOrResponseType;
@@ -56,7 +59,9 @@ import com.github.ambry.store.DiskManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
@@ -221,6 +226,9 @@ public class AmbryServerRequests extends AmbryRequests {
         case BlobIndex:
           response = handleBlobIndexRequest(requestStream, adminRequest);
           break;
+        case ForceDelete:
+          response = handleForceDeleteRequest(requestStream, adminRequest);
+          break;
       }
     } catch (Exception e) {
       logger.error("Unknown exception for admin request {}", adminRequest, e);
@@ -234,6 +242,10 @@ public class AmbryServerRequests extends AmbryRequests {
         case HealthCheck:
         case BlobIndex:
           response = new AdminResponseWithContent(adminRequest.getCorrelationId(), adminRequest.getClientId(),
+              ServerErrorCode.Unknown_Error);
+          break;
+        case ForceDelete:
+          response = new AdminResponse(adminRequest.getCorrelationId(), adminRequest.getClientId(),
               ServerErrorCode.Unknown_Error);
           break;
       }
@@ -534,6 +546,60 @@ public class AmbryServerRequests extends AmbryRequests {
     }
     return new AdminResponseWithContent(correlationId, clientId, ServerErrorCode.Unknown_Error,
         errorMessage.getBytes());
+  }
+
+  /**
+   * Handles {@link ForceDeleteAdminRequest}.
+   * @param requestStream the serialized bytes of the request.
+   * @param adminRequest the {@link AdminRequest} received.
+   * @return the {@link AdminResponse} to the request.
+   */
+  private AdminResponse handleForceDeleteRequest(DataInputStream requestStream, AdminRequest adminRequest) {
+    final int correlationId = adminRequest.getCorrelationId();
+    final String clientId = adminRequest.getClientId();
+    // check if the force delete request is enabled.
+    if (!serverConfig.serverHandleForceDeleteRequestEnabled) {
+      logger.error("ForceDelete request is disabled");
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.Bad_Request);
+    }
+
+    ForceDeleteAdminRequest forceDeleteAdminRequest;
+    try {
+      forceDeleteAdminRequest = ForceDeleteAdminRequest.readFrom(requestStream, adminRequest, storeKeyFactory);
+    } catch (Exception e) {
+      logger.error("Failed to deserialize ForceDeleteAdminRequest", e);
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.Bad_Request);
+    }
+
+    StoreKey storeKey = forceDeleteAdminRequest.getStoreKey();
+    short lifeVersion = forceDeleteAdminRequest.getLifeVersion();
+    long operationTimeMs = System.currentTimeMillis();
+    BlobId blobId = (BlobId)storeKey;
+    short accountId = blobId.getAccountId();
+    short containerId = blobId.getContainerId();
+
+    try {
+      PartitionId partitionId = blobId.getPartition();
+      Store store = storeManager.getStore(partitionId);
+      if (store == null) {
+        logger.error("ForceDeleteAdminRequest BlobId {}'s partition[{}] doesn't exist or stopped in this host", blobId,
+            partitionId.getId());
+        return new AdminResponse(correlationId, clientId, ServerErrorCode.Replica_Unavailable);
+      }
+      // MessageInfo.size is supposed to be DeleteMessageFormatInputStream.size(). store.forceDelete will recalculate it.
+      MessageInfo info = new MessageInfo(storeKey, 0, accountId, containerId, operationTimeMs, lifeVersion);
+
+      store.forceDelete(Collections.singletonList(info));
+      return new AdminResponse(correlationId, clientId, ServerErrorCode.No_Error);
+    } catch (StoreException e) {
+      logger.error("ForceDeleteAdminRequest failed to execute on given key {}", blobId, e);
+      if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
+        return new AdminResponse(correlationId, clientId, Blob_Already_Exists);
+      }
+    } catch (Exception e) {
+      logger.error("ForceDeleteAdminRequest Unexpected error when handleForceDeleteRequest", e);
+    }
+    return new AdminResponse(correlationId, clientId, ServerErrorCode.Unknown_Error);
   }
 
   /**
