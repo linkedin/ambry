@@ -720,9 +720,6 @@ public class BlobStore implements Store {
           FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
           index.markAsDeleted(info.getStoreKey(), fileSpan, info, info.getOperationTimeMs(), info.getLifeVersion());
           endOffsetOfLastMessage = fileSpan.getEndOffset();
-          // FORCE_DELETE_TODO: Do we need update blobStoreStats? We don't have PutBlob to compact.
-          //blobStoreStats.handleNewDeleteEntry(info.getStoreKey(), deleteIndexValue,
-          //    originalPuts.get(correspondingPutIndex), indexValuesPriorToDelete.get(correspondingPutIndex));
         }
         logger.trace("Store : {} force delete has been marked in the index ", dataDir);
       }

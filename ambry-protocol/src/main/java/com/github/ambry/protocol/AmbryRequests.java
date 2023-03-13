@@ -1540,6 +1540,18 @@ public class AmbryRequests implements RequestAPI {
             metrics.totalRequestDroppedRate.mark();
           }
           break;
+        case ForceDelete:
+          metrics.forceDeleteRequestQueueTimeInMs.update(requestQueueTime);
+          metrics.forceDeleteRequestRate.mark();
+          metrics.forceDeleteRequestProcessingTimeInMs.update(requestProcessingTime);
+          responseQueueTimeHistogram = metrics.forceDeleteResponseQueueTimeInMs;
+          responseSendTimeHistogram = metrics.forceDeleteResponseSendTimeInMs;
+          requestTotalTimeHistogram = metrics.forceDeleteRequestTotalTimeInMs;
+          if (isRequestDropped) {
+            metrics.forceDeleteDroppedRate.mark();
+            metrics.totalRequestDroppedRate.mark();
+          }
+          break;
       }
     }
 
