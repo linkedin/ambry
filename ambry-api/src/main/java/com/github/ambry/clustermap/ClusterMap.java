@@ -54,12 +54,29 @@ public interface ClusterMap extends AutoCloseable {
   List<? extends PartitionId> getWritablePartitionIds(String partitionClass);
 
   /**
+   * Gets a list of partitions that are available for writes. Gets a mutable shallow copy of the list of the partitions
+   * that are available for writes
+   * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
+   * @return a list of all writable partitions belonging to the partition class (or all writable partitions if
+   * {@code partitionClass} is {@code null})
+   */
+  List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass);
+
+  /**
    * Get a writable partition chosen at random that belongs to given partition class.
    * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
    * @param partitionsToExclude list of partitions that shouldn't be considered as a possible partition returned
    * @return chosen random partition. Can be {@code null}
    */
   PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude);
+
+  /**
+   * Get a fully writable partition chosen at random that belongs to given partition class.
+   * @param partitionClass the partition class whose fully writable partitions are required. Can be {@code null}
+   * @param partitionsToExclude list of partitions that shouldn't be considered as a possible partition returned
+   * @return chosen random partition. Can be {@code null}.
+   */
+  PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude);
 
   /**
    * Gets a list of all partitions in the cluster.  Gets a mutable shallow copy of the list of all partitions.

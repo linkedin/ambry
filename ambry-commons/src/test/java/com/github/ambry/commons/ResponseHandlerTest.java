@@ -71,7 +71,17 @@ public class ResponseHandlerTest {
     }
 
     @Override
+    public List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+      return null;
+    }
+
+    @Override
     public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+      return null;
+    }
+
+    @Override
+    public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
       return null;
     }
 

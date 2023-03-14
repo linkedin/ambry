@@ -33,6 +33,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
@@ -97,6 +98,8 @@ public class ClusterMapUtils {
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
   static final int CURRENT_SCHEMA_VERSION = 0;
+  static final String WRITABLE_LOG_STR = "writable";
+  static final String FULLY_WRITABLE_LOG_STR = "fully writable";
   private static final Logger logger = LoggerFactory.getLogger(ClusterMapUtils.class);
 
   /**
@@ -681,19 +684,56 @@ public class ClusterMapUtils {
      * datacenter (all writable partitions if it is {@code null}).
      */
     List<PartitionId> getWritablePartitions(String partitionClass) {
-      List<PartitionId> writablePartitions = new ArrayList<>();
-      List<PartitionId> healthyWritablePartitions = new ArrayList<>();
+      return getPartitionsWithState(partitionClass, (partitionState -> partitionState != PartitionState.READ_ONLY),
+          WRITABLE_LOG_STR);
+    }
+
+    /**
+     * Returns all the partitions that are in the state {@link PartitionState#READ_WRITE} AND have the highest number of
+     * replicas in the local datacenter for the given {@code partitionClass}.
+     * <p/>
+     * Also attempts to return only partitions with healthy replicas but if no such partitions are found, returns all
+     * the eligible partitions irrespective of replica health.
+     * <p/>
+     * If {@code partitionClass} is {@code null}, gets writable partitions from all partition classes.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @return all the writable partitions in {@code partitionClass} with the highest replica count in the local
+     * datacenter (all writable partitions if it is {@code null}).
+     */
+    List<PartitionId> getFullyWritablePartitions(String partitionClass) {
+      return getPartitionsWithState(partitionClass, (partitionState -> partitionState == PartitionState.READ_WRITE),
+          FULLY_WRITABLE_LOG_STR);
+    }
+
+    /**
+     * Returns all the partitions that meet the specified stateCriteria AND have the highest number of
+     * replicas in the local datacenter for the given {@code partitionClass}.
+     * <p/>
+     * Also attempts to return only partitions with healthy replicas but if no such partitions are found, returns all
+     * the eligible partitions irrespective of replica health.
+     * <p/>
+     * If {@code partitionClass} is {@code null}, gets partitions from all partition classes.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @param stateCriteria {@link Predicate} that specifies the selection criteria for the partition based on {@link PartitionState}.
+     * @param criteriaStr String representing a name for stateCriteria for logging.
+     * @return all the writable partitions in {@code partitionClass} with the highest replica count in the local
+     * datacenter (all writable partitions if it is {@code null}).
+     */
+    List<PartitionId> getPartitionsWithState(String partitionClass, Predicate<PartitionState> stateCriteria,
+        String criteriaStr) {
+      List<PartitionId> suitablePartitions = new ArrayList<>();
+      List<PartitionId> healthySuitablePartitions = new ArrayList<>();
       for (PartitionId partition : getPartitionsInClass(partitionClass, true)) {
-        if (partition.getPartitionState() != PartitionState.READ_ONLY) {
-          writablePartitions.add(partition);
+        if (stateCriteria.test(partition.getPartitionState())) {
+          suitablePartitions.add(partition);
           if (areAllReplicasForPartitionUp((partition))) {
-            healthyWritablePartitions.add(partition);
+            healthySuitablePartitions.add(partition);
           }
         } else {
-          logger.debug("{} is in READ_ONLY state, skipping it", partition.toString());
+          logger.debug("{} doesn't meet {} criteria, skipping it", partition, criteriaStr);
         }
       }
-      return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
+      return healthySuitablePartitions.isEmpty() ? suitablePartitions : healthySuitablePartitions;
     }
 
     /**
@@ -706,7 +746,39 @@ public class ClusterMapUtils {
      * @return A writable partition or {@code null} if no writable partition with given criteria found
      */
     PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
-      PartitionId anyWritablePartition = null;
+      return getRandomPartitionWithState(partitionClass, partitionsToExclude,
+          (partitionState -> partitionState != PartitionState.READ_ONLY), WRITABLE_LOG_STR);
+    }
+
+    /**
+     * Returns a fully writable partition selected at random, that belongs to the specified partition class and that is in
+     * the state {@link PartitionState#READ_WRITE} AND has enough replicas up. In case none of the partitions have enough
+     * replicas up, any fully writable partition is returned. Enough replicas is considered to be all local replicas if such
+     * information is available. In case localDatacenterName is not available, all of the partition's replicas should be up.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @param partitionsToExclude partitions that should be excluded from the result. Can be {@code null} or empty.
+     * @return A fully writable partition or {@code null} if no fully writable partition with given criteria found
+     */
+    PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+      return getRandomPartitionWithState(partitionClass, partitionsToExclude,
+          (partitionState -> partitionState == PartitionState.READ_WRITE), FULLY_WRITABLE_LOG_STR);
+    }
+
+    /**
+     * Returns a partition selected at random, that belongs to the specified partition class and meets the specified
+     * stateCriteria AND has enough replicas up. In case none of the partitions have enough
+     * replicas up, any partition that meets the state criteria is returned. Enough replicas is considered to be all
+     * local replicas if such information is available. In case localDatacenterName is not available, all of the
+     * partition's replicas should be up.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @param partitionsToExclude partitions that should be excluded from the result. Can be {@code null} or empty.
+     * @param stateCriteria {@link Predicate} that specifies the selection criteria for the partition based on {@link PartitionState}.
+     * @param criteriaStr String representing a name for stateCriteria for logging.
+     * @return A partition that meets the specified stateCriteria or {@code null} if no partition with given stateCriteria found
+     */
+    PartitionId getRandomPartitionWithState(String partitionClass, List<PartitionId> partitionsToExclude,
+        Predicate<PartitionState> stateCriteria, String criteriaStr) {
+      PartitionId anySuitablePartition = null;
       long startTime = SystemTime.getInstance().milliseconds();
       List<PartitionId> partitionsInClass = new ArrayList<>();
       rwLock.readLock().lock();
@@ -718,8 +790,8 @@ public class ClusterMapUtils {
           PartitionId selected = partitionsInClass.get(randomIndex);
           if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(
               selected)) {
-            if (selected.getPartitionState() != PartitionState.READ_ONLY) {
-              anyWritablePartition = selected;
+            if (stateCriteria.test(selected.getPartitionState())) {
+              anySuitablePartition = selected;
               if (hasEnoughEligibleWritableReplicas(selected)) {
                 return selected;
               }
@@ -731,15 +803,17 @@ public class ClusterMapUtils {
           workingSize--;
         }
         //if we are here then that means we couldn't find any partition with all local replicas up
-        return anyWritablePartition;
+        return anySuitablePartition;
       } finally {
         rwLock.readLock().unlock();
-        if (anyWritablePartition != null) {
-          logger.debug("Partition class {}, number of partitions {}, selected partition {}, search time in Ms {}",
-              partitionClass != null ? partitionClass : "", partitionsInClass.size(), anyWritablePartition,
+        if (anySuitablePartition != null) {
+          logger.debug(
+              "Partition class {}, number of partitions {}, selected partition {} for {} criteria, search time in Ms {}",
+              partitionClass != null ? partitionClass : "", partitionsInClass.size(), anySuitablePartition,
               SystemTime.getInstance().milliseconds() - startTime);
         } else {
-          logger.debug("Partition class {}, number of partitions {}, no partition selected, search time in Ms {}",
+          logger.debug(
+              "Partition class {}, number of partitions {}, no partition selected for {} criteria, search time in Ms {}",
               partitionClass != null ? partitionClass : "", partitionsInClass.size(),
               SystemTime.getInstance().milliseconds() - startTime);
         }

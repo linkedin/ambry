@@ -1473,6 +1473,9 @@ public class HelixClusterManagerTest {
     // getWritablePartitions(), class null
     returnedPartitions = clusterManager.getWritablePartitionIds(null);
     checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, specialRw, specialPrw, defaultPrw, defaultRwForPrw));
+    // getFullyWritablePartitions(), class null
+    returnedPartitions = clusterManager.getFullyWritablePartitionIds(null);
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, specialRw, defaultRwForPrw));
 
     // getPartitions(), class default
     returnedPartitions = clusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS);
@@ -1480,6 +1483,9 @@ public class HelixClusterManagerTest {
     // getWritablePartitions(), class default
     returnedPartitions = clusterManager.getWritablePartitionIds(DEFAULT_PARTITION_CLASS);
     checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultPrw, defaultRwForPrw));
+    // getFullyWritablePartitions(), class default
+    returnedPartitions = clusterManager.getFullyWritablePartitionIds(DEFAULT_PARTITION_CLASS);
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultRwForPrw));
 
     // getPartitions(), class special
     returnedPartitions = clusterManager.getAllPartitionIds(SPECIAL_PARTITION_CLASS);
@@ -1487,6 +1493,9 @@ public class HelixClusterManagerTest {
     // getWritablePartitions(), class special
     returnedPartitions = clusterManager.getWritablePartitionIds(SPECIAL_PARTITION_CLASS);
     checkReturnedPartitions(returnedPartitions, Arrays.asList(specialRw, specialPrw));
+    // getFullyWritablePartitions(), class special
+    returnedPartitions = clusterManager.getFullyWritablePartitionIds(SPECIAL_PARTITION_CLASS);
+    checkReturnedPartitions(returnedPartitions, Arrays.asList(specialRw));
   }
 
   /**
@@ -1598,6 +1607,57 @@ public class HelixClusterManagerTest {
       assertFalse(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 2, true));
       assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 1, true));
     }
+  }
+
+  /**
+   * Test for {@link HelixClusterManager#getRandomWritablePartition(String, List)}.
+   */
+  @Test
+  public void testGetRandomWritablePartition() {
+    Set<PartitionState> writablePartitionStates = new HashSet<>();
+    writablePartitionStates.add(PartitionState.READ_WRITE);
+    writablePartitionStates.add(PartitionState.PARTIAL_READ_WRITE);
+    List<PartitionId> partitionIdsToExclude = new ArrayList<>();
+    List<? extends PartitionId> allPartitionIds = clusterManager.getAllPartitionIds(null);
+    int totalWritablePartitions = (int) allPartitionIds.stream()
+        .filter(partitionId -> partitionId.getPartitionState() != PartitionState.READ_ONLY)
+        .count();
+
+    // Call getRandomWritablePartition as many times as there are writable partitions. It should always return writable partition.
+    for (int i = 0; i < totalWritablePartitions; i++) {
+      PartitionId partitionId = clusterManager.getRandomWritablePartition(null, partitionIdsToExclude);
+      if (partitionId == null) {
+        System.out.print("null");
+      }
+      assertTrue(
+          "getRandomWritablePartition should always return partitions in READ_WRITE or PARTIAL_READ_WRITE states only.",
+          writablePartitionStates.contains(partitionId.getPartitionState()));
+      partitionIdsToExclude.add(partitionId);
+    }
+    // Now that all the writable partitions are in the excluded list, getRandomWritablePartition should not return any partition.
+    assertNull(clusterManager.getRandomWritablePartition(null, partitionIdsToExclude));
+  }
+
+  /**
+   * Test for {@link HelixClusterManager#getRandomFullyWritablePartition(String, List)}.
+   */
+  @Test
+  public void testGetRandomFullyWritablePartition() {
+    List<PartitionId> partitionIdsToExclude = new ArrayList<>();
+    List<? extends PartitionId> allPartitionIds = clusterManager.getAllPartitionIds(null);
+    int totalFullyWritablePartitions = (int) allPartitionIds.stream()
+        .filter(partitionId -> partitionId.getPartitionState() == PartitionState.READ_WRITE)
+        .count();
+
+    // Call getRandomFullyWritablePartition as many times as there are fully writable partitions. It should always return fully writable partition.
+    for (int i = 0; i < totalFullyWritablePartitions; i++) {
+      PartitionId partitionId = clusterManager.getRandomFullyWritablePartition(null, partitionIdsToExclude);
+      assertEquals("getRandomFullyWritablePartition should always return partitions in READ_WRITE states only.",
+          PartitionState.READ_WRITE, partitionId.getPartitionState());
+      partitionIdsToExclude.add(partitionId);
+    }
+    // Now that all the fully writable partitions are in the excluded list, getRandomWritablePartition should not return any partition.
+    assertNull(clusterManager.getRandomFullyWritablePartition(null, partitionIdsToExclude));
   }
 
   // Helpers

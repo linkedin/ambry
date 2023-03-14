@@ -134,6 +134,10 @@ public class PartitionLayout {
     return partitionSelectionHelper.getWritablePartitions(partitionClass);
   }
 
+  public List<PartitionId> getFullyWritablePartitions(String partitionClass) {
+    return partitionSelectionHelper.getFullyWritablePartitions(partitionClass);
+  }
+
   public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> toExclude) {
     return partitionSelectionHelper.getRandomWritablePartition(partitionClass, toExclude);
   }
@@ -144,6 +148,9 @@ public class PartitionLayout {
         checkLocalDcOnly);
   }
 
+  public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> toExclude) {
+    return partitionSelectionHelper.getRandomFullyWritablePartition(partitionClass, toExclude);
+  }
 
   public long getAllocatedRawCapacityInBytes() {
     return allocatedRawCapacityInBytes;

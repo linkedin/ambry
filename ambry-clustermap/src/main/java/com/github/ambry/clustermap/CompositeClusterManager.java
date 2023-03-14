@@ -95,31 +95,60 @@ class CompositeClusterManager implements ClusterMap {
     List<PartitionId> staticWritablePartitionIds = staticClusterManager.getWritablePartitionIds(partitionClass);
     if (helixClusterManager != null) {
       List<PartitionId> helixWritablePartitionIds = helixClusterManager.getWritablePartitionIds(partitionClass);
-      Set<String> staticWritablePartitionSet = new HashSet<>();
-      Set<String> helixWritablePartitionSet = new HashSet<>();
-      staticWritablePartitionIds.forEach(p -> staticWritablePartitionSet.add(p.toString()));
-      helixWritablePartitionIds.forEach(p -> helixWritablePartitionSet.add(p.toString()));
-      if (!staticWritablePartitionSet.equals(helixWritablePartitionSet)) {
-        helixClusterManagerMetrics.getWritablePartitionIdsMismatchCount.inc();
-        Set<String> partitionsInBoth = new HashSet<>(staticWritablePartitionSet);
-        partitionsInBoth.retainAll(helixWritablePartitionSet);
-        staticWritablePartitionSet.removeAll(partitionsInBoth);
-        helixWritablePartitionSet.removeAll(partitionsInBoth);
-        staticWritablePartitionSet.forEach(
-            partition -> logger.debug("{} is writable partition in static clustermap only", partition));
-        helixWritablePartitionSet.forEach(
-            partition -> logger.debug("{} is writable partition in helix only", partition));
-      }
+      comparePartitions(staticWritablePartitionIds, helixWritablePartitionIds, "writable");
     }
     return staticWritablePartitionIds;
   }
 
   /**
+   * {@inheritDoc}
+   * Get fully writable partition ids from both the underlying {@link StaticClusterManager} and the underlying
+   * {@link HelixClusterManager}. Compare the two and if there is a mismatch, update a metric.
+   * @param partitionClass the partition class whose fully writable partitions are required. Can be {@code null}
+   * @return a list of fully writable partition ids from the underlying {@link StaticClusterManager}.
+   */
+  @Override
+  public List<PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+    List<PartitionId> staticWritablePartitionIds = staticClusterManager.getFullyWritablePartitionIds(partitionClass);
+    if (helixClusterManager != null) {
+      List<PartitionId> helixWritablePartitionIds = helixClusterManager.getFullyWritablePartitionIds(partitionClass);
+      comparePartitions(staticWritablePartitionIds, helixWritablePartitionIds, "fully writable");
+    }
+    return staticWritablePartitionIds;
+  }
+
+  /**
+   * Compare the partition ids from both the underlying {@link StaticClusterManager} and the underlying
+   * {@link HelixClusterManager}.If there is a mismatch, update a metric.
+   * @param staticPartitionIds {@link List} of {@link PartitionId}s from {@link StaticClusterManager}.
+   * @param helixPartitionIds {@link List} of {@link PartitionId}s from {@link HelixClusterManager}.
+   * @param partitionStateStr String representing the state of the partitionids for logging.
+   */
+  private void comparePartitions(List<PartitionId> staticPartitionIds, List<PartitionId> helixPartitionIds,
+      String partitionStateStr) {
+    Set<String> staticWritablePartitionSet = new HashSet<>();
+    Set<String> helixWritablePartitionSet = new HashSet<>();
+    staticPartitionIds.forEach(p -> staticWritablePartitionSet.add(p.toString()));
+    helixPartitionIds.forEach(p -> helixWritablePartitionSet.add(p.toString()));
+    if (!staticWritablePartitionSet.equals(helixWritablePartitionSet)) {
+      helixClusterManagerMetrics.getWritablePartitionIdsMismatchCount.inc();
+      Set<String> partitionsInBoth = new HashSet<>(staticWritablePartitionSet);
+      partitionsInBoth.retainAll(helixWritablePartitionSet);
+      staticWritablePartitionSet.removeAll(partitionsInBoth);
+      helixWritablePartitionSet.removeAll(partitionsInBoth);
+      staticWritablePartitionSet.forEach(
+          partition -> logger.debug("{} is {} partition in static clustermap only", partition, partitionStateStr));
+      helixWritablePartitionSet.forEach(
+          partition -> logger.debug("{} is {} partition in helix only", partition, partitionStateStr));
+    }
+  }
+
+  /**
    * Randomly select a writable partition from a list of writable partition ids obtained from both the underlying
    * {@link StaticClusterManager} and the underlying {@link HelixClusterManager}. This implementation can add to put
-   * latency because getWritablePartitionIds called within this method, scans all the partitions to get writable paritions.
+   * latency because getWritablePartitionIds called within this method, scans all the partitions to get writable partitions.
    * However, since {@link CompositeClusterManager} is used only during migrations, when both static and helix cluster
-   * managers co-exist, the latency can be a acceptable trade off for the extra metrics obtained from
+   * managers co-exist, the latency can be an acceptable trade-off for the extra metrics obtained from
    * getWritablePartitionIds.
    * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
    * @param partitionsToExclude A list of partitions that should be excluded from consideration.
@@ -128,6 +157,24 @@ class CompositeClusterManager implements ClusterMap {
   @Override
   public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     List<? extends PartitionId> partitions = getWritablePartitionIds(partitionClass);
+    partitions.removeAll(partitionsToExclude);
+    return partitions.isEmpty() ? null : partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
+  }
+
+  /**
+   * Randomly select a fully writable partition from a list of fully writable partition ids obtained from both the underlying
+   * {@link StaticClusterManager} and the underlying {@link HelixClusterManager}. This implementation can add to put
+   * latency because getFullyWritablePartitionIds called within this method, scans all the partitions to get fully writable partitions.
+   * However, since {@link CompositeClusterManager} is used only during migrations, when both static and helix cluster
+   * managers co-exist, the latency can be an acceptable trade-off for the extra metrics obtained from
+   * getFullyWritablePartitionIds.
+   * @param partitionClass the partition class whose partially writable partitions are required. Can be {@code null}
+   * @param partitionsToExclude A list of partitions that should be excluded from consideration.
+   * @return A fully writable partition id object. Can be {@code null}
+   */
+  @Override
+  public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    List<? extends PartitionId> partitions = getFullyWritablePartitionIds(partitionClass);
     partitions.removeAll(partitionsToExclude);
     return partitions.isEmpty() ? null : partitions.get(ThreadLocalRandom.current().nextInt(partitions.size()));
   }
