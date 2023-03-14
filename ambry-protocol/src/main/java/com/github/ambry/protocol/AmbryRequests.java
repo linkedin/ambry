@@ -107,6 +107,8 @@ public class AmbryRequests implements RequestAPI {
   protected final MetricRegistry metricRegistry;
   protected final ServerConfig serverConfig;
   protected ThreadLocal<Transformer> transformer;
+  private final ObjectMapper objectMapper = new ObjectMapper();
+
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
@@ -152,6 +154,7 @@ public class AmbryRequests implements RequestAPI {
       }
       return null;
     });
+    StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
   }
 
   @Override
@@ -836,6 +839,7 @@ public class AmbryRequests implements RequestAPI {
           // If GetBlob with GetOption.Include_All returns Blob_Deleted.
           // it means the remote peer probably only have a delete tombstone for this blob.
           // get the tombstone index entry from the remote replica and force write the delete record.
+          metrics.replicateDeleteRecordRate.mark();
           Pair<ServerErrorCode, MessageInfo> indexEntryResult =
               getTombStoneFromRemoteReplica(blobId, remoteHostName, remoteHostPort);
           errorCode = indexEntryResult.getFirst();
@@ -923,14 +927,12 @@ public class AmbryRequests implements RequestAPI {
       }
 
       byte[] jsonBytes = adminResponse.getContent();
-      ObjectMapper objectMapper = new ObjectMapper();
-      StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
       Map<String, MessageInfo> messages =
           objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
           });
       if (messages == null || messages.size() != 1) {
-        logger.error("ReplicateBlobRequest adminRequest for {} from the remote node {} {} return {} entries", blobId,
-            remoteHostName, remoteHostPort, messages == null ? 0 : messages.size());
+        logger.error("ReplicateBlobRequest adminRequest for {} from the remote node {} {} return {} entries {}", blobId,
+            remoteHostName, remoteHostPort, messages == null ? 0 : messages.size(), messages);
         return new Pair<>(ServerErrorCode.Unknown_Error, null);
       }
       MessageInfo info = messages.values().stream().findFirst().get();

@@ -132,7 +132,7 @@ public class ServerHttp2Test {
   }
 
   @Test
-  public void replicateDeleteRecrodTest() {
+  public void replicateDeleteRecordTest() {
     // test ReplicateBlob delete tombstone record
     ServerTestUtil.replicateDeleteRecordTest(http2Cluster, clientSSLConfig1, routerProps, testEncryption,
         notificationSystem);

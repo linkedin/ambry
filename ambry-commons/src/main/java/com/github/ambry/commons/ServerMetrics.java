@@ -195,6 +195,7 @@ public class ServerMetrics {
   public final Meter getBlobInfoRequestRate;
   public final Meter deleteBlobRequestRate;
   public final Meter replicateBlobRequestRate;
+  public final Meter replicateDeleteRecordRate;
   public final Meter undeleteBlobRequestRate;
   public final Meter updateBlobTtlRequestRate;
   public final Meter replicaMetadataRequestRate;
@@ -549,6 +550,7 @@ public class ServerMetrics {
     undeleteBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "UndeleteBlobRequestRate"));
     updateBlobTtlRequestRate = registry.meter(MetricRegistry.name(requestClass, "UpdateBlobTtlRequestRate"));
     replicateBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicateBlobRequestRate"));
+    replicateDeleteRecordRate = registry.meter(MetricRegistry.name(requestClass, "ReplicateDeleteRecordRate"));
     replicaMetadataRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicaMetadataRequestRate"));
     triggerCompactionRequestRate = registry.meter(MetricRegistry.name(requestClass, "TriggerCompactionRequestRate"));
     requestControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "RequestControlRequestRate"));
