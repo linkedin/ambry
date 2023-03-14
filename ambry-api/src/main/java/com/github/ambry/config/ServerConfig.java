@@ -86,6 +86,12 @@ public class ServerConfig {
   public final boolean serverHandleForceDeleteRequestEnabled;
 
   /**
+   * True to enable replicateBlob to replicate tombstone
+   */
+  @Config("server.replicate.tombstone.enabled")
+  public final boolean serverReplicateTombstoneEnabled;
+
+  /**
    * Implementation class for accountServiceFactory
    */
   @Config("server.account.service.factory")
@@ -123,6 +129,7 @@ public class ServerConfig {
         verifiableProperties.getBoolean("server.handle.undelete.request.enabled", false);
     serverHandleForceDeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.force.delete.request.enabled", false);
+    serverReplicateTombstoneEnabled = verifiableProperties.getBoolean("server.replicate.tombstone.enabled", false);
     serverAccountServiceFactory = verifiableProperties.getString("server.account.service.factory",
         "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
     serverParticipantsConsistencyCheckerPeriodSec =

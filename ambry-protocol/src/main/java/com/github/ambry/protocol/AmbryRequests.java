@@ -836,22 +836,24 @@ public class AmbryRequests implements RequestAPI {
             errorCode = ServerErrorCode.No_Error;
           } // if (output == null)
         } else if (errorCode == ServerErrorCode.Blob_Deleted) {
-          // If GetBlob with GetOption.Include_All returns Blob_Deleted.
-          // it means the remote peer probably only have a delete tombstone for this blob.
-          // get the tombstone index entry from the remote replica and force write the delete record.
-          metrics.replicateDeleteRecordRate.mark();
-          Pair<ServerErrorCode, MessageInfo> indexEntryResult =
-              getTombStoneFromRemoteReplica(blobId, remoteHostName, remoteHostPort);
-          errorCode = indexEntryResult.getFirst();
-          MessageInfo indexInfo = indexEntryResult.getSecond();
+          if (serverConfig.serverReplicateTombstoneEnabled) {
+            // If GetBlob with GetOption.Include_All returns Blob_Deleted.
+            // it means the remote peer probably only have a delete tombstone for this blob.
+            // get the tombstone index entry from the remote replica and force write the delete record.
+            metrics.replicateDeleteRecordRate.mark();
+            Pair<ServerErrorCode, MessageInfo> indexEntryResult =
+                getTombStoneFromRemoteReplica(blobId, remoteHostName, remoteHostPort);
+            errorCode = indexEntryResult.getFirst();
+            MessageInfo indexInfo = indexEntryResult.getSecond();
 
-          if (errorCode == ServerErrorCode.No_Error) {
-            Store store = storeManager.getStore(blobId.getPartition());
-            // if forceDelete fail due to local store has the key, it throws Already_Exist exception
-            store.forceDelete(Collections.singletonList(indexInfo));
-            logger.info("ReplicateBlobRequest replicated tombstone {} from remote host {} {} : {}", blobId,
-                remoteHostName, remoteHostPort, indexInfo);
-          }
+            if (errorCode == ServerErrorCode.No_Error) {
+              Store store = storeManager.getStore(blobId.getPartition());
+              // if forceDelete fail due to local store has the key, it throws Already_Exist exception
+              store.forceDelete(Collections.singletonList(indexInfo));
+              logger.info("ReplicateBlobRequest replicated tombstone {} from remote host {} {} : {}", blobId,
+                  remoteHostName, remoteHostPort, indexInfo);
+            }
+          } // if (serverConfig.serverReplicateTombstoneEnabled)
         } // if (errorCode == XXX)
       } // if (remoteDataNode.equals(currentNode))
     } catch (StoreException e) { // catch the store write exception
