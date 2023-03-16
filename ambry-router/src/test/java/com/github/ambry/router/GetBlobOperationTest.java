@@ -298,7 +298,7 @@ public class GetBlobOperationTest {
       String temp = "abcdefg";
       while (sb.length() < blobSize) {
         int len = temp.length() < blobSize - sb.length() ? temp.length() : blobSize - sb.length();
-        sb.append("abcdefg".substring(0, len));
+        sb.append("abcdefg" .substring(0, len));
       }
       // This is highly compressible content
       putContent = sb.toString().getBytes(StandardCharsets.US_ASCII);
@@ -895,6 +895,47 @@ public class GetBlobOperationTest {
     serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
 
     getErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
+  }
+
+  /**
+   * Test the case where deletes and unavailability happens at the same time, delete should take priority.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcUnavailabilityWithDelete() throws Exception {
+    doPut();
+    Properties props = getDefaultNonBlockingRouterProperties(true);
+    props.setProperty(RouterConfig.ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED, "true");
+    props.setProperty(RouterConfig.ROUTER_GET_BLOB_RETRY_LIMIT_COUNT, "10");
+    props.setProperty(RouterConfig.ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, "10");
+    RouterConfig oldRouterConfig = routerConfig;
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    try {
+      // For originating DC, let's bring down two replicas and have one replica return deleted
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      List<ReplicaId> localReplicas = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+          .collect(Collectors.toList());
+      partitionId.setReplicaState(localReplicas.get(0), ReplicaState.LEADER);
+      partitionId.setReplicaState(localReplicas.get(1), ReplicaState.ERROR);
+      partitionId.setReplicaState(localReplicas.get(2), ReplicaState.ERROR);
+      // LEADER should return DELETED
+      ReplicaId leaderReplica = localReplicas.get(0);
+      mockServerLayout.getMockServer(leaderReplica.getDataNodeId().getHostname(),
+          leaderReplica.getDataNodeId().getPort()).setServerErrorForAllRequests(ServerErrorCode.Blob_Deleted);
+
+      // For remote DC, let's bring down all the replicas
+      partitionId.replicaIds.stream()
+          .filter(replicaId -> !replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+          .forEach(rid -> partitionId.setReplicaState(rid, ReplicaState.ERROR));
+
+      getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDeleted);
+      // There is not retry for this error
+      assertEquals(0, routerMetrics.getBlobRetryCount.getCount());
+    } finally {
+      routerConfig = oldRouterConfig;
+    }
   }
 
   /**
@@ -1992,7 +2033,7 @@ public class GetBlobOperationTest {
 
     // Generate the test compressed buffer.
     ByteBuffer sourceBuffer =
-        ByteBuffer.wrap("Compression unit test to test compression.".getBytes(StandardCharsets.UTF_8));
+        ByteBuffer.wrap("Compression unit test to test compression." .getBytes(StandardCharsets.UTF_8));
     ZstdCompression zstd = new ZstdCompression();
     ByteBuffer compressedBuffer = ByteBuffer.allocate(zstd.getCompressBufferSize(sourceBuffer.remaining()));
     zstd.compress(sourceBuffer, compressedBuffer);
