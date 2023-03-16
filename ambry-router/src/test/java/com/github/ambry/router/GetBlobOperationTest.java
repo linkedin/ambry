@@ -298,7 +298,7 @@ public class GetBlobOperationTest {
       String temp = "abcdefg";
       while (sb.length() < blobSize) {
         int len = temp.length() < blobSize - sb.length() ? temp.length() : blobSize - sb.length();
-        sb.append("abcdefg" .substring(0, len));
+        sb.append("abcdefg".substring(0, len));
       }
       // This is highly compressible content
       putContent = sb.toString().getBytes(StandardCharsets.US_ASCII);
