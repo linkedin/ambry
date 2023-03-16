@@ -177,10 +177,6 @@ public class PostDatasetsHandler {
             throw new RestServiceException("Version schema can't be null for dataset creation",
                 RestServiceErrorCode.BadRequest);
           }
-          if (datasetToUpdate.getExpirationTimeMs() == null) {
-            throw new RestServiceException("ExpirationTimeMs can't be null for dataset creation",
-                RestServiceErrorCode.BadRequest);
-          }
         }
         datasetName = datasetToUpdate.getDatasetName();
         accountName = datasetToUpdate.getAccountName();

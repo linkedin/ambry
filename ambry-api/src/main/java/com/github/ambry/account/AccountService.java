@@ -181,12 +181,15 @@ public interface AccountService extends Closeable {
    * @param containerName The name for the container.
    * @param datasetName The name of the dataset.
    * @param version The version of the dataset.
-   * @param expirationTimeMs the expiration time of the version of the dataset.
+   * @param timeToLiveInSeconds The dataset version level ttl.
+   * @param creationTimeInMs the creationTime of the dataset version.
+   * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
    * @return the {@link DatasetVersionRecord}.
    * @throws AccountServiceException
    */
   default DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
-      String version, long expirationTimeMs) throws AccountServiceException {
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled)
+      throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 

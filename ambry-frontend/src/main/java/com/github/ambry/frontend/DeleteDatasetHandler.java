@@ -136,6 +136,7 @@ public class DeleteDatasetHandler {
         accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
         containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
         datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
+        //TODO: delete all the dataset version under the dataset.
         accountService.deleteDataset(accountName, containerName, datasetName);
         restResponseChannel.setStatus(ResponseStatus.Accepted);
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
