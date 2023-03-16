@@ -59,7 +59,7 @@ public class FrontendConfig {
   private static final String DEFAULT_CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = "GetBlob,GetBlobInfo,GetSignedUrl";
 
 
-  /**u
+  /**
    * Cache validity in seconds for non-private blobs for GET.
    */
   @Config("frontend.cache.validity.seconds")
