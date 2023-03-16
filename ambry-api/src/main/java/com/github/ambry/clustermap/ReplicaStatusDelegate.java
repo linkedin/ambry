@@ -44,9 +44,7 @@ public class ReplicaStatusDelegate {
    * @return {@code true} if replica is successfully partial-sealed. {@code false} if not.
    */
   public boolean partialSeal(ReplicaId replicaId) {
-    // TODO Efficient_Metadata_Operations_TODO Once the partial seal logic is complete end to end, this should set the
-    //  partial seal state.
-    return clusterParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
+    return clusterParticipant.setReplicaSealedState(replicaId, ReplicaSealStatus.PARTIALLY_SEALED);
   }
 
   /**
