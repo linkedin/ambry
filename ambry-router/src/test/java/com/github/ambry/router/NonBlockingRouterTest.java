@@ -3283,4 +3283,58 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
     }
   }
+
+  /**
+   * Test On-Demand Replication on deletion success case. And the service id of the delete request is null.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDeleteWithNullServiceID() throws Exception {
+    // service id is null
+    String serviceID = null;
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    String localDcName = "DC3";
+    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setOperationParams();
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+    // set two local replicas Replica_Unavailable.
+    DataNodeId sourceDataNode = null;
+    List<ServerErrorCode> serverErrors = new ArrayList<>();
+    serverErrors.add(ServerErrorCode.Blob_Not_Found); // return NOT_FOUND for the first Delete Request
+    for (MockServer server : layout.getMockServers()) {
+      if (server.getDataCenter().equals(localDcName)) {
+        // local DC, return NO_ERROR for one replica,
+        if (sourceDataNode == null) {
+          sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+        } else {
+          server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+        }
+      } else {
+        server.setServerErrors(serverErrors);
+      }
+    }
+    router.deleteBlob(blobId, serviceID).get();
+
+    // simulate Replica_Unavailable for all local replicas. Then verify delete from the remote replica
+    for (MockServer server : layout.getMockServers()) {
+      if (server.getDataCenter().equals(localDcName)) {
+        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+      }
+    }
+    try {
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, null).get();
+      fail("Blob must be deleted");
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+    } finally {
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+      router.getNotFoundCache().invalidateAll();
+      if (router != null) {
+        router.close();
+      }
+    }
+  }
 }
