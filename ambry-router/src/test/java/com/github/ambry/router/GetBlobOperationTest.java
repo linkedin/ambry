@@ -2033,7 +2033,7 @@ public class GetBlobOperationTest {
 
     // Generate the test compressed buffer.
     ByteBuffer sourceBuffer =
-        ByteBuffer.wrap("Compression unit test to test compression." .getBytes(StandardCharsets.UTF_8));
+        ByteBuffer.wrap("Compression unit test to test compression.".getBytes(StandardCharsets.UTF_8));
     ZstdCompression zstd = new ZstdCompression();
     ByteBuffer compressedBuffer = ByteBuffer.allocate(zstd.getCompressBufferSize(sourceBuffer.remaining()));
     zstd.compress(sourceBuffer, compressedBuffer);
