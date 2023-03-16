@@ -306,6 +306,24 @@ class CompositeClusterManager implements ClusterMap {
   }
 
   @Override
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    boolean staticHasEnoughEligible =
+        staticClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+            checkLocalDcOnly);
+    if (helixClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+        checkLocalDcOnly) != staticHasEnoughEligible) {
+      String staticLogStr = staticHasEnoughEligible ? "has" : "doesn't have";
+      String helixLogStr = staticHasEnoughEligible ? "doesn't have" : "has";
+      logger.warn(
+          "Partition {} {} enough eligible replicas for put in static cluster map, but {} enough eligible replicas for put in helix cluster map.",
+          partitionId, staticLogStr, helixLogStr);
+    }
+    return staticHasEnoughEligible;
+  }
+
+
+  @Override
   public void close() {
     staticClusterManager.close();
     if (helixClusterManager != null) {

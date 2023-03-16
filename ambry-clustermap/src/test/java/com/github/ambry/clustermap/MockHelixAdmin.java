@@ -253,6 +253,20 @@ public class MockHelixAdmin implements HelixAdmin {
   }
 
   /**
+   * Set the replica state of the specified replica of the specified partition to the specified state.
+   * @param partition the partition whose leader replica should be changed.
+   * @param instance the instance of the replica for which state needs to be changed.
+   * @param newReplicaState The new state of the replica.
+   */
+  void setReplicaStateForPartition(String partition, String instance, ReplicaState newReplicaState) {
+    instanceToReplicaStateInfos.get(instance).setReplicaState(partition, newReplicaState.name());
+    // Update external view maps
+    String resource = partitionToResourceMap.get(partition);
+    ResourceInfo resourceInfo = resourceToResourceInfoMap.get(resource);
+    resourceInfo.setReplicasState(partition, instance, newReplicaState.name());
+  }
+
+  /**
    * Set or reset the sealed state of the replica for the given partition on the given instance.
    * @param partition the {@link AmbryPartition}
    * @param instance the instance name.

@@ -163,6 +163,14 @@ class StaticClusterManager implements ClusterMap {
     // no op for static cluster manager
   }
 
+  @Override
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    return partitionLayout.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+        checkLocalDcOnly);
+  }
+
+
   // Administrative API
   // -----------------------
 

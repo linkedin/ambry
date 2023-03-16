@@ -222,6 +222,14 @@ public class RecoveryTestClusterManager implements ClusterMap {
   }
 
   @Override
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    return helixClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+        checkLocalDcOnly);
+  }
+
+
+  @Override
   public void close() {
     staticClusterManager.close();
     if (helixClusterManager != null) {

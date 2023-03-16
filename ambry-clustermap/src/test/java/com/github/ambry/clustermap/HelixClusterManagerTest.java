@@ -1532,6 +1532,74 @@ public class HelixClusterManagerTest {
     }
   }
 
+  @Test
+  public void testHasEnoughEligibleReplicasAvailableForPut() throws Exception {
+    PartitionId partitionId = clusterManager.getAllPartitionIds(null).get(0);
+    assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 2, true));
+    assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 3, true));
+    assertFalse(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 4, true));
+    assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 2, false));
+    assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 3, false));
+    assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 5, false));
+    assertFalse(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 7, false));
+    List<? extends ReplicaId> remoteReplicaIds = partitionId.getReplicaIds()
+        .stream()
+        .filter(replicaId -> !replicaId.getDataNodeId().getDatacenterName().equals(localDc))
+        .collect(Collectors.toList());
+    remoteReplicaIds.get(0).markDiskDown();
+    assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 5, false));
+    remoteReplicaIds.get(1).markDiskDown();
+    assertFalse(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 5, false));
+    List<? extends ReplicaId> localReplicas = partitionId.getReplicaIds()
+        .stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDc))
+        .collect(Collectors.toList());
+    localReplicas.get(0).markDiskDown();
+    assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 2, true));
+    localReplicas.get(1).markDiskDown();
+    assertFalse(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 2, true));
+
+    // reset disk states
+    remoteReplicaIds.get(0).markDiskUp();
+    remoteReplicaIds.get(1).markDiskUp();
+    localReplicas.get(0).markDiskUp();
+    localReplicas.get(1).markDiskUp();
+    assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 3, true));
+
+    if (clusterManager instanceof HelixClusterManager) {
+      // randomly choose a partition and change one its replica state of local cluster.
+      MockHelixAdmin localHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+      String instance = localHelixAdmin.getInstancesForPartition(partitionId.toPathString()).stream().findFirst().get();
+      localHelixAdmin.setReplicaStateForPartition(partitionId.toPathString(), instance, ReplicaState.BOOTSTRAP);
+      localHelixAdmin.triggerRoutingTableNotification();
+      int sleepCnt = 0;
+      while (partitionId.getReplicaIdsByState(ReplicaState.BOOTSTRAP, localDc).size() == 0) {
+        assertTrue("Routing table change (triggered by leadership change) didn't come within 1 sec", sleepCnt < 5);
+        Thread.sleep(200);
+        sleepCnt++;
+      }
+      assertFalse(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 3, true));
+      assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 2, true));
+
+      // choose another replica and set its state
+      String nextInstance = localHelixAdmin.getInstancesForPartition(partitionId.toPathString())
+          .stream()
+          .filter(node -> !node.equals(instance))
+          .findFirst()
+          .get();
+      localHelixAdmin.setReplicaStateForPartition(partitionId.toPathString(), nextInstance, ReplicaState.OFFLINE);
+      localHelixAdmin.triggerRoutingTableNotification();
+      sleepCnt = 0;
+      while (partitionId.getReplicaIdsByState(ReplicaState.OFFLINE, localDc).size() == 0) {
+        assertTrue("Routing table change (triggered by leadership change) didn't come within 1 sec", sleepCnt < 5);
+        Thread.sleep(200);
+        sleepCnt++;
+      }
+      assertFalse(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 2, true));
+      assertTrue(clusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, 1, true));
+    }
+  }
+
   // Helpers
 
   /**

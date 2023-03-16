@@ -692,6 +692,12 @@ public class BlobIdTransformerTest {
     public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
     }
 
+    @Override
+    public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+        boolean checkLocalDcOnly) {
+      return false;
+    }
+
     public void close() {
     }
   }
