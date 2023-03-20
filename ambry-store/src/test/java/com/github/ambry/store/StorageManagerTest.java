@@ -26,6 +26,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockDiskId;
 import com.github.ambry.clustermap.MockHelixManagerFactory;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -468,6 +469,60 @@ public class StorageManagerTest {
     mockHelixParticipant.getReplicaSyncUpManager().onDisconnectionComplete(testReplica);
     assertTrue("Helix participant transition didn't get invoked within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Test disk free space is decreased after replica is added.
+   */
+  @Test
+  public void updateDiskSpaceOnReplicaAdditionTest() throws InterruptedException, StoreException {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    ReplicaId newReplica = newPartition.getReplicaIds().get(0);
+    // 1. Get disk space before adding the replica
+    ReplicaId replicaOnSameDisk =
+        localReplicas.stream().filter(r -> r.getDiskId().equals(newReplica.getDiskId())).findFirst().get();
+    long originalDiskSpace =
+        storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).getDisk().getAvailableSpaceInBytes();
+    // 2. Induce state transition to add a replica
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+    // 3. Verify disk space is reduced after adding the replica
+    assertEquals("Disk space should be reduced after replica addition",
+        originalDiskSpace - newReplica.getCapacityInBytes(),
+        storageManager.partitionToDiskManager.get(newPartition).getDisk().getAvailableSpaceInBytes());
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Test disk free space is increased after replica is removed.
+   */
+  @Test
+  public void updateDiskSpaceOnReplicaRemovalTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    ReplicaId oldReplica = localReplicas.get(0);
+    MockClusterParticipant mockHelixParticipant = Mockito.spy(new MockClusterParticipant());
+    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+    // Get disk space before dropping the replica
+    MockDiskId diskId = (MockDiskId) oldReplica.getDiskId();
+    long originalSpace = diskId.getAvailableSpaceInBytes();
+    storageManager.controlCompactionForBlobStore(oldReplica.getPartitionId(), false);
+    storageManager.shutdownBlobStore(oldReplica.getPartitionId());
+    mockHelixParticipant.onPartitionBecomeDroppedFromOffline(oldReplica.getPartitionId().toPathString());
+    // Verify disk space is increased on removing replica
+    assertEquals("Disk free space should be increased after removing replica",
+        originalSpace + oldReplica.getCapacityInBytes(), oldReplica.getDiskId().getAvailableSpaceInBytes());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
