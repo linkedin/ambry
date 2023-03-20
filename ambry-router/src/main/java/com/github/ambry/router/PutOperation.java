@@ -18,6 +18,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobId.BlobDataType;
@@ -1772,6 +1773,7 @@ class PutOperation {
     private final TreeMap<Integer, Pair<StoreKey, Long>> indexToChunkIdsAndChunkSizes;
     private int intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
     private Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
+    private final PartitionId reservedPartitionId;
 
     /**
      * Initialize the MetadataPutChunk.
@@ -1780,6 +1782,7 @@ class PutOperation {
       indexToChunkIdsAndChunkSizes = new TreeMap<>();
       // metadata blob is in building state.
       state = ChunkState.Building;
+      reservedPartitionId = reserveMetadataPartition(partitionClass, Collections.emptyList());
     }
 
     @Override
@@ -1889,6 +1892,7 @@ class PutOperation {
         serialized.flip();
         buf = Unpooled.wrappedBuffer(serialized);
         onFillComplete(false);
+        checkReservedPartitionState(reservedPartitionId);
       } else {
         // if there is only one chunk
         blobId = (BlobId) indexToChunkIdsAndChunkSizes.get(0).getFirst();
@@ -1916,6 +1920,48 @@ class PutOperation {
           chunkBlobId, finalBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
           buf.readableBytes(), BlobType.MetadataBlob,
           encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+    }
+
+    /**
+     * Choose a random {@link PartitionId} for putting the metadata chunk and return it.
+     * @param partitionClass the partition class to choose partitions from.
+     * @param partitionIdsToExclude the list of {@link PartitionId}s that should be excluded from consideration.
+     * @return the chosen {@link PartitionId}
+     */
+    private PartitionId reserveMetadataPartition(String partitionClass, List<PartitionId> partitionIdsToExclude) {
+      PartitionId selected = clusterMap.getRandomFullyWritablePartition(partitionClass, partitionIdsToExclude);
+      if (selected == null) {
+        routerMetrics.numFailedPartitionReserveAttempts.inc();
+        return null;
+      }
+      if (!partitionClass.equals(selected.getPartitionClass())) {
+        logger.warn(
+            "{}: No partitions for partitionClass='{}' found, partitionClass='{}' used instead for metadata chunk. blobProperties={}",
+            loggingContext, partitionClass, selected.getPartitionClass(), passedInBlobProperties);
+        routerMetrics.numUnexpectedReservedPartitionClassCount.inc();
+      }
+      return selected;
+    }
+
+    /**
+     * Check if the reserved partition is available to take the Metadata chunk write.
+     * @param reservedPartitionId reserved partition id for the metadata chunk.
+     */
+    private void checkReservedPartitionState(PartitionId reservedPartitionId) {
+      if (reservedPartitionId == null) {
+        return;
+      }
+      if(reservedPartitionId.getPartitionState() == PartitionState.READ_ONLY) {
+        routerMetrics.numReservedPartitionFoundReadOnlyCount.inc();
+      }
+      if(!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
+          true)) {
+        routerMetrics.numReservedPartitionFoundUnavailableInLocalDcCount.inc();
+      }
+      if(!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
+          false)) {
+        routerMetrics.numReservedPartitionFoundUnavailableInAllDcCount.inc();
+      }
     }
   }
 

@@ -1352,6 +1352,7 @@ public class PutManagerTest {
   private void checkLastRequestPartitionClasses(int expectedCount, String expectedClass) {
     List<String> lastNRequestedPartitionClasses = mockClusterMap.getLastNRequestedPartitionClasses();
     if (expectedCount >= 0) {
+      expectedCount++; // to account for Metadata chunk's reserved partition id.
       assertEquals("Last requested partition class count is not as expected", expectedCount,
           lastNRequestedPartitionClasses.size());
     }
