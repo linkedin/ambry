@@ -513,6 +513,14 @@ public class HelixClusterManager implements ClusterMap {
     return property != null && property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO);
   }
 
+  @Override
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    return partitionSelectionHelper.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+        checkLocalDcOnly);
+  }
+
+
   /**
    * Disconnect from the HelixManagers associated with each and every datacenter.
    */

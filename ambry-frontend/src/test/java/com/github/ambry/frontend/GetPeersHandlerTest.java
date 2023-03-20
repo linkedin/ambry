@@ -397,6 +397,12 @@ class TailoredPeersClusterMap implements ClusterMap {
   }
 
   @Override
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    throw new IllegalStateException();
+  }
+
+  @Override
   public void close() {
   }
 

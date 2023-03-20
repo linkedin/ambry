@@ -163,6 +163,18 @@ public interface ClusterMap extends AutoCloseable {
   void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener);
 
   /**
+   * Check if there are at least requiredEligibleReplicaCount of replicas eligible for Put operation for the specified
+   * partition. If the specified checkLocalDcOnly is set to {@code true} then the check happens only for local datacenter.
+   * Otherwise, the check happens for all the datacenters.
+   * @param partitionId {@link PartitionId} whose replicas are checked for eligibility.
+   * @param requiredEligibleReplicaCount required number of replicas which should be eligible for put.
+   * @param checkLocalDcOnly if set to {@code true} then only local datacenter is checked. Otherwise, all the datacenters are checked.
+   * @return {@code true} if there are enough replicas. {@code false} otherwise.
+   */
+   boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+       boolean checkLocalDcOnly);
+
+  /**
    * Close the cluster map. Any cleanups should be done in this call.
    */
   @Override

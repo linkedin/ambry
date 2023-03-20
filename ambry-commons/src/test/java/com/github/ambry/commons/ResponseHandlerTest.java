@@ -136,6 +136,12 @@ public class ResponseHandlerTest {
     }
 
     @Override
+    public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+        boolean checkLocalDcOnly) {
+      return false;
+    }
+
+    @Override
     public void close() {
     }
 

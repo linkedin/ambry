@@ -138,6 +138,13 @@ public class PartitionLayout {
     return partitionSelectionHelper.getRandomWritablePartition(partitionClass, toExclude);
   }
 
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    return partitionSelectionHelper.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+        checkLocalDcOnly);
+  }
+
+
   public long getAllocatedRawCapacityInBytes() {
     return allocatedRawCapacityInBytes;
   }

@@ -764,6 +764,31 @@ public class ClusterMapUtils {
     }
 
     /**
+     * Check if there are at least requiredEligibleReplicaCount of replicas eligible for Put operation for the specified
+     * partition. If the specified checkLocalDcOnly is set to {@code true} then the check happens only for local datacenter.
+     * Otherwise, the check happens for all the datacenters.
+     * @param partitionId {@link PartitionId} whose replicas are checked for eligibility.
+     * @param requiredEligibleReplicaCount required number of replicas which should be eligible for put.
+     * @param checkLocalDcOnly if set to {@code true} then only local datacenter is checked. Otherwise, all the datacenters are checked.
+     * @return {@code true} if there are enough replicas. {@code false} otherwise.
+     */
+    boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+        boolean checkLocalDcOnly) {
+      Set<ReplicaId> eligibleReplicas = new HashSet<>();
+      EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)
+          .forEach(state -> eligibleReplicas.addAll(
+              partitionId.getReplicaIdsByState(state, checkLocalDcOnly ? localDatacenterName : null)));
+      int eligibleReplicaCount = 0;
+      for (ReplicaId replica : eligibleReplicas) {
+        if (!replica.isDown()) {
+          eligibleReplicaCount++;
+        }
+      }
+      return eligibleReplicaCount >= requiredEligibleReplicaCount;
+    }
+
+
+    /**
      * Check whether all local replicas of the given {@link PartitionId} are up.
      * @param partitionId the {@link PartitionId} to check.
      * @return true if all local replicas are up; false otherwise.
@@ -822,8 +847,7 @@ public class ClusterMapUtils {
           }
           if (partitionsByReplicaCount == null) {
             throw new IllegalArgumentException(
-                "No partitions for partition class = '" + partitionClass + "' or default partition class = '"
-                    + defaultPartitionClass + "' found");
+                "No partitions for partition class = '" + partitionClass + "' or default partition class = '" + defaultPartitionClass + "' found");
           }
           if (minimumReplicaCountRequired) {
             // get partitions with replica count >= min replica count specified in ClusterMapConfig

@@ -631,6 +631,16 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    if (!partitionsUnavailable) {
+      return partitionSelectionHelper.hasEnoughEligibleReplicasAvailableForPut(partitionId,
+          requiredEligibleReplicaCount, checkLocalDcOnly);
+    }
+    return false;
+  }
+
+  @Override
   public void close() {
     // No-op.
   }
