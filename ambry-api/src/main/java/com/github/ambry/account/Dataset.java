@@ -42,7 +42,7 @@ import java.util.regex.Pattern;
  *    "versionSchema": "TIMESTAMP",
  *    "expirationTimeMs": -1,
  *    "retentionCount": 10,
- *    "retentionTime": 3600,
+ *    "retentionTimeInSeconds": 3600,
  *    "userTags": "{userTag1:tagValue1}"
  *  } * </code></pre>
  */
@@ -62,7 +62,7 @@ public class Dataset {
   static final String DATASET_NAME_KEY = "datasetName";
   static final String JSON_VERSION_SCHEMA_KEY = "versionSchema";
   static final String JSON_RETENTION_COUNT_KEY = "retentionCount";
-  static final String JSON_RETENTION_TIME_KEY = "retentionTime";
+  static final String JSON_RETENTION_TIME_KEY = "retentionTimeInSeconds";
   static final String JSON_USER_TAGS_KEY = "userTags";
 
   @JsonProperty(ACCOUNT_NAME_KEY)
@@ -78,7 +78,7 @@ public class Dataset {
   private final Integer retentionCount;
   @JsonProperty(JSON_RETENTION_TIME_KEY)
   @JsonInclude(JsonInclude.Include.NON_DEFAULT)
-  private final Long retentionTime;
+  private final Long retentionTimeInSeconds;
   @JsonProperty(JSON_USER_TAGS_KEY)
   private final Map<String, String> userTags;
 
@@ -89,18 +89,18 @@ public class Dataset {
    * @param datasetName The name of the dataset. Cannot be null.
    * @param versionSchema The schema of the version. Cannot be null.
    * @param retentionCount The retention of dataset by count. The older versions will be deprecated. Can be null.
-   * @param retentionTime The time-to-live for versions of this dataset. Numbers equals to -1 indicate an unlimited retention.
+   * @param retentionTimeInSeconds The time-to-live for versions of this dataset. Numbers equals to -1 indicate an unlimited retention.
    * @param userTags The user defined metadata. Can be null.
    */
   public Dataset(String accountName, String containerName, String datasetName, VersionSchema versionSchema,
-      Integer retentionCount, Long retentionTime, Map<String, String> userTags) {
+      Integer retentionCount, Long retentionTimeInSeconds, Map<String, String> userTags) {
     checkPreconditions(accountName, containerName, datasetName);
     this.accountName = accountName;
     this.containerName = containerName;
     this.datasetName = datasetName;
     this.versionSchema = versionSchema;
     this.retentionCount = retentionCount;
-    this.retentionTime = retentionTime;
+    this.retentionTimeInSeconds = retentionTimeInSeconds;
     this.userTags = userTags;
   }
 
@@ -147,7 +147,7 @@ public class Dataset {
   /**
    * @return the time-to-live for versions of this dataset.
    */
-  public Long getRetentionTime() {return retentionTime; }
+  public Long getRetentionTimeInSeconds() {return retentionTimeInSeconds; }
 
   /**
    * @return the user defined metadata.
@@ -195,7 +195,7 @@ public class Dataset {
         && Objects.equals(datasetName, dataset.datasetName)
         && versionSchema == dataset.versionSchema
         && Objects.equals(retentionCount, dataset.retentionCount)
-        && Objects.equals(retentionTime, dataset.retentionTime)
+        && Objects.equals(retentionTimeInSeconds, dataset.retentionTimeInSeconds)
         && Objects.equals(userTags, dataset.userTags);
   }
 

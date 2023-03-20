@@ -66,7 +66,7 @@ public class AccountDao {
   public static final String DATASET_NAME = "datasetName";
   public static final String VERSION_SCHEMA = "versionSchema";
   public static final String RETENTION_COUNT = "retentionCount";
-  public static final String RETENTION_TIME = "retentionTime";
+  public static final String RETENTION_TIME_IN_SECONDS = "retentionTimeInSeconds";
   public static final String USER_TAGS = "userTags";
   public static final String DELETE_TS = "delete_ts";
 
@@ -145,21 +145,20 @@ public class AccountDao {
     insertDatasetSql =
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?)",
             DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT,
-            RETENTION_TIME, USER_TAGS);
+            RETENTION_TIME_IN_SECONDS, USER_TAGS);
     updateDatasetIfExpiredSql = String.format(
         "update %s set %s = ?, %s = now(3), %s = ?, %s = ?, %s = ? where %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
-        DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, RETENTION_TIME, USER_TAGS, ACCOUNT_ID,
+        DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS, ACCOUNT_ID,
         CONTAINER_ID, DATASET_NAME);
     //update the dataset field, in order to support partial update, if one parameter is null, keep the original value.
-    //if the delete_ts parameter from input equals to Utils.Infinite_Time(-1), set the delete_ts to null.
     updateDatasetSql = String.format(
         "update %1$s set %2$s = now(3)," + "`retentionCount` = IFNULL(?, `retentionCount`), "
-            + "`retentionTime` = IFNULL(?, `retentionTime`)," + "`userTags` = IFNULL(?, `userTags`)"
+            + "`retentionTimeInSeconds` = IFNULL(?, `retentionTimeInSeconds`)," + "`userTags` = IFNULL(?, `userTags`)"
             + " where %6$s = ? and %7$s = ? and %8$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_COUNT,
-        RETENTION_TIME, USER_TAGS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+        RETENTION_TIME_IN_SECONDS, USER_TAGS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getDatasetByNameSql =
         String.format("select %s, %s, %s, %s, %s, %s , %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
-            VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, RETENTION_TIME, USER_TAGS, DELETE_TS, DATASET_TABLE,
+            VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS, DELETE_TS, DATASET_TABLE,
             ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     deleteDatasetByIdSql = String.format(
         "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
@@ -470,10 +469,10 @@ public class AccountDao {
     statement.setString(3, datasetName);
     statement.setLong(4, version);
     long updatedExpirationTimeMs;
-    if (datasetVersionTtlEnabled || dataset.getRetentionTime() == null) {
+    if (datasetVersionTtlEnabled || dataset.getRetentionTimeInSeconds() == null) {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
     } else {
-      updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTime());
+      updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
     }
     if (updatedExpirationTimeMs == Infinite_Time) {
       statement.setTimestamp(5, null);
@@ -528,10 +527,10 @@ public class AccountDao {
       Dataset dataset, boolean datasetVersionTtlEnabled) throws SQLException, AccountServiceException {
     statement.setLong(1, version);
     long updatedExpirationTimeMs;
-    if (datasetVersionTtlEnabled || dataset.getRetentionTime() == null) {
+    if (datasetVersionTtlEnabled || dataset.getRetentionTimeInSeconds() == null) {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
     } else {
-      updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTime());
+      updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
     }
     if (updatedExpirationTimeMs == Infinite_Time) {
       statement.setTimestamp(2, null);
@@ -886,7 +885,7 @@ public class AccountDao {
     }
     int schemaVersionOrdinal = dataset.getVersionSchema().ordinal();
     Integer retentionCount = dataset.getRetentionCount();
-    Long retentionTime = dataset.getRetentionTime();
+    Long retentionTimeInSeconds = dataset.getRetentionTimeInSeconds();
     Map<String, String> userTags = dataset.getUserTags();
     String userTagsInJson;
     try {
@@ -904,8 +903,8 @@ public class AccountDao {
     } else {
       statement.setObject(5, null);
     }
-    if (retentionTime != null) {
-      statement.setLong(6, retentionTime);
+    if (retentionTimeInSeconds != null) {
+      statement.setLong(6, retentionTimeInSeconds);
     } else {
       statement.setObject(6, null);
     }
@@ -936,7 +935,7 @@ public class AccountDao {
     }
     int schemaVersionOrdinal = dataset.getVersionSchema().ordinal();
     Integer retentionCount = dataset.getRetentionCount();
-    Long retentionTime = dataset.getRetentionTime();
+    Long retentionTimeInSeconds = dataset.getRetentionTimeInSeconds();
     Map<String, String> userTags = dataset.getUserTags();
     String userTagsInJson;
     try {
@@ -951,8 +950,8 @@ public class AccountDao {
     } else {
       statement.setObject(2, null);
     }
-    if (retentionTime != null) {
-      statement.setLong(3, retentionTime);
+    if (retentionTimeInSeconds != null) {
+      statement.setLong(3, retentionTimeInSeconds);
     } else {
       statement.setObject(3, null);
     }
@@ -999,9 +998,9 @@ public class AccountDao {
     } else {
       statement.setObject(1, null);
     }
-    Long retentionTime = dataset.getRetentionTime();
-    if (retentionTime != null) {
-      statement.setLong(2, retentionTime);
+    Long retentionTimeInSeconds = dataset.getRetentionTimeInSeconds();
+    if (retentionTimeInSeconds != null) {
+      statement.setLong(2, retentionTimeInSeconds);
     } else {
       statement.setObject(2, null);
     }
@@ -1027,7 +1026,7 @@ public class AccountDao {
       String accountName, String containerName, String datasetName) throws SQLException, AccountServiceException {
     Dataset.VersionSchema versionSchema;
     Integer retentionCount;
-    Long retentionTime;
+    Long retentionTimeInSeconds;
     Timestamp deletionTime;
     Map<String, String> userTags = null;
     ResultSet resultSet = null;
@@ -1050,7 +1049,7 @@ public class AccountDao {
       }
       versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
       retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
-      retentionTime = resultSet.getObject(RETENTION_TIME, Long.class);
+      retentionTimeInSeconds = resultSet.getObject(RETENTION_TIME_IN_SECONDS, Long.class);
       String userTagsInJson = resultSet.getString(USER_TAGS);
       if (userTagsInJson != null) {
         try {
@@ -1064,7 +1063,7 @@ public class AccountDao {
       //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
       closeQuietly(resultSet);
     }
-    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionCount, retentionTime, userTags);
+    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionCount, retentionTimeInSeconds, userTags);
   }
 
   /**

@@ -91,7 +91,7 @@ public class AccountContainerTest {
   private List<Dataset> refDatasets;
   private List<String> refDatasetNames;
   private List<Dataset.VersionSchema> refDatasetVersionSchemas;
-  private List<Long> refDatasetRetentionTime;
+  private List<Long> refDatasetRetentionTimeInSeconds;
   private List<Integer> refDatasetRetentionCounts;
   private List<Map<String, String>> refDatasetUserTags;
 
@@ -309,7 +309,7 @@ public class AccountContainerTest {
       Dataset datasetFromBuilder = buildDatasetWithOtherFields(
           new DatasetBuilder(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i))
               .setVersionSchema(refDatasetVersionSchemas.get(i))
-              .setRetentionTime(refDatasetRetentionTime.get(i))
+              .setRetentionTimeInSeconds(refDatasetRetentionTimeInSeconds.get(i))
               .setRetentionCount(refDatasetRetentionCounts.get(i))
               .setUserTags(refDatasetUserTags.get(i)), refDatasets.get(i));
       assertDataset(datasetFromBuilder, i);
@@ -842,7 +842,7 @@ public class AccountContainerTest {
     assertEquals("Wrong dataset name", refDatasetNames.get(index), dataset.getDatasetName());
     assertEquals("Wrong version schema", refDatasetVersionSchemas.get(index), dataset.getVersionSchema());
     assertEquals("Wrong retention count", refDatasetRetentionCounts.get(index), dataset.getRetentionCount());
-    assertEquals("Wrong retention time", refDatasetRetentionTime.get(index), dataset.getRetentionTime());
+    assertEquals("Wrong retention time", refDatasetRetentionTimeInSeconds.get(index), dataset.getRetentionTimeInSeconds());
     assertEquals("Wrong user tage", refDatasetUserTags.get(index), dataset.getUserTags());
   }
 
@@ -1072,7 +1072,7 @@ public class AccountContainerTest {
   private void initializeRefDatasets() {
     refDatasetNames = new ArrayList<>();
     refDatasetVersionSchemas = new ArrayList<>();
-    refDatasetRetentionTime = new ArrayList<>();
+    refDatasetRetentionTimeInSeconds = new ArrayList<>();
     refDatasetRetentionCounts = new ArrayList<>();
     refDatasetUserTags = new ArrayList<>();
     refDatasets = new ArrayList<>();
@@ -1082,15 +1082,15 @@ public class AccountContainerTest {
       refDatasetNames.add(datasetName);
       refDatasetVersionSchemas.add(
           random.nextBoolean() ? Dataset.VersionSchema.MONOTONIC : Dataset.VersionSchema.TIMESTAMP);
-      long retentionTime = random.nextBoolean() ? -1 : Utils.getRandomLong(random, Long.MAX_VALUE);
-      refDatasetRetentionTime.add(retentionTime);
+      long retentionTimeInSeconds = random.nextBoolean() ? -1 : Utils.getRandomLong(random, Long.MAX_VALUE);
+      refDatasetRetentionTimeInSeconds.add(retentionTimeInSeconds);
       int retentionCount = Utils.getRandomShort(random);
       refDatasetRetentionCounts.add(retentionCount);
       Map<String, String> userTags = new HashMap<>();
       userTags.put(UUID.randomUUID().toString(), UUID.randomUUID().toString());
       refDatasetUserTags.add(userTags);
       refDatasets.add(new Dataset(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i),
-          refDatasetVersionSchemas.get(i), refDatasetRetentionCounts.get(i), refDatasetRetentionTime.get(i),
+          refDatasetVersionSchemas.get(i), refDatasetRetentionCounts.get(i), refDatasetRetentionTimeInSeconds.get(i),
           refDatasetUserTags.get(i)));
     }
   }

@@ -31,8 +31,6 @@ import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
-import static com.github.ambry.utils.Utils.*;
-
 
 /**
  * Implementation of {@link AccountService} for test. This implementation synchronizes on all methods.
@@ -140,7 +138,7 @@ public class InMemAccountService implements AccountService {
     short containerId = account.getContainerByName(containerName).getId();
     idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
     Dataset dataset = getDataset(accountName, containerName, datasetName);
-    long updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTime());
+    long updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
     if (datasetVersionTtlEnabled) {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
     }

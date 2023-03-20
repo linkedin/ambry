@@ -534,7 +534,7 @@ public class FrontendRestRequestServiceTest {
 
     Dataset dataset =
         new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
-            .setRetentionTime(datasetTtl)
+            .setRetentionTimeInSeconds(datasetTtl)
             .setUserTags(userTags)
             .build();
     byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
@@ -595,7 +595,7 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Unexpected PUT /DatasetVersions response", blobId, blobIdFromResponse);
     assertEquals("Unexpected userMetadata", userTags.get(userTagKey),
         userMetadataFromRouter.get(USER_META_DATA_HEADER_PREFIX + userTagKey));
-    assertEquals("Ttl should be the dataset level ttl", (long) dataset.getRetentionTime(),
+    assertEquals("Ttl should be the dataset level ttl", (long) dataset.getRetentionTimeInSeconds(),
         expectedBlobProperties.getTimeToLiveInSeconds());
 
     // Add a dataset version without version specified.
@@ -637,7 +637,7 @@ public class FrontendRestRequestServiceTest {
     versionSchema = Dataset.VersionSchema.MONOTONIC;
 
     dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(),
-        DATASET_NAME_WITHOUT_USER_TAGS).setVersionSchema(versionSchema).setRetentionTime(-1).build();
+        DATASET_NAME_WITHOUT_USER_TAGS).setVersionSchema(versionSchema).setRetentionTimeInSeconds(-1).build();
     datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
     body = new LinkedList<>();
     body.add(ByteBuffer.wrap(datasetsUpdateJson));

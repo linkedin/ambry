@@ -33,7 +33,7 @@ public class DatasetBuilder {
   private Dataset.VersionSchema versionSchema;
   //optional
   private Integer retentionCount = null;
-  private Long retentionTime = null;
+  private Long retentionTimeInSeconds = null;
   private Map<String, String> userTags = null;
 
   /**
@@ -57,7 +57,7 @@ public class DatasetBuilder {
     datasetName = origin.getDatasetName();
     versionSchema = origin.getVersionSchema();
     retentionCount = origin.getRetentionCount();
-    retentionTime = origin.getRetentionTime();
+    retentionTimeInSeconds = origin.getRetentionTimeInSeconds();
     userTags = origin.getUserTags();
   }
 
@@ -130,12 +130,12 @@ public class DatasetBuilder {
 
   /**
    * Set the retention time of the {@link Dataset} to build.
-   * @param retentionTime the retention count to set.
+   * @param retentionTimeInSeconds the retention count to set.
    * @return the builder.
    */
   @JsonProperty(JSON_RETENTION_TIME_KEY)
-  public DatasetBuilder setRetentionTime(long retentionTime) {
-    this.retentionTime = retentionTime;
+  public DatasetBuilder setRetentionTimeInSeconds(long retentionTimeInSeconds) {
+    this.retentionTimeInSeconds = retentionTimeInSeconds;
     return this;
   }
 
@@ -156,6 +156,6 @@ public class DatasetBuilder {
    * @return a {@link Dataset} object.
    */
   public Dataset build() {
-    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionCount, retentionTime, userTags);
+    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionCount, retentionTimeInSeconds, userTags);
   }
 }
