@@ -66,6 +66,7 @@ import static org.junit.Assert.*;
  */
 public class UndeleteManagerTest {
   private static final int DEFAULT_PARALLELISM = 3;
+  private static final int DEFAULT_SUCCESS_TARGET = 2;
   // changing this may fail tests
   private static final int MAX_PORTS_PLAIN_TEXT = 3;
   private static final int MAX_PORTS_SSL = 3;
@@ -75,8 +76,6 @@ public class UndeleteManagerTest {
   private static final int BLOBS_COUNT = 5;
   private static final String UNDELETE_SERVICE_ID = "undelete-service-id";
   private static final String LOCAL_DC = "DC1";
-  private final NonBlockingRouter router;
-  private final RouterConfig routerConfig;
   private final QuotaChargeCallback quotaChargeCallback = QuotaTestUtils.createTestQuotaChargeCallback();
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
   private final MockClusterMap clusterMap = new MockClusterMap();
@@ -86,6 +85,8 @@ public class UndeleteManagerTest {
   private final AccountService accountService = new InMemAccountService(true, false);
   private final MockNetworkClientFactory networkClientFactory;
   private final NonBlockingRouterMetrics metrics;
+  private NonBlockingRouter router;
+  private RouterConfig routerConfig;
   private UndeleteManager undeleteManager;
   private SocketNetworkClient networkClient;
 
@@ -112,7 +113,8 @@ public class UndeleteManagerTest {
       BlobProperties putBlobProperties =
           new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time,
               Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
-      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      String blobId = router.putBlob(putBlobProperties, new byte[0], putChannel, new PutBlobOptionsBuilder().build())
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       blobIds.add(blobId);
       // Make sure all the mock servers have this put
       BlobId id = new BlobId(blobId, clusterMap);
@@ -151,8 +153,7 @@ public class UndeleteManagerTest {
     for (String blobId : blobIds) {
       deleteBlobInAllServer(blobId);
       // Undelete requires global quorum, so we have to make sure all the mock servers received a delete.
-      router.undeleteBlob(blobId, UNDELETE_SERVICE_ID)
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.undeleteBlob(blobId, UNDELETE_SERVICE_ID).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       verifyUndelete(blobId);
     }
   }
@@ -204,6 +205,65 @@ public class UndeleteManagerTest {
         blob.lifeVersion = 5;
       }
       executeOpAndVerify(Collections.singleton(blobId), RouterErrorCode.LifeVersionConflict);
+    }
+  }
+
+  /**
+   * Test when the operation tracker is simple operation tracker
+   */
+  @Test
+  public void simpleOperationTrackerTest() throws Exception {
+    RouterConfig oldRouterConfig = routerConfig;
+    NonBlockingRouter oldRouter = router;
+    UndeleteManager oldUndeleteManager = undeleteManager;
+
+    Properties props = getNonBlockingRouterProperties(DEFAULT_PARALLELISM);
+    props.setProperty(RouterConfig.ROUTER_UNDELETE_OPERATION_TRACKER_TYPE,
+        SimpleOperationTracker.class.getSimpleName());
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+    router =
+        new NonBlockingRouter(routerConfig, metrics, networkClientFactory, new LoggingNotificationSystem(), clusterMap,
+            null, null, null, new InMemAccountService(false, true), time, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
+    undeleteManager = new UndeleteManager(clusterMap, new ResponseHandler(clusterMap), new LoggingNotificationSystem(),
+        accountService, routerConfig, metrics, time, router);
+
+    try {
+      // Case 1: simple router test
+      String blobId = blobIds.get(0);
+      deleteBlobInAllServer(blobId);
+      // Undelete requires global quorum, so we have to make sure all the mock servers received a delete.
+      router.undeleteBlob(blobId, UNDELETE_SERVICE_ID).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      verifyUndeleteWithSimpleOperationTracker(blobId);
+
+      // Case 2: simple manager test
+      blobId = blobIds.get(1);
+      deleteBlobInAllServer(blobId);
+      executeOpAndVerifyWithSimpleOperationTracker(Collections.singleton(blobId), null);
+      executeOpAndVerifyWithSimpleOperationTracker(Collections.singleton(blobId), null);
+
+      // Case 3: Blob_Not_Deleted error
+      blobId = blobIds.get(3);
+      deleteBlobInAllServer(blobId);
+      List<MockServer> localServers = serverLayout.getMockServers()
+          .stream()
+          .filter(server -> server.getDataCenter().equals(LOCAL_DC))
+          .collect(Collectors.toList());
+      localServers.get(0).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Deleted);
+      localServers.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Already_Undeleted);
+
+      FutureResult<Void> future = new FutureResult<>();
+      router.currentOperationsCount.addAndGet(1);
+      List<String> chunkIds = Collections.singletonList(blobId);
+      undeleteManager.submitUndeleteOperation(chunkIds.get(0), chunkIds.subList(1, chunkIds.size()), UNDELETE_SERVICE_ID,
+          future, future::done, quotaChargeCallback);
+      sendRequestsGetResponse(future, undeleteManager, false, false);
+      future.get(1, TimeUnit.MILLISECONDS);
+
+      router.close();
+    } finally {
+      routerConfig = oldRouterConfig;
+      router = oldRouter;
+      undeleteManager = oldUndeleteManager;
     }
   }
 
@@ -311,7 +371,7 @@ public class UndeleteManagerTest {
     }
     // configure servers to not respond to requests
     serverLayout.getMockServers().forEach(mockServer -> mockServer.setShouldRespond(false));
-    executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true);
+    executeOpAndVerify(blobIds, RouterErrorCode.OperationTimedOut, true, false);
   }
 
   /**
@@ -328,7 +388,7 @@ public class UndeleteManagerTest {
         continue;
       }
       mockSelectorState.set(state);
-      executeOpAndVerify(Collections.singleton(blobIds.get(0)), RouterErrorCode.OperationTimedOut, true);
+      executeOpAndVerify(Collections.singleton(blobIds.get(0)), RouterErrorCode.OperationTimedOut, true, false);
     }
   }
 
@@ -358,13 +418,13 @@ public class UndeleteManagerTest {
     properties.setProperty(RouterConfig.ROUTER_HOSTNAME, "localhost");
     properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, LOCAL_DC);
     properties.setProperty(RouterConfig.ROUTER_UNDELETE_REQUEST_PARALLELISM, Integer.toString(parallelism));
+    properties.setProperty(RouterConfig.ROUTER_UNDELETE_SUCCESS_TARGET, Integer.toString(DEFAULT_SUCCESS_TARGET));
     return properties;
   }
 
   private void assertDeleted(String blobId) throws Exception {
     try {
-      router.getBlob(blobId, new GetBlobOptionsBuilder().build())
-          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
       fail("blob " + blobId + " Should be deleted");
     } catch (ExecutionException e) {
       assertTrue(e.getCause() instanceof RouterException);
@@ -373,14 +433,12 @@ public class UndeleteManagerTest {
   }
 
   private void assertNotDeleted(String blobId) throws Exception {
-    router.getBlob(blobId, new GetBlobOptionsBuilder().build())
-        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
   }
 
   private void deleteBlobInAllServer(String blobId) throws Exception {
     // Delete this blob
-    router.deleteBlob(blobId, "serviceid")
-        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    router.deleteBlob(blobId, "serviceid").get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     // Then make sure all the mock servers have the delete request.
     assertDeleted(blobId);
     BlobId id = new BlobId(blobId, clusterMap);
@@ -410,8 +468,21 @@ public class UndeleteManagerTest {
     assertTrue("Global quorum not reached, yet undelete succeeded", numServersNotUndelete <= 3);
   }
 
-  private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime)
-      throws Exception {
+  private void verifyUndeleteWithSimpleOperationTracker(String blobId) {
+    int numServersUndelete = 0;
+    for (MockServer server : serverLayout.getMockServers()) {
+      StoredBlob blob = server.getBlobs().get(blobId);
+      if (blob.isUndeleted()) {
+        assertEquals((short) 1, blob.lifeVersion);
+        assertFalse(blob.isDeleted());
+        numServersUndelete++;
+      }
+    }
+    assertTrue("Inefficient number of undelete: " + numServersUndelete, numServersUndelete >= DEFAULT_SUCCESS_TARGET);
+  }
+
+  private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode, boolean advanceTime,
+      boolean withSimpleOperationTracker) throws Exception {
     FutureResult<Void> future = new FutureResult<>();
     router.currentOperationsCount.addAndGet(ids.size() == 1 ? 1 : ids.size() - 1);
     List<String> chunkIds = new ArrayList<>(ids);
@@ -422,7 +493,11 @@ public class UndeleteManagerTest {
       // Should return no error
       future.get(1, TimeUnit.MILLISECONDS);
       for (String blobId : ids) {
-        verifyUndelete(blobId);
+        if (withSimpleOperationTracker) {
+          verifyUndeleteWithSimpleOperationTracker(blobId);
+        } else {
+          verifyUndelete(blobId);
+        }
       }
     } else {
       try {
@@ -453,11 +528,16 @@ public class UndeleteManagerTest {
   }
 
   private void executeOpAndVerify(Collection<String> ids, RouterErrorCode expectedErrorCode) throws Exception {
-    executeOpAndVerify(ids, expectedErrorCode, false);
+    executeOpAndVerify(ids, expectedErrorCode, false, false);
   }
 
-  private void sendRequestsGetResponse(FutureResult<Void> future, UndeleteManager undeleteManager,
-      boolean advanceTime, boolean isQuotaRejected) {
+  private void executeOpAndVerifyWithSimpleOperationTracker(Collection<String> ids, RouterErrorCode expectedErrorCode)
+      throws Exception {
+    executeOpAndVerify(ids, expectedErrorCode, false, true);
+  }
+
+  private void sendRequestsGetResponse(FutureResult<Void> future, UndeleteManager undeleteManager, boolean advanceTime,
+      boolean isQuotaRejected) {
     List<RequestInfo> requestInfoList = new ArrayList<>();
     Set<Integer> requestsToDrop = new HashSet<>();
     Set<RequestInfo> requestAcks = new HashSet<>();
@@ -468,8 +548,9 @@ public class UndeleteManagerTest {
 
       List<ResponseInfo> responseInfoList;
       if (isQuotaRejected) {
-        responseInfoList = requestInfoList.stream().map(requestInfo -> new ResponseInfo(requestInfo, true)).collect(
-            Collectors.toList());
+        responseInfoList = requestInfoList.stream()
+            .map(requestInfo -> new ResponseInfo(requestInfo, true))
+            .collect(Collectors.toList());
       } else {
         responseInfoList = new ArrayList<>();
         try {

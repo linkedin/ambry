@@ -321,8 +321,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationRate"));
     replicateBlobOperationOnDeleteRate =
         metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationOnDeleteRate"));
-    replicateBlobOperationOnTtlUpdateRate =
-        metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationOnTtlUpdateRate"));
+    replicateBlobOperationOnTtlUpdateRate = metricRegistry.meter(
+        MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationOnTtlUpdateRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
     operationDequeuingRate =
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationDequeuingRate"));
@@ -753,9 +753,9 @@ public class NonBlockingRouterMetrics {
    */
   public void initializeOperationControllerMetrics(final Thread requestResponseHandlerThread) {
     requestResponseHandlerThreadRunning = () -> requestResponseHandlerThread.isAlive() ? 1L : 0L;
-    metricRegistry.register(
+    metricRegistry.gauge(
         MetricRegistry.name(NonBlockingRouter.class, requestResponseHandlerThread.getName() + "Running"),
-        requestResponseHandlerThreadRunning);
+        () -> requestResponseHandlerThreadRunning);
   }
 
   /**
@@ -800,8 +800,8 @@ public class NonBlockingRouterMetrics {
    */
   public void initializePutManagerMetrics(final Thread chunkFillerThread) {
     chunkFillerThreadRunning = () -> chunkFillerThread.isAlive() ? 1L : 0L;
-    metricRegistry.register(MetricRegistry.name(PutManager.class, chunkFillerThread.getName() + "Running"),
-        chunkFillerThreadRunning);
+    metricRegistry.gauge(MetricRegistry.name(PutManager.class, chunkFillerThread.getName() + "Running"),
+        () -> chunkFillerThreadRunning);
   }
 
   /**
@@ -815,12 +815,12 @@ public class NonBlockingRouterMetrics {
   public void initializeNumActiveOperationsMetrics(final AtomicInteger currentOperationsCount,
       final AtomicInteger currentBackgroundOperationsCount,
       final AtomicInteger concurrentBackgroundDeleteOperationCount) {
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"),
-        (Gauge<Integer>) currentOperationsCount::get);
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
-        (Gauge<Integer>) currentBackgroundOperationsCount::get);
-    metricRegistry.register(MetricRegistry.name(BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
-        (Gauge<Integer>) concurrentBackgroundDeleteOperationCount::get);
+    metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"),
+        () -> (Gauge<Integer>) currentOperationsCount::get);
+    metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
+        () -> (Gauge<Integer>) currentBackgroundOperationsCount::get);
+    metricRegistry.gauge(MetricRegistry.name(BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
+        () -> (Gauge<Integer>) concurrentBackgroundDeleteOperationCount::get);
   }
 
   /**
@@ -829,8 +829,8 @@ public class NonBlockingRouterMetrics {
    * @param cache which keeps track of blobs not found recently.
    */
   public void initializeNotFoundCacheMetrics(Cache cache) {
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "BlobsNotFoundCacheHitRate"),
-        (Gauge<Double>) () -> cache.stats().hitRate());
+    metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "BlobsNotFoundCacheHitRate"),
+        () -> (Gauge<Double>) () -> cache.stats().hitRate());
   }
 
   /**
@@ -845,11 +845,15 @@ public class NonBlockingRouterMetrics {
         .map(oc -> (QuotaAwareOperationController) oc)
         .collect(Collectors.toList());
     outOfQuotaResourcesInQueue =
-        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "OutOfQuotaResourcesInQueue"),
-            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getOutOfQuotaResourcesInQueue()).sum());
+        metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "OutOfQuotaResourcesInQueue"),
+            () -> () -> quotaAwareOperationControllers.stream()
+                .mapToInt(oc -> oc.getOutOfQuotaResourcesInQueue())
+                .sum());
     delayedQuotaResourcesInQueue =
-        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "DelayedQuotaResourcesInQueue"),
-            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getDelayedQuotaResourcesInQueue()).sum());
+        metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "DelayedQuotaResourcesInQueue"),
+            () -> () -> quotaAwareOperationControllers.stream()
+                .mapToInt(oc -> oc.getDelayedQuotaResourcesInQueue())
+                .sum());
   }
 
   /**
