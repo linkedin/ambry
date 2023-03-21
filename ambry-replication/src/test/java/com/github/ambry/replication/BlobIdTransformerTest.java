@@ -639,7 +639,17 @@ public class BlobIdTransformerTest {
       return null;
     }
 
+    @Override
+    public List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+      return null;
+    }
+
     public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+      return null;
+    }
+
+    @Override
+    public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
       return null;
     }
 

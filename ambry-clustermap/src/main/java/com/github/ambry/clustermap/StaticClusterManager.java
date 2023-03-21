@@ -82,8 +82,18 @@ class StaticClusterManager implements ClusterMap {
   }
 
   @Override
+  public List<PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+    return partitionLayout.getFullyWritablePartitions(partitionClass);
+  }
+
+  @Override
   public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     return partitionLayout.getRandomWritablePartition(partitionClass, partitionsToExclude);
+  }
+
+  @Override
+  public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    return partitionLayout.getRandomFullyWritablePartition(partitionClass, partitionsToExclude);
   }
 
   @Override

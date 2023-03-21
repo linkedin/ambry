@@ -46,7 +46,6 @@ import org.apache.helix.NotificationContext;
 import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.RoutingTableChangeListener;
-import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.spectator.RoutingTableSnapshot;
@@ -379,8 +378,18 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   @Override
+  public List<PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+    return partitionSelectionHelper.getFullyWritablePartitions(partitionClass);
+  }
+
+  @Override
   public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     return partitionSelectionHelper.getRandomWritablePartition(partitionClass, partitionsToExclude);
+  }
+
+  @Override
+  public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    return partitionSelectionHelper.getRandomFullyWritablePartition(partitionClass, partitionsToExclude);
   }
 
   @Override

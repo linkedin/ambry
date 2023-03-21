@@ -417,10 +417,29 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+    lastRequestedPartitionClasses.add(partitionClass);
+    List<PartitionId> partitionIdList = Collections.emptyList();
+    if (!partitionsUnavailable) {
+      partitionIdList = partitionSelectionHelper.getFullyWritablePartitions(partitionClass);
+    }
+    return partitionIdList;
+  }
+
+  @Override
   public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     lastRequestedPartitionClasses.add(partitionClass);
     if (!partitionsUnavailable) {
       return partitionSelectionHelper.getRandomWritablePartition(partitionClass, partitionsToExclude);
+    }
+    return null;
+  }
+
+  @Override
+  public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    lastRequestedPartitionClasses.add(partitionClass);
+    if (!partitionsUnavailable) {
+      return partitionSelectionHelper.getRandomFullyWritablePartition(partitionClass, partitionsToExclude);
     }
     return null;
   }

@@ -81,8 +81,18 @@ public class RecoveryTestClusterManager implements ClusterMap {
   }
 
   @Override
+  public List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+    throw new UnsupportedOperationException(String.format("getFullyWritablePartitionIds method is not supported"));
+  }
+
+  @Override
   public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     throw new UnsupportedOperationException(String.format("getRandomWritablePartition method is not supported"));
+  }
+
+  @Override
+  public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    throw new UnsupportedOperationException(String.format("getRandomFullyWritablePartition method is not supported"));
   }
 
   /**
