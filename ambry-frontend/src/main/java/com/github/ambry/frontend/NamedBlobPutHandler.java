@@ -516,10 +516,13 @@ public class NamedBlobPutHandler {
         containerName = dataset.getContainerName();
         datasetName = dataset.getDatasetName();
         version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
+        boolean datasetVersionTtlEnabled =
+            RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.DATASET_VERSION_TTL_ENABLED, false);
         long expirationTimeMs =
             Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
         DatasetVersionRecord datasetVersionRecord =
-            accountService.addDatasetVersion(accountName, containerName, datasetName, version, expirationTimeMs);
+            accountService.addDatasetVersion(accountName, containerName, datasetName, version,
+                blobProperties.getTimeToLiveInSeconds(), blobProperties.getCreationTimeInMs(), datasetVersionTtlEnabled);
         FrontendUtils.replaceRequestPathWithNewOperationOrBlobIdIfNeeded(restRequest, datasetVersionRecord, version);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);

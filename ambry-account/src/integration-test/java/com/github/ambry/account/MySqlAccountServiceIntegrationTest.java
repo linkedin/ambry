@@ -39,7 +39,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
@@ -733,7 +732,7 @@ public class MySqlAccountServiceIntegrationTest {
     //add dataset with must provide info
     Dataset dataset =
         new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_BASIC).setVersionSchema(
-            Dataset.VersionSchema.MONOTONIC).setExpirationTimeMs(-1).build();
+            Dataset.VersionSchema.MONOTONIC).setRetentionTimeInSeconds(-1).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     Dataset datasetFromMysql =
         mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
@@ -745,7 +744,7 @@ public class MySqlAccountServiceIntegrationTest {
     int retentionCount = 5;
     dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
             Dataset.VersionSchema.TIMESTAMP)
-        .setExpirationTimeMs(-1)
+        .setRetentionTimeInSeconds(-1)
         .setUserTags(userTags)
         .setRetentionCount(retentionCount)
         .build();
@@ -777,15 +776,14 @@ public class MySqlAccountServiceIntegrationTest {
         datasetFromMysql.getRetentionCount());
 
     //update the expiration time.
-    long expirationTimeInMs = Utils.addSecondsToEpochTime(System.currentTimeMillis(), 30);
+    long datasetTtl = 30;
     datasetForUpdate =
-        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setExpirationTimeMs(
-            expirationTimeInMs).build();
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setRetentionTimeInSeconds(datasetTtl)
+            .build();
     mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME);
-    assertEquals("Mismatch in updated expirationTimeInMst", (Long) expirationTimeInMs,
-        datasetFromMysql.getExpirationTimeMs());
+    assertEquals("Mismatch in updated dataset ttl", (Long) datasetTtl, datasetFromMysql.getRetentionTimeInSeconds());
 
     //update the user tags
     userTags.clear();
@@ -809,41 +807,26 @@ public class MySqlAccountServiceIntegrationTest {
     }
 
     //Add a dataset with limited ttl
-    expirationTimeInMs = Utils.addSecondsToEpochTime(System.currentTimeMillis(), 30);
     dataset =
         new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setVersionSchema(
                 Dataset.VersionSchema.TIMESTAMP)
-            .setExpirationTimeMs(expirationTimeInMs)
+            .setRetentionTimeInSeconds(datasetTtl)
             .setUserTags(userTags)
             .setRetentionCount(retentionCount)
             .build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
 
     //update expiration to permanent.
-    expirationTimeInMs = -1;
+    datasetTtl = -1;
     datasetForUpdate =
-        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setExpirationTimeMs(
-            expirationTimeInMs).build();
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setRetentionTimeInSeconds(
+            datasetTtl).build();
     mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME_WITH_TTL);
-    assertEquals("Mismatch in updated expirationTimeInMst", (Long) expirationTimeInMs,
-        datasetFromMysql.getExpirationTimeMs());
+    assertEquals("Mismatch in updated dataset ttl", (Long) datasetTtl, datasetFromMysql.getRetentionTimeInSeconds());
 
-    //delete a permanent dataset.
-    mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL);
-    try {
-      mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), DATASET_NAME_WITH_TTL);
-      fail("Should fail due to the dataset already expired");
-    } catch (AccountServiceException e) {
-      assertEquals("Mistmatch on error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
-    }
-
-    //delete a dataset with future expirationTimeMs
-    long oldExpirationTime =
-        mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME).getExpirationTimeMs();
+    //delete a dataset
     mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME);
     try {
       mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
@@ -853,26 +836,9 @@ public class MySqlAccountServiceIntegrationTest {
       assertEquals("Mistmatch on error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
     }
 
-    //delete a dataset which already expired, should fail.
-    expirationTimeInMs = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
-    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_EXPIRED).setVersionSchema(
-            Dataset.VersionSchema.TIMESTAMP)
-        .setExpirationTimeMs(expirationTimeInMs)
-        .setUserTags(userTags)
-        .setRetentionCount(retentionCount)
-        .build();
-    // Add dataset to db
-    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
-    try {
-      mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME_EXPIRED);
-      fail("Should fail due to the dataset already expired");
-    } catch (AccountServiceException e) {
-      assertEquals("Mistmatch on error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
-    }
-
     //add new dataset with same primary key after it has been deleted.
     dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_EXPIRED).setVersionSchema(
-        Dataset.VersionSchema.TIMESTAMP).setExpirationTimeMs(-1).setRetentionCount(retentionCount).build();
+        Dataset.VersionSchema.TIMESTAMP).setRetentionTimeInSeconds(-1).setRetentionCount(retentionCount).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
   }
 
@@ -886,9 +852,9 @@ public class MySqlAccountServiceIntegrationTest {
     Map<String, String> userTags = new HashMap<>();
     List<Long> versions = new ArrayList<>();
     userTags.put("userTag", "tagValue");
-    long expirationTimeMs1 = Utils.addSecondsToEpochTime(SystemTime.getInstance().milliseconds(), 3600L);
+    long datasetTtl = 3600L;
     Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
-        Dataset.VersionSchema.MONOTONIC).setExpirationTimeMs(expirationTimeMs1).setUserTags(userTags).build();
+        Dataset.VersionSchema.MONOTONIC).setRetentionTimeInSeconds(datasetTtl).setUserTags(userTags).build();
 
     // Add a dataset to db
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
@@ -897,59 +863,70 @@ public class MySqlAccountServiceIntegrationTest {
     long versionNumber = 1;
     String version = String.valueOf(versionNumber);
     versions.add(versionNumber);
+    long creationTimeInMs = System.currentTimeMillis();
     DatasetVersionRecord expectedDatasetVersionRecord =
-        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, expirationTimeMs1);
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version,
+            Utils.addSecondsToEpochTime(creationTimeInMs, datasetTtl));
     DatasetVersionRecord datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME, version, -1);
-    assertEquals("Mismatch in dataset read from db", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+            testContainer.getName(), DATASET_NAME, version, -1, creationTimeInMs, false);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     // Get the dataset version
     datasetVersionRecordFromMysql =
-        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, version);
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version);
     assertEquals("Mismatch in dataset version read from db", expectedDatasetVersionRecord,
         datasetVersionRecordFromMysql);
 
-    // Add a valid dataset version with ttl and get from DB, dataset version ttl < dataset ttl.
+    // Enable datasetVersionTtlEnable and add a valid dataset version with ttl and get from DB, should use the dataset
+    // version level ttl.
     versionNumber = 2;
     version = String.valueOf(versionNumber);
     versions.add(versionNumber);
-    long expirationTimeMs = Utils.addSecondsToEpochTime(SystemTime.getInstance().milliseconds(), 360L);
+    creationTimeInMs = System.currentTimeMillis();
+    long datasetVersionTtl = 360L;
+    boolean datasetVersionTtlEnable = true;
     expectedDatasetVersionRecord =
-        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version, expirationTimeMs);
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version,
+            Utils.addSecondsToEpochTime(creationTimeInMs, datasetVersionTtl));
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME, version, expirationTimeMs);
+        testContainer.getName(), DATASET_NAME, version, datasetVersionTtl, creationTimeInMs, datasetVersionTtlEnable);
     datasetVersionRecordFromMysql =
-        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, version);
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version);
     assertEquals("Mismatch in dataset version read from db", expectedDatasetVersionRecord,
         datasetVersionRecordFromMysql);
 
-    // Add a dataset with ttl (set to a past timestamp) and add a dataset version with current ttl, expect to be failed
-    // due to dataset already expired.
-    expirationTimeMs = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(10);
-    Dataset datasetWithTtl =
-        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setVersionSchema(
-            Dataset.VersionSchema.TIMESTAMP).setExpirationTimeMs(expirationTimeMs).setUserTags(userTags).build();
-    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), datasetWithTtl);
-    version = "3";
-    expirationTimeMs = System.currentTimeMillis();
-    try {
-      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), DATASET_NAME_WITH_TTL, version, expirationTimeMs);
-      fail("Add dataset version should fail with ttl larger than dataset level");
-    } catch (AccountServiceException e) {
-      assertEquals("Unexpected ErrorCode", AccountServiceErrorCode.Deleted, e.getErrorCode());
-    }
+    // Disable datasetVersionTtlEnable and add a valid dataset version with ttl and get from DB, should use the dataset
+    // level ttl.
+    versionNumber = 3;
+    datasetVersionTtlEnable = false;
+    version = String.valueOf(versionNumber);
+    versions.add(versionNumber);
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version,
+            Utils.addSecondsToEpochTime(creationTimeInMs, datasetTtl));
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME, version, datasetVersionTtl, creationTimeInMs, datasetVersionTtlEnable);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version);
+    assertEquals("Mismatch in dataset version read from db", expectedDatasetVersionRecord,
+        datasetVersionRecordFromMysql);
+
     // Add a permanent dataset version, it should inherit from dataset level ttl.
     versionNumber = 4;
     version = String.valueOf(versionNumber);
     versions.add(versionNumber);
+    creationTimeInMs = System.currentTimeMillis();
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME, version, -1);
+        testContainer.getName(), DATASET_NAME, version, -1, creationTimeInMs, false);
     DatasetVersionRecord datasetVersionRecordWithTtl =
-        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, version);
-    assertEquals("Mismatch in dataset expirationTimeMs", (long) dataset.getExpirationTimeMs(),
-        datasetVersionRecordWithTtl.getExpirationTimeMs());
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version);
+    assertEquals("Mismatch in dataset expirationTimeMs", (long) dataset.getRetentionTimeInSeconds(),
+        TimeUnit.MILLISECONDS.toSeconds(datasetVersionRecordWithTtl.getExpirationTimeMs() - creationTimeInMs));
 
     Collections.reverse(versions);
     long expectedLatestVersion = versions.get(0);
@@ -960,21 +937,21 @@ public class MySqlAccountServiceIntegrationTest {
     //Test semantic version.
     dataset =
         new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC).setVersionSchema(
-            Dataset.VersionSchema.SEMANTIC).setExpirationTimeMs(-1).setUserTags(userTags).build();
+            Dataset.VersionSchema.SEMANTIC).setRetentionTimeInSeconds(-1).setUserTags(userTags).build();
     // Add a dataset to db
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     version = "1.2.4";
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
     DatasetVersionRecord datasetVersionRecordWithSemanticVersion =
-        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC,
-            version);
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version);
     assertEquals("Mismatch in dataset version", version, datasetVersionRecordWithSemanticVersion.getVersion());
 
     // Add dataset version for non-existing dataset.
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), "NonExistingDataset", version, -1);
+          testContainer.getName(), "NonExistingDataset", version, -1, System.currentTimeMillis(), false);
       fail("Add dataset version should fail without dataset");
     } catch (AccountServiceException e) {
       assertEquals("Unexpected ErrorCode", AccountServiceErrorCode.NotFound, e.getErrorCode());
@@ -983,7 +960,7 @@ public class MySqlAccountServiceIntegrationTest {
     //add same dataset version, should fail
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, 0, false);
       fail("Should fail due to dataset version already exist");
     } catch (AccountServiceException e) {
       assertEquals("Unexpected error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
@@ -995,16 +972,35 @@ public class MySqlAccountServiceIntegrationTest {
 
     //add dataset version again, should succeed.
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
 
     // Add dataset version which didn't follow the semantic format.
     version = "1.2";
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1);
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
       fail("Add dataset version should fail with wrong format of semantic version");
     } catch (IllegalArgumentException e) {
       // do nothing
+    }
+
+    //delete the dataset, and can't add or get any dataset version.
+    mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME);
+    version = "1";
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false);
+      fail("Should fail due to the dataset already gone");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
+
+    try {
+      mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME, version);
+      fail("Should fail due to the dataset already gone");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
     }
   }
 

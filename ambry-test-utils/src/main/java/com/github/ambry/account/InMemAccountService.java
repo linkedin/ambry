@@ -31,8 +31,6 @@ import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
-import static com.github.ambry.utils.Utils.*;
-
 
 /**
  * Implementation of {@link AccountService} for test. This implementation synchronizes on all methods.
@@ -132,17 +130,17 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized DatasetVersionRecord addDatasetVersion(String accountName, String containerName,
-      String datasetName, String version, long expirationTimeMs) throws AccountServiceException {
+      String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
+      boolean datasetVersionTtlEnabled)
+      throws AccountServiceException {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
     idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
     Dataset dataset = getDataset(accountName, containerName, datasetName);
-    long updatedExpirationTimeMs = expirationTimeMs;
-    if (expirationTimeMs == Infinite_Time || dataset.getExpirationTimeMs() == Infinite_Time) {
-      updatedExpirationTimeMs = expirationTimeMs == Infinite_Time ? dataset.getExpirationTimeMs() : expirationTimeMs;
-    } else if (dataset.getExpirationTimeMs() <= expirationTimeMs) {
-      updatedExpirationTimeMs = dataset.getExpirationTimeMs();
+    long updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
+    if (datasetVersionTtlEnabled) {
+      updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
     }
     DatasetVersionRecord datasetVersionRecord =
         new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs);

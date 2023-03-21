@@ -181,28 +181,33 @@ public class MySqlAccountStore {
    * @param containerName the name for the container.
    * @param datasetName the name of the dataset.
    * @param version the version of the dataset.
-   * @param expirationTimeMs the expiration time of the version of the dataset.
+   * @param timeToLiveInSeconds The dataset version level ttl.
+   * @param creationTimeInMs the creation time of the dataset.
+   * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
    * @return the corresponding {@link Dataset}
    * @throws SQLException
    */
-  public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
-      String datasetName, String version, long expirationTimeMs) throws SQLException, AccountServiceException {
+  public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName,
+      String containerName, String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
+      boolean datasetVersionTtlEnabled) throws SQLException, AccountServiceException {
     return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
-        expirationTimeMs);
+        timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
   }
 
   /**
    * Get a version of {@link Dataset}
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
    * @param datasetName the name of the dataset.
    * @param version the version of the dataset.
    * @return the {@link DatasetVersionRecord}
    * @throws SQLException
    */
-  public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String datasetName,
-      String version) throws SQLException, AccountServiceException {
-    return accountDao.getDatasetVersions(accountId, containerId, datasetName, version);
+  public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String accountName,
+      String containerName, String datasetName, String version) throws SQLException, AccountServiceException {
+    return accountDao.getDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version);
   }
 
   /**

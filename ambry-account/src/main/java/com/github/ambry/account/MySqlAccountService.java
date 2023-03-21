@@ -413,8 +413,8 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
-  public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName, String version,
-      long expirationTimeMs) throws AccountServiceException {
+  public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled) throws AccountServiceException {
     try {
       Container container = getContainerByName(accountName, containerName);
       if (container == null) {
@@ -424,7 +424,7 @@ public class MySqlAccountService extends AbstractAccountService {
       short accountId = container.getParentAccountId();
       short containerId = container.getId();
       return mySqlAccountStore.addDatasetVersion(accountId, containerId, accountName, containerName, datasetName,
-          version, expirationTimeMs);
+          version, timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
     } catch (SQLException e) {
       throw translateSQLException(e);
     }
@@ -441,7 +441,8 @@ public class MySqlAccountService extends AbstractAccountService {
       }
       short accountId = container.getParentAccountId();
       short containerId = container.getId();
-      return mySqlAccountStore.getDatasetVersion(accountId, containerId, datasetName, version);
+      return mySqlAccountStore.getDatasetVersion(accountId, containerId, accountName, containerName, datasetName,
+          version);
     } catch (SQLException e) {
       throw translateSQLException(e);
     }

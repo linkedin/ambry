@@ -247,6 +247,10 @@ public class RestUtils {
      */
     public static final String DATASET_VERSION_QUERY_ENABLED = "x-ambry-dataset-version-query-enabled";
     /**
+     * Boolean field set to "true" to enable dataset version level ttl.
+     */
+    public static final String DATASET_VERSION_TTL_ENABLED = "x-ambry-dataset-version-ttl-enabled";
+    /**
      * Boolean field set to "true" to update dataset.
      */
     public static final String DATASET_UPDATE = "x-ambry-dataset-update";

@@ -32,8 +32,8 @@ public class DatasetBuilder {
   // necessary for insert, not update.
   private Dataset.VersionSchema versionSchema;
   //optional
-  private Long expirationTimeMs = null;
   private Integer retentionCount = null;
+  private Long retentionTimeInSeconds = null;
   private Map<String, String> userTags = null;
 
   /**
@@ -56,8 +56,8 @@ public class DatasetBuilder {
     containerName = origin.getContainerName();
     datasetName = origin.getDatasetName();
     versionSchema = origin.getVersionSchema();
-    expirationTimeMs = origin.getExpirationTimeMs();
     retentionCount = origin.getRetentionCount();
+    retentionTimeInSeconds = origin.getRetentionTimeInSeconds();
     userTags = origin.getUserTags();
   }
 
@@ -118,17 +118,6 @@ public class DatasetBuilder {
   }
 
   /**
-   * Set the expiration time in milliseconds of the {@link Dataset} to build.
-   * @param expirationTimeMs the expirationTime in milliseconds to set.
-   * @return the builder.
-   */
-  @JsonProperty(JSON_EXPIRATION_TIME_KEY)
-  public DatasetBuilder setExpirationTimeMs(long expirationTimeMs) {
-    this.expirationTimeMs = expirationTimeMs;
-    return this;
-  }
-
-  /**
    * Set the retention count of the {@link Dataset} to build.
    * @param retentionCount the retention count to set.
    * @return the builder.
@@ -136,6 +125,17 @@ public class DatasetBuilder {
   @JsonProperty(JSON_RETENTION_COUNT_KEY)
   public DatasetBuilder setRetentionCount(int retentionCount) {
     this.retentionCount = retentionCount;
+    return this;
+  }
+
+  /**
+   * Set the retention time of the {@link Dataset} to build.
+   * @param retentionTimeInSeconds the retention count to set.
+   * @return the builder.
+   */
+  @JsonProperty(JSON_RETENTION_TIME_KEY)
+  public DatasetBuilder setRetentionTimeInSeconds(long retentionTimeInSeconds) {
+    this.retentionTimeInSeconds = retentionTimeInSeconds;
     return this;
   }
 
@@ -156,7 +156,6 @@ public class DatasetBuilder {
    * @return a {@link Dataset} object.
    */
   public Dataset build() {
-    return new Dataset(accountName, containerName, datasetName, versionSchema, expirationTimeMs, retentionCount,
-        userTags);
+    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionCount, retentionTimeInSeconds, userTags);
   }
 }
