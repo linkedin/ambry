@@ -48,6 +48,10 @@ public abstract class StoreKey implements Comparable<StoreKey> {
    */
   public abstract boolean isAccountContainerMatch(short accountId, short containerId);
 
+  public abstract short getAccountId();
+
+  public abstract short getContainerId();
+
   /**
    * Get a long form of the key for printing.
    * @return the long form of the key

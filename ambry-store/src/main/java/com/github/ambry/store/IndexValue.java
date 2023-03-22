@@ -46,6 +46,17 @@ import static com.github.ambry.account.Container.*;
  * |           |           |         |   ( 4 bytes)    | (8 bytes) |   (4 bytes)   |           |             |               |
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
+ * Version_5
+ * In version 5, we don't have have original message offset, to find the original message, you have to call findKey. We don't have
+ * account id and container id either, since you can find account id and container is in storekey. LifeVersion also shares
+ * byte with blob size.
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * | Blob Size |   Offset  |  Flags  | Expiration Time | OperationTime  |
+ * | (4 bytes) | (4 bytes) | (1 byte)|   in  Secs      |   in secs      |
+ * |           |           |         |   ( 4 bytes)    |   (4 bytes)    |
+ * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ *
+ *
  */
 class IndexValue implements Comparable<IndexValue> {
 
@@ -79,6 +90,23 @@ class IndexValue implements Comparable<IndexValue> {
 
   final static int INDEX_VALUE_SIZE_IN_BYTES_V3_V4 = INDEX_VALUE_SIZE_IN_BYTES_V1_V2 + LIFE_VERSION_SIZE_IN_BYTES;
 
+  // We don't need 8 bytes to represent blob size. A blob is usually 4MB in Ambry, which takes 22 bits. Extra bits should
+  // be used for future extension. If we use 26 bits, then the blob size can be up to 64MB, which should be good enough.
+  // We have 6 bits left, we can use this 6 bits to represent life version. LifeVersion is not an API level operation, it
+  // is an admin operation which should be applied quite rarely, having 6 bits (up to 64) is good enough of life version.
+  private final static int BLOB_SIZE_IN_BYTES_V5 = 4;
+  // A signed integer (4-byte) can represent an offset up to 2GB. A log segment is probably larger than 2 GB, so we need
+  // a base offset (8-byte) in the index segment file and this offset is the offset to the base offset.
+  private final static int OFFSET_SIZE_IN_BYTES_V5 = 4;
+  final static int INDEX_VALUE_SIZE_IN_BYTES_V5 =
+      BLOB_SIZE_IN_BYTES_V5 + OFFSET_SIZE_IN_BYTES_V5 + FLAG_SIZE_IN_BYTES + EXPIRES_AT_SECS_SIZE_IN_BYTES_V1
+          + OPERATION_TIME_SECS_SIZE_IN_BYTES;
+
+  private final static int LIFE_VERSION_NUM_BITS = 6;
+  private final static int LIFE_VERSION_SHIFT = Integer.SIZE - LIFE_VERSION_NUM_BITS;
+  private final static int LIFE_VERSION_MASK = (1 << LIFE_VERSION_NUM_BITS) - 1;
+  private final static int BLOB_SIZE_IN_BYTES_V5_MASK = (1 << LIFE_VERSION_SHIFT) - 1;
+
   private long size;
   private Offset offset;
   private byte flags;
@@ -89,6 +117,7 @@ class IndexValue implements Comparable<IndexValue> {
   private final short accountId;
   private final short containerId;
   private final short formatVersion;
+  private long baseOffset = -1;
 
   /**
    * Constructs the {@link IndexValue} with the passed in {@link ByteBuffer} and the given {@code formatVersion}
@@ -96,7 +125,7 @@ class IndexValue implements Comparable<IndexValue> {
    * @param value the {@link ByteBuffer} representation of the {@link IndexValue}
    * @param formatVersion the format version of the {@link PersistentIndex}
    */
-  IndexValue(LogSegmentName logSegmentName, ByteBuffer value, short formatVersion) {
+  IndexValue(Offset startOffset, ByteBuffer value, short formatVersion, StoreKey storeKey) {
     this.formatVersion = formatVersion;
     switch (formatVersion) {
       case PersistentIndex.VERSION_0:
@@ -104,7 +133,7 @@ class IndexValue implements Comparable<IndexValue> {
           throw new IllegalArgumentException("Invalid buffer size for formatVersion 0");
         }
         size = value.getLong();
-        offset = new Offset(logSegmentName, value.getLong());
+        offset = new Offset(startOffset.getName(), value.getLong());
         flags = value.get();
         expiresAtMs = value.getLong();
         originalMessageOffset = value.getLong();
@@ -119,7 +148,7 @@ class IndexValue implements Comparable<IndexValue> {
           throw new IllegalArgumentException("Invalid buffer size for formatVersion 1/2");
         }
         size = value.getLong();
-        offset = new Offset(logSegmentName, value.getLong());
+        offset = new Offset(startOffset.getName(), value.getLong());
         flags = value.get();
         long expiresAt = value.getInt();
         expiresAtMs = expiresAt != Utils.Infinite_Time && expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt)
@@ -138,7 +167,7 @@ class IndexValue implements Comparable<IndexValue> {
           throw new IllegalArgumentException("Invalid buffer size for formatVersion 3/4");
         }
         size = value.getLong();
-        offset = new Offset(logSegmentName, value.getLong());
+        offset = new Offset(startOffset.getName(), value.getLong());
         flags = value.get();
         expiresAt = value.getInt();
         expiresAtMs = expiresAt != Utils.Infinite_Time && expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt)
@@ -150,6 +179,26 @@ class IndexValue implements Comparable<IndexValue> {
         accountId = value.getShort();
         containerId = value.getShort();
         lifeVersion = value.getShort();
+        break;
+      case PersistentIndex.VERSION_5:
+        if (value.capacity() != INDEX_VALUE_SIZE_IN_BYTES_V5) {
+          throw new IllegalArgumentException("Invalid buffer size for formatVersion 5");
+        }
+        int sizeAndLifeVersion = value.getInt();
+        size = sizeAndLifeVersion & BLOB_SIZE_IN_BYTES_V5_MASK;
+        lifeVersion = (short) (sizeAndLifeVersion >> LIFE_VERSION_SHIFT);
+        offset = new Offset(startOffset.getName(), startOffset.getOffset() + value.getInt());
+        flags = value.get();
+        expiresAt = value.getInt();
+        expiresAtMs = expiresAt != Utils.Infinite_Time && expiresAt >= 0 ? TimeUnit.SECONDS.toMillis(expiresAt)
+            : Utils.Infinite_Time;
+        originalMessageOffset = UNKNOWN_ORIGINAL_MESSAGE_OFFSET;
+        operationTimeInSecs = value.getInt();
+        operationTimeInMs = operationTimeInSecs != Utils.Infinite_Time ? TimeUnit.SECONDS.toMillis(operationTimeInSecs)
+            : Utils.Infinite_Time;
+        accountId = storeKey.getAccountId();
+        containerId = storeKey.getContainerId();
+        this.baseOffset = startOffset.getOffset();
         break;
       default:
         throw new IllegalArgumentException(
@@ -168,7 +217,7 @@ class IndexValue implements Comparable<IndexValue> {
    */
   IndexValue(long size, Offset offset, long expiresAtMs, long operationTimeInMs, short accountId, short containerId) {
     this(size, offset, FLAGS_DEFAULT_VALUE, expiresAtMs, offset.getOffset(), operationTimeInMs, accountId, containerId,
-        (short) 0);
+        (short) 0, -1);
   }
 
   /**
@@ -184,7 +233,8 @@ class IndexValue implements Comparable<IndexValue> {
    */
   IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long operationTimeInMs, short accountId,
       short containerId, short lifeVersion) {
-    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, accountId, containerId, lifeVersion);
+    this(size, offset, flags, expiresAtMs, offset.getOffset(), operationTimeInMs, accountId, containerId, lifeVersion,
+        -1);
   }
 
   /**
@@ -193,7 +243,8 @@ class IndexValue implements Comparable<IndexValue> {
    */
   IndexValue(IndexValue other) {
     this(other.getSize(), other.getOffset(), other.getFlags(), other.getExpiresAtMs(), other.getOriginalMessageOffset(),
-        other.getOperationTimeInMs(), other.getAccountId(), other.getContainerId(), other.getLifeVersion());
+        other.getOperationTimeInMs(), other.getAccountId(), other.getContainerId(), other.getLifeVersion(),
+        other.baseOffset);
   }
 
   /**
@@ -210,7 +261,7 @@ class IndexValue implements Comparable<IndexValue> {
    * @param lifeVersion the life version of this blob.
    */
   IndexValue(long size, Offset offset, byte flags, long expiresAtMs, long originalMessageOffset, long operationTimeInMs,
-      short accountId, short containerId, short lifeVersion) {
+      short accountId, short containerId, short lifeVersion, long baseOffset) {
     this.size = size;
     this.offset = offset;
     this.flags = flags;
@@ -220,6 +271,7 @@ class IndexValue implements Comparable<IndexValue> {
     this.accountId = accountId;
     this.containerId = containerId;
     this.lifeVersion = lifeVersion;
+    this.baseOffset = baseOffset;
     formatVersion = PersistentIndex.CURRENT_VERSION;
   }
 
@@ -409,6 +461,23 @@ class IndexValue implements Comparable<IndexValue> {
     this.size = size;
   }
 
+  int getSizeInBytes() {
+    switch (formatVersion) {
+      case PersistentIndex.VERSION_0:
+        return INDEX_VALUE_SIZE_IN_BYTES_V0;
+      case PersistentIndex.VERSION_1:
+      case PersistentIndex.VERSION_2:
+        return INDEX_VALUE_SIZE_IN_BYTES_V1_V2;
+      case PersistentIndex.VERSION_3:
+      case PersistentIndex.VERSION_4:
+        return INDEX_VALUE_SIZE_IN_BYTES_V3_V4;
+      case PersistentIndex.VERSION_5:
+        return INDEX_VALUE_SIZE_IN_BYTES_V5;
+      default:
+        throw new IllegalArgumentException("Unsupported formatVersion " + formatVersion + " for IndexValue ");
+    }
+  }
+
   /**
    * @return the {@link ByteBuffer} representation of this {@link IndexValue}
    */
@@ -453,6 +522,20 @@ class IndexValue implements Comparable<IndexValue> {
         value.putShort(lifeVersion);
         value.position(0);
         break;
+      case PersistentIndex.VERSION_5:
+        value = ByteBuffer.allocate(INDEX_VALUE_SIZE_IN_BYTES_V5);
+        int sizeInInt = (int) size;
+        sizeInInt &= BLOB_SIZE_IN_BYTES_V5_MASK;
+        sizeInInt |= ((int) lifeVersion & LIFE_VERSION_MASK) << LIFE_VERSION_SHIFT;
+        value.putInt(sizeInInt);
+        int offsetToBaseOffset = (int) (offset.getOffset() - baseOffset);
+        value.putInt(offsetToBaseOffset);
+        value.put(flags);
+        value.putInt(expiresAtMs != Utils.Infinite_Time ? (int) (expiresAtMs / Time.MsPerSec) : (int) expiresAtMs);
+        value.putInt(operationTimeInMs != Utils.Infinite_Time ? (int) (operationTimeInMs / Time.MsPerSec)
+            : (int) operationTimeInMs);
+        value.position(0);
+        break;
       default:
         throw new IllegalArgumentException("Unsupported formatVersion " + formatVersion + " for IndexValue ");
     }
@@ -483,6 +566,19 @@ class IndexValue implements Comparable<IndexValue> {
       expiresAtMs = Utils.Infinite_Time;
     } else {
       expiresAtMs = Utils.getTimeInMsToTheNearestSec(expiresAtMsLocal);
+    }
+  }
+
+  void setBaseOffset(long baseOffset) {
+    this.baseOffset = baseOffset;
+  }
+
+  @Override
+  public Object clone() {
+    try {
+      return super.clone();
+    } catch (CloneNotSupportedException e) {
+      throw new RuntimeException("Fail to clone IndexValue: " + toString(), e);
     }
   }
 

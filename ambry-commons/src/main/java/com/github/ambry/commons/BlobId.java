@@ -207,8 +207,8 @@ public class BlobId extends StoreKey {
    * @param blobDataType The blob data type.
    * @param uuidStr The uuid that is to be used to construct this id.
    */
-  BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId, PartitionId partitionId,
-      boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
+  public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId,
+      PartitionId partitionId, boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");
     }
@@ -385,6 +385,7 @@ public class BlobId extends StoreKey {
    * blobId was formed, it will return {@link Account#UNKNOWN_ACCOUNT_ID}.
    * @return The id of the {@link Account} who created this blob.
    */
+  @Override
   public short getAccountId() {
     return accountId;
   }
@@ -394,6 +395,7 @@ public class BlobId extends StoreKey {
    * the blobId was formed, it will return {@link Container#UNKNOWN_CONTAINER_ID}.
    * @return The id of the {@link Container} where this blob belongs to.
    */
+  @Override
   public short getContainerId() {
     return containerId;
   }
@@ -408,6 +410,10 @@ public class BlobId extends StoreKey {
       return true;
     }
     return (this.accountId == accountId) && (this.containerId == containerId);
+  }
+
+  public boolean isEncrypted() {
+    return isEncrypted;
   }
 
   /**
@@ -784,15 +790,15 @@ public class BlobId extends StoreKey {
   /**
    * A serde to store UUIDs in a more compact byte representation than their canonical string representation.
    */
-  private static class UuidSerDe {
-    static final int SIZE_IN_BYTES = 2 * Long.BYTES;
+  public static class UuidSerDe {
+    public static final int SIZE_IN_BYTES = 2 * Long.BYTES;
 
     /**
      * Write a compact representation of a {@link UUID} into a {@link ByteBuffer}. This will advance the buffer cursor.
      * @param uuid the {@link UUID} to serialize.
      * @param buf the {@link ByteBuffer} to write into.
      */
-    static void serialize(UUID uuid, ByteBuffer buf) {
+    public static void serialize(UUID uuid, ByteBuffer buf) {
       buf.putLong(uuid.getMostSignificantBits());
       buf.putLong(uuid.getLeastSignificantBits());
     }
@@ -803,7 +809,7 @@ public class BlobId extends StoreKey {
      * @return the {@link UUID}.
      * @throws IOException if there are errors reading from the stream.
      */
-    static UUID deserialize(DataInputStream stream) throws IOException {
+    public static UUID deserialize(DataInputStream stream) throws IOException {
       long mostSigBits = stream.readLong();
       long leastSigBits = stream.readLong();
       return new UUID(mostSigBits, leastSigBits);

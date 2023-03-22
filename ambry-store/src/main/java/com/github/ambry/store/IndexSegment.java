@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
@@ -86,6 +87,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   private final int LAST_MODIFIED_TIME_FIELD_LENGTH = 8;
   private final int RESET_KEY_TYPE_FIELD_LENGTH = 2;
   private final int RESET_KEY_VERSION_FIELD_LENGTH = 2;
+  private final ReplicaId replicaId;
   private final StoreConfig config;
   private final String indexSegmentFilenamePrefix;
   private final Offset startOffset;
@@ -125,8 +127,9 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @param config The store config used to initialize the index segment
    * @param time the {@link Time} instance to use
    */
-  IndexSegment(String dataDir, Offset startOffset, StoreKeyFactory factory, int entrySize, int valueSize,
-      StoreConfig config, StoreMetrics metrics, Time time) {
+  IndexSegment(ReplicaId replicaId, String dataDir, Offset startOffset, StoreKeyFactory factory, int entrySize,
+      int valueSize, StoreConfig config, StoreMetrics metrics, Time time) {
+    this.replicaId = replicaId;
     this.config = config;
     this.startOffset = startOffset;
     this.factory = factory;
@@ -140,7 +143,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     // For key size, we decided to allow different key sizes when we introduce V2 blob ids.
     // https://github.com/linkedin/ambry/pull/698
     // Instead of pre set a pretty big entry size for different key blob version, we monitor the max entry size.
-    this.maxEntrySize = entrySize;
+    //this.maxEntrySize = entrySize;
     endOffset = new AtomicReference<>(startOffset);
     index = new ConcurrentSkipListMap<>();
     version = PersistentIndex.CURRENT_VERSION;
@@ -164,9 +167,10 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @param time the {@link Time} instance to use
    * @throws StoreException
    */
-  IndexSegment(File indexFile, boolean sealed, StoreKeyFactory factory, StoreConfig config, StoreMetrics metrics,
-      Journal journal, Time time) throws StoreException {
+  IndexSegment(ReplicaId replicaId, File indexFile, boolean sealed, StoreKeyFactory factory, StoreConfig config,
+      StoreMetrics metrics, Journal journal, Time time) throws StoreException {
     try {
+      this.replicaId = replicaId;
       this.config = config;
       this.indexFile = indexFile;
       this.factory = factory;
@@ -379,6 +383,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   NavigableSet<IndexValue> find(StoreKey keyToFind) throws StoreException {
     NavigableSet<IndexValue> toReturn = null;
     NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
+    keyToFind = compactStoreKey(keyToFind);
     rwLock.readLock().lock();
     try {
       if (!sealed.get()) {
@@ -427,34 +432,35 @@ class IndexSegment implements Iterable<IndexEntry> {
               + "originalMessageOffset {} fileEndOffset {}", indexFile.getAbsolutePath(), entry.getKey(),
           entry.getValue().getOffset(), entry.getValue().getSize(), entry.getValue().getExpiresAtMs(),
           entry.getValue().getOriginalMessageOffset(), fileEndOffset);
-      boolean isPresent = index.containsKey(entry.getKey());
-      index.computeIfAbsent(entry.getKey(), key -> new ConcurrentSkipListSet<>()).add(entry.getValue());
+      IndexEntry compactEnt = compactEntry(entry);
+      boolean isPresent = index.containsKey(compactEnt.getKey());
+      index.computeIfAbsent(compactEnt.getKey(), key -> new ConcurrentSkipListSet<>()).add(compactEnt.getValue());
       if (!isPresent) {
-        bloomFilter.add(getStoreKeyBytes(entry.getKey()));
+        bloomFilter.add(getStoreKeyBytes(compactEnt.getKey()));
       }
       if (resetKeyInfo == null) {
         resetKeyInfo =
             new ResetKeyInfo(entry.getKey(), entry.getValue().getIndexValueType(), entry.getValue().getLifeVersion());
       }
       numberOfItems.incrementAndGet();
-      sizeWritten.addAndGet(entry.getKey().sizeInBytes() + entry.getValue().getBytes().capacity());
+      sizeWritten.addAndGet(compactEnt.getKey().sizeInBytes() + compactEnt.getValue().getSizeInBytes());
       endOffset.set(fileEndOffset);
-      long operationTimeInMs = entry.getValue().getOperationTimeInMs();
+      long operationTimeInMs = compactEnt.getValue().getOperationTimeInMs();
       if (operationTimeInMs == Utils.Infinite_Time) {
         lastModifiedTimeSec.set(time.seconds());
       } else if ((operationTimeInMs / Time.MsPerSec) > lastModifiedTimeSec.get()) {
         lastModifiedTimeSec.set(operationTimeInMs / Time.MsPerSec);
       }
       if (valueSize == VALUE_SIZE_INVALID_VALUE) {
-        valueSize = entry.getValue().getBytes().capacity();
+        valueSize = compactEnt.getValue().getSizeInBytes();
         logger.info("IndexSegment : {} setting value size to {} for index with start offset {}",
             indexFile.getAbsolutePath(), valueSize, startOffset);
       }
-      int keySize = entry.getKey().sizeInBytes();
+      int keySize = compactEnt.getKey().sizeInBytes();
       if (keySize + valueSize > maxEntrySize) {
         maxEntrySize = keySize + valueSize;
         logger.info("IndexSegment : {} setting persisted entry size to {} of key {} for index with start offset {}",
-            indexFile.getAbsolutePath(), maxEntrySize, entry.getKey().getLongForm(), startOffset);
+            indexFile.getAbsolutePath(), maxEntrySize, compactEnt.getKey().getLongForm(), startOffset);
       }
     } finally {
       rwLock.writeLock().unlock();
@@ -497,7 +503,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   /**
    * Writes the index to a persistent file.
    *
-   * Those that are written in version 4 has the following format:
+   * Those that are written in version 4, 5 have the following format:
    *
    *  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    * | version | entrysize | valuesize | fileendpointer |  last modified time(in secs) | Reset key | Reset key type | Reset key version ...
@@ -740,6 +746,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         case PersistentIndex.VERSION_2:
         case PersistentIndex.VERSION_3:
         case PersistentIndex.VERSION_4:
+        case PersistentIndex.VERSION_5:
           tmpEntrySize = stream.readInt();
           tmpValueSize = stream.readInt();
           indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
@@ -776,7 +783,7 @@ class IndexSegment implements Iterable<IndexEntry> {
         if (getVersion() >= PersistentIndex.VERSION_2) {
           stream.readFully(padding, 0, tmpEntrySize - (key.sizeInBytes() + tmpValueSize));
         }
-        IndexValue blobValue = new IndexValue(startOffset.getName(), ByteBuffer.wrap(value), getVersion());
+        IndexValue blobValue = new IndexValue(startOffset, ByteBuffer.wrap(value), getVersion(), key);
         long offsetInLogSegment = blobValue.getOffset().getOffset();
         // ignore entries that have offsets outside the log end offset that this index represents
         if (offsetInLogSegment + blobValue.getSize() <= logEndOffset) {
@@ -941,6 +948,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     // These variables would change with sealed boolean
     NavigableMap<StoreKey, ConcurrentSkipListSet<IndexValue>> indexCopy = index;
     List<IndexEntry> entriesLocal = new ArrayList<>();
+    key = compactStoreKey(key);
     rwLock.readLock().lock();
     boolean isSealed = sealed.get();
     rwLock.readLock().unlock();
@@ -955,7 +963,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       }
       for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : tempMap.entrySet()) {
         for (IndexValue value : entry.getValue()) {
-          IndexValue newValue = new IndexValue(startOffset.getName(), value.getBytes(), getVersion());
+          IndexValue newValue = (IndexValue) value.clone();
           entriesLocal.add(new IndexEntry(entry.getKey(), newValue));
           currentTotalSizeOfEntriesInBytes.addAndGet(value.getSize());
         }
@@ -984,7 +992,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       if (!sealed.get()) {
         throw new IllegalStateException("Index segment {} is not sealed, not able to determine the first key.");
       }
-      return sealedIndex.getFirstKeyInSealedSegment();
+      return uncompactStoreKey(sealedIndex.getFirstKeyInSealedSegment());
     } finally {
       rwLock.readLock().unlock();
     }
@@ -1008,6 +1016,31 @@ class IndexSegment implements Iterable<IndexEntry> {
         iterator.remove();
       }
     }
+  }
+
+  private IndexEntry compactEntry(IndexEntry entry) {
+    if (getVersion() != PersistentIndex.VERSION_5) {
+      return entry;
+    }
+    StoreKey compactKey = CompactBlobId.fromStoreKey(entry.getKey());
+    if (compactKey == entry.getKey()) {
+      return entry;
+    }
+    return new IndexEntry(compactKey, entry.getValue(), entry.getCrc());
+  }
+
+  private StoreKey compactStoreKey(StoreKey key) {
+    if (getVersion() != PersistentIndex.VERSION_5) {
+      return key;
+    }
+    return CompactBlobId.fromStoreKey(key);
+  }
+
+  private StoreKey uncompactStoreKey(StoreKey key) {
+    if (getVersion() != PersistentIndex.VERSION_5) {
+      return key;
+    }
+    return CompactBlobId.toStoreKey(key, replicaId);
   }
 
   /**
@@ -1130,7 +1163,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       for (; end < totalEntries && getKeyAt(mmap, end).equals(keyToFind); end++) {
         logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), keyToFind, end);
         mmap.get(buf);
-        values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
+        values.add(new IndexValue(startOffset, ByteBuffer.wrap(buf), getVersion(), keyToFind));
       }
       end--;
 
@@ -1139,7 +1172,7 @@ class IndexSegment implements Iterable<IndexEntry> {
       for (; start >= 0 && getKeyAt(mmap, start).equals(keyToFind); start--) {
         logger.trace("Index Segment {}: found {} at {}", indexFile.getAbsolutePath(), keyToFind, start);
         mmap.get(buf);
-        values.add(new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion()));
+        values.add(new IndexValue(startOffset, ByteBuffer.wrap(buf), getVersion(), keyToFind));
       }
       return new Pair<>(start, end);
     }
@@ -1164,7 +1197,12 @@ class IndexSegment implements Iterable<IndexEntry> {
       StoreKey storeKey = null;
       try {
         mmap.position(firstKeyRelativeOffset + index * persistedEntrySize);
-        storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
+        // Change to CompactBlobId
+        if (getVersion() == PersistentIndex.VERSION_5) {
+          storeKey = new CompactBlobId(new DataInputStream(new ByteBufferInputStream(mmap)));
+        } else {
+          storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(mmap)));
+        }
       } catch (InternalError e) {
         StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
         throw new StoreException("Internal " + errorCode.toString() + " while trying to get store key", e, errorCode);
@@ -1271,6 +1309,20 @@ class IndexSegment implements Iterable<IndexEntry> {
             endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
             lastModifiedTimeSec.set(serEntries.getLong());
             storeKey = factory.getStoreKey(new DataInputStream(new ByteBufferInputStream(serEntries)));
+            resetKeyType = PersistentIndex.IndexEntryType.values()[serEntries.getShort()];
+            resetKeyLifeVersion = serEntries.getShort();
+            resetKeyInfo = new ResetKeyInfo(storeKey, resetKeyType, resetKeyLifeVersion);
+            indexSizeExcludingEntries = VERSION_FIELD_LENGTH + KEY_OR_ENTRY_SIZE_FIELD_LENGTH + VALUE_SIZE_FIELD_LENGTH
+                + LOG_END_OFFSET_FIELD_LENGTH + CRC_FIELD_LENGTH + LAST_MODIFIED_TIME_FIELD_LENGTH
+                + storeKey.sizeInBytes() + RESET_KEY_TYPE_FIELD_LENGTH + RESET_KEY_VERSION_FIELD_LENGTH;
+            firstKeyRelativeOffset = indexSizeExcludingEntries - CRC_FIELD_LENGTH;
+            break;
+          case PersistentIndex.VERSION_5:
+            persistedEntrySize = serEntries.getInt();
+            persistedValueSize = serEntries.getInt();
+            endOffset.set(new Offset(startOffset.getName(), serEntries.getLong()));
+            lastModifiedTimeSec.set(serEntries.getLong());
+            storeKey = new CompactBlobId(new DataInputStream(new ByteBufferInputStream(serEntries)));
             resetKeyType = PersistentIndex.IndexEntryType.values()[serEntries.getShort()];
             resetKeyLifeVersion = serEntries.getShort();
             resetKeyInfo = new ResetKeyInfo(storeKey, resetKeyType, resetKeyLifeVersion);
@@ -1555,7 +1607,8 @@ class IndexSegment implements Iterable<IndexEntry> {
       try {
         StoreKey key = sealedIndex.getKeyAt(mmap, cursor);
         mmap.get(valueBuf);
-        return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
+        return new IndexEntry(uncompactStoreKey(key),
+            new IndexValue(startOffset, ByteBuffer.wrap(valueBuf), getVersion(), key));
       } catch (Exception e) {
         throw new IllegalStateException(
             "Failed to read index entry at " + cursor + " in index segment file " + indexFile.getAbsolutePath(), e);
@@ -1590,7 +1643,8 @@ class IndexSegment implements Iterable<IndexEntry> {
         int i = cursor - 1;
         StoreKey key = sealedIndex.getKeyAt(mmap, i);
         mmap.get(valueBuf);
-        return new IndexEntry(key, new IndexValue(startOffset.getName(), ByteBuffer.wrap(valueBuf), getVersion()));
+        return new IndexEntry(uncompactStoreKey(key),
+            new IndexValue(startOffset, ByteBuffer.wrap(valueBuf), getVersion(), key));
       } catch (Exception e) {
         throw new IllegalStateException(
             "Failed to read index entry at " + cursor + " in index segment file " + indexFile.getAbsolutePath(), e);
@@ -1654,7 +1708,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     @Override
     public IndexEntry next() {
       IndexEntry cur = it.next();
-      return new IndexEntry(cur.getKey(), new IndexValue(cur.getValue()));
+      return new IndexEntry(uncompactStoreKey(cur.getKey()), new IndexValue(cur.getValue()));
     }
   }
 

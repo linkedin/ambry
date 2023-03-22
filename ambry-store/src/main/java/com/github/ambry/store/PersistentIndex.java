@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Timer;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
@@ -73,6 +74,7 @@ class PersistentIndex {
   static final short VERSION_2 = 2;
   static final short VERSION_3 = 3;
   static final short VERSION_4 = 4;
+  static final short VERSION_5 = 5;
   static short CURRENT_VERSION = VERSION_4;
   static final String CLEAN_SHUTDOWN_FILENAME = "cleanshutdown";
 
@@ -107,6 +109,7 @@ class PersistentIndex {
 
   private final long maxInMemoryIndexSizeInBytes;
   private final int maxInMemoryNumElements;
+  private final ReplicaId replicaId;
   private final String dataDir;
   private final MessageStoreHardDelete hardDelete;
   private final StoreKeyFactory factory;
@@ -187,15 +190,15 @@ class PersistentIndex {
    * @param incarnationId to uniquely identify the store's incarnation
    * @throws StoreException
    */
-  PersistentIndex(String datadir, String storeId, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+  PersistentIndex(ReplicaId replicaId, String datadir, String storeId, ScheduledExecutorService scheduler, Log log,
+      StoreConfig config, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics, Time time, UUID sessionId, UUID incarnationId)
       throws StoreException {
     /* it is no longer required that the journal have twice the size of the index segment size since the index
     segment will not squash entries anymore but useful to keep this here in order to allow for a new index segment
     to be created that doesn't squash entries.
      */
-    this(datadir, storeId, scheduler, log, config, factory, recovery, hardDelete, diskIOScheduler, metrics,
+    this(replicaId, datadir, storeId, scheduler, log, config, factory, recovery, hardDelete, diskIOScheduler, metrics,
         new Journal(datadir, 2 * config.storeIndexMaxNumberOfInmemElements,
             config.storeMaxNumberOfEntriesToReturnFromJournal), time, sessionId, incarnationId,
         CLEAN_SHUTDOWN_FILENAME);
@@ -221,10 +224,11 @@ class PersistentIndex {
    * @param cleanShutdownFileName the name of the file that will be stored on clean shutdown.
    * @throws StoreException
    */
-  PersistentIndex(String datadir, String storeId, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
+  PersistentIndex(ReplicaId replicaId, String datadir, String storeId, ScheduledExecutorService scheduler, Log log,
+      StoreConfig config, StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics, Journal journal, Time time, UUID sessionId,
       UUID incarnationId, String cleanShutdownFileName) throws StoreException {
+    this.replicaId = replicaId;
     this.dataDir = datadir;
     this.log = log;
     this.time = time;
@@ -254,7 +258,8 @@ class PersistentIndex {
         // The recent index segment would go through recovery after they have been
         // read into memory
         boolean sealed = determineSealStatusForIndexFiles(i, indexFiles);
-        IndexSegment info = new IndexSegment(indexFiles.get(i), sealed, factory, config, metrics, journal, time);
+        IndexSegment info =
+            new IndexSegment(replicaId, indexFiles.get(i), sealed, factory, config, metrics, journal, time);
         logger.info("Index : {} loaded index segment {} with start offset {} and end offset {} ", datadir,
             indexFiles.get(i), info.getStartOffset(), info.getEndOffset());
         validIndexSegments.put(info.getStartOffset(), info);
@@ -525,7 +530,8 @@ class PersistentIndex {
 
       TreeMap<Offset, IndexSegment> segmentsToAdd = new TreeMap<>();
       for (File indexSegmentFile : segmentFilesToAdd) {
-        IndexSegment indexSegment = new IndexSegment(indexSegmentFile, true, factory, config, metrics, journal, time);
+        IndexSegment indexSegment =
+            new IndexSegment(replicaId, indexSegmentFile, true, factory, config, metrics, journal, time);
         if (journalFirstOffset != null && indexSegment.getEndOffset().compareTo(journalFirstOffset) > 0) {
           throw new IllegalArgumentException(
               "One of the index segments has an end offset " + indexSegment.getEndOffset()
@@ -685,10 +691,11 @@ class PersistentIndex {
   void addToIndex(IndexEntry entry, FileSpan fileSpan) throws StoreException {
     validateFileSpan(fileSpan, true);
     if (needToRollOverIndex(entry)) {
-      int valueSize = entry.getValue().getBytes().capacity();
+      int valueSize = entry.getValue().getSizeInBytes();
       int entrySize = entry.getKey().sizeInBytes() + valueSize;
       IndexSegment info =
-          new IndexSegment(dataDir, entry.getValue().getOffset(), factory, entrySize, valueSize, config, metrics, time);
+          new IndexSegment(replicaId, dataDir, entry.getValue().getOffset(), factory, entrySize, valueSize, config,
+              metrics, time);
       info.addEntry(entry, fileSpan.getEndOffset());
       // always add to both valid and in-flux index segment map to account for the fact that changeIndexSegments()
       // might be in the process of updating the reference to validIndexSegments
@@ -740,7 +747,7 @@ class PersistentIndex {
    */
   private boolean needToRollOverIndex(IndexEntry entry) {
     Offset offset = entry.getValue().getOffset();
-    int thisValueSize = entry.getValue().getBytes().capacity();
+    int thisValueSize = entry.getValue().getSizeInBytes();
     if (validIndexSegments.size() == 0) {
       logger.info("Creating first segment with start offset {}", offset);
       return true;
@@ -769,6 +776,7 @@ class PersistentIndex {
           dataDir, lastSegment.getStartOffset(), offset, lastSegment.getNumberOfItems(), maxInMemoryNumElements);
       return true;
     }
+    // Value size at the same version should be the same. This if statement might not be effective anymore
     if (lastSegment.getValueSize() != thisValueSize) {
       logger.info(
           "Index: {} Rolling over from {} to {} because the segment value size: {} != current entry value size: {}",
@@ -903,8 +911,7 @@ class PersistentIndex {
           if (retCandidate != null) {
             // merge entries if required to account for updated fields
             if (latest.isTtlUpdate() && !retCandidate.isTtlUpdate()) {
-              retCandidate = new IndexValue(retCandidate.getOffset().getName(), retCandidate.getBytes(),
-                  retCandidate.getFormatVersion());
+              retCandidate = (IndexValue) retCandidate.clone();
               retCandidate.setFlag(IndexValue.Flags.Ttl_Update_Index);
               retCandidate.setExpiresAtMs(latest.getExpiresAtMs());
             }
