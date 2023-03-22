@@ -80,6 +80,8 @@ public class RouterConfig {
   public static final String ROUTER_TTL_UPDATE_REQUEST_PARALLELISM = "router.ttl.update.request.parallelism";
   public static final String ROUTER_TTL_UPDATE_SUCCESS_TARGET = "router.ttl.update.success.target";
   public static final String ROUTER_UNDELETE_REQUEST_PARALLELISM = "router.undelete.request.parallelism";
+  public static final String ROUTER_UNDELETE_OPERATION_TRACKER_TYPE = "router.undelete.operation.tracker.type";
+  public static final String ROUTER_UNDELETE_SUCCESS_TARGET = "router.undelete.success.target";
   public static final String ROUTER_USE_GET_BLOB_OPERATION_FOR_BLOB_INFO =
       "router.use.get.blob.operation.for.blob.info";
   public static final String ROUTER_OPERATION_TRACKER_CUSTOM_PERCENTILES =
@@ -385,6 +387,20 @@ public class RouterConfig {
   @Config(ROUTER_UNDELETE_REQUEST_PARALLELISM)
   @Default("3")
   public final int routerUndeleteRequestParallelism;
+
+  /**
+   * The OperationTracker to use for UNDELETE operations.
+   */
+  @Config(ROUTER_UNDELETE_OPERATION_TRACKER_TYPE)
+  @Default("UndeleteOperationTracker")
+  public final String routerUndeleteOperationTrackerType;
+
+  /**
+   * The minimum number of successful responses required for a undelete operation.
+   */
+  @Config(ROUTER_UNDELETE_SUCCESS_TARGET)
+  @Default("2")
+  public final int routerUndeleteSuccessTarget;
 
   /**
    * If this config is set to {@code true} the router will use {@code GetBlobOperation} instead of
@@ -695,7 +711,6 @@ public class RouterConfig {
   @Default("true")
   public final boolean routerOperationTrackerCheckAllOriginatingReplicasForNotFound;
 
-
   // Group compression-related configs in the CompressConfig class.
   private final CompressionConfig compressionConfig;
 
@@ -778,6 +793,9 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_TTL_UPDATE_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
     routerUndeleteRequestParallelism =
         verifiableProperties.getIntInRange(ROUTER_UNDELETE_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
+    routerUndeleteSuccessTarget =
+        verifiableProperties.getIntInRange(ROUTER_UNDELETE_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
+    routerUndeleteOperationTrackerType = verifiableProperties.getString(ROUTER_UNDELETE_OPERATION_TRACKER_TYPE, "UndeleteOperationTracker");
     routerUseGetBlobOperationForBlobInfo =
         verifiableProperties.getBoolean(ROUTER_USE_GET_BLOB_OPERATION_FOR_BLOB_INFO, false);
     List<String> customPercentiles =
