@@ -837,9 +837,12 @@ public class MySqlAccountServiceIntegrationTest {
     }
 
     //add new dataset with same primary key after it has been deleted.
-    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_EXPIRED).setVersionSchema(
+    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
         Dataset.VersionSchema.TIMESTAMP).setRetentionTimeInSeconds(-1).setRetentionCount(retentionCount).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+    datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME);
+    assertEquals("Mismatch on new added dataset", dataset, datasetFromMysql);
   }
 
   /**
@@ -973,6 +976,10 @@ public class MySqlAccountServiceIntegrationTest {
     //add dataset version again, should succeed.
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+
+    //get the new added dataset version, should not fail.
+    mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version);
 
     // Add dataset version which didn't follow the semantic format.
     version = "1.2";
