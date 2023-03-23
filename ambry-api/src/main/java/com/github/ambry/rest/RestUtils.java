@@ -259,6 +259,10 @@ public class RestUtils {
      */
     public static final String UPLOAD_NAMED_BLOB_MODE = "x-ambry-upload-named-blob-mode";
     /**
+     * It is set to a string that differentiate STITCH vs regular upload dataset version. If it set to "STITCH", it indicate that this is the a stitch upload.
+     */
+    public static final String UPLOAD_DATASET_VERSION_MODE = "x-ambry-upload-dataset-version-mode";
+    /**
      * This header will carry a UUID that represents a "session." For example, when performing a stitched upload, each
      * chunk upload should be a part of the same session.
      */
@@ -783,6 +787,24 @@ public class RestUtils {
     final String STITCH = "STITCH";
     try {
       return STITCH.equals(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false));
+    } catch (RestServiceException e) {
+      return false;
+    }
+  }
+
+  /**
+   * Return true when the given dataset version upload request is a stitch request. The {@code restRequest} has to be a dataset version upload
+   * request, which means it's PUT request and the operation in requestPath is dataset version.
+   * Notice that this method doesn't enforce this precondition.
+   * @param restRequest
+   * @return
+   */
+  public static boolean isDatasetVersionStitchRequest(RestRequest restRequest) {
+    // This request has to be dataset version upload Request, which means it's PUT request and the operation in requestPath is datasetVersion.
+    final String STITCH = "STITCH";
+    try {
+      return STITCH.equals(
+          RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_DATASET_VERSION_MODE, false));
     } catch (RestServiceException e) {
       return false;
     }

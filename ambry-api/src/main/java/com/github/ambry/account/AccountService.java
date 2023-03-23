@@ -17,6 +17,7 @@ import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.Closeable;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -242,6 +243,11 @@ public interface AccountService extends Closeable {
    */
   default void deleteDatasetVersion(String accountName, String containerName, String datasetName,
       String version) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  default List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 

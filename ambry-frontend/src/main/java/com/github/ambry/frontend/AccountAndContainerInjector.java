@@ -21,6 +21,7 @@ import com.github.ambry.account.Dataset;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -35,6 +36,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
 
 
@@ -364,11 +366,17 @@ public class AccountAndContainerInjector {
         && Container.UNKNOWN_CONTAINER_NAME.equals(namedBlobPath.getContainerName()))) {
       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
     }
-    List<String> prohibitedHeaders = Arrays.asList(InternalKeys.TARGET_ACCOUNT_KEY, InternalKeys.TARGET_CONTAINER_KEY);
-    for (String prohibitedHeader : prohibitedHeaders) {
-      if (restRequest.getArgs().get(prohibitedHeader) != null) {
-        throw new RestServiceException("Unexpected header " + prohibitedHeader + " in request",
-            RestServiceErrorCode.BadRequest);
+    //when delete the dataset, we need to delete the dataset version as well, so the InternalKeys.TARGET_ACCOUNT_KEY
+    //and InternalKeys.TARGET_CONTAINER_KEY already existed. We need to bypass this check.
+    if (!(RequestPath.matchesOperation(restRequest.getUri(), ACCOUNTS_CONTAINERS_DATASETS)
+        && restRequest.getRestMethod() == RestMethod.DELETE)) {
+      List<String> prohibitedHeaders =
+          Arrays.asList(InternalKeys.TARGET_ACCOUNT_KEY, InternalKeys.TARGET_CONTAINER_KEY);
+      for (String prohibitedHeader : prohibitedHeaders) {
+        if (restRequest.getArgs().get(prohibitedHeader) != null) {
+          throw new RestServiceException("Unexpected header " + prohibitedHeader + " in request",
+              RestServiceErrorCode.BadRequest);
+        }
       }
     }
   }

@@ -633,6 +633,24 @@ public class FrontendRestRequestServiceTest {
     assertEquals("Unexpected GET /DatasetVersions response content length", contentLength,
         restResponseChannel.getResponseBody().length);
 
+    //delete the dataset version
+    reset(namedBlobDb);
+    when(namedBlobDb.delete(any(), any(), any())).thenReturn(
+        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
+    when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    restRequest = createRestRequest(RestMethod.DELETE, namedBlobPathUri, headers, null);
+    verifyDeleteAccepted(restRequest);
+    assertEquals("Unexpected number of blobs has been deleted", 1, router.getDeletedBlobs().size());
+
+    //delete the dataset version
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri, headers, null);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
+
     //Add dataset without user tags
     versionSchema = Dataset.VersionSchema.MONOTONIC;
 
@@ -680,24 +698,33 @@ public class FrontendRestRequestServiceTest {
         blobIdFromRouter, Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
+    when(namedBlobDb.delete(any(), any(), any())).thenReturn(
+        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
+    when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+    when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
     // Issue put dataset version request, should not throw null point exception.
     doOperation(restRequest, restResponseChannel);
     assertEquals("Unexpected ttl", blobTtl,
         allBlobs.get(blobIdFromRouter).getBlobProperties().getTimeToLiveInSeconds());
 
-    //delete the dataset version
-    reset(namedBlobDb);
-    when(namedBlobDb.delete(any(), any(), any())).thenReturn(
-        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
-    when(namedBlobDb.get(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
-
-    headers = new JSONObject();
-    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
-    restRequest = createRestRequest(RestMethod.DELETE, namedBlobPathUri, headers, null);
+    //delete the dataset
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName())
+        .put(RestUtils.Headers.TARGET_DATASET_NAME, DATASET_NAME_WITHOUT_USER_TAGS);
+    restRequest = createRestRequest(RestMethod.DELETE, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, null);
     verifyDeleteAccepted(restRequest);
+    assertEquals("Unexpected number of blobs has been deleted", 1, router.getDeletedBlobs().size());
 
-    //delete the dataset version
+    //get the dataset, should be deleted.
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName())
+        .put(RestUtils.Headers.TARGET_DATASET_NAME, DATASET_NAME_WITHOUT_USER_TAGS);
+    restRequest = createRestRequest(RestMethod.GET, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, null);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
+
+    //get the datset version under the dataset, should be deleted.
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri, headers, null);
