@@ -215,6 +215,13 @@ public class NonBlockingRouterMetrics {
   public final Counter compositeBlobGetCount;
   public final Counter rawBlobGetCount;
 
+  // Metrics for Reserving partitions and blobid for metadata chunk.
+  public final Counter numFailedPartitionReserveAttempts;
+  public final Counter numUnexpectedReservedPartitionClassCount;
+  public final Counter numReservedPartitionFoundReadOnlyCount;
+  public final Counter numReservedPartitionFoundUnavailableInLocalDcCount;
+  public final Counter numReservedPartitionFoundUnavailableInAllDcCount;
+
   // SimpleOperationTracker and AdaptiveOperationTracker metrics
   public final CachedHistogram getBlobLocalDcLatencyMs;
   public final CachedHistogram getBlobCrossDcLatencyMs;
@@ -512,6 +519,16 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "CompositeBlobSizeMismatchCount"));
     unknownPartitionClassCount =
         metricRegistry.counter(MetricRegistry.name(PutOperation.class, "UnknownPartitionClassCount"));
+    numUnexpectedReservedPartitionClassCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
+        "NumUnexpectedReservedPartitionClassCount"));
+    numFailedPartitionReserveAttempts = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
+        "NumFailedPartitionReserveAttempts"));
+    numReservedPartitionFoundReadOnlyCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
+        "NumReservedPartitionFoundReadOnlyCount"));
+    numReservedPartitionFoundUnavailableInLocalDcCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
+        "NumReservedPartitionFoundUnavailableInLocalDcCount"));
+    numReservedPartitionFoundUnavailableInAllDcCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
+        "NumReservedPartitionFoundUnavailableInAllDcCount"));
     updateOptimizedCount =
         metricRegistry.counter(MetricRegistry.name(OperationController.class, "UpdateOptimizedCount"));
     updateUnOptimizedCount =
