@@ -167,6 +167,9 @@ public class DeleteBlobHandler {
           }
         }
         LOGGER.debug("Deleted {}", getRequestPath(restRequest).getOperationOrBlobId(false));
+        //if delete dataset request call this handler to delete all dataset versions under the dataset, we
+        //don't need to set the header and call securityService.processResponse. We should let DeleteDatasetHandler
+        //take care of this.
         if (!(RequestPath.matchesOperation(restRequest.getUri(), ACCOUNTS_CONTAINERS_DATASETS)
             && restRequest.getRestMethod() == RestMethod.DELETE)) {
           restResponseChannel.setStatus(ResponseStatus.Accepted);
