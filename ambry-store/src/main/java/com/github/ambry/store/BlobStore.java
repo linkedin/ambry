@@ -102,7 +102,8 @@ public class BlobStore implements Store {
   private volatile ReplicaState currentState;
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
-  private AtomicReference<ReplicaSealStatus> replicaSealStatus = new AtomicReference<>(ReplicaSealStatus.NOT_SEALED);
+  private AtomicReference<ReplicaSealStatus> replicaSealStatus =
+      new AtomicReference<>(ReplicaSealStatus.NOT_SEALED);
   private AtomicBoolean isDisabled = new AtomicBoolean(false);
   protected PersistentIndex index;
 
@@ -203,8 +204,9 @@ public class BlobStore implements Store {
     this.time = time;
     this.sealThresholdBytesHigh =
         (long) (capacityInBytes * (config.storeReadOnlyEnableSizeThresholdPercentage / 100.0));
-    this.sealThresholdBytesLow = (long) (capacityInBytes * ((config.storeReadOnlyEnableSizeThresholdPercentage
-        - config.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta) / 100.0));
+    this.sealThresholdBytesLow = (long) (capacityInBytes * (
+        (config.storeReadOnlyEnableSizeThresholdPercentage
+            - config.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta) / 100.0));
     this.partialSealThresholdBytesHigh =
         (long) (capacityInBytes * (config.storePartialWriteEnableSizeThresholdPercentage / 100.0));
     this.partialSealThresholdBytesLow = (long) (capacityInBytes * (
@@ -426,7 +428,7 @@ public class BlobStore implements Store {
       logger.debug("The current used capacity is {} bytes on store {}", index.getLogUsedCapacity(),
           replicaId.getPartitionId());
       updateSealedStatus();
-      if (!started && replicaStatusDelegates.size() > 1) {
+      if(!started && replicaStatusDelegates.size() > 1) {
         reconcileSealedStatus();
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
@@ -1202,9 +1204,10 @@ public class BlobStore implements Store {
               replicaId.getPartitionId(), index.getLogUsedCapacity(), sealThresholdBytesLow, sealThresholdBytesHigh);
         }
       }
-    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED && ((replicaStatusDelegates.size() > 1
-        && replicaSealStatus.getAndSet(ReplicaSealStatus.PARTIALLY_SEALED) != ReplicaSealStatus.PARTIALLY_SEALED)
-        || !replicaId.isPartiallySealed())) {
+    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED && (
+        (replicaStatusDelegates.size() > 1
+             && replicaSealStatus.getAndSet(ReplicaSealStatus.PARTIALLY_SEALED) != ReplicaSealStatus.PARTIALLY_SEALED)
+             || !replicaId.isPartiallySealed())) {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         if (!replicaStatusDelegate.partialSeal(replicaId)) {
           metrics.partialSealSetError.inc();
@@ -1218,9 +1221,10 @@ public class BlobStore implements Store {
               partialSealThresholdBytesHigh);
         }
       }
-    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.NOT_SEALED && ((replicaStatusDelegates.size() > 1
-        && replicaSealStatus.getAndSet(ReplicaSealStatus.NOT_SEALED) != ReplicaSealStatus.NOT_SEALED)
-        || !replicaId.isUnsealed())) {
+    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.NOT_SEALED && (
+        (replicaStatusDelegates.size() > 1
+            && replicaSealStatus.getAndSet(ReplicaSealStatus.NOT_SEALED) != ReplicaSealStatus.NOT_SEALED)
+            || !replicaId.isUnsealed())) {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         if (!replicaStatusDelegate.unseal(replicaId)) {
           metrics.unsealSetError.inc();
@@ -1274,6 +1278,7 @@ public class BlobStore implements Store {
     }
   }
 
+
   /**
    * Resolve the {@link ReplicaSealStatus} of this store's replica based on the current {@link ReplicaSealStatus} and
    * current log used capacity.
@@ -1283,15 +1288,15 @@ public class BlobStore implements Store {
     // If the size of log exceeds seal high threshold then the log should be marked as sealed.
     // If the log is already sealed, but the size exceeds low threshold, then we will wait for size to go below low
     // threshold before changing the replica state to partially_sealed.
-    if (index.getLogUsedCapacity() > sealThresholdBytesHigh || (replicaId.isSealed()
-        && index.getLogUsedCapacity() >= sealThresholdBytesLow)) {
+    if (index.getLogUsedCapacity() > sealThresholdBytesHigh ||
+        (replicaId.isSealed() && index.getLogUsedCapacity() >= sealThresholdBytesLow)) {
       return ReplicaSealStatus.SEALED;
     }
     // If the size of log exceeds partial seal high threshold then the log should be marked as partially sealed.
     // If the log is already partially sealed, but the size exceeds low threshold, then we will wait for size to go
     // below low threshold before changing the replica state to partially_sealed.
-    if (index.getLogUsedCapacity() > partialSealThresholdBytesHigh || (replicaId.isPartiallySealed()
-        && index.getLogUsedCapacity() >= partialSealThresholdBytesLow)) {
+    if (index.getLogUsedCapacity() > partialSealThresholdBytesHigh ||
+        (replicaId.isPartiallySealed() && index.getLogUsedCapacity() >= partialSealThresholdBytesLow)) {
       return ReplicaSealStatus.PARTIALLY_SEALED;
     }
     return ReplicaSealStatus.NOT_SEALED;
