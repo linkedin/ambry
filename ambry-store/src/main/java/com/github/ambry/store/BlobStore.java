@@ -1206,8 +1206,8 @@ public class BlobStore implements Store {
       }
     } else if (resolvedReplicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED && (
         (replicaStatusDelegates.size() > 1
-             && replicaSealStatus.getAndSet(ReplicaSealStatus.PARTIALLY_SEALED) != ReplicaSealStatus.PARTIALLY_SEALED)
-             || !replicaId.isPartiallySealed())) {
+            && replicaSealStatus.getAndSet(ReplicaSealStatus.PARTIALLY_SEALED) != ReplicaSealStatus.PARTIALLY_SEALED)
+            || !replicaId.isPartiallySealed())) {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         if (!replicaStatusDelegate.partialSeal(replicaId)) {
           metrics.partialSealSetError.inc();
