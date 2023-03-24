@@ -25,10 +25,7 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.Dataset;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.config.MySqlAccountServiceConfig;
-import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.mysql.MySqlDataAccessor;
-import com.github.ambry.named.NamedBlobRecord;
-import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.PreparedStatement;
@@ -37,7 +34,6 @@ import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
