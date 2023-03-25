@@ -630,9 +630,10 @@ public class HelixClusterManagerTest {
         new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
 
     PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
-    // Getting bootstrap replica should be successful on local node
+    AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
+    // 1. Verify bootstrap replica should be successful
     assertNotNull("New replica should be created successfully",
-        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), currentNode));
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode));
     assertEquals("There should be exactly one entry in bootstrap replica map", 1,
         helixClusterManager.getBootstrapReplicaMap().size());
     helixClusterManager.close();
@@ -658,19 +659,41 @@ public class HelixClusterManagerTest {
     PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
     HelixClusterManager.HelixClusterManagerQueryHelper clusterManagerCallback =
         helixClusterManager.getManagerQueryHelper();
-    AmbryDataNode dataNodeId = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
-    List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(dataNodeId));
+    AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
+
+    // Success cases:
+    // 1. All disks have equal free space. Any one of the disks can be picked up
+    List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(ambryDataNode));
     Set<AmbryDisk> potentialDisks = new HashSet<>(disks);
-    // All disks have equal free space. Any one of the disks can be picked up
     ReplicaId bootstrapReplica =
-        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), currentNode);
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
     assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
-    // Decrease free space on 5 disks. Verify that one of the other 5 disks are picked up
+
+    // 2. Decrease free space on first 5 disks. Verify that one of the last 5 disks are picked up
     for (int i = 0; i < disks.size() - 5; i++) {
       disks.get(i).decreaseAvailableSpaceInBytes(5000);
       potentialDisks.remove(disks.get(i));
     }
+    bootstrapReplica = helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
     assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
+
+    // 3. Decrease free space all other disks except last one. Verify that last one is picked up
+    for (int i = disks.size() - 5; i < disks.size() - 1; i++) {
+      disks.get(i).decreaseAvailableSpaceInBytes(5000);
+      potentialDisks.remove(disks.get(i));
+    }
+    bootstrapReplica = helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+    assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
+
+    // Failure cases
+    // 4. None of the disks have enough space to host the replica
+    for (int i = 0; i < disks.size(); i++) {
+      disks.get(i).decreaseAvailableSpaceInBytes(disks.get(i).getAvailableSpaceInBytes());
+      potentialDisks.remove(disks.get(i));
+    }
+    assertNull("Bootstrapping replica should be fail since no disk space is available",
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode));
+
     helixClusterManager.close();
   }
 

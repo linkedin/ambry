@@ -462,7 +462,6 @@ public class HelixClusterManager implements ClusterMap {
         checkLocalDcOnly);
   }
 
-
   /**
    * Disconnect from the HelixManagers associated with each and every datacenter.
    */
@@ -658,13 +657,13 @@ public class HelixClusterManager implements ClusterMap {
    *     "1": {
    *         "replicaCapacityInBytes": 107374182400,
    *         "partitionClass": "max-replicas-all-datacenters",
-   *         "localhost1_17088": "/tmp/c/1",
-   *         "localhost2_17088": "/tmp/d/1"
+   *         "localhost1_17088": "/tmp/c/1,536870912000",
+   *         "localhost2_17088": "/tmp/d/1,536870912000"
    *     },
    *     "2": {
    *         "replicaCapacityInBytes": 107374182400,
    *         "partitionClass": "max-replicas-all-datacenters",
-   *         "localhost3_17088": "/tmp/e/1"
+   *         "localhost3_17088": "/tmp/e/1,536870912000"
    *     }
    * }
    * </pre>
@@ -711,10 +710,14 @@ public class HelixClusterManager implements ClusterMap {
         if (diskCapacityStr != null) {
           // update disk capacity if bootstrap replica info contains disk capacity in bytes.
           targetDisk.setDiskCapacityInBytes(Long.parseLong(diskCapacityStr));
+        } else {
+          logger.info("Replica addition infos map doesn't contain disk capacity. Disk {} capacity {} is not changed",
+              targetDisk, targetDisk.getRawCapacityInBytes());
         }
         // A bootstrap replica is always ReplicaSealedStatus#NOT_SEALED.
         bootstrapReplica = new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity,
             ReplicaSealStatus.NOT_SEALED);
+        logger.info("Created bootstrap replica {} for Partition {}", bootstrapReplica, partitionIdStr);
       } catch (Exception e) {
         logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
             instanceName, e);
@@ -749,8 +752,11 @@ public class HelixClusterManager implements ClusterMap {
         logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
         currentPartition = mappedPartition;
       }
-      return new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, DEFAULT_REPLICA_CAPACITY_IN_BYTES,
-          ReplicaSealStatus.NOT_SEALED);
+      AmbryServerReplica replica =
+          new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, DEFAULT_REPLICA_CAPACITY_IN_BYTES,
+              ReplicaSealStatus.NOT_SEALED);
+      logger.info("Created bootstrap replica {} for Partition {}", replica, partitionIdStr);
+      return replica;
     } catch (Exception e) {
       logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
           dataNodeId, e);
@@ -772,7 +778,7 @@ public class HelixClusterManager implements ClusterMap {
     long maxAvailableDiskSpace = 0;
     for (AmbryDisk disk : disks) {
       if (disk.getAvailableSpaceInBytes() < DEFAULT_REPLICA_CAPACITY_IN_BYTES) {
-        logger.info("Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}", disk,
+        logger.debug("Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}", disk,
             disk.getAvailableSpaceInBytes(), DEFAULT_REPLICA_CAPACITY_IN_BYTES);
         continue;
       }
