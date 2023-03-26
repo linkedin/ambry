@@ -1540,6 +1540,12 @@ public class BlobStore implements Store {
       // Don't fatal the process just because we can't build the compaction history.
       logger.error("Store {}: Failed to process CompactionLogs", storeId, e);
     }
+
+    try {
+      CompactionLog.cleanupCompactionLogs(dataDir, storeId, cutoffTime);
+    } catch (Throwable e) {
+      logger.error("Store {}: Failed to clean up compaction files", storeId, e);
+    }
   }
 
   @Override
