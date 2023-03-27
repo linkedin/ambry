@@ -238,6 +238,19 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Get a list of dataset versions which is not expired or been deleted for specific dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @return a list of dataset versions which is not expired for specific dataset.
+   * @throws SQLException
+   */
+  public List<DatasetVersionRecord> getAllValidVersion(short accountId, short containerId, String datasetName)
+      throws SQLException {
+    return accountDao.getAllValidVersion(accountId, containerId, datasetName);
+  }
+
+  /**
    * Helper method to close the active connection, if there is one.
    */
   public void closeConnection() {

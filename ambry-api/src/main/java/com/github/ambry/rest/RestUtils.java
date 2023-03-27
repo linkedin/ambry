@@ -60,6 +60,8 @@ public class RestUtils {
    */
   public static final String DEFAULT_EXTENSION = "bin";
   public static final String PATH_SEPARATOR_STRING = "/";
+  public static final String STITCH = "STITCH";
+
   /**
    * Ambry specific HTTP headers.
    */
@@ -780,7 +782,6 @@ public class RestUtils {
    */
   public static boolean isNamedBlobStitchRequest(RestRequest restRequest) {
     // This request has to be NamedBlob Request, which means it's PUT request and the operation in requestPath is namedBlob.
-    final String STITCH = "STITCH";
     try {
       return STITCH.equals(RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, false));
     } catch (RestServiceException e) {

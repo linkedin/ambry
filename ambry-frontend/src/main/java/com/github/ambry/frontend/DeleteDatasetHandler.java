@@ -17,7 +17,9 @@ package com.github.ambry.frontend;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Dataset;
+import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -26,10 +28,12 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import java.util.GregorianCalendar;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.*;
 
 
 public class DeleteDatasetHandler {
@@ -39,6 +43,7 @@ public class DeleteDatasetHandler {
   private final AccountService accountService;
   private final FrontendMetrics frontendMetrics;
   private final AccountAndContainerInjector accountAndContainerInjector;
+  private final DeleteBlobHandler deleteBlobHandler;
 
   /**
    * Constructs a handler for handling requests deleting dataset.
@@ -46,13 +51,15 @@ public class DeleteDatasetHandler {
    * @param accountService the {@link AccountService} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
+   * @param deleteBlobHandler the {@link DeleteBlobHandler} used to delete all dataset versions under the dataset.
    */
   DeleteDatasetHandler(SecurityService securityService, AccountService accountService, FrontendMetrics frontendMetrics,
-      AccountAndContainerInjector accountAndContainerInjector) {
+      AccountAndContainerInjector accountAndContainerInjector, DeleteBlobHandler deleteBlobHandler) {
     this.securityService = securityService;
     this.accountService = accountService;
     this.frontendMetrics = frontendMetrics;
     this.accountAndContainerInjector = accountAndContainerInjector;
+    this.deleteBlobHandler = deleteBlobHandler;
   }
 
   /**
@@ -120,7 +127,6 @@ public class DeleteDatasetHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.deleteDatasetsSecurityPostProcessRequestMetrics, securityCheckResult -> {
         deleteDataset();
-        finalCallback.onCompletion(null, null);
       }, uri, LOGGER, finalCallback);
     }
 
@@ -136,11 +142,28 @@ public class DeleteDatasetHandler {
         accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
         containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
         datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
-        //TODO: delete all the dataset version under the dataset.
-        accountService.deleteDataset(accountName, containerName, datasetName);
-        restResponseChannel.setStatus(ResponseStatus.Accepted);
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        List<DatasetVersionRecord> datasetVersionRecordList =
+            accountService.getAllValidVersion(accountName, containerName, datasetName);
+        if (datasetVersionRecordList.size() > 0) {
+          DatasetVersionRecord record = datasetVersionRecordList.get(0);
+          String version = record.getVersion();
+          RequestPath requestPath = getRequestPath(restRequest);
+          RequestPath newRequestPath =
+              new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+                  NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
+                      + version, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+          // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
+          restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+          restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
+          deleteBlobHandler.handle(restRequest, restResponseChannel,
+              recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName));
+        } else {
+          accountService.deleteDataset(accountName, containerName, datasetName);
+          restResponseChannel.setStatus(ResponseStatus.Accepted);
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          finalCallback.onCompletion(null, null);
+        }
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "
@@ -148,6 +171,43 @@ public class DeleteDatasetHandler {
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
+    }
+
+    /**
+     *
+     * @param datasetVersionRecordList the list of the {@link DatasetVersionRecord}
+     * @param idx the index of the datasetVersionRecordList
+     * @param accountName the name of the account.
+     * @param containerName the name of the container.
+     * @param datasetName the name of the dataset.
+     * @return the chained {@link Callback} which will delete each dataset version and delete dataset for final step.
+     */
+    private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx, String accountName,
+        String containerName, String datasetName) {
+      if (idx == datasetVersionRecordList.size()) {
+        return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
+          accountService.deleteDataset(accountName, containerName, datasetName);
+          restResponseChannel.setStatus(ResponseStatus.Accepted);
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+          finalCallback.onCompletion(null, null);
+        }, uri, LOGGER, finalCallback);
+      }
+      Callback<Void> nextCallBack =
+          recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName);
+      DatasetVersionRecord record = datasetVersionRecordList.get(idx);
+      return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
+        String version = record.getVersion();
+        RequestPath requestPath = getRequestPath(restRequest);
+        RequestPath newRequestPath =
+            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
+                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+        // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
+        restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+        restRequest.setArg(Headers.DATASET_VERSION_QUERY_ENABLED, "true");
+        deleteBlobHandler.handle(restRequest, restResponseChannel, nextCallBack);
+      }, uri, LOGGER, finalCallback);
     }
   }
 }

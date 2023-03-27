@@ -199,6 +199,9 @@ public class NamedBlobPutHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
         if (RestUtils.isNamedBlobStitchRequest(restRequest)) {
+          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+            addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
+          }
           RetainingAsyncWritableChannel channel =
               new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
@@ -529,11 +532,11 @@ public class NamedBlobPutHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
         long newExpirationTimeMs = datasetVersionRecord.getExpirationTimeMs();
-        // expirationTimeMs = ttl + creationTime. If dataset version inherit the expirationTimeMs from dataset level
+        // expirationTimeMs = ttl + creationTime. If dataset version inherit the retentionTimeInSeconds from dataset level
         // the ttl should be updated.
-        if (expirationTimeMs != Utils.Infinite_Time || expirationTimeMs != newExpirationTimeMs) {
+        if (expirationTimeMs != newExpirationTimeMs) {
           blobProperties.setTimeToLiveInSeconds(
-              TimeUnit.MILLISECONDS.toSeconds(newExpirationTimeMs - blobProperties.getCreationTimeInMs()));
+              Utils.getTtlInSecsFromExpiryMs(newExpirationTimeMs, blobProperties.getCreationTimeInMs()));
         }
         frontendMetrics.addDatasetVersionProcessingTimeInMs.update(
             System.currentTimeMillis() - startAddDatasetVersionTime);

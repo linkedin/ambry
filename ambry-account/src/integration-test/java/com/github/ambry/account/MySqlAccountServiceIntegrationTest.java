@@ -1009,6 +1009,16 @@ public class MySqlAccountServiceIntegrationTest {
     } catch (AccountServiceException e) {
       assertEquals("Unexpected error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
     }
+
+    List<DatasetVersionRecord> datasetVersionRecords =
+        mySqlAccountStore.getAllValidVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME);
+    assertEquals("Mismatch on number of valid dataset versions", 4, datasetVersionRecords.size());
+
+    mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME,
+        "1");
+
+    datasetVersionRecords = mySqlAccountStore.getAllValidVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME);
+    assertEquals("Mismatch on number of valid dataset versions", 3, datasetVersionRecords.size());
   }
 
   private Account makeTestAccountWithContainer() {

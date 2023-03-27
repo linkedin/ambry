@@ -23,6 +23,7 @@ import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
@@ -35,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
@@ -165,9 +167,15 @@ public class DeleteBlobHandler {
           }
         }
         LOGGER.debug("Deleted {}", getRequestPath(restRequest).getOperationOrBlobId(false));
-        restResponseChannel.setStatus(ResponseStatus.Accepted);
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        //if delete dataset request call this handler to delete all dataset versions under the dataset, we
+        //don't need to set the header and call securityService.processResponse. We should let DeleteDatasetHandler
+        //take care of this.
+        if (!(RequestPath.matchesOperation(restRequest.getUri(), ACCOUNTS_CONTAINERS_DATASETS)
+            && restRequest.getRestMethod() == RestMethod.DELETE)) {
+          restResponseChannel.setStatus(ResponseStatus.Accepted);
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        }
         securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
       }, restRequest.getUri(), LOGGER, (r, e) -> {
         // Even we failed in router operations, we already used some of the resources in router,

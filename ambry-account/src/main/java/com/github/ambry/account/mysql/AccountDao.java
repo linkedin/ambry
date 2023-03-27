@@ -97,6 +97,7 @@ public class AccountDao {
   private final String deleteDatasetVersionByIdSql;
   private final String updateDatasetVersionIfExpiredSql;
   private final String listVersionSql;
+  private final String listValidVersionSql;
 
   // Dataset table query strings
   private final String insertDatasetSql;
@@ -172,6 +173,9 @@ public class AccountDao {
     listVersionSql =
         String.format("select %1$s from %2$s " + "where (%3$s, %4$s, %5$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
             VERSION, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    listValidVersionSql =
+        String.format("select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
+            VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
@@ -677,6 +681,30 @@ public class AccountDao {
   }
 
   /**
+   * Get a list of dataset versions which is not expired or been deleted which belongs to the related dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @return a list of dataset versions which is not expired or been deleted.
+   * @throws SQLException
+   */
+  public synchronized List<DatasetVersionRecord> getAllValidVersion(short accountId, short containerId,
+      String datasetName) throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(false);
+      PreparedStatement listAllValidVersionStatement = dataAccessor.getPreparedStatement(listValidVersionSql, false);
+      List<DatasetVersionRecord> datasetVersionRecords =
+          executeListAllValidVersionStatement(listAllValidVersionStatement, accountId, containerId, datasetName);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return datasetVersionRecords;
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
+    }
+  }
+
+  /**
    * Execute the listVersionSql statement.
    * @param statement the statement to list the latest version.
    * @param accountId the id for the parent account.
@@ -699,6 +727,38 @@ public class AccountDao {
                 + datasetName, AccountServiceErrorCode.NotFound);
       }
       return resultSet.getLong(VERSION);
+    } finally {
+      closeQuietly(resultSet);
+    }
+  }
+
+  /**
+   * Execute listValidVersionSql statement.
+   * @param statement the statement to list all dataset versions which is not expired or been deleted which belongs to
+   * the related dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @return a list of all dataset versions which is not expired or been deleted which belongs to the related dataset.
+   * @throws SQLException
+   */
+  private List<DatasetVersionRecord> executeListAllValidVersionStatement(PreparedStatement statement, int accountId,
+      int containerId, String datasetName) throws SQLException {
+    ResultSet resultSet = null;
+    List<DatasetVersionRecord> datasetVersionRecords = new ArrayList<>();
+    try {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, datasetName);
+      resultSet = statement.executeQuery();
+      while (resultSet.next()) {
+        String version = resultSet.getString(VERSION);
+        Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
+        DatasetVersionRecord datasetVersionRecord =
+            new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime));
+        datasetVersionRecords.add(datasetVersionRecord);
+      }
+      return datasetVersionRecords;
     } finally {
       closeQuietly(resultSet);
     }

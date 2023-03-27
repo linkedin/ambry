@@ -48,6 +48,8 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  * Common utility functions that will be used across frontend package
  */
 class FrontendUtils {
+  static final String NAMED_BLOB_PREFIX = "/named";
+  static final String SLASH = "/";
 
   /**
    * Fetches {@link BlobId} from the given string representation of BlobId
