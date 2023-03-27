@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -397,95 +398,28 @@ public class HelixClusterManager implements ClusterMap {
     return partitionSelectionHelper.getPartitions(partitionClass);
   }
 
-  /**
-   * {@inheritDoc}
-   * To create bootstrap replica, {@link HelixClusterManager} needs to fetch replica info (i.e. capacity, mount path)
-   * from Helix PropertyStore. This method looks up the ZNode in local datacenter and does some validation. Right now,
-   * {@link HelixClusterManager} supports getting bootstrap replica of new partition but it doesn't support getting replica
-   * residing on hosts that are not present in clustermap.
-   * The ZNRecord of REPLICA_ADDITION_ZNODE has following format in mapFields.
-   * <pre>
-   * "mapFields": {
-   *     "1": {
-   *         "replicaCapacityInBytes": 107374182400,
-   *         "partitionClass": "max-replicas-all-datacenters",
-   *         "localhost1_17088": "/tmp/c/1",
-   *         "localhost2_17088": "/tmp/d/1"
-   *     },
-   *     "2": {
-   *         "replicaCapacityInBytes": 107374182400,
-   *         "partitionClass": "max-replicas-all-datacenters",
-   *         "localhost3_17088": "/tmp/e/1"
-   *     }
-   * }
-   * </pre>
-   * In above example, two bootstrap replicas of partition[1] will be added to localhost1 and localhost2 respectively.
-   * The host name is followed by mount path on which the bootstrap replica should be placed.
-   */
   @Override
   public ReplicaId getBootstrapReplica(String partitionIdStr, DataNodeId dataNodeId) {
-    ReplicaId bootstrapReplica = null;
-    logger.info("Getting ReplicaAddition ZNRecord from HelixPropertyStore in local DC.");
-    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(REPLICA_ADDITION_ZNODE_PATH, null, AccessOption.PERSISTENT);
-    if (zNRecord == null) {
-      logger.warn("ZNRecord from HelixPropertyStore is NULL, partition to replicaInfo map doesn't exist.");
-      return null;
-    }
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
-    Map<String, Map<String, String>> partitionToReplicas = zNRecord.getMapFields();
-    Map<String, String> replicaInfos = partitionToReplicas.get(partitionIdStr);
-    if (replicaInfos == null || !replicaInfos.containsKey(instanceName)) {
-      logger.warn("Partition {} or replica on host {} is not found in replica info map", partitionIdStr, instanceName);
+    try {
+      ReplicaId bootstrapReplica =
+          isDataNodeInFullAutoMode(dataNodeId) ? getBootstrapReplicaInFullAuto(partitionIdStr, dataNodeId)
+              : getBootstrapReplicaInSemiAuto(partitionIdStr, dataNodeId);
+      // For now this method is only called by server which new replica will be added to. So if datanode equals to current
+      // node, we temporarily add this into a map (because we don't know whether store addition in storage manager
+      // succeeds or not). After store addition succeeds, current node is supposed to update InstanceConfig and will
+      // receive notification from Helix afterwards. At that time, dynamic cluster change handler will move replica from
+      // this map to clustermap related data structures that can be queried by other components.
+      if (bootstrapReplica != null && instanceName.equals(selfInstanceName)) {
+        // Note that this method might be called by several state transition threads concurrently.
+        bootstrapReplicas.put(partitionIdStr, bootstrapReplica);
+      }
+      return bootstrapReplica;
+    } catch (Exception e) {
+      logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
+          instanceName, e);
       return null;
     }
-    long replicaCapacity = Long.parseLong(replicaInfos.get(REPLICAS_CAPACITY_STR));
-    String partitionClass = replicaInfos.get(PARTITION_CLASS_STR);
-    AmbryPartition mappedPartition =
-        new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerQueryHelper);
-    AmbryPartition currentPartition =
-        partitionNameToAmbryPartition.putIfAbsent(mappedPartition.toPathString(), mappedPartition);
-    if (currentPartition == null) {
-      logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
-      currentPartition = mappedPartition;
-    }
-    // Check if data node or disk is in current cluster map, if not, set bootstrapReplica to null.
-    AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
-    String mountPathAndDiskCapacityFromHelix = replicaInfos.get(instanceName);
-    String[] segments = mountPathAndDiskCapacityFromHelix.split(DISK_CAPACITY_DELIM_STR);
-    String mountPath = segments[0];
-    String diskCapacityStr = segments.length >= 2 ? segments[1] : null;
-    Set<AmbryDisk> disks = dataNode != null ? ambryDataNodeToAmbryDisks.get(dataNode) : null;
-    Optional<AmbryDisk> potentialDisk =
-        disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPath)).findAny() : Optional.empty();
-    if (potentialDisk.isPresent()) {
-      try {
-        AmbryDisk targetDisk = potentialDisk.get();
-        if (diskCapacityStr != null) {
-          // update disk capacity if bootstrap replica info contains disk capacity in bytes.
-          targetDisk.setDiskCapacityInBytes(Long.parseLong(diskCapacityStr));
-        }
-        // A bootstrap replica is always ReplicaSealedStatus#NOT_SEALED.
-        bootstrapReplica = new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity,
-            ReplicaSealStatus.NOT_SEALED);
-      } catch (Exception e) {
-        logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
-            instanceName, e);
-        bootstrapReplica = null;
-      }
-    } else {
-      logger.error(
-          "Either datanode or disk that associated with bootstrap replica is not found in cluster map. Cannot create the replica.");
-    }
-    // For now this method is only called by server which new replica will be added to. So if datanode equals to current
-    // node, we temporarily add this into a map (because we don't know whether store addition in storage manager
-    // succeeds or not). After store addition succeeds, current node is supposed to update InstanceConfig and will
-    // receive notification from Helix afterwards. At that time, dynamic cluster change handler will move replica from
-    // this map to clustermap related data structures that can be queried by other components.
-    if (bootstrapReplica != null && instanceName.equals(selfInstanceName)) {
-      // Note that this method might be called by several state transition threads concurrently.
-      bootstrapReplicas.put(currentPartition.toPathString(), bootstrapReplica);
-    }
-    return bootstrapReplica;
   }
 
   @Override
@@ -500,11 +434,10 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   @Override
-  public boolean isDataNodeInFullAutoMode(String hostname, int port) {
-    String instanceName = getInstanceName(hostname, port);
-    DataNodeId dataNodeId = instanceNameToAmbryDataNode.get(instanceName);
-    if (dataNodeId == null) {
-      throw new IllegalArgumentException("Host " + hostname + " Port " + port + " doesn't exist");
+  public boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId) {
+    String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
+    if (instanceNameToAmbryDataNode.get(instanceName) == null) {
+      throw new IllegalArgumentException("Instance " + instanceName + " doesn't exist");
     }
     String dcName = dataNodeId.getDatacenterName();
     Set<String> resourceNames = dcToInstanceNameToResources.get(dcName).get(instanceName);
@@ -528,7 +461,6 @@ public class HelixClusterManager implements ClusterMap {
     return partitionSelectionHelper.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
         checkLocalDcOnly);
   }
-
 
   /**
    * Disconnect from the HelixManagers associated with each and every datacenter.
@@ -711,6 +643,159 @@ public class HelixClusterManager implements ClusterMap {
    */
   private AmbryReplica fetchBootstrapReplica(String partitionName) {
     return (AmbryReplica) bootstrapReplicas.remove(partitionName);
+  }
+
+  /**
+   * Get bootstrap replica in Helix semi auto mode.
+   * To create bootstrap replica, {@link HelixClusterManager} needs to fetch replica info (i.e. capacity, mount path)
+   * from Helix PropertyStore. This method looks up the ZNode in local datacenter and does some validation. Right now,
+   * {@link HelixClusterManager} supports getting bootstrap replica of new partition but it doesn't support getting replica
+   * residing on hosts that are not present in clustermap.
+   * The ZNRecord of REPLICA_ADDITION_ZNODE has following format in mapFields.
+   * <pre>
+   * "mapFields": {
+   *     "1": {
+   *         "replicaCapacityInBytes": 107374182400,
+   *         "partitionClass": "max-replicas-all-datacenters",
+   *         "localhost1_17088": "/tmp/c/1,536870912000",
+   *         "localhost2_17088": "/tmp/d/1,536870912000"
+   *     },
+   *     "2": {
+   *         "replicaCapacityInBytes": 107374182400,
+   *         "partitionClass": "max-replicas-all-datacenters",
+   *         "localhost3_17088": "/tmp/e/1,536870912000"
+   *     }
+   * }
+   * </pre>
+   * In above example, two bootstrap replicas of partition[1] will be added to localhost1 and localhost2 respectively.
+   * The host name is followed by mount path on which the bootstrap replica should be placed.
+   */
+  private ReplicaId getBootstrapReplicaInSemiAuto(String partitionIdStr, DataNodeId dataNodeId) {
+    ReplicaId bootstrapReplica = null;
+    logger.info("Getting ReplicaAddition ZNRecord from HelixPropertyStore in local DC.");
+    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(REPLICA_ADDITION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+    if (zNRecord == null) {
+      logger.warn("ZNRecord from HelixPropertyStore is NULL, partition to replicaInfo map doesn't exist.");
+      return null;
+    }
+    String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
+    Map<String, Map<String, String>> partitionToReplicas = zNRecord.getMapFields();
+    Map<String, String> replicaInfos = partitionToReplicas.get(partitionIdStr);
+    if (replicaInfos == null || !replicaInfos.containsKey(instanceName)) {
+      logger.warn("Partition {} or replica on host {} is not found in replica info map", partitionIdStr, instanceName);
+      return null;
+    }
+    long replicaCapacity = Long.parseLong(replicaInfos.get(REPLICAS_CAPACITY_STR));
+    String partitionClass = replicaInfos.get(PARTITION_CLASS_STR);
+    AmbryPartition mappedPartition =
+        new AmbryPartition(Long.parseLong(partitionIdStr), partitionClass, helixClusterManagerQueryHelper);
+    AmbryPartition currentPartition =
+        partitionNameToAmbryPartition.putIfAbsent(mappedPartition.toPathString(), mappedPartition);
+    if (currentPartition == null) {
+      logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
+      currentPartition = mappedPartition;
+    }
+    // Check if data node or disk is in current cluster map, if not, set bootstrapReplica to null.
+    AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
+    String mountPathAndDiskCapacityFromHelix = replicaInfos.get(instanceName);
+    String[] segments = mountPathAndDiskCapacityFromHelix.split(DISK_CAPACITY_DELIM_STR);
+    String mountPath = segments[0];
+    String diskCapacityStr = segments.length >= 2 ? segments[1] : null;
+    Set<AmbryDisk> disks = dataNode != null ? ambryDataNodeToAmbryDisks.get(dataNode) : null;
+    Optional<AmbryDisk> potentialDisk =
+        disks != null ? disks.stream().filter(d -> d.getMountPath().equals(mountPath)).findAny() : Optional.empty();
+    if (potentialDisk.isPresent()) {
+      try {
+        AmbryDisk targetDisk = potentialDisk.get();
+        if (diskCapacityStr != null) {
+          // update disk capacity if bootstrap replica info contains disk capacity in bytes.
+          targetDisk.setDiskCapacityInBytes(Long.parseLong(diskCapacityStr));
+        } else {
+          logger.info("Replica addition infos map doesn't contain disk capacity. Disk {} capacity {} is not changed",
+              targetDisk, targetDisk.getRawCapacityInBytes());
+        }
+        // A bootstrap replica is always ReplicaSealedStatus#NOT_SEALED.
+        bootstrapReplica = new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity,
+            ReplicaSealStatus.NOT_SEALED);
+        logger.info("Created bootstrap replica {} for Partition {}", bootstrapReplica, partitionIdStr);
+      } catch (Exception e) {
+        logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
+            instanceName, e);
+        bootstrapReplica = null;
+      }
+    } else {
+      logger.error(
+          "Either datanode or disk that associated with bootstrap replica is not found in cluster map. Cannot create the replica.");
+    }
+    return bootstrapReplica;
+  }
+
+  /**
+   * Gets bootstrap replica in Helix full auto mode.
+   * @param partitionIdStr the partition id string
+   * @param dataNodeId the {@link DataNodeId} on which bootstrap replica is placed
+   * @return {@link ReplicaId} if there is a new replica satisfying given partition and data node. {@code null} otherwise.
+   */
+  private ReplicaId getBootstrapReplicaInFullAuto(String partitionIdStr, DataNodeId dataNodeId) {
+    try {
+      AmbryDisk disk = getDiskForBootstrapReplica((AmbryDataNode) dataNodeId);
+      if (disk == null) {
+        logger.error("No Disk is available to host bootstrap replica. Cannot create the replica.");
+        return null;
+      }
+      AmbryPartition mappedPartition =
+          new AmbryPartition(Long.parseLong(partitionIdStr), clusterMapConfig.clusterMapDefaultPartitionClass,
+              helixClusterManagerQueryHelper);
+      AmbryPartition currentPartition =
+          partitionNameToAmbryPartition.putIfAbsent(mappedPartition.toPathString(), mappedPartition);
+      if (currentPartition == null) {
+        logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
+        currentPartition = mappedPartition;
+      }
+      AmbryServerReplica replica =
+          new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, DEFAULT_REPLICA_CAPACITY_IN_BYTES,
+              ReplicaSealStatus.NOT_SEALED);
+      logger.info("Created bootstrap replica {} for Partition {}", replica, partitionIdStr);
+      return replica;
+    } catch (Exception e) {
+      logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
+          dataNodeId, e);
+      return null;
+    }
+  }
+
+  /**
+   * Get a disk with maximum available space for bootstrapping replica in Full auto mode. This method is synchronized
+   * since it can be queried concurrently when multiple replicas are bootstrapped.
+   * TODO Check for disk health as well (Will be added in next PR)
+   * @param dataNode the {@link DataNodeId} on which disk is needed
+   * @return {@link AmbryDisk} which has maximum available or free capacity. If none of the disks have free space,
+   * returns null.
+   */
+  synchronized private AmbryDisk getDiskForBootstrapReplica(AmbryDataNode dataNode) {
+    Set<AmbryDisk> disks = ambryDataNodeToAmbryDisks.get(dataNode);
+    List<AmbryDisk> potentialDisks = new ArrayList<>();
+    long maxAvailableDiskSpace = 0;
+    for (AmbryDisk disk : disks) {
+      if (disk.getAvailableSpaceInBytes() < DEFAULT_REPLICA_CAPACITY_IN_BYTES) {
+        logger.debug("Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}", disk,
+            disk.getAvailableSpaceInBytes(), DEFAULT_REPLICA_CAPACITY_IN_BYTES);
+        continue;
+      }
+      if (disk.getAvailableSpaceInBytes() == maxAvailableDiskSpace) {
+        potentialDisks.add(disk);
+      } else if (disk.getAvailableSpaceInBytes() > maxAvailableDiskSpace) {
+        potentialDisks.clear();
+        potentialDisks.add(disk);
+        maxAvailableDiskSpace = disk.getAvailableSpaceInBytes();
+      }
+    }
+    if (potentialDisks.isEmpty()) {
+      return null;
+    }
+    // Select a random disk to among all the ones with equal available space.
+    int index = new Random().nextInt(potentialDisks.size());
+    return potentialDisks.get(index);
   }
 
   /**

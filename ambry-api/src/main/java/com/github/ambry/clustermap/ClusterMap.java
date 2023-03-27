@@ -119,14 +119,14 @@ public interface ClusterMap extends AutoCloseable {
   DataNodeId getDataNodeId(String hostname, int port);
 
   /**
-   * Return true if the given host is in the clustermap and all resources this host is given to have already turned
+   * Return true if the given host is in the cluster map and all resources this host is given to have already turned
    * on FULL_AUTO mode. This is a Helix specific method that requires Helix specific data. All the other implementations
    * should just return false.
-   * @param hostname of the DataNodeId
-   * @param port of the DataNodeId
+   *
+   * @param dataNodeId the {@link DataNodeId} to check.
    * @return True if all the resources for the given host has turned on FULL_AUTO.
    */
-  default boolean isDataNodeInFullAutoMode(String hostname, int port) {
+  default boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId) {
     return false;
   }
 

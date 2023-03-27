@@ -16,6 +16,8 @@ package com.github.ambry.server;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
@@ -37,7 +39,7 @@ public interface StoreManager {
    * @param id the {@link PartitionId} associated with store
    * @return {@code true} if removal succeeds. {@code false} otherwise.
    */
-  boolean removeBlobStore(PartitionId id);
+  boolean removeBlobStore(PartitionId id) throws IOException, StoreException;
 
   /**
    * Start BlobStore with given {@link PartitionId} {@code id}.

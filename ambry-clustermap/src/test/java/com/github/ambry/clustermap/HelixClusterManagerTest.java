@@ -611,6 +611,93 @@ public class HelixClusterManagerTest {
   }
 
   /**
+   * Test getting new replica in full auto.
+   */
+  @Test
+  public void getNewReplicaInFullAutoBasicTest() throws Exception {
+    assumeTrue(!useComposite);
+    metricRegistry = new MetricRegistry();
+
+    // Set the node to FullAuto
+    List<String> resourceNames = helixCluster.getResources(localDc);
+    String resourceName = resourceNames.get(0);
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    helixCluster.refreshIdealState();
+
+    // Set ZNRecord is NULL in Helix PropertyStore
+    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
+
+    PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
+    AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
+    // 1. Verify bootstrap replica should be successful
+    assertNotNull("New replica should be created successfully",
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode));
+    assertEquals("There should be exactly one entry in bootstrap replica map", 1,
+        helixClusterManager.getBootstrapReplicaMap().size());
+    helixClusterManager.close();
+  }
+
+  /**
+   * Test correct disk is used while getting new replica in full auto.
+   */
+  @Test
+  public void getNewReplicaInFullAutoDiskUsageTest() throws Exception {
+    assumeTrue(!useComposite);
+    metricRegistry = new MetricRegistry();
+    // Set the node to FullAuto
+    List<String> resourceNames = helixCluster.getResources(localDc);
+    String resourceName = resourceNames.get(0);
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    helixCluster.refreshIdealState();
+    // Set ZNRecord is NULL in Helix PropertyStore
+    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
+    // Select a partition for getting the bootstrap replica
+    PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
+    HelixClusterManager.HelixClusterManagerQueryHelper clusterManagerCallback =
+        helixClusterManager.getManagerQueryHelper();
+    AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
+
+    // Success cases:
+    // 1. All disks have equal free space. Any one of the disks can be picked up
+    List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(ambryDataNode));
+    Set<AmbryDisk> potentialDisks = new HashSet<>(disks);
+    ReplicaId bootstrapReplica =
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+    assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
+
+    // 2. Decrease free space on first 5 disks. Verify that one of the last 5 disks are picked up
+    for (int i = 0; i < disks.size() - 5; i++) {
+      disks.get(i).decreaseAvailableSpaceInBytes(5000);
+      potentialDisks.remove(disks.get(i));
+    }
+    bootstrapReplica = helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+    assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
+
+    // 3. Decrease free space all other disks except last one. Verify that last one is picked up
+    for (int i = disks.size() - 5; i < disks.size() - 1; i++) {
+      disks.get(i).decreaseAvailableSpaceInBytes(5000);
+      potentialDisks.remove(disks.get(i));
+    }
+    bootstrapReplica = helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+    assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
+
+    // Failure cases
+    // 4. None of the disks have enough space to host the replica
+    for (int i = 0; i < disks.size(); i++) {
+      disks.get(i).decreaseAvailableSpaceInBytes(disks.get(i).getAvailableSpaceInBytes());
+      potentialDisks.remove(disks.get(i));
+    }
+    assertNull("Bootstrapping replica should be fail since no disk space is available",
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode));
+
+    helixClusterManager.close();
+  }
+
+  /**
    * Tests all the interface methods.
    * @throws Exception
    */
@@ -800,12 +887,12 @@ public class HelixClusterManagerTest {
     List<DataNode> allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
     for (DataNode dataNode : allLocalDcDataNodes) {
       assertFalse("By default, local node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     List<DataNode> allRemoteDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(remoteDc);
     for (DataNode dataNode : allRemoteDcDataNodes) {
       assertFalse("By default, remote node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
 
     // Should have only one Resource when bootup
@@ -821,7 +908,7 @@ public class HelixClusterManagerTest {
     allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
     for (DataNode dataNode : allLocalDcDataNodes) {
       assertFalse("Customized mode, local node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
 
     // Now update resource to FULL_AUTO
@@ -829,12 +916,12 @@ public class HelixClusterManagerTest {
     helixCluster.refreshIdealState();
     for (DataNode dataNode : allLocalDcDataNodes) {
       assertTrue("FULL_AUTO mode, local node should be on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     // Remote data nodes should not be impacted
     for (DataNode dataNode : allRemoteDcDataNodes) {
       assertFalse("Local DC change, remote node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
 
     // Now add new resource to the local dc, it will make hosts back to off FULL_AUTO.
@@ -851,13 +938,13 @@ public class HelixClusterManagerTest {
     assertEquals("Should have two resources after adding a new resource", 2, resourceNames.size());
     for (DataNode dataNode : allLocalDcDataNodes) {
       assertFalse("More than one resources, local node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
 
     helixCluster.removeResourceIdealState(newResourceName, localDc);
     for (DataNode dataNode : allLocalDcDataNodes) {
       assertTrue("Back to one resource, local node should on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode.getHostname(), dataNode.getPort()));
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
   }
 

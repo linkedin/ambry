@@ -41,6 +41,27 @@ public interface DiskId extends Resource {
   long getRawCapacityInBytes();
 
   /**
+   * Decrease available space in bytes for this DiskId
+   *
+   * @param delta amount of bytes to decrease.
+   */
+  void decreaseAvailableSpaceInBytes(long delta);
+
+  /**
+   * Increase available space in bytes for this DiskId
+   *
+   * @param delta amount of bytes to increase.
+   */
+  void increaseAvailableSpaceInBytes(long delta);
+
+  /**
+   * Get available capacity in bytes for this DiskId
+   *
+   * @return the available capacity in bytes
+   */
+  long getAvailableSpaceInBytes();
+
+  /**
    * Gets the data node of this disk.
    *
    * @return {@link DataNodeId} hosting this disk.

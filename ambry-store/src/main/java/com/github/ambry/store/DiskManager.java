@@ -146,6 +146,8 @@ public class DiskManager {
         stores.put(replica.getPartitionId(), store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
         expectedDirs.add(replica.getReplicaPath());
+        // All these replicas are already present on this disk. Update the space used on this disk.
+        disk.decreaseAvailableSpaceInBytes(store.getReplicaId().getCapacityInBytes());
       }
     }
     compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, stores.values(), metrics, time);
@@ -371,6 +373,8 @@ public class DiskManager {
         // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
         // BOOTSTRAP -> STANDBY transition)
         createBootstrapFileIfAbsent(replica);
+        // Update the disk used space
+        disk.decreaseAvailableSpaceInBytes(replica.getCapacityInBytes());
         logger.info("New store is successfully added into DiskManager.");
         succeed = true;
       }
@@ -440,7 +444,7 @@ public class DiskManager {
    * @param id the {@link PartitionId} of the {@link BlobStore} which should be removed.
    * @return {@code true} if store removal was successful. {@code false} if not.
    */
-  boolean removeBlobStore(PartitionId id) {
+  boolean removeBlobStore(PartitionId id) throws IOException, StoreException {
     rwLock.writeLock().lock();
     boolean succeed = false;
     try {
@@ -452,6 +456,10 @@ public class DiskManager {
       } else if (!compactionManager.removeBlobStore(store)) {
         logger.error("Fail to remove store {} from compaction manager.", id);
       } else {
+        store.deleteStoreFiles();
+        // Since all the files are either deleted or returned to reserve pool, increase available space in the disk
+        disk.increaseAvailableSpaceInBytes(partitionToReplicaMap.get(id).getCapacityInBytes());
+        logger.info("Store {} is successfully removed from disk manager", id);
         stores.remove(id);
         stoppedReplicas.remove(id.toPathString());
         partitionToReplicaMap.remove(id);

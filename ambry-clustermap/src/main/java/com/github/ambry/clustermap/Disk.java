@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -36,6 +37,7 @@ class Disk implements DiskId {
   private final ResourceStatePolicy diskStatePolicy;
   private long capacityInBytes;
   private long maxCapacityInBytes;
+  private final AtomicLong availableSpaceInBytes;
 
   private static final Logger logger = LoggerFactory.getLogger(Disk.class);
 
@@ -56,6 +58,7 @@ class Disk implements DiskId {
     this.capacityInBytes = jsonObject.getLong("capacityInBytes");
     this.maxCapacityInBytes = clusterMapConfig.clustermapMaxDiskCapacityInBytes;
     validate();
+    availableSpaceInBytes = new AtomicLong(capacityInBytes);
   }
 
   @Override
@@ -77,6 +80,21 @@ class Disk implements DiskId {
   @Override
   public long getRawCapacityInBytes() {
     return capacityInBytes;
+  }
+
+  @Override
+  public void decreaseAvailableSpaceInBytes(long delta) {
+    availableSpaceInBytes.getAndAdd(-delta);
+  }
+
+  @Override
+  public void increaseAvailableSpaceInBytes(long delta) {
+    availableSpaceInBytes.getAndAdd(delta);
+  }
+
+  @Override
+  public long getAvailableSpaceInBytes() {
+    return availableSpaceInBytes.get();
   }
 
   @Override

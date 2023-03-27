@@ -60,6 +60,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.nio.channels.WritableByteChannel;
@@ -589,7 +590,10 @@ class MockStorageManager extends StorageManager {
   }
 
   @Override
-  public boolean removeBlobStore(PartitionId id) {
+  public boolean removeBlobStore(PartitionId id) throws IOException, StoreException {
+    // Delete store files to mock logic in StorageManager code.
+    Store store = getStore(id, false);
+    ((BlobStore)store).deleteStoreFiles();
     return returnValueOfRemoveBlobStore;
   }
 

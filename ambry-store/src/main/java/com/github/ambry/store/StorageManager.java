@@ -364,7 +364,7 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public boolean removeBlobStore(PartitionId id) {
+  public boolean removeBlobStore(PartitionId id) throws IOException, StoreException {
     DiskManager diskManager = partitionToDiskManager.get(id);
     if (diskManager == null) {
       logger.info("Store {} is not found in storage manager", id);
@@ -735,16 +735,14 @@ public class StorageManager implements StoreManager {
       if (replicationManagerListener != null) {
         replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
       }
-      // 3. remove store associated with given replica in Storage Manager
-      if (removeBlobStore(replica.getPartitionId())) {
-        try {
-          store.deleteStoreFiles();
-        } catch (Exception e) {
-          throw new StateTransitionException("Failed to delete directory for store " + partitionName,
+      // 3. remove store and delete all files associated with given replica in Storage Manager
+      try {
+        if (!removeBlobStore(replica.getPartitionId())) {
+          throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
               ReplicaOperationFailure);
         }
-      } else {
-        throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
+      } catch (IOException | StoreException e) {
+        throw new StateTransitionException("Failed to delete directory for store " + partitionName,
             ReplicaOperationFailure);
       }
       partitionNameToReplicaId.remove(partitionName);
