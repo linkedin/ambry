@@ -199,10 +199,6 @@ public class NamedBlobPutHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
         if (RestUtils.isNamedBlobStitchRequest(restRequest)) {
-          RetainingAsyncWritableChannel channel =
-              new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
-          restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
-        } else if (RestUtils.isDatasetVersionStitchRequest(restRequest)) {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }

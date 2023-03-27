@@ -175,8 +175,8 @@ public class DeleteBlobHandler {
           restResponseChannel.setStatus(ResponseStatus.Accepted);
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-          securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
         }
+        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
       }, restRequest.getUri(), LOGGER, (r, e) -> {
         // Even we failed in router operations, we already used some of the resources in router,
         // so let's record the charges for this request.

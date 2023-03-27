@@ -379,7 +379,7 @@ public class NamedBlobPutHandlerTest {
       FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, ttl, !REF_CONTAINER.isCacheable(), SERVICE_ID,
           CONTENT_TYPE, OWNER_ID, null, null, null);
       headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
-      headers.put(RestUtils.Headers.UPLOAD_DATASET_VERSION_MODE, "STITCH");
+      headers.put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, "STITCH");
       RestRequest request = getRestRequest(headers, dataset_version_request_path, requestBody);
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       FutureResult<Void> future = new FutureResult<>();
