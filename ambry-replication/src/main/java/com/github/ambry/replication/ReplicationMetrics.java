@@ -155,6 +155,8 @@ public class ReplicationMetrics {
   private final Counter intraColoTimeoutRequestErrorCount;
   private final Map<String, Counter> dcToRequestNetworkError = new ConcurrentHashMap<>();
   private final Counter intraColoRequestNetworkErrorCount;
+  private final Map<String, Counter> dcToRetryAfterBackoffError = new ConcurrentHashMap<>();
+  private final Counter intraColoRetryAfterBackoffErrorCount;
   private final Map<String, Counter> dcToResponseError = new ConcurrentHashMap<>();
   private final Counter intraColoResponseErrorCount;
 
@@ -285,6 +287,8 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoTimeoutRequestErrorCount"));
     intraColoRequestNetworkErrorCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoRequestNetworkErrorCount"));
+    intraColoRetryAfterBackoffErrorCount =
+        registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoRetryAfterBackoffErrorCount"));
     intraColoResponseErrorCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoResponseErrorCount"));
     this.registry = registry;
@@ -421,6 +425,9 @@ public class ReplicationMetrics {
     Counter requestNetworkError =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-RequestNetworkErrorCount"));
     dcToRequestNetworkError.put(datacenter, requestNetworkError);
+    Counter retryAfterBackoffError = registry.counter(
+        MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-RetryAfterBackoffErrorCount"));
+    dcToRetryAfterBackoffError.put(datacenter, retryAfterBackoffError);
     Counter responseError =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "Inter-" + datacenter + "-ResponseErrorCount"));
     dcToResponseError.put(datacenter, responseError);
@@ -658,6 +665,16 @@ public class ReplicationMetrics {
       dcToReplicationError.get(datacenter).inc();
     } else {
       intraColoRequestNetworkErrorCount.inc();
+      intraColoReplicationErrorCount.inc();
+    }
+  }
+
+  public void incrementRetryAfterBackoffErrorCount(boolean remoteColo, String datacenter) {
+    if (remoteColo) {
+      dcToRetryAfterBackoffError.get(datacenter).inc();
+      dcToReplicationError.get(datacenter).inc();
+    } else {
+      intraColoRetryAfterBackoffErrorCount.inc();
       intraColoReplicationErrorCount.inc();
     }
   }
