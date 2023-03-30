@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS Datasets (
     datasetName VARCHAR(235) NOT NULL,
     versionSchema INT NOT NULL,
     retentionCount INT DEFAULT NULL,
-    retentionTimeInSeconds BIGINT NOT NULL,
+    retentionTimeInSeconds BIGINT DEFAULT NULL,
     userTags JSON DEFAULT NULL,
     lastModifiedTime DATETIME(3) NOT NULL,
     delete_ts DATETIME(6) DEFAULT NULL,

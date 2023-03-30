@@ -732,7 +732,7 @@ public class MySqlAccountServiceIntegrationTest {
     //add dataset with must provide info
     Dataset dataset =
         new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_BASIC).setVersionSchema(
-            Dataset.VersionSchema.MONOTONIC).setRetentionTimeInSeconds(-1).build();
+            Dataset.VersionSchema.MONOTONIC).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     Dataset datasetFromMysql =
         mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
