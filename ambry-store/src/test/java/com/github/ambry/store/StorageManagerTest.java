@@ -15,6 +15,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
@@ -1270,10 +1271,10 @@ public class StorageManagerTest {
   }
 
   /**
-   * @return the value of {@link StorageManagerMetrics#unexpectedDirsOnDisk}.
+   * @return the value of unexpected directory.
    */
-  private long getNumUnrecognizedPartitionsReported() {
-    return getCounterValue(metricRegistry.getCounters(), DiskManager.class.getName(), "UnexpectedDirsOnDisk");
+  private int getNumUnrecognizedPartitionsReported() {
+    return getGaugeValue(metricRegistry.getGauges(), DiskManager.class.getName(), "UnexpectedDirsOnDisk");
   }
 
   /**
@@ -1285,6 +1286,17 @@ public class StorageManagerTest {
    */
   private long getCounterValue(Map<String, Counter> counters, String className, String suffix) {
     return counters.get(className + "." + suffix).getCount();
+  }
+
+  /**
+   * Get the gauge value for the metric in {@link StorageManagerMetrics} for the given class and suffix.
+   * @param gauges Map of gauge metrics to use
+   * @param className the class to which the metric belongs to
+   * @param suffix the suffix of the metric that distinguishes it from other metrics in the class.
+   * @return the value of the counter.
+   */
+  private int getGaugeValue(Map<String, Gauge> gauges, String className, String suffix) {
+    return (int) gauges.get(className + "." + suffix).getValue();
   }
 
   /**
