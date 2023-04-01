@@ -597,7 +597,7 @@ public class DiskManager {
       }
       if (unexpectedDirs.size() > 0) {
         logger.warn("Encountered unexpected dirs in {} : {}", disk.getMountPath(), unexpectedDirs);
-        metrics.unexpectedDirsOnDisk.inc(unexpectedDirs.size());
+        metrics.registerUnexpectedDirsForMountPath(disk.getMountPath(), unexpectedDirs.size());
       }
     }
   }
