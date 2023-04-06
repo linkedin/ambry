@@ -251,6 +251,21 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Get all versions from a dataset which has not expired and out of retentionCount by checking the last modified time.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @return a list of {@link DatasetVersionRecord}
+   * @throws SQLException
+   */
+  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId, short containerId,
+      String accountName, String containerName, String datasetName) throws SQLException, AccountServiceException {
+     return accountDao.getAllValidVersionsOutOfRetentionCount(accountId, containerId, accountName, containerName, datasetName);
+  }
+
+  /**
    * Helper method to close the active connection, if there is one.
    */
   public void closeConnection() {

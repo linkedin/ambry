@@ -1021,6 +1021,47 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mismatch on number of valid dataset versions", 3, datasetVersionRecords.size());
   }
 
+  /**
+   * Test get the version out of retention count.
+   */
+  @Test
+  public void testGetDatasetVersionOutOfRetentionCount() throws AccountServiceException, SQLException {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
+        Dataset.VersionSchema.SEMANTIC).setRetentionCount(2).build();
+
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // Add 1st dataset version
+    String version1 = "1.2.3";
+    long creationTimeInMs = System.currentTimeMillis();
+    DatasetVersionRecord datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version1, -1, creationTimeInMs, false);
+
+    // Add 2nd dataset version
+    String version2 = "1.2.4";
+    creationTimeInMs = System.currentTimeMillis();
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version2, -1, creationTimeInMs, false);
+
+    // Add 3rd dataset version
+    String version3 = "1.2.5";
+    creationTimeInMs = System.currentTimeMillis();
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version3, -1, creationTimeInMs, false);
+
+    List<DatasetVersionRecord> datasetVersionRecordList =
+        mySqlAccountStore.getAllValidVersionsOutOfRetentionCount(testAccount.getId(), testContainer.getId(),
+            testAccount.getName(), testContainer.getName(), DATASET_NAME);
+    assertEquals("Mismatch on size of the datasetVersionRecordList", 1, datasetVersionRecordList.size());
+    assertEquals("Mismatch on the version", version1, datasetVersionRecordList.get(0).getVersion());
+  }
+
   private Account makeTestAccountWithContainer() {
     Container testContainer =
         new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
