@@ -13,6 +13,7 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -51,6 +52,7 @@ public class AmbryUrlSigningService implements UrlSigningService {
   private final long chunkUploadMaxChunkSize;
   private final long maxUrlTtlSecs;
   private final Time time;
+  private final ClusterMap clusterMap;
 
   /**
    * Constructor
@@ -64,10 +66,11 @@ public class AmbryUrlSigningService implements UrlSigningService {
    *                                       will be made permanent once the blob is stitched together.
    * @param chunkUploadMaxChunkSize the preconfigured max size for chunks of a stitched upload.
    * @param time the {@link Time} instance to use.
+   * @param clusterMap the {@link ClusterMap} object.
    */
   AmbryUrlSigningService(String uploadEndpoint, String downloadEndpoint, long defaultUrlTtlSecs,
       long defaultMaxUploadSize, long maxUrlTtlSecs, long chunkUploadInitialChunkTtlSecs, long chunkUploadMaxChunkSize,
-      Time time) {
+      Time time, ClusterMap clusterMap) {
     if (!uploadEndpoint.endsWith(ENDPOINT_SUFFIX)) {
       uploadEndpoint = uploadEndpoint + ENDPOINT_SUFFIX;
     }
@@ -82,6 +85,7 @@ public class AmbryUrlSigningService implements UrlSigningService {
     this.chunkUploadMaxChunkSize = chunkUploadMaxChunkSize;
     this.maxUrlTtlSecs = maxUrlTtlSecs;
     this.time = time;
+    this.clusterMap = clusterMap;
   }
 
   @Override

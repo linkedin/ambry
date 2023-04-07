@@ -211,7 +211,7 @@ public class FrontendRestRequestServiceTest {
     String endpoint = "http://localhost:1174";
     urlSigningService = new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,
         frontendConfig.urlSignerDefaultMaxUploadSizeBytes, frontendConfig.urlSignerMaxUrlTtlSecs,
-        frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance());
+        frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance(), clusterMap);
     idSigningService = new AmbryIdSigningService();
     namedBlobDb = mock(NamedBlobDb.class);
     idConverterFactory =

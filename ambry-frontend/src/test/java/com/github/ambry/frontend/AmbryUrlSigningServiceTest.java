@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -33,6 +34,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
 
@@ -49,6 +51,7 @@ public class AmbryUrlSigningServiceTest {
   private static final long CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS = 24 * 1024 * 1024;
   private static final long CHUNK_UPLOAD_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
   private static final String RANDOM_AMBRY_HEADER = AmbryUrlSigningService.AMBRY_PARAMETERS_PREFIX + "random";
+  private static final ClusterMap MOCK_CLUSTER_MAP = Mockito.mock(ClusterMap.class);
 
   /**
    * Tests for {@link AmbryUrlSigningServiceFactory}.
@@ -66,7 +69,7 @@ public class AmbryUrlSigningServiceTest {
     CommonTestUtils.populateRequiredRouterProps(properties);
     properties.setProperty("router.max.put.chunk.size.bytes", Long.toString(CHUNK_UPLOAD_MAX_CHUNK_SIZE));
     UrlSigningService signer = new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
-        new MetricRegistry()).getUrlSigningService();
+        MOCK_CLUSTER_MAP).getUrlSigningService();
     assertNotNull("UrlSigningService is null", signer);
     assertTrue("UrlSigningService is AmbryUrlSigningService", signer instanceof AmbryUrlSigningService);
     assertTrue(((AmbryUrlSigningService) signer).getUploadEndpoint().contains(UPLOAD_ENDPOINT));
@@ -85,7 +88,7 @@ public class AmbryUrlSigningServiceTest {
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
     try {
       new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
-          new MetricRegistry()).getUrlSigningService();
+          MOCK_CLUSTER_MAP).getUrlSigningService();
       fail("Expected exception");
     } catch (IllegalStateException ex) {
     }
@@ -94,7 +97,7 @@ public class AmbryUrlSigningServiceTest {
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
     try {
       new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
-          new MetricRegistry()).getUrlSigningService();
+          MOCK_CLUSTER_MAP).getUrlSigningService();
       fail("Expected exception");
     } catch (IllegalStateException ex) {
     }
@@ -102,7 +105,7 @@ public class AmbryUrlSigningServiceTest {
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, "[Garbage string &%#123");
     try {
       new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
-          new MetricRegistry()).getUrlSigningService();
+          MOCK_CLUSTER_MAP).getUrlSigningService();
       fail("Expected exception");
     } catch (IllegalStateException ex) {
     }
@@ -147,7 +150,8 @@ public class AmbryUrlSigningServiceTest {
    */
   private AmbryUrlSigningService getUrlSignerWithDefaults(Time time) {
     return new AmbryUrlSigningService(UPLOAD_ENDPOINT, DOWNLOAD_ENDPOINT, DEFAULT_URL_TTL_SECS, DEFAULT_MAX_UPLOAD_SIZE,
-        MAX_URL_TTL_SECS, CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS, CHUNK_UPLOAD_MAX_CHUNK_SIZE, time);
+        MAX_URL_TTL_SECS, CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS, CHUNK_UPLOAD_MAX_CHUNK_SIZE, time, Mockito.mock(
+        ClusterMap.class));
   }
 
   /**
