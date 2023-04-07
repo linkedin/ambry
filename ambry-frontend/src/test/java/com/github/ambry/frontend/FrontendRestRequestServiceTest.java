@@ -532,7 +532,7 @@ public class FrontendRestRequestServiceTest {
     Dataset dataset =
         new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
             .setRetentionTimeInSeconds(datasetTtl)
-            .setRetentionCount(1)
+            .setRetentionCount(2)
             .build();
     byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
     List<ByteBuffer> body = new LinkedList<>();
@@ -617,16 +617,69 @@ public class FrontendRestRequestServiceTest {
 
     doOperation(restRequest, restResponseChannel);
 
+    //update dataset retention Count
+    Dataset datasetToUpdate = new DatasetBuilder(dataset).setRetentionCount(1).build();
+    datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(datasetToUpdate);
+    body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName())
+        .put(RestUtils.Headers.TARGET_DATASET_NAME, DATASET_NAME)
+        .put(RestUtils.Headers.DATASET_UPDATE, true);
+    restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+
+    //add third version
+    long version2 = 2;
+    String blobName2 = DATASET_NAME + SLASH + version2;
+    String namedBlobPathUri2 =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName2;
+    content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    body = new LinkedList<>();
+    body.add(content);
+    body.add(null);
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, 7200, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null, null,
+        null);
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri2, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+
+    byteBufferContent = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(10));
+    String blobIdFromRouter2 =
+        router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
+    NamedBlobRecord namedBlobRecord2 = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName2,
+        blobIdFromRouter2, Utils.Infinite_Time);
+    when(namedBlobDb.put(any(), any(), any())).thenReturn(
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecord2)));
+    when(namedBlobDb.delete(namedBlobRecord2.getAccountName(), namedBlobRecord2.getContainerName(),
+        blobName2)).thenReturn(
+        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter2, false)));
+    when(namedBlobDb.get(namedBlobRecord2.getAccountName(), namedBlobRecord2.getContainerName(),
+        blobName2, GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord2));
+    when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+        CompletableFuture.completedFuture(new PutResult(namedBlobRecord2)));
+
+    doOperation(restRequest, restResponseChannel);
+
     //get the 1st dataset version under the dataset, should be deleted.
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri, headers, null);
     verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
 
-    //get the 2nd dataset version, should exist
+    //get the 2nd dataset version, should be deleted.
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
-    restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri1, headers, null);
+    restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri2, headers, null);
+    restResponseChannel = new MockRestResponseChannel();
+
+    //get the 3rd dataset version, should exist
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri2, headers, null);
     restResponseChannel = new MockRestResponseChannel();
 
     //Issue get dataset version request

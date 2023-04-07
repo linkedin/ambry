@@ -179,6 +179,8 @@ public class DeleteBlobHandler {
         //do not process response when the delete request is coming caused by putting dataset version request.
         if (restRequest.getRestMethod() != RestMethod.PUT) {
           securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
+        } else {
+          securityProcessResponseCallback().onCompletion(null, null);
         }
       }, restRequest.getUri(), LOGGER, (r, e) -> {
         // Even we failed in router operations, we already used some of the resources in router,

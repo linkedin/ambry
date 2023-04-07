@@ -177,9 +177,10 @@ public class AccountDao {
     listValidVersionSql =
         String.format("select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
             VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
-    listVersionByModifiedTimeSql = String.format(
-        "select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? ORDER BY %s DESC",
-        VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
+    // list all valid versions sorted by last modified time, and skip the first N records which is not out of retentionCount.
+    listVersionByModifiedTimeSql = String.format("select %s, %s from %s "
+            + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? ORDER BY %s DESC LIMIT ?, 100", VERSION,
+        DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
         LAST_MODIFIED_TIME);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
@@ -772,17 +773,14 @@ public class AccountDao {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
+      statement.setInt(4, retentionCount);
       resultSet = statement.executeQuery();
-      int idx = 0;
       while (resultSet.next()) {
-        idx++;
-        if (idx > retentionCount) {
-          long versionValue = resultSet.getLong(VERSION);
-          Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
-          String version = convertVersionValueToVersion(versionValue, versionSchema);
-          datasetVersionRecordList.add(
-              new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime)));
-        }
+        long versionValue = resultSet.getLong(VERSION);
+        Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
+        String version = convertVersionValueToVersion(versionValue, versionSchema);
+        datasetVersionRecordList.add(
+            new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime)));
       }
       return datasetVersionRecordList;
     } finally {

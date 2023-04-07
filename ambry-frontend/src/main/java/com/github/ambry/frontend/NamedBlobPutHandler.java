@@ -31,7 +31,9 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -48,6 +50,7 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -279,7 +282,9 @@ public class NamedBlobPutHandler {
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
               routerTtlUpdateCallback(blobInfo, blobId));
         } else {
-          deleteDatasetVersionOutOfRetentionCount();
+          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+            deleteDatasetVersionOutOfRetentionCount();
+          }
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());
         }
@@ -315,7 +320,9 @@ public class NamedBlobPutHandler {
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
         namedBlobDb.updateBlobStateToReady(record).get();
-        deleteDatasetVersionOutOfRetentionCount();
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          deleteDatasetVersionOutOfRetentionCount();
+        }
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, finalCallback);
     }
@@ -559,34 +566,60 @@ public class NamedBlobPutHandler {
     private void deleteDatasetVersionOutOfRetentionCount() {
       Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
       try {
-        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-          String accountName = dataset.getAccountName();
-          String containerName = dataset.getContainerName();
-          String datasetName = dataset.getDatasetName();
-          List<DatasetVersionRecord> datasetVersionRecordList =
-              accountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
-          for (DatasetVersionRecord record : datasetVersionRecordList) {
-            String version = record.getVersion();
-            RequestPath requestPath = getRequestPath(restRequest);
-            RequestPath newRequestPath = new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(),
-                requestPath.getPathAfterPrefixes(),
-                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
-                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-            // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
-            restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-            restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
-            restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
-            try {
-              deleteBlobHandler.handle(restRequest, restResponseChannel, null);
-            } catch (Exception e) {
-              //do not throw the exception or handle it since we don't care if it has been deleted successfully.
-              LOGGER.error("Failed to delete the datasetVersionRecord :" + record);
-            }
-          }
+        String accountName = dataset.getAccountName();
+        String containerName = dataset.getContainerName();
+        String datasetName = dataset.getDatasetName();
+        List<DatasetVersionRecord> datasetVersionRecordList =
+            accountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
+        if (datasetVersionRecordList.size() > 0) {
+          DatasetVersionRecord record = datasetVersionRecordList.get(0);
+          String version = record.getVersion();
+          RequestPath requestPath = getRequestPath(restRequest);
+          RequestPath newRequestPath =
+              new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+                  NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
+                      + version, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+          // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
+          restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+          restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
+          restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+          deleteBlobHandler.handle(restRequest, restResponseChannel,
+              recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName));
         }
       } catch (Exception e) {
         LOGGER.error("Failed to delete dataset version out of retention count for this dataset: " + dataset.toString());
       }
+    }
+
+    /**
+     * Recursively delete the dataset version out of retention count at dataset level.
+     * @param datasetVersionRecordList the list of the {@link DatasetVersionRecord}
+     * @param idx the index of the datasetVersionRecordList
+     * @param accountName the name of the account.
+     * @param containerName the name of the container.
+     * @param datasetName the name of the dataset.
+     */
+    private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx, String accountName,
+        String containerName, String datasetName) {
+      if (idx == datasetVersionRecordList.size()) {
+        return null;
+      }
+      Callback<Void> nextCallBack =
+          recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName);
+      DatasetVersionRecord record = datasetVersionRecordList.get(idx);
+      return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
+        String version = record.getVersion();
+        RequestPath requestPath = getRequestPath(restRequest);
+        RequestPath newRequestPath =
+            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
+                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+        // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
+        restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+        restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
+        restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+        deleteBlobHandler.handle(restRequest, restResponseChannel, nextCallBack);
+      }, uri, LOGGER, null);
     }
   }
 }
