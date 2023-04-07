@@ -13,6 +13,8 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.frontend.ReservedMetadataIdMetrics;
+import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -221,6 +223,29 @@ public class ClusterMapUtils {
     }
     return replicaSealStatus;
   }
+
+  /**
+   * Choose a random {@link PartitionId} for putting the metadata chunk and return it.
+   * @param partitionClass the partition class to choose partitions from.
+   * @param partitionIdsToExclude the list of {@link PartitionId}s that should be excluded from consideration.
+   * @return the chosen {@link PartitionId}
+   */
+  public static PartitionId reserveMetadataPartition(String partitionClass, List<PartitionId> partitionIdsToExclude,
+      ReservedMetadataIdMetrics reservedMetadataIdMetrics, ClusterMap clusterMap) {
+    PartitionId selected = clusterMap.getRandomFullyWritablePartition(partitionClass, partitionIdsToExclude);
+    if (selected == null) {
+      reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.inc();
+      return null;
+    }
+    if (!partitionClass.equals(selected.getPartitionClass())) {
+      logger.warn(
+          "While reserving metadata chunk id, no partitions for partitionClass='{}' found, partitionClass='{}' used instead for metadata chunk.",
+          partitionClass, selected.getPartitionClass());
+      reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.inc();
+    }
+    return selected;
+  }
+
 
   /**
    * Get the schema version associated with the given instance (if any).
