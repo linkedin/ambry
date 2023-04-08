@@ -13,7 +13,6 @@
  */
 package com.github.ambry.clustermap;
 
-import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.*;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.tools.util.ToolUtils;
 import java.util.ArrayList;
@@ -126,10 +125,11 @@ public class HelixBootstrapUpgradeTool {
             + "       \"zkConnectStr\":\"abc.example.com:2199\",\n" + "     },\n" + "     {\n"
             + "       \"datacenter\":\"dc2\",\n" + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n"
             + "     {\n" + "       \"datacenter\":\"dc3\",\n" + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n"
-            + "     }\n" + "  ]\n" + "}").requiredUnless(dropClusterOpt).
-        withRequiredArg().
-        describedAs("zk_connect_info_path").
-        ofType(String.class);
+            + "     }\n" + "  ]\n" + "}")
+        .requiredUnless(dropClusterOpt)
+        .withRequiredArg()
+        .describedAs("zk_connect_info_path")
+        .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> clusterNamePrefixOpt =
         parser.accepts("clusterNamePrefix", "The prefix for the cluster in Helix to bootstrap or upgrade")
@@ -181,6 +181,7 @@ public class HelixBootstrapUpgradeTool {
             + " '--adminOperation ListSealedPartition' # List all sealed partitions in Helix cluster (aggregated across all datacenters)"
             + " '--adminOperation ValidateCluster' # Validates the information in static clustermap is consistent with the information in Helix"
             + " '--adminOperation MigrateToPropertyStore' # Migrate custom instance config properties to DataNodeConfigs in the property store"
+            + " '--adminOperation MigrateToFullAuto' # Migrate resources to Full Auto"
             + " '--adminOperation BootstrapCluster' # (Default operation if not specified) Bootstrap cluster based on static clustermap")
         .withRequiredArg()
         .describedAs("admin_operation")
@@ -228,6 +229,20 @@ public class HelixBootstrapUpgradeTool {
         .describedAs("data_node_config_source")
         .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> rebalanceModeOpt = parser.accepts("rebalanceMode",
+        "(Optional argument) The type of rebalance mode (default is SEMI_AUTO). "
+            + "See RebalanceMode enum for more details.")
+        .withRequiredArg()
+        .describedAs("rebalance_mode")
+        .ofType(String.class);
+
+    ArgumentAcceptingOptionSpec<String> resourcesNameOpt = parser.accepts("resources",
+        "The comma-separated resources to migrate to Full Auto. Use '--resources all' to migrate all resources")
+        .withRequiredArg()
+        .describedAs("resources")
+        .required()
+        .ofType(String.class);
+
     OptionSpecBuilder overrideReplicaStatus = parser.accepts("overrideReplicaStatus",
         "(Optional argument) whether to override replica status lists (i.e. sealed/stopped/disabled lists) in instance(datanode) config");
 
@@ -244,6 +259,7 @@ public class HelixBootstrapUpgradeTool {
     String hostname = options.valueOf(hostnameOpt);
     String partitionName = options.valueOf(partitionIdOpt);
     String portStr = options.valueOf(portOpt);
+    String resources = options.valueOf(resourcesNameOpt);
     int maxPartitionsInOneResource =
         options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
             : Integer.parseInt(options.valueOf(maxPartitionsInOneResourceOpt));
@@ -252,6 +268,8 @@ public class HelixBootstrapUpgradeTool {
     DataNodeConfigSourceType dataNodeConfigSourceType =
         options.valueOf(dataNodeConfigSourceOpt) == null ? DataNodeConfigSourceType.PROPERTY_STORE
             : DataNodeConfigSourceType.valueOf(options.valueOf(dataNodeConfigSourceOpt));
+    RebalanceMode rebalanceMode = options.valueOf(rebalanceModeOpt) == null ? RebalanceMode.SEMI_AUTO
+        : RebalanceMode.valueOf(options.valueOf(rebalanceModeOpt));
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(hardwareLayoutPathOpt);
     listOpt.add(partitionLayoutPathOpt);
@@ -291,6 +309,10 @@ public class HelixBootstrapUpgradeTool {
           HelixBootstrapUpgradeUtil.migrateToPropertyStore(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
               clusterNamePrefix, dcs);
           break;
+        case MigrateToFullAuto:
+          HelixBootstrapUpgradeUtil.migrateToFullAuto(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+              clusterNamePrefix, dcs, resources, options.has(dryRun));
+          break;
         case ResetPartition:
         case EnablePartition:
           HelixBootstrapUpgradeUtil.controlPartitionState(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
@@ -311,7 +333,7 @@ public class HelixBootstrapUpgradeTool {
           HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
               clusterNamePrefix, dcs, maxPartitionsInOneResource, options.has(dryRun), options.has(forceRemove), null,
               options.has(enableValidatingClusterManager), stateModelDef, operation, dataNodeConfigSourceType,
-              options.has(overrideReplicaStatus));
+              options.has(overrideReplicaStatus), rebalanceMode);
       }
     }
     System.out.println("======== HelixBootstrapUpgradeTool completed successfully! ========");

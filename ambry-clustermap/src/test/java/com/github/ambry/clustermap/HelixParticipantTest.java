@@ -122,7 +122,7 @@ public class HelixParticipantTest {
 
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "", "DC0",
         DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false, stateModelDef,
-        BootstrapCluster, dataNodeConfigSourceType, false);
+        BootstrapCluster, dataNodeConfigSourceType, false, RebalanceMode.SEMI_AUTO);
     propertyStoreAdapter =
         dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE ? new PropertyStoreToDataNodeConfigAdapter(
             "localhost:" + zkInfo.getPort(), clusterMapConfig) : null;
@@ -512,8 +512,10 @@ public class HelixParticipantTest {
         getDataNodeConfigInHelix(helixAdmin, instanceName));
     // create two new replicas on the same disk of local node
     int currentPartitionCount = testPartitionLayout.getPartitionCount();
-    Partition newPartition1 = new Partition(currentPartitionCount++, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, testPartitionLayout.replicaCapacityInBytes);
-    Partition newPartition2 = new Partition(currentPartitionCount, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, testPartitionLayout.replicaCapacityInBytes);
+    Partition newPartition1 = new Partition(currentPartitionCount++, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE,
+        testPartitionLayout.replicaCapacityInBytes);
+    Partition newPartition2 = new Partition(currentPartitionCount, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE,
+        testPartitionLayout.replicaCapacityInBytes);
     Disk disk = (Disk) existingReplica.getDiskId();
     // 2. add new partition2 (id = 10, replicaFromPartition2) to Helix
     ReplicaId replicaFromPartition2 = new Replica(newPartition2, disk, clusterMapConfig);
@@ -555,7 +557,7 @@ public class HelixParticipantTest {
     helixAdmin.close();
   }
 
-  private DataNodeConfig getDataNodeConfigInHelix(HelixAdmin helixAdmin, String instanceName){
+  private DataNodeConfig getDataNodeConfigInHelix(HelixAdmin helixAdmin, String instanceName) {
     return dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG ? instanceConfigConverter.convert(
         helixAdmin.getInstanceConfig(clusterName, instanceName)) : propertyStoreAdapter.get(instanceName);
   }
@@ -592,7 +594,7 @@ public class HelixParticipantTest {
       String mountPath = entry.getKey();
       DataNodeConfig.DiskConfig diskConfig = entry.getValue();
       StringBuilder replicaStrBuilder = new StringBuilder();
-      for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry: diskConfig.getReplicaConfigs().entrySet()) {
+      for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry : diskConfig.getReplicaConfigs().entrySet()) {
         DataNodeConfig.ReplicaConfig replicaConfig = replicaEntry.getValue();
         replicaStrBuilder.append(replicaEntry.getKey())
             .append(REPLICAS_STR_SEPARATOR)

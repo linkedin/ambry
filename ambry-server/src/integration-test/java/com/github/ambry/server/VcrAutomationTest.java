@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil;
 import com.github.ambry.clustermap.HelixClusterAgentsFactory;
 import com.github.ambry.clustermap.HelixVcrUtil;
 
+import com.github.ambry.clustermap.RebalanceMode;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -124,7 +125,8 @@ public class VcrAutomationTest {
 
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterPrefix,
         dcName, 10, false, false, new HelixAdminFactory(), false, mainClusterStateModelDef,
-        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false);
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false,
+        RebalanceMode.SEMI_AUTO);
 
     HelixControllerManager helixControllerManager =
         new HelixControllerManager(zkConnectString, clusterPrefix + clusterName);
@@ -180,7 +182,8 @@ public class VcrAutomationTest {
 
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterPrefix,
         dcName, 10, false, false, new HelixAdminFactory(), false, mainClusterStateModelDef,
-        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false);
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false,
+        RebalanceMode.SEMI_AUTO);
 
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     Assert.assertTrue("Partition assignment is not correct.",
@@ -193,7 +196,8 @@ public class VcrAutomationTest {
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterPrefix,
         dcName, 10, false, true, new HelixAdminFactory(), false, mainClusterStateModelDef,
-        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false);
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false,
+        RebalanceMode.SEMI_AUTO);
 
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     Assert.assertTrue("Partition assignment is not correct.", TestUtils.checkAndSleep(partitionCount,

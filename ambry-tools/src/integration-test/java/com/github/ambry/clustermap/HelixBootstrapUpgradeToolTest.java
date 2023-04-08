@@ -15,7 +15,6 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.TestUtils.*;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
@@ -206,7 +205,8 @@ public class HelixBootstrapUpgradeToolTest {
     // bootstrap a cluster
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false,
+        RebalanceMode.SEMI_AUTO);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
@@ -245,7 +245,8 @@ public class HelixBootstrapUpgradeToolTest {
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false,
+            RebalanceMode.SEMI_AUTO);
         fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -601,7 +602,8 @@ public class HelixBootstrapUpgradeToolTest {
     // upgrade Helix by updating IdealState: AdminOperation = UpdateIdealState
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState, dataNodeConfigSourceType, false);
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState, dataNodeConfigSourceType, false,
+        RebalanceMode.SEMI_AUTO);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
 
     // verify IdealState has been updated
@@ -677,7 +679,8 @@ public class HelixBootstrapUpgradeToolTest {
         // Upgrade Helix by updating IdealState: AdminOperation = DisablePartition
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition, dataNodeConfigSourceType, false);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition, dataNodeConfigSourceType, false,
+            RebalanceMode.SEMI_AUTO);
         bootstrapCompletionLatch.countDown();
       } catch (Exception e) {
         // do nothing, if there is any exception subsequent test should fail.
@@ -1069,7 +1072,8 @@ public class HelixBootstrapUpgradeToolTest {
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory(),
-        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
+        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false,
+        RebalanceMode.SEMI_AUTO);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 
