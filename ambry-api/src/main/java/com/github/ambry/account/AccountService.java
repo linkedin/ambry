@@ -251,6 +251,19 @@ public interface AccountService extends Closeable {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
+  /**
+   * Get all versions from a dataset which has not expired and out of retentionCount by checking the last modified time.
+   * @param accountName The name for the parent account.
+   * @param containerName The name for the container.
+   * @param datasetName The name of the dataset.
+   * @return a list of {@link DatasetVersionRecord}
+   * @throws AccountServiceException
+   */
+  default List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(String accountName,
+      String containerName, String datasetName) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
   default void selectInactiveContainersAndMarkInStore(AggregatedAccountStorageStats aggregatedAccountStorageStats) {
     throw new UnsupportedOperationException("This method is not supported");
   }

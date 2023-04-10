@@ -98,6 +98,7 @@ public class AccountDao {
   private final String updateDatasetVersionIfExpiredSql;
   private final String listVersionSql;
   private final String listValidVersionSql;
+  private final String listVersionByModifiedTimeSql;
 
   // Dataset table query strings
   private final String insertDatasetSql;
@@ -176,6 +177,11 @@ public class AccountDao {
     listValidVersionSql =
         String.format("select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
             VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    // list all valid versions sorted by last modified time, and skip the first N records which is not out of retentionCount.
+    listVersionByModifiedTimeSql = String.format("select %s, %s from %s "
+            + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? ORDER BY %s DESC LIMIT ?, 100", VERSION,
+        DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
+        LAST_MODIFIED_TIME);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
@@ -701,6 +707,113 @@ public class AccountDao {
     } catch (SQLException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    }
+  }
+
+  /**
+   * Get all versions from a dataset which has not expired and out of retentionCount by checking the last modified time.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @return a list of {@link DatasetVersionRecord}
+   */
+  public synchronized List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId,
+      short containerId, String accountName, String containerName, String datasetName)
+      throws SQLException, AccountServiceException {
+    long startTimeMs = System.currentTimeMillis();
+    Integer retentionCount;
+    Dataset.VersionSchema versionSchema;
+    try {
+      //if dataset is deleted, we should not be able to get any dataset version.
+      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
+      retentionCount = dataset.getRetentionCount();
+      versionSchema = dataset.getVersionSchema();
+    } catch (SQLException | AccountServiceException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
+    }
+    if (retentionCount != null) {
+      try {
+        dataAccessor.getDatabaseConnection(false);
+        PreparedStatement listAllValidVersionsOrderedByLastModifiedTimeStatement =
+            dataAccessor.getPreparedStatement(listVersionByModifiedTimeSql, false);
+        List<DatasetVersionRecord> datasetVersionRecordList =
+            executeListAllValidVersionsOrderedByLastModifiedTimeStatement(
+                listAllValidVersionsOrderedByLastModifiedTimeStatement, accountId, containerId, datasetName, retentionCount, versionSchema);
+        dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+        return datasetVersionRecordList;
+      } catch (SQLException e) {
+        dataAccessor.onException(e, Read);
+        throw e;
+      }
+    } else {
+      return new ArrayList<>();
+    }
+  }
+
+  /**
+   * Execute the listAllValidVersionsOrderedByLastModifiedTimeStatement and fileter all versions out of retentionCount.
+   * @param statement the listVersionByModifiedTimeSql statement.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param retentionCount the retention count of dataset.
+   * @param versionSchema the {@link com.github.ambry.account.Dataset.VersionSchema} of the datset.
+   * @return a list of versions from a dataset which has not expired and out of retentionCount by checking the last modified time.
+   * @throws SQLException
+   */
+  private List<DatasetVersionRecord> executeListAllValidVersionsOrderedByLastModifiedTimeStatement(
+      PreparedStatement statement, int accountId, int containerId, String datasetName, int retentionCount,
+      Dataset.VersionSchema versionSchema) throws SQLException {
+    ResultSet resultSet = null;
+    List<DatasetVersionRecord> datasetVersionRecordList = new ArrayList<>();
+    try {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, datasetName);
+      statement.setInt(4, retentionCount);
+      resultSet = statement.executeQuery();
+      while (resultSet.next()) {
+        long versionValue = resultSet.getLong(VERSION);
+        Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
+        String version = convertVersionValueToVersion(versionValue, versionSchema);
+        datasetVersionRecordList.add(
+            new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime)));
+      }
+      return datasetVersionRecordList;
+    } finally {
+      closeQuietly(resultSet);
+    }
+  }
+
+  /**
+   * Convert version value from DB to string version.
+   * @param versionValue the value of the version from DB.
+   * @param versionSchema the {@link com.github.ambry.account.Dataset.VersionSchema} from dataset level.
+   * @return the converted string format version.
+   */
+  private String convertVersionValueToVersion(long versionValue, Dataset.VersionSchema versionSchema) {
+    String version;
+    switch (versionSchema) {
+      case TIMESTAMP:
+      case MONOTONIC:
+        version = Long.toString(versionValue);
+        return version;
+      case SEMANTIC:
+        //Given a version number MAJOR.MINOR.PATCH, increment the:
+        //1.MAJOR version when you make incompatible API changes
+        //2.MINOR version when you add functionality in a backwards compatible manner
+        //3.PATCH version when you make backwards compatible bug fixes
+        //The MAJOR,MINOR and PATCH version are non-negative value.
+        long major = versionValue / 1000000L;
+        long minor = (versionValue % 1000000L) / 1000L;
+        long patch = versionValue % 1000L;
+        version = String.format("%d.%d.%d", major, minor, patch);
+        return version;
+      default:
+        throw new IllegalArgumentException("Unsupported version schema: " + versionSchema);
     }
   }
 

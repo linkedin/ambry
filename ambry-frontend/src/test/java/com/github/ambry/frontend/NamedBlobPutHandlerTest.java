@@ -22,7 +22,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.DatasetBuilder;
 import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -563,7 +562,7 @@ public class NamedBlobPutHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     namedBlobPutHandler = new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb,
         idConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
-        QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
+        QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
   }
 
   /**
