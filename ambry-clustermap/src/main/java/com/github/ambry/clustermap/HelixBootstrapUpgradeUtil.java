@@ -961,8 +961,9 @@ public class HelixBootstrapUpgradeUtil {
    * }
    * we know that host1 to host6 shared some partitions and should be placed in the same group and host10 to host12 share
    * some partitions and should be a group. Instances in different groups never share partitions with each other.
-   * @param partitionToInstances
-   * @return
+   * @param partitionToInstances A map from partition id to a list of instances this partition is assigned to
+   * @return A list of instance group. Each item of this list is a group of instances that share partitions with each other
+   * but never share partitions outside this group.
    */
   List<Set<String>> groupInstancesBasedOnSharedPartition(Map<String, Set<String>> partitionToInstances) {
     int maxId = 0;
@@ -1101,6 +1102,8 @@ public class HelixBootstrapUpgradeUtil {
    * Before calling this method, we should already verify that each instance has only one assigned resource. So if a
    * partition's instances are already assigned to the same resource, then this partition would be assigned to this resource
    * as well. If a partition's instances are assigned to different resources, then this method would fail.
+   *
+   * This method would also remove all the new partitions that are assigned to an existing resource from partitionToInstancesInDc.
    * @param dcName The name of the datacenter
    * @param partitionsToInstancesInDc The map of partition layout.
    * @param instanceNameToOneResource The map from instance name to its corresponding assigned resource id
@@ -1131,9 +1134,9 @@ public class HelixBootstrapUpgradeUtil {
           resourceIdToInstances.get(resourceId).addAll(instanceNames);
           // Some instance names might not have a resource name, now assign the resource name to it
           instanceNames.forEach(in -> instanceNameToOneResource.put(in, resourceId));
-          Set<String> s = resourceIdToInstances.get(resourceId);
-          ensureOrThrow(s.size() <= maxInstancesInOneResourceForFullAuto,
-              "Resource has more than " + maxInstancesInOneResourceForFullAuto + " hosts: " + s);
+          Set<String> instances = resourceIdToInstances.get(resourceId);
+          ensureOrThrow(instances.size() <= maxInstancesInOneResourceForFullAuto,
+              "Resource has more than " + maxInstancesInOneResourceForFullAuto + " hosts: " + instances);
         } else {
           String errorMessage =
               String.format("Partition %s belong to different hosts of different resources, hosts: %s, resources %s",
@@ -2208,8 +2211,9 @@ public class HelixBootstrapUpgradeUtil {
     for (Map.Entry<Integer, Set<String>> ent : resourceNameToInstances.entrySet()) {
       if (ent.getKey().equals(lastResourceId)) {
         ensureOrThrow(maxInstancesInOneResourceForFullAuto >= ent.getValue().size(),
-            "Resource " + ent.getKey() + " has " + ent.getValue().size() + " instances, but we are expecting less than "
-                + maxInstancesInOneResourceForFullAuto + ": " + ent.getValue());
+            "Resource " + ent.getKey() + " has " + ent.getValue().size()
+                + " instances, but we are expecting less than or equal to " + maxInstancesInOneResourceForFullAuto
+                + ": " + ent.getValue());
       } else {
         ensureOrThrow(maxInstancesInOneResourceForFullAuto == ent.getValue().size(),
             "Resource " + ent.getKey() + " has " + ent.getValue().size() + " instances, but we are expecting "
