@@ -49,6 +49,12 @@ public class AccountDao {
   private final MySqlDataAccessor dataAccessor;
   private final MySqlAccountServiceConfig mySqlAccountServiceConfig;
   private final ObjectMapper objectMapper = new ObjectMapper();
+  private static final long MAX_TIMESTAMP_MONOTONIC_VERSION_VALUE = Long.MAX_VALUE;
+  private static final long MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE = 999L;
+  private static final String LATEST = "LATEST";
+  private static final String MAJOR = "MAJOR";
+  private static final String MINOR = "MINOR";
+  private static final String PATCH = "PATCH";
 
   // Account table fields
   public static final String ACCOUNT_TABLE = "Accounts";
@@ -96,7 +102,8 @@ public class AccountDao {
   private final String getDatasetVersionByNameSql;
   private final String deleteDatasetVersionByIdSql;
   private final String updateDatasetVersionIfExpiredSql;
-  private final String listVersionSql;
+  private final String listLatestVersionSqlForUpload;
+  private final String getLatestVersionSqlForDownload;
   private final String listValidVersionSql;
   private final String listVersionByModifiedTimeSql;
 
@@ -171,9 +178,12 @@ public class AccountDao {
     insertDatasetVersionSql =
         String.format("insert into %s (%s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?)", DATASET_VERSION_TABLE,
             ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, LAST_MODIFIED_TIME, DELETE_TS);
-    listVersionSql =
-        String.format("select %1$s from %2$s " + "where (%3$s, %4$s, %5$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
-            VERSION, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    getLatestVersionSqlForDownload = String.format("select %1$s, %2$s from %3$s "
+            + "where (%4$s IS NULL or %4$s > now(3)) and (%5$s, %6$s, %7$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
+        VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    listLatestVersionSqlForUpload =
+        String.format("select %1$s from %2$s " + "where (%4$s, %5$s, %6$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
+            VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     listValidVersionSql =
         String.format("select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
             VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
@@ -364,29 +374,30 @@ public class AccountDao {
     long startTimeMs = System.currentTimeMillis();
     long versionNumber = 0;
     Dataset dataset = null;
+    DatasetVersionRecord datasetVersionRecord;
     try {
       dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
       dataAccessor.getDatabaseConnection(true);
-      PreparedStatement insertDatasetVersionStatement =
-          dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
-      //TODO: if version == null, add the latest version from db + 1.
-      versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
-      long newExpirationTimeMs =
-          executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId, datasetName,
-              versionNumber, timeToLiveInSeconds, creationTimeInMs, dataset, datasetVersionTtlEnabled);
+      if (isAutoCreatedVersionForUpload(version)) {
+        datasetVersionRecord =
+            retryWithLatestAutoIncrementedVersion(accountId, containerId, dataset, version, timeToLiveInSeconds,
+                creationTimeInMs, datasetVersionTtlEnabled);
+      } else {
+        versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
+        datasetVersionRecord =
+            addDatasetVersionHelper(accountId, containerId, dataset, version, timeToLiveInSeconds, creationTimeInMs,
+                datasetVersionTtlEnabled, versionNumber);
+      }
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
-      return new DatasetVersionRecord(accountId, containerId, datasetName, version, newExpirationTimeMs);
+      return datasetVersionRecord;
     } catch (SQLException | AccountServiceException e) {
       if (e instanceof SQLIntegrityConstraintViolationException) {
-        PreparedStatement updateDatasetSqlIfExpiredStatement =
-            dataAccessor.getPreparedStatement(updateDatasetVersionIfExpiredSql, true);
         try {
-          long newExpirationTimeMs =
-              executeUpdateDatasetVersionIfExpiredSqlStatement(updateDatasetSqlIfExpiredStatement, accountId,
-                  containerId, datasetName, versionNumber, timeToLiveInSeconds, creationTimeInMs, dataset,
-                  datasetVersionTtlEnabled);
+          datasetVersionRecord =
+              updateDatasetVersionHelper(accountId, containerId, dataset, version, timeToLiveInSeconds,
+                  creationTimeInMs, datasetVersionTtlEnabled, versionNumber);
           dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
-          return new DatasetVersionRecord(accountId, containerId, datasetName, version, newExpirationTimeMs);
+          return datasetVersionRecord;
         } catch (SQLException | AccountServiceException ex) {
           dataAccessor.onException(ex, Write);
           throw ex;
@@ -395,6 +406,91 @@ public class AccountDao {
       dataAccessor.onException(e, Write);
       throw e;
     }
+  }
+
+  /**
+   * Helper function to support add dataset verison.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param dataset the {@link Dataset}
+   * @param version the version of the dataset.
+   * @param timeToLiveInSeconds The dataset version level ttl.
+   * @param creationTimeInMs the creation time of the dataset.
+   * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @return the {@link DatasetVersionRecord} and the latest version.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private DatasetVersionRecord addDatasetVersionHelper(int accountId, int containerId, Dataset dataset, String version,
+      long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled, long versionNumber)
+      throws SQLException, AccountServiceException {
+    dataAccessor.getDatabaseConnection(true);
+    PreparedStatement insertDatasetVersionStatement = dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
+    long newExpirationTimeMs = executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId,
+        dataset.getDatasetName(), versionNumber, timeToLiveInSeconds, creationTimeInMs, dataset,
+        datasetVersionTtlEnabled);
+    return new DatasetVersionRecord(accountId, containerId, dataset.getDatasetName(), version, newExpirationTimeMs);
+  }
+
+  /**
+   * Retry and add the latest auto incremented dataset version
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param dataset the {@link Dataset}
+   * @param version the version of the dataset.
+   * @param timeToLiveInSeconds The dataset version level ttl.
+   * @param creationTimeInMs the creation time of the dataset.
+   * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @return the {@link DatasetVersionRecord} with the latest auto incremented dataset version
+   * @throws AccountServiceException
+   * @throws SQLException
+   */
+  private DatasetVersionRecord retryWithLatestAutoIncrementedVersion(int accountId, int containerId, Dataset dataset,
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled)
+      throws AccountServiceException, SQLException {
+    long versionNumber;
+    while (true) {
+      try {
+        versionNumber =
+            getAutoIncrementedVersionBasedOnLatestAvailableVersion(accountId, containerId, dataset.getVersionSchema(),
+                dataset.getDatasetName(), version);
+        version = convertVersionValueToVersion(versionNumber, dataset.getVersionSchema());
+        //always retry with the latest version + 1 until it has been successfully uploading without conflict or failed with exception.
+        return addDatasetVersionHelper(accountId, containerId, dataset, version, timeToLiveInSeconds, creationTimeInMs,
+            datasetVersionTtlEnabled, versionNumber);
+      } catch (SQLException | AccountServiceException ex) {
+        // if the version already exist in database, retry with the new latest version +1.
+        if (!(ex instanceof SQLIntegrityConstraintViolationException)) {
+          throw ex;
+        }
+      }
+    }
+  }
+
+  /**
+   * Helper function to support update dataset version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param dataset the {@link Dataset}
+   * @param version the version of the dataset.
+   * @param timeToLiveInSeconds The dataset version level ttl.
+   * @param creationTimeInMs the creation time of the dataset.
+   * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @param versionNumber the version number converted by version string.
+   * @return
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private DatasetVersionRecord updateDatasetVersionHelper(int accountId, int containerId, Dataset dataset,
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled,
+      long versionNumber) throws SQLException, AccountServiceException {
+    PreparedStatement updateDatasetVersionSqlIfExpiredStatement =
+        dataAccessor.getPreparedStatement(updateDatasetVersionIfExpiredSql, true);
+    long newExpirationTimeMs =
+        executeUpdateDatasetVersionIfExpiredSqlStatement(updateDatasetVersionSqlIfExpiredStatement, accountId,
+            containerId, dataset.getDatasetName(), versionNumber, timeToLiveInSeconds, creationTimeInMs, dataset,
+            datasetVersionTtlEnabled);
+    return new DatasetVersionRecord(accountId, containerId, dataset.getDatasetName(), version, newExpirationTimeMs);
   }
 
   /**
@@ -418,11 +514,19 @@ public class AccountDao {
       dataAccessor.getDatabaseConnection(false);
       PreparedStatement getDatasetVersionStatement =
           dataAccessor.getPreparedStatement(getDatasetVersionByNameSql, false);
-      //TODO: if version == null, get the latest version from db + 1.
-      long versionValue = getVersionBasedOnSchema(version, versionSchema);
-      DatasetVersionRecord result =
-          executeGetDatasetVersionStatement(getDatasetVersionStatement, accountId, containerId, datasetName,
-              versionValue, version);
+      long versionValue;
+      DatasetVersionRecord result;
+      if (isAutoCreatedVersionForDownload(version)) {
+        PreparedStatement getLatestVersionStatement =
+            dataAccessor.getPreparedStatement(getLatestVersionSqlForDownload, false);
+        result =
+            executeGetLatestVersionStatementForDownload(getLatestVersionStatement, accountId, containerId, datasetName,
+                versionSchema);
+      } else {
+        versionValue = getVersionBasedOnSchema(version, versionSchema);
+        result = executeGetDatasetVersionStatement(getDatasetVersionStatement, accountId, containerId, datasetName,
+            versionValue, version);
+      }
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return result;
     } catch (SQLException | AccountServiceException e) {
@@ -664,22 +768,37 @@ public class AccountDao {
   }
 
   /**
-   * Get the latest version value of the dataset.
+   * Get the auto incremented version based on latest version.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
+   * @param versionSchema the {@link com.github.ambry.account.Dataset.VersionSchema} of the dataset.
    * @param datasetName the name of the dataset.
    * @return the latest version.
    * @throws SQLException
    */
-  public synchronized long getLatestVersion(short accountId, short containerId, String datasetName)
+  private synchronized long getAutoIncrementedVersionBasedOnLatestAvailableVersion(int accountId, int containerId,
+      Dataset.VersionSchema versionSchema, String datasetName, String version)
       throws SQLException, AccountServiceException {
+    long latestVersionValue;
     try {
       long startTimeMs = System.currentTimeMillis();
       dataAccessor.getDatabaseConnection(false);
-      PreparedStatement listVersionStatement = dataAccessor.getPreparedStatement(listVersionSql, false);
-      long latestVersion = executeListVersionStatement(listVersionStatement, accountId, containerId, datasetName);
+      PreparedStatement listLatestVersionStatement =
+          dataAccessor.getPreparedStatement(listLatestVersionSqlForUpload, false);
+      try {
+        latestVersionValue =
+            executeListLatestVersionStatementForUpload(listLatestVersionStatement, accountId, containerId, datasetName);
+      } catch (AccountServiceException e) {
+        if (AccountServiceErrorCode.NotFound.equals(e.getErrorCode())) {
+          latestVersionValue = 0;
+        } else {
+          throw e;
+        }
+      }
+      long autoIncrementedVersionBasedOnSchema =
+          generateAutoIncrementedVersionBasedOnSchema(latestVersionValue, versionSchema, version);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
-      return latestVersion;
+      return autoIncrementedVersionBasedOnSchema;
     } catch (SQLException | AccountServiceException e) {
       dataAccessor.onException(e, Read);
       throw e;
@@ -826,7 +945,7 @@ public class AccountDao {
    * @return the latest version of the dataset.
    * @throws SQLException
    */
-  private long executeListVersionStatement(PreparedStatement statement, int accountId, int containerId,
+  private long executeListLatestVersionStatementForUpload(PreparedStatement statement, int accountId, int containerId,
       String datasetName) throws SQLException, AccountServiceException {
     ResultSet resultSet = null;
     try {
@@ -843,6 +962,121 @@ public class AccountDao {
     } finally {
       closeQuietly(resultSet);
     }
+  }
+
+  /**
+   * Execute the getLatestVersionSqlForDownload statement.
+   * @param statement the statement to list the latest version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @return the latest version of the dataset.
+   * @throws SQLException
+   */
+  private DatasetVersionRecord executeGetLatestVersionStatementForDownload(PreparedStatement statement, int accountId,
+      int containerId, String datasetName, Dataset.VersionSchema versionSchema)
+      throws SQLException, AccountServiceException {
+    ResultSet resultSet = null;
+    String version;
+    Timestamp deletionTime;
+    try {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, datasetName);
+      resultSet = statement.executeQuery();
+      if (!resultSet.next()) {
+        throw new AccountServiceException(
+            "Latest version not found for account: " + accountId + " container: " + containerId + " dataset: "
+                + datasetName, AccountServiceErrorCode.NotFound);
+      }
+      long versionValue = resultSet.getLong(VERSION);
+      version = convertVersionValueToVersion(versionValue, versionSchema);
+      deletionTime = resultSet.getTimestamp(DELETE_TS);
+    } finally {
+      closeQuietly(resultSet);
+    }
+    return new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime));
+  }
+
+  /**
+   * Generate the auto incremented version based on the latest valid version and the version schema.
+   * @param versionValue the latest version value for current dataset.
+   * @param versionSchema the {@link com.github.ambry.account.Dataset.VersionSchema} of the dataset.
+   * @param version the version string to indicate if user provide LATEST, MAJOR, MINOR or PATCH option.
+   * @return the auto incremented value base on latest version.
+   */
+  private long generateAutoIncrementedVersionBasedOnSchema(long versionValue, Dataset.VersionSchema versionSchema,
+      String version) {
+    long autoIncrementedVersionValue;
+    switch (versionSchema) {
+      case TIMESTAMP:
+      case MONOTONIC:
+        if (!LATEST.equals(version)) {
+          throw new IllegalArgumentException(
+              "The current version string " + version + " is not supported for Timestamp or Monotonic version schema");
+        }
+        autoIncrementedVersionValue = versionValue + 1;
+        if (autoIncrementedVersionValue >= MAX_TIMESTAMP_MONOTONIC_VERSION_VALUE) {
+          throw new IllegalArgumentException(
+              "The largest version for Timestamp and Monotonic version should be less than "
+                  + MAX_TIMESTAMP_MONOTONIC_VERSION_VALUE + ", currentVersion: " + versionValue);
+        }
+        return autoIncrementedVersionValue;
+      case SEMANTIC:
+        //Given a version number MAJOR.MINOR.PATCH, increment the:
+        //1.MAJOR version when you make incompatible API changes
+        //2.MINOR version when you add functionality in a backwards compatible manner
+        //3.PATCH version when you make backwards compatible bug fixes
+        //The MAJOR,MINOR and PATCH version are non-negative value.
+        if (!MAJOR.equals(version) && !MINOR.equals(version) && !PATCH.equals(version)) {
+          throw new IllegalArgumentException(
+              "The current version string " + version + " is not supported for Semantic version schema");
+        }
+        long majorVersion = versionValue / 1000000;
+        long minorVersion = ((versionValue % 1000000) / 1000);
+        long patchVersion = versionValue % 1000;
+        if (MAJOR.equals(version)) {
+          majorVersion += 1;
+          minorVersion = 0;
+          patchVersion = 0;
+          if (majorVersion > MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE) {
+            throw new IllegalArgumentException("The largest version for Semantic Major version should be less than "
+                + MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE + ", currentMajorVersion: " + majorVersion);
+          }
+        } else if (MINOR.equals(version)) {
+          minorVersion += 1;
+          patchVersion = 0;
+          if (minorVersion > MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE) {
+            throw new IllegalArgumentException("The largest version for Semantic Minor version should be less than "
+                + MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE + ", currentMinorVersion: " + minorVersion);
+          }
+        } else {
+          patchVersion += 1;
+          if (patchVersion > MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE) {
+            throw new IllegalArgumentException("The largest version for Semantic Patch version should be less than "
+                + MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE + ", currentPatchVersion: " + patchVersion);
+          }
+        }
+        return majorVersion * 1000000 + minorVersion * 1000 + patchVersion;
+      default:
+        throw new IllegalArgumentException("Unsupported version schema: " + versionSchema);
+    }
+  }
+
+  /**
+   * @param version the version string.
+   * @return {@code} true if the version is auto created version for upload.
+   */
+  private boolean isAutoCreatedVersionForUpload(String version) {
+    return LATEST.equals(version) || MAJOR.equals(version) || MINOR.equals(version) || PATCH.equals(version);
+  }
+
+  /**
+   * @param version the version string.
+   * @return {@code} true if the version is auto created version for download.
+   */
+  private boolean isAutoCreatedVersionForDownload(String version) {
+    return LATEST.equals(version);
   }
 
   /**

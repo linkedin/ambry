@@ -31,9 +31,7 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
-import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RequestPath;
-import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -50,7 +48,6 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -572,6 +569,8 @@ public class NamedBlobPutHandler {
         List<DatasetVersionRecord> datasetVersionRecordList =
             accountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
         if (datasetVersionRecordList.size() > 0) {
+          LOGGER.info(
+              "Number of records need to be deleted due to out of retention count: " + datasetVersionRecordList.size());
           DatasetVersionRecord record = datasetVersionRecordList.get(0);
           String version = record.getVersion();
           RequestPath requestPath = getRequestPath(restRequest);

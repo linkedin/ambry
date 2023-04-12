@@ -225,19 +225,6 @@ public class MySqlAccountStore {
   }
 
   /**
-   * Get the latest version value of the dataset versions.
-   * @param accountId the id for the parent account.
-   * @param containerId the id of the container.
-   * @param datasetName the name of the dataset.
-   * @return the latest version of the dataset.
-   * @throws SQLException
-   */
-  public long getLatestVersion(short accountId, short containerId, String datasetName)
-      throws SQLException, AccountServiceException {
-    return accountDao.getLatestVersion(accountId, containerId, datasetName);
-  }
-
-  /**
    * Get a list of dataset versions which is not expired or been deleted for specific dataset.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
