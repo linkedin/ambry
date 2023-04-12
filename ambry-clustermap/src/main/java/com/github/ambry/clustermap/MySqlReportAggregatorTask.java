@@ -36,6 +36,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import org.apache.helix.HelixManager;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskResult;
@@ -122,6 +124,13 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
     AggregatedAccountStorageStats aggregatedAccountStorageStats = null;
     try {
       List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
+      if (ThreadLocalRandom.current().nextFloat()
+          < clusterMapConfig.clustermapDeleteInvalidHostsInMysqlAggregationTaskPossibility) {
+        logger.info("Retain host account storage stats for {} hosts", instanceNames.size());
+        List<Pair<String, Integer>> hostAndPortPairList =
+            instanceNames.stream().map(this::getHostNameAndPort).collect(Collectors.toList());
+        accountStatsStore.retainHostAccountStorageStatsForHosts(hostAndPortPairList);
+      }
       if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
         Map<String, HostAccountStorageStatsWrapper> accountStatsWrappers =
             fetchAccountStorageStatsWrapperForInstances(instanceNames);

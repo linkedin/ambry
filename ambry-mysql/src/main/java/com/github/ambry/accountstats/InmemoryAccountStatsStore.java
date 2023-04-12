@@ -17,6 +17,8 @@ import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
+import com.github.ambry.utils.Pair;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -87,6 +89,11 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   @Override
   public AggregatedAccountStorageStats queryMonthlyAggregatedAccountStorageStats() throws Exception {
     return monthlyAggregatedAccountStats;
+  }
+
+  @Override
+  public void retainHostAccountStorageStatsForHosts(List<Pair<String, Integer>> hosts) throws Exception {
+
   }
 
   @Override

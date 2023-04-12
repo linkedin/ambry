@@ -17,6 +17,8 @@ import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
+import com.github.ambry.utils.Pair;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -83,6 +85,14 @@ public interface AccountStatsStore {
    * @throws Exception
    */
   AggregatedAccountStorageStats queryMonthlyAggregatedAccountStorageStats() throws Exception;
+
+  /**
+   * Retain the host account storage stats for the given list of host and port, and remove the account storage stats for
+   * the other hosts.
+   * @param hosts The list of host and port pair
+   * @throws Exception
+   */
+  void retainHostAccountStorageStatsForHosts(List<Pair<String, Integer>> hosts) throws Exception;
 
   /**
    * Return the month value of the current container storage snapshot.

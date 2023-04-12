@@ -27,6 +27,18 @@ public class Pair<A, B> {
   private final B second;
 
   /**
+   * Return a pair of objects.
+   * @param first The first element in the pair.
+   * @param second The second element in the pair.
+   * @param <A> The type of the first element
+   * @param <B> The type fo the second element
+   * @return A pair of objects.
+   */
+  public static <A, B> Pair<A, B> of(A first, B second) {
+    return new Pair<A, B>(first, second);
+  }
+
+  /**
    * Construct a pair from two objects.
    * @param first the first object in the pair.
    * @param second the second object in the pair.

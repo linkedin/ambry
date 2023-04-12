@@ -32,6 +32,7 @@ import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -263,6 +264,64 @@ public class AccountStatsMySqlStoreIntegrationTest {
     HostAccountStorageStatsWrapper obtainedStats = mySqlStore.queryHostAccountStorageStatsByHost(hostname1, port1);
     assertEquals(stats.getStats().getStorageStats(), obtainedStats.getStats().getStorageStats());
     mySqlStore.shutdown();
+  }
+
+  @Test
+  public void testRetainHostsForAccountStorageStats() throws Exception {
+    AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
+    AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clusterName1, hostname2, port2);
+    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, port3);
+
+    // Generating HostAccountStorageStatsWrappers, store and retrieve them
+    HostAccountStorageStatsWrapper hostStats1 =
+        generateHostAccountStorageStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    HostAccountStorageStatsWrapper hostStats2 =
+        generateHostAccountStorageStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    HostAccountStorageStatsWrapper hostStats3 =
+        generateHostAccountStorageStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    mySqlStore1.storeHostAccountStorageStats(hostStats1);
+    mySqlStore2.storeHostAccountStorageStats(hostStats2);
+    mySqlStore3.storeHostAccountStorageStats(hostStats3);
+
+    // Here we have account stats for three hosts, first two for clusterName1, and last one for clusterName2
+    // 1. test some invalid input cases
+    try {
+      mySqlStore1.retainHostAccountStorageStatsForHosts(null);
+      fail("Null input should fail");
+    } catch (IllegalArgumentException e) {
+    }
+
+    try {
+      mySqlStore1.retainHostAccountStorageStatsForHosts(Collections.emptyList());
+      fail("Empty list should fail");
+    } catch (IllegalArgumentException e) {
+    }
+
+    // 2. retain all three hosts
+    List<Pair<String, Integer>> hostAndPortPairs = new ArrayList<>();
+    hostAndPortPairs.add(Pair.of(hostname1, port1));
+    hostAndPortPairs.add(Pair.of(hostname2, port2));
+    hostAndPortPairs.add(Pair.of(hostname3, port3)); // we have more hosts to retain
+    mySqlStore1.retainHostAccountStorageStatsForHosts(hostAndPortPairs);
+    HostAccountStorageStatsWrapper obtainedHostStats1 =
+        mySqlStore1.queryHostAccountStorageStatsByHost(hostname1, port1);
+    HostAccountStorageStatsWrapper obtainedHostStats2 =
+        mySqlStore2.queryHostAccountStorageStatsByHost(hostname2, port2);
+    HostAccountStorageStatsWrapper obtainedHostStats3 =
+        mySqlStore3.queryHostAccountStorageStatsByHost(hostname3, port3);
+    assertEquals(hostStats1.getStats().getStorageStats(), obtainedHostStats1.getStats().getStorageStats());
+    assertEquals(hostStats2.getStats().getStorageStats(), obtainedHostStats2.getStats().getStorageStats());
+    assertEquals(hostStats3.getStats().getStorageStats(), obtainedHostStats3.getStats().getStorageStats());
+
+    // 3. retain only two hosts
+    hostAndPortPairs.remove(0);
+    mySqlStore1.retainHostAccountStorageStatsForHosts(hostAndPortPairs);
+    obtainedHostStats1 = mySqlStore1.queryHostAccountStorageStatsByHost(hostname1, port1);
+    assertEquals(0, obtainedHostStats1.getStats().getStorageStats().size());
+
+    mySqlStore1.shutdown();
+    mySqlStore2.shutdown();
+    mySqlStore3.shutdown();
   }
 
   /**

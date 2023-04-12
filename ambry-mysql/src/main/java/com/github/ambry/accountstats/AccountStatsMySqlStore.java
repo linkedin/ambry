@@ -28,7 +28,7 @@ import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
-import com.github.ambry.utils.Utils;
+import com.github.ambry.utils.Pair;
 import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
@@ -96,6 +96,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     public final Histogram queryMonthTimeMs;
     public final Histogram takeSnapshotTimeMs;
     public final Histogram deleteSnapshotTimeMs;
+    public final Histogram retainHostAccountStatsTimeMs;
+    public final Histogram queryHostsForClusterTimeMs;
 
     public final Histogram queryPartitionNameAndIdTimeMs;
     public final Histogram storePartitionClassStatsTimeMs;
@@ -134,6 +136,10 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
       takeSnapshotTimeMs = registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "TakeSnapshotTimeMs"));
       deleteSnapshotTimeMs =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteSnapshotTimeMs"));
+      retainHostAccountStatsTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "RetainHostAccountStatsTimeMs"));
+      queryHostsForClusterTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryHostsForClusterTimeMs"));
       queryPartitionNameAndIdTimeMs =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "QueryPartitionNameAndIdsTimeMs"));
       storePartitionClassStatsTimeMs =
@@ -238,7 +244,6 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
 
   /**
    * Read all the container storage usage from local backup file.
-   * @param localBackupFilePath The filepath to local backup file.
    */
   private void readStatsFromLocalBackupFile() {
     if (!Strings.isNullOrEmpty(config.localBackupFilePath)) {
@@ -410,6 +415,27 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     });
     storeMetrics.queryMonthlyAggregatedStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
     return aggregatedAccountStorageStats;
+  }
+
+  @Override
+  public void retainHostAccountStorageStatsForHosts(List<Pair<String, Integer>> hosts) throws Exception {
+    if (hosts == null || hosts.isEmpty()) {
+      throw new IllegalArgumentException("Host list is not valid");
+    }
+    long startTimeMs = System.currentTimeMillis();
+    List<String> hostnames = accountReportsDao.queryHostsForCluster(clusterName);
+    storeMetrics.queryHostsForClusterTimeMs.update(System.currentTimeMillis() - startTimeMs);
+    // We only want to retain the hosts in argument
+    List<String> hostnamesToRetain = hosts.stream()
+        .map(p -> hostnameHelper.simplifyHostname(p.getFirst(), p.getSecond()))
+        .collect(Collectors.toList());
+
+    hostnames.removeAll(hostnamesToRetain);
+    for (String hostname : hostnames) {
+      logger.info("Delete account storage usage for host " + hostname);
+      accountReportsDao.deleteStorageUsageForHost(clusterName, hostname);
+    }
+    storeMetrics.retainHostAccountStatsTimeMs.update(System.currentTimeMillis() - startTimeMs);
   }
 
   @Override

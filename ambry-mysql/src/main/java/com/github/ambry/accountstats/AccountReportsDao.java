@@ -20,6 +20,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
@@ -52,6 +54,8 @@ public class AccountReportsDao {
       String.format("SELECT %s, %s, %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN,
           ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN,
           NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN);
+  private static final String deleteHostSql =
+      String.format("DELETE FROM %s WHERE %s=? AND %s=?", ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN);
   private static final String deletePartitionSql =
       String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
           HOSTNAME_COLUMN, PARTITION_ID_COLUMN);
@@ -61,6 +65,9 @@ public class AccountReportsDao {
   private static final String deleteContainerSql =
       String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE,
           CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN, PARTITION_ID_COLUMN, ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN);
+  private static final String queryHostsSql =
+      String.format("SELECT DISTINCT %s FROM %s WHERE %s=?", HOSTNAME_COLUMN, ACCOUNT_REPORTS_TABLE,
+          CLUSTER_NAME_COLUMN);
   private final DataSource dataSource;
   private final MySqlMetrics metrics;
 
@@ -161,6 +168,29 @@ public class AccountReportsDao {
    * Delete container storage usage rows for given {@code clusterName}, {@code hostname} and {@code partitionId}.
    * @param clusterName The clusterName
    * @param hostname The hostname
+   * @throws SQLException
+   */
+  void deleteStorageUsageForHost(String clusterName, String hostname) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement deleteStatement = connection.prepareStatement(deleteHostSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(2, hostname);
+        deleteStatement.executeUpdate();
+        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.writeSuccessCount.inc();
+      }
+    } catch (SQLException e) {
+      metrics.writeFailureCount.inc();
+      logger.error("Failed to execute DELETE on {}, with parameter {}", ACCOUNT_REPORTS_TABLE, hostname, e);
+      throw e;
+    }
+  }
+
+  /**
+   * Delete container storage usage rows for given {@code clusterName}, {@code hostname} and {@code partitionId}.
+   * @param clusterName The clusterName
+   * @param hostname The hostname
    * @param partitionId The partitionId
    * @throws SQLException
    */
@@ -241,6 +271,34 @@ public class AccountReportsDao {
           accountId, containerId, e);
       throw e;
     }
+  }
+
+  /**
+   * Query and return a list distinct host names that have host account storage stats in the given cluster name.
+   * @param clusterName The clustername
+   * @return A list of distinct host names
+   * @throws SQLException
+   */
+  List<String> queryHostsForCluster(String clusterName) throws SQLException {
+    List<String> result = new ArrayList<>();
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement queryHostStatement = connection.prepareStatement(queryHostsSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        queryHostStatement.setString(1, clusterName);
+        try (ResultSet resultSet = queryHostStatement.executeQuery()) {
+          while (resultSet.next()) {
+            result.add(resultSet.getString(HOSTNAME_COLUMN));
+          }
+        }
+        metrics.readTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.readSuccessCount.inc();
+      }
+    } catch (SQLException e) {
+      metrics.readFailureCount.inc();
+      logger.error("Failed to execute SELECT host on {}, with parameter {}", ACCOUNT_REPORTS_TABLE, clusterName, e);
+      throw e;
+    }
+    return result;
   }
 
   /**

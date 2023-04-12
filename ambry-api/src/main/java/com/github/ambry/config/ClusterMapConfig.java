@@ -37,6 +37,8 @@ public class ClusterMapConfig {
       "clustermap.enable.delete.invalid.data.in.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
       "clustermap.enable.aggregated.monthly.account.report";
+  public static final String DELETE_INVALID_HOSTS_IN_MYSQL_AGGREGATION_TASK_POSSIBILITY =
+      "clustermap.delete.invalid.hosts.in.mysql.aggregation.task.possibility";
   private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
@@ -329,6 +331,15 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableDeleteInvalidDataInMysqlAggregationTask;
 
+  /**
+   * The possibility to delete invalid hosts in mysql aggregation tasks. It should be a value between 0 and 1.
+   * When it's 0, it means we are never going to delete invalid hosts in the aggregation task. When it's 1, it
+   * means every time we run an aggregation task, we will try to delete the invalid hosts.
+   */
+  @Config(DELETE_INVALID_HOSTS_IN_MYSQL_AGGREGATION_TASK_POSSIBILITY)
+  @Default("0.01")
+  public final float clustermapDeleteInvalidHostsInMysqlAggregationTaskPossibility;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -397,6 +408,8 @@ public class ClusterMapConfig {
         verifiableProperties.getBoolean(ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT, false);
     clustermapEnableDeleteInvalidDataInMysqlAggregationTask =
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
+    clustermapDeleteInvalidHostsInMysqlAggregationTaskPossibility =
+        verifiableProperties.getFloatInRange(DELETE_INVALID_HOSTS_IN_MYSQL_AGGREGATION_TASK_POSSIBILITY, 0.01f, 0f, 1f);
     clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
   }
