@@ -894,6 +894,15 @@ public class MySqlAccountServiceIntegrationTest {
             testContainer.getName(), DATASET_NAME, version);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
+    // Deleted version 2 and add new latest version
+    mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, "2");
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, "3", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
     // Add a dataset with semantic version
     dataset =
         new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC).setVersionSchema(
