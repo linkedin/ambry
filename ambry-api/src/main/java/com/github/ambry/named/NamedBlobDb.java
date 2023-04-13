@@ -17,6 +17,7 @@ package com.github.ambry.named;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.NamedBlobState;
+import java.io.Closeable;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -24,7 +25,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * A layer for interacting with a metadata store that holds mappings between blob names and blob IDs.
  */
-public interface NamedBlobDb {
+public interface NamedBlobDb extends Closeable {
 
   /**
    * Look up a {@link NamedBlobRecord} by name.
