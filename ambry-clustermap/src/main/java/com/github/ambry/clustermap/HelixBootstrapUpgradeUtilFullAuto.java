@@ -19,9 +19,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.DoubleSummaryStatistics;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -47,9 +47,9 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
   static final int LESS_MOVEMENT = 2;
   static final int EVENNESS = 3;
   // the default of partition. each partition can store up to 24 * 16 = 384 GB data, and leave 2 GB here for margin
-  static final int PARTITION_WEIGHT = 386;
+  static final int DEFAULT_PARTITION_WEIGHT = 100;
   // Allow a host to be filled upto 95%
-  static final int INSTANCE_MAX_CAPACITY_PERCENTAGE =  95 ;
+  static final int INSTANCE_MAX_CAPACITY_PERCENTAGE = 95;
 
   /**
    * Instantiates this class with the given information.
@@ -119,6 +119,11 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
             });
           }
 
+          Map<String, IdealState> resourceToIdealState = new HashMap<>();
+          for (String resource : resources) {
+            resourceToIdealState.put(resource, helixAdmin.getResourceIdealState(clusterName, resource));
+          }
+
           ConfigAccessor configAccessor =
               new ConfigAccessor(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
 
@@ -129,7 +134,7 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
           Set<String> allInstances = new HashSet<>();
           for (String resource : resources) {
             // a. Get list of instances sharing partitions in this resource
-            IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resource);
+            IdealState idealState = resourceToIdealState.get(resource);
             Set<String> partitions = idealState.getPartitionSet();
             Set<String> instances = new HashSet<>();
             for (String partition : partitions) {
@@ -157,14 +162,18 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
           }
 
           if (!dryRun) {
+            // Before
+            Map<String, Set<String>> replicaPlacementBefore = getReplicaPlacement(helixAdmin, resources);
+
             // 5. Enter maintenance mode
             helixAdmin.manuallyEnableMaintenanceMode(clusterName, true, "Migrating to Full auto",
                 Collections.emptyMap());
 
             // 6. Update ideal state and enable waged rebalancer
             for (String resource : resources) {
-              IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resource);
+              IdealState idealState = resourceToIdealState.get(resource);
               idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+              idealState.setInstanceGroupTag(getResourceTag(resource));
               helixAdmin.updateIdealState(clusterName, resource, idealState);
             }
             helixAdmin.enableWagedRebalance(clusterName, new ArrayList<>(resources));
@@ -172,6 +181,12 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
             // 7. Exit maintenance mode
             helixAdmin.manuallyEnableMaintenanceMode(clusterName, false, "Complete migrating to Full auto",
                 Collections.emptyMap());
+
+            // After
+            Map<String, Set<String>> replicaPlacementAfter = getReplicaPlacement(helixAdmin, resources);
+
+            // Log stats
+            logMigrationStats(dcName, propertyStoreAdapter, replicaPlacementBefore, replicaPlacementAfter);
           }
           logger.info("Successfully migrated resources to full-auto in {}", dcName);
         }
@@ -183,6 +198,32 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
     }, false).start());
 
     migrationComplete.await();
+  }
+
+  /**
+   * Return tag for resources and their instances
+   * @param resource resource name
+   * @return tag name
+   */
+  private String getResourceTag(String resource) {
+    return "TAG_" + resource;
+  }
+
+  /**
+   * Get replica placement.
+   * @param helixAdmin {@link HelixAdmin} to talk to helix
+   * @param resources list of resources for which we need the partition-replica placement.
+   * @return
+   */
+  private Map<String, Set<String>> getReplicaPlacement(HelixAdmin helixAdmin, Set<String> resources) {
+    Map<String, Set<String>> partitionToInstances = new HashMap<>();
+    for (String resource : resources) {
+      IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resource);
+      for (String partitionName : idealState.getPartitionSet()) {
+        partitionToInstances.put(partitionName, idealState.getInstanceSet(partitionName));
+      }
+    }
+    return partitionToInstances;
   }
 
   /**
@@ -201,7 +242,7 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
     clusterConfig.setStateTransitionThrottleConfigs(Collections.singletonList(stateTransitionThrottleConfig));
     // 2. Set default weight for each partition
     Map<String, Integer> defaultPartitionWeightMap = new HashMap<>();
-    defaultPartitionWeightMap.put(DISK_KEY, PARTITION_WEIGHT);
+    defaultPartitionWeightMap.put(DISK_KEY, DEFAULT_PARTITION_WEIGHT);
     clusterConfig.setDefaultPartitionWeightMap(defaultPartitionWeightMap);
     // 3. Set instance capacity keys
     clusterConfig.setInstanceCapacityKeys(Collections.singletonList(DISK_KEY));
@@ -228,7 +269,7 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
     DataNodeConfig nodeConfigFromHelix =
         getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreToDataNodeConfigAdapter, null);
     // 1. Add tag
-    instanceConfig.addTag("TAG_" + resource);
+    instanceConfig.addTag(getResourceTag(resource));
     // 2. Setup domain information
     Map<String, String> domainMap = new HashMap<>();
     domainMap.put(RACK_KEY, nodeConfigFromHelix.getRackId());
@@ -241,10 +282,62 @@ public class HelixBootstrapUpgradeUtilFullAuto extends HelixBootstrapUpgradeUtil
         .stream()
         .mapToLong(DataNodeConfig.DiskConfig::getDiskCapacityInBytes)
         .sum();
-    capacityMap.put(DISK_KEY, (int) ((double) INSTANCE_MAX_CAPACITY_PERCENTAGE / 100 * capacity));
+    long capacityInGB = capacity / 1024 / 1024 / 1024;
+    capacityMap.put(DISK_KEY, (int) ((double) INSTANCE_MAX_CAPACITY_PERCENTAGE / 100 * capacityInGB));
     instanceConfig.setInstanceCapacityMap(capacityMap);
     // Update instance config in Helix/ZK
     configAccessor.updateInstanceConfig(clusterName, instanceName, instanceConfig);
+  }
+
+  /**
+   * @param dcName data center name
+   * @param propertyStoreToDataNodeConfigAdapter {@link PropertyStoreToDataNodeConfigAdapter} to get node configs.
+   * @param replicaPlacementBefore replica placement before the migration
+   * @param replicaPlacementAfter replica placement after the migration
+   */
+  private void logMigrationStats(String dcName,
+      PropertyStoreToDataNodeConfigAdapter propertyStoreToDataNodeConfigAdapter,
+      Map<String, Set<String>> replicaPlacementBefore, Map<String, Set<String>> replicaPlacementAfter) {
+
+    // 1. See host usages in new assignment
+    DoubleSummaryStatistics doubleSummaryStatistics = new DoubleSummaryStatistics();
+    Map<String, Integer> replicasPerInstance = new HashMap<>();
+    for (Map.Entry<String, Set<String>> entry : replicaPlacementAfter.entrySet()) {
+      Set<String> instances = entry.getValue();
+      for (String instance : instances) {
+        replicasPerInstance.put(instance, replicasPerInstance.getOrDefault(instance, 0) + 1);
+      }
+    }
+    for (String instance : replicasPerInstance.keySet()) {
+      // Get instance capacity
+      DataNodeConfig nodeConfigFromHelix =
+          getDataNodeConfigFromHelix(dcName, instance, propertyStoreToDataNodeConfigAdapter, null);
+      long capacity = nodeConfigFromHelix.getDiskConfigs()
+          .values()
+          .stream()
+          .mapToLong(DataNodeConfig.DiskConfig::getDiskCapacityInBytes)
+          .sum();
+      // Usage = (replicasInTheInstance / instance capacity) * 100;
+      double usage = (double) (replicasPerInstance.get(instance) * DEFAULT_PARTITION_WEIGHT) / capacity * 100;
+      doubleSummaryStatistics.accept(usage);
+    }
+    logger.info("Host usage stats");
+    logger.info("Min usage {}", (float) doubleSummaryStatistics.getMin());
+    logger.info("Max usage {}", (float) doubleSummaryStatistics.getMax());
+    logger.info("Average usage {}", (float) doubleSummaryStatistics.getAverage());
+
+    // 2. See replicas for partition before and after
+    int numReplicasMoved = 0;
+    for (String partition : replicaPlacementBefore.keySet()) {
+      Set<String> replicasBefore = new HashSet<>(replicaPlacementBefore.get(partition));
+      Set<String> replicasAfter = new HashSet<>(replicaPlacementAfter.get(partition));
+      replicasBefore.removeAll(replicaPlacementAfter.get(partition));
+      replicasAfter.removeAll(replicaPlacementBefore.get(partition));
+      logger.info("Replicas for partition {} moved from {} to {}", partition, replicasBefore, replicasAfter);
+      numReplicasMoved += replicasBefore.size();
+    }
+    logger.info("Percentage of replicas moved is {}",
+        (float) numReplicasMoved / (replicaPlacementAfter.size() * 3) * 100.0);
   }
 
   @Override
