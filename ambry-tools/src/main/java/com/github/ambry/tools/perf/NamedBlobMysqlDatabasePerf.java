@@ -95,10 +95,11 @@ public class NamedBlobMysqlDatabasePerf {
   public static void main(String[] args) throws Exception {
     OptionParser parser = new OptionParser();
 
-    ArgumentAcceptingOptionSpec<String> propsFilepathOpt = parser.accepts("props", "Path to property file \n" + "All the argument can be provided through a property file with key=value at each line.\n"
+    ArgumentAcceptingOptionSpec<String> propsFilepathOpt = parser.accepts("props", "Path to property file \n"
+            + "All the argument can be provided through a property file with key=value at each line.\n"
             + "If an parameter both exist in the property file and the command line argument, the value in the command line argument would override the value in the property file")
         .withRequiredArg()
-        .describedAs("db_username")
+        .describedAs("props_file")
         .ofType(String.class);
 
     // database connection configuration
