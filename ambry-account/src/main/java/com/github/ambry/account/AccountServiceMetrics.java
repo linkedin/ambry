@@ -28,7 +28,9 @@ public class AccountServiceMetrics {
 
   public static final String STARTUP_TIME_MSEC = "StartupTimeInMs";
   public static final String UPDATE_ACCOUNT_TIME_MSEC = "UpdateAccountTimeInMs";
+  public static final String UPDATE_ACCOUNT_TIME_MSEC_NEW = "UpdateAccountTimeInMsNew";
   public static final String FETCH_REMOTE_ACCOUNT_TIME_MSEC = "FetchRemoteAccountTimeInMs";
+  public static final String FETCH_REMOTE_ACCOUNT_TIME_MSEC_NEW = "FetchRemoteAccountTimeInMsNew";
   public static final String ACCOUNT_UPDATE_CONSUMER_TIME_MSEC = "AccountUpdateConsumerTimeInMs";
   public static final String ACCOUNT_UPDATE_TO_AMBRY_TIME_MSEC = "AccountUpdateToAmbryTimeInMs";
   public static final String ACCOUNT_FETCH_FROM_AMBRY_TIME_MSEC = "AccountFetchFromAmbryTimeInMs";
@@ -37,9 +39,11 @@ public class AccountServiceMetrics {
   public static final String UNRECOGNIZED_MESSAGE_ERROR_COUNT = "UnrecognizedMessageErrorCount";
   public static final String NOTIFY_ACCOUNT_DATA_CHANGE_ERROR_COUNT = "NotifyAccountDataChangeErrorCount";
   public static final String UPDATE_ACCOUNT_ERROR_COUNT = "UpdateAccountErrorCount";
+  public static final String UPDATE_ACCOUNT_ERROR_COUNT_NEW = "UpdateAccountErrorCountNew";
   public static final String CONFLICT_RETRY_COUNT = "ConflictRetryCount";
   public static final String ACCOUNT_UPDATES_TO_STORE_ERROR_COUNT = "AccountUpdatesToStoreErrorCount";
   public static final String FETCH_REMOTE_ACCOUNT_ERROR_COUNT = "FetchRemoteAccountErrorCount";
+  public static final String FETCH_REMOTE_ACCOUNT_ERROR_COUNT_NEW = "FetchRemoteAccountErrorCountNew";
   public static final String REMOTE_DATA_CORRUPTION_ERROR_COUNT = "RemoteDataCorruptionErrorCount";
   public static final String BACKUP_ERROR_COUNT = "BackupErrorCount";
   public static final String NULL_NOTIFIER_COUNT = "NullNotifierCount";
@@ -50,14 +54,21 @@ public class AccountServiceMetrics {
   public static final String ACCOUNT_FETCH_FROM_AMBRY_SERVER_ERROR_COUNT = "AccountFetchFromAmbryServerErrorCount";
   public static final String GET_ACCOUNT_INCONSISTENCY_COUNT = "GetAccountInconsistencyCount";
   public static final String ON_DEMAND_CONTAINER_FETCH_COUNT = "OnDemandContainerFetchCount";
+  public static final String ON_DEMAND_CONTAINER_FETCH_COUNT_NEW = "OnDemandContainerFetchCountNew";
   public static final String ACCOUNT_DATA_INCONSISTENCY_COUNT = "AccountDataInconsistencyCount";
   public static final String TIME_IN_SECONDS_SINCE_LAST_SYNC = "TimeInSecondsSinceLastSync";
+  public static final String TIME_IN_SECONDS_SINCE_LAST_SYNC_NEW = "TimeInSecondsSinceLastSyncNew";
+  public static final String UPDATE_ACCOUNT_FROM_OLD_CACHE_TO_NEW_DB_COUNT = "UpdateAccountFromOldCacheToNewDbCount";
+
   public static final String CONTAINER_COUNT = "ContainerCount";
+  public static final String CONTAINER_COUNT_NEW = "ContainerCountNew";
 
   // Histogram
   public final Histogram startupTimeInMs;
   public final Histogram updateAccountTimeInMs;
+  public final Histogram updateAccountTimeInMsNew;
   public final Histogram fetchRemoteAccountTimeInMs;
+  public final Histogram fetchRemoteAccountTimeInMsNew;
   public final Histogram accountUpdateConsumerTimeInMs;
   public final Histogram accountUpdateToAmbryTimeInMs;
   public final Histogram accountFetchFromAmbryTimeInMs;
@@ -68,8 +79,10 @@ public class AccountServiceMetrics {
   public final Counter unrecognizedMessageErrorCount;
   public final Counter notifyAccountDataChangeErrorCount;
   public final Counter updateAccountErrorCount;
+  public final Counter updateAccountErrorCountNew;
   public final Counter conflictRetryCount;
   public final Counter fetchRemoteAccountErrorCount;
+  public final Counter fetchRemoteAccountErrorCountNew;
   public final Counter remoteDataCorruptionErrorCount;
   public final Counter backupErrorCount;
   public final Counter nullNotifierCount;
@@ -80,6 +93,8 @@ public class AccountServiceMetrics {
   public final Counter accountUpdatesToStoreErrorCount;
   public final Counter getAccountInconsistencyCount;
   public final Counter onDemandContainerFetchCount;
+  public final Counter onDemandContainerFetchCountNew;
+  public final Counter updateAccountFromOldCacheToNewDbCount;
 
   // Gauge
   Gauge<Integer> accountDataInconsistencyCount;
@@ -94,8 +109,12 @@ public class AccountServiceMetrics {
     startupTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, STARTUP_TIME_MSEC));
     updateAccountTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_TIME_MSEC));
+    updateAccountTimeInMsNew =
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_TIME_MSEC_NEW));
     fetchRemoteAccountTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_TIME_MSEC));
+    fetchRemoteAccountTimeInMsNew =
+        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_TIME_MSEC_NEW));
     accountUpdateConsumerTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, ACCOUNT_UPDATE_CONSUMER_TIME_MSEC));
     accountUpdateToAmbryTimeInMs =
@@ -114,11 +133,15 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, NOTIFY_ACCOUNT_DATA_CHANGE_ERROR_COUNT));
     updateAccountErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_ERROR_COUNT));
+    updateAccountErrorCountNew =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_ERROR_COUNT_NEW));
     conflictRetryCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, CONFLICT_RETRY_COUNT));
     accountUpdatesToStoreErrorCount =
         metricRegistry.counter(MetricRegistry.name(AbstractAccountService.class, ACCOUNT_UPDATES_TO_STORE_ERROR_COUNT));
     fetchRemoteAccountErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_ERROR_COUNT));
+    fetchRemoteAccountErrorCountNew =
+        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_ERROR_COUNT_NEW));
     remoteDataCorruptionErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, REMOTE_DATA_CORRUPTION_ERROR_COUNT));
     backupErrorCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, BACKUP_ERROR_COUNT));
@@ -135,6 +158,10 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, GET_ACCOUNT_INCONSISTENCY_COUNT));
     onDemandContainerFetchCount =
         metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, ON_DEMAND_CONTAINER_FETCH_COUNT));
+    onDemandContainerFetchCountNew =
+        metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, ON_DEMAND_CONTAINER_FETCH_COUNT_NEW));
+    updateAccountFromOldCacheToNewDbCount = metricRegistry.counter(
+        MetricRegistry.name(MySqlAccountService.class, UPDATE_ACCOUNT_FROM_OLD_CACHE_TO_NEW_DB_COUNT));
   }
 
   /**
@@ -158,11 +185,30 @@ public class AccountServiceMetrics {
   }
 
   /**
+   * Tracks the number of seconds elapsed since the last database sync.
+   * @param gauge the function returning the elapsed time.
+   */
+  void trackTimeSinceLastSyncNew(Gauge<Integer> gauge) {
+    timeInSecondsSinceLastSyncGauge = gauge;
+    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, TIME_IN_SECONDS_SINCE_LAST_SYNC_NEW),
+        timeInSecondsSinceLastSyncGauge);
+  }
+
+  /**
    * Tracks the total number of containers across all accounts.
    * @param gauge the function returning the container count.
    */
   void trackContainerCount(Gauge<Integer> gauge) {
     containerCountGauge = gauge;
     metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT), containerCountGauge);
+  }
+
+  /**
+   * Tracks the total number of containers across all accounts.
+   * @param gauge the function returning the container count.
+   */
+  void trackContainerCountNew(Gauge<Integer> gauge) {
+    containerCountGauge = gauge;
+    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT_NEW), containerCountGauge);
   }
 }

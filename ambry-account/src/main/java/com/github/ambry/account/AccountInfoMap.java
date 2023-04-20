@@ -172,6 +172,14 @@ class AccountInfoMap {
   }
 
   /**
+   * Gets all the {@link Account}s' Id in this {@code AccountInfoMap} in a {@link Collection}.
+   * @return A {@link Collection} of all the {@link Account}s' Id in this map.
+   */
+  Collection<Short> getAccountIds() {
+    return Collections.unmodifiableCollection(idToAccountMap.keySet());
+  }
+
+  /**
    * Return true if there is no accounts in this info map.
    * @return True when there is no accounts.
    */

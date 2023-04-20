@@ -64,6 +64,7 @@ public class MySqlAccountServiceIntegrationTest {
   private final Properties mySqlConfigProps;
   private final MockNotifier<String> mockNotifier = new MockNotifier();
   private MySqlAccountStore mySqlAccountStore;
+  private MySqlAccountStore mySqlAccountStoreNew;
   private MySqlAccountServiceConfig accountServiceConfig;
   private MySqlAccountService mySqlAccountService;
   private static final String DATASET_NAME = "testDataset";

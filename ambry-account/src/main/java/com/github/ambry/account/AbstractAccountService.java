@@ -49,6 +49,7 @@ public abstract class AbstractAccountService implements AccountService {
   static final String ACCOUNT_METADATA_CHANGE_TOPIC = "account_metadata_change_topic";
   static final String FULL_ACCOUNT_METADATA_CHANGE_MESSAGE = "full_account_metadata_change";
   protected final AtomicReference<AccountInfoMap> accountInfoMapRef;
+  protected final AtomicReference<AccountInfoMap> accountInfoMapRefNew;
   protected final ReentrantLock lock = new ReentrantLock();
   protected final CopyOnWriteArraySet<Consumer<Collection<Account>>> accountUpdateConsumers =
       new CopyOnWriteArraySet<>();
@@ -62,6 +63,7 @@ public abstract class AbstractAccountService implements AccountService {
     this.config = config;
     this.accountServiceMetrics = accountServiceMetrics;
     this.accountInfoMapRef = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
+    this.accountInfoMapRefNew = new AtomicReference<>(new AccountInfoMap(accountServiceMetrics));
     this.notifier = notifier;
     changeTopicListener = this::onAccountChangeMessage;
   }
@@ -123,6 +125,12 @@ public abstract class AbstractAccountService implements AccountService {
     checkOpen();
     Objects.requireNonNull(accountName, "accountName cannot be null.");
     return accountInfoMapRef.get().getAccountByName(accountName);
+  }
+
+  public Account getAccountByNameNew(String accountName) {
+    checkOpen();
+    Objects.requireNonNull(accountName, "accountName cannot be null.");
+    return accountInfoMapRefNew.get().getAccountByName(accountName);
   }
 
   @Override
