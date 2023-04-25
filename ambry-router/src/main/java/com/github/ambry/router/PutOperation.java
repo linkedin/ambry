@@ -26,6 +26,7 @@ import com.github.ambry.commons.BlobId.BlobIdType;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.ReservedMetadataIdMetrics;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -177,6 +178,7 @@ class PutOperation {
   private final RestRequest restRequest;
   private final String loggingContext;
   private final CompressionService compressionService;
+  private final ReservedMetadataIdMetrics reservedMetadataIdMetrics;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -314,6 +316,7 @@ class PutOperation {
     bytesFilledSoFar = 0;
     chunkCounter = -1;
     putChunks = new ConcurrentLinkedQueue<>();
+    reservedMetadataIdMetrics = ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(routerMetrics.getMetricRegistry());
     metadataPutChunk = new MetadataPutChunk();
     chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
@@ -1931,14 +1934,14 @@ class PutOperation {
     private PartitionId reserveMetadataPartition(String partitionClass, List<PartitionId> partitionIdsToExclude) {
       PartitionId selected = clusterMap.getRandomFullyWritablePartition(partitionClass, partitionIdsToExclude);
       if (selected == null) {
-        routerMetrics.numFailedPartitionReserveAttempts.inc();
+        reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.inc();
         return null;
       }
       if (!partitionClass.equals(selected.getPartitionClass())) {
         logger.warn(
             "{}: No partitions for partitionClass='{}' found, partitionClass='{}' used instead for metadata chunk. blobProperties={}",
             loggingContext, partitionClass, selected.getPartitionClass(), passedInBlobProperties);
-        routerMetrics.numUnexpectedReservedPartitionClassCount.inc();
+        reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.inc();
       }
       return selected;
     }
@@ -1952,15 +1955,15 @@ class PutOperation {
         return;
       }
       if(reservedPartitionId.getPartitionState() == PartitionState.READ_ONLY) {
-        routerMetrics.numReservedPartitionFoundReadOnlyCount.inc();
+        reservedMetadataIdMetrics.numReservedPartitionFoundReadOnlyCount.inc();
       }
       if(!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
           true)) {
-        routerMetrics.numReservedPartitionFoundUnavailableInLocalDcCount.inc();
+        reservedMetadataIdMetrics.numReservedPartitionFoundUnavailableInLocalDcCount.inc();
       }
       if(!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
           false)) {
-        routerMetrics.numReservedPartitionFoundUnavailableInAllDcCount.inc();
+        reservedMetadataIdMetrics.numReservedPartitionFoundUnavailableInAllDcCount.inc();
       }
     }
   }
