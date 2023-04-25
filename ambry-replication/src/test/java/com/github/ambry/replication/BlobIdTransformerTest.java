@@ -527,7 +527,7 @@ public class BlobIdTransformerTest {
       MessageInfo messageInfo;
       BlobProperties blobProperties =
           new BlobProperties(blobPropertiesSize, "serviceId", "ownerId", "contentType", false, 0, 0,
-              blobId.getAccountId(), blobId.getContainerId(), hasEncryption, null, "gzip", "filename");
+              blobId.getAccountId(), blobId.getContainerId(), hasEncryption, null, "gzip", "filename", null);
       if (clazz != null) {
         MessageFormatInputStream messageFormatInputStream;
         if (clazz == PutMessageFormatInputStream.class) {

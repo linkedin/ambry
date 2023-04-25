@@ -65,7 +65,7 @@ public class BlobPropertiesSerDe {
     String contentEncoding = version > VERSION_3 ? Utils.readNullableIntString(stream) : null;
     String filename = version > VERSION_3 ? Utils.readNullableIntString(stream) : null;
     return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
-        containerId, isEncrypted, null, contentEncoding, filename);
+        containerId, isEncrypted, null, contentEncoding, filename, null);
   }
 
   /**
