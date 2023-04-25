@@ -65,6 +65,31 @@ import org.json.JSONArray;
  *
  * This tool would insert number of target rows specified in the argument or property file and then do performance testing
  * with several named blob operations.
+ *
+ * To run this tool.
+ * First compile ambry.jar with ./gradelw allJar
+ * Then copy target/ambry.jar to a host that has access to mysql database if mysql database has host based permission checking.
+ * Then run
+ *  > java -cp "*" com.github.ambry.tools.perf.NamedBlobMysqlDatabasePerf
+ *  >      --db_username database_username
+ *  >      --db_datacenter datacenter_name
+ *  >      --db_name database_name
+ *  >      --db_host database_host
+ *  >      --parallelism 10 // number of connections to create
+ *  >      --target_row 10  // number of millions of rows to create before performance test
+ *  >      --include_list false // true of false to include list operations in the performance test
+ *
+ *  Or you can provide a property file to include all the arguments in the above command, for example:
+ *  > cat named_blob.props
+ *  db_username=database_username
+ *  db_password=databse_pasword // yes, you can also provide database password in the prop file
+ *  db_datacenter=datacenter_name
+ *  db_name=database_name
+ *  db_host=database_hostname
+ *  parallelism=10
+ *  target_rows=10
+ *  include_list=false
+ *  > java -cp "*" com.github.ambry.tools.perf.NamedBlobMysqlDatabasePerf --props named_blob.props
  */
 public class NamedBlobMysqlDatabasePerf {
   public static final short HUGE_LIST_ACCOUNT_ID = 1024;
