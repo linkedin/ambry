@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS Accounts
     gg_modi_ts datetime(6) DEFAULT CURRENT_TIMESTAMP(6),
     gg_status varchar(1) DEFAULT 'o',
     PRIMARY KEY (accountId),
+    INDEX accountName (accountName),
     INDEX lmtIndex (lastModifiedTime),
     INDEX statusIndex (status)
 )

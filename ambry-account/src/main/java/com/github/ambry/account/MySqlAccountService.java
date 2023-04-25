@@ -359,9 +359,14 @@ public class MySqlAccountService extends AbstractAccountService {
   public Account getAccountById(short accountId) {
     infoMapLock.readLock().lock();
     try {
-      if (config.enableNewDatabaseForMigration && accountInfoMapRefNew.get().getAccountById(accountId) != null) {
-        logger.trace("get account by Id from new in memory cache, accountId: " + accountId);
-        return accountInfoMapRefNew.get().getAccountById(accountId);
+      if (config.enableNewDatabaseForMigration) {
+        if (accountInfoMapRefNew.get().getAccountById(accountId) != null) {
+          logger.trace("get account by Id from new in memory cache, accountId: " + accountId);
+          return accountInfoMapRefNew.get().getAccountById(accountId);
+        } else {
+          logger.trace("get account by Id from old in memory cache, accountId: " + accountId);
+          return accountInfoMapRef.get().getAccountById(accountId);
+        }
       } else {
         logger.trace("get account by Id from old in memory cache, accountId: " + accountId);
         return accountInfoMapRef.get().getAccountById(accountId);
@@ -395,9 +400,14 @@ public class MySqlAccountService extends AbstractAccountService {
   public Account getAccountByName(String accountName) {
     infoMapLock.readLock().lock();
     try {
-      if (config.enableNewDatabaseForMigration && accountInfoMapRefNew.get().getAccountByName(accountName) != null) {
-        logger.trace("get account by Id from new in memory cache, accountName: " + accountName);
-        return accountInfoMapRefNew.get().getAccountByName(accountName);
+      if (config.enableNewDatabaseForMigration) {
+        if (accountInfoMapRefNew.get().getAccountByName(accountName) != null) {
+          logger.trace("get account by Id from new in memory cache, accountName: " + accountName);
+          return accountInfoMapRefNew.get().getAccountByName(accountName);
+        } else {
+          logger.trace("get account by Id from old in memory cache, accountName: " + accountName);
+          return accountInfoMapRef.get().getAccountByName(accountName);
+        }
       } else {
         logger.trace("get account by Id from old in memory cache, accountName: " + accountName);
         return accountInfoMapRef.get().getAccountByName(accountName);
@@ -869,7 +879,7 @@ public class MySqlAccountService extends AbstractAccountService {
       if (account != null) {
         container = account.getContainerByName(containerName);
       }
-      if (container == null) {
+      if (account != null && container == null) {
         // If container is not present in the cache, query from mysql db
         try {
           container = mySqlAccountStoreNew.getContainerByName(account.getId(), containerName);
@@ -879,6 +889,8 @@ public class MySqlAccountService extends AbstractAccountService {
             logger.info("Container {} in Account {} is not found locally; Fetched from mysql db", containerName,
                 accountName);
             accountServiceMetrics.onDemandContainerFetchCountNew.inc();
+          } else {
+            return getContainerByNameFromOldDbHelper(accountName, containerName);
           }
         } catch (SQLException e) {
           throw translateSQLException(e);
@@ -945,7 +957,7 @@ public class MySqlAccountService extends AbstractAccountService {
       if (account != null) {
         container = account.getContainerById(containerId);
       }
-      if (container == null) {
+      if (account != null && container == null) {
         // If container is not present in the cache, query from mysql db
         try {
           container = mySqlAccountStoreNew.getContainerById(account.getId(), containerId);
