@@ -52,6 +52,8 @@ public class AccountReportsDao {
       String.format("SELECT %s, %s, %s, %s, %s, %s, %s FROM %s WHERE %s = ? AND %s = ?", PARTITION_ID_COLUMN,
           ACCOUNT_ID_COLUMN, CONTAINER_ID_COLUMN, STORAGE_USAGE_COLUMN, PHYSICAL_STORAGE_USAGE_COLUMN,
           NUMBER_OF_BLOBS_COLUMN, UPDATED_AT_COLUMN, ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN);
+  private static final String deleteHostSql =
+      String.format("DELETE FROM %s WHERE %s=? AND %s=?", ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN, HOSTNAME_COLUMN);
   private static final String deletePartitionSql =
       String.format("DELETE FROM %s WHERE %s=? AND %s=? AND %s=?", ACCOUNT_REPORTS_TABLE, CLUSTER_NAME_COLUMN,
           HOSTNAME_COLUMN, PARTITION_ID_COLUMN);
@@ -158,6 +160,29 @@ public class AccountReportsDao {
   }
 
   /**
+   * Delete container storage usage rows for given {@code clusterName}, {@code hostname}.
+   * @param clusterName The clusterName
+   * @param hostname The hostname
+   * @throws SQLException
+   */
+  void deleteStorageUsageForHost(String clusterName, String hostname) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement deleteStatement = connection.prepareStatement(deleteHostSql)) {
+        long startTimeMs = System.currentTimeMillis();
+        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(2, hostname);
+        deleteStatement.executeUpdate();
+        metrics.deleteTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.deleteFailureCount.inc();
+      }
+    } catch (SQLException e) {
+      metrics.deleteFailureCount.inc();
+      logger.error("Failed to execute DELETE on {}, with parameter {}", ACCOUNT_REPORTS_TABLE, hostname, e);
+      throw e;
+    }
+  }
+
+  /**
    * Delete container storage usage rows for given {@code clusterName}, {@code hostname} and {@code partitionId}.
    * @param clusterName The clusterName
    * @param hostname The hostname
@@ -172,11 +197,11 @@ public class AccountReportsDao {
         deleteStatement.setString(2, hostname);
         deleteStatement.setInt(3, partitionId);
         deleteStatement.executeUpdate();
-        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        metrics.writeSuccessCount.inc();
+        metrics.deleteTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.deleteSuccessCount.inc();
       }
     } catch (SQLException e) {
-      metrics.writeFailureCount.inc();
+      metrics.deleteFailureCount.inc();
       logger.error("Failed to execute DELETE on {}, with parameter {}", ACCOUNT_REPORTS_TABLE, partitionId, e);
       throw e;
     }
@@ -200,11 +225,11 @@ public class AccountReportsDao {
         deleteStatement.setInt(3, partitionId);
         deleteStatement.setInt(4, accountId);
         deleteStatement.executeUpdate();
-        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        metrics.writeSuccessCount.inc();
+        metrics.deleteTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.deleteSuccessCount.inc();
       }
     } catch (SQLException e) {
-      metrics.writeFailureCount.inc();
+      metrics.deleteFailureCount.inc();
       logger.error("Failed to execute DELETE on {}, with parameter {}, {}", ACCOUNT_REPORTS_TABLE, partitionId,
           accountId, e);
       throw e;
@@ -232,11 +257,11 @@ public class AccountReportsDao {
         deleteStatement.setInt(4, accountId);
         deleteStatement.setInt(5, containerId);
         deleteStatement.executeUpdate();
-        metrics.writeTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        metrics.writeSuccessCount.inc();
+        metrics.deleteTimeMs.update(System.currentTimeMillis() - startTimeMs);
+        metrics.deleteSuccessCount.inc();
       }
     } catch (SQLException e) {
-      metrics.writeFailureCount.inc();
+      metrics.deleteFailureCount.inc();
       logger.error("Failed to execute DELETE on {}, with parameter {}, {}, {}", ACCOUNT_REPORTS_TABLE, partitionId,
           accountId, containerId, e);
       throw e;

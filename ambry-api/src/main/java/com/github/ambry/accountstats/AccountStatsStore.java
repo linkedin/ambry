@@ -17,6 +17,7 @@ import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
+import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,6 +31,14 @@ public interface AccountStatsStore {
    * @param statsWrapper The {@link HostAccountStorageStatsWrapper} that contains stats and other metadata.
    */
   void storeHostAccountStorageStats(HostAccountStorageStatsWrapper statsWrapper) throws Exception;
+
+  /**
+   * Delete {@link HostAccountStorageStats} for the given host.
+   * @param hostname The hostname
+   * @param port The port
+   * @throws Exception
+   */
+  void deleteHostAccountStorageStatsForHost(String hostname, int port) throws Exception;
 
   /**
    * Store aggregated storage stats in the {@link AggregatedAccountStorageStats}. This method will be used for aggregation
