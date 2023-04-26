@@ -22,8 +22,6 @@ CREATE TABLE IF NOT EXISTS Accounts
     accountName VARCHAR(255) GENERATED ALWAYS AS (accountInfo->>"$.accountName") NOT NULL,
     status VARCHAR(50) GENERATED ALWAYS AS (accountInfo->>"$.status") STORED NOT NULL,
     deleted_ts datetime(6) DEFAULT NULL,
-    gg_modi_ts datetime(6) DEFAULT CURRENT_TIMESTAMP(6),
-    gg_status varchar(1) DEFAULT 'o',
     PRIMARY KEY (accountId),
     INDEX accountName (accountName),
     INDEX lmtIndex (lastModifiedTime),
@@ -42,8 +40,6 @@ CREATE TABLE IF NOT EXISTS Containers
     containerName VARCHAR(255) GENERATED ALWAYS AS (containerInfo->>"$.containerName") NOT NULL,
     status VARCHAR(50) GENERATED ALWAYS AS (containerInfo->>"$.status") STORED NOT NULL,
     deleted_ts datetime(6) DEFAULT NULL,
-    gg_modi_ts datetime(6) DEFAULT CURRENT_TIMESTAMP(6),
-    gg_status varchar(1) DEFAULT 'o',
     PRIMARY KEY (accountId, containerId),
     INDEX containerNameIndex (accountId, containerName),
     INDEX lmtIndex (lastModifiedTime),
@@ -61,8 +57,6 @@ CREATE TABLE IF NOT EXISTS Datasets (
     userTags JSON DEFAULT NULL,
     lastModifiedTime DATETIME(3) NOT NULL,
     delete_ts DATETIME(6) DEFAULT NULL,
-    gg_modi_ts datetime(6) DEFAULT CURRENT_TIMESTAMP(6),
-    gg_status varchar(1) DEFAULT 'o',
     PRIMARY KEY (accountId, containerId, datasetName)
     )
 CHARACTER SET utf8 COLLATE utf8_bin;
@@ -74,8 +68,6 @@ CREATE TABLE IF NOT EXISTS DatasetVersions (
     version BIGINT NOT NULL,
     lastModifiedTime DATETIME(3) NOT NULL,
     delete_ts DATETIME(6) DEFAULT NULL,
-    gg_modi_ts datetime(6) DEFAULT CURRENT_TIMESTAMP(6),
-    gg_status varchar(1) DEFAULT 'o',
     PRIMARY KEY (accountId, containerId, datasetName, version)
     )
 CHARACTER SET utf8 COLLATE utf8_bin;
