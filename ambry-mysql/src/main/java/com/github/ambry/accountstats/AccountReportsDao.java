@@ -78,14 +78,14 @@ public class AccountReportsDao {
 
   /**
    * Update the storage usage for the given account/container.
-   * @param clusterName the name of target cluster
+   * @param clustername the name of target cluster
    * @param hostname the name of target host
    * @param partitionId The partition id of this account/container usage.
    * @param accountId The account id.
    * @param containerId The container id.
    * @param storageUsage The storage usage in bytes.
    */
-  void updateStorageUsage(String clusterName, String hostname, int partitionId, short accountId, short containerId,
+  void updateStorageUsage(String clustername, String hostname, int partitionId, short accountId, short containerId,
       long storageUsage) throws SQLException {
     // TODO: adding real physical storage usage and number of blobs here
     final long physicalStorageUsage = storageUsage;
@@ -93,7 +93,7 @@ public class AccountReportsDao {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement insertStatement = connection.prepareStatement(insertSql)) {
         long startTimeMs = System.currentTimeMillis();
-        insertStatement.setString(1, clusterName);
+        insertStatement.setString(1, clustername);
         insertStatement.setString(2, hostname);
         // The data type of partition id, account id and container id are not SMALLINT, but INT in MySQL, for
         // future extension
@@ -119,19 +119,19 @@ public class AccountReportsDao {
   }
 
   /**
-   * Query container storage usage for given {@code clusterName} and {@code hostname}. The result will be applied to the
+   * Query container storage usage for given {@code clustername} and {@code hostname}. The result will be applied to the
    * {@link ContainerStorageStatsFunction}.
-   * @param clusterName The clusterName.
+   * @param clustername The clustername.
    * @param hostname The hostname.
    * @param func The {@link ContainerStorageStatsFunction} to call to process each container storage usage.
    * @throws SQLException
    */
-  void queryStorageUsageForHost(String clusterName, String hostname, ContainerStorageStatsFunction func)
+  void queryStorageUsageForHost(String clustername, String hostname, ContainerStorageStatsFunction func)
       throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement queryStatement = connection.prepareStatement(querySqlForClusterAndHost)) {
         long startTimeMs = System.currentTimeMillis();
-        queryStatement.setString(1, clusterName);
+        queryStatement.setString(1, clustername);
         queryStatement.setString(2, hostname);
         try (ResultSet resultSet = queryStatement.executeQuery()) {
           while (resultSet.next()) {
@@ -153,23 +153,23 @@ public class AccountReportsDao {
     } catch (SQLException e) {
       metrics.readFailureCount.inc();
       logger.error(
-          String.format("Failed to execute query on %s, with parameter %s %s", ACCOUNT_REPORTS_TABLE, clusterName,
+          String.format("Failed to execute query on %s, with parameter %s %s", ACCOUNT_REPORTS_TABLE, clustername,
               hostname), e);
       throw e;
     }
   }
 
   /**
-   * Delete container storage usage rows for given {@code clusterName}, {@code hostname}.
-   * @param clusterName The clusterName
+   * Delete container storage usage rows for given {@code clustername}, {@code hostname}.
+   * @param clustername The clustername
    * @param hostname The hostname
    * @throws SQLException
    */
-  void deleteStorageUsageForHost(String clusterName, String hostname) throws SQLException {
+  void deleteStorageUsageForHost(String clustername, String hostname) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement deleteStatement = connection.prepareStatement(deleteHostSql)) {
         long startTimeMs = System.currentTimeMillis();
-        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(1, clustername);
         deleteStatement.setString(2, hostname);
         deleteStatement.executeUpdate();
         metrics.deleteTimeMs.update(System.currentTimeMillis() - startTimeMs);
@@ -183,17 +183,17 @@ public class AccountReportsDao {
   }
 
   /**
-   * Delete container storage usage rows for given {@code clusterName}, {@code hostname} and {@code partitionId}.
-   * @param clusterName The clusterName
+   * Delete container storage usage rows for given {@code clustername}, {@code hostname} and {@code partitionId}.
+   * @param clustername The clustername
    * @param hostname The hostname
    * @param partitionId The partitionId
    * @throws SQLException
    */
-  void deleteStorageUsageForPartition(String clusterName, String hostname, int partitionId) throws SQLException {
+  void deleteStorageUsageForPartition(String clustername, String hostname, int partitionId) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement deleteStatement = connection.prepareStatement(deletePartitionSql)) {
         long startTimeMs = System.currentTimeMillis();
-        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(1, clustername);
         deleteStatement.setString(2, hostname);
         deleteStatement.setInt(3, partitionId);
         deleteStatement.executeUpdate();
@@ -208,19 +208,19 @@ public class AccountReportsDao {
   }
 
   /**
-   * Delete container storage usage rows for given {@code clusterName}, {@code hostname}, {@code partitionId} and {@code accountId}.
-   * @param clusterName The clusterName
+   * Delete container storage usage rows for given {@code clustername}, {@code hostname}, {@code partitionId} and {@code accountId}.
+   * @param clustername The clustername
    * @param hostname The hostname
    * @param partitionId The partitionId
    * @param accountId The accountId
    * @throws SQLException
    */
-  void deleteStorageUsageForAccount(String clusterName, String hostname, int partitionId, int accountId)
+  void deleteStorageUsageForAccount(String clustername, String hostname, int partitionId, int accountId)
       throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement deleteStatement = connection.prepareStatement(deleteAccountSql)) {
         long startTimeMs = System.currentTimeMillis();
-        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(1, clustername);
         deleteStatement.setString(2, hostname);
         deleteStatement.setInt(3, partitionId);
         deleteStatement.setInt(4, accountId);
@@ -237,21 +237,21 @@ public class AccountReportsDao {
   }
 
   /**
-   * Delete container storage usage rows for given {@code clusterName}, {@code hostname}, {@code partitionId},
+   * Delete container storage usage rows for given {@code clustername}, {@code hostname}, {@code partitionId},
    * {@code accountId} and {@code containerId}.
-   * @param clusterName The clusterName
+   * @param clustername The clustername
    * @param hostname The hostname
    * @param partitionId The partitionId
    * @param accountId The accountId
    * @param containerId The containerId
    * @throws SQLException
    */
-  void deleteStorageUsageForContainer(String clusterName, String hostname, int partitionId, int accountId,
+  void deleteStorageUsageForContainer(String clustername, String hostname, int partitionId, int accountId,
       int containerId) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement deleteStatement = connection.prepareStatement(deleteContainerSql)) {
         long startTimeMs = System.currentTimeMillis();
-        deleteStatement.setString(1, clusterName);
+        deleteStatement.setString(1, clustername);
         deleteStatement.setString(2, hostname);
         deleteStatement.setInt(3, partitionId);
         deleteStatement.setInt(4, accountId);
@@ -284,17 +284,17 @@ public class AccountReportsDao {
 
     /**
      * Supply values to the prepared statement and add it to the batch updater.
-     * @param clusterName the cluster name
+     * @param clustername the cluster name
      * @param hostname the hostname
      * @param partitionId The partition id of this account/container usage.
      * @param accountId The account id.
      * @param containerStats The {@link ContainerStorageStats}.
      * @throws SQLException
      */
-    public void addUpdateToBatch(String clusterName, String hostname, int partitionId, short accountId,
+    public void addUpdateToBatch(String clustername, String hostname, int partitionId, short accountId,
         ContainerStorageStats containerStats) throws SQLException {
       addUpdateToBatch(statement -> {
-        statement.setString(1, clusterName);
+        statement.setString(1, clustername);
         statement.setString(2, hostname);
         statement.setInt(3, partitionId);
         statement.setInt(4, accountId);
