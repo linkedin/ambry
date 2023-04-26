@@ -577,17 +577,12 @@ class PutOperation {
       setOperationCompleted();
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
-      logger.trace("{}: Successfully put data chunk with blob id : {}", loggingContext, chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkBlobSize, chunk.chunkIndex);
       metadataPutChunk.maybeNotifyForChunkCreation(chunk);
+      maybeUpdateSlippedPutSuccessMetrics(chunk);
     } else {
       blobId = chunk.getChunkBlobId();
-      if (chunk.failedAttempts > 0) {
-        logger.trace("{}: Slipped put succeeded for chunk: {}", loggingContext, chunk.getChunkBlobId());
-        routerMetrics.slippedPutSuccessCount.inc();
-      } else {
-        logger.trace("{}: Successfully put chunk: {} ", loggingContext, chunk.getChunkBlobId());
-      }
+      maybeUpdateSlippedPutSuccessMetrics(chunk);
       setOperationCompleted();
     }
     long operationLatencyMs = time.milliseconds() - chunk.chunkFillCompleteAtMs;
@@ -720,6 +715,21 @@ class PutOperation {
    */
   public QuotaChargeCallback getQuotaChargeCallback() {
     return quotaChargeCallback;
+  }
+
+  /**
+   * Update the metrics for slipped puts if slipped puts were attempted.
+   */
+  private void maybeUpdateSlippedPutSuccessMetrics(PutChunk chunk) {
+    if (chunk.failedAttempts > 0) {
+      logger.trace("{}: Slipped put succeeded for chunk: {}", loggingContext, chunk.getChunkBlobId());
+      routerMetrics.slippedPutSuccessCount.inc();
+      if (chunk instanceof MetadataPutChunk) {
+        routerMetrics.metadataSlippedPutSuccessCount.inc();
+      }
+    } else {
+      logger.trace("{}: Successfully put chunk: {} ", loggingContext, chunk.getChunkBlobId());
+    }
   }
 
   /**
@@ -1438,6 +1448,9 @@ class PutOperation {
             logger.trace("{}: Attempt to put chunk with id: {} failed, attempting slipped put ", loggingContext,
                 chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
+            if (this instanceof MetadataPutChunk) {
+              routerMetrics.metadataSlippedPutAttemptCount.inc();
+            }
             chunkException = null;
             prepareForSending();
           } else {

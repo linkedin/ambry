@@ -183,8 +183,14 @@ public class NonBlockingRouterMetrics {
   // Misc metrics.
   public final Meter operationErrorRate;
   public final Meter encryptedOperationErrorRate;
+  // total count of slipped put attempts for all chunks.
   public final Counter slippedPutAttemptCount;
+  // count of slipped put attempts for metadata chunks only.
+  public final Counter metadataSlippedPutAttemptCount;
+  // total count of slipped put success for all chunks.
   public final Counter slippedPutSuccessCount;
+  // total count of slipped put success for all metadata chunks only.
+  public final Counter metadataSlippedPutSuccessCount;
   public final Counter ignoredResponseCount;
   public final Counter crossColoRequestCount;
   public final Counter crossColoSuccessCount;
@@ -500,7 +506,11 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "EncryptedOperationErrorRate"));
     ignoredResponseCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "IgnoredRequestCount"));
     slippedPutAttemptCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutAttemptCount"));
+    metadataSlippedPutAttemptCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class,"MetadataSlippedPutAttemptCount"));
     slippedPutSuccessCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutSuccessCount"));
+    metadataSlippedPutSuccessCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class,"MetadataSlippedPutSuccessCount"));
     crossColoRequestCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoRequestCount"));
     crossColoSuccessCount =
