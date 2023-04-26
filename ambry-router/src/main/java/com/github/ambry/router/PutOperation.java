@@ -1464,6 +1464,10 @@ class PutOperation {
                 quotaException.toString());
           }
         }
+        if(this instanceof MetadataPutChunk && chunkException == null) {
+          // if this is a metadata chunk, and it was successful then increment the count of metadata chunk creation.
+          routerMetrics.metadataChunkCreationCount.inc();
+        }
         state = ChunkState.Complete;
       }
     }

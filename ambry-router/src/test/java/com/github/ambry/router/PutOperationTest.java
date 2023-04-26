@@ -218,6 +218,8 @@ public class PutOperationTest {
     responseInfo.release();
     requestInfos.forEach(info -> info.getRequest().release());
     Assert.assertTrue("Operation should be complete at this time", op.isOperationComplete());
+    Assert.assertEquals("Metrics should show creation of metadata chunk", 1,
+        routerMetrics.metadataChunkCreationCount.getCount());
   }
 
   /**
@@ -303,6 +305,9 @@ public class PutOperationTest {
     Assert.assertEquals("Failure count should be 1", 1,
         ((SimpleOperationTracker) putChunk.getOperationTrackerInUse()).getFailedCount());
     mockServer.resetServerErrors();
+    Assert.assertEquals("Metrics should show no metadata chunk was created", 0,
+        routerMetrics.metadataChunkCreationCount.getCount());
+
     // Release all the other requests
     requestInfos.forEach(info -> info.getRequest().release());
   }
@@ -353,6 +358,8 @@ public class PutOperationTest {
     responseInfo.release();
     Assert.assertTrue(op.isOperationComplete());
     Assert.assertEquals(RouterErrorCode.TooManyRequests, ((RouterException)op.getOperationException()).getErrorCode());
+    Assert.assertEquals("Metrics should show no metadata chunk was created", 0,
+        routerMetrics.metadataChunkCreationCount.getCount());
   }
 
   /**
@@ -496,6 +503,8 @@ public class PutOperationTest {
     op.setOperationExceptionAndComplete(new RouterException("RouterError", RouterErrorCode.InsufficientCapacity));
     Assert.assertEquals(((RouterException) op.getOperationException()).getErrorCode(),
         RouterErrorCode.InsufficientCapacity);
+    Assert.assertEquals("Metrics should show no metadata chunk was created", 0,
+        routerMetrics.metadataChunkCreationCount.getCount());
   }
 
   /**

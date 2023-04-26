@@ -232,6 +232,7 @@ public class NonBlockingRouterMetrics {
   public final Counter failedMaybeDueToOriginatingDcOfflineReplicasCount;
   public final Counter failedMaybeDueToTotalOfflineReplicasCount;
   public final Counter failedMaybeDueToUnavailableReplicasCount;
+  public final Counter metadataChunkCreationCount;
 
   // Workload characteristics
   public final AgeAtAccessMetrics ageAtGet;
@@ -577,6 +578,8 @@ public class NonBlockingRouterMetrics {
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToOriginatingDcOfflineReplicasCount"));
     failedMaybeDueToUnavailableReplicasCount = metricRegistry.counter(
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToUnavailableReplicasCount"));
+    metadataChunkCreationCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class, "MetadataChunkCreationCount"));
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");
