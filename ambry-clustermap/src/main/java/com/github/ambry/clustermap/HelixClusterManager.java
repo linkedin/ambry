@@ -1170,6 +1170,9 @@ public class HelixClusterManager implements ClusterMap {
               listener.onReplicaAddedOrRemoved(Collections.emptyList(), removedReplicas);
             }
           }
+          for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
+            listener.onDataNodeRemoved(datanode);
+          }
           logger.info("Removed {} and its {} replicas from cluster map", instanceName, removedReplicas.size());
           // Since the replicas on deleted hosts could be sealed, increase the sealed change counter so that latest
           // partition state (RO or RW) is queried again in AmbryPartition#resolvePartitionState().
