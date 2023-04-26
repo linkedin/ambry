@@ -122,7 +122,7 @@ public class HelixParticipantTest {
 
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "", "DC0",
         DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false, stateModelDef,
-        BootstrapCluster, dataNodeConfigSourceType, false);
+        BootstrapCluster, dataNodeConfigSourceType, false, 1000);
     propertyStoreAdapter =
         dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE ? new PropertyStoreToDataNodeConfigAdapter(
             "localhost:" + zkInfo.getPort(), clusterMapConfig) : null;

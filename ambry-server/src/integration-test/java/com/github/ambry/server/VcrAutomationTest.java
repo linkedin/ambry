@@ -124,7 +124,7 @@ public class VcrAutomationTest {
 
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterPrefix,
         dcName, 10, false, false, new HelixAdminFactory(), false, mainClusterStateModelDef,
-        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false);
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false, 0);
 
     HelixControllerManager helixControllerManager =
         new HelixControllerManager(zkConnectString, clusterPrefix + clusterName);
@@ -180,7 +180,7 @@ public class VcrAutomationTest {
 
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterPrefix,
         dcName, 10, false, false, new HelixAdminFactory(), false, mainClusterStateModelDef,
-        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false);
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false, 0);
 
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     Assert.assertTrue("Partition assignment is not correct.",
@@ -193,7 +193,7 @@ public class VcrAutomationTest {
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterPrefix,
         dcName, 10, false, true, new HelixAdminFactory(), false, mainClusterStateModelDef,
-        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false);
+        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false, 0);
 
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     Assert.assertTrue("Partition assignment is not correct.", TestUtils.checkAndSleep(partitionCount,
