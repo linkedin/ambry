@@ -37,7 +37,6 @@ import static org.mockito.Mockito.*;
 
 
 public class MySqlAccountServiceMigrationIntegrationTest {
-  private static final String DESCRIPTION = "Indescribable";
   private final MySqlAccountStoreFactory mockMySqlAccountStoreFactory;
   private final Properties mySqlConfigProps;
   private final MockNotifier<String> mockNotifier = new MockNotifier();
@@ -77,15 +76,22 @@ public class MySqlAccountServiceMigrationIntegrationTest {
   public void testUpdateAccounts() throws Exception {
     // add accounts in old db.
     Container testContainer1 =
-        new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
+        new ContainerBuilder((short) 1, "testContainer1", Container.ContainerStatus.ACTIVE, "testContainer1",
             (short) 1).build();
     Container testContainer2 =
-        new ContainerBuilder((short) 1, "testContainer", Container.ContainerStatus.ACTIVE, "testContainer",
+        new ContainerBuilder((short) 2, "testContainer2", Container.ContainerStatus.ACTIVE, "testContainer2",
             (short) 2).build();
+    Container testContainer3 =
+        new ContainerBuilder((short) 3, "testContainer3", Container.ContainerStatus.ACTIVE, "testContainer3",
+            (short) 2).build();
+    List<Container> containers = new ArrayList<>();
+    containers.add(testContainer2);
+    containers.add(testContainer3);
+
     Account testAccount1 = new AccountBuilder((short) 1, "testAccount1", Account.AccountStatus.ACTIVE).containers(
         Collections.singleton(testContainer1)).build();
-    Account testAccount2 = new AccountBuilder((short) 2, "testAccount2", Account.AccountStatus.ACTIVE).containers(
-        Collections.singleton(testContainer2)).build();
+    Account testAccount2 =
+        new AccountBuilder((short) 2, "testAccount2", Account.AccountStatus.ACTIVE).containers(containers).build();
 
     List<Account> accounts = new ArrayList<>();
     accounts.add(testAccount1);
@@ -104,7 +110,7 @@ public class MySqlAccountServiceMigrationIntegrationTest {
     assertEquals("Mismatch in account retrieved by name", testAccount1,
         mySqlAccountService.getAccountByName(testAccount1.getName()));
 
-    // update test account1, should only take effect in new db.
+    // update test account1, should be able to get from both old and new db.
     testContainer1 = new ContainerBuilder(testContainer1).setMediaScanDisabled(true).setCacheable(true).build();
     testAccount1 = new AccountBuilder(testAccount1).addOrUpdateContainer(testContainer1).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount1));
@@ -112,14 +118,50 @@ public class MySqlAccountServiceMigrationIntegrationTest {
         mySqlAccountService.getAccountById(testAccount1.getId()));
     assertEquals("Mismatch in account retrieved by name", testAccount1,
         mySqlAccountService.getAccountByName(testAccount1.getName()));
+    assertEquals("Mismatch in account retrieved by ID", testAccount1,
+        mySqlAccountService.getAccountByIdNew(testAccount1.getId()));
+    assertEquals("Mismatch in account retrieved by name", testAccount1,
+        mySqlAccountService.getAccountByNameNew(testAccount1.getName()));
 
-    // get testAccount2, should get from old db.
+    // get testAccount2, should get from old db only.
     Account account2 = mySqlAccountService.getAccountById(testAccount2.getId());
     assertEquals("Mismatch in account retrieved by ID", testAccount2, account2);
+    assertNull(mySqlAccountService.getAccountByIdNew(testAccount2.getId()));
 
-    assertEquals("Mismatch in account total number", 2, mySqlAccountService.getAllAccounts().size());
+    //update containers for testAccount2, should only update the container in old db, and do not throw exception.
+    Container updatedContainer =
+        new ContainerBuilder(testContainer2).setStatus(Container.ContainerStatus.DELETE_IN_PROGRESS).build();
+    mySqlAccountService.updateContainers(testAccount2.getName(), Collections.singletonList(updatedContainer));
+    assertEquals("Mismatch in container retrieved by id", updatedContainer,
+        mySqlAccountService.getContainerById(testAccount2.getId(), testContainer2.getId()));
+    assertEquals("Mismatch in container retrieved by name", updatedContainer,
+        mySqlAccountService.getContainerByName(testAccount2.getName(), testContainer2.getName()));
+    assertNull(mySqlAccountService.getAccountByIdNew(testAccount2.getId()));
 
+    // add testAccount2 to new db and two db should be in sync, enable the config for enableGetFromNewDbOnly
+    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount2));
+    mySqlConfigProps.setProperty(ENABLE_GET_FROM_NEW_DB_ONLY, "true");
+    mySqlAccountService = getAccountService();
+    assertEquals("Mismatch in account retrieved by name", testAccount1,
+        mySqlAccountService.getAccountByNameNew(testAccount1.getName()));
+    assertEquals("Mismatch in account retrieved by id", testAccount1,
+        mySqlAccountService.getAccountByIdNew(testAccount1.getId()));
+    assertEquals("Mismatch in account retrieved by name", testAccount2,
+        mySqlAccountService.getAccountByNameNew(testAccount2.getName()));
+    assertEquals("Mismatch in account retrieved by id", testAccount2,
+        mySqlAccountService.getAccountByIdNew(testAccount2.getId()));
 
+    //disable put to old db and upload updated testAccount2. should only updated in new db.
+    mySqlConfigProps.setProperty(ENABLE_PUT_TO_OLD_DB_WHEN_MIGRATION_ENABLED, "false");
+    mySqlAccountService = getAccountService();
+    updatedContainer =
+        new ContainerBuilder(updatedContainer).setMediaScanDisabled(true).build();
+    testAccount2 = new AccountBuilder(testAccount2).addOrUpdateContainer(updatedContainer).build();
+    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount2));
+    assertEquals("Mismatch in account retrieved by id", testAccount2,
+        mySqlAccountService.getAccountById(testAccount2.getId()));
+    assertNotEquals("Should not update the old db after the config disabled", testAccount2,
+        mySqlAccountService.getAccountByIdOld(testAccount2.getId()));
   }
 
   private void cleanup() throws SQLException {

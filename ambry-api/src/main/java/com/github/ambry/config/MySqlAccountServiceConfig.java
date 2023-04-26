@@ -34,6 +34,8 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "max.major.version.for.semantic.schema.dataset";
   public static final String ENABLE_NEW_DATABASE_FOR_MIGRATION = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.new.database.for.migration";
+  public static final String ENABLE_GET_FROM_NEW_DB_ONLY = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.get.from.new.db.only";
+  public static final String ENABLE_PUT_TO_OLD_DB_WHEN_MIGRATION_ENABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.put.to.old.db.when.migration.enabled";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -148,6 +150,14 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("false")
   public final boolean enableNewDatabaseForMigration;
 
+  @Config(ENABLE_GET_FROM_NEW_DB_ONLY)
+  @Default("false")
+  public final boolean enableGetFromNewDbOnly;
+
+  @Config(ENABLE_PUT_TO_OLD_DB_WHEN_MIGRATION_ENABLED)
+  @Default("true")
+  public final boolean enablePutToOldDbWhenMigrationEnabled;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -160,6 +170,8 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     backupDirNew = verifiableProperties.getString(BACKUP_DIRECTORY_KEY_NEW, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
     enableNewDatabaseForMigration = verifiableProperties.getBoolean(ENABLE_NEW_DATABASE_FOR_MIGRATION, false);
+    enableGetFromNewDbOnly = verifiableProperties.getBoolean(ENABLE_GET_FROM_NEW_DB_ONLY, false);
+    enablePutToOldDbWhenMigrationEnabled = verifiableProperties.getBoolean(ENABLE_PUT_TO_OLD_DB_WHEN_MIGRATION_ENABLED, true);
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
     dbExecuteBatchSize = verifiableProperties.getIntInRange(DB_EXECUTE_BATCH_SIZE, 50, 1, Integer.MAX_VALUE);
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY, null);

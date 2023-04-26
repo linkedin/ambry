@@ -77,6 +77,7 @@ public class MySqlAccountService extends AbstractAccountService {
   private long lastSyncTime = -1;
   private long lastSyncTimeNew = -1;
   private final Set<String> recentNotFoundContainersCache;
+  private Set<String> recentNotFoundContainersCacheNew = null;
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private final boolean writeCacheAfterUpdate;
@@ -115,12 +116,19 @@ public class MySqlAccountService extends AbstractAccountService {
             return size() > cacheMaxLimit;
           }
         }));
+
     this.writeCacheAfterUpdate = config.writeCacheAfterUpdate;
 
     if (config.enableNewDatabaseForMigration) {
       accountServiceMetrics.trackTimeSinceLastSyncNew(this::getTimeInSecondsSinceLastSyncNew);
       accountServiceMetrics.trackContainerCountNew(this::getContainerCountNew);
       backupFileManagerNew = new BackupFileManager(accountServiceMetrics, config.backupDirNew, config.maxBackupFileCount);
+      recentNotFoundContainersCacheNew = Collections.newSetFromMap(
+          Collections.synchronizedMap(new LinkedHashMap<String, Boolean>(cacheInitialCapacity, cacheLoadFactor, true) {
+            protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+              return size() > cacheMaxLimit;
+            }
+          }));
     }
     // Initialize cache from backup file on disk
     initCacheFromBackupFile();
@@ -216,67 +224,69 @@ public class MySqlAccountService extends AbstractAccountService {
       }
     }
 
-    try {
-      // Find last modified time of Accounts and containers in cache.
-      long lastModifiedTime = accountInfoMapRef.get().getLastModifiedTime();
-      logger.info("Syncing from database using lastModifiedTime = {}", new Date(lastModifiedTime));
+    if (!config.enableGetFromNewDbOnly) {
+      try {
+        // Find last modified time of Accounts and containers in cache.
+        long lastModifiedTime = accountInfoMapRef.get().getLastModifiedTime();
+        logger.info("Syncing from database using lastModifiedTime = {}", new Date(lastModifiedTime));
 
-      long startTimeMs = System.currentTimeMillis();
-      // Fetch added/modified accounts and containers from MySql database since LMT
-      Collection<Account> updatedAccountsInDB = mySqlAccountStore.getNewAccounts(lastModifiedTime);
-      Collection<Container> updatedContainersInDB = mySqlAccountStore.getNewContainers(lastModifiedTime);
-      long endTimeMs = System.currentTimeMillis();
-      accountServiceMetrics.fetchRemoteAccountTimeInMs.update(endTimeMs - startTimeMs);
-      // Close connection and get fresh one next time
-      mySqlAccountStore.closeConnection();
+        long startTimeMs = System.currentTimeMillis();
+        // Fetch added/modified accounts and containers from MySql database since LMT
+        Collection<Account> updatedAccountsInDB = mySqlAccountStore.getNewAccounts(lastModifiedTime);
+        Collection<Container> updatedContainersInDB = mySqlAccountStore.getNewContainers(lastModifiedTime);
+        long endTimeMs = System.currentTimeMillis();
+        accountServiceMetrics.fetchRemoteAccountTimeInMs.update(endTimeMs - startTimeMs);
+        // Close connection and get fresh one next time
+        mySqlAccountStore.closeConnection();
 
-      if (!updatedAccountsInDB.isEmpty() || !updatedContainersInDB.isEmpty()) {
-        logger.info("Found {} accounts and {} containers", updatedAccountsInDB.size(), updatedContainersInDB.size());
-        for (Account account : updatedAccountsInDB) {
-          logger.info("Found account {}", account.getName());
+        if (!updatedAccountsInDB.isEmpty() || !updatedContainersInDB.isEmpty()) {
+          logger.info("Found {} accounts and {} containers", updatedAccountsInDB.size(), updatedContainersInDB.size());
+          for (Account account : updatedAccountsInDB) {
+            logger.info("Found account {}", account.getName());
+          }
+          for (Container container : updatedContainersInDB) {
+            logger.info("Found container {}", container.getName());
+          }
+
+          // Update cache with fetched accounts and containers
+          updateAccountsInCache(updatedAccountsInDB);
+          updateContainersInCache(updatedContainersInDB);
+
+          // Refresh last modified time of Accounts and Containers in cache
+          accountInfoMapRef.get().refreshLastModifiedTime();
+
+          // At this point we can safely say cache is refreshed
+          needRefresh = false;
+          lastSyncTime = endTimeMs;
+
+          // Notify updated accounts to consumers
+          Set<Account> updatedAccounts = new HashSet<>();
+          updatedAccountsInDB.forEach(
+              account -> updatedAccounts.add(accountInfoMapRef.get().getAccountById(account.getId())));
+          updatedContainersInDB.forEach(
+              container -> updatedAccounts.add(accountInfoMapRef.get().getAccountById(container.getParentAccountId())));
+          notifyAccountUpdateConsumers(updatedAccounts, false);
+
+          // Persist all account metadata to back up file on disk.
+          Collection<Account> accountCollection;
+          infoMapLock.readLock().lock();
+          try {
+            accountCollection = accountInfoMapRef.get().getAccounts();
+          } finally {
+            infoMapLock.readLock().unlock();
+          }
+          backupFileManager.persistAccountMap(accountCollection, backupFileManager.getLatestVersion() + 1,
+              SystemTime.getInstance().seconds());
+        } else {
+          // Cache is up to date
+          needRefresh = false;
+          lastSyncTime = endTimeMs;
         }
-        for (Container container : updatedContainersInDB) {
-          logger.info("Found container {}", container.getName());
-        }
-
-        // Update cache with fetched accounts and containers
-        updateAccountsInCache(updatedAccountsInDB);
-        updateContainersInCache(updatedContainersInDB);
-
-        // Refresh last modified time of Accounts and Containers in cache
-        accountInfoMapRef.get().refreshLastModifiedTime();
-
-        // At this point we can safely say cache is refreshed
-        needRefresh = false;
-        lastSyncTime = endTimeMs;
-
-        // Notify updated accounts to consumers
-        Set<Account> updatedAccounts = new HashSet<>();
-        updatedAccountsInDB.forEach(
-            account -> updatedAccounts.add(accountInfoMapRef.get().getAccountById(account.getId())));
-        updatedContainersInDB.forEach(
-            container -> updatedAccounts.add(accountInfoMapRef.get().getAccountById(container.getParentAccountId())));
-        notifyAccountUpdateConsumers(updatedAccounts, false);
-
-        // Persist all account metadata to back up file on disk.
-        Collection<Account> accountCollection;
-        infoMapLock.readLock().lock();
-        try {
-          accountCollection = accountInfoMapRef.get().getAccounts();
-        } finally {
-          infoMapLock.readLock().unlock();
-        }
-        backupFileManager.persistAccountMap(accountCollection, backupFileManager.getLatestVersion() + 1,
-            SystemTime.getInstance().seconds());
-      } else {
-        // Cache is up to date
-        needRefresh = false;
-        lastSyncTime = endTimeMs;
+      } catch (SQLException e) {
+        accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
+        logger.error("Fetching accounts from MySql DB failed: {}", e.getMessage());
+        throw e;
       }
-    } catch (SQLException e) {
-      accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
-      logger.error("Fetching accounts from MySql DB failed: {}", e.getMessage());
-      throw e;
     }
 
     if (config.enableNewDatabaseForMigration) {
@@ -359,14 +369,9 @@ public class MySqlAccountService extends AbstractAccountService {
   public Account getAccountById(short accountId) {
     infoMapLock.readLock().lock();
     try {
-      if (config.enableNewDatabaseForMigration) {
-        if (accountInfoMapRefNew.get().getAccountById(accountId) != null) {
-          logger.trace("get account by Id from new in memory cache, accountId: " + accountId);
-          return accountInfoMapRefNew.get().getAccountById(accountId);
-        } else {
-          logger.trace("get account by Id from old in memory cache, accountId: " + accountId);
-          return accountInfoMapRef.get().getAccountById(accountId);
-        }
+      if (config.enableNewDatabaseForMigration && config.enableGetFromNewDbOnly) {
+        logger.trace("get account by Id from new in memory cache, accountId: " + accountId);
+        return accountInfoMapRefNew.get().getAccountById(accountId);
       } else {
         logger.trace("get account by Id from old in memory cache, accountId: " + accountId);
         return accountInfoMapRef.get().getAccountById(accountId);
@@ -376,6 +381,9 @@ public class MySqlAccountService extends AbstractAccountService {
     }
   }
 
+  /**
+   * This method is used for uploading data to new db. Will be removed after migration is done.
+   */
   public Account getAccountByIdNew(short accountId) {
     infoMapLock.readLock().lock();
     try {
@@ -386,7 +394,10 @@ public class MySqlAccountService extends AbstractAccountService {
     }
   }
 
-  public Account getAccountByIdOld(short accountId) {
+  /**
+   * This method is used for uploading data to new db. Will be removed after migration is done.
+   */
+  protected Account getAccountByIdOld(short accountId) {
     infoMapLock.readLock().lock();
     try {
       logger.trace("get account by Id from new in memory cache, accountId: " + accountId);
@@ -400,14 +411,9 @@ public class MySqlAccountService extends AbstractAccountService {
   public Account getAccountByName(String accountName) {
     infoMapLock.readLock().lock();
     try {
-      if (config.enableNewDatabaseForMigration) {
-        if (accountInfoMapRefNew.get().getAccountByName(accountName) != null) {
-          logger.trace("get account by Id from new in memory cache, accountName: " + accountName);
-          return accountInfoMapRefNew.get().getAccountByName(accountName);
-        } else {
-          logger.trace("get account by Id from old in memory cache, accountName: " + accountName);
-          return accountInfoMapRef.get().getAccountByName(accountName);
-        }
+      if (config.enableNewDatabaseForMigration && config.enableGetFromNewDbOnly) {
+        logger.trace("get account by Id from new in memory cache, accountName: " + accountName);
+        return accountInfoMapRefNew.get().getAccountByName(accountName);
       } else {
         logger.trace("get account by Id from old in memory cache, accountName: " + accountName);
         return accountInfoMapRef.get().getAccountByName(accountName);
@@ -417,6 +423,9 @@ public class MySqlAccountService extends AbstractAccountService {
     }
   }
 
+  /**
+   * This method is used for uploading data to new db. Will be removed after migration is done.
+   */
   public Account getAccountByNameNew(String accountName) {
     infoMapLock.readLock().lock();
     try {
@@ -456,22 +465,24 @@ public class MySqlAccountService extends AbstractAccountService {
     // but the local cache is not yet refreshed with latest account info.
     infoMapLock.readLock().lock();
     try {
-      AccountInfoMap accountInfoMap = accountInfoMapRef.get();
-      if (accountInfoMap.hasConflictingAccount(accounts, config.ignoreVersionMismatch)) {
-        logger.error("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
-        accountServiceMetrics.updateAccountErrorCount.inc();
-        throw new AccountServiceException("Input accounts conflict with the accounts in local cache",
-            AccountServiceErrorCode.ResourceConflict);
-      }
-      for (Account account : accounts) {
-        if (accountInfoMap.hasConflictingContainer(account.getAllContainers(), account.getId(),
-            config.ignoreVersionMismatch)) {
-          logger.error(
-              "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
-              account.getAllContainers(), account.getId());
+      if (config.enablePutToOldDbWhenMigrationEnabled) {
+        AccountInfoMap accountInfoMap = accountInfoMapRef.get();
+        if (accountInfoMap.hasConflictingAccount(accounts, config.ignoreVersionMismatch)) {
+          logger.error("Accounts={} conflict with the accounts in local cache. Cancel the update operation.", accounts);
           accountServiceMetrics.updateAccountErrorCount.inc();
-          throw new AccountServiceException("Containers in account " + account.getId() + " conflict with local cache",
+          throw new AccountServiceException("Input accounts conflict with the accounts in local cache",
               AccountServiceErrorCode.ResourceConflict);
+        }
+        for (Account account : accounts) {
+          if (accountInfoMap.hasConflictingContainer(account.getAllContainers(), account.getId(),
+              config.ignoreVersionMismatch)) {
+            logger.error(
+                "Containers={} under Account={} conflict with the containers in local cache. Cancel the update operation.",
+                account.getAllContainers(), account.getId());
+            accountServiceMetrics.updateAccountErrorCount.inc();
+            throw new AccountServiceException("Containers in account " + account.getId() + " conflict with local cache",
+                AccountServiceErrorCode.ResourceConflict);
+          }
         }
       }
       if (config.enableNewDatabaseForMigration) {
@@ -503,6 +514,9 @@ public class MySqlAccountService extends AbstractAccountService {
       if (config.enableNewDatabaseForMigration) {
         //only do put or update against new db
         updateAccountsWithMySqlStoreNew(accounts);
+        if (config.enablePutToOldDbWhenMigrationEnabled) {
+          updateAccountsWithMySqlStore(accounts);
+        }
       } else {
         updateAccountsWithMySqlStore(accounts);
       }
@@ -518,6 +532,9 @@ public class MySqlAccountService extends AbstractAccountService {
       if (config.enableNewDatabaseForMigration) {
         //since when config enable, we only update the new db, so only new cache should be updated.
         updateAccountsInCacheNew(accounts);
+        if (config.enablePutToOldDbWhenMigrationEnabled) {
+          updateAccountsInCache(accounts);
+        }
       } else {
         updateAccountsInCache(accounts);
       }
@@ -528,16 +545,8 @@ public class MySqlAccountService extends AbstractAccountService {
   public Collection<Account> getAllAccounts() {
     infoMapLock.readLock().lock();
     try {
-      if (config.enableNewDatabaseForMigration) {
-        List<Account> allAccounts = new ArrayList<>(accountInfoMapRefNew.get().getAccounts());
-        Collection<Short> allAccountIds = accountInfoMapRefNew.get().getAccountIds();
-        for (Account account : accountInfoMapRef.get().getAccounts()) {
-          if (!allAccountIds.contains(account.getId())) {
-            logger.trace("Account {} is in old cache only", account);
-            allAccounts.add(account);
-          }
-        }
-        return allAccounts;
+      if (config.enableNewDatabaseForMigration && config.enableGetFromNewDbOnly) {
+        return accountInfoMapRefNew.get().getAccounts();
       }
       return accountInfoMapRef.get().getAccounts();
     } finally {
@@ -600,44 +609,78 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      try {
-        return updateContainersHelper(accountName, containers);
-      } catch (AccountServiceException ase) {
-        if (needRefresh || needRefreshNew) {
-          // refresh and retry (with regenerated containerIds)
-          try {
-            fetchAndUpdateCache();
-          } catch (SQLException e) {
-            throw translateSQLException(e);
-          }
-          accountServiceMetrics.conflictRetryCount.inc();
-          return updateContainersHelper(accountName, containers);
-        } else {
-          throw ase;
+    if (config.enableNewDatabaseForMigration && config.enableGetFromNewDbOnly) {
+      updateContainersForOldDb(accountName, containers);
+      return updateContainersForNewDb(accountName, containers);
+    } else {
+      if (config.enableNewDatabaseForMigration) {
+        try {
+          updateContainersForNewDb(accountName, containers);
+        } catch (AccountServiceException e) {
+          // if before migration, update container for new db would fail due to the account does not exist.
+          logger.trace("This is expected due to the account {} does not exist in new db", accountName);
         }
       }
-    } else {
-      try {
-        return super.updateContainers(accountName, containers);
-      } catch (AccountServiceException ase) {
-        if (needRefresh || needRefreshNew) {
-          // refresh and retry (with regenerated containerIds)
-          try {
-            fetchAndUpdateCache();
-          } catch (SQLException e) {
-            throw translateSQLException(e);
-          }
-          accountServiceMetrics.conflictRetryCount.inc();
-          return super.updateContainers(accountName, containers);
-        } else {
-          throw ase;
+      return updateContainersForOldDb(accountName, containers);
+    }
+  }
+
+  /**
+   * Update the container to old db.
+   * @param accountName the name of the account.
+   * @param containers the containers.
+   * @return the container which has been updated.
+   * @throws AccountServiceException
+   */
+  private Collection<Container> updateContainersForOldDb(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
+    try {
+      return super.updateContainers(accountName, containers);
+    } catch (AccountServiceException ase) {
+      if (needRefresh || needRefreshNew) {
+        // refresh and retry (with regenerated containerIds)
+        try {
+          fetchAndUpdateCache();
+        } catch (SQLException e) {
+          throw translateSQLException(e);
         }
+        accountServiceMetrics.conflictRetryCount.inc();
+        return super.updateContainers(accountName, containers);
+      } else {
+        throw ase;
       }
     }
   }
 
-  private Collection<Container> updateContainersHelper (String accountName, Collection<Container> containers)
+  /**
+   * Update the container to new db.
+   * @param accountName the name of the account.
+   * @param containers the containers.
+   * @return the container which has been updated.
+   * @throws AccountServiceException
+   */
+  private Collection<Container> updateContainersForNewDb(String accountName, Collection<Container> containers)
+      throws AccountServiceException {
+    try {
+      return updateContainersReferAccountFromNewDbHelper(accountName, containers);
+    } catch (AccountServiceException ase) {
+      if (needRefresh || needRefreshNew) {
+        // refresh and retry (with regenerated containerIds)
+        try {
+          fetchAndUpdateCache();
+        } catch (SQLException e) {
+          throw translateSQLException(e);
+        }
+        accountServiceMetrics.conflictRetryCount.inc();
+        return updateContainersReferAccountFromNewDbHelper(accountName, containers);
+      } else {
+        throw ase;
+      }
+    }
+  }
+
+  /**This is only used during transition time **/
+  private Collection<Container> updateContainersReferAccountFromNewDbHelper(String accountName, Collection<Container> containers)
       throws AccountServiceException {
     checkOpen();
     // input validation
@@ -645,27 +688,9 @@ public class MySqlAccountService extends AbstractAccountService {
       throw new AccountServiceException("Account or container is null or empty", AccountServiceErrorCode.BadRequest);
     }
 
-    Account account = getAccountByName(accountName);
-    if (account == null) {
-      logger.error("Account {} is not found", accountName);
-      throw new AccountServiceException("Account " + accountName + " is not found", AccountServiceErrorCode.NotFound);
-    }
-
-    Account accountInCacheOld = getAccountByIdOld(account.getId());
-    Account accountInCacheNew = getAccountByIdNew(account.getId());
-    //only when the account in old cache but not exist in new cache, we need to upload account from old cache to new db
-    //and refresh new cache. After migration is done, we can remove this line.
-    if (accountInCacheNew == null && accountInCacheOld != null) {
-      accountServiceMetrics.updateAccountFromOldCacheToNewDbCount.inc();
-      try {
-        uploadAccountFromOldCacheToNewDBAndRefreshNewCache(accountInCacheOld);
-      } catch (SQLException e) {
-        throw translateSQLException(e);
-      }
-    }
-
     //after above, the account should be found in new cache.
-    account = getAccountByNameNew(accountName);
+    //This is the only two changes compare to super.updateContainers
+    Account account = getAccountByNameNew(accountName);
     if (account == null) {
       logger.error("Account {} is not found", accountName);
       throw new AccountServiceException("Account " + accountName + " is not found in new cache",
@@ -754,7 +779,8 @@ public class MySqlAccountService extends AbstractAccountService {
     }
 
     if (!resolvedContainers.isEmpty()) {
-      updateResolvedContainers(account, resolvedContainers);
+      //This is the only two changes compare to super.updateContainers
+      updateResolvedContainersNew(account, resolvedContainers);
     }
 
     resolvedContainers.addAll(existingUnchangedContainers);
@@ -835,11 +861,7 @@ public class MySqlAccountService extends AbstractAccountService {
   protected void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
       throws AccountServiceException {
     try {
-      if (config.enableNewDatabaseForMigration) {
-        updateContainersWithMySqlStoreNew(account, resolvedContainers);
-      } else {
-        updateContainersWithMySqlStore(account, resolvedContainers);
-      }
+      updateContainersWithMySqlStore(account, resolvedContainers);
     } catch (SQLException e) {
       logger.error("Failed updating containers {} in MySql DB", resolvedContainers, e);
       handleSQLException(e);
@@ -849,11 +871,24 @@ public class MySqlAccountService extends AbstractAccountService {
 
     if (writeCacheAfterUpdate) {
       // Write containers to in-memory cache. Snapshot version will be out of date until the next DB refresh.
-      if (config.enableNewDatabaseForMigration) {
-        updateContainersInCacheNew(resolvedContainers);
-      } else {
-        updateContainersInCache(resolvedContainers);
-      }
+      updateContainersInCache(resolvedContainers);
+    }
+  }
+
+  private void updateResolvedContainersNew(Account account, Collection<Container> resolvedContainers)
+      throws AccountServiceException {
+    try {
+      updateContainersWithMySqlStoreNew(account, resolvedContainers);
+    } catch (SQLException e) {
+      logger.error("Failed updating containers {} in MySql DB", resolvedContainers, e);
+      handleSQLException(e);
+    }
+    // Tell the world
+    publishChangeNotice();
+
+    if (writeCacheAfterUpdate) {
+      // Write containers to in-memory cache. Snapshot version will be out of date until the next DB refresh.
+      updateContainersInCacheNew(resolvedContainers);
     }
   }
 
@@ -867,40 +902,17 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerByName(String accountName, String containerName) throws AccountServiceException {
-
-    if (recentNotFoundContainersCache.contains(accountName + SEPARATOR + containerName)) {
-      // If container was not found in recent get attempts, avoid another query to db and return null.
-      return null;
-    }
-
-    if (config.enableNewDatabaseForMigration) {
-      Account account = getAccountByNameNew(accountName);
-      Container container = null;
-      if (account != null) {
-        container = account.getContainerByName(containerName);
+    if (config.enableNewDatabaseForMigration && config.enableGetFromNewDbOnly) {
+      if (recentNotFoundContainersCacheNew.contains(accountName + SEPARATOR + containerName)) {
+        // If container was not found in recent get attempts, avoid another query to db and return null.
+        return null;
       }
-      if (account != null && container == null) {
-        // If container is not present in the cache, query from mysql db
-        try {
-          container = mySqlAccountStoreNew.getContainerByName(account.getId(), containerName);
-          if (container != null) {
-            // write container to in-memory cache
-            updateContainersInCacheNew(Collections.singletonList(container));
-            logger.info("Container {} in Account {} is not found locally; Fetched from mysql db", containerName,
-                accountName);
-            accountServiceMetrics.onDemandContainerFetchCountNew.inc();
-          } else {
-            return getContainerByNameFromOldDbHelper(accountName, containerName);
-          }
-        } catch (SQLException e) {
-          throw translateSQLException(e);
-        }
-        logger.trace("Found container from new db, container: " + containerName);
-        return container;
-      } else {
-        return getContainerByNameFromOldDbHelper(accountName, containerName);
-      }
+      return getContainerByNameFromNewDbHelper(accountName, containerName);
     } else {
+      if (recentNotFoundContainersCache.contains(accountName + SEPARATOR + containerName)) {
+        // If container was not found in recent get attempts, avoid another query to db and return null.
+        return null;
+      }
       return getContainerByNameFromOldDbHelper(accountName, containerName);
     }
   }
@@ -925,13 +937,49 @@ public class MySqlAccountService extends AbstractAccountService {
         if (container != null) {
           // write container to in-memory cache
           updateContainersInCache(Collections.singletonList(container));
-          logger.info("Container {} in Account {} is not found locally; Fetched from new mysql db", containerName,
+          logger.info("Container {} in Account {} is not found locally; Fetched from old mysql db", containerName,
               accountName);
           accountServiceMetrics.onDemandContainerFetchCount.inc();
         } else {
           // Add account_container to not-found LRU cache
           recentNotFoundContainersCache.add(accountName + SEPARATOR + containerName);
           logger.error("Container {} is not found in Account {}", containerName, accountName);
+        }
+      } catch (SQLException e) {
+        throw translateSQLException(e);
+      }
+    }
+    logger.trace("Found container from new db, container: " + containerName);
+    return container;
+  }
+
+  /**
+   * Get container from new cache or db.
+   * @param accountName the name of the account.
+   * @param containerName the name of the container.
+   * @return the {@link Container}
+   * @throws AccountServiceException
+   */
+  private Container getContainerByNameFromNewDbHelper(String accountName, String containerName) throws AccountServiceException {
+    Account account = getAccountByNameNew(accountName);
+    if (account == null) {
+      return null;
+    }
+    Container container = account.getContainerByName(containerName);
+    if (container == null) {
+      // If container is not present in the cache, query from mysql db
+      try {
+        container = mySqlAccountStoreNew.getContainerByName(account.getId(), containerName);
+        if (container != null) {
+          // write container to in-memory cache
+          updateContainersInCacheNew(Collections.singletonList(container));
+          logger.info("Container {} in Account {} is not found locally; Fetched from new mysql db", containerName,
+              accountName);
+          accountServiceMetrics.onDemandContainerFetchCountNew.inc();
+        } else {
+          // Add account_container to not-found LRU cache
+          recentNotFoundContainersCacheNew.add(accountName + SEPARATOR + containerName);
+          logger.error("Container {} is not found in Account {} for new db", containerName, accountName);
         }
       } catch (SQLException e) {
         throw translateSQLException(e);
@@ -951,31 +999,8 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerById(short accountId, Short containerId) throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      Account account = getAccountByIdNew(accountId);
-      Container container = null;
-      if (account != null) {
-        container = account.getContainerById(containerId);
-      }
-      if (account != null && container == null) {
-        // If container is not present in the cache, query from mysql db
-        try {
-          container = mySqlAccountStoreNew.getContainerById(account.getId(), containerId);
-          if (container != null) {
-            // write container to in-memory cache
-            updateContainersInCacheNew(Collections.singletonList(container));
-            logger.info("Container Id {} in Account {} is not found locally, fetched from new mysql db", containerId,
-                account.getName());
-            accountServiceMetrics.onDemandContainerFetchCountNew.inc();
-          }
-        } catch (SQLException e) {
-          throw translateSQLException(e);
-        }
-        logger.trace("Found container from new db, container: " + containerId);
-        return container;
-      } else {
-        return getContainerByIdFromOldDbHelper(accountId, containerId);
-      }
+    if (config.enableNewDatabaseForMigration && config.enableGetFromNewDbOnly) {
+      return getContainerByIdFromNewDbHelper(accountId, containerId);
     } else {
       return getContainerByIdFromOldDbHelper(accountId, containerId);
     }
@@ -1004,6 +1029,42 @@ public class MySqlAccountService extends AbstractAccountService {
           logger.info("Container Id {} in Account {} is not found locally, fetched from mysql db", containerId,
               account.getName());
           accountServiceMetrics.onDemandContainerFetchCount.inc();
+        } else {
+          logger.error("Container Id {} is not found in Account {}", containerId, account.getName());
+          // Note: We are not using LRU cache for storing recent unsuccessful get attempts by container Ids since this
+          // will be called in getBlob() path which should have valid account-container in most cases.
+        }
+      } catch (SQLException e) {
+        throw translateSQLException(e);
+      }
+    }
+    logger.trace("Found container from old db, container: " + containerId);
+    return container;
+  }
+
+  /**
+   * Helper function to support get container id from old cache or db.
+   * @param accountId the id of the account.
+   * @param containerId the id of the container.
+   * @return the {@link Container}
+   * @throws AccountServiceException
+   */
+  private Container getContainerByIdFromNewDbHelper(short accountId, Short containerId) throws AccountServiceException {
+    Account account = getAccountByIdNew(accountId);
+    if (account == null) {
+      return null;
+    }
+    Container container = account.getContainerById(containerId);
+    if (container == null) {
+      // If container is not present in the cache, query from mysql db
+      try {
+        container = mySqlAccountStoreNew.getContainerById(accountId, containerId);
+        if (container != null) {
+          // write container to in-memory cache
+          updateContainersInCacheNew(Collections.singletonList(container));
+          logger.info("Container Id {} in Account {} is not found locally, fetched from mysql db", containerId,
+              account.getName());
+          accountServiceMetrics.onDemandContainerFetchCountNew.inc();
         } else {
           logger.error("Container Id {} is not found in Account {}", containerId, account.getName());
           // Note: We are not using LRU cache for storing recent unsuccessful get attempts by container Ids since this
@@ -1088,6 +1149,11 @@ public class MySqlAccountService extends AbstractAccountService {
     }
   }
 
+  /**
+   * Updates new MySql DB with added or modified {@link Account}s
+   * @param accounts collection of {@link Account}s
+   * @throws SQLException
+   */
   void updateAccountsWithMySqlStoreNew(Collection<Account> accounts) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     logger.trace("Start updating accounts={} into new MySql DB", accounts);
@@ -1099,16 +1165,7 @@ public class MySqlAccountService extends AbstractAccountService {
       boolean isAccountAdded = false, isAccountUpdated = false;
       List<Container> addedContainers;
       List<Container> updatedContainers = new ArrayList<>();
-      Account accountInCacheOld = getAccountByIdOld(account.getId());
       Account accountInCacheNew = getAccountByIdNew(account.getId());
-      //only when the account in old cache but not exist in new cache, we need to upload account from old cache to new db
-      //and refresh new cache. After migration is done, we can remove this line.
-      if (accountInCacheNew == null && accountInCacheOld != null) {
-        accountServiceMetrics.updateAccountFromOldCacheToNewDbCount.inc();
-        uploadAccountFromOldCacheToNewDBAndRefreshNewCache(accountInCacheOld);
-      }
-      //refresh accountInCacheNew.
-      accountInCacheNew = getAccountByIdNew(account.getId());
       //after above action, there's no chance the account exist in old db only.
       if (accountInCacheNew == null) {
         isAccountAdded = true;
@@ -1289,27 +1346,6 @@ public class MySqlAccountService extends AbstractAccountService {
     return new Pair<>(addedContainers, updatedContainers);
   }
 
-  private void uploadAccountFromOldCacheToNewDBAndRefreshNewCache(Account account) throws SQLException {
-    try {
-      logger.trace("Upload account from old cache to new db for account: " + account);
-      List <Container> addedContainers = new ArrayList<>(account.getAllContainers());
-      List<AccountUpdateInfo> accountsUpdateInfo = new ArrayList<>();
-      accountsUpdateInfo.add(
-          new AccountUpdateInfo(account, true, false, addedContainers, new ArrayList<>()));
-      mySqlAccountStoreNew.updateAccounts(accountsUpdateInfo);
-      logger.trace("Completed updating account={} in new MySql DB", account);
-    } catch (SQLException e) {
-      logger.error("Failed updating accounts={} in new MySql DB", account, e);
-      throw e;
-    }
-    // Tell the world
-    publishChangeNotice();
-    if (writeCacheAfterUpdate) {
-      // Write accounts to in-memory cache. Snapshot version will be out of date until the next DB refresh.
-      updateAccountsInCacheNew(Collections.singletonList(account));
-    }
-  }
-
   /**
    * Updates {@link Account}s to in-memory cache.
    * @param accounts added or modified {@link Account}s
@@ -1371,8 +1407,8 @@ public class MySqlAccountService extends AbstractAccountService {
 
     // Remove containers from not-found LRU cache.
     for (Container container : containers) {
-      recentNotFoundContainersCache.remove(
-          getAccountById(container.getParentAccountId()).getName() + SEPARATOR + container.getName());
+      recentNotFoundContainersCacheNew.remove(
+          getAccountByIdNew(container.getParentAccountId()).getName() + SEPARATOR + container.getName());
     }
   }
 
@@ -1417,6 +1453,9 @@ public class MySqlAccountService extends AbstractAccountService {
     if (ase.getErrorCode() == AccountServiceErrorCode.ResourceConflict) {
       if (config.enableNewDatabaseForMigration) {
         needRefreshNew = true;
+        if (config.enablePutToOldDbWhenMigrationEnabled) {
+          needRefresh = true;
+        }
       } else {
         needRefresh = true;
       }
