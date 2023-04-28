@@ -672,10 +672,10 @@ public class MockClusterMap implements ClusterMap {
   }
 
   /**
-   * removeDataNode to invoke clustermap change listener. This method doesn't really remove the datanode.
+   * Invoke clustermap change listener. This method doesn't really remove the datanode.
    * @param dataNodeId The removed data node
    */
-  public void removeDataNode(DataNodeId dataNodeId) {
+  public void invokeListenerForDataNodeRemoval(DataNodeId dataNodeId) {
     if (dataNodes.contains(dataNodeId) && clusterMapChangeListener != null) {
       clusterMapChangeListener.onDataNodeRemoved(dataNodeId);
     }
