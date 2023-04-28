@@ -1228,13 +1228,14 @@ class PutOperation {
                 passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
                 passedInBlobProperties.isEncrypted(), blobDataType);
 
+        // TODO: Efficient Metadata Operations: The reserved metadata blob id needs to be passed as chunk properties.
         chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
-            passedInBlobProperties.getFilename());
+            passedInBlobProperties.getFilename(), null);
         operationTracker = getOperationTracker();
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
@@ -1898,7 +1899,7 @@ class PutOperation {
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag(),
-              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename());
+              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null);
       if (isStitchOperation() || getNumDataChunks() > 1) {
         ByteBuffer serialized = null;
         // values returned are in the right order as TreeMap returns them in key-order.
