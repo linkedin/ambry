@@ -173,7 +173,7 @@ public class AccountReportsDao {
         deleteStatement.setString(2, hostname);
         deleteStatement.executeUpdate();
         metrics.deleteTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        metrics.deleteFailureCount.inc();
+        metrics.deleteSuccessCount.inc();
       }
     } catch (SQLException e) {
       metrics.deleteFailureCount.inc();
