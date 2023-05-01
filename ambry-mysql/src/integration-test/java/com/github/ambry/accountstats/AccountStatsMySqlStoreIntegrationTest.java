@@ -323,6 +323,54 @@ public class AccountStatsMySqlStoreIntegrationTest {
   }
 
   /**
+   * Test method {@link AccountStatsStore#deleteHostAccountStorageStatsForHost}
+   * @throws Exception
+   */
+  @Test
+  public void testDeleteHostAccountStorageStatsForHost() throws Exception {
+    AccountStatsMySqlStore mySqlStore1 = createAccountStatsMySqlStore(clusterName1, hostname1, port1);
+    AccountStatsMySqlStore mySqlStore2 = createAccountStatsMySqlStore(clusterName1, hostname2, port2);
+    AccountStatsMySqlStore mySqlStore3 = createAccountStatsMySqlStore(clusterName2, hostname3, port3);
+
+    // Generating HostAccountStorageStatsWrappers, store and retrieve them
+    HostAccountStorageStatsWrapper hostStats1 =
+        generateHostAccountStorageStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    HostAccountStorageStatsWrapper hostStats2 =
+        generateHostAccountStorageStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    HostAccountStorageStatsWrapper hostStats3 =
+        generateHostAccountStorageStatsWrapper(10, 10, 1, StatsReportType.ACCOUNT_REPORT);
+    mySqlStore1.storeHostAccountStorageStats(hostStats1);
+    mySqlStore2.storeHostAccountStorageStats(hostStats2);
+    mySqlStore3.storeHostAccountStorageStats(hostStats3);
+
+    // Delete a non-existing host
+    mySqlStore1.deleteHostAccountStorageStatsForHost(hostname1, port3);
+    HostAccountStorageStatsWrapper obtainedHostStats1 =
+        mySqlStore1.queryHostAccountStorageStatsByHost(hostname1, port1);
+    assertEquals(hostStats1.getStats().getStorageStats(), obtainedHostStats1.getStats().getStorageStats());
+
+    // Delete an existing host
+    mySqlStore1.deleteHostAccountStorageStatsForHost(hostname1, port1);
+    obtainedHostStats1 = mySqlStore1.queryHostAccountStorageStatsByHost(hostname1, port1);
+    assertEquals(0, obtainedHostStats1.getStats().getStorageStats().size());
+
+    // Delete this host again
+    mySqlStore1.deleteHostAccountStorageStatsForHost(hostname1, port1);
+    obtainedHostStats1 = mySqlStore1.queryHostAccountStorageStatsByHost(hostname1, port1);
+    assertEquals(0, obtainedHostStats1.getStats().getStorageStats().size());
+
+    // Delete another host
+    mySqlStore3.deleteHostAccountStorageStatsForHost(hostname3, port3);
+    HostAccountStorageStatsWrapper obtainedHostStats3 =
+        mySqlStore3.queryHostAccountStorageStatsByHost(hostname3, port3);
+    assertEquals(0, obtainedHostStats3.getStats().getStorageStats().size());
+
+    mySqlStore1.shutdown();
+    mySqlStore2.shutdown();
+    mySqlStore3.shutdown();
+  }
+
+  /**
    * Test the methods for storing, deleting and fetch aggregated account storage stats.
    * @throws Exception
    */
