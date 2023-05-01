@@ -79,7 +79,7 @@ public class RouterStoreTest {
   public RouterStoreTest(boolean forBackfill) throws IOException {
     this.forBackfill = forBackfill;
     accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
-    accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry(), false);
     Properties properties = new Properties();
     properties.setProperty(HelixAccountServiceConfig.BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
     properties.setProperty(HelixAccountServiceConfig.ZK_CLIENT_CONNECT_STRING_KEY, "1000");

@@ -90,7 +90,7 @@ public class MySqlAccountServiceIntegrationTest {
   }
 
   private MySqlAccountService getAccountService() throws Exception {
-    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    AccountServiceMetricsWrapper accountServiceMetrics = new AccountServiceMetricsWrapper(new MetricRegistry());
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
     // Don't initialize account store here as it may have preinitialized data
     return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory,
@@ -219,7 +219,7 @@ public class MySqlAccountServiceIntegrationTest {
         new MetricRegistry()).getMySqlAccountStore());
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
     // constructor does initial fetch which will fail on first endpoint and succeed on second
-    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    AccountServiceMetricsWrapper accountServiceMetrics = new AccountServiceMetricsWrapper(new MetricRegistry());
     mySqlAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory,
             mockNotifier);
@@ -295,7 +295,7 @@ public class MySqlAccountServiceIntegrationTest {
             new MetricRegistry()).getMySqlAccountStore());
     MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(consumerAccountStore);
-    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    AccountServiceMetricsWrapper accountServiceMetrics = new AccountServiceMetricsWrapper(new MetricRegistry());
     MySqlAccountService consumerAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory,
             mockNotifier);
@@ -410,7 +410,7 @@ public class MySqlAccountServiceIntegrationTest {
             new MetricRegistry()).getMySqlAccountStore());
     MySqlAccountStoreFactory mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(consumerAccountStore);
-    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    AccountServiceMetricsWrapper accountServiceMetrics = new AccountServiceMetricsWrapper(new MetricRegistry());
     // Note: for these tests, consumer must NOT be notified of changes
     MySqlAccountService consumerAccountService =
         new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory, null);

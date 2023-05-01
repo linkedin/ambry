@@ -65,8 +65,8 @@ public class MySqlAccountServiceMigrationIntegrationTest {
   }
 
   private MySqlAccountService getAccountService() throws Exception {
-    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
     accountServiceConfig = new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps));
+    AccountServiceMetricsWrapper accountServiceMetrics = new AccountServiceMetricsWrapper(new MetricRegistry());
     // Don't initialize account store here as it may have preinitialized data
     return new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mockMySqlAccountStoreFactory,
         mockNotifier);

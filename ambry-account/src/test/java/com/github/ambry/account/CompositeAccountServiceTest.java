@@ -37,7 +37,7 @@ public class CompositeAccountServiceTest {
 
   AccountService primaryAccountService = mock(HelixAccountService.class);
   AccountService secondaryAccountService = mock(MySqlAccountService.class);
-  AccountServiceMetrics metrics = new AccountServiceMetrics(new MetricRegistry());
+  AccountServiceMetrics metrics = new AccountServiceMetrics(new MetricRegistry(), false);
   Properties props = new Properties();
   AccountService compositeAccountService;
   Container testContainer =

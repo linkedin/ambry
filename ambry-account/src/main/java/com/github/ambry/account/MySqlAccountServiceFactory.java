@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
 public class MySqlAccountServiceFactory implements AccountServiceFactory {
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountServiceFactory.class);
   protected final MySqlAccountServiceConfig accountServiceConfig;
-  protected final AccountServiceMetrics accountServiceMetrics;
+  protected final AccountServiceMetricsWrapper accountServiceMetrics;
   protected final MySqlAccountStoreFactory mySqlAccountStoreFactory;
   protected final Notifier<String> notifier;
 
@@ -43,7 +43,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
    */
   public MySqlAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.accountServiceConfig = new MySqlAccountServiceConfig(verifiableProperties);
-    this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
+    this.accountServiceMetrics = new AccountServiceMetricsWrapper(metricRegistry);
     this.mySqlAccountStoreFactory = new MySqlAccountStoreFactory(verifiableProperties, metricRegistry);
     this.notifier = accountServiceConfig.zkClientConnectString != null ? new HelixNotifier(
         accountServiceConfig.zkClientConnectString, new HelixPropertyStoreConfig(verifiableProperties)) : null;

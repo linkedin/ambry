@@ -66,9 +66,7 @@ public class AccountServiceMetrics {
   // Histogram
   public final Histogram startupTimeInMs;
   public final Histogram updateAccountTimeInMs;
-  public final Histogram updateAccountTimeInMsNew;
   public final Histogram fetchRemoteAccountTimeInMs;
-  public final Histogram fetchRemoteAccountTimeInMsNew;
   public final Histogram accountUpdateConsumerTimeInMs;
   public final Histogram accountUpdateToAmbryTimeInMs;
   public final Histogram accountFetchFromAmbryTimeInMs;
@@ -79,10 +77,8 @@ public class AccountServiceMetrics {
   public final Counter unrecognizedMessageErrorCount;
   public final Counter notifyAccountDataChangeErrorCount;
   public final Counter updateAccountErrorCount;
-  public final Counter updateAccountErrorCountNew;
   public final Counter conflictRetryCount;
   public final Counter fetchRemoteAccountErrorCount;
-  public final Counter fetchRemoteAccountErrorCountNew;
   public final Counter remoteDataCorruptionErrorCount;
   public final Counter backupErrorCount;
   public final Counter nullNotifierCount;
@@ -93,28 +89,34 @@ public class AccountServiceMetrics {
   public final Counter accountUpdatesToStoreErrorCount;
   public final Counter getAccountInconsistencyCount;
   public final Counter onDemandContainerFetchCount;
-  public final Counter onDemandContainerFetchCountNew;
   public final Counter updateAccountFromOldCacheToNewDbCount;
 
   // Gauge
   Gauge<Integer> accountDataInconsistencyCount;
   Gauge<Integer> timeInSecondsSinceLastSyncGauge;
+  Gauge<Integer> timeInSecondsSinceLastSyncGaugeNew;
   Gauge<Integer> containerCountGauge;
+  Gauge<Integer> containerCountGaugeNew;
 
   private final MetricRegistry metricRegistry;
+  private final boolean enableNewMetricsForMigration;
 
-  public AccountServiceMetrics(MetricRegistry metricRegistry) {
+  public AccountServiceMetrics(MetricRegistry metricRegistry, boolean enableNewMetricsForMigration) {
     this.metricRegistry = metricRegistry;
+    this.enableNewMetricsForMigration = enableNewMetricsForMigration;
     // Histogram
     startupTimeInMs = metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, STARTUP_TIME_MSEC));
-    updateAccountTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_TIME_MSEC));
-    updateAccountTimeInMsNew =
-        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_TIME_MSEC_NEW));
-    fetchRemoteAccountTimeInMs =
-        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_TIME_MSEC));
-    fetchRemoteAccountTimeInMsNew =
-        metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_TIME_MSEC_NEW));
+    if (enableNewMetricsForMigration) {
+      updateAccountTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_TIME_MSEC_NEW));
+      fetchRemoteAccountTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_TIME_MSEC_NEW));
+    } else {
+      updateAccountTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_TIME_MSEC));
+      fetchRemoteAccountTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_TIME_MSEC));
+    }
     accountUpdateConsumerTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(HelixAccountService.class, ACCOUNT_UPDATE_CONSUMER_TIME_MSEC));
     accountUpdateToAmbryTimeInMs =
@@ -131,17 +133,24 @@ public class AccountServiceMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, UNRECOGNIZED_MESSAGE_ERROR_COUNT));
     notifyAccountDataChangeErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, NOTIFY_ACCOUNT_DATA_CHANGE_ERROR_COUNT));
-    updateAccountErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_ERROR_COUNT));
-    updateAccountErrorCountNew =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_ERROR_COUNT_NEW));
+    if (enableNewMetricsForMigration) {
+      updateAccountErrorCount =
+          metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_ERROR_COUNT_NEW));
+      fetchRemoteAccountErrorCount =
+          metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_ERROR_COUNT_NEW));
+      onDemandContainerFetchCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, ON_DEMAND_CONTAINER_FETCH_COUNT_NEW));
+    } else {
+      updateAccountErrorCount =
+          metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, UPDATE_ACCOUNT_ERROR_COUNT));
+      fetchRemoteAccountErrorCount =
+          metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_ERROR_COUNT));
+      onDemandContainerFetchCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, ON_DEMAND_CONTAINER_FETCH_COUNT));
+    }
     conflictRetryCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, CONFLICT_RETRY_COUNT));
     accountUpdatesToStoreErrorCount =
         metricRegistry.counter(MetricRegistry.name(AbstractAccountService.class, ACCOUNT_UPDATES_TO_STORE_ERROR_COUNT));
-    fetchRemoteAccountErrorCount =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_ERROR_COUNT));
-    fetchRemoteAccountErrorCountNew =
-        metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, FETCH_REMOTE_ACCOUNT_ERROR_COUNT_NEW));
     remoteDataCorruptionErrorCount =
         metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, REMOTE_DATA_CORRUPTION_ERROR_COUNT));
     backupErrorCount = metricRegistry.counter(MetricRegistry.name(HelixAccountService.class, BACKUP_ERROR_COUNT));
@@ -156,10 +165,6 @@ public class AccountServiceMetrics {
         MetricRegistry.name(HelixAccountService.class, ACCOUNT_FETCH_FROM_AMBRY_SERVER_ERROR_COUNT));
     getAccountInconsistencyCount =
         metricRegistry.counter(MetricRegistry.name(CompositeAccountService.class, GET_ACCOUNT_INCONSISTENCY_COUNT));
-    onDemandContainerFetchCount =
-        metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, ON_DEMAND_CONTAINER_FETCH_COUNT));
-    onDemandContainerFetchCountNew =
-        metricRegistry.counter(MetricRegistry.name(MySqlAccountService.class, ON_DEMAND_CONTAINER_FETCH_COUNT_NEW));
     updateAccountFromOldCacheToNewDbCount = metricRegistry.counter(
         MetricRegistry.name(MySqlAccountService.class, UPDATE_ACCOUNT_FROM_OLD_CACHE_TO_NEW_DB_COUNT));
   }
@@ -177,38 +182,32 @@ public class AccountServiceMetrics {
   /**
    * Tracks the number of seconds elapsed since the last database sync.
    * @param gauge the function returning the elapsed time.
+   * @param gauge1
    */
-  void trackTimeSinceLastSync(Gauge<Integer> gauge) {
+  void trackTimeSinceLastSync(Gauge<Integer> gauge, Gauge<Integer> gauge1) {
     timeInSecondsSinceLastSyncGauge = gauge;
-    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, TIME_IN_SECONDS_SINCE_LAST_SYNC),
-        timeInSecondsSinceLastSyncGauge);
-  }
-
-  /**
-   * Tracks the number of seconds elapsed since the last database sync.
-   * @param gauge the function returning the elapsed time.
-   */
-  void trackTimeSinceLastSyncNew(Gauge<Integer> gauge) {
-    timeInSecondsSinceLastSyncGauge = gauge;
-    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, TIME_IN_SECONDS_SINCE_LAST_SYNC_NEW),
-        timeInSecondsSinceLastSyncGauge);
+    timeInSecondsSinceLastSyncGaugeNew = gauge1;
+    if (enableNewMetricsForMigration) {
+      metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, TIME_IN_SECONDS_SINCE_LAST_SYNC_NEW),
+          timeInSecondsSinceLastSyncGaugeNew);
+    } else {
+      metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, TIME_IN_SECONDS_SINCE_LAST_SYNC),
+          timeInSecondsSinceLastSyncGauge);
+    }
   }
 
   /**
    * Tracks the total number of containers across all accounts.
    * @param gauge the function returning the container count.
+   * @param gauge1
    */
-  void trackContainerCount(Gauge<Integer> gauge) {
+  void trackContainerCount(Gauge<Integer> gauge, Gauge<Integer> gauge1) {
     containerCountGauge = gauge;
-    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT), containerCountGauge);
-  }
-
-  /**
-   * Tracks the total number of containers across all accounts.
-   * @param gauge the function returning the container count.
-   */
-  void trackContainerCountNew(Gauge<Integer> gauge) {
-    containerCountGauge = gauge;
-    metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT_NEW), containerCountGauge);
+    containerCountGaugeNew = gauge1;
+    if (enableNewMetricsForMigration) {
+      metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT_NEW), containerCountGaugeNew);
+    } else {
+      metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT), containerCountGauge);
+    }
   }
 }
