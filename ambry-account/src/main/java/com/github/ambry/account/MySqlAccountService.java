@@ -177,8 +177,7 @@ public class MySqlAccountService extends AbstractAccountService {
    * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
    */
   synchronized void fetchAndUpdateCache() throws SQLException {
-    if (!config.enableGetFromNewDbOnly) {
-      // Retry connection to mysql if we couldn't set up previously
+    // Retry connection to mysql if we couldn't set up previously
     if (mySqlAccountStore == null) {
       try {
         mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
@@ -187,8 +186,7 @@ public class MySqlAccountService extends AbstractAccountService {
         throw e;
       }
     }
-      accountMigrationService.fetchAndUpdateCacheHelper();
-    }
+    accountMigrationService.fetchAndUpdateCacheHelper();
 
     if (config.enableNewDatabaseForMigration) {
       if (mySqlAccountStoreNew == null) {
@@ -205,20 +203,12 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public Account getAccountById(short accountId) {
-    if (config.enableGetFromNewDbOnly) {
-      return accountMigrationServiceNew.getAccountById(accountId);
-    } else {
-      return accountMigrationService.getAccountById(accountId);
-    }
+    return accountMigrationService.getAccountById(accountId);
   }
 
   @Override
   public Account getAccountByName(String accountName) {
-    if (config.enableGetFromNewDbOnly) {
-      return accountMigrationServiceNew.getAccountByName(accountName);
-    } else {
-      return accountMigrationService.getAccountByName(accountName);
-    }
+    return accountMigrationService.getAccountByName(accountName);
   }
 
   @Override
@@ -256,9 +246,7 @@ public class MySqlAccountService extends AbstractAccountService {
   public void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     if (config.enableNewDatabaseForMigration) {
       accountMigrationServiceNew.updateAccounts(accounts);
-      if (config.enablePutToOldDbWhenMigrationEnabled) {
-        accountMigrationService.updateAccounts(accounts);
-      }
+      accountMigrationService.updateAccounts(accounts);
     } else {
       accountMigrationService.updateAccounts(accounts);
     }
@@ -266,9 +254,6 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public Collection<Account> getAllAccounts() {
-    if (config.enableGetFromNewDbOnly) {
-      return accountMigrationServiceNew.getAllAccountsHelper();
-    }
     return accountMigrationService.getAllAccountsHelper();
   }
 
@@ -312,11 +297,7 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
-    if (config.enableGetFromNewDbOnly) {
-      return accountMigrationServiceNew.getContainersByStatus(containerStatus);
-    } else {
-      return accountMigrationService.getContainersByStatus(containerStatus);
-    }
+    return accountMigrationService.getContainersByStatus(containerStatus);
   }
 
   @Override
@@ -330,26 +311,6 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
-    if (config.enableGetFromNewDbOnly) {
-      if (mySqlAccountStore == null) {
-        try {
-          mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
-        } catch (SQLException e) {
-          logger.error("MySQL account store creation failed: {}", e.getMessage());
-          throw translateSQLException(e);
-        }
-      }
-      accountMigrationService.updateContainers(accountName, containers);
-      if (mySqlAccountStoreNew == null) {
-        try {
-          mySqlAccountStoreNew = mySqlAccountStoreFactory.getMySqlAccountStoreNew();
-        } catch (SQLException e) {
-          logger.error("MySQL account store creation failed: {}", e.getMessage());
-          throw translateSQLException(e);
-        }
-      }
-      return accountMigrationServiceNew.updateContainers(accountName, containers);
-    } else {
       if (config.enableNewDatabaseForMigration) {
         try {
           if (mySqlAccountStoreNew == null) {
@@ -375,7 +336,6 @@ public class MySqlAccountService extends AbstractAccountService {
         }
       }
       return accountMigrationService.updateContainers(accountName, containers);
-      }
   }
 
   @Override
@@ -467,11 +427,7 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerByName(String accountName, String containerName) throws AccountServiceException {
-    if (config.enableGetFromNewDbOnly) {
-      return accountMigrationServiceNew.getContainerByNameHelper(accountName, containerName);
-    } else {
-      return accountMigrationService.getContainerByNameHelper(accountName, containerName);
-    }
+    return accountMigrationService.getContainerByNameHelper(accountName, containerName);
   }
 
   /**
@@ -484,11 +440,7 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerById(short accountId, Short containerId) throws AccountServiceException {
-    if (config.enableGetFromNewDbOnly) {
-      return accountMigrationServiceNew.getContainerByIdHelper(accountId, containerId);
-    } else {
-      return accountMigrationService.getContainerByIdHelper(accountId, containerId);
-    }
+    return accountMigrationService.getContainerByIdHelper(accountId, containerId);
   }
 
   @Override

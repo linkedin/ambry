@@ -137,31 +137,6 @@ public class MySqlAccountServiceMigrationIntegrationTest {
     assertEquals("Mismatch in container retrieved by name", updatedContainer,
         mySqlAccountService.getContainerByName(testAccount2.getName(), testContainer2.getName()));
     assertNull(mySqlAccountService.getAccountByIdNew(testAccount2.getId()));
-
-    // add testAccount2 to new db and two db should be in sync, enable the config for enableGetFromNewDbOnly
-    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount2));
-    mySqlConfigProps.setProperty(ENABLE_GET_FROM_NEW_DB_ONLY, "true");
-    mySqlAccountService = getAccountService();
-    assertEquals("Mismatch in account retrieved by name", testAccount1,
-        mySqlAccountService.getAccountByNameNew(testAccount1.getName()));
-    assertEquals("Mismatch in account retrieved by id", testAccount1,
-        mySqlAccountService.getAccountByIdNew(testAccount1.getId()));
-    assertEquals("Mismatch in account retrieved by name", testAccount2,
-        mySqlAccountService.getAccountByNameNew(testAccount2.getName()));
-    assertEquals("Mismatch in account retrieved by id", testAccount2,
-        mySqlAccountService.getAccountByIdNew(testAccount2.getId()));
-
-    //disable put to old db and upload updated testAccount2. should only updated in new db.
-    mySqlConfigProps.setProperty(ENABLE_PUT_TO_OLD_DB_WHEN_MIGRATION_ENABLED, "false");
-    mySqlAccountService = getAccountService();
-    updatedContainer =
-        new ContainerBuilder(updatedContainer).setMediaScanDisabled(true).build();
-    testAccount2 = new AccountBuilder(testAccount2).addOrUpdateContainer(updatedContainer).build();
-    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount2));
-    assertEquals("Mismatch in account retrieved by id", testAccount2,
-        mySqlAccountService.getAccountById(testAccount2.getId()));
-    assertNotEquals("Should not update the old db after the config disabled", testAccount2,
-        mySqlAccountService.getAccountByIdOld(testAccount2.getId()));
   }
 
   private void cleanup() throws SQLException {
