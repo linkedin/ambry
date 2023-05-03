@@ -33,7 +33,6 @@ import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Supplier;
@@ -381,6 +380,7 @@ public class CachedAccountService extends AbstractAccountService {
 
   @Override
   public void close() throws IOException {
+    open.set(false);
   }
 
   @Override
