@@ -489,7 +489,7 @@ public class MySqlAccountServiceIntegrationTest {
     verify(mySqlAccountStore).getContainerByName(eq((int) accountId), eq("c2"));
     // verify container name "a1:c2" is added to LRU cache
     assertTrue("container a1:c2 must be present in LRU cache",
-        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1" + MySqlAccountService.SEPARATOR + "c2"));
+        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1" + CachedAccountService.SEPARATOR + "c2"));
 
     // Look up container "c2" again in account service
     assertNull("Container must not be present in account service",
@@ -503,7 +503,7 @@ public class MySqlAccountServiceIntegrationTest {
 
     // verify container "c2" is removed from not-found LRU cache
     assertFalse("Added container a1:c2 must no longer be present in LRU cache",
-        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1" + MySqlAccountService.SEPARATOR + "c2"));
+        mySqlAccountService.getRecentNotFoundContainersCache().contains("a1" + CachedAccountService.SEPARATOR + "c2"));
   }
 
   /**
@@ -647,8 +647,7 @@ public class MySqlAccountServiceIntegrationTest {
     }
     Account a2 = new AccountBuilder((short) 2, "a2", Account.AccountStatus.ACTIVE).containers(containersList2).build();
 
-    mySqlAccountService.updateAccountsWithMySqlStore(Arrays.asList(a1, a2));
-    mySqlAccountService.fetchAndUpdateCache();
+    mySqlAccountService.updateAccounts(Arrays.asList(a1, a2));
 
     // Verify all accounts and containers are added.
     assertEquals("Mismatch in number of accounts", 2, mySqlAccountService.getAllAccounts().size());
@@ -681,7 +680,7 @@ public class MySqlAccountServiceIntegrationTest {
           new ContainerBuilder((short) i, "c" + i, Container.ContainerStatus.ACTIVE, "c" + i, (short) 1).build());
     }
     a1 = new AccountBuilder((short) 1, "a1", Account.AccountStatus.ACTIVE).containers(containers).build();
-    mySqlAccountService.updateAccountsWithMySqlStore(Collections.singletonList(a1));
+    mySqlAccountService.getCachedAccountService().updateAccountsWithMySqlStore(Collections.singletonList(a1));
 
     // Add few more containers with one of them (container ID: 6) conflicting.
     containers.clear();
@@ -693,8 +692,8 @@ public class MySqlAccountServiceIntegrationTest {
         new AccountBuilder((short) 1, "a1", Account.AccountStatus.ACTIVE).containers(containers).build();
 
     // Verify updateAccountsWithMySqlStore() fails with Integrity constraint exception
-    TestUtils.assertException(SQLException.class,
-        () -> mySqlAccountService.updateAccountsWithMySqlStore(Collections.singletonList(a1Updated)), null);
+    TestUtils.assertException(SQLException.class, () -> mySqlAccountService.getCachedAccountService()
+        .updateAccountsWithMySqlStore(Collections.singletonList(a1Updated)), null);
 
     // Verify account update failed atomically with none of the containers (7 to 9) added.
     mySqlAccountService.fetchAndUpdateCache();

@@ -154,15 +154,16 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
-    dbInfoNew = verifiableProperties.getString(DB_INFO_NEW, "");
     updaterPollingIntervalSeconds =
         verifiableProperties.getIntInRange(UPDATER_POLLING_INTERVAL_SECONDS, 60, 0, Integer.MAX_VALUE);
     updaterShutDownTimeoutMinutes =
         verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MINUTES, 2, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
-    backupDirNew = verifiableProperties.getString(BACKUP_DIRECTORY_KEY_NEW, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
     enableNewDatabaseForMigration = verifiableProperties.getBoolean(ENABLE_NEW_DATABASE_FOR_MIGRATION, false);
+    dbInfoNew = enableNewDatabaseForMigration ? verifiableProperties.getString(DB_INFO_NEW)
+        : verifiableProperties.getString(DB_INFO_NEW, "");
+    backupDirNew = verifiableProperties.getString(BACKUP_DIRECTORY_KEY_NEW, "");
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
     dbExecuteBatchSize = verifiableProperties.getIntInRange(DB_EXECUTE_BATCH_SIZE, 50, 1, Integer.MAX_VALUE);
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY, null);

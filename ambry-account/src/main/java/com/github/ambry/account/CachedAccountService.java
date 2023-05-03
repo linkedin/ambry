@@ -45,7 +45,7 @@ import static com.github.ambry.account.MySqlAccountService.*;
 
 public class CachedAccountService extends AbstractAccountService {
   private static final Logger logger = LoggerFactory.getLogger(CachedAccountService.class);
-  private static final String SEPARATOR = ":";
+  public static final String SEPARATOR = ":";
   // Cache parameters (initial capacity, load factor and max limit) for recentNotFoundContainersCache
   private static final int cacheInitialCapacity = 100;
   private static final float cacheLoadFactor = 0.75f;
@@ -88,6 +88,10 @@ public class CachedAccountService extends AbstractAccountService {
     this.supplier = supplier;
     accountServiceMetrics.trackTimeSinceLastSync(this::getTimeInSecondsSinceLastSync);
     accountServiceMetrics.trackContainerCount(this::getContainerCount);
+    // Initialize cache from backup file on disk
+    initCacheFromBackupFile();
+    // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
+    initialFetchAndSchedule();
   }
 
   @Override
@@ -486,6 +490,13 @@ public class CachedAccountService extends AbstractAccountService {
         throw ase;
       }
     }
+  }
+
+  @Override
+  protected void publishChangeNotice() {
+    // TODO: can optimize this by sending the account/container payload as the topic message,
+    // so subscribers can update their cache and avoid the database query.
+    super.publishChangeNotice();
   }
 
   /**

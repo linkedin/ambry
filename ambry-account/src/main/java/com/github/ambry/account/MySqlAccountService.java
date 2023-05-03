@@ -69,16 +69,6 @@ public class MySqlAccountService extends AbstractAccountService {
           new CachedAccountService(callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStoreNew),
               accountServiceMetrics.getAccountServiceMetricsNew(), config, notifier, config.backupDirNew, scheduler);
     }
-    // Initialize cache from backup file on disk
-    cachedAccountService.initCacheFromBackupFile();
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.initCacheFromBackupFile();
-    }
-    // Fetches added or modified accounts and containers from mysql db and schedules to execute it periodically
-    cachedAccountService.initialFetchAndSchedule();
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.initialFetchAndSchedule();
-    }
   }
 
   /**
@@ -137,11 +127,9 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
+    cachedAccountService.updateAccounts(accounts);
     if (config.enableNewDatabaseForMigration) {
       cachedAccountServiceNew.updateAccounts(accounts);
-      cachedAccountService.updateAccounts(accounts);
-    } else {
-      cachedAccountService.updateAccounts(accounts);
     }
   }
 
@@ -172,16 +160,6 @@ public class MySqlAccountService extends AbstractAccountService {
 
   ExecutorService getScheduler() {
     return scheduler;
-  }
-
-  @Override
-  protected void publishChangeNotice() {
-    // TODO: can optimize this by sending the account/container payload as the topic message,
-    // so subscribers can update their cache and avoid the database query.
-    cachedAccountService.publishChangeNotice();
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.publishChangeNotice();
-    }
   }
 
   @Override
@@ -220,15 +198,6 @@ public class MySqlAccountService extends AbstractAccountService {
     return containerList;
   }
 
-  @Override
-  protected void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
-      throws AccountServiceException {
-    cachedAccountService.updateResolvedContainers(account, resolvedContainers);
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.updateResolvedContainers(account, resolvedContainers);
-    }
-  }
-
   /**
    * Gets the {@link Container} by its name and parent {@link Account} name by looking up in in-memory cache.
    * If it is not present in in-memory cache, it queries from mysql db and updates the cache.
@@ -253,18 +222,6 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   public Container getContainerById(short accountId, Short containerId) throws AccountServiceException {
     return cachedAccountService.getContainerByIdHelper(accountId, containerId);
-  }
-
-  /**
-   * Updates MySql DB with added or modified {@link Account}s
-   * @param accounts collection of {@link Account}s
-   * @throws SQLException
-   */
-  void updateAccountsWithMySqlStore(Collection<Account> accounts) throws SQLException {
-    cachedAccountService.updateAccountsWithMySqlStore(accounts);
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.updateAccountsWithMySqlStore(accounts);
-    }
   }
 
   /**
