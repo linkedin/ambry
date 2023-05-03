@@ -94,9 +94,7 @@ public class AccountServiceMetrics {
   // Gauge
   Gauge<Integer> accountDataInconsistencyCount;
   Gauge<Integer> timeInSecondsSinceLastSyncGauge;
-  Gauge<Integer> timeInSecondsSinceLastSyncGaugeNew;
   Gauge<Integer> containerCountGauge;
-  Gauge<Integer> containerCountGaugeNew;
 
   private final MetricRegistry metricRegistry;
   private final boolean enableNewMetricsForMigration;
@@ -184,12 +182,11 @@ public class AccountServiceMetrics {
    * @param gauge the function returning the elapsed time.
    * @param gauge1
    */
-  void trackTimeSinceLastSync(Gauge<Integer> gauge, Gauge<Integer> gauge1) {
+  void trackTimeSinceLastSync(Gauge<Integer> gauge) {
     timeInSecondsSinceLastSyncGauge = gauge;
-    timeInSecondsSinceLastSyncGaugeNew = gauge1;
     if (enableNewMetricsForMigration) {
       metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, TIME_IN_SECONDS_SINCE_LAST_SYNC_NEW),
-          timeInSecondsSinceLastSyncGaugeNew);
+          timeInSecondsSinceLastSyncGauge);
     } else {
       metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, TIME_IN_SECONDS_SINCE_LAST_SYNC),
           timeInSecondsSinceLastSyncGauge);
@@ -201,11 +198,10 @@ public class AccountServiceMetrics {
    * @param gauge the function returning the container count.
    * @param gauge1
    */
-  void trackContainerCount(Gauge<Integer> gauge, Gauge<Integer> gauge1) {
+  void trackContainerCount(Gauge<Integer> gauge) {
     containerCountGauge = gauge;
-    containerCountGaugeNew = gauge1;
     if (enableNewMetricsForMigration) {
-      metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT_NEW), containerCountGaugeNew);
+      metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT_NEW), containerCountGauge);
     } else {
       metricRegistry.register(MetricRegistry.name(MySqlAccountService.class, CONTAINER_COUNT), containerCountGauge);
     }

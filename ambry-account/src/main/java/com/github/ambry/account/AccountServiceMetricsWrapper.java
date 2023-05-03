@@ -13,34 +13,19 @@
  */
 package com.github.ambry.account;
 
-import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 
 
-public class AccountServiceMetricsWrapper extends AccountServiceMetrics {
+public class AccountServiceMetricsWrapper {
+  private final AccountServiceMetrics accountServiceMetrics;
   private final AccountServiceMetrics accountServiceMetricsNew;
 
   public AccountServiceMetricsWrapper(MetricRegistry metricRegistry) {
-    super(metricRegistry, false);
+    this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry, false);
     this.accountServiceMetricsNew = new AccountServiceMetrics(metricRegistry, true);
   }
 
-  @Override
-  void trackAccountDataInconsistency(CompositeAccountService compositeAccountService) {
-    super.trackAccountDataInconsistency(compositeAccountService);
-  }
-
-  @Override
-  void trackTimeSinceLastSync(Gauge<Integer> gauge, Gauge<Integer> gauge1) {
-    super.trackTimeSinceLastSync(gauge, gauge1);
-  }
-
-  @Override
-  void trackContainerCount(Gauge<Integer> gauge, Gauge<Integer> gauge1) {
-    super.trackContainerCount(gauge, gauge1);
-  }
-
-  public AccountServiceMetrics getAccountServiceMetrics() {return this;}
+  public AccountServiceMetrics getAccountServiceMetrics() {return this.accountServiceMetrics;}
 
   public AccountServiceMetrics getAccountServiceMetricsNew() {return this.accountServiceMetricsNew;}
 }

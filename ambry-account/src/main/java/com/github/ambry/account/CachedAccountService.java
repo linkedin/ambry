@@ -13,7 +13,6 @@
  */
 package com.github.ambry.account;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
@@ -26,7 +25,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
@@ -34,53 +35,60 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.account.AccountUtils.*;
 import static com.github.ambry.account.MySqlAccountService.*;
-import static com.github.ambry.utils.Utils.*;
 
 
-public class AccountMigrationService extends AbstractAccountService {
-  private static final Logger logger = LoggerFactory.getLogger(AccountMigrationService.class);
-  public static final String SEPARATOR = ":";
-  private static final ObjectMapper objectMapper = new ObjectMapper();
+public class CachedAccountService extends AbstractAccountService {
+  private static final Logger logger = LoggerFactory.getLogger(CachedAccountService.class);
+  private static final String SEPARATOR = ":";
+  // Cache parameters (initial capacity, load factor and max limit) for recentNotFoundContainersCache
+  private static final int cacheInitialCapacity = 100;
+  private static final float cacheLoadFactor = 0.75f;
+  private static final int cacheMaxLimit = 1000;
 
   private final BackupFileManager backupFileManager;
-  private final MySqlAccountStore mySqlAccountStore;
   private final Set<String> recentNotFoundContainersCache;
   private final AccountServiceMetrics accountServiceMetrics;
-  private final AtomicReference<AccountInfoMap> accountInfoMapRef;
   private final ReadWriteLock infoMapLock;
   private final MySqlAccountServiceConfig config;
   private final boolean writeCacheAfterUpdate;
-  protected final Notifier<String> notifier;
-  private boolean needRefresh;
-  private long lastSyncTime;
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final ScheduledExecutorService scheduler;
+  private final Supplier<MySqlAccountStore> supplier;
+  private MySqlAccountStore mySqlAccountStore;
+  private boolean needRefresh = false;
+  private long lastSyncTime = -1;
 
   /**
    * The service used for mysql migration which includes all common logic.
    */
-  public AccountMigrationService(BackupFileManager backupFileManager, MySqlAccountStore mySqlAccountStore,
-      boolean needRefresh, long lastSyncTime, Set<String> recentNotFoundContainersCache,
-      AtomicReference<AccountInfoMap> accountInfoMapRef, AccountServiceMetrics accountServiceMetrics,
-      ReadWriteLock infoMapLock, MySqlAccountServiceConfig config, Notifier<String> notifier, ScheduledExecutorService scheduler) {
+  public CachedAccountService(Supplier<MySqlAccountStore> supplier, AccountServiceMetrics accountServiceMetrics,
+      MySqlAccountServiceConfig config, Notifier<String> notifier, String backupDir, ScheduledExecutorService scheduler)
+      throws IOException {
     super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"), notifier);
-    this.backupFileManager = backupFileManager;
-    this.mySqlAccountStore = mySqlAccountStore;
-    this.needRefresh = needRefresh;
-    this.lastSyncTime = lastSyncTime;
-    this.recentNotFoundContainersCache = recentNotFoundContainersCache;
-    this.accountInfoMapRef = accountInfoMapRef;
+    this.mySqlAccountStore = supplier.get();
     this.accountServiceMetrics = accountServiceMetrics;
-    this.infoMapLock = infoMapLock;
     this.config = config;
     this.writeCacheAfterUpdate = config.writeCacheAfterUpdate;
-    this.notifier = notifier;
+    this.recentNotFoundContainersCache = Collections.newSetFromMap(
+        Collections.synchronizedMap(new LinkedHashMap<String, Boolean>(cacheInitialCapacity, cacheLoadFactor, true) {
+          protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+            return size() > cacheMaxLimit;
+          }
+        }));
+    this.infoMapLock = new ReentrantReadWriteLock();
+    // create backup file manager for persisting and retrieving Account metadata on local disk
+    this.backupFileManager = new BackupFileManager(accountServiceMetrics, backupDir, config.maxBackupFileCount);
     this.scheduler = scheduler;
+    this.supplier = supplier;
+    accountServiceMetrics.trackTimeSinceLastSync(this::getTimeInSecondsSinceLastSync);
+    accountServiceMetrics.trackContainerCount(this::getContainerCount);
   }
 
   @Override
@@ -101,7 +109,7 @@ public class AccountMigrationService extends AbstractAccountService {
       switch (message) {
         case FULL_ACCOUNT_METADATA_CHANGE_MESSAGE:
           logger.info("Processing message={} for topic={}", message, topic);
-          fetchAndUpdateCacheHelper();
+          fetchAndUpdateCache();
           logger.trace("Completed processing message={} for topic={}", message, topic);
           break;
         default:
@@ -113,6 +121,20 @@ public class AccountMigrationService extends AbstractAccountService {
       accountServiceMetrics.remoteDataCorruptionErrorCount.inc();
       accountServiceMetrics.fetchRemoteAccountErrorCount.inc();
     }
+  }
+
+  /**
+   * Fetches added or modified accounts and containers from mysql database and schedules to execute periodically.
+   */
+  public void initialFetchAndSchedule() {
+    fetchAndUpdateCacheNoThrow();
+    if (scheduler != null) {
+      scheduler.scheduleAtFixedRate(this::fetchAndUpdateCacheNoThrow, config.updaterPollingIntervalSeconds,
+          config.updaterPollingIntervalSeconds, TimeUnit.SECONDS);
+      logger.info("Background account updater will fetch accounts from mysql db at intervals of {} seconds",
+          config.updaterPollingIntervalSeconds);
+    }
+    maybeSubscribeChangeTopic(false);
   }
 
   /**
@@ -141,7 +163,22 @@ public class AccountMigrationService extends AbstractAccountService {
    * Fetches all the accounts and containers that have been created or modified in the mysql database since the
    * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
    */
-  public synchronized void fetchAndUpdateCacheHelper() throws SQLException {
+  private void fetchAndUpdateCacheNoThrow() {
+    try {
+      fetchAndUpdateCache();
+    } catch (Throwable e) {
+      logger.error("fetchAndUpdateCache failed", e);
+    }
+  }
+
+  /**
+   * Fetches all the accounts and containers that have been created or modified in the mysql database since the
+   * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
+   */
+  protected synchronized void fetchAndUpdateCache() throws SQLException {
+    if (mySqlAccountStore == null) {
+      mySqlAccountStore = this.supplier.get();
+    }
     try {
       // Find last modified time of Accounts and containers in cache.
       long lastModifiedTime = accountInfoMapRef.get().getLastModifiedTime();
@@ -344,11 +381,6 @@ public class AccountMigrationService extends AbstractAccountService {
 
   @Override
   public void close() throws IOException {
-    if (scheduler != null) {
-      shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
-    }
-    maybeUnsubscribeChangeTopic();
-    open.set(false);
   }
 
   @Override
@@ -414,20 +446,6 @@ public class AccountMigrationService extends AbstractAccountService {
     }
   }
 
-  /**
-   * Gets all the {@link Account}s in this {@code AccountService}. The {@link Account}s <em>MUST</em> have their
-   * ids and names one-to-one mapped.
-   * @return A collection of {@link Account}s.
-   */
-  public Collection<Account> getAllAccountsHelper() {
-    infoMapLock.readLock().lock();
-    try {
-      return accountInfoMapRef.get().getAccounts();
-    } finally {
-      infoMapLock.readLock().unlock();
-    }
-  }
-
   @Override
   public void updateResolvedContainers(Account account, Collection<Container> resolvedContainers)
       throws AccountServiceException {
@@ -449,13 +467,16 @@ public class AccountMigrationService extends AbstractAccountService {
   @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
+    if (mySqlAccountStore == null) {
+      mySqlAccountStore = supplier.get();
+    }
     try {
       return super.updateContainers(accountName, containers);
     } catch (AccountServiceException ase) {
       if (needRefresh) {
         // refresh and retry (with regenerated containerIds)
         try {
-          fetchAndUpdateCacheHelper();
+          fetchAndUpdateCache();
         } catch (SQLException e) {
           throw translateSQLException(e);
         }
@@ -468,28 +489,38 @@ public class AccountMigrationService extends AbstractAccountService {
   }
 
   /**
-   * Updates MySql DB with added or modified {@link Container}s of a given account
-   * @param account parent {@link Account} for the {@link Container}s
-   * @param containers collection of {@link Container}s
-   * @throws SQLException
+   * Gets all the {@link Account}s in this {@code AccountService}. The {@link Account}s <em>MUST</em> have their
+   * ids and names one-to-one mapped.
+   * @return A collection of {@link Account}s.
    */
-  private void updateContainersWithMySqlStore(Account account, Collection<Container> containers) throws SQLException {
-    long startTimeMs = System.currentTimeMillis();
-    logger.trace("Start updating containers={} for accountId={} into MySql DB", containers, account.getId());
+  public Collection<Account> getAllAccountsHelper() {
+    infoMapLock.readLock().lock();
+    try {
+      return accountInfoMapRef.get().getAccounts();
+    } finally {
+      infoMapLock.readLock().unlock();
+    }
+  }
 
-    // Get list of added and updated containers in the account.
-    Pair<List<Container>, List<Container>> addedOrUpdatedContainers = getUpdatedContainers(account, containers);
-    AccountUpdateInfo accountUpdateInfo =
-        new AccountUpdateInfo(account, false, false, addedOrUpdatedContainers.getFirst(),
-            addedOrUpdatedContainers.getSecond());
+  /**
+   * @return the time in seconds since the last database sync / cache refresh
+   */
+  public int getTimeInSecondsSinceLastSync() {
+    return lastSyncTime > 0 ? (int) (System.currentTimeMillis() - lastSyncTime) / 1000 : Integer.MAX_VALUE;
+  }
 
-    // Write changes to MySql db.
-    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
+  /**
+   * @return the total number of containers in all accounts.
+   */
+  public int getContainerCount() {
+    return accountInfoMapRef.get().getContainerCount();
+  }
 
-    long timeForUpdate = System.currentTimeMillis() - startTimeMs;
-    logger.trace("Completed updating containers={} for accountId={} in MySqlDB in time={} ms", containers,
-        account.getId(), timeForUpdate);
-    accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
+  /**
+   * @return set (LRA cache) of containers not found in recent get attempts. Used in only tests.
+   */
+  public Set<String> getRecentNotFoundContainersCache() {
+    return Collections.unmodifiableSet(recentNotFoundContainersCache);
   }
 
   /**
@@ -533,6 +564,31 @@ public class AccountMigrationService extends AbstractAccountService {
 
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     logger.trace("Completed updating accounts={} in MySql DB, took time={} ms", accounts, timeForUpdate);
+    accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
+  }
+
+  /**
+   * Updates MySql DB with added or modified {@link Container}s of a given account
+   * @param account parent {@link Account} for the {@link Container}s
+   * @param containers collection of {@link Container}s
+   * @throws SQLException
+   */
+  private void updateContainersWithMySqlStore(Account account, Collection<Container> containers) throws SQLException {
+    long startTimeMs = System.currentTimeMillis();
+    logger.trace("Start updating containers={} for accountId={} into MySql DB", containers, account.getId());
+
+    // Get list of added and updated containers in the account.
+    Pair<List<Container>, List<Container>> addedOrUpdatedContainers = getUpdatedContainers(account, containers);
+    AccountUpdateInfo accountUpdateInfo =
+        new AccountUpdateInfo(account, false, false, addedOrUpdatedContainers.getFirst(),
+            addedOrUpdatedContainers.getSecond());
+
+    // Write changes to MySql db.
+    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
+
+    long timeForUpdate = System.currentTimeMillis() - startTimeMs;
+    logger.trace("Completed updating containers={} for accountId={} in MySqlDB in time={} ms", containers,
+        account.getId(), timeForUpdate);
     accountServiceMetrics.updateAccountTimeInMs.update(timeForUpdate);
   }
 
@@ -581,19 +637,5 @@ public class AccountMigrationService extends AbstractAccountService {
       needRefresh = true;
     }
     throw ase;
-  }
-
-  /**
-   * @return the time in seconds since the last database sync / cache refresh
-   */
-  public int getTimeInSecondsSinceLastSync() {
-    return lastSyncTime > 0 ? (int) (System.currentTimeMillis() - lastSyncTime) / 1000 : Integer.MAX_VALUE;
-  }
-
-  /**
-   * @return the total number of containers in all accounts.
-   */
-  public int getContainerCount() {
-    return accountInfoMapRef.get().getContainerCount();
   }
 }

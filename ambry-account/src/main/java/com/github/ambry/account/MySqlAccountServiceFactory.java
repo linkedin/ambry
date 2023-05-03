@@ -58,7 +58,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
           new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mySqlAccountStoreFactory, notifier);
       long spentTimeMs = System.currentTimeMillis() - startTimeMs;
       logger.info("MySqlAccountService started, took {} ms", spentTimeMs);
-      accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
+      accountServiceMetrics.getAccountServiceMetrics().startupTimeInMs.update(spentTimeMs);
       return mySqlAccountService;
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate MySqlAccountService", e);
