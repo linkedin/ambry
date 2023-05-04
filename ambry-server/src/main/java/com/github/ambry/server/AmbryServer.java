@@ -279,7 +279,7 @@ public class AmbryServer {
               clusterMapConfig, registry).getAccountStatsStore() : null;
       statsManager =
           new StatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
-              clusterParticipants.get(0), accountStatsMySqlStore, accountService);
+              clusterParticipants.get(0), accountStatsMySqlStore, accountService, nodeId);
       statsManager.start();
 
       ArrayList<Port> ports = new ArrayList<Port>();
