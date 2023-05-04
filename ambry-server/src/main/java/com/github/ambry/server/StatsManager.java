@@ -127,7 +127,7 @@ class StatsManager {
         .map(Account::getId)
         .collect(Collectors.toList());
     this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.publishExcludeAccountNames);
-    this.scheduler = Utils.newScheduler(1, false);
+    this.scheduler = Utils.newScheduler(2, false);
   }
 
   /**
@@ -493,23 +493,29 @@ class StatsManager {
     private void tryRemoveHostFromAccountStatsStore(DataNodeId removedDataNode) {
       String resource =
           "%s_%s_%d".format(LOCK_RESOURCE_PREFIX + removedDataNode.getHostname(), removedDataNode.getPort());
-      DistributedLock lock = clusterParticipant.getDistributedLock(resource, "AccountStatsStoreRemoval");
-      if (lock.tryLock()) {
-        logger.info("Acquired distributed lock for host removal: {}_{}", removedDataNode.getHostname(),
-            removedDataNode.getPort());
-        try {
-          accountStatsStore.deleteHostAccountStorageStatsForHost(removedDataNode.getHostname(),
+      try {
+        DistributedLock lock = clusterParticipant.getDistributedLock(resource, "AccountStatsStoreRemoval");
+        if (lock.tryLock()) {
+          logger.info("Acquired distributed lock for host removal: {}_{}", removedDataNode.getHostname(),
               removedDataNode.getPort());
-          logger.info("Successfully removed host {}_{} from account stats store", removedDataNode.getHostname(),
+          try {
+            accountStatsStore.deleteHostAccountStorageStatsForHost(removedDataNode.getHostname(),
+                removedDataNode.getPort());
+            logger.info("Successfully removed host {}_{} from account stats store", removedDataNode.getHostname(),
+                removedDataNode.getPort());
+          } catch (Exception e) {
+            logger.error("Failed to remove host {}_{} from account stats store", removedDataNode.getHostname(),
+                removedDataNode.getPort(), e);
+          } finally {
+            lock.unlock();
+            lock.close();
+          }
+        } else {
+          logger.info("Failed to acquire distributed lock for host removal: {}_{}", removedDataNode.getHostname(),
               removedDataNode.getPort());
-        } catch (Exception e) {
-          logger.error("Failed to remove host {}_{} from account stats store", removedDataNode.getHostname(),
-              removedDataNode.getPort(), e);
-        } finally {
         }
-      } else {
-        logger.info("Failed to acquire distributed lock for host removal: {}_{}", removedDataNode.getHostname(),
-            removedDataNode.getPort());
+      } catch (Throwable t) {
+        logger.error("Failed to execute the removal task", t);
       }
     }
   }

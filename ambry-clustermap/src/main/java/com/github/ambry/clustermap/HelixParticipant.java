@@ -313,9 +313,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   public DistributedLock getDistributedLock(String resource, String message) {
     LockScope distributedLockScope =
         new HelixLockScope(HelixLockScope.LockScopeProperty.RESOURCE, Arrays.asList(clusterName, resource));
-    ZKDistributedNonblockingLock lock =
-        new ZKDistributedNonblockingLock(distributedLockScope, zkConnectStr, (long) 10 * 1000, message,
-            clusterMapConfig.clusterMapHostName);
+    ZKDistributedNonblockingLock lock = new ZKDistributedNonblockingLock(distributedLockScope, zkConnectStr,
+        clusterMapConfig.clustermapDistributedLockLeaseTimeoutInMs, message, clusterMapConfig.clusterMapHostName);
     return new DistributedLockImpl(lock);
   }
 
