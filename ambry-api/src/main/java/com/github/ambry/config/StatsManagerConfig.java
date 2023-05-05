@@ -29,6 +29,8 @@ public class StatsManagerConfig {
   public static final String STATS_PUBLISH_EXCLUDE_ACCOUNT_NAMES = "stats.publish.exclude.account.names";
   public static final String STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS =
       "stats.publish.partition.class.report.period.in.secs";
+  public static final String STATS_ENABLE_REMOVE_HOST_FROM_ACCOUNT_STATS_STORE =
+      "stats.enable.remove.host.from.account.stats.store";
 
   /**
    * True to enable publishing stats to mysql database. StatsManager is tightly coupled with mysql database for now.
@@ -69,6 +71,13 @@ public class StatsManagerConfig {
   @Default("0")
   public final long publishPartitionClassReportPeriodInSecs;
 
+  /**
+   * True to enable removal host from account stats store when the host is removed from clustermap.
+   */
+  @Config(STATS_ENABLE_REMOVE_HOST_FROM_ACCOUNT_STATS_STORE)
+  @Default("false")
+  public final boolean enableRemoveHostFromAccountStatsStore;
+
   public StatsManagerConfig(VerifiableProperties verifiableProperties) {
     publishPeriodInSecs = verifiableProperties.getLongInRange(STATS_PUBLISH_PERIOD_IN_SECS, 7200, 0, Long.MAX_VALUE);
     initialDelayUpperBoundInSecs =
@@ -79,6 +88,8 @@ public class StatsManagerConfig {
         excludeNames.isEmpty() ? Collections.EMPTY_LIST : Arrays.asList(excludeNames.split(","));
     publishPartitionClassReportPeriodInSecs =
         verifiableProperties.getLongInRange(STATS_PUBLISH_PARTITION_CLASS_REPORT_PERIOD_IN_SECS, 0, 0, Long.MAX_VALUE);
+    enableRemoveHostFromAccountStatsStore =
+        verifiableProperties.getBoolean(STATS_ENABLE_REMOVE_HOST_FROM_ACCOUNT_STATS_STORE, false);
     if (publishPartitionClassReportPeriodInSecs != 0 && !enableMysqlReport) {
       throw new IllegalStateException(
           "Bad configuration, you have to enableMysqlReport if you set a non-zero value for publishPartitionClassReportPeriodInSecs");

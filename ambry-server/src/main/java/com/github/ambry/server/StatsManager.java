@@ -479,7 +479,8 @@ class StatsManager {
     @Override
     public void onDataNodeRemoved(DataNodeId removedDataNode) {
       logger.info("DataNode: {} is removed from clustermap", removedDataNode);
-      if (accountStatsStore != null && removedDataNode.getDatacenterName().equals(currentNode.getDatacenterName())) {
+      if (config.enableRemoveHostFromAccountStatsStore && accountStatsStore != null
+          && removedDataNode.getDatacenterName().equals(currentNode.getDatacenterName())) {
         // 1. There are many other server nodes that received this message and are taking action now, we have to
         // use a distributed lock so there will be only one server node who is deleting this data node
         // 2. Start a new thread for this task so that we don't block the listener.

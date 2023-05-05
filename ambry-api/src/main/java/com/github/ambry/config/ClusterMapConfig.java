@@ -329,7 +329,7 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableDeleteInvalidDataInMysqlAggregationTask;
 
-  public final static String DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS = "clustermap.distributed.lock.lease.timeout.in.ms";
+  public static final String DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS = "clustermap.distributed.lock.lease.timeout.in.ms";
   /**
    * The lease timeout for distributed lock. For now, the lock is only used for removing host from account stats store.
    * This timeout should be longer than the time to do this task.

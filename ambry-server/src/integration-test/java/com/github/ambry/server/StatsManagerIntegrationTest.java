@@ -183,6 +183,8 @@ public class StatsManagerIntegrationTest {
     configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(BATCH_SIZE));
     configProps.setProperty(AccountStatsMySqlConfig.LOCAL_BACKUP_FILE_PATH, accountStatsOutputFileString);
     configProps.setProperty(StatsManagerConfig.STATS_ENABLE_MYSQL_REPORT, Boolean.TRUE.toString());
+    configProps.setProperty(StatsManagerConfig.STATS_ENABLE_REMOVE_HOST_FROM_ACCOUNT_STATS_STORE,
+        Boolean.TRUE.toString());
 
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, dc, (byte) 0, 2199, false));
