@@ -225,19 +225,6 @@ public class MySqlAccountStore {
   }
 
   /**
-   * Get the latest version value of the dataset versions.
-   * @param accountId the id for the parent account.
-   * @param containerId the id of the container.
-   * @param datasetName the name of the dataset.
-   * @return the latest version of the dataset.
-   * @throws SQLException
-   */
-  public long getLatestVersion(short accountId, short containerId, String datasetName)
-      throws SQLException, AccountServiceException {
-    return accountDao.getLatestVersion(accountId, containerId, datasetName);
-  }
-
-  /**
    * Get a list of dataset versions which is not expired or been deleted for specific dataset.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
@@ -248,6 +235,21 @@ public class MySqlAccountStore {
   public List<DatasetVersionRecord> getAllValidVersion(short accountId, short containerId, String datasetName)
       throws SQLException {
     return accountDao.getAllValidVersion(accountId, containerId, datasetName);
+  }
+
+  /**
+   * Get all versions from a dataset which has not expired and out of retentionCount by checking the last modified time.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @return a list of {@link DatasetVersionRecord}
+   * @throws SQLException
+   */
+  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId, short containerId,
+      String accountName, String containerName, String datasetName) throws SQLException, AccountServiceException {
+     return accountDao.getAllValidVersionsOutOfRetentionCount(accountId, containerId, accountName, containerName, datasetName);
   }
 
   /**

@@ -623,7 +623,10 @@ public class ReplicationMetrics {
     String metadataRequestErrorMetricName =
         remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
             + remoteReplica.getPartitionId().toString() + "-metadataRequestError";
-    metadataRequestErrorMap.get(metadataRequestErrorMetricName).inc();
+    Counter counter = metadataRequestErrorMap.get(metadataRequestErrorMetricName);
+    if (counter != null) {
+      counter.inc();
+    }
   }
 
   public void updateGetRequestError(ReplicaId remoteReplica) {

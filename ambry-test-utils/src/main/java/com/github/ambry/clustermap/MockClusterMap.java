@@ -672,6 +672,16 @@ public class MockClusterMap implements ClusterMap {
   }
 
   /**
+   * Invoke clustermap change listener. This method doesn't really remove the datanode.
+   * @param dataNodeId The removed data node
+   */
+  public void invokeListenerForDataNodeRemoval(DataNodeId dataNodeId) {
+    if (dataNodes.contains(dataNodeId) && clusterMapChangeListener != null) {
+      clusterMapChangeListener.onDataNodeRemoved(dataNodeId);
+    }
+  }
+
+  /**
    * Sets the local datacenter name and changes the views of the partition classes. Not thread safe.
    * @param localDatacenterName the name of the local datacenter
    */

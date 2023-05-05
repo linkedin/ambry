@@ -192,6 +192,8 @@ public class PutManagerTest {
       // since the puts are processed one at a time, it is fair to check the last partition class set
       checkLastRequestPartitionClasses(1, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
+    Assert.assertEquals("Metrics should show no creation of metadata chunk", 0,
+        metrics.metadataChunkCreationCount.getCount());
   }
 
   /**
@@ -209,6 +211,8 @@ public class PutManagerTest {
       // one extra call if there is a metadata blob
       checkLastRequestPartitionClasses(i == 1 ? 1 : i + 1, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
+    Assert.assertEquals("Metrics should show creation of metadata chunk", 1,
+        metrics.metadataChunkCreationCount.getCount());
   }
 
   /**
@@ -224,6 +228,8 @@ public class PutManagerTest {
       // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
       checkLastRequestPartitionClasses(i + 2, MockClusterMap.DEFAULT_PARTITION_CLASS);
     }
+    Assert.assertEquals("Metrics should show creation of metadata chunk", 1,
+        metrics.metadataChunkCreationCount.getCount());
   }
 
   /**
@@ -245,6 +251,7 @@ public class PutManagerTest {
         new RequestAndResult(chunkSize + 1, null, new PutBlobOptionsBuilder().maxUploadSize(2 * chunkSize - 1).build(),
             null));
     runTest.accept(new RequestAndResult(0, null, new PutBlobOptionsBuilder().maxUploadSize(0).build(), null));
+    Assert.assertEquals(0, metrics.metadataChunkCreationCount.getCount());
   }
 
   /**
@@ -314,6 +321,8 @@ public class PutManagerTest {
       runTest.accept(RouterTestHelpers.buildChunkList(mockClusterMap, BlobDataType.DATACHUNK, Utils.Infinite_Time,
           LongStream.of(200, 201)));
     }
+    Assert.assertEquals("Metrics should show creation of metadata chunk", 1,
+        metrics.metadataChunkCreationCount.getCount());
   }
 
   /**

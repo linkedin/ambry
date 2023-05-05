@@ -22,7 +22,6 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.DatasetBuilder;
 import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.account.InMemAccountServiceFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
@@ -491,7 +490,7 @@ public class NamedBlobPutHandlerTest {
       BlobProperties blobProperties =
           new BlobProperties(-1, SERVICE_ID, OWNER_ID, CONTENT_TYPE, !container.isCacheable(), blobTtlSecs,
               creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null, null,
-              null);
+              null, null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
@@ -563,7 +562,7 @@ public class NamedBlobPutHandlerTest {
     frontendConfig = new FrontendConfig(verifiableProperties);
     namedBlobPutHandler = new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb,
         idConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
-        QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
+        QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
   }
 
   /**

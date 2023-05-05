@@ -384,10 +384,11 @@ project(':ambry-tools') {
                 project(':ambry-server'),
                 project(':ambry-rest'),
                 project(':ambry-frontend'),
-                project(':ambry-cloud')
+                project(':ambry-cloud'),
+                project(':ambry-named-mysql'),
+                project(':ambry-test-utils')
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
-        testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile project(path: ':ambry-account', configuration: 'testArchives')
         testCompile project(path: ':ambry-store', configuration: 'testArchives')

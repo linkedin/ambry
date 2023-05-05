@@ -18,7 +18,10 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
@@ -65,6 +68,7 @@ import static com.github.ambry.utils.Utils.*;
  */
 class StatsManager {
   private static final Logger logger = LoggerFactory.getLogger(StatsManager.class);
+  private static final String LOCK_RESOURCE_PREFIX = "AccountStatsStore_HostRemoval_";
 
   private final StorageManager storageManager;
   private final StatsManagerMetrics metrics;
@@ -75,6 +79,8 @@ class StatsManager {
   private AccountStatsPublisher accountsStatsPublisher = null;
   private PartitionClassStatsPublisher partitionClassStatsPublisher = null;
   private final StatsManagerConfig config;
+  private final ClusterParticipant clusterParticipant;
+  private final ClusterMap clustermap;
   private long expiredDeleteTombstoneCount = 0;
   private long expiredDeleteTombstoneTotalSize = 0;
   private long permanentDeleteTombstoneCount = 0;
@@ -86,6 +92,7 @@ class StatsManager {
   /**
    * Constructs a {@link StatsManager}.
    * @param storageManager the {@link StorageManager} to be used to fetch the {@link Store}s
+   * @param clustermap The {@link ClusterMap} object to be used
    * @param replicaIds a {@link List} of {@link ReplicaId}s that are going to be fetched
    * @param registry the {@link MetricRegistry} to be used for {@link StatsManagerMetrics}
    * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
@@ -94,24 +101,26 @@ class StatsManager {
    * @param accountStatsStore the {@link AccountStatsStore} to publish stats.
    * @param accountService the {@link AccountService} to get account ids from account names.
    */
-  StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
-      StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant, AccountStatsStore accountStatsStore,
-      AccountService accountService) {
+  StatsManager(StorageManager storageManager, ClusterMap clustermap, List<? extends ReplicaId> replicaIds,
+      MetricRegistry registry, StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant,
+      AccountStatsStore accountStatsStore, AccountService accountService) {
     this.storageManager = storageManager;
     this.config = config;
     metrics = new StatsManagerMetrics(registry, aggregatedDeleteTombstoneStats);
     partitionToReplicaMap =
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
+    this.clusterParticipant = clusterParticipant;
+    this.clustermap = clustermap;
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
           new PartitionStateChangeListenerImpl());
       logger.info("Stats Manager's state change listener registered!");
     }
+    clustermap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     this.accountStatsStore = accountStatsStore;
-    Function<List<String>, List<Short>> convertAccountNamesToIds = names -> names.stream()
-        .map(accountService::getAccountByName)
-        .filter(Objects::nonNull)
+    Function<List<String>, List<Short>> convertAccountNamesToIds =
+        names -> names.stream().map(accountService::getAccountByName).filter(Objects::nonNull)
         .map(Account::getId)
         .collect(Collectors.toList());
     this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.publishExcludeAccountNames);
@@ -452,6 +461,21 @@ class StatsManager {
       }
     }
     return unreachableStores;
+  }
+
+  /**
+   * An implementation of {@link ClusterMapChangeListener} to listen on the data node removal.
+   */
+  private class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
+
+    @Override
+    public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+    }
+
+    @Override
+    public void onDataNodeRemoved(DataNodeId removedDataNode) {
+      logger.info("DataNode: {} is removed from clustermap", removedDataNode);
+    }
   }
 
   /**

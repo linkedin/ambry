@@ -44,6 +44,7 @@ public class FrontendConfig {
   public static final String ACCOUNT_STATS_STORE_FACTORY = PREFIX + "account.stats.store.factory";
   public static final String CONTAINER_METRICS_ENABLED_REQUEST_TYPES = PREFIX + "container.metrics.enabled.request.types";
   public static final String CONTAINER_METRICS_ENABLED_GET_REQUEST_TYPES = PREFIX + "container.metrics.enabled.get.request.types";
+  public static final String RESERVED_METADATA_ENABLED = PREFIX + "reserved.metadata.enabled";
 
   // Default values
   private static final String DEFAULT_ENDPOINT = "http://localhost:1174";
@@ -271,6 +272,14 @@ public class FrontendConfig {
   @Default("")
   public final List<String> containerMetricsExcludedAccounts;
 
+  /**
+   * Feature flag to indicate if reserved metadata is enabled.
+   */
+  // TODO get rid of this flag once the efficient metadata operations feature is complete.
+  @Config(RESERVED_METADATA_ENABLED)
+  @Default("false")
+  public final boolean reservedMetadataEnabled;
+
   public FrontendConfig(VerifiableProperties verifiableProperties) {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
@@ -329,6 +338,7 @@ public class FrontendConfig {
     namedBlobDbFactory = verifiableProperties.getString(NAMED_BLOB_DB_FACTORY, null);
     containerMetricsExcludedAccounts =
         Utils.splitString(verifiableProperties.getString(CONTAINER_METRICS_EXCLUDED_ACCOUNTS, ""), ",");
+    reservedMetadataEnabled = verifiableProperties.getBoolean(RESERVED_METADATA_ENABLED, false);
   }
 
   /**

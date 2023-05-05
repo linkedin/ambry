@@ -67,6 +67,7 @@ public class StatsManagerIntegrationTest {
   private final AccountStatsMySqlStore accountStatsMySqlStore;
   private final HostAccountStorageStats hostAccountStorageStats;
   private final HostPartitionClassStorageStats hostPartitionClassStorageStats;
+  private final MockClusterMap mockClusterMap;
   private final StatsManager statsManager;
   private final List<ReplicaId> replicas = new ArrayList<>();
   private final Map<PartitionId, Store> storeMap = new HashMap<>();
@@ -90,15 +91,16 @@ public class StatsManagerIntegrationTest {
       PartitionId partitionId =
           new MockPartitionId(i, partitionClassName, Collections.singletonList((MockDataNodeId) dataNodeId), 0);
       StoreStats storeStats =
-          new StatsManagerTest.MockStoreStats(hostAccountStorageStats.getStorageStats().get((long)i), false, null);
+          new StatsManagerTest.MockStoreStats(hostAccountStorageStats.getStorageStats().get((long) i), false, null);
       storeMap.put(partitionId, new StatsManagerTest.MockStore(storeStats));
       replicas.add(partitionId.getReplicaIds().get(0));
       hostPartitionClassStorageStatsMap.computeIfAbsent(partitionClassName, k -> new HashMap<>())
-          .put((long) i, hostAccountStorageStats.getStorageStats().get((long)i));
+          .put((long) i, hostAccountStorageStats.getStorageStats().get((long) i));
     }
     hostPartitionClassStorageStats = new HostPartitionClassStorageStats(hostPartitionClassStorageStatsMap);
     StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
-    statsManager = new StatsManager(storageManager, replicas, new MetricRegistry(),
+    mockClusterMap = new MockClusterMap();
+    statsManager = new StatsManager(storageManager, mockClusterMap, replicas, new MetricRegistry(),
         new StatsManagerConfig(new VerifiableProperties(properties)), new MockTime(), null, null,
         new InMemAccountService(false, false));
   }

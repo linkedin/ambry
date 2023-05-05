@@ -223,7 +223,7 @@ final class ServerTestUtil {
       // put blob 2 with an expiry time and apply TTL update later
       BlobProperties propertiesForTtlUpdate =
           new BlobProperties(31870, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS,
-              cluster.time.milliseconds(), accountId, containerId, testEncryption, null, null, null);
+              cluster.time.milliseconds(), accountId, containerId, testEncryption, null, null, null, null);
       long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesForTtlUpdate);
       PutRequest putRequest2 =
           new PutRequest(1, "client1", blobId2, propertiesForTtlUpdate, ByteBuffer.wrap(userMetadata),
@@ -245,7 +245,7 @@ final class ServerTestUtil {
       // put blob 4 that is expired
       BlobProperties propertiesExpired =
           new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, 0, cluster.time.milliseconds(), accountId,
-              containerId, testEncryption, null, null, null);
+              containerId, testEncryption, null, null, null, null);
       PutRequest putRequest4 = new PutRequest(1, "client1", blobId4, propertiesExpired, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
@@ -803,7 +803,7 @@ final class ServerTestUtil {
     long ttl = doTtlUpdate ? TimeUnit.DAYS.toMillis(1) : Utils.Infinite_Time;
     BlobProperties properties =
         new BlobProperties(blobSize, "serviceid1", null, null, false, ttl, cluster.time.milliseconds(), accountId,
-            containerId, false, null, null, null);
+            containerId, false, null, null, null, null);
     TestUtils.RANDOM.nextBytes(userMetadata);
     TestUtils.RANDOM.nextBytes(data);
 
@@ -879,7 +879,7 @@ final class ServerTestUtil {
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
     BlobProperties properties =
         new BlobProperties(100, "serviceid1", null, null, false, TestUtils.TTL_SECS, cluster.time.milliseconds(),
-            accountId, containerId, false, null, null, null);
+            accountId, containerId, false, null, null, null, null);
     long expectedExpiryTimeMs = getExpiryTimeMs(properties);
     TestUtils.RANDOM.nextBytes(usermetadata);
     TestUtils.RANDOM.nextBytes(data);
@@ -1559,7 +1559,7 @@ final class ServerTestUtil {
       int size = new Random().nextInt(5000);
       final BlobProperties properties =
           new BlobProperties(size, "service1", "owner id check", "image/jpeg", false, TestUtils.TTL_SECS,
-              cluster.time.milliseconds(), accountId, containerId, false, null, null, null);
+              cluster.time.milliseconds(), accountId, containerId, false, null, null, null, null);
       final byte[] metadata = new byte[new Random().nextInt(1000)];
       final byte[] blob = new byte[size];
       TestUtils.RANDOM.nextBytes(metadata);
@@ -1748,7 +1748,7 @@ final class ServerTestUtil {
         short containerId = Utils.getRandomShort(TestUtils.RANDOM);
         propertyList.add(
             new BlobProperties(1000, "serviceid1", null, null, false, TestUtils.TTL_SECS, cluster.time.milliseconds(),
-                accountId, containerId, testEncryption, null, null, null));
+                accountId, containerId, testEncryption, null, null, null, null));
         blobIdList.add(new BlobId(CommonTestUtils.getCurrentBlobIdVersion(), BlobId.BlobIdType.NATIVE,
             clusterMap.getLocalDatacenterId(), accountId, containerId, partition, false,
             BlobId.BlobDataType.DATACHUNK));
@@ -2514,7 +2514,7 @@ final class ServerTestUtil {
       long ttl = 24 * 60 * 60 + 5;
       BlobProperties propertiesExpired =
           new BlobProperties(31870, "serviceid1", "ownerid", "jpeg", false, ttl, cluster.time.milliseconds(), accountId,
-              containerId, false, null, null, null);
+              containerId, false, null, null, null, null);
       BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           propertiesExpired.getAccountId(), propertiesExpired.getContainerId(), partitionIds.get(0), false,
           BlobId.BlobDataType.DATACHUNK);
@@ -2637,12 +2637,12 @@ final class ServerTestUtil {
       // property with 7days expiration
       BlobProperties propertiesWithTtl =
           new BlobProperties(dataSize, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS,
-              cluster.time.milliseconds(), accountId, containerId, testEncryption, null, null, null);
+              cluster.time.milliseconds(), accountId, containerId, testEncryption, null, null, null, null);
       long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesWithTtl);
       // property of expired blob
       BlobProperties propertiesExpired =
           new BlobProperties(dataSize, "serviceid1", "ownerid", "jpeg", false, 0, cluster.time.milliseconds(),
-              accountId, containerId, testEncryption, null, null, null);
+              accountId, containerId, testEncryption, null, null, null, null);
       // property of blob with the infinite TTL
       BlobProperties properties = new BlobProperties(dataSize, "serviceid1", accountId, containerId, testEncryption,
           cluster.time.milliseconds());
@@ -4045,7 +4045,7 @@ final class ServerTestUtil {
     byte[] data = new byte[blobSize];
     BlobProperties blobProperties =
         new BlobProperties(blobSize, "serviceid1", null, null, false, Utils.Infinite_Time, accountId, containerId,
-            false, null, null, null);
+            false, null, null, null, null);
     TestUtils.RANDOM.nextBytes(data);
     blobIdToSizeMap.put(blobId, blobSize);
     return new PutMessageFormatInputStream(blobId, null, blobProperties, ByteBuffer.wrap(userMetadata),

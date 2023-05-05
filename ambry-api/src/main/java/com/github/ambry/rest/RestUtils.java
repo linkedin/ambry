@@ -245,6 +245,10 @@ public class RestUtils {
      */
     public static final String CHUNK_UPLOAD = "x-ambry-chunk-upload";
     /**
+     * The reserved blobid for metadata chunk of a stitched upload.
+     */
+    public static final String RESERVED_METADATA_ID = "x-ambry-metadata-id";
+    /**
      * Boolean field set to "true" to enable dataset version upload
      */
     public static final String DATASET_VERSION_QUERY_ENABLED = "x-ambry-dataset-version-query-enabled";
@@ -506,6 +510,7 @@ public class RestUtils {
     String externalAssetTag = getHeader(args, Headers.EXTERNAL_ASSET_TAG, false);
     String contentEncoding = getHeader(args, Headers.AMBRY_CONTENT_ENCODING, false);
     String filename = getHeader(args, Headers.AMBRY_FILENAME, false);
+    String reservedMetadataBlobid = getReservedMetadataBlobId(args);
 
     long ttl = getTtlFromRequestHeader(args);
 
@@ -513,7 +518,7 @@ public class RestUtils {
     // based on the container properties and ACLs. For now, BlobProperties still includes this field, though.
     boolean isPrivate = !container.isCacheable();
     return new BlobProperties(-1, serviceId, ownerId, contentType, isPrivate, ttl, account.getId(), container.getId(),
-        container.isEncrypted(), externalAssetTag, contentEncoding, filename);
+        container.isEncrypted(), externalAssetTag, contentEncoding, filename, reservedMetadataBlobid);
   }
 
   /**
@@ -865,6 +870,16 @@ public class RestUtils {
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false);
+  }
+
+  /**
+   * Return the reserved metadata id if set in the request args. Return {@code null} if not set in args.
+   * @param args The request arguments.
+   * @return the reserved metadata blob id if set in the request args. {@code null} otherwise.
+   * @throws RestServiceException if exception happens while parsing args.
+   */
+  public static String getReservedMetadataBlobId(Map<String, Object> args) throws RestServiceException {
+    return getHeader(args, Headers.RESERVED_METADATA_ID, false);
   }
 
   /**

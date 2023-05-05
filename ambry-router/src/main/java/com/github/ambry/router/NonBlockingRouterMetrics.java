@@ -183,8 +183,14 @@ public class NonBlockingRouterMetrics {
   // Misc metrics.
   public final Meter operationErrorRate;
   public final Meter encryptedOperationErrorRate;
+  // total count of slipped put attempts for all chunks.
   public final Counter slippedPutAttemptCount;
+  // count of slipped put attempts for metadata chunks only.
+  public final Counter metadataSlippedPutAttemptCount;
+  // total count of slipped put success for all chunks.
   public final Counter slippedPutSuccessCount;
+  // total count of slipped put success for all metadata chunks only.
+  public final Counter metadataSlippedPutSuccessCount;
   public final Counter ignoredResponseCount;
   public final Counter crossColoRequestCount;
   public final Counter crossColoSuccessCount;
@@ -215,13 +221,6 @@ public class NonBlockingRouterMetrics {
   public final Counter compositeBlobGetCount;
   public final Counter rawBlobGetCount;
 
-  // Metrics for Reserving partitions and blobid for metadata chunk.
-  public final Counter numFailedPartitionReserveAttempts;
-  public final Counter numUnexpectedReservedPartitionClassCount;
-  public final Counter numReservedPartitionFoundReadOnlyCount;
-  public final Counter numReservedPartitionFoundUnavailableInLocalDcCount;
-  public final Counter numReservedPartitionFoundUnavailableInAllDcCount;
-
   // SimpleOperationTracker and AdaptiveOperationTracker metrics
   public final CachedHistogram getBlobLocalDcLatencyMs;
   public final CachedHistogram getBlobCrossDcLatencyMs;
@@ -239,6 +238,7 @@ public class NonBlockingRouterMetrics {
   public final Counter failedMaybeDueToOriginatingDcOfflineReplicasCount;
   public final Counter failedMaybeDueToTotalOfflineReplicasCount;
   public final Counter failedMaybeDueToUnavailableReplicasCount;
+  public final Counter metadataChunkCreationCount;
 
   // Workload characteristics
   public final AgeAtAccessMetrics ageAtGet;
@@ -506,7 +506,11 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "EncryptedOperationErrorRate"));
     ignoredResponseCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "IgnoredRequestCount"));
     slippedPutAttemptCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutAttemptCount"));
+    metadataSlippedPutAttemptCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class,"MetadataSlippedPutAttemptCount"));
     slippedPutSuccessCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutSuccessCount"));
+    metadataSlippedPutSuccessCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class,"MetadataSlippedPutSuccessCount"));
     crossColoRequestCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoRequestCount"));
     crossColoSuccessCount =
@@ -519,16 +523,6 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(GetBlobOperation.class, "CompositeBlobSizeMismatchCount"));
     unknownPartitionClassCount =
         metricRegistry.counter(MetricRegistry.name(PutOperation.class, "UnknownPartitionClassCount"));
-    numUnexpectedReservedPartitionClassCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
-        "NumUnexpectedReservedPartitionClassCount"));
-    numFailedPartitionReserveAttempts = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
-        "NumFailedPartitionReserveAttempts"));
-    numReservedPartitionFoundReadOnlyCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
-        "NumReservedPartitionFoundReadOnlyCount"));
-    numReservedPartitionFoundUnavailableInLocalDcCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
-        "NumReservedPartitionFoundUnavailableInLocalDcCount"));
-    numReservedPartitionFoundUnavailableInAllDcCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class,
-        "NumReservedPartitionFoundUnavailableInAllDcCount"));
     updateOptimizedCount =
         metricRegistry.counter(MetricRegistry.name(OperationController.class, "UpdateOptimizedCount"));
     updateUnOptimizedCount =
@@ -594,6 +588,8 @@ public class NonBlockingRouterMetrics {
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToOriginatingDcOfflineReplicasCount"));
     failedMaybeDueToUnavailableReplicasCount = metricRegistry.counter(
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToUnavailableReplicasCount"));
+    metadataChunkCreationCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class, "MetadataChunkCreationCount"));
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");

@@ -51,6 +51,13 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
+  public void deleteHostAccountStorageStatsForHost(String hostname, int port) throws Exception {
+    if (hostname.equals(this.hostname)) {
+      currentHostStatsWrapper = null;
+    }
+  }
+
+  @Override
   public void storeAggregatedAccountStorageStats(AggregatedAccountStorageStats aggregatedAccountStorageStats)
       throws Exception {
     aggregatedAccountStats = aggregatedAccountStorageStats;
