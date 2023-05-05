@@ -60,18 +60,18 @@ public class CachedAccountService extends AbstractAccountService {
   private final AtomicBoolean open = new AtomicBoolean(true);
   private final ScheduledExecutorService scheduler;
   private final Supplier<MySqlAccountStore> supplier;
-  private MySqlAccountStore mySqlAccountStore;
+  private volatile MySqlAccountStore mySqlAccountStore;
   private boolean needRefresh = false;
   private long lastSyncTime = -1;
 
   /**
    * The service used for mysql migration which includes all common logic.
    */
-  public CachedAccountService(Supplier<MySqlAccountStore> supplier, AccountServiceMetrics accountServiceMetrics,
-      MySqlAccountServiceConfig config, Notifier<String> notifier, String backupDir, ScheduledExecutorService scheduler)
-      throws IOException {
+  public CachedAccountService(MySqlAccountStore mySqlAccountStore, Supplier<MySqlAccountStore> supplier,
+      AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config, Notifier<String> notifier,
+      String backupDir, ScheduledExecutorService scheduler) throws IOException {
     super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"), notifier);
-    this.mySqlAccountStore = supplier.get();
+    this.mySqlAccountStore = mySqlAccountStore;
     this.accountServiceMetrics = accountServiceMetrics;
     this.config = config;
     this.writeCacheAfterUpdate = config.writeCacheAfterUpdate;
@@ -384,6 +384,7 @@ public class CachedAccountService extends AbstractAccountService {
 
   @Override
   public void close() throws IOException {
+    maybeUnsubscribeChangeTopic();
     open.set(false);
   }
 
@@ -471,9 +472,6 @@ public class CachedAccountService extends AbstractAccountService {
   @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
-    if (mySqlAccountStore == null) {
-      mySqlAccountStore = supplier.get();
-    }
     try {
       return super.updateContainers(accountName, containers);
     } catch (AccountServiceException ase) {

@@ -49,25 +49,48 @@ public class MySqlAccountService extends AbstractAccountService {
   private final MySqlAccountServiceConfig config;
   // lock to protect in-memory metadata cache
   private final ScheduledExecutorService scheduler;
-  private final MySqlAccountStore mySqlAccountStore;
+  private volatile MySqlAccountStore mySqlAccountStore;
+  private volatile MySqlAccountStore mySqlAccountStoreNew;
   private final CachedAccountService cachedAccountService;
   private CachedAccountService cachedAccountServiceNew;
+  private final AccountServiceMetrics accountServiceMetricsNew;
 
-  public MySqlAccountService(AccountServiceMetricsWrapper accountServiceMetrics, MySqlAccountServiceConfig config,
-      MySqlAccountStoreFactory mySqlAccountStoreFactory, Notifier<String> notifier) throws IOException {
-    super(config, Objects.requireNonNull(accountServiceMetrics.getAccountServiceMetrics(),
+  public MySqlAccountService(AccountServiceMetricsWrapper accountServiceMetricsWrapper, MySqlAccountServiceConfig config,
+      MySqlAccountStoreFactory mySqlAccountStoreFactory, Notifier<String> notifier) throws IOException, SQLException {
+    super(config, Objects.requireNonNull(accountServiceMetricsWrapper.getAccountServiceMetrics(),
         "accountServiceMetrics cannot be null"), notifier);
     this.config = config;
     this.scheduler =
         config.updaterPollingIntervalSeconds > 0 ? Utils.newScheduler(1, MYSQL_ACCOUNT_UPDATER_PREFIX, false) : null;
-    this.mySqlAccountStore = callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStore).get();
-    cachedAccountService =
-        new CachedAccountService(callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStore),
-            accountServiceMetrics.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler);
+    try {
+      this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
+    } catch (SQLException e) {
+      logger.error("MySQL account store creation failed", e);
+      // If it is a non-transient error like credential issue, creation should fail.
+      // Otherwise, continue account service creation and initialize cache with metadata from local file copy
+      // to serve read requests. Connection to MySql DB will be retried during periodic sync. Until then, write
+      // requests will be blocked.
+      if (MySqlDataAccessor.isCredentialError(e)) {
+        // Fatal error, fail fast
+        throw e;
+      }
+    }
+    this.accountServiceMetricsNew = accountServiceMetricsWrapper.getAccountServiceMetricsNew();
+    cachedAccountService = new CachedAccountService(mySqlAccountStore,
+        callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStore),
+        accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler);
     if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew =
-          new CachedAccountService(callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStoreNew),
-              accountServiceMetrics.getAccountServiceMetricsNew(), config, notifier, config.backupDirNew, scheduler);
+      try {
+        this.mySqlAccountStoreNew = mySqlAccountStoreFactory.getMySqlAccountStoreNew();
+      } catch (SQLException e) {
+        logger.error("MySQL account store creation failed", e);
+        if (MySqlDataAccessor.isCredentialError(e)) {
+          throw e;
+        }
+      }
+      cachedAccountServiceNew = new CachedAccountService(mySqlAccountStoreNew,
+          callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStoreNew),
+          accountServiceMetricsWrapper.getAccountServiceMetricsNew(), config, notifier, config.backupDirNew, scheduler);
     }
   }
 
@@ -143,7 +166,6 @@ public class MySqlAccountService extends AbstractAccountService {
     if (scheduler != null) {
       shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
     }
-    maybeUnsubscribeChangeTopic();
     cachedAccountService.close();
     if (config.enableNewDatabaseForMigration) {
       cachedAccountServiceNew.close();
@@ -164,10 +186,6 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   protected void onAccountChangeMessage(String topic, String message) {
-   cachedAccountService.onAccountChangeMessage(topic, message);
-   if (config.enableNewDatabaseForMigration) {
-     cachedAccountServiceNew.onAccountChangeMessage(topic, message);
-   }
   }
 
   @Override
@@ -192,6 +210,7 @@ public class MySqlAccountService extends AbstractAccountService {
         cachedAccountServiceNew.updateContainers(accountName, containers);
       } catch (AccountServiceException e) {
         // if before migration, update container for new db would fail due to the account does not exist.
+        accountServiceMetricsNew.updateContainerErrorCount.inc();
         logger.trace("This is expected due to the account {} does not exist in new db", accountName);
       }
     }
@@ -244,12 +263,8 @@ public class MySqlAccountService extends AbstractAccountService {
       try {
         return ts.get();
       } catch (SQLException e) {
-        logger.error("MySQL account store creation failed", e);
-        if (MySqlDataAccessor.isCredentialError(e)) {
-          throw new RuntimeException("Failed to create account store due to credential issue", e);
-        } else {
-          return null;
-        }
+        logger.error("MySQL account store creation failed: {}", e.getMessage());
+        throw new RuntimeException("MySQL account store creation failed: {}", e);
       }
     };
   }
