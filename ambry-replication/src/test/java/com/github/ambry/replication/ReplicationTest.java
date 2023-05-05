@@ -757,6 +757,50 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Test INACTIVE -> OFFLINE transition for empty replica (Corner case)
+   */
+  @Test
+  public void emptyReplicaFromInactiveToOfflineTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    Store localStore = storageManager.getStore(existingPartition);
+    // Check size of empty store is 18 bytes (header bytes)
+    assertEquals("Mismatch in size of empty store", 18, localStore.getSizeInBytes());
+    // Create a new thread and trigger INACTIVE -> OFFLINE transition
+    ReplicaId localReplica = storageManager.getReplica(existingPartition.toPathString());
+    // put a decommission-in-progress file into local store dir
+    File decommissionFile = new File(localReplica.getReplicaPath(), "decommission_in_progress");
+    assertTrue("Couldn't create decommission file in local store", decommissionFile.createNewFile());
+    decommissionFile.deleteOnExit();
+    assertNotSame("Before disconnection, the local store state shouldn't be OFFLINE", ReplicaState.OFFLINE,
+        localStore.getCurrentState());
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+        replicationManager.replicationListener);
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    replicationManager.listenerExecutionLatch = new CountDownLatch(1);
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeOfflineFromInactive(existingPartition.toPathString());
+      participantLatch.countDown();
+    }, false).start();
+    assertTrue("Partition state change listener in ReplicationManager didn't get called within 1 sec",
+        replicationManager.listenerExecutionLatch.await(1, TimeUnit.SECONDS));
+    // the state of local store should be updated to OFFLINE
+    assertEquals("Local store state is not expected", ReplicaState.OFFLINE, localStore.getCurrentState());
+    // Since replica is empty, no sync-up is needed and transition should be able to proceed.
+    assertTrue("Inactive-To-Offline transition didn't complete within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
+    assertFalse("Local store should be stopped after transition", localStore.isStarted());
+    storageManager.shutdown();
+  }
+
+  /**
    * Test that resuming decommission on certain replica behaves correctly.
    * @throws Exception
    */
@@ -802,14 +846,6 @@ public class ReplicationTest extends ReplicationTestHelper {
         executionLatch.countDown();
       }
     }, false).start();
-    while (!replicaSyncUpManager.getPartitionToDeactivationLatch().containsKey(partitionName)) {
-      Thread.sleep(100);
-    }
-    replicaSyncUpManager.onDeactivationComplete(localReplica);
-    while (!replicaSyncUpManager.getPartitionToDisconnectionLatch().containsKey(partitionName)) {
-      Thread.sleep(100);
-    }
-    replicaSyncUpManager.onDisconnectionComplete(localReplica);
     assertTrue("Offline-To-Dropped transition didn't complete within 1 sec", executionLatch.await(1, TimeUnit.SECONDS));
     assertTrue("State transition exception should be thrown", exceptionOccurred.get());
     mockHelixParticipant.updateNodeInfoReturnVal = null;
@@ -825,14 +861,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
       participantLatch.countDown();
     }, false).start();
-    while (!replicaSyncUpManager.getPartitionToDeactivationLatch().containsKey(partitionName)) {
-      Thread.sleep(100);
-    }
-    replicaSyncUpManager.onDeactivationComplete(localReplica);
-    while (!replicaSyncUpManager.getPartitionToDisconnectionLatch().containsKey(partitionName)) {
-      Thread.sleep(100);
-    }
-    replicaSyncUpManager.onDisconnectionComplete(localReplica);
+    // Since replica is empty, offline to dropped transition should complete immediately
     assertTrue("Offline-To-Dropped transition didn't complete within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
     // verify stats manager listener is called

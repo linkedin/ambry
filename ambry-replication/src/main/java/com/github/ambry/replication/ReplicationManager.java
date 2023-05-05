@@ -360,7 +360,10 @@ public class ReplicationManager extends ReplicationEngine {
         throw new StateTransitionException(
             "Store " + partitionName + " is not started during Standby-To-Inactive transition", StoreNotStarted);
       }
-      replicaSyncUpManager.initiateDeactivation(localReplica);
+      if (!store.isEmpty()) {
+        // Wait for peers to sync up if this replica is not empty
+        replicaSyncUpManager.initiateDeactivation(localReplica);
+      }
     }
 
     @Override
@@ -381,7 +384,10 @@ public class ReplicationManager extends ReplicationEngine {
       }
       // set local store state to OFFLINE and initiate disconnection
       store.setCurrentState(ReplicaState.OFFLINE);
-      replicaSyncUpManager.initiateDisconnection(localReplica);
+      if (!store.isEmpty()) {
+        // Wait for peers to sync up if this replica is not empty
+        replicaSyncUpManager.initiateDisconnection(localReplica);
+      }
     }
 
     @Override

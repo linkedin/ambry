@@ -243,6 +243,11 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     RemoteReplicaInfo foundRemoteReplicaInfo = null;
 
     PartitionInfo partitionInfo = partitionToPartitionInfo.get(partitionId);
+    if (partitionInfo == null) {
+      logger.debug("Remote replica info not present for partition {}, hostname {}, path {}", partitionId, hostName,
+          replicaPath);
+      return null;
+    }
     for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
       if (remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath) && remoteReplicaInfo.getReplicaId()
           .getDataNodeId()
