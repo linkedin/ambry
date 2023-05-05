@@ -19,11 +19,13 @@ package com.github.ambry.config;
 public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String MYSQL_ACCOUNT_SERVICE_PREFIX = "mysql.account.service.";
   public static final String DB_INFO = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.info";
+  public static final String DB_INFO_NEW = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.info.new";
   public static final String UPDATER_POLLING_INTERVAL_SECONDS =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.polling.interval.seconds";
   public static final String UPDATER_SHUT_DOWN_TIMEOUT_MINUTES =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "updater.shut.down.timeout.minutes";
   public static final String BACKUP_DIRECTORY_KEY = MYSQL_ACCOUNT_SERVICE_PREFIX + "backup.dir";
+  public static final String BACKUP_DIRECTORY_KEY_NEW = MYSQL_ACCOUNT_SERVICE_PREFIX + "backup.dir.new";
   public static final String UPDATE_DISABLED = MYSQL_ACCOUNT_SERVICE_PREFIX + "update.disabled";
   private static final String MAX_BACKUP_FILE_COUNT = MYSQL_ACCOUNT_SERVICE_PREFIX + "max.backup.file.count";
   public static final String DB_EXECUTE_BATCH_SIZE = MYSQL_ACCOUNT_SERVICE_PREFIX + "db.execute.batch.size";
@@ -31,6 +33,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String WRITE_CACHE_AFTER_UPDATE = MYSQL_ACCOUNT_SERVICE_PREFIX + "write.cache.after.update";
   public static final String MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "max.major.version.for.semantic.schema.dataset";
+  public static final String ENABLE_NEW_DATABASE_FOR_MIGRATION = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.new.database.for.migration";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -65,6 +68,10 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("")
   public final String dbInfo;
 
+  @Config(DB_INFO_NEW)
+  @Default("")
+  public final String dbInfoNew;
+
   /**
    * The time interval in seconds between two consecutive account polling for the background account updater of
    * {@code MySqlAccountService}. Setting to 0 will disable it. Default value is 60 seconds.
@@ -87,6 +94,14 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Config(BACKUP_DIRECTORY_KEY)
   @Default("")
   public final String backupDir;
+
+  /**
+   * The directory on the local machine where account data backups will be stored before updating accounts.
+   * If this string is empty, backups will be disabled.
+   */
+  @Config(BACKUP_DIRECTORY_KEY_NEW)
+  @Default("")
+  public final String backupDirNew;
 
   /**
    * The maximum number of local backup files kept in disk. When account service exceeds this count, every time it creates
@@ -129,6 +144,13 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("999")
   public final int maxMajorVersionForSemanticSchemaDataset;
 
+  /**
+   * If true, enable upload to new database for migration.
+   */
+  @Config(ENABLE_NEW_DATABASE_FOR_MIGRATION)
+  @Default("false")
+  public final boolean enableNewDatabaseForMigration;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -138,6 +160,10 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
         verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MINUTES, 2, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
+    enableNewDatabaseForMigration = verifiableProperties.getBoolean(ENABLE_NEW_DATABASE_FOR_MIGRATION, false);
+    dbInfoNew = enableNewDatabaseForMigration ? verifiableProperties.getString(DB_INFO_NEW)
+        : verifiableProperties.getString(DB_INFO_NEW, "");
+    backupDirNew = verifiableProperties.getString(BACKUP_DIRECTORY_KEY_NEW, "");
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
     dbExecuteBatchSize = verifiableProperties.getIntInRange(DB_EXECUTE_BATCH_SIZE, 50, 1, Integer.MAX_VALUE);
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY, null);

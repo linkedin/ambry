@@ -415,7 +415,7 @@ public class AccountTool {
     accountServiceConfig = new HelixAccountServiceConfig(verifiableProperties);
     storeConfig = new HelixPropertyStoreConfig(verifiableProperties);
     registry = new MetricRegistry();
-    backupFileManager = new BackupFileManager(new AccountServiceMetrics(registry), accountServiceConfig.backupDir,
+    backupFileManager = new BackupFileManager(new AccountServiceMetrics(registry, false), accountServiceConfig.backupDir,
         accountServiceConfig.maxBackupFileCount);
     helixStore = CommonUtils.createHelixPropertyStore(accountServiceConfig.zkClientConnectString, storeConfig, null);
     routerStore = getRouterStore();
@@ -575,7 +575,7 @@ public class AccountTool {
    * @throws Exception Any unexpected exception.
    */
   private RouterStore getRouterStore() throws Exception {
-    return new RouterStore(new AccountServiceMetrics(registry), backupFileManager, helixStore,
+    return new RouterStore(new AccountServiceMetrics(registry, false), backupFileManager, helixStore,
         new AtomicReference<>(getRouter()), true, 100, accountServiceConfig);
   }
 

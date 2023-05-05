@@ -66,7 +66,7 @@ public class MySqlAccountServiceTest {
 
   // TODO: parametrize to use mock or real store (maybe blank url = test)
   private MySqlAccountService getAccountService() throws IOException, SQLException {
-    AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+    AccountServiceMetricsWrapper accountServiceMetrics = new AccountServiceMetricsWrapper(new MetricRegistry());
     return new MySqlAccountService(accountServiceMetrics,
         new MySqlAccountServiceConfig(new VerifiableProperties(mySqlConfigProps)), mockMySqlAccountStoreFactory,
         mockNotifier);

@@ -86,6 +86,8 @@ jobs:
           sudo systemctl start mysql.service
           mysql -e 'CREATE DATABASE AccountMetadata;' -uroot -proot
           mysql -e 'USE AccountMetadata; SOURCE ./ambry-account/src/main/resources/AccountSchema.ddl;' -uroot -proot
+          mysql -e 'CREATE DATABASE AccountMetadataNew;' -uroot -proot
+          mysql -e 'USE AccountMetadataNew; SOURCE ./ambry-account/src/main/resources/AccountSchemaNew.ddl;' -uroot -proot
           mysql -e 'CREATE DATABASE ambry_container_storage_stats;' -uroot -proot
           mysql -e 'USE ambry_container_storage_stats; SOURCE ./ambry-mysql/src/main/resources/AmbryContainerStorageStats.ddl;' -uroot -proot
           mysql -e 'CREATE DATABASE AmbryNamedBlobs;' -uroot -proot

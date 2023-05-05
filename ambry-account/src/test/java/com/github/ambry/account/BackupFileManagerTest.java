@@ -43,7 +43,7 @@ import static org.junit.Assert.*;
  * Unit test for {@link BackupFileManager}
  */
 public class BackupFileManagerTest {
-  private final AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry());
+  private final AccountServiceMetrics accountServiceMetrics = new AccountServiceMetrics(new MetricRegistry(), false);
   private final Properties helixConfigProps = new Properties();
   private static final int ZK_CLIENT_CONNECTION_TIMEOUT_MS = 20000;
   private final int maxBackupFile = 10;
