@@ -137,6 +137,7 @@ public class RouterConfig {
   public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED = "router.repair.with.replicate.blob.enabled";
   public static final String ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND =
       "router.operation.tracker.check.all.originating.replicas.for.not.found";
+  public static final String RESERVED_METADATA_ENABLED = "router.reserved.metadata.enabled";
 
   /**
    * Number of independent scaling units for the router.
@@ -715,6 +716,14 @@ public class RouterConfig {
   private final CompressionConfig compressionConfig;
 
   /**
+   * Feature flag to indicate if reserved metadata is enabled.
+   */
+  // TODO EMO: get rid of this flag once the efficient metadata operations feature is complete.
+  @Config(RESERVED_METADATA_ENABLED)
+  @Default("false")
+  public final boolean routerReservedMetadataEnabled;
+
+  /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
    */
@@ -871,6 +880,7 @@ public class RouterConfig {
     compressionConfig = new CompressionConfig(verifiableProperties);
     routerOperationTrackerCheckAllOriginatingReplicasForNotFound =
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND, true);
+    routerReservedMetadataEnabled = verifiableProperties.getBoolean(RESERVED_METADATA_ENABLED, false);
   }
 
   /**
