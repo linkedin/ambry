@@ -87,7 +87,7 @@ public class DatabaseTest {
       accountUpdateInfos.add(new AccountUpdateInfo(account, true, false, containers, new ArrayList<>()));
     }
 
-    accountDao.updateAccounts(accountUpdateInfos, 100);
+    accountDao.updateAccounts(accountUpdateInfos, 100, false);
 
     long t1 = System.currentTimeMillis();
     long insertTime = t1 - t0;
