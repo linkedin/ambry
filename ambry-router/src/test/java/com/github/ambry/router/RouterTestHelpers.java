@@ -326,7 +326,7 @@ class RouterTestHelpers {
   static List<ChunkInfo> buildChunkList(ClusterMap clusterMap, BlobId.BlobDataType blobDataType, long ttl,
       LongStream chunkSizeStream) {
     return chunkSizeStream.mapToObj(
-        chunkSize -> new ChunkInfo(getRandomBlobId(clusterMap, blobDataType), chunkSize, ttl))
+        chunkSize -> new ChunkInfo(getRandomBlobId(clusterMap, blobDataType), chunkSize, ttl, null))
         .collect(Collectors.toList());
   }
 
