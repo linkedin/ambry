@@ -1795,7 +1795,7 @@ class PutOperation {
     private final TreeMap<Integer, Pair<StoreKey, Long>> indexToChunkIdsAndChunkSizes;
     private int intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
     private Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
-    private final PartitionId reservedPartitionId;
+    private final BlobId reservedMetadataChunkId;
 
     /**
      * Initialize the MetadataPutChunk.
@@ -1804,9 +1804,10 @@ class PutOperation {
       indexToChunkIdsAndChunkSizes = new TreeMap<>();
       // metadata blob is in building state.
       state = ChunkState.Building;
-      reservedPartitionId =
-          ClusterMapUtils.reserveMetadataPartition(partitionClass, Collections.emptyList(), reservedMetadataIdMetrics,
-              clusterMap);
+      reservedMetadataChunkId =
+          ClusterMapUtils.reserveMetadataBlobId(partitionClass, Collections.emptyList(), reservedMetadataIdMetrics,
+              clusterMap, passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
+              passedInBlobProperties.isEncrypted(), routerConfig);
     }
 
     @Override
@@ -1916,7 +1917,7 @@ class PutOperation {
         serialized.flip();
         buf = Unpooled.wrappedBuffer(serialized);
         onFillComplete(false);
-        checkReservedPartitionState(reservedPartitionId);
+        checkReservedPartitionState(reservedMetadataChunkId == null ? null : reservedMetadataChunkId.getPartition());
       } else {
         // if there is only one chunk
         blobId = (BlobId) indexToChunkIdsAndChunkSizes.get(0).getFirst();

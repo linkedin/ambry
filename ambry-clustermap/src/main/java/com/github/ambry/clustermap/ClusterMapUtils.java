@@ -13,8 +13,11 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.frontend.ReservedMetadataIdMetrics;
-import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.Port;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -225,13 +228,21 @@ public class ClusterMapUtils {
   }
 
   /**
-   * Choose a random {@link PartitionId} for putting the metadata chunk and return it.
+   * Choose a random {@link PartitionId} for putting the metadata chunk and return a {@link BlobId} that belongs to the
+   * chosen partition id.
    * @param partitionClass the partition class to choose partitions from.
    * @param partitionIdsToExclude the list of {@link PartitionId}s that should be excluded from consideration.
-   * @return the chosen {@link PartitionId}
+   * @param reservedMetadataIdMetrics the {@link ReservedMetadataIdMetrics} object.
+   * @param clusterMap the {@link ClusterMap} object.
+   * @param accountId the account id to be encoded in the blob id.
+   * @param containerId the container id to be encoded in the blob id.
+   * @param isEncrypted {@code true} is the blob is encrypted. {@code false} otherwise.
+   * @param routerConfig the {@link RouterConfig} object.
+   * @return the chosen {@link BlobId}.
    */
-  public static PartitionId reserveMetadataPartition(String partitionClass, List<PartitionId> partitionIdsToExclude,
-      ReservedMetadataIdMetrics reservedMetadataIdMetrics, ClusterMap clusterMap) {
+  public static BlobId reserveMetadataBlobId(String partitionClass, List<PartitionId> partitionIdsToExclude,
+      ReservedMetadataIdMetrics reservedMetadataIdMetrics, ClusterMap clusterMap, short accountId, short containerId,
+      boolean isEncrypted, RouterConfig routerConfig) {
     PartitionId selected = clusterMap.getRandomFullyWritablePartition(partitionClass, partitionIdsToExclude);
     if (selected == null) {
       reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.inc();
@@ -239,11 +250,32 @@ public class ClusterMapUtils {
     }
     if (!partitionClass.equals(selected.getPartitionClass())) {
       logger.warn(
-          "While reserving metadata chunk id, no partitions for partitionClass='{}' found, partitionClass='{}' used instead for metadata chunk.",
-          partitionClass, selected.getPartitionClass());
+          "While reserving metadata chunk id, no partitions for partitionClass='{}' found, partitionClass='{}' used"
+              + " instead for metadata chunk.", partitionClass, selected.getPartitionClass());
       reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.inc();
     }
-    return selected;
+    return new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        clusterMap.getLocalDatacenterId(), accountId, containerId, selected, isEncrypted,
+        BlobId.BlobDataType.METADATA);
+  }
+
+  /**
+   * Return the partition class for the specified {@link Account} and {@link Container}.
+   * If the partition class for the Account and Container is not specified or cannot be determined, then return the
+   * specified defaultPartitionClass.
+   * @param account the {@link Account} object.
+   * @param container the {@link Container} object.
+   * @param defaultPartitionClass the default partition class.
+   * @return the partition class as required by the parameters.
+   */
+  public static String getPartitionClass(Account account, Container container, String defaultPartitionClass) {
+    String partitionClass = defaultPartitionClass;
+    if (account != null) {
+      if (container != null && !Utils.isNullOrEmpty(container.getReplicationPolicy())) {
+        partitionClass = container.getReplicationPolicy();
+      }
+    }
+    return partitionClass;
   }
 
 
