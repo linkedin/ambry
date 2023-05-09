@@ -240,7 +240,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
     setOperationParams();
     String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, blobIds.stream()
-        .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
+        .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
         .collect(Collectors.toList())).get();
 
     // Test router for individual blob operations on the stitched blob's chunks.
@@ -306,7 +306,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
       setOperationParams();
       List<ChunkInfo> chunksToStitch = blobIds.stream()
-          .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
+          .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
           .collect(Collectors.toList());
       String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch).get();
       ensureStitchInAllServers(stitchedBlobId, mockServerLayout, chunksToStitch, PUT_CONTENT_SIZE);
@@ -422,7 +422,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
       setOperationParams();
       List<ChunkInfo> chunksToStitch = blobIds.stream()
-          .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
+          .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
           .collect(Collectors.toList());
       String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch).get();
       ensureStitchInAllServers(blobId, mockServerLayout, chunksToStitch, PUT_CONTENT_SIZE);
@@ -1088,7 +1088,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
                 .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             long expirationTime = Utils.addSecondsToEpochTime(putBlobProperties.getCreationTimeInMs(),
                 putBlobProperties.getTimeToLiveInSeconds());
-            chunksToStitch.add(new ChunkInfo(blobId, chunkSize, expirationTime));
+            chunksToStitch.add(new ChunkInfo(blobId, chunkSize, expirationTime, null));
             stitchedContentStream.write(putContent);
           }
           byte[] expectedContent = stitchedContentStream.toByteArray();

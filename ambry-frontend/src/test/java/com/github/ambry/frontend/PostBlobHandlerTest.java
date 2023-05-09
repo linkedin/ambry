@@ -276,7 +276,7 @@ public class PostBlobHandlerTest {
           restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
       // invalid blob ID
       stitchBlobAndVerify(
-          getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1), uploadSession))),
+          getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1, null), uploadSession))),
           null, restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
       // unsigned ID
       stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("/notASignedId")), null,
@@ -468,7 +468,7 @@ public class PostBlobHandlerTest {
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
-      chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
+      chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs), null));
     }
     return chunks;
   }
