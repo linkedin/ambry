@@ -497,6 +497,171 @@ public class CachedAccountService extends AbstractAccountService {
     super.publishChangeNotice();
   }
 
+  @Override
+  public void addDataset(Dataset dataset) throws AccountServiceException {
+    try {
+      String accountName = dataset.getAccountName();
+      String containerName = dataset.getContainerName();
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      mySqlAccountStore.addDataset(accountId, containerId, dataset);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public void updateDataset(Dataset dataset) throws AccountServiceException {
+    try {
+      String accountName = dataset.getAccountName();
+      String containerName = dataset.getContainerName();
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      mySqlAccountStore.updateDataset(accountId, containerId, dataset);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public Dataset getDataset(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException(
+            "Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.getDataset(accountId, containerId, accountName, containerName, datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public void deleteDataset(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      mySqlAccountStore.deleteDataset(accountId, containerId, datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled) throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.addDatasetVersion(accountId, containerId, accountName, containerName, datasetName,
+          version, timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public DatasetVersionRecord getDatasetVersion(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.getDatasetVersion(accountId, containerId, accountName, containerName, datasetName,
+          version);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public void deleteDatasetVersion(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      mySqlAccountStore.deleteDatasetVersion(accountId, containerId, datasetName, version);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
+    try {
+      Container container = getContainerByName(accountName, containerName);
+      if (container == null) {
+        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
+            AccountServiceErrorCode.BadRequest);
+      }
+      short accountId = container.getParentAccountId();
+      short containerId = container.getId();
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.getAllValidVersion(accountId, containerId, datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
   /**
    * Gets all the {@link Account}s in this {@code AccountService}. The {@link Account}s <em>MUST</em> have their
    * ids and names one-to-one mapped.
