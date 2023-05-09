@@ -17,9 +17,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
-import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
@@ -27,8 +27,6 @@ import com.github.ambry.config.AccountStatsMySqlConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
@@ -46,10 +44,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -58,8 +58,7 @@ import static org.junit.Assert.*;
  */
 public class StatsManagerIntegrationTest {
   private static final String CLUSTER_NAME = "ambry-test";
-  private static final String HOSTNAME = "localhost";
-  private static final int PORT = 12345;
+  private static final String DC_NAME = "DC1";
   private static final int BATCH_SIZE = 0;
 
   private final Path tempDir;
@@ -68,18 +67,22 @@ public class StatsManagerIntegrationTest {
   private final HostAccountStorageStats hostAccountStorageStats;
   private final HostPartitionClassStorageStats hostPartitionClassStorageStats;
   private final MockClusterMap mockClusterMap;
+  private final MockHelixParticipant mockClusterParticipant;
   private final StatsManager statsManager;
   private final List<ReplicaId> replicas = new ArrayList<>();
   private final Map<PartitionId, Store> storeMap = new HashMap<>();
+  private final MockDataNodeId currentNode;
 
   public StatsManagerIntegrationTest() throws Exception {
     tempDir = Files.createTempDirectory("StatsManagerIntegrationTest");
     tempDir.toFile().deleteOnExit();
     accountStatsOutputFileString = tempDir.resolve("stats_output.json").toAbsolutePath().toString();
-    Properties properties = initProperties();
+    mockClusterMap = new MockClusterMap();
+    currentNode =
+        mockClusterMap.getDataNodes().stream().filter(dn -> dn.getDatacenterName().equals(DC_NAME)).findFirst().get();
+    Properties properties =
+        initProperties(currentNode.getHostname(), currentNode.getPort(), currentNode.getDatacenterName());
     accountStatsMySqlStore = createAccountStatsMySqlStore(properties);
-    DataNodeId dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
-        Collections.singletonList("/tmp"), "DC1");
 
     hostAccountStorageStats = new HostAccountStorageStats(
         StorageStatsUtilTest.generateRandomHostAccountStorageStats(6, 10, 6, 10000L, 2, 10));
@@ -89,7 +92,7 @@ public class StatsManagerIntegrationTest {
       String partitionClassName =
           i % 2 == 0 ? MockClusterMap.DEFAULT_PARTITION_CLASS : MockClusterMap.SPECIAL_PARTITION_CLASS;
       PartitionId partitionId =
-          new MockPartitionId(i, partitionClassName, Collections.singletonList((MockDataNodeId) dataNodeId), 0);
+          new MockPartitionId(i, partitionClassName, Collections.singletonList((MockDataNodeId) currentNode), 0);
       StoreStats storeStats =
           new StatsManagerTest.MockStoreStats(hostAccountStorageStats.getStorageStats().get((long) i), false, null);
       storeMap.put(partitionId, new StatsManagerTest.MockStore(storeStats));
@@ -98,11 +101,11 @@ public class StatsManagerIntegrationTest {
           .put((long) i, hostAccountStorageStats.getStorageStats().get((long) i));
     }
     hostPartitionClassStorageStats = new HostPartitionClassStorageStats(hostPartitionClassStorageStatsMap);
-    StorageManager storageManager = new MockStorageManager(storeMap, dataNodeId);
-    mockClusterMap = new MockClusterMap();
+    StorageManager storageManager = new MockStorageManager(storeMap, currentNode);
+    mockClusterParticipant = new MockHelixParticipant(new ClusterMapConfig(new VerifiableProperties(properties)));
     statsManager = new StatsManager(storageManager, mockClusterMap, replicas, new MetricRegistry(),
-        new StatsManagerConfig(new VerifiableProperties(properties)), new MockTime(), null, null,
-        new InMemAccountService(false, false));
+        new StatsManagerConfig(new VerifiableProperties(properties)), new MockTime(), mockClusterParticipant,
+        accountStatsMySqlStore, new InMemAccountService(false, false), currentNode);
   }
 
   /**
@@ -129,7 +132,7 @@ public class StatsManagerIntegrationTest {
     publisher.run();
 
     HostAccountStorageStatsWrapper statsWrapper =
-        accountStatsMySqlStore.queryHostAccountStorageStatsByHost(HOSTNAME, PORT);
+        accountStatsMySqlStore.queryHostAccountStorageStatsByHost(currentNode.getHostname(), currentNode.getPort());
     assertEquals(hostAccountStorageStats.getStorageStats(), statsWrapper.getStats().getStorageStats());
   }
 
@@ -150,20 +153,43 @@ public class StatsManagerIntegrationTest {
 
     Map<String, Set<Integer>> partitionNameAndIds = accountStatsMySqlStore.queryPartitionNameAndIds();
     HostPartitionClassStorageStatsWrapper statsWrapper =
-        accountStatsMySqlStore.queryHostPartitionClassStorageStatsByHost(HOSTNAME, PORT, partitionNameAndIds);
+        accountStatsMySqlStore.queryHostPartitionClassStorageStatsByHost(currentNode.getHostname(),
+            currentNode.getPort(), partitionNameAndIds);
     assertEquals(hostPartitionClassStorageStats.getStorageStats(), statsWrapper.getStats().getStorageStats());
   }
 
-  private Properties initProperties() throws Exception {
+  @Test
+  public void testHostRemoval() throws Exception {
+    // Publish some data to account stats store
+    StatsManager.AccountStatsPublisher publisher = statsManager.new AccountStatsPublisher(accountStatsMySqlStore);
+    publisher.run();
+
+    mockClusterMap.invokeListenerForDataNodeRemoval(currentNode);
+    // There should be a task scheduled to delete this current from the account stats store
+    // Sleep for a while so the task can be executed
+    Thread.sleep(2000);
+    HostAccountStorageStatsWrapper statsWrapper =
+        accountStatsMySqlStore.queryHostAccountStorageStatsByHost(currentNode.getHostname(), currentNode.getPort());
+    assertEquals(0, statsWrapper.getStats().getStorageStats().size());
+  }
+
+  private Properties initProperties(String hostname, int port, String dc) throws Exception {
     Properties configProps = Utils.loadPropsFromResource("accountstats_mysql.properties");
     configProps.setProperty(ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME, CLUSTER_NAME);
-    configProps.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, HOSTNAME);
-    configProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "dc1");
-    configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(PORT));
+    configProps.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, hostname);
+    configProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, dc);
+    configProps.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(port));
     configProps.setProperty(AccountStatsMySqlConfig.DOMAIN_NAMES_TO_REMOVE, ".github.com");
     configProps.setProperty(AccountStatsMySqlConfig.UPDATE_BATCH_SIZE, String.valueOf(BATCH_SIZE));
     configProps.setProperty(AccountStatsMySqlConfig.LOCAL_BACKUP_FILE_PATH, accountStatsOutputFileString);
     configProps.setProperty(StatsManagerConfig.STATS_ENABLE_MYSQL_REPORT, Boolean.TRUE.toString());
+    configProps.setProperty(StatsManagerConfig.STATS_ENABLE_REMOVE_HOST_FROM_ACCOUNT_STATS_STORE,
+        Boolean.TRUE.toString());
+
+    List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
+    zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, dc, (byte) 0, 2199, false));
+    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
+    configProps.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     return configProps;
   }
 

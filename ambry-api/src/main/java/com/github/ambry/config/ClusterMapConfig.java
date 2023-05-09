@@ -329,6 +329,15 @@ public class ClusterMapConfig {
   @Default("false")
   public final boolean clustermapEnableDeleteInvalidDataInMysqlAggregationTask;
 
+  public static final String DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS = "clustermap.distributed.lock.lease.timeout.in.ms";
+  /**
+   * The lease timeout for distributed lock. For now, the lock is only used for removing host from account stats store.
+   * This timeout should be longer than the time to do this task.
+   */
+  @Config(DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS)
+  @Default("60 * 1000")
+  public final long clustermapDistributedLockLeaseTimeoutInMs;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -399,5 +408,7 @@ public class ClusterMapConfig {
         verifiableProperties.getBoolean(ENABLE_DELETE_INVALID_DATA_IN_MYSQL_AGGREGATION_TASK, false);
     clusterMapAggregatedViewClusterName = verifiableProperties.getString(CLUSTERMAP_AGGREGATED_VIEW_CLUSTER_NAME, "");
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
+    clustermapDistributedLockLeaseTimeoutInMs =
+        verifiableProperties.getLong(DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS, 60 * 1000);
   }
 }

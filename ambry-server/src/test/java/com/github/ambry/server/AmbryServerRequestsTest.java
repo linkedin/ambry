@@ -195,7 +195,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         MockReplicationManager.getReplicationManager(verifiableProperties, storageManager, clusterMap, dataNodeId,
             storeKeyConverterFactory);
     statsManager = new MockStatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(dataNodeId),
-        clusterMap.getMetricRegistry(), statsManagerConfig, null);
+        clusterMap.getMetricRegistry(), statsManagerConfig, null, dataNodeId);
     serverMetrics = new ServerMetrics(clusterMap.getMetricRegistry(), AmbryRequests.class, AmbryServer.class);
     requestResponseChannel = new MockRequestResponseChannel(new NetworkConfig(verifiableProperties));
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,

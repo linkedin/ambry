@@ -89,10 +89,6 @@ import static org.mockito.Mockito.*;
  * Tests for {@link StatsManager}.
  */
 public class StatsManagerTest {
-  private static final int MAX_ACCOUNT_COUNT = 10;
-  private static final int MIN_ACCOUNT_COUNT = 5;
-  private static final int MAX_CONTAINER_COUNT = 6;
-  private static final int MIN_CONTAINER_COUNT = 3;
   private final StatsManager statsManager;
   private final StorageManager storageManager;
   private final MockHelixParticipant clusterParticipant;
@@ -168,7 +164,7 @@ public class StatsManagerTest {
     clusterParticipant = new MockHelixParticipant(clusterMapConfig);
     accountStatsStore = new InmemoryAccountStatsStore("test", "localhost");
     statsManager = new StatsManager(storageManager, mockClusterMap, replicas, new MetricRegistry(), statsManagerConfig,
-        new MockTime(), null, accountStatsStore, inMemoryAccountService);
+        new MockTime(), null, accountStatsStore, inMemoryAccountService, dataNodeId);
   }
 
   /**
@@ -186,7 +182,7 @@ public class StatsManagerTest {
         Arrays.asList(new AccountBuilder((short) 0, "account0", Account.AccountStatus.ACTIVE).build()));
     StatsManager testManager =
         new StatsManager(storageManager, mockClusterMap, replicas, new MetricRegistry(), newStatsManagerConfig,
-            new MockTime(), null, null, inMemoryAccountService);
+            new MockTime(), null, null, inMemoryAccountService, dataNodeId);
     List<Short> ids = testManager.getPublishExcludeAccountIds();
     assertEquals(1, ids.size());
     assertEquals((short) 0, ids.get(0).shortValue());
@@ -238,7 +234,7 @@ public class StatsManagerTest {
     StatsManager testStatsManager =
         new StatsManager(new MockStorageManager(problematicStoreMap, dataNodeId), mockClusterMap,
             Arrays.asList(partitionId1.getReplicaIds().get(0), partitionId2.getReplicaIds().get(0)),
-            new MetricRegistry(), statsManagerConfig, new MockTime(), null, null, inMemoryAccountService);
+            new MetricRegistry(), statsManagerConfig, new MockTime(), null, null, inMemoryAccountService, dataNodeId);
     List<PartitionId> unreachablePartitions = new ArrayList<>();
     Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> hostAccountStorageStatsMap = new HashMap<>();
     for (PartitionId partitionId : problematicStoreMap.keySet()) {
@@ -267,7 +263,7 @@ public class StatsManagerTest {
     mixedStoreMap.put(partitionId4, exceptionStore);
     testStatsManager = new StatsManager(new MockStorageManager(mixedStoreMap, dataNodeId), mockClusterMap,
         Arrays.asList(partitionId3.getReplicaIds().get(0), partitionId4.getReplicaIds().get(0)), new MetricRegistry(),
-        statsManagerConfig, new MockTime(), null, null, inMemoryAccountService);
+        statsManagerConfig, new MockTime(), null, null, inMemoryAccountService, dataNodeId);
     hostAccountStorageStatsMap.clear();
     for (PartitionId partitionId : mixedStoreMap.keySet()) {
       testStatsManager.collectAndAggregateAccountStorageStats(hostAccountStorageStatsMap, partitionId,
@@ -308,7 +304,7 @@ public class StatsManagerTest {
     StorageManager mockStorageManager = new MockStorageManager(testStoreMap, dataNodeId);
     StatsManager testStatsManager =
         new StatsManager(mockStorageManager, mockClusterMap, testReplicas, new MetricRegistry(), statsManagerConfig,
-            new MockTime(), null, null, inMemoryAccountService);
+            new MockTime(), null, null, inMemoryAccountService, dataNodeId);
 
     // verify that adding an existing store to StatsManager should fail
     assertFalse("Adding a store which already exists should fail", testStatsManager.addReplica(testReplicas.get(0)));
@@ -430,7 +426,7 @@ public class StatsManagerTest {
   public void testReplicaFromOfflineToBootstrap() {
     MockStatsManager mockStatsManager =
         new MockStatsManager(storageManager, mockClusterMap, replicas, new MetricRegistry(), statsManagerConfig,
-            clusterParticipant);
+            clusterParticipant, dataNodeId);
     // 1. verify stats manager's listener is registered
     assertTrue("Stats manager listener is found in cluster participant",
         clusterParticipant.getPartitionStateChangeListeners().containsKey(StateModelListenerType.StatsManagerListener));
@@ -470,7 +466,7 @@ public class StatsManagerTest {
   public void testReplicaFromStandbyToLeader() {
     MockStatsManager mockStatsManager =
         new MockStatsManager(storageManager, mockClusterMap, replicas, new MetricRegistry(), statsManagerConfig,
-            clusterParticipant);
+            clusterParticipant, dataNodeId);
     // state transition on existing replica should be no-op
     clusterParticipant.onPartitionBecomeLeaderFromStandby(replicas.get(0).getPartitionId().toPathString());
   }
@@ -482,7 +478,7 @@ public class StatsManagerTest {
   public void testReplicaFromLeaderToStandby() {
     MockStatsManager mockStatsManager =
         new MockStatsManager(storageManager, mockClusterMap, replicas, new MetricRegistry(), statsManagerConfig,
-            clusterParticipant);
+            clusterParticipant, dataNodeId);
     // state transition on existing replica should be no-op
     clusterParticipant.onPartitionBecomeStandbyFromLeader(replicas.get(0).getPartitionId().toPathString());
   }
@@ -528,7 +524,7 @@ public class StatsManagerTest {
             currentNode, storeKeyConverterFactory, clusterParticipant);
     MockStatsManager mockStatsManager =
         new MockStatsManager(storageManager, mockClusterMap, localReplicas, new MetricRegistry(), statsManagerConfig,
-            clusterParticipant);
+            clusterParticipant, dataNodeId);
     // 1. attempt to remove replica while store is still running (remove store failure case)
     ReplicaId replicaToDrop = localReplicas.get(0);
     try {

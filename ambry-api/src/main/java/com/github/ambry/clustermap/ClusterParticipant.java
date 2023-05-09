@@ -147,4 +147,15 @@ public interface ClusterParticipant extends AutoCloseable {
    */
   @Override
   void close();
+
+  /**
+   * Returning a {@link DistributedLock} for the given resource with the given message.
+   * @param resource The resource on which to create a distributed lock. Locks created for different resource
+   *                 should be independent of each other.
+   * @param message The message for this lock creation
+   * @return A {@link DistributedLock} created for the given resource.
+   */
+  default DistributedLock getDistributedLock(String resource, String message) {
+    return new DistributedLockLocalImpl();
+  }
 }

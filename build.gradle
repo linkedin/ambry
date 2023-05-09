@@ -280,6 +280,7 @@ project(':ambry-clustermap') {
                 project(':ambry-commons'),
                 project(':ambry-utils')
         compile "org.apache.helix:helix-core:$helixVersion"
+        compile "org.apache.helix:helix-lock:$helixVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-commons')

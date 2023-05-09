@@ -22,6 +22,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.DistributedLock;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
@@ -80,7 +81,7 @@ class StatsManager {
   private PartitionClassStatsPublisher partitionClassStatsPublisher = null;
   private final StatsManagerConfig config;
   private final ClusterParticipant clusterParticipant;
-  private final ClusterMap clustermap;
+  private final DataNodeId currentNode;
   private long expiredDeleteTombstoneCount = 0;
   private long expiredDeleteTombstoneTotalSize = 0;
   private long permanentDeleteTombstoneCount = 0;
@@ -100,10 +101,11 @@ class StatsManager {
    * @param clusterParticipant the {@link ClusterParticipant} to register state change listener.
    * @param accountStatsStore the {@link AccountStatsStore} to publish stats.
    * @param accountService the {@link AccountService} to get account ids from account names.
+   * @param dataNodeId the {@link DataNodeId} for current node
    */
   StatsManager(StorageManager storageManager, ClusterMap clustermap, List<? extends ReplicaId> replicaIds,
       MetricRegistry registry, StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant,
-      AccountStatsStore accountStatsStore, AccountService accountService) {
+      AccountStatsStore accountStatsStore, AccountService accountService, DataNodeId dataNodeId) {
     this.storageManager = storageManager;
     this.config = config;
     metrics = new StatsManagerMetrics(registry, aggregatedDeleteTombstoneStats);
@@ -111,7 +113,7 @@ class StatsManager {
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
     this.clusterParticipant = clusterParticipant;
-    this.clustermap = clustermap;
+    this.currentNode = dataNodeId;
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
           new PartitionStateChangeListenerImpl());
@@ -119,18 +121,19 @@ class StatsManager {
     }
     clustermap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     this.accountStatsStore = accountStatsStore;
-    Function<List<String>, List<Short>> convertAccountNamesToIds =
-        names -> names.stream().map(accountService::getAccountByName).filter(Objects::nonNull)
+    Function<List<String>, List<Short>> convertAccountNamesToIds = names -> names.stream()
+        .map(accountService::getAccountByName)
+        .filter(Objects::nonNull)
         .map(Account::getId)
         .collect(Collectors.toList());
     this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.publishExcludeAccountNames);
+    this.scheduler = Utils.newScheduler(2, false);
   }
 
   /**
    * Start the stats manager by scheduling the periodic task that collect, aggregate and publish stats.
    */
   void start() {
-    scheduler = Utils.newScheduler(1, false);
     if (accountStatsStore != null) {
       accountsStatsPublisher = new AccountStatsPublisher(accountStatsStore);
       int actualDelay = config.initialDelayUpperBoundInSecs > 0 ? ThreadLocalRandom.current()
@@ -468,6 +471,7 @@ class StatsManager {
    */
   private class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
 
+    // We don't really care about the replica addition and removal for stats manager
     @Override
     public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
     }
@@ -475,6 +479,45 @@ class StatsManager {
     @Override
     public void onDataNodeRemoved(DataNodeId removedDataNode) {
       logger.info("DataNode: {} is removed from clustermap", removedDataNode);
+      if (config.enableRemoveHostFromAccountStatsStore && accountStatsStore != null
+          && removedDataNode.getDatacenterName().equals(currentNode.getDatacenterName())) {
+        // 1. There are many other server nodes that received this message and are taking action now, we have to
+        // use a distributed lock so there will be only one server node who is deleting this data node
+        // 2. Start a new thread for this task so that we don't block the listener.
+        logger.info(
+            "Receive a data node removal message for {}_{}, schedule a task to remove account stats for this host",
+            removedDataNode.getHostname(), removedDataNode.getPort());
+        scheduler.submit(() -> this.tryRemoveHostFromAccountStatsStore(removedDataNode));
+      }
+    }
+
+    private void tryRemoveHostFromAccountStatsStore(DataNodeId removedDataNode) {
+      String resource =
+          "%s_%s_%d".format(LOCK_RESOURCE_PREFIX + removedDataNode.getHostname(), removedDataNode.getPort());
+      try {
+        DistributedLock lock = clusterParticipant.getDistributedLock(resource, "AccountStatsStoreRemoval");
+        if (lock.tryLock()) {
+          logger.info("Acquired distributed lock for host removal: {}_{}", removedDataNode.getHostname(),
+              removedDataNode.getPort());
+          try {
+            accountStatsStore.deleteHostAccountStorageStatsForHost(removedDataNode.getHostname(),
+                removedDataNode.getPort());
+            logger.info("Successfully removed host {}_{} from account stats store", removedDataNode.getHostname(),
+                removedDataNode.getPort());
+          } catch (Exception e) {
+            logger.error("Failed to remove host {}_{} from account stats store", removedDataNode.getHostname(),
+                removedDataNode.getPort(), e);
+          } finally {
+            lock.unlock();
+            lock.close();
+          }
+        } else {
+          logger.info("Failed to acquire distributed lock for host removal: {}_{}", removedDataNode.getHostname(),
+              removedDataNode.getPort());
+        }
+      } catch (Throwable t) {
+        logger.error("Failed to execute the removal task", t);
+      }
     }
   }
 
