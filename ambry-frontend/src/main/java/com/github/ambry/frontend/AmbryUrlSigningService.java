@@ -13,7 +13,13 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -53,6 +59,9 @@ public class AmbryUrlSigningService implements UrlSigningService {
   private final long maxUrlTtlSecs;
   private final Time time;
   private final ClusterMap clusterMap;
+  private final ClusterMapConfig clusterMapConfig;
+  private final boolean isReservedMetadataEnabled;
+  private final RouterConfig routerConfig;
 
   /**
    * Constructor
@@ -67,10 +76,12 @@ public class AmbryUrlSigningService implements UrlSigningService {
    * @param chunkUploadMaxChunkSize the preconfigured max size for chunks of a stitched upload.
    * @param time the {@link Time} instance to use.
    * @param clusterMap the {@link ClusterMap} object.
+   * @param clusterMapConfig the {@link ClusterMapConfig} object.
+   * @param routerConfig the {@link RouterConfig} object.
    */
   AmbryUrlSigningService(String uploadEndpoint, String downloadEndpoint, long defaultUrlTtlSecs,
       long defaultMaxUploadSize, long maxUrlTtlSecs, long chunkUploadInitialChunkTtlSecs, long chunkUploadMaxChunkSize,
-      Time time, ClusterMap clusterMap) {
+      Time time, ClusterMap clusterMap, ClusterMapConfig clusterMapConfig, RouterConfig routerConfig) {
     if (!uploadEndpoint.endsWith(ENDPOINT_SUFFIX)) {
       uploadEndpoint = uploadEndpoint + ENDPOINT_SUFFIX;
     }
@@ -86,12 +97,17 @@ public class AmbryUrlSigningService implements UrlSigningService {
     this.maxUrlTtlSecs = maxUrlTtlSecs;
     this.time = time;
     this.clusterMap = clusterMap;
+    this.clusterMapConfig = clusterMapConfig;
+    this.isReservedMetadataEnabled = routerConfig.routerReservedMetadataEnabled;
+    this.routerConfig = routerConfig;
   }
 
   @Override
   public String getSignedUrl(RestRequest restRequest) throws RestServiceException {
     Map<String, Object> args = restRequest.getArgs();
     String restMethodInSignedUrlStr = RestUtils.getHeader(args, RestUtils.Headers.URL_TYPE, true);
+    Account account = RestUtils.getAccountFromArgs(args);
+    Container container = RestUtils.getContainerFromArgs(args);
     RestMethod restMethodInSignedUrl;
     try {
       restMethodInSignedUrl = RestMethod.valueOf(restMethodInSignedUrlStr);
@@ -149,6 +165,20 @@ public class AmbryUrlSigningService implements UrlSigningService {
         }
         argsForUrl.put(RestUtils.Headers.CHUNK_UPLOAD, true);
         argsForUrl.put(RestUtils.Headers.SESSION, UUID.randomUUID().toString());
+        BlobId reservedMetadataBlobId = ClusterMapUtils.reserveMetadataBlobId(
+            ClusterMapUtils.getPartitionClass(account, container, clusterMapConfig.clusterMapDefaultPartitionClass),
+            null, ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(clusterMap.getMetricRegistry()), clusterMap,
+            account.getId(), container.getId(), container.isEncrypted(), routerConfig);
+        if (reservedMetadataBlobId == null) {
+          ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+              clusterMap.getMetricRegistry()).reserveMetadataIdFailedForPostSignedUrlCount.inc();
+        }
+        if (isReservedMetadataEnabled) {
+          if (reservedMetadataBlobId == null) {
+            throw new RestServiceException("Reserving metadata id failed", RestServiceErrorCode.InternalServerError);
+          }
+          argsForUrl.put(RestUtils.Headers.RESERVED_METADATA_ID, reservedMetadataBlobId);
+        }
       }
       argsForUrl.put(RestUtils.Headers.MAX_UPLOAD_SIZE, maxUploadSize);
     }

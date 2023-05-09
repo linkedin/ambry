@@ -40,5 +40,8 @@ public class CommonTestUtils {
   public static void populateRequiredRouterProps(Properties props) {
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", "localDC");
+    props.put("clustermap.cluster.name", "dev");
+    props.put("clustermap.datacenter.name", "localDC");
+    props.put("clustermap.host.name", "localhost");
   }
 }
