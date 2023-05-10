@@ -18,6 +18,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -372,6 +373,11 @@ public class InMemoryRouter implements Router {
       completeOperation(futureResult, callback, null, exception);
     }
     return futureResult;
+  }
+
+  @Override
+  public RouterConfig getRouterConfig() {
+    return new RouterConfig(verifiableProperties);
   }
 
   @Override

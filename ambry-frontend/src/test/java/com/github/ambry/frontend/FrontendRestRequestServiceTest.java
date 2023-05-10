@@ -3751,6 +3751,11 @@ class FrontendTestRouter implements Router {
   }
 
   @Override
+  public RouterConfig getRouterConfig() {
+    return null;
+  }
+
+  @Override
   public void close() {
     isOpen = false;
   }

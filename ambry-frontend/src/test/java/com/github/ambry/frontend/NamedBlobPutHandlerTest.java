@@ -25,6 +25,7 @@ import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -134,6 +135,7 @@ public class NamedBlobPutHandlerTest {
     idConverterFactory = new FrontendTestIdConverterFactory();
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     Properties props = new Properties();
+    CommonTestUtils.populateRequiredRouterProps(props);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);

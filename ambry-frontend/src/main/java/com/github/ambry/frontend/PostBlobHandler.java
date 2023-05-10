@@ -322,6 +322,14 @@ class PostBlobHandler {
             RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
         metadata.put(EXPIRATION_TIME_MS_KEY,
             Long.toString(Utils.addSecondsToEpochTime(time.milliseconds(), blobProperties.getTimeToLiveInSeconds())));
+        if (blobProperties.getReservedMetadataBlobId() != null) {
+          metadata.put(RestUtils.Headers.RESERVED_METADATA_ID, blobProperties.getReservedMetadataBlobId());
+        } else {
+          ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+              frontendMetrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.inc();
+          throwRestServiceExceptionIfEnabled(new RestServiceException("No reserved metadata id present to set in chunked upload response",
+                RestServiceErrorCode.BadRequest), router.getRouterConfig().routerReservedMetadataEnabled);
+        }
         restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
       }
       //the actual blob size is the number of bytes read
@@ -356,6 +364,7 @@ class PostBlobHandler {
      */
     List<ChunkInfo> getChunksToStitch(BlobProperties stitchedBlobProperties, JSONObject stitchRequestJson)
         throws RestServiceException {
+      String reservedMetadataBlobId = null;
       List<String> signedChunkIds = StitchRequestSerDe.fromJson(stitchRequestJson);
       if (signedChunkIds.isEmpty()) {
         throw new RestServiceException("Must provide at least one ID in stitch request",
@@ -388,7 +397,8 @@ class PostBlobHandler {
         long expirationTimeMs = RestUtils.getLongHeader(metadata, EXPIRATION_TIME_MS_KEY, true);
         verifyChunkAccountAndContainer(blobId, stitchedBlobProperties);
 
-        chunksToStitch.add(new ChunkInfo(blobId, chunkSizeBytes, expirationTimeMs, null));
+        reservedMetadataBlobId = getAndVerifyReservedMetadataBlobId(metadata, reservedMetadataBlobId, blobId);
+        chunksToStitch.add(new ChunkInfo(blobId, chunkSizeBytes, expirationTimeMs, reservedMetadataBlobId));
       }
       //the actual blob size for stitched blob is the sum of all the chunk sizes
       restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, totalStitchedBlobSize);
@@ -417,6 +427,36 @@ class PostBlobHandler {
             + stitchedBlobProperties.getAccountId() + ", " + stitchedBlobProperties.getContainerId() + ")",
             RestServiceErrorCode.BadRequest);
       }
+    }
+
+    /**
+     * Verify that the reserved metadata id for the specified chunkId is same as seen for previous chunks.
+     * Also return the chunk's reserved metadata id.
+     * @param metadata {@link Map} of metadata set in the signed ids.
+     * @param reservedMetadataBlobId Reserved metadata id for the chunks. Can be {@code null}.
+     * @param chunkId The chunk id.
+     * @return The reserved metadata id.
+     * @throws RestServiceException in case of any exception.
+     */
+    private String getAndVerifyReservedMetadataBlobId(Map<String, String> metadata, String reservedMetadataBlobId,
+        String chunkId) throws RestServiceException {
+      String chunkReservedMetadataBlobId = RestUtils.getHeader(metadata, RestUtils.Headers.RESERVED_METADATA_ID, false);
+      if (chunkReservedMetadataBlobId == null) {
+        ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+            frontendMetrics.getMetricRegistry()).noReservedMetadataForChunkedUploadCount.inc();
+        throwRestServiceExceptionIfEnabled(
+            new RestServiceException(String.format("No reserved metadata id present in chunk %s signed url", chunkId),
+                RestServiceErrorCode.BadRequest), router.getRouterConfig().routerReservedMetadataEnabled);
+      }
+      if (reservedMetadataBlobId != null && !reservedMetadataBlobId.equals(chunkReservedMetadataBlobId)) {
+        ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+            frontendMetrics.getMetricRegistry()).mismatchedReservedMetadataForChunkedUploadCount.inc();
+        throwRestServiceExceptionIfEnabled(new RestServiceException(String.format(
+                "Reserved metadata id for the chunks are not same. For chunk: %s the reserved metadata id is %s. But reserved metadata id %s was found earlier.",
+                chunkId, chunkReservedMetadataBlobId, reservedMetadataBlobId), RestServiceErrorCode.BadRequest),
+            router.getRouterConfig().routerReservedMetadataEnabled);
+      }
+      return chunkReservedMetadataBlobId;
     }
   }
 }

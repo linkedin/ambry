@@ -450,6 +450,7 @@ public class AmbrySecurityServiceTest {
     Map<String, String> userMetadata = RestUtils.buildUserMetadata(userMetadataArray);
     Assert.assertEquals("Encoded user metadata mismatch", Chinese,
         userMetadata.get(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "filename"));
+    USER_METADATA.remove(RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX + "filename");
   }
 
   /**
