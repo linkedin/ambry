@@ -637,6 +637,8 @@ public class MockClusterMap implements ClusterMap {
       for (ReplicaId replicaId : partition.getReplicaIds()) {
         if (replicaId.getDataNodeId().compareTo(dataNodeId) == 0) {
           newReplica = replicaId;
+          // Decrease available disk capacity in bytes. This is checked in StorageManagerTest#updateDiskSpaceOnReplicaAdditionTest()
+          newReplica.getDiskId().decreaseAvailableSpaceInBytes(replicaId.getCapacityInBytes());
           break;
         }
       }

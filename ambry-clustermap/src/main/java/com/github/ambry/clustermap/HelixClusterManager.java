@@ -737,12 +737,12 @@ public class HelixClusterManager implements ClusterMap {
    * @return {@link ReplicaId} if there is a new replica satisfying given partition and data node. {@code null} otherwise.
    */
   private ReplicaId getBootstrapReplicaInFullAuto(String partitionIdStr, DataNodeId dataNodeId) {
+    AmbryDisk disk = getDiskForBootstrapReplica((AmbryDataNode) dataNodeId);
+    if (disk == null) {
+      logger.error("No Disk is available to host bootstrap replica. Cannot create the replica.");
+      return null;
+    }
     try {
-      AmbryDisk disk = getDiskForBootstrapReplica((AmbryDataNode) dataNodeId);
-      if (disk == null) {
-        logger.error("No Disk is available to host bootstrap replica. Cannot create the replica.");
-        return null;
-      }
       AmbryPartition mappedPartition =
           new AmbryPartition(Long.parseLong(partitionIdStr), clusterMapConfig.clusterMapDefaultPartitionClass,
               helixClusterManagerQueryHelper);
@@ -760,6 +760,9 @@ public class HelixClusterManager implements ClusterMap {
     } catch (Exception e) {
       logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
           dataNodeId, e);
+      // We have decreased the available space on the disk since we thought that it will be used to host replica. Since
+      // bootstrapping replica failed, increase the available disk space back.
+      disk.increaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES);
       return null;
     }
   }
@@ -793,9 +796,14 @@ public class HelixClusterManager implements ClusterMap {
     if (potentialDisks.isEmpty()) {
       return null;
     }
-    // Select a random disk to among all the ones with equal available space.
-    int index = new Random().nextInt(potentialDisks.size());
-    return potentialDisks.get(index);
+
+    // Select first available disk with maximum available capacity.
+    AmbryDisk disk = potentialDisks.get(0);
+
+    // Update disk usage
+    disk.decreaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES);
+
+    return disk;
   }
 
   /**

@@ -373,8 +373,6 @@ public class DiskManager {
         // create a bootstrap-in-progress file to distinguish it from regular stores (the file will be checked during
         // BOOTSTRAP -> STANDBY transition)
         createBootstrapFileIfAbsent(replica);
-        // Update the disk used space
-        disk.decreaseAvailableSpaceInBytes(replica.getCapacityInBytes());
         logger.info("New store is successfully added into DiskManager.");
         succeed = true;
       }
