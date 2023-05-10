@@ -713,10 +713,22 @@ public class StorageManager implements StoreManager {
       // the store could be started if it failed on decommission last time. Helix may directly reset it to OFFLINE
       // without stopping it)
       BlobStore store = (BlobStore) getStore(replica.getPartitionId(), true);
-      // 1. check is the store is recovering from decommission
+
+      // 1. check is the store is recovering from decommission or directly transitioning from OFFLINE to DROPPED in
+      // full-auto.
+      boolean resumeDecommission = false;
       if (store.recoverFromDecommission()) {
-        // if the store is recovering from previous decommission failure, then resume decommission (this will ensure
-        // peer replicas have caught up with local replica and update InstanceConfig in Helix)
+        resumeDecommission = true;
+      } else if (clusterMap.isDataNodeInFullAutoMode(replica.getDataNodeId())
+          && store.getPreviousState() == ReplicaState.OFFLINE) {
+        // In Full-auto mode, it is possible that this replica has been reassigned to a different host when it is down.
+        // After the host comes up, Helix may directly transition the replica from OFFLINE -> DROPPED without going
+        // through OFFLINE -> BOOTSTRAP -> STANDBY -> INACTIVE -> OFFLINE -> DROPPED steps. So, we have to make sure
+        // peers have caught with this replica before deleting the files.
+        resumeDecommission = true;
+      }
+      if (resumeDecommission) {
+        // This will ensure peer replicas have caught up with local replica and update InstanceConfig in Helix.
         try {
           resumeDecommission(partitionName);
         } catch (Exception e) {

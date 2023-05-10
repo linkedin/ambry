@@ -100,6 +100,7 @@ public class BlobStore implements Store {
   private boolean started;
   private FileLock fileLock;
   private volatile ReplicaState currentState;
+  private volatile ReplicaState previousState;
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
   private AtomicReference<ReplicaSealStatus> replicaSealStatus =
@@ -216,6 +217,7 @@ public class BlobStore implements Store {
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
+    previousState = ReplicaState.OFFLINE;
     remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId, taskScheduler, factory);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold for seal is {} bytes and the"
@@ -1093,13 +1095,20 @@ public class BlobStore implements Store {
 
   @Override
   public void setCurrentState(ReplicaState state) {
-    logger.info("storeId = {}, State change from {} to {}", storeId, currentState, state);
-    currentState = state;
+    if(currentState != state){
+      logger.info("storeId = {}, State change from {} to {}", storeId, currentState, state);
+      previousState = currentState;
+      currentState = state;
+    }
   }
 
   @Override
   public ReplicaState getCurrentState() {
     return currentState;
+  }
+
+  public ReplicaState getPreviousState() {
+    return previousState;
   }
 
   @Override
@@ -1321,7 +1330,7 @@ public class BlobStore implements Store {
           remoteTokenTracker.close();
         }
         metrics.deregisterMetrics(storeId);
-        currentState = ReplicaState.OFFLINE;
+        setCurrentState(ReplicaState.OFFLINE);
         started = false;
       } catch (Exception e) {
         logger.error("Store : {} shutdown of store failed for directory ", dataDir, e);
@@ -1496,11 +1505,11 @@ public class BlobStore implements Store {
     if (replicaStatusDelegates != null && !replicaStatusDelegates.isEmpty() && replicaStatusDelegates.get(0)
         .supportsStateChanges()) {
       // If store is managed by Helix, Helix controller will update its state after participation.
-      currentState = ReplicaState.OFFLINE;
+      setCurrentState(ReplicaState.OFFLINE);
     } else {
       // This is to be compatible with static clustermap. If static cluster manager is adopted, all replicas are supposed to be STANDBY
       // and router relies on failure detector to track liveness of replicas(stores).
-      currentState = ReplicaState.STANDBY;
+      setCurrentState(ReplicaState.STANDBY);
     }
   }
 
