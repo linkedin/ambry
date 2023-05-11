@@ -1118,19 +1118,35 @@ public class RequestResponseTest {
     final int sourceHostPort = 15058;
     final int correlationId = TestUtils.RANDOM.nextInt();
 
-    final ReplicateBlobRequest replicateBlobRequest =
-        new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName, sourceHostPort);
-    DataInputStream requestStream = serAndPrepForRead(replicateBlobRequest, -1, true);
-    final ReplicateBlobRequest deserializedReplicateBlobRequest =
-        ReplicateBlobRequest.readFrom(requestStream, clusterMap);
-    verifyReplicateBlobRequest(replicateBlobRequest, deserializedReplicateBlobRequest);
-    replicateBlobRequest.release();
+    final RequestOrResponseType operationType =
+        RequestOrResponseType.values()[Utils.getRandomShort(TestUtils.RANDOM) % RequestOrResponseType.values().length];
+    final long operationTime = SystemTime.getInstance().milliseconds() + TestUtils.RANDOM.nextInt();
+    final short lifeVersion = Utils.getRandomShort(TestUtils.RANDOM);
+    final long operationParameter = Utils.getRandomLong(TestUtils.RANDOM, Long.MAX_VALUE);
+    short[] versions = new short[]{ReplicateBlobRequest.VERSION_1, ReplicateBlobRequest.VERSION_2};
+    for (short version : versions) {
+      final ReplicateBlobRequest replicateBlobRequest;
+      if (version == ReplicateBlobRequest.VERSION_1) {
+        replicateBlobRequest = new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName, sourceHostPort);
+      } else {
+        replicateBlobRequest =
+            new ReplicateBlobRequest(correlationId, clientId, id1, sourceHostName, sourceHostPort, operationType,
+                operationTime, lifeVersion, operationParameter);
+      }
 
-    final ReplicateBlobResponse response = new ReplicateBlobResponse(correlationId, clientId, ServerErrorCode.No_Error);
-    requestStream = serAndPrepForRead(response, -1, false);
-    final ReplicateBlobResponse deserializedReplicateBlobResponse = ReplicateBlobResponse.readFrom(requestStream);
-    verifyReplicateBlobResponse(response, deserializedReplicateBlobResponse);
-    response.release();
+      DataInputStream requestStream = serAndPrepForRead(replicateBlobRequest, -1, true);
+      final ReplicateBlobRequest deserializedReplicateBlobRequest =
+          ReplicateBlobRequest.readFrom(requestStream, clusterMap);
+      verifyReplicateBlobRequest(replicateBlobRequest, deserializedReplicateBlobRequest);
+      replicateBlobRequest.release();
+
+      final ReplicateBlobResponse response =
+          new ReplicateBlobResponse(correlationId, clientId, ServerErrorCode.No_Error);
+      requestStream = serAndPrepForRead(response, -1, false);
+      final ReplicateBlobResponse deserializedReplicateBlobResponse = ReplicateBlobResponse.readFrom(requestStream);
+      verifyReplicateBlobResponse(response, deserializedReplicateBlobResponse);
+      response.release();
+    }
   }
 
   /**
@@ -1146,6 +1162,18 @@ public class RequestResponseTest {
     Assert.assertEquals(orgReq.getBlobId(), deserializedReq.getBlobId());
     Assert.assertEquals(orgReq.getSourceHostName(), deserializedReq.getSourceHostName());
     Assert.assertEquals(orgReq.getSourceHostPort(), deserializedReq.getSourceHostPort());
+
+    if (orgReq.versionId == ReplicateBlobRequest.VERSION_1) {
+      Assert.assertEquals(RequestOrResponseType.PutRequest, deserializedReq.getOperationType());
+      Assert.assertEquals(0, deserializedReq.getOperationTimeInMs());
+      Assert.assertEquals(-1, deserializedReq.getLifeVersion());
+      Assert.assertEquals(0, deserializedReq.getExpirationTimeInMs());
+    } else {
+      Assert.assertEquals(orgReq.getOperationType(), deserializedReq.getOperationType());
+      Assert.assertEquals(orgReq.getOperationTimeInMs(), deserializedReq.getOperationTimeInMs());
+      Assert.assertEquals(orgReq.getLifeVersion(), deserializedReq.getLifeVersion());
+      Assert.assertEquals(orgReq.getExpirationTimeInMs(), deserializedReq.getExpirationTimeInMs());
+    }
   }
 
   /**
