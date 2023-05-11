@@ -115,6 +115,7 @@ public class MySqlAccountService extends AbstractAccountService {
         cachedAccountServiceNew.fetchAndUpdateCache();
       } catch (SQLException e) {
         if (config.ignoreNewDatabaseUploadError) {
+          accountServiceMetricsNew.fetchAndUpdateCacheErrorCount.inc();
           logger.error("failed to do fetchAndUpdateCache for new db");
         } else {
           throw e;
@@ -201,6 +202,7 @@ public class MySqlAccountService extends AbstractAccountService {
         cachedAccountServiceNew.updateAccounts(accounts);
       } catch (AccountServiceException e) {
         if (config.ignoreNewDatabaseUploadError) {
+          accountServiceMetricsNew.updateAccountsErrorCount.inc();
           logger.error("failed to do updateAccounts for new db");
         } else {
           throw e;
@@ -269,8 +271,8 @@ public class MySqlAccountService extends AbstractAccountService {
         cachedAccountServiceNew.updateContainers(accountName, containers);
       } catch (AccountServiceException e) {
         // if before migration, update container for new db would fail due to the account does not exist.
-        accountServiceMetricsNew.updateContainerErrorCount.inc();
         if (config.ignoreNewDatabaseUploadError) {
+          accountServiceMetricsNew.updateContainersErrorCount.inc();
           logger.trace("This is expected due to the account {} does not exist in new db", accountName);
         } else {
           throw e;
