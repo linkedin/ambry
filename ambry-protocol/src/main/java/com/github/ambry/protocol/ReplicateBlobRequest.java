@@ -27,7 +27,6 @@ import java.io.IOException;
 public class ReplicateBlobRequest extends RequestOrResponse {
   public final static short VERSION_1 = 1;
   public final static short VERSION_2 = 2;
-  private final static short CURRENT_VERSION = VERSION_1;
 
   // the Blob to be repaired.
   private final BlobId blobId;
@@ -36,10 +35,10 @@ public class ReplicateBlobRequest extends RequestOrResponse {
   private final int sourceHostPort;
 
   // operation related parameters
-  private RequestOrResponseType operationType;
-  private long operationTimeInMs;
-  private short lifeVersion;
-  private long operationParameter; // It's the operation specific parameter. For TtlUpdate, it's the expirationTimeInMs.
+  private final RequestOrResponseType operationType;
+  private final long operationTimeInMs;
+  private final short lifeVersion;
+  private final long expirationTimeInMs; // It's only used when operationType is RequestOrResponseType.TtlUpdateRequest
 
   private static final short SOURCE_HOST_NAME_SIZE_IN_BYTES = Integer.BYTES;
   private static final short SOURCE_HOST_PORT_SIZE_IN_BYTES = Integer.BYTES;
@@ -72,13 +71,13 @@ public class ReplicateBlobRequest extends RequestOrResponse {
    * @param operationType type of the {@link RequestOrResponseType}
    * @param operationTimeInMs operation time in milliseconds
    * @param lifeVersion life version of the Blob
-   * @param operationParameter specific parameter for different operation types
+   * @param expirationTimeInMs expiration time for TtlUpdate
    */
   public ReplicateBlobRequest(int correlationId, String clientId, BlobId blobId, String sourceHostName,
       int sourceHostPort, RequestOrResponseType operationType, long operationTimeInMs, short lifeVersion,
-      long operationParameter) {
+      long expirationTimeInMs) {
     this(correlationId, clientId, blobId, sourceHostName, sourceHostPort, VERSION_2, operationType, operationTimeInMs,
-        lifeVersion, operationParameter);
+        lifeVersion, expirationTimeInMs);
   }
 
   /**
@@ -92,11 +91,11 @@ public class ReplicateBlobRequest extends RequestOrResponse {
    * @param operationType type of the {@link RequestOrResponseType}
    * @param operationTimeInMs operation time in milliseconds
    * @param lifeVersion life version of the Blob
-   * @param operationParameter specific parameter for different operation types
+   * @param expirationTimeInMs expiration time for TtlUpdate
    */
   private ReplicateBlobRequest(int correlationId, String clientId, BlobId blobId, String sourceHostName,
       int sourceHostPort, short version, RequestOrResponseType operationType, long operationTimeInMs, short lifeVersion,
-      long operationParameter) {
+      long expirationTimeInMs) {
     super(RequestOrResponseType.ReplicateBlobRequest, version, correlationId, clientId);
     this.blobId = blobId;
     this.sourceHostName = sourceHostName;
@@ -105,7 +104,7 @@ public class ReplicateBlobRequest extends RequestOrResponse {
     this.operationType = operationType;
     this.operationTimeInMs = operationTimeInMs;
     this.lifeVersion = lifeVersion;
-    this.operationParameter = operationParameter;
+    this.expirationTimeInMs = expirationTimeInMs;
   }
 
   /**
@@ -147,7 +146,7 @@ public class ReplicateBlobRequest extends RequestOrResponse {
       bufferToSend.writeShort((short) operationType.ordinal());
       bufferToSend.writeLong(operationTimeInMs);
       bufferToSend.writeShort(lifeVersion);
-      bufferToSend.writeLong(operationParameter);
+      bufferToSend.writeLong(expirationTimeInMs);
     }
   }
 
@@ -208,10 +207,10 @@ public class ReplicateBlobRequest extends RequestOrResponse {
   }
 
   /**
-   * @return the operation specific parameter
+   * @return the expiration time in milli-seconds
    */
-  public long getOperationParameter() {
-    return operationParameter;
+  public long getExpirationTimeInMs() {
+    return expirationTimeInMs;
   }
 
   /**
@@ -225,7 +224,7 @@ public class ReplicateBlobRequest extends RequestOrResponse {
     sizeInBytes += SOURCE_HOST_PORT_SIZE_IN_BYTES;
 
     if (versionId == VERSION_2) {
-      // operationType + operationTimeInMs + lifeVersion + operationParameter
+      // operationType + operationTimeInMs + lifeVersion + expirationTimeInMs
       sizeInBytes += OPERATION_TYPE_SIZE_IN_BYTES;
       sizeInBytes += OPERATION_TIME_SIZE_IN_BYTES;
       sizeInBytes += LIFE_VERSION_SIZE_IN_BYTES;
@@ -250,7 +249,7 @@ public class ReplicateBlobRequest extends RequestOrResponse {
       sb.append(", ").append("OperationType=").append(operationType);
       sb.append(", ").append("OperationTimeInMs=").append(operationTimeInMs);
       sb.append(", ").append("LifeVersion=").append(lifeVersion);
-      sb.append(", ").append("OperationParameter=").append(operationParameter);
+      sb.append(", ").append("ExpirationTimeInMs=").append(expirationTimeInMs);
     }
     sb.append("]");
     return sb.toString();
@@ -284,9 +283,9 @@ public class ReplicateBlobRequest extends RequestOrResponse {
       RequestOrResponseType operationType = RequestOrResponseType.values()[stream.readShort()];
       long operationTime = stream.readLong();
       short lifeVersion = stream.readShort();
-      long operationParameter = stream.readLong();
+      long expirationTimeInMs = stream.readLong();
       return new ReplicateBlobRequest(correlationId, clientId, id, sourceHostName, sourceHostPort, operationType,
-          operationTime, lifeVersion, operationParameter);
+          operationTime, lifeVersion, expirationTimeInMs);
     }
   }
 }

@@ -1167,12 +1167,12 @@ public class RequestResponseTest {
       Assert.assertEquals(RequestOrResponseType.PutRequest, deserializedReq.getOperationType());
       Assert.assertEquals(0, deserializedReq.getOperationTimeInMs());
       Assert.assertEquals(-1, deserializedReq.getLifeVersion());
-      Assert.assertEquals(0, deserializedReq.getOperationParameter());
+      Assert.assertEquals(0, deserializedReq.getExpirationTimeInMs());
     } else {
       Assert.assertEquals(orgReq.getOperationType(), deserializedReq.getOperationType());
       Assert.assertEquals(orgReq.getOperationTimeInMs(), deserializedReq.getOperationTimeInMs());
       Assert.assertEquals(orgReq.getLifeVersion(), deserializedReq.getLifeVersion());
-      Assert.assertEquals(orgReq.getOperationParameter(), deserializedReq.getOperationParameter());
+      Assert.assertEquals(orgReq.getExpirationTimeInMs(), deserializedReq.getExpirationTimeInMs());
     }
   }
 
