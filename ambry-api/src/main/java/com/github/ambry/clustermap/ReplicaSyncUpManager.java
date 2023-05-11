@@ -83,7 +83,8 @@ public interface ReplicaSyncUpManager {
   void onDeactivationError(ReplicaId replicaId);
 
   /**
-   * Initiate deactivation process if the replica should become INACTIVE from STANDBY on current node.
+   * Initiate deactivation process if the replica is transitioning from STANDBY to INACTIVE on current node. This is
+   * used to track remote peers lag from last PUT record in local replica. This is not needed for empty replica.
    * @param replicaId the replica to deactivate
    */
   void initiateDeactivation(ReplicaId replicaId);
@@ -97,7 +98,8 @@ public interface ReplicaSyncUpManager {
 
   /**
    * Initiate disconnection process to stop replica and make it offline. This happens when replica is going to be
-   * removed from current node. For Ambry, it disconnection occurs in Inactive-To-Offline transition.
+   * removed from current node. For Ambry, it disconnection occurs in Inactive-To-Offline transition. This is used to
+   * track remote peers lag from last record in local replica. This is not needed for empty replica.
    * @param replicaId the {@link ReplicaId} to be disconnected.
    */
   void initiateDisconnection(ReplicaId replicaId);
