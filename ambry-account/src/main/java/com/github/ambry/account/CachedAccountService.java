@@ -502,6 +502,9 @@ public class CachedAccountService extends AbstractAccountService {
     try {
       Pair<Short, Short> accountAndContainerIdPair =
           getAccountAndContainerIdFromName(dataset.getAccountName(), dataset.getContainerName());
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
       mySqlAccountStore.addDataset(accountAndContainerIdPair.getFirst(), accountAndContainerIdPair.getSecond(),
           dataset);
     } catch (SQLException e) {
@@ -514,6 +517,9 @@ public class CachedAccountService extends AbstractAccountService {
     try {
       Pair<Short, Short> accountAndContainerIdPair =
           getAccountAndContainerIdFromName(dataset.getAccountName(), dataset.getContainerName());
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
       mySqlAccountStore.updateDataset(accountAndContainerIdPair.getFirst(), accountAndContainerIdPair.getSecond(),
           dataset);
     } catch (SQLException e) {
@@ -526,6 +532,9 @@ public class CachedAccountService extends AbstractAccountService {
       throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
       return mySqlAccountStore.getDataset(accountAndContainerIdPair.getFirst(), accountAndContainerIdPair.getSecond(),
           accountName, containerName, datasetName);
     } catch (SQLException e) {
@@ -538,6 +547,9 @@ public class CachedAccountService extends AbstractAccountService {
       throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
       mySqlAccountStore.deleteDataset(accountAndContainerIdPair.getFirst(), accountAndContainerIdPair.getSecond(),
           datasetName);
     } catch (SQLException e) {
@@ -550,6 +562,9 @@ public class CachedAccountService extends AbstractAccountService {
       String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled) throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
       return mySqlAccountStore.addDatasetVersion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version, timeToLiveInSeconds,
           creationTimeInMs, datasetVersionTtlEnabled);
@@ -563,6 +578,9 @@ public class CachedAccountService extends AbstractAccountService {
       String version) throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
       return mySqlAccountStore.getDatasetVersion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version);
     } catch (SQLException e) {
@@ -575,6 +593,9 @@ public class CachedAccountService extends AbstractAccountService {
       String version) throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
       mySqlAccountStore.deleteDatasetVersion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), datasetName, version);
     } catch (SQLException e) {
@@ -587,6 +608,9 @@ public class CachedAccountService extends AbstractAccountService {
       throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
       return mySqlAccountStore.getAllValidVersion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), datasetName);
     } catch (SQLException e) {
@@ -745,9 +769,6 @@ public class CachedAccountService extends AbstractAccountService {
     }
     final short accountId = container.getParentAccountId();
     final short containerId = container.getId();
-    if (mySqlAccountStore == null) {
-      mySqlAccountStore = this.supplier.get();
-    }
     return new Pair<>(accountId, containerId);
   }
 
