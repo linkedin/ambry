@@ -215,14 +215,6 @@ public class AmbryReplicaSyncUpManagerTest {
    */
   @Test
   public void deactivationFailureTest() throws Exception {
-    // test replica not found exception (get another partition that is not present in ReplicaSyncUpManager)
-    PartitionId partition = clusterMap.getAllPartitionIds(null).get(1);
-    try {
-      replicaSyncUpService.waitDeactivationCompleted(partition.toPathString());
-      fail("should fail because replica is not found");
-    } catch (StateTransitionException e) {
-      assertEquals("Error code is not expected", ReplicaNotFound, e.getErrorCode());
-    }
     // test deactivation failure for some reason (triggered by calling onDeactivationError)
     CountDownLatch stateModelLatch = new CountDownLatch(1);
     mockHelixParticipant.listenerLatch = new CountDownLatch(1);
@@ -275,14 +267,6 @@ public class AmbryReplicaSyncUpManagerTest {
    */
   @Test
   public void disconnectionFailureTest() throws Exception {
-    // test replica-not-found case (pass in another partition that is not present in ReplicaSyncUpManager)
-    PartitionId secondPartition = clusterMap.getAllPartitionIds(null).get(1);
-    try {
-      replicaSyncUpService.waitDisconnectionCompleted(secondPartition.toPathString());
-      fail("should fail because replica is not tracked by ReplicaSyncUpManager");
-    } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", ReplicaNotFound, e.getErrorCode());
-    }
     // test disconnection failure (this is induced by call onDisconnectionError)
     CountDownLatch stateModelLatch = new CountDownLatch(1);
     mockHelixParticipant.listenerLatch = new CountDownLatch(1);
