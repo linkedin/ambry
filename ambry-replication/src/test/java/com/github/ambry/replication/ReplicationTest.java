@@ -874,6 +874,130 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Test that resuming decommission on certain replica behaves correctly in Full-Auto where a replica can be dropped
+   * immediately on bootup (OFFLINE to DROPPED) without going through state transitions (OFFLINE to BOOTSTRAP to STANDBY
+   * to INACTIVE to OFFLINE to DROPPED).
+   * @throws Exception
+   */
+  @Test
+  public void replicaResumeDecommissionInFullAutoTest() throws Exception {
+    MockClusterMap clusterMap = spy(new MockClusterMap());
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
+    MockHelixParticipant mockHelixParticipant = Mockito.spy(new MockHelixParticipant(clusterMapConfig));
+    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
+
+    // choose a replica on local node for decommission
+    ReplicaId localReplica = clusterMap.getReplicaIds(clusterMap.getDataNodeIds().get(0)).get(0);
+    PartitionId partitionId = localReplica.getPartitionId();
+    String partitionName = localReplica.getPartitionId().toPathString();
+
+    // Create Replication and Storage managers
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+
+    mockHelixParticipant.mockStatsManagerListener = Mockito.mock(PartitionStateChangeListener.class);
+    doNothing().when(mockHelixParticipant.mockStatsManagerListener).onPartitionBecomeDroppedFromOffline(anyString());
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
+        mockHelixParticipant.mockStatsManagerListener);
+
+    // Start the blob store
+    storageManager.startBlobStore(localReplica.getPartitionId());
+
+    // Return true when checking for Full-auto mode
+    when(clusterMap.isDataNodeInFullAutoMode(any())).thenReturn(true);
+
+    // Lets write a blob (size = 100) into local store and its delete record
+    Store localStore = storageManager.getStore(partitionId);
+    // Put a blob
+    MockId id = new MockId(TestUtils.getRandomString(10), Utils.getRandomShort(TestUtils.RANDOM),
+        Utils.getRandomShort(TestUtils.RANDOM));
+    long crc = (new Random()).nextLong();
+    long blobSize = 100;
+    MessageInfo info =
+        new MessageInfo(id, blobSize, false, false, Utils.Infinite_Time, crc, id.getAccountId(), id.getContainerId(),
+            Utils.Infinite_Time);
+    List<MessageInfo> infos = new ArrayList<>();
+    List<ByteBuffer> buffers = new ArrayList<>();
+    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) blobSize));
+    infos.add(info);
+    buffers.add(buffer);
+    localStore.put(new MockMessageWriteSet(infos, buffers));
+    // delete the blob
+    int deleteRecordSize = (int) (new DeleteMessageFormatInputStream(id, (short) 0, (short) 0, 0).getSize());
+    MessageInfo deleteInfo =
+        new MessageInfo(id, deleteRecordSize, id.getAccountId(), id.getContainerId(), time.milliseconds());
+    localStore.delete(Collections.singletonList(deleteInfo));
+    int sizeOfPutAndHeader = 100 + 18;
+    int sizeOfWhole = sizeOfPutAndHeader + deleteRecordSize;
+
+    // Verification: Trigger OFFLINE to DROPPED state transition. Since this is being triggered on a partition that
+    // didn't go through decommission process, this should trigger going through INACTIVE -> OFFLINE -> DROPPED internally
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+        replicationManager.replicationListener);
+    CountDownLatch participantLatch = new CountDownLatch(1);
+    replicationManager.listenerExecutionLatch = new CountDownLatch(3);
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(partitionName);
+      participantLatch.countDown();
+    }, false).start();
+
+    // We should start seeing transitions within a second
+    Thread.sleep(1000);
+
+    // 1. Verify decommission file is created
+    File decommissionFile = new File(localReplica.getReplicaPath(), "decommission_in_progress");
+    assertTrue("Clean shutdown file should exist.", decommissionFile.exists());
+
+    // 2. ReplicationManager#onPartitionBecomeInactiveFromStandby() must be called as part of resuming decommission
+    assertEquals("Partition state change listener for standby to inactive transition didn't get called within 1 sec", 2,
+        replicationManager.listenerExecutionLatch.getCount());
+
+    // Make peers catch up with Put record
+    List<RemoteReplicaInfo> remoteReplicaInfos =
+        replicationManager.partitionToPartitionInfo.get(partitionId).getRemoteReplicaInfos();
+    ReplicaId peerReplica1 = remoteReplicaInfos.get(0).getReplicaId();
+    ReplicaId peerReplica2 = remoteReplicaInfos.get(1).getReplicaId();
+    replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, peerReplica1.getDataNodeId().getHostname(),
+        peerReplica1.getReplicaPath(), sizeOfPutAndHeader);
+    replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath(), sizeOfPutAndHeader);
+
+    Thread.sleep(1000);
+
+    // 3. ReplicationManager#onPartitionBecomeOfflineFromInactive() must be called by now
+    assertEquals("Partition state change listener for inactive to offline transition didn't get called within 1 sec", 1,
+        replicationManager.listenerExecutionLatch.getCount());
+
+    // Make peers catch up whole log
+    replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath(), sizeOfWhole);
+    replicationManager.updateTotalBytesReadByRemoteReplica(partitionId, peerReplica1.getDataNodeId().getHostname(),
+        peerReplica1.getReplicaPath(), sizeOfWhole);
+
+    // 4. ReplicationManager#onPartitionBecomeDroppedFromOffline() must be called by now
+    assertTrue("Partition state change listener for offline to dropped transition didn't get called within 1 sec",
+        replicationManager.listenerExecutionLatch.await(1, TimeUnit.SECONDS));
+
+    // 5. Transition must have been completed now.
+    assertTrue("Offline-To-Dropped transition didn't complete within 1 sec",
+        participantLatch.await(1, TimeUnit.SECONDS));
+
+    // 6. verify stats manager listener is called
+    verify(mockHelixParticipant.mockStatsManagerListener).onPartitionBecomeDroppedFromOffline(anyString());
+
+    // 7. verify setPartitionDisabledState method is called
+    verify(mockHelixParticipant).setPartitionDisabledState(partitionName, false);
+
+    // 8. Verify replica directory is deleted
+    File storeDir = new File(localReplica.getReplicaPath());
+    assertFalse("Store dir should not exist", storeDir.exists());
+    storageManager.shutdown();
+  }
+
+  /**
    * Tests pausing all partitions and makes sure that the replica thread pauses. Also tests that it resumes when one
    * eligible partition is re-enabled and that replication completes successfully.
    * @throws Exception
