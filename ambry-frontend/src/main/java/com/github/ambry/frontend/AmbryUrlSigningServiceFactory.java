@@ -14,6 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -32,11 +33,15 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
   private final FrontendConfig config;
   private final int chunkUploadMaxChunkSize;
   private final ClusterMap clusterMap;
+  private final ClusterMapConfig clusterMapConfig;
+  private final RouterConfig routerConfig;
 
   public AmbryUrlSigningServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap) {
     config = new FrontendConfig(verifiableProperties);
-    chunkUploadMaxChunkSize = new RouterConfig(verifiableProperties).routerMaxPutChunkSizeBytes;
     this.clusterMap = clusterMap;
+    this.clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    this.routerConfig = new RouterConfig(verifiableProperties);
+    this.chunkUploadMaxChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
   }
 
   @Override
@@ -54,6 +59,7 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
 
     return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint, config.urlSignerDefaultUrlTtlSecs,
         config.urlSignerDefaultMaxUploadSizeBytes, config.urlSignerMaxUrlTtlSecs,
-        config.chunkUploadInitialChunkTtlSecs, chunkUploadMaxChunkSize, SystemTime.getInstance(), clusterMap);
+        config.chunkUploadInitialChunkTtlSecs, chunkUploadMaxChunkSize, SystemTime.getInstance(), clusterMap,
+        clusterMapConfig, routerConfig);
   }
 }

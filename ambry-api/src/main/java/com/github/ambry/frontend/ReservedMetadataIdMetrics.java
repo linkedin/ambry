@@ -29,6 +29,7 @@ public class ReservedMetadataIdMetrics {
   public final Counter numReservedPartitionFoundReadOnlyCount;
   public final Counter numReservedPartitionFoundUnavailableInLocalDcCount;
   public final Counter numReservedPartitionFoundUnavailableInAllDcCount;
+  public final Counter reserveMetadataIdFailedForPostSignedUrlCount;
 
   /**
    * Constructor for {@link ReservedMetadataIdMetrics}.
@@ -45,6 +46,8 @@ public class ReservedMetadataIdMetrics {
         MetricRegistry.name(ReservedMetadataIdMetrics.class, "NumReservedPartitionFoundUnavailableInLocalDcCount"));
     numReservedPartitionFoundUnavailableInAllDcCount = metricRegistry.counter(
         MetricRegistry.name(ReservedMetadataIdMetrics.class, "NumReservedPartitionFoundUnavailableInAllDcCount"));
+    reserveMetadataIdFailedForPostSignedUrlCount = metricRegistry.counter(
+        MetricRegistry.name(ReservedMetadataIdMetrics.class, "ReserveMetadataIdFailedForPostSignedUrlCount"));
   }
 
   /**
