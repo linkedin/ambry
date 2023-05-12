@@ -111,12 +111,7 @@ class CompactionLog implements Closeable {
   static void processCompactionLogs(String dir, String storeId, StoreKeyFactory storeKeyFactory, Time time,
       StoreConfig config, CompactionLogProcessor processor) throws IOException {
     // Ignore current in process compaction.
-    File storeDir = new File(dir);
-    File[] files =
-        storeDir.listFiles((fileDir, name) -> name.startsWith(storeId + COMPACTION_LOG_SUFFIX + BlobStore.SEPARATOR));
-    List<File> sortedFiles = Stream.of(files)
-        .sorted((file1, file2) -> getStartTimeFromFile(file2) - getStartTimeFromFile(file1) > 0 ? 1 : -1)
-        .collect(Collectors.toList());
+    List<File> sortedFiles = getCompactedLogFilesInDescendingOrder(dir, storeId);
     File inProgressCompactionLog = new File(dir, storeId + COMPACTION_LOG_SUFFIX);
     if (inProgressCompactionLog.exists()) {
       sortedFiles.add(0, inProgressCompactionLog); // If there is an in progress compaction log, put it in the front.
@@ -126,6 +121,47 @@ class CompactionLog implements Closeable {
         break;
       }
     }
+  }
+
+  /**
+   * Remove all the compaction files that are started before the given {@code beforeTime}.
+   * @param dir The data dir that contains all the compaction log files.
+   * @param storeId The store id.
+   * @param beforeTime The cutoff time. Compaction log file started before this time will be removed.
+   */
+  static void cleanupCompactionLogs(String dir, String storeId, long beforeTime) {
+    List<File> sortedFiles = getCompactedLogFilesInDescendingOrder(dir, storeId);
+    if (sortedFiles.isEmpty()) {
+      logger.info("{}: No compaction log to cleanup", storeId);
+      return;
+    }
+    // The list is in descending order, the most recent compaction logs are in the front, we have to reverse the list
+    for (int i = sortedFiles.size() - 1; i >= 0; i--) {
+      File compactionFile = sortedFiles.get(i);
+      long startTime = getStartTimeFromFile(compactionFile);
+      if (startTime >= beforeTime) {
+        break;
+      } else {
+        logger.info("{}: Removing compaction file: {}, cutoff time: {}", storeId, compactionFile.getName(), beforeTime);
+        compactionFile.delete();
+      }
+    }
+  }
+
+  /**
+   * Get all the compaction file (not including inprogress compaction file) in descending order based on the start time
+   * @param dir The data dir that contains all the compaction log files.
+   * @param storeId The store id.
+   * @return A list of {@link File}s that are sorted at descending order
+   */
+  static List<File> getCompactedLogFilesInDescendingOrder(String dir, String storeId) {
+    File storeDir = new File(dir);
+    File[] files =
+        storeDir.listFiles((fileDir, name) -> name.startsWith(storeId + COMPACTION_LOG_SUFFIX + BlobStore.SEPARATOR));
+    List<File> sortedFiles = Stream.of(files)
+        .sorted((file1, file2) -> getStartTimeFromFile(file2) - getStartTimeFromFile(file1) > 0 ? 1 : -1)
+        .collect(Collectors.toList());
+    return sortedFiles;
   }
 
   /**

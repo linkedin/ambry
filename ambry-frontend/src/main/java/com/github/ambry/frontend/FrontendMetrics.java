@@ -256,10 +256,13 @@ public class FrontendMetrics {
   //Dataset Version
   public final Counter addDatasetVersionError;
   public final Counter getDatasetVersionError;
+  public final Counter deleteDatasetVersionError;
   public final Meter addDatasetVersionRate;
   public final Meter getDatasetVersionRate;
+  public final Meter deleteDatasetVersionRate;
   public final Histogram addDatasetVersionProcessingTimeInMs;
   public final Histogram getDatasetVersionProcessingTimeInMs;
+  public final Histogram deleteDatasetVersionProcessingTimeInMs;
 
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
@@ -655,13 +658,18 @@ public class FrontendMetrics {
         metricRegistry.counter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionError"));
     getDatasetVersionError =
         metricRegistry.counter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionError"));
+    deleteDatasetVersionError =
+        metricRegistry.counter(MetricRegistry.name(GetBlobHandler.class, "DeleteDatasetVersionError"));
     addDatasetVersionRate =
         metricRegistry.meter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionRate"));
-    getDatasetVersionRate =
-        metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionRate"));
+    getDatasetVersionRate = metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionRate"));
+    deleteDatasetVersionRate =
+        metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "DeleteDatasetVersionRate"));
     addDatasetVersionProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionProcessingTimeInMs"));
     getDatasetVersionProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionProcessingTimeInMs"));
+    deleteDatasetVersionProcessingTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(GetBlobHandler.class, "DeleteDatasetVersionProcessingTimeInMs"));
   }
 }

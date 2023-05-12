@@ -36,6 +36,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -214,6 +215,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   MySqlNamedBlobDb(AccountService accountService, MySqlNamedBlobDbConfig config, DataSourceFactory dataSourceFactory,
       String localDatacenter, MetricRegistry metricRegistry) {
     this(accountService, config, dataSourceFactory, localDatacenter, metricRegistry, SystemTime.getInstance());
+  }
+
+  @Override
+  public void close() throws IOException {
+    this.transactionExecutors.values().forEach(TransactionExecutor::close);
   }
 
   private static class Metrics {

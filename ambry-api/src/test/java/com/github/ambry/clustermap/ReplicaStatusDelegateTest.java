@@ -43,7 +43,7 @@ public class ReplicaStatusDelegateTest {
     verify(clusterParticipant).setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
     verifyNoMoreInteractions(clusterParticipant);
     delegate.partialSeal(replicaId);
-    verify(clusterParticipant, times(2)).setReplicaSealedState(replicaId, ReplicaSealStatus.NOT_SEALED);
+    verify(clusterParticipant).setReplicaSealedState(replicaId, ReplicaSealStatus.PARTIALLY_SEALED);
     verifyNoMoreInteractions(clusterParticipant);
     delegate.markStopped(replicaIds);
     verify(clusterParticipant).setReplicaStoppedState(replicaIds, true);

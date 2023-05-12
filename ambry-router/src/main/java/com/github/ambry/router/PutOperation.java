@@ -17,7 +17,9 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobId.BlobDataType;
@@ -25,6 +27,7 @@ import com.github.ambry.commons.BlobId.BlobIdType;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.ReservedMetadataIdMetrics;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -176,6 +179,7 @@ class PutOperation {
   private final RestRequest restRequest;
   private final String loggingContext;
   private final CompressionService compressionService;
+  private final ReservedMetadataIdMetrics reservedMetadataIdMetrics;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -313,6 +317,7 @@ class PutOperation {
     bytesFilledSoFar = 0;
     chunkCounter = -1;
     putChunks = new ConcurrentLinkedQueue<>();
+    reservedMetadataIdMetrics = ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(routerMetrics.getMetricRegistry());
     metadataPutChunk = new MetadataPutChunk();
     chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
@@ -572,17 +577,12 @@ class PutOperation {
       setOperationCompleted();
     } else if (chunk != metadataPutChunk) {
       // a data chunk has succeeded.
-      logger.trace("{}: Successfully put data chunk with blob id : {}", loggingContext, chunk.getChunkBlobId());
       metadataPutChunk.addChunkId(chunk.chunkBlobId, chunk.chunkBlobSize, chunk.chunkIndex);
       metadataPutChunk.maybeNotifyForChunkCreation(chunk);
+      maybeUpdateSlippedPutSuccessMetrics(chunk);
     } else {
       blobId = chunk.getChunkBlobId();
-      if (chunk.failedAttempts > 0) {
-        logger.trace("{}: Slipped put succeeded for chunk: {}", loggingContext, chunk.getChunkBlobId());
-        routerMetrics.slippedPutSuccessCount.inc();
-      } else {
-        logger.trace("{}: Successfully put chunk: {} ", loggingContext, chunk.getChunkBlobId());
-      }
+      maybeUpdateSlippedPutSuccessMetrics(chunk);
       setOperationCompleted();
     }
     long operationLatencyMs = time.milliseconds() - chunk.chunkFillCompleteAtMs;
@@ -715,6 +715,21 @@ class PutOperation {
    */
   public QuotaChargeCallback getQuotaChargeCallback() {
     return quotaChargeCallback;
+  }
+
+  /**
+   * Update the metrics for slipped puts if slipped puts were attempted.
+   */
+  private void maybeUpdateSlippedPutSuccessMetrics(PutChunk chunk) {
+    if (chunk.failedAttempts > 0) {
+      logger.trace("{}: Slipped put succeeded for chunk: {}", loggingContext, chunk.getChunkBlobId());
+      routerMetrics.slippedPutSuccessCount.inc();
+      if (chunk instanceof MetadataPutChunk) {
+        routerMetrics.metadataSlippedPutSuccessCount.inc();
+      }
+    } else {
+      logger.trace("{}: Successfully put chunk: {} ", loggingContext, chunk.getChunkBlobId());
+    }
   }
 
   /**
@@ -1213,13 +1228,14 @@ class PutOperation {
                 passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
                 passedInBlobProperties.isEncrypted(), blobDataType);
 
+        // TODO: Efficient Metadata Operations: The reserved metadata blob id needs to be passed as chunk properties.
         chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
-            passedInBlobProperties.getFilename());
+            passedInBlobProperties.getFilename(), null);
         operationTracker = getOperationTracker();
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
@@ -1433,6 +1449,9 @@ class PutOperation {
             logger.trace("{}: Attempt to put chunk with id: {} failed, attempting slipped put ", loggingContext,
                 chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
+            if (this instanceof MetadataPutChunk) {
+              routerMetrics.metadataSlippedPutAttemptCount.inc();
+            }
             chunkException = null;
             prepareForSending();
           } else {
@@ -1458,6 +1477,10 @@ class PutOperation {
             logger.info("{}: Exception {} while handling quota charge event", loggingContext,
                 quotaException.toString());
           }
+        }
+        if(this instanceof MetadataPutChunk && chunkException == null) {
+          // if this is a metadata chunk, and it was successful then increment the count of metadata chunk creation.
+          routerMetrics.metadataChunkCreationCount.inc();
         }
         state = ChunkState.Complete;
       }
@@ -1509,6 +1532,7 @@ class PutOperation {
               chunkBlobId));
           requestRegistrationCallback.registerRequestToDrop(correlationId);
           inFlightRequestsIterator.remove();
+          RouterUtils.logTimeoutMetrics(routerRequestExpiryReason, routerMetrics, requestInfo);
         } else {
           // Note: Even though the requests are ordered by correlation id and their creation time, we cannot break out of
           // the while loop here. This is because time outs for all requests may not be equal now.
@@ -1771,6 +1795,7 @@ class PutOperation {
     private final TreeMap<Integer, Pair<StoreKey, Long>> indexToChunkIdsAndChunkSizes;
     private int intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
     private Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
+    private final BlobId reservedMetadataChunkId;
 
     /**
      * Initialize the MetadataPutChunk.
@@ -1779,6 +1804,10 @@ class PutOperation {
       indexToChunkIdsAndChunkSizes = new TreeMap<>();
       // metadata blob is in building state.
       state = ChunkState.Building;
+      reservedMetadataChunkId =
+          ClusterMapUtils.reserveMetadataBlobId(partitionClass, Collections.emptyList(), reservedMetadataIdMetrics,
+              clusterMap, passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
+              passedInBlobProperties.isEncrypted(), routerConfig);
     }
 
     @Override
@@ -1871,7 +1900,7 @@ class PutOperation {
               passedInBlobProperties.getTimeToLiveInSeconds(), passedInBlobProperties.getCreationTimeInMs(),
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag(),
-              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename());
+              passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null);
       if (isStitchOperation() || getNumDataChunks() > 1) {
         ByteBuffer serialized = null;
         // values returned are in the right order as TreeMap returns them in key-order.
@@ -1888,6 +1917,7 @@ class PutOperation {
         serialized.flip();
         buf = Unpooled.wrappedBuffer(serialized);
         onFillComplete(false);
+        checkReservedPartitionState(reservedMetadataChunkId == null ? null : reservedMetadataChunkId.getPartition());
       } else {
         // if there is only one chunk
         blobId = (BlobId) indexToChunkIdsAndChunkSizes.get(0).getFirst();
@@ -1915,6 +1945,27 @@ class PutOperation {
           chunkBlobId, finalBlobProperties, ByteBuffer.wrap(chunkUserMetadata), buf.retainedDuplicate(),
           buf.readableBytes(), BlobType.MetadataBlob,
           encryptedPerBlobKey != null ? encryptedPerBlobKey.duplicate() : null);
+    }
+
+    /**
+     * Check if the reserved partition is available to take the Metadata chunk write.
+     * @param reservedPartitionId reserved partition id for the metadata chunk.
+     */
+    private void checkReservedPartitionState(PartitionId reservedPartitionId) {
+      if (reservedPartitionId == null) {
+        return;
+      }
+      if(reservedPartitionId.getPartitionState() == PartitionState.READ_ONLY) {
+        reservedMetadataIdMetrics.numReservedPartitionFoundReadOnlyCount.inc();
+      }
+      if(!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
+          true)) {
+        reservedMetadataIdMetrics.numReservedPartitionFoundUnavailableInLocalDcCount.inc();
+      }
+      if(!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
+          false)) {
+        reservedMetadataIdMetrics.numReservedPartitionFoundUnavailableInAllDcCount.inc();
+      }
     }
   }
 

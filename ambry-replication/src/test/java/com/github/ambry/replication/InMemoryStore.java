@@ -281,6 +281,11 @@ class InMemoryStore implements Store {
   }
 
   @Override
+  public void forceDelete(List<MessageInfo> infos) throws StoreException {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void updateTtl(List<MessageInfo> infos) throws StoreException {
     List<MessageInfo> infosToUpdate = new ArrayList<>(infos.size());
     List<InputStream> inputStreams = new ArrayList<>();

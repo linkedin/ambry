@@ -221,7 +221,7 @@ public class MySqlAccountsDBTool {
     logger.info("Fetched account metadata from zk path={}, took time={} ms", fullZKAccountMetadataPath,
         zkFetchTimeMs - startTimeMs);
 
-    AccountInfoMap accountInfoMap = new AccountInfoMap(new AccountServiceMetrics(new MetricRegistry()), accountMap);
+    AccountInfoMap accountInfoMap = new AccountInfoMap(new AccountServiceMetrics(new MetricRegistry(), false), accountMap);
 
     // Populate Account and Container tables in batches
     List<AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();

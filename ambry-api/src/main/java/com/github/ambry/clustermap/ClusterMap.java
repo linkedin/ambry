@@ -54,12 +54,29 @@ public interface ClusterMap extends AutoCloseable {
   List<? extends PartitionId> getWritablePartitionIds(String partitionClass);
 
   /**
+   * Gets a list of partitions that are available for writes. Gets a mutable shallow copy of the list of the partitions
+   * that are available for writes
+   * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
+   * @return a list of all writable partitions belonging to the partition class (or all writable partitions if
+   * {@code partitionClass} is {@code null})
+   */
+  List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass);
+
+  /**
    * Get a writable partition chosen at random that belongs to given partition class.
    * @param partitionClass the partition class whose writable partitions are required. Can be {@code null}
    * @param partitionsToExclude list of partitions that shouldn't be considered as a possible partition returned
    * @return chosen random partition. Can be {@code null}
    */
   PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude);
+
+  /**
+   * Get a fully writable partition chosen at random that belongs to given partition class.
+   * @param partitionClass the partition class whose fully writable partitions are required. Can be {@code null}
+   * @param partitionsToExclude list of partitions that shouldn't be considered as a possible partition returned
+   * @return chosen random partition. Can be {@code null}.
+   */
+  PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude);
 
   /**
    * Gets a list of all partitions in the cluster.  Gets a mutable shallow copy of the list of all partitions.
@@ -102,14 +119,14 @@ public interface ClusterMap extends AutoCloseable {
   DataNodeId getDataNodeId(String hostname, int port);
 
   /**
-   * Return true if the given host is in the clustermap and all resources this host is given to have already turned
+   * Return true if the given host is in the cluster map and all resources this host is given to have already turned
    * on FULL_AUTO mode. This is a Helix specific method that requires Helix specific data. All the other implementations
    * should just return false.
-   * @param hostname of the DataNodeId
-   * @param port of the DataNodeId
+   *
+   * @param dataNodeId the {@link DataNodeId} to check.
    * @return True if all the resources for the given host has turned on FULL_AUTO.
    */
-  default boolean isDataNodeInFullAutoMode(String hostname, int port) {
+  default boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId) {
     return false;
   }
 
@@ -161,6 +178,18 @@ public interface ClusterMap extends AutoCloseable {
    * @param clusterMapChangeListener the {@link ClusterMapChangeListener} to add.
    */
   void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener);
+
+  /**
+   * Check if there are at least requiredEligibleReplicaCount of replicas eligible for Put operation for the specified
+   * partition. If the specified checkLocalDcOnly is set to {@code true} then the check happens only for local datacenter.
+   * Otherwise, the check happens for all the datacenters.
+   * @param partitionId {@link PartitionId} whose replicas are checked for eligibility.
+   * @param requiredEligibleReplicaCount required number of replicas which should be eligible for put.
+   * @param checkLocalDcOnly if set to {@code true} then only local datacenter is checked. Otherwise, all the datacenters are checked.
+   * @return {@code true} if there are enough replicas. {@code false} otherwise.
+   */
+   boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+       boolean checkLocalDcOnly);
 
   /**
    * Close the cluster map. Any cleanups should be done in this call.

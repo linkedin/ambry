@@ -24,16 +24,20 @@ public class ChunkInfo {
   private final String blobId;
   private final long chunkSizeInBytes;
   private final long expirationTimeInMs;
+  private final String reservedMetadataId;
 
   /**
    * @param blobId the blob ID for the chunk.
    * @param chunkSizeInBytes the size of the chunk content in bytes.
    * @param expirationTimeInMs the expiration time of the chunk in milliseconds.
+   * @param reservedMetadataId the metadata id reserved for the chunk.
    */
-  public ChunkInfo(String blobId, long chunkSizeInBytes, long expirationTimeInMs) {
+  public ChunkInfo(String blobId, long chunkSizeInBytes, long expirationTimeInMs, String reservedMetadataId) {
     this.blobId = Objects.requireNonNull(blobId, "blobId cannot be null");
     this.chunkSizeInBytes = chunkSizeInBytes;
     this.expirationTimeInMs = expirationTimeInMs;
+    // TODO EMO: After feature completion, reservedMetadataId must be asserted not null.
+    this.reservedMetadataId = reservedMetadataId;
   }
 
   /**
@@ -57,10 +61,17 @@ public class ChunkInfo {
     return expirationTimeInMs;
   }
 
+  /**
+   * @return the reserved metadata id of the chunk.
+   */
+  public String getReservedMetadataId() {
+    return reservedMetadataId;
+  }
+
   @Override
   public String toString() {
     return "ChunkInfo{" + "blobId='" + blobId + '\'' + ", chunkSizeInBytes=" + chunkSizeInBytes
-        + ", expirationTimeInMs=" + expirationTimeInMs + '}';
+        + ", expirationTimeInMs=" + expirationTimeInMs + ", reservedMetadataId=" + reservedMetadataId + '}';
   }
 
   @Override
@@ -73,7 +84,7 @@ public class ChunkInfo {
     }
     ChunkInfo chunkInfo = (ChunkInfo) o;
     return chunkSizeInBytes == chunkInfo.chunkSizeInBytes && expirationTimeInMs == chunkInfo.expirationTimeInMs
-        && Objects.equals(blobId, chunkInfo.blobId);
+        && Objects.equals(blobId, chunkInfo.blobId) && Objects.equals(reservedMetadataId, chunkInfo.reservedMetadataId);
   }
 
   @Override

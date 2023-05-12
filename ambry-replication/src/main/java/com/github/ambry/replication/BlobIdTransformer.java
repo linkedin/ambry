@@ -251,7 +251,7 @@ public class BlobIdTransformer implements Transformer {
               oldProperties.getContentType(), oldProperties.isPrivate(), oldProperties.getTimeToLiveInSeconds(),
               oldProperties.getCreationTimeInMs(), newBlobId.getAccountId(), newBlobId.getContainerId(),
               oldProperties.isEncrypted(), oldProperties.getExternalAssetTag(), oldProperties.getContentEncoding(),
-              oldProperties.getFilename());
+              oldProperties.getFilename(), oldProperties.getReservedMetadataBlobId());
 
       // BlobIDTransformer only exists on ambry-server and replication between servers is relying on blocking channel
       // which is still using java ByteBuffer. So, no need to consider releasing stuff.

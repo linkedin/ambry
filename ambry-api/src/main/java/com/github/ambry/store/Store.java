@@ -61,6 +61,13 @@ public interface Store {
   void delete(List<MessageInfo> infosToDelete) throws StoreException;
 
   /**
+   * Force to write delete record for all the messages in the list when the Put record doesn't exist.
+   * @param infosToDelete The list of messages that need to be deleted.
+   * @throws StoreException
+   */
+  void forceDelete(List<MessageInfo> infosToDelete) throws StoreException;
+
+  /**
    * Undelete the blob identified by {@code id}. When the lifeVersion is {@link MessageInfo#LIFE_VERSION_FROM_FRONTEND},
    * this method is invoked by the responding to the frontend request. Otherwise, it's invoked in the replication thread.
    * @param info The {@link MessageInfo} that carries some basic information about this operation.

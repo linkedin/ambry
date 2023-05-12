@@ -264,6 +264,7 @@ class ReplicateBlobOperation {
         onErrorResponse(requestInfo.getReplicaId(),
             RouterUtils.buildTimeoutException(correlationId, requestInfo.getReplicaId().getDataNodeId(), blobId));
         requestRegistrationCallback.registerRequestToDrop(correlationId);
+        RouterUtils.logTimeoutMetrics(routerRequestExpiryReason, routerMetrics, requestInfo);
       } else {
         // Note: Even though the requests are ordered by correlation id and their creation time, we cannot break out of
         // the while loop here. This is because time outs for all requests may not be equal now.

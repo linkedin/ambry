@@ -13,7 +13,7 @@
  */
 package com.github.ambry.frontend;
 
-import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -31,10 +31,12 @@ import org.json.JSONObject;
 public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
   private final FrontendConfig config;
   private final int chunkUploadMaxChunkSize;
+  private final ClusterMap clusterMap;
 
-  public AmbryUrlSigningServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
+  public AmbryUrlSigningServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap) {
     config = new FrontendConfig(verifiableProperties);
     chunkUploadMaxChunkSize = new RouterConfig(verifiableProperties).routerMaxPutChunkSizeBytes;
+    this.clusterMap = clusterMap;
   }
 
   @Override
@@ -52,6 +54,6 @@ public class AmbryUrlSigningServiceFactory implements UrlSigningServiceFactory {
 
     return new AmbryUrlSigningService(uploadEndpoint, downloadEndpoint, config.urlSignerDefaultUrlTtlSecs,
         config.urlSignerDefaultMaxUploadSizeBytes, config.urlSignerMaxUrlTtlSecs,
-        config.chunkUploadInitialChunkTtlSecs, chunkUploadMaxChunkSize, SystemTime.getInstance());
+        config.chunkUploadInitialChunkTtlSecs, chunkUploadMaxChunkSize, SystemTime.getInstance(), clusterMap);
   }
 }

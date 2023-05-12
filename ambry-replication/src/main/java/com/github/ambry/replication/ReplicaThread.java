@@ -2048,7 +2048,8 @@ public class ReplicaThread implements Runnable {
                 "Remote node: {} Thread name: {} RemoteReplicaGroup {} ServerError for ReplicaMetadataResponse {} "
                     + "ReplicaMetadataResponseInfoListSize: {} RemoteReplicaInfoSize: {}", remoteDataNode, threadName,
                 id, response.getError(), replicaMetadataResponseInfoListSize, remoteReplicaInfos.size());
-            throw new ReplicationException("ReplicaMetadataResponse unexpected error " + response.getError());
+            throw new ReplicationException("ReplicaMetadataResponse unexpected error " + response.getError(),
+                response.getError());
           }
           exchangeMetadataResponseList =
               ReplicaThread.this.handleReplicaMetadataResponse(response, remoteReplicaInfos, remoteDataNode);
@@ -2101,7 +2102,7 @@ public class ReplicaThread implements Runnable {
             replicationMetrics.incrementResponseErrorCount(replicatingFromRemoteColo, datacenterName);
             logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} ServerError for GetResponse {}",
                 remoteDataNode, threadName, id, response.getError());
-            throw new ReplicationException("GetResponse unexpected error " + response.getError());
+            throw new ReplicationException("GetResponse unexpected error " + response.getError(), response.getError());
           }
           ReplicaThread.this.handleGetResponse(response, remoteReplicaInfosToSend,
               exchangeMetadataResponseListToProcess, remoteDataNode, isNonProgressStandbyReplicaGroup);
@@ -2130,8 +2131,15 @@ public class ReplicaThread implements Runnable {
      * @param message The message to log out
      */
     private void setException(Exception e, String message) {
-      logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} {}", remoteDataNode, threadName, id, message,
-          e);
+      if (e instanceof ReplicationException
+          && ((ReplicationException) e).getServerErrorCode() == ServerErrorCode.Retry_After_Backoff) {
+        replicationMetrics.incrementRetryAfterBackoffErrorCount(replicatingFromRemoteColo, datacenterName);
+        logger.trace("Remote node: {} Thread name: {} RemoteReplicaGroup {} {}", remoteDataNode, threadName, id,
+            message);
+      } else {
+        logger.error("Remote node: {} Thread name: {} RemoteReplicaGroup {} {}", remoteDataNode, threadName, id,
+            message, e);
+      }
       exception = e;
       state = ReplicaGroupReplicationState.DONE;
     }

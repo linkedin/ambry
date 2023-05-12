@@ -13,6 +13,11 @@
  */
 package com.github.ambry.clustermap;
 
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.RouterConfig;
+import com.github.ambry.frontend.ReservedMetadataIdMetrics;
 import com.github.ambry.network.Port;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -33,6 +38,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Predicate;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
@@ -81,6 +87,7 @@ public class ClusterMapUtils {
   static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String READ_ONLY_STR = "RO";
   static final String READ_WRITE_STR = "RW";
+  static final String PARTIAL_READ_WRITE_STR = "PRW";
   static final String ZKCONNECT_STR = "zkConnectStr";
   static final String ZKCONNECT_STR_DELIMITER = ",";
   static final String ZKINFO_STR = "zkInfo";
@@ -95,7 +102,12 @@ public class ClusterMapUtils {
   static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
+  // TODO: Temporary defaults to be used when adding replicas in helix FULL_AUTO mode. These replica configs will need
+  //  to stored in configs or helix for each cluster.
+  static final long DEFAULT_REPLICA_CAPACITY_IN_BYTES = 100L * 1024 * 1024 * 1024;
   static final int CURRENT_SCHEMA_VERSION = 0;
+  static final String WRITABLE_LOG_STR = "writable";
+  static final String FULLY_WRITABLE_LOG_STR = "fully writable";
   private static final Logger logger = LoggerFactory.getLogger(ClusterMapUtils.class);
 
   /**
@@ -214,6 +226,58 @@ public class ClusterMapUtils {
     }
     return replicaSealStatus;
   }
+
+  /**
+   * Choose a random {@link PartitionId} for putting the metadata chunk and return a {@link BlobId} that belongs to the
+   * chosen partition id.
+   * @param partitionClass the partition class to choose partitions from.
+   * @param partitionIdsToExclude the list of {@link PartitionId}s that should be excluded from consideration.
+   * @param reservedMetadataIdMetrics the {@link ReservedMetadataIdMetrics} object.
+   * @param clusterMap the {@link ClusterMap} object.
+   * @param accountId the account id to be encoded in the blob id.
+   * @param containerId the container id to be encoded in the blob id.
+   * @param isEncrypted {@code true} is the blob is encrypted. {@code false} otherwise.
+   * @param routerConfig the {@link RouterConfig} object.
+   * @return the chosen {@link BlobId}.
+   */
+  public static BlobId reserveMetadataBlobId(String partitionClass, List<PartitionId> partitionIdsToExclude,
+      ReservedMetadataIdMetrics reservedMetadataIdMetrics, ClusterMap clusterMap, short accountId, short containerId,
+      boolean isEncrypted, RouterConfig routerConfig) {
+    PartitionId selected = clusterMap.getRandomFullyWritablePartition(partitionClass, partitionIdsToExclude);
+    if (selected == null) {
+      reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.inc();
+      return null;
+    }
+    if (!partitionClass.equals(selected.getPartitionClass())) {
+      logger.warn(
+          "While reserving metadata chunk id, no partitions for partitionClass='{}' found, partitionClass='{}' used"
+              + " instead for metadata chunk.", partitionClass, selected.getPartitionClass());
+      reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.inc();
+    }
+    return new BlobId(routerConfig.routerBlobidCurrentVersion, BlobId.BlobIdType.NATIVE,
+        clusterMap.getLocalDatacenterId(), accountId, containerId, selected, isEncrypted,
+        BlobId.BlobDataType.METADATA);
+  }
+
+  /**
+   * Return the partition class for the specified {@link Account} and {@link Container}.
+   * If the partition class for the Account and Container is not specified or cannot be determined, then return the
+   * specified defaultPartitionClass.
+   * @param account the {@link Account} object.
+   * @param container the {@link Container} object.
+   * @param defaultPartitionClass the default partition class.
+   * @return the partition class as required by the parameters.
+   */
+  public static String getPartitionClass(Account account, Container container, String defaultPartitionClass) {
+    String partitionClass = defaultPartitionClass;
+    if (account != null) {
+      if (container != null && !Utils.isNullOrEmpty(container.getReplicationPolicy())) {
+        partitionClass = container.getReplicationPolicy();
+      }
+    }
+    return partitionClass;
+  }
+
 
   /**
    * Get the schema version associated with the given instance (if any).
@@ -522,6 +586,45 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Convert {@link PartitionState} object to str.
+   * @param partitionState {@link PartitionState} to convert.
+   * @return String representation for {@link PartitionState}.
+   */
+  public static String partitionStateToStr(PartitionState partitionState) {
+    String partitionStateStr = null;
+    switch (partitionState) {
+      case READ_WRITE:
+        partitionStateStr = READ_WRITE_STR;
+        break;
+      case PARTIAL_READ_WRITE:
+        partitionStateStr = PARTIAL_READ_WRITE_STR;
+        break;
+      case READ_ONLY:
+        partitionStateStr = READ_ONLY_STR;
+        break;
+      default:
+        throw new IllegalArgumentException(String.format("Invalid partition state %s", partitionState.name()));
+    }
+    return partitionStateStr;
+  }
+
+  /**
+   * Convert partition state string to {@link ReplicaSealStatus} object.
+   * @param partitionStateStr the partition state string to convert.
+   * @return ReplicaSealStatus object.
+   */
+  public static ReplicaSealStatus partitionStateStrToReplicaSealStatus(String partitionStateStr) {
+    if (partitionStateStr.equals(READ_WRITE_STR)) {
+      return ReplicaSealStatus.NOT_SEALED;
+    } else if (partitionStateStr.equals(PARTIAL_READ_WRITE_STR)) {
+      return ReplicaSealStatus.PARTIALLY_SEALED;
+    } else if (partitionStateStr.equals(READ_ONLY_STR)) {
+      return ReplicaSealStatus.SEALED;
+    }
+    throw new IllegalArgumentException(String.format("Invalid partition state str %s", partitionStateStr));
+  }
+
+  /**
    * Validate the replica capacity.
    * @param replicaCapacityInBytes the replica capacity to validate.
    */
@@ -641,19 +744,56 @@ public class ClusterMapUtils {
      * datacenter (all writable partitions if it is {@code null}).
      */
     List<PartitionId> getWritablePartitions(String partitionClass) {
-      List<PartitionId> writablePartitions = new ArrayList<>();
-      List<PartitionId> healthyWritablePartitions = new ArrayList<>();
+      return getPartitionsWithState(partitionClass, (partitionState -> partitionState != PartitionState.READ_ONLY),
+          WRITABLE_LOG_STR);
+    }
+
+    /**
+     * Returns all the partitions that are in the state {@link PartitionState#READ_WRITE} AND have the highest number of
+     * replicas in the local datacenter for the given {@code partitionClass}.
+     * <p/>
+     * Also attempts to return only partitions with healthy replicas but if no such partitions are found, returns all
+     * the eligible partitions irrespective of replica health.
+     * <p/>
+     * If {@code partitionClass} is {@code null}, gets writable partitions from all partition classes.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @return all the writable partitions in {@code partitionClass} with the highest replica count in the local
+     * datacenter (all writable partitions if it is {@code null}).
+     */
+    List<PartitionId> getFullyWritablePartitions(String partitionClass) {
+      return getPartitionsWithState(partitionClass, (partitionState -> partitionState == PartitionState.READ_WRITE),
+          FULLY_WRITABLE_LOG_STR);
+    }
+
+    /**
+     * Returns all the partitions that meet the specified stateCriteria AND have the highest number of
+     * replicas in the local datacenter for the given {@code partitionClass}.
+     * <p/>
+     * Also attempts to return only partitions with healthy replicas but if no such partitions are found, returns all
+     * the eligible partitions irrespective of replica health.
+     * <p/>
+     * If {@code partitionClass} is {@code null}, gets partitions from all partition classes.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @param stateCriteria {@link Predicate} that specifies the selection criteria for the partition based on {@link PartitionState}.
+     * @param criteriaStr String representing a name for stateCriteria for logging.
+     * @return all the writable partitions in {@code partitionClass} with the highest replica count in the local
+     * datacenter (all writable partitions if it is {@code null}).
+     */
+    List<PartitionId> getPartitionsWithState(String partitionClass, Predicate<PartitionState> stateCriteria,
+        String criteriaStr) {
+      List<PartitionId> suitablePartitions = new ArrayList<>();
+      List<PartitionId> healthySuitablePartitions = new ArrayList<>();
       for (PartitionId partition : getPartitionsInClass(partitionClass, true)) {
-        if (partition.getPartitionState() != PartitionState.READ_ONLY) {
-          writablePartitions.add(partition);
+        if (stateCriteria.test(partition.getPartitionState())) {
+          suitablePartitions.add(partition);
           if (areAllReplicasForPartitionUp((partition))) {
-            healthyWritablePartitions.add(partition);
+            healthySuitablePartitions.add(partition);
           }
         } else {
-          logger.debug("{} is in READ_ONLY state, skipping it", partition.toString());
+          logger.debug("{} doesn't meet {} criteria, skipping it", partition, criteriaStr);
         }
       }
-      return healthyWritablePartitions.isEmpty() ? writablePartitions : healthyWritablePartitions;
+      return healthySuitablePartitions.isEmpty() ? suitablePartitions : healthySuitablePartitions;
     }
 
     /**
@@ -666,7 +806,39 @@ public class ClusterMapUtils {
      * @return A writable partition or {@code null} if no writable partition with given criteria found
      */
     PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
-      PartitionId anyWritablePartition = null;
+      return getRandomPartitionWithState(partitionClass, partitionsToExclude,
+          (partitionState -> partitionState != PartitionState.READ_ONLY), WRITABLE_LOG_STR);
+    }
+
+    /**
+     * Returns a fully writable partition selected at random, that belongs to the specified partition class and that is in
+     * the state {@link PartitionState#READ_WRITE} AND has enough replicas up. In case none of the partitions have enough
+     * replicas up, any fully writable partition is returned. Enough replicas is considered to be all local replicas if such
+     * information is available. In case localDatacenterName is not available, all of the partition's replicas should be up.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @param partitionsToExclude partitions that should be excluded from the result. Can be {@code null} or empty.
+     * @return A fully writable partition or {@code null} if no fully writable partition with given criteria found
+     */
+    PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+      return getRandomPartitionWithState(partitionClass, partitionsToExclude,
+          (partitionState -> partitionState == PartitionState.READ_WRITE), FULLY_WRITABLE_LOG_STR);
+    }
+
+    /**
+     * Returns a partition selected at random, that belongs to the specified partition class and meets the specified
+     * stateCriteria AND has enough replicas up. In case none of the partitions have enough
+     * replicas up, any partition that meets the state criteria is returned. Enough replicas is considered to be all
+     * local replicas if such information is available. In case localDatacenterName is not available, all of the
+     * partition's replicas should be up.
+     * @param partitionClass the class of the partitions desired. Can be {@code null}.
+     * @param partitionsToExclude partitions that should be excluded from the result. Can be {@code null} or empty.
+     * @param stateCriteria {@link Predicate} that specifies the selection criteria for the partition based on {@link PartitionState}.
+     * @param criteriaStr String representing a name for stateCriteria for logging.
+     * @return A partition that meets the specified stateCriteria or {@code null} if no partition with given stateCriteria found
+     */
+    PartitionId getRandomPartitionWithState(String partitionClass, List<PartitionId> partitionsToExclude,
+        Predicate<PartitionState> stateCriteria, String criteriaStr) {
+      PartitionId anySuitablePartition = null;
       long startTime = SystemTime.getInstance().milliseconds();
       List<PartitionId> partitionsInClass = new ArrayList<>();
       rwLock.readLock().lock();
@@ -678,8 +850,8 @@ public class ClusterMapUtils {
           PartitionId selected = partitionsInClass.get(randomIndex);
           if (partitionsToExclude == null || partitionsToExclude.size() == 0 || !partitionsToExclude.contains(
               selected)) {
-            if (selected.getPartitionState() != PartitionState.READ_ONLY) {
-              anyWritablePartition = selected;
+            if (stateCriteria.test(selected.getPartitionState())) {
+              anySuitablePartition = selected;
               if (hasEnoughEligibleWritableReplicas(selected)) {
                 return selected;
               }
@@ -691,15 +863,17 @@ public class ClusterMapUtils {
           workingSize--;
         }
         //if we are here then that means we couldn't find any partition with all local replicas up
-        return anyWritablePartition;
+        return anySuitablePartition;
       } finally {
         rwLock.readLock().unlock();
-        if (anyWritablePartition != null) {
-          logger.debug("Partition class {}, number of partitions {}, selected partition {}, search time in Ms {}",
-              partitionClass != null ? partitionClass : "", partitionsInClass.size(), anyWritablePartition,
+        if (anySuitablePartition != null) {
+          logger.debug(
+              "Partition class {}, number of partitions {}, selected partition {} for {} criteria, search time in Ms {}",
+              partitionClass != null ? partitionClass : "", partitionsInClass.size(), anySuitablePartition,
               SystemTime.getInstance().milliseconds() - startTime);
         } else {
-          logger.debug("Partition class {}, number of partitions {}, no partition selected, search time in Ms {}",
+          logger.debug(
+              "Partition class {}, number of partitions {}, no partition selected for {} criteria, search time in Ms {}",
               partitionClass != null ? partitionClass : "", partitionsInClass.size(),
               SystemTime.getInstance().milliseconds() - startTime);
         }
@@ -722,6 +896,31 @@ public class ClusterMapUtils {
         return areAllReplicasForPartitionUp(partitionId) && areAllReplicaStatesEligibleForPut(partitionId, null);
       }
     }
+
+    /**
+     * Check if there are at least requiredEligibleReplicaCount of replicas eligible for Put operation for the specified
+     * partition. If the specified checkLocalDcOnly is set to {@code true} then the check happens only for local datacenter.
+     * Otherwise, the check happens for all the datacenters.
+     * @param partitionId {@link PartitionId} whose replicas are checked for eligibility.
+     * @param requiredEligibleReplicaCount required number of replicas which should be eligible for put.
+     * @param checkLocalDcOnly if set to {@code true} then only local datacenter is checked. Otherwise, all the datacenters are checked.
+     * @return {@code true} if there are enough replicas. {@code false} otherwise.
+     */
+    boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+        boolean checkLocalDcOnly) {
+      Set<ReplicaId> eligibleReplicas = new HashSet<>();
+      EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)
+          .forEach(state -> eligibleReplicas.addAll(
+              partitionId.getReplicaIdsByState(state, checkLocalDcOnly ? localDatacenterName : null)));
+      int eligibleReplicaCount = 0;
+      for (ReplicaId replica : eligibleReplicas) {
+        if (!replica.isDown()) {
+          eligibleReplicaCount++;
+        }
+      }
+      return eligibleReplicaCount >= requiredEligibleReplicaCount;
+    }
+
 
     /**
      * Check whether all local replicas of the given {@link PartitionId} are up.
@@ -782,8 +981,7 @@ public class ClusterMapUtils {
           }
           if (partitionsByReplicaCount == null) {
             throw new IllegalArgumentException(
-                "No partitions for partition class = '" + partitionClass + "' or default partition class = '"
-                    + defaultPartitionClass + "' found");
+                "No partitions for partition class = '" + partitionClass + "' or default partition class = '" + defaultPartitionClass + "' found");
           }
           if (minimumReplicaCountRequired) {
             // get partitions with replica count >= min replica count specified in ClusterMapConfig

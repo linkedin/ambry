@@ -23,6 +23,7 @@ public class MockDiskId implements DiskId {
   MockDataNodeId dataNode;
   HardwareState state = HardwareState.AVAILABLE;
   private boolean allowChangesThroughClustermap = true;
+  public long availableSpaceInBytes = 10000;
 
   public MockDiskId(MockDataNodeId dataNode, String mountPath) {
     this.mountPath = mountPath;
@@ -41,7 +42,22 @@ public class MockDiskId implements DiskId {
 
   @Override
   public long getRawCapacityInBytes() {
-    return 100000;
+    return availableSpaceInBytes;
+  }
+
+  @Override
+  public void decreaseAvailableSpaceInBytes(long delta) {
+    availableSpaceInBytes -= delta;
+  }
+
+  @Override
+  public void increaseAvailableSpaceInBytes(long delta) {
+    availableSpaceInBytes += delta;
+  }
+
+  @Override
+  public long getAvailableSpaceInBytes() {
+    return availableSpaceInBytes;
   }
 
   @Override

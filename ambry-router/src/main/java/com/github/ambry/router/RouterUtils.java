@@ -308,6 +308,22 @@ public class RouterUtils {
   }
 
   /**
+   * Update the metrics related to request time out.
+   * @param routerRequestExpiryReason the reason for request expiry.
+   * @param routerMetrics router metrics.
+   * @param requestInfo of the request.
+   */
+  public static void logTimeoutMetrics(RouterRequestExpiryReason routerRequestExpiryReason,
+      NonBlockingRouterMetrics routerMetrics, RequestInfo requestInfo) {
+    if (routerRequestExpiryReason == RouterUtils.RouterRequestExpiryReason.ROUTER_SERVER_NETWORK_CLIENT_TIMEOUT) {
+      routerMetrics.requestWaitTimeBeforeExpiryOnNetworkTimeoutMs.update(requestInfo.getNetworkTimeOutMs());
+      routerMetrics.requestExpiryOnNetworkTimeoutCount.inc();
+    } else if (routerRequestExpiryReason == RouterUtils.RouterRequestExpiryReason.ROUTER_REQUEST_TIMEOUT) {
+      routerMetrics.requestExpiryOnFinalTimeoutCount.inc();
+    }
+  }
+
+  /**
    * @param blobId {@link BlobId} to check.
    * @param clusterMap {@link ClusterMap} object.
    * @return {@code true} if it can be determined that the blobid's originating dc is remote. {@code false} otherwise.

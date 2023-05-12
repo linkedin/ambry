@@ -157,6 +157,10 @@ class HelixClusterManagerMetrics {
     Gauge<Long> partitionSealedCount = clusterMapCallback::getPartitionSealedCount;
     registry.register(MetricRegistry.name(HelixClusterManager.class, "partitionSealedCount"), partitionSealedCount);
 
+    Gauge<Long> partitionPartiallySealedCount = clusterMapCallback::getPartitionPartiallySealedCount;
+    registry.register(MetricRegistry.name(HelixClusterManager.class, "partitionPartiallySealedCount"),
+        partitionPartiallySealedCount);
+
     Gauge<Long> isMajorityReplicasDownForAnyPartition = () -> {
       for (PartitionId partition : clusterMapCallback.getPartitions()) {
         List<? extends ReplicaId> replicas = partition.getReplicaIds();

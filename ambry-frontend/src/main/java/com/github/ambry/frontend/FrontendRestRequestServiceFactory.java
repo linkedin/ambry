@@ -90,7 +90,7 @@ public class FrontendRestRequestServiceFactory implements RestRequestServiceFact
               idSigningService, namedBlobDb);
       UrlSigningService urlSigningService =
           Utils.<UrlSigningServiceFactory>getObj(frontendConfig.urlSigningServiceFactory, verifiableProperties,
-              clusterMap.getMetricRegistry()).getUrlSigningService();
+              clusterMap).getUrlSigningService();
       AccountAndContainerInjector accountAndContainerInjector =
           new AccountAndContainerInjector(accountService, frontendMetrics, frontendConfig);
       AccountStatsStore accountStatsStore =

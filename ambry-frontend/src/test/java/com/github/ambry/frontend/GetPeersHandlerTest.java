@@ -322,7 +322,17 @@ class TailoredPeersClusterMap implements ClusterMap {
   }
 
   @Override
+  public List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+    throw new IllegalStateException();
+  }
+
+  @Override
   public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    throw new IllegalStateException();
+  }
+
+  @Override
+  public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     throw new IllegalStateException();
   }
 
@@ -394,6 +404,12 @@ class TailoredPeersClusterMap implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+  }
+
+  @Override
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    throw new IllegalStateException();
   }
 
   @Override

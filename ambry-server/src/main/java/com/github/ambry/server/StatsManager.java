@@ -18,7 +18,11 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.DistributedLock;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
@@ -65,6 +69,7 @@ import static com.github.ambry.utils.Utils.*;
  */
 class StatsManager {
   private static final Logger logger = LoggerFactory.getLogger(StatsManager.class);
+  private static final String LOCK_RESOURCE_PREFIX = "AccountStatsStore_HostRemoval_";
 
   private final StorageManager storageManager;
   private final StatsManagerMetrics metrics;
@@ -75,6 +80,8 @@ class StatsManager {
   private AccountStatsPublisher accountsStatsPublisher = null;
   private PartitionClassStatsPublisher partitionClassStatsPublisher = null;
   private final StatsManagerConfig config;
+  private final ClusterParticipant clusterParticipant;
+  private final DataNodeId currentNode;
   private long expiredDeleteTombstoneCount = 0;
   private long expiredDeleteTombstoneTotalSize = 0;
   private long permanentDeleteTombstoneCount = 0;
@@ -86,6 +93,7 @@ class StatsManager {
   /**
    * Constructs a {@link StatsManager}.
    * @param storageManager the {@link StorageManager} to be used to fetch the {@link Store}s
+   * @param clustermap The {@link ClusterMap} object to be used
    * @param replicaIds a {@link List} of {@link ReplicaId}s that are going to be fetched
    * @param registry the {@link MetricRegistry} to be used for {@link StatsManagerMetrics}
    * @param config the {@link StatsManagerConfig} to be used to configure the output file path and publish period
@@ -93,21 +101,25 @@ class StatsManager {
    * @param clusterParticipant the {@link ClusterParticipant} to register state change listener.
    * @param accountStatsStore the {@link AccountStatsStore} to publish stats.
    * @param accountService the {@link AccountService} to get account ids from account names.
+   * @param dataNodeId the {@link DataNodeId} for current node
    */
-  StatsManager(StorageManager storageManager, List<? extends ReplicaId> replicaIds, MetricRegistry registry,
-      StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant, AccountStatsStore accountStatsStore,
-      AccountService accountService) {
+  StatsManager(StorageManager storageManager, ClusterMap clustermap, List<? extends ReplicaId> replicaIds,
+      MetricRegistry registry, StatsManagerConfig config, Time time, ClusterParticipant clusterParticipant,
+      AccountStatsStore accountStatsStore, AccountService accountService, DataNodeId dataNodeId) {
     this.storageManager = storageManager;
     this.config = config;
     metrics = new StatsManagerMetrics(registry, aggregatedDeleteTombstoneStats);
     partitionToReplicaMap =
         replicaIds.stream().collect(Collectors.toConcurrentMap(ReplicaId::getPartitionId, Function.identity()));
     this.time = time;
+    this.clusterParticipant = clusterParticipant;
+    this.currentNode = dataNodeId;
     if (clusterParticipant != null) {
       clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener,
           new PartitionStateChangeListenerImpl());
       logger.info("Stats Manager's state change listener registered!");
     }
+    clustermap.registerClusterMapListener(new ClusterMapChangeListenerImpl());
     this.accountStatsStore = accountStatsStore;
     Function<List<String>, List<Short>> convertAccountNamesToIds = names -> names.stream()
         .map(accountService::getAccountByName)
@@ -115,13 +127,13 @@ class StatsManager {
         .map(Account::getId)
         .collect(Collectors.toList());
     this.publishExcludeAccountIds = convertAccountNamesToIds.apply(config.publishExcludeAccountNames);
+    this.scheduler = Utils.newScheduler(2, false);
   }
 
   /**
    * Start the stats manager by scheduling the periodic task that collect, aggregate and publish stats.
    */
   void start() {
-    scheduler = Utils.newScheduler(1, false);
     if (accountStatsStore != null) {
       accountsStatsPublisher = new AccountStatsPublisher(accountStatsStore);
       int actualDelay = config.initialDelayUpperBoundInSecs > 0 ? ThreadLocalRandom.current()
@@ -452,6 +464,61 @@ class StatsManager {
       }
     }
     return unreachableStores;
+  }
+
+  /**
+   * An implementation of {@link ClusterMapChangeListener} to listen on the data node removal.
+   */
+  private class ClusterMapChangeListenerImpl implements ClusterMapChangeListener {
+
+    // We don't really care about the replica addition and removal for stats manager
+    @Override
+    public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+    }
+
+    @Override
+    public void onDataNodeRemoved(DataNodeId removedDataNode) {
+      logger.info("DataNode: {} is removed from clustermap", removedDataNode);
+      if (config.enableRemoveHostFromAccountStatsStore && accountStatsStore != null
+          && removedDataNode.getDatacenterName().equals(currentNode.getDatacenterName())) {
+        // 1. There are many other server nodes that received this message and are taking action now, we have to
+        // use a distributed lock so there will be only one server node who is deleting this data node
+        // 2. Start a new thread for this task so that we don't block the listener.
+        logger.info(
+            "Receive a data node removal message for {}_{}, schedule a task to remove account stats for this host",
+            removedDataNode.getHostname(), removedDataNode.getPort());
+        scheduler.submit(() -> this.tryRemoveHostFromAccountStatsStore(removedDataNode));
+      }
+    }
+
+    private void tryRemoveHostFromAccountStatsStore(DataNodeId removedDataNode) {
+      String resource =
+          "%s_%s_%d".format(LOCK_RESOURCE_PREFIX + removedDataNode.getHostname(), removedDataNode.getPort());
+      try {
+        DistributedLock lock = clusterParticipant.getDistributedLock(resource, "AccountStatsStoreRemoval");
+        if (lock.tryLock()) {
+          logger.info("Acquired distributed lock for host removal: {}_{}", removedDataNode.getHostname(),
+              removedDataNode.getPort());
+          try {
+            accountStatsStore.deleteHostAccountStorageStatsForHost(removedDataNode.getHostname(),
+                removedDataNode.getPort());
+            logger.info("Successfully removed host {}_{} from account stats store", removedDataNode.getHostname(),
+                removedDataNode.getPort());
+          } catch (Exception e) {
+            logger.error("Failed to remove host {}_{} from account stats store", removedDataNode.getHostname(),
+                removedDataNode.getPort(), e);
+          } finally {
+            lock.unlock();
+            lock.close();
+          }
+        } else {
+          logger.info("Failed to acquire distributed lock for host removal: {}_{}", removedDataNode.getHostname(),
+              removedDataNode.getPort());
+        }
+      } catch (Throwable t) {
+        logger.error("Failed to execute the removal task", t);
+      }
+    }
   }
 
   /**

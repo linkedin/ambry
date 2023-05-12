@@ -249,7 +249,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       }
 
       String stitchedBlobId = router.stitchBlob(putBlobProperties, putUserMetadata, blobIds.stream()
-          .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time))
+          .map(blobId -> new ChunkInfo(blobId, PUT_CONTENT_SIZE, Utils.Infinite_Time, null))
           .collect(Collectors.toList()), null, quotaChargeCallback).get();
       assertEquals(expectedChargeCallbackCount, listenerCalledCount.get());
 

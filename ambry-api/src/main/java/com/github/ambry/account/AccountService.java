@@ -17,6 +17,7 @@ import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.Closeable;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -181,12 +182,15 @@ public interface AccountService extends Closeable {
    * @param containerName The name for the container.
    * @param datasetName The name of the dataset.
    * @param version The version of the dataset.
-   * @param expirationTimeMs the expiration time of the version of the dataset.
+   * @param timeToLiveInSeconds The dataset version level ttl.
+   * @param creationTimeInMs the creationTime of the dataset version.
+   * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
    * @return the {@link DatasetVersionRecord}.
    * @throws AccountServiceException
    */
   default DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
-      String version, long expirationTimeMs) throws AccountServiceException {
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled)
+      throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
@@ -226,6 +230,37 @@ public interface AccountService extends Closeable {
    */
   default DatasetVersionRecord getDatasetVersion(String accountName, String containerName, String datasetName,
       String version) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * Delete the dataset version based on the supplied properties.
+   * @param accountName The name for the parent account.
+   * @param containerName The name for the container.
+   * @param datasetName The name of the dataset.
+   * @param version The version of the dataset.
+   * @throws AccountServiceException
+   */
+  default void deleteDatasetVersion(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  default List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
+      throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * Get all versions from a dataset which has not expired and out of retentionCount by checking the last modified time.
+   * @param accountName The name for the parent account.
+   * @param containerName The name for the container.
+   * @param datasetName The name of the dataset.
+   * @return a list of {@link DatasetVersionRecord}
+   * @throws AccountServiceException
+   */
+  default List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(String accountName,
+      String containerName, String datasetName) throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }
 

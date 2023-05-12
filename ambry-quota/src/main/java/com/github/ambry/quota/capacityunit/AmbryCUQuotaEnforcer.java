@@ -102,6 +102,7 @@ public class AmbryCUQuotaEnforcer implements QuotaEnforcer {
     return doAndHandleException(() -> {
       if (quotaSource.getSystemResourceUsage(QuotaUtils.getCUQuotaName(restRequest))
           >= maxFrontendCuUsageToAllowExceed) {
+        quotaMetrics.highSystemResourceUsageCount.inc();
         if (quotaMetrics.perQuotaResourceDelayedRequestMap.containsKey(quotaResource.getResourceId())) {
           quotaMetrics.perQuotaResourceDelayedRequestMap.get(quotaResource.getResourceId()).inc();
         }

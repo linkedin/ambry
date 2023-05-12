@@ -13,18 +13,34 @@
  */
 package com.github.ambry.replication;
 
+import com.github.ambry.server.ServerErrorCode;
+
+
 public class ReplicationException extends Exception {
   private static final long serialVersionUID = 1;
+  private final ServerErrorCode serverErrorCode;
 
   public ReplicationException(String message) {
     super(message);
+    serverErrorCode = null;
   }
 
   public ReplicationException(String message, Throwable e) {
     super(message, e);
+    serverErrorCode = null;
   }
 
   public ReplicationException(Throwable e) {
     super(e);
+    serverErrorCode = null;
+  }
+
+  public ReplicationException(String message, ServerErrorCode errorCode) {
+    super(message);
+    serverErrorCode = errorCode;
+  }
+
+  public ServerErrorCode getServerErrorCode() {
+    return serverErrorCode;
   }
 }

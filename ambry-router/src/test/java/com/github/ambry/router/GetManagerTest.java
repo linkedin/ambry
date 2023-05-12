@@ -288,7 +288,7 @@ public class GetManagerTest {
       curBlobSize -= curChunkSize;
       stitchBlobsIds.add(
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get());
-      chunkInfos.add(new ChunkInfo(stitchBlobsIds.get(i), curChunkSize, -1L));
+      chunkInfos.add(new ChunkInfo(stitchBlobsIds.get(i), curChunkSize, -1L, null));
     }
     setOperationParams(blobSize, null);
     this.options = new GetBlobOptionsBuilder().build();

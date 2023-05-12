@@ -100,6 +100,7 @@ public class BlobStore implements Store {
   private boolean started;
   private FileLock fileLock;
   private volatile ReplicaState currentState;
+  private volatile ReplicaState previousState;
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
   private AtomicReference<ReplicaSealStatus> replicaSealStatus =
@@ -216,6 +217,7 @@ public class BlobStore implements Store {
     ttlUpdateBufferTimeMs = TimeUnit.SECONDS.toMillis(config.storeTtlUpdateBufferTimeSeconds);
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
+    previousState = ReplicaState.OFFLINE;
     remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId, taskScheduler, factory);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold for seal is {} bytes and the"
@@ -666,6 +668,78 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public void forceDelete(List<MessageInfo> infosToDelete) throws StoreException {
+    checkStarted();
+    checkDuplicates(infosToDelete);
+    final Timer.Context context = metrics.deleteResponse.time();
+    try {
+      Offset indexEndOffsetBeforeCheck = index.getCurrentEndOffset();
+      // If the PubBlob exists, we are supposed to call BlobStore.delete.
+      // forceDelete is supposed to use when the blob doesn't exist.
+      for (MessageInfo info : infosToDelete) {
+        IndexValue value =
+            index.findKey(info.getStoreKey(), new FileSpan(index.getStartOffset(), indexEndOffsetBeforeCheck));
+        if (value != null) {
+          throw new StoreException("Cannot force delete id " + info.getStoreKey() + " since the id exists",
+              StoreErrorCodes.Already_Exist);
+        }
+      }
+      synchronized (storeWriteLock) {
+        // findKey again with the file span from the previous end offset to the new end offset
+        // to make sure there is no new entry is added while we acquire the lock.
+        Offset currentIndexEndOffset = index.getCurrentEndOffset();
+        if (!currentIndexEndOffset.equals(indexEndOffsetBeforeCheck)) {
+          FileSpan fileSpan = new FileSpan(indexEndOffsetBeforeCheck, currentIndexEndOffset);
+          for (MessageInfo info : infosToDelete) {
+            IndexValue value = index.findKey(info.getStoreKey(), fileSpan);
+            if (value != null) {
+              throw new StoreException("Cannot force delete id " + info.getStoreKey() + " since the id exists",
+                  StoreErrorCodes.Already_Exist);
+            }
+          }
+        }
+
+        List<InputStream> inputStreams = new ArrayList<>(infosToDelete.size());
+        List<MessageInfo> updatedInfos = new ArrayList<>(infosToDelete.size());
+
+        for (MessageInfo info : infosToDelete) {
+          MessageFormatInputStream stream =
+              new DeleteMessageFormatInputStream(info.getStoreKey(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), info.getLifeVersion());
+          updatedInfos.add(
+              new MessageInfo(info.getStoreKey(), stream.getSize(), info.getAccountId(), info.getContainerId(),
+                  info.getOperationTimeMs(), info.getLifeVersion()));
+          inputStreams.add(stream);
+        }
+
+        Offset endOffsetOfLastMessage = log.getEndOffset();
+        MessageFormatWriteSet writeSet =
+            new MessageFormatWriteSet(new SequenceInputStream(Collections.enumeration(inputStreams)), updatedInfos,
+                false);
+        writeSet.writeTo(log);
+        logger.trace("Store : {} force delete mark written to log", dataDir);
+        for (MessageInfo info : updatedInfos) {
+          FileSpan fileSpan = log.getFileSpanForMessage(endOffsetOfLastMessage, info.getSize());
+          index.markAsDeleted(info.getStoreKey(), fileSpan, info, info.getOperationTimeMs(), info.getLifeVersion());
+          endOffsetOfLastMessage = fileSpan.getEndOffset();
+        }
+        logger.trace("Store : {} force delete has been marked in the index ", dataDir);
+      }
+      onSuccess("DELETE");
+    } catch (StoreException e) {
+      if (e.getErrorCode() == StoreErrorCodes.IOError) {
+        onError();
+      }
+      throw e;
+    } catch (Exception e) {
+      throw new StoreException("Unknown error while trying to force delete blobs from store " + dataDir, e,
+          StoreErrorCodes.Unknown_Error);
+    } finally {
+      context.stop();
+    }
+  }
+
+  @Override
   public void updateTtl(List<MessageInfo> infosToUpdate) throws StoreException {
     checkStarted();
     checkDuplicates(infosToUpdate);
@@ -1021,13 +1095,20 @@ public class BlobStore implements Store {
 
   @Override
   public void setCurrentState(ReplicaState state) {
-    logger.info("storeId = {}, State change from {} to {}", storeId, currentState, state);
-    currentState = state;
+    if(currentState != state){
+      logger.info("storeId = {}, State change from {} to {}", storeId, currentState, state);
+      previousState = currentState;
+      currentState = state;
+    }
   }
 
   @Override
   public ReplicaState getCurrentState() {
     return currentState;
+  }
+
+  public ReplicaState getPreviousState() {
+    return previousState;
   }
 
   @Override
@@ -1182,7 +1263,7 @@ public class BlobStore implements Store {
       ReplicaSealStatus delegateSealStatus = sealedReplicas.contains(partitionName) ? ReplicaSealStatus.SEALED
           : (partiallySealedReplicas.contains(partitionName) ? ReplicaSealStatus.PARTIALLY_SEALED
               : ReplicaSealStatus.NOT_SEALED);
-      sealStatus = mergeReplicaSealStatus(sealStatus, delegateSealStatus);
+      sealStatus = ReplicaSealStatus.mergeReplicaSealStatus(sealStatus, delegateSealStatus);
     }
     boolean success = false;
     for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
@@ -1203,24 +1284,6 @@ public class BlobStore implements Store {
       replicaSealStatus.set(sealStatus);
     } else {
       logger.error("Failed on reconciling replica state to {} state", sealStatus.name());
-    }
-  }
-
-  /**
-   * Merge the specified {@link ReplicaSealStatus}es into a single {@link ReplicaSealStatus} by choosing the most restrictive
-   * seal status for the replica in the order
-   * {@link ReplicaSealStatus#SEALED} > {@link ReplicaSealStatus#PARTIALLY_SEALED} > {@link ReplicaSealStatus#NOT_SEALED}.
-   * @param sealStatus1 {@link ReplicaSealStatus} object to be merged.
-   * @param sealStatus2 {@link ReplicaSealStatus} object to be merged.
-   * @return The merged {@link ReplicaSealStatus} object.
-   */
-  ReplicaSealStatus mergeReplicaSealStatus(ReplicaSealStatus sealStatus1, ReplicaSealStatus sealStatus2) {
-    if (sealStatus1 == ReplicaSealStatus.SEALED || sealStatus2 == ReplicaSealStatus.SEALED) {
-      return ReplicaSealStatus.SEALED;
-    } else if (sealStatus1 == ReplicaSealStatus.PARTIALLY_SEALED || sealStatus2 == ReplicaSealStatus.PARTIALLY_SEALED) {
-      return ReplicaSealStatus.PARTIALLY_SEALED;
-    } else {
-      return ReplicaSealStatus.NOT_SEALED;
     }
   }
 
@@ -1267,7 +1330,7 @@ public class BlobStore implements Store {
           remoteTokenTracker.close();
         }
         metrics.deregisterMetrics(storeId);
-        currentState = ReplicaState.OFFLINE;
+        setCurrentState(ReplicaState.OFFLINE);
         started = false;
       } catch (Exception e) {
         logger.error("Store : {} shutdown of store failed for directory ", dataDir, e);
@@ -1442,11 +1505,11 @@ public class BlobStore implements Store {
     if (replicaStatusDelegates != null && !replicaStatusDelegates.isEmpty() && replicaStatusDelegates.get(0)
         .supportsStateChanges()) {
       // If store is managed by Helix, Helix controller will update its state after participation.
-      currentState = ReplicaState.OFFLINE;
+      setCurrentState(ReplicaState.OFFLINE);
     } else {
       // This is to be compatible with static clustermap. If static cluster manager is adopted, all replicas are supposed to be STANDBY
       // and router relies on failure detector to track liveness of replicas(stores).
-      currentState = ReplicaState.STANDBY;
+      setCurrentState(ReplicaState.STANDBY);
     }
   }
 
@@ -1485,6 +1548,12 @@ public class BlobStore implements Store {
     } catch (Exception e) {
       // Don't fatal the process just because we can't build the compaction history.
       logger.error("Store {}: Failed to process CompactionLogs", storeId, e);
+    }
+
+    try {
+      CompactionLog.cleanupCompactionLogs(dataDir, storeId, cutoffTime);
+    } catch (Throwable e) {
+      logger.error("Store {}: Failed to clean up compaction files", storeId, e);
     }
   }
 

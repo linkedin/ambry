@@ -37,23 +37,23 @@ class HelixParticipantMetrics {
     this.localPartitionAndState = localPartitionAndState;
     EnumSet.complementOf(EnumSet.of(ReplicaState.DROPPED)).forEach(state -> replicaCountByState.put(state, 0));
     Gauge<Integer> bootstrapPartitionCount = () -> getReplicaCountInState(ReplicaState.BOOTSTRAP);
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "bootstrapPartitionCount" + zkSuffix),
-        bootstrapPartitionCount);
+    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "bootstrapPartitionCount" + zkSuffix),
+        () -> bootstrapPartitionCount);
     Gauge<Integer> standbyPartitionCount = () -> getReplicaCountInState(ReplicaState.STANDBY);
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "standbyPartitionCount" + zkSuffix),
-        standbyPartitionCount);
+    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "standbyPartitionCount" + zkSuffix),
+        () -> standbyPartitionCount);
     Gauge<Integer> leaderPartitionCount = () -> getReplicaCountInState(ReplicaState.LEADER);
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "leaderPartitionCount" + zkSuffix),
-        leaderPartitionCount);
+    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "leaderPartitionCount" + zkSuffix),
+        () -> leaderPartitionCount);
     Gauge<Integer> inactivePartitionCount = () -> getReplicaCountInState(ReplicaState.INACTIVE);
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "inactivePartitionCount" + zkSuffix),
-        inactivePartitionCount);
+    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "inactivePartitionCount" + zkSuffix),
+        () -> inactivePartitionCount);
     Gauge<Integer> offlinePartitionCount = () -> getReplicaCountInState(ReplicaState.OFFLINE);
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "offlinePartitionCount" + zkSuffix),
-        offlinePartitionCount);
+    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "offlinePartitionCount" + zkSuffix),
+        () -> offlinePartitionCount);
     Gauge<Integer> errorStatePartitionCount = () -> getReplicaCountInState(ReplicaState.ERROR);
-    metricRegistry.register(MetricRegistry.name(HelixParticipant.class, "errorStatePartitionCount" + zkSuffix),
-        errorStatePartitionCount);
+    metricRegistry.gauge(MetricRegistry.name(HelixParticipant.class, "errorStatePartitionCount" + zkSuffix),
+        () -> errorStatePartitionCount);
     partitionDroppedCount =
         metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "partitionDroppedCount" + zkSuffix));
     setReplicaDisabledStateErrorCount = metricRegistry.counter(

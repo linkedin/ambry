@@ -58,7 +58,7 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
    * @param dbEndpoint struct containing JDBC connection information.
    * @return the {@link HikariDataSource} for the {@link DbEndpoint}.
    */
-  private HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
+  public HikariDataSource buildDataSource(DbEndpoint dbEndpoint) {
     HikariConfig hikariConfig = new HikariConfig();
     hikariConfig.setJdbcUrl(dbEndpoint.getUrl());
     hikariConfig.setUsername(dbEndpoint.getUsername());

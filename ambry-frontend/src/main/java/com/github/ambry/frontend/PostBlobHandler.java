@@ -388,7 +388,7 @@ class PostBlobHandler {
         long expirationTimeMs = RestUtils.getLongHeader(metadata, EXPIRATION_TIME_MS_KEY, true);
         verifyChunkAccountAndContainer(blobId, stitchedBlobProperties);
 
-        chunksToStitch.add(new ChunkInfo(blobId, chunkSizeBytes, expirationTimeMs));
+        chunksToStitch.add(new ChunkInfo(blobId, chunkSizeBytes, expirationTimeMs, null));
       }
       //the actual blob size for stitched blob is the sum of all the chunk sizes
       restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, totalStitchedBlobSize);

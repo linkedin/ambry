@@ -15,7 +15,6 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.TestUtils.*;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
@@ -119,14 +118,10 @@ public class HelixBootstrapUpgradeToolTest {
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{
-        {"DC1", DataNodeConfigSourceType.INSTANCE_CONFIG},
-        {"DC1", DataNodeConfigSourceType.PROPERTY_STORE},
-        {"DC1, DC0", DataNodeConfigSourceType.INSTANCE_CONFIG},
-        {"DC1, DC0", DataNodeConfigSourceType.PROPERTY_STORE},
-        {"all", DataNodeConfigSourceType.INSTANCE_CONFIG},
-        {"all", DataNodeConfigSourceType.PROPERTY_STORE},
-    });
+    return Arrays.asList(new Object[][]{{"DC1", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"DC1", DataNodeConfigSourceType.PROPERTY_STORE}, {"DC1, DC0", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"DC1, DC0", DataNodeConfigSourceType.PROPERTY_STORE}, {"all", DataNodeConfigSourceType.INSTANCE_CONFIG},
+        {"all", DataNodeConfigSourceType.PROPERTY_STORE},});
   }
 
   /**
@@ -206,7 +201,7 @@ public class HelixBootstrapUpgradeToolTest {
     // bootstrap a cluster
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
+        ClusterMapConfig.OLD_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false, 0);
     // add new state model def
     HelixBootstrapUpgradeUtil.addStateModelDef(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
@@ -245,7 +240,7 @@ public class HelixBootstrapUpgradeToolTest {
       try {
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false, 0);
         fail("Should have thrown IllegalArgumentException as a zk host is missing for one of the dcs");
       } catch (IllegalArgumentException e) {
         // OK
@@ -446,6 +441,125 @@ public class HelixBootstrapUpgradeToolTest {
   }
 
   /**
+   * Test adding partitions and instances in FULL_AUTO compatible way.
+   * @throws Exception
+   */
+  @Test
+  public void testAddNewPartitionsAndDataNodesBeingFullAutoCompatible() throws Exception {
+    Map<String, Map<String, Set<String>>> instancesUnderResourcesInDc = new HashMap<>();
+    Map<String, Map<String, Set<Integer>>> partitionsUnderResourcesInDc = new HashMap<>();
+    int basePort = 18088;
+    int basePartitionId = 0;
+    int dataNode = 6;
+    int numPartition = 200;
+    testHardwareLayout = constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP, dataNode, basePort);
+    testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, numPartition, null);
+    testHardwareLayout.getHardwareLayout().getDatacenters().forEach(dc -> {
+      instancesUnderResourcesInDc.put(dc.getName(), new HashMap<>());
+      partitionsUnderResourcesInDc.put(dc.getName(), new HashMap<>());
+    });
+
+    // Test 1: Add initial partition to helix
+    long expectedResourceCount = 1;
+    writeBootstrapOrUpgrade(expectedResourceCount, false, dataNode);
+    addExpectedPartitionAndInstanceToResource(testPartitionLayout, FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER,
+        instancesUnderResourcesInDc, partitionsUnderResourcesInDc);
+    verifyResourceInFullAuto(testHardwareLayout.getHardwareLayout(), instancesUnderResourcesInDc,
+        partitionsUnderResourcesInDc);
+
+    // Test 2: Add a new group of partitions and instances.
+    basePort += dataNode * 2; // it has two datacenter
+    basePartitionId += numPartition;
+    TestHardwareLayout secondTestHardwareLayout =
+        constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP, dataNode, basePort);
+    TestPartitionLayout secondTestPartitionLayout =
+        constructInitialPartitionLayoutJSON(secondTestHardwareLayout, numPartition, null, basePartitionId);
+
+    // This two layouts have different set of datanodes, and different set of partitions. Merge this two layouts, and
+    // we should create two different resources for these two layouts
+    testPartitionLayout.merge(secondTestPartitionLayout);
+    expectedResourceCount = 2;
+    writeBootstrapOrUpgrade(expectedResourceCount, false, dataNode);
+    addExpectedPartitionAndInstanceToResource(secondTestPartitionLayout,
+        FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER + 1, instancesUnderResourcesInDc, partitionsUnderResourcesInDc);
+    verifyResourceInFullAuto(testHardwareLayout.getHardwareLayout(), instancesUnderResourcesInDc,
+        partitionsUnderResourcesInDc);
+
+    // Test 3: Create another set of data nodes and partitions, but this time, only half the size as last time.
+    basePort += dataNode * 2; // it has two datacenter
+    basePartitionId += numPartition;
+    TestHardwareLayout thirdTestHardwareLayout =
+        constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP, dataNode / 2, basePort);
+    TestPartitionLayout thirdTestPartitionLayout =
+        constructInitialPartitionLayoutJSON(thirdTestHardwareLayout, numPartition / 2, null, basePartitionId);
+
+    testPartitionLayout.merge(thirdTestPartitionLayout);
+    expectedResourceCount = 3;
+    writeBootstrapOrUpgrade(expectedResourceCount, false, dataNode);
+    addExpectedPartitionAndInstanceToResource(thirdTestPartitionLayout,
+        FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER + 2, instancesUnderResourcesInDc, partitionsUnderResourcesInDc);
+    verifyResourceInFullAuto(testHardwareLayout.getHardwareLayout(), instancesUnderResourcesInDc,
+        partitionsUnderResourcesInDc);
+
+    // Test 4: Create another set of data nodes with only the half size, this would be merged in the latest resource
+    basePort += dataNode; // it has two datacenter
+    basePartitionId += numPartition / 2;
+    TestHardwareLayout fourthTestHardwareLayout =
+        constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP, dataNode / 2, basePort);
+    TestPartitionLayout fourthTestPartitionLayout =
+        constructInitialPartitionLayoutJSON(fourthTestHardwareLayout, numPartition / 2, null, basePartitionId);
+    testPartitionLayout.merge(fourthTestPartitionLayout);
+    expectedResourceCount = 3; // still expecting 3 resource, the latest resource would merge third and four layout
+    writeBootstrapOrUpgrade(expectedResourceCount, false, dataNode);
+    addExpectedPartitionAndInstanceToResource(fourthTestPartitionLayout,
+        FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER + 2, instancesUnderResourcesInDc, partitionsUnderResourcesInDc);
+    verifyResourceInFullAuto(testHardwareLayout.getHardwareLayout(), instancesUnderResourcesInDc,
+        partitionsUnderResourcesInDc);
+
+    // Test 5: Adding a new partition from third and four layout
+    basePartitionId += numPartition / 2;
+    List<DataNode> dataNodesInThird = thirdTestHardwareLayout.getIndependentDataNodes(3);
+    List<DataNode> dataNodesInFourth = fourthTestHardwareLayout.getIndependentDataNodes(3);
+    assertEquals(dataNodesInFourth.size(), dataNodesInThird.size());
+    List<DataNode> finalDataNodes = new ArrayList<>(dataNodesInFourth.size());
+    for (int i = 0; i < dataNodesInFourth.size(); i++) {
+      finalDataNodes.add(i % 2 == 0 ? dataNodesInThird.get(i) : dataNodesInFourth.get(i));
+    }
+
+    testPartitionLayout.addNewPartition(testHardwareLayout, finalDataNodes, DEFAULT_PARTITION_CLASS);
+    writeBootstrapOrUpgrade(expectedResourceCount, false, dataNode);
+    for (Datacenter dc : testHardwareLayout.getHardwareLayout().getDatacenters()) {
+      String resourceName = String.valueOf(FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER + 2);
+      partitionsUnderResourcesInDc.get(dc.getName()).get(resourceName).add(testPartitionLayout.getPartitionCount()-1);
+    }
+    verifyResourceInFullAuto(testHardwareLayout.getHardwareLayout(), instancesUnderResourcesInDc,
+        partitionsUnderResourcesInDc);
+
+    // Test 6: Add several groups together
+    basePort += dataNode;
+    basePartitionId += 1;
+    int numGroups = 4;
+    for (int i = 0; i < numGroups; i++) {
+      int numNewDataNode = i == numGroups - 1 ? dataNode / 2 : dataNode;
+      int numNewPartition = i == numGroups - 1 ? numPartition / 2 : numPartition;
+      TestHardwareLayout newHardwareLayout =
+          constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP, numNewDataNode, basePort);
+      TestPartitionLayout newPartitionLayout =
+          constructInitialPartitionLayoutJSON(newHardwareLayout, numNewPartition, null, basePartitionId);
+      testPartitionLayout.merge(newPartitionLayout);
+      addExpectedPartitionAndInstanceToResource(newPartitionLayout,
+          FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER + 3 + i, instancesUnderResourcesInDc,
+          partitionsUnderResourcesInDc);
+      basePort += numNewDataNode * 2;
+      basePartitionId += numNewPartition;
+    }
+    expectedResourceCount += 4;
+    writeBootstrapOrUpgrade(expectedResourceCount, false, dataNode);
+    verifyResourceInFullAuto(testHardwareLayout.getHardwareLayout(), instancesUnderResourcesInDc,
+        partitionsUnderResourcesInDc);
+  }
+
+  /**
    * Test that new replicas can be correctly extracted from the diff between static clustermap and clustermap in Helix.
    * Verify that new added replica infos are correct (i.e. partition class, replica size, data node and mount path)
    * Also, this method tests replica addition config can be deleted correctly.
@@ -601,7 +715,7 @@ public class HelixBootstrapUpgradeToolTest {
     // upgrade Helix by updating IdealState: AdminOperation = UpdateIdealState
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(), false,
-        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState, dataNodeConfigSourceType, false);
+        ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, UpdateIdealState, dataNodeConfigSourceType, false, 0);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
 
     // verify IdealState has been updated
@@ -677,7 +791,7 @@ public class HelixBootstrapUpgradeToolTest {
         // Upgrade Helix by updating IdealState: AdminOperation = DisablePartition
         HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
             CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, new HelixAdminFactory(),
-            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition, dataNodeConfigSourceType, false);
+            false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DisablePartition, dataNodeConfigSourceType, false, 0);
         bootstrapCompletionLatch.countDown();
       } catch (Exception e) {
         // do nothing, if there is any exception subsequent test should fail.
@@ -718,7 +832,8 @@ public class HelixBootstrapUpgradeToolTest {
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
     assertTrue("Helix participant didn't complete update within 5 seconds",
         updateCompletionLatch.await(5, TimeUnit.SECONDS));
-    InstanceConfig currentInstanceConfig = admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
+    InstanceConfig currentInstanceConfig =
+        admin.getInstanceConfig(clusterName, getInstanceName(removedReplica.getDataNodeId()));
     // Verify that replica has been disabled
     String resourceName = null;
     for (String rs : admin.getResourcesInCluster(clusterName)) {
@@ -1063,13 +1178,29 @@ public class HelixBootstrapUpgradeToolTest {
    * @throws JSONException if a JSON parse error is encountered.
    */
   private void writeBootstrapOrUpgrade(long expectedResourceCount, boolean forceRemove) throws Exception {
+    writeBootstrapOrUpgrade(expectedResourceCount, forceRemove, 0);
+  }
+
+  /**
+   * Write the layout files out from the constructed in-memory hardware and partition layouts; use the bootstrap tool
+   * to update the contents in Helix; verify that the information is consistent between the two.
+   * @param expectedResourceCount number of resources expected in Helix for this cluster in each datacenter.
+   * @param forceRemove whether the forceRemove option should be passed when doing the bootstrap/upgrade.
+   * @param maxInstancesInOneResource the maximum number of data nodes to place under a resource, this is only meaningful
+   *                                  when the resources are constructed to be full auto compatible.
+   * @throws IOException if a file read error is encountered.
+   * @throws JSONException if a JSON parse error is encountered.
+   */
+  private void writeBootstrapOrUpgrade(long expectedResourceCount, boolean forceRemove, int maxInstancesInOneResource)
+      throws Exception {
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
     // This updates and verifies that the information in Helix is consistent with the one in the static cluster map.
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
         CLUSTER_NAME_PREFIX, dcStr, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, new HelixAdminFactory(),
-        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false);
+        false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, dataNodeConfigSourceType, false,
+        maxInstancesInOneResource);
     verifyResourceCount(testHardwareLayout.getHardwareLayout(), expectedResourceCount);
   }
 
@@ -1094,22 +1225,26 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      ZNRecord zNRecord =
-          propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
-      if (!activeDcSet.contains(zkInfo.getDcName())) {
-        assertNull(zNRecord);
-      } else {
-        assertNotNull(zNRecord);
-        Map<String, Map<String, String>> overridePartition = zNRecord.getMapFields();
-        Set<String> writableInDC = new HashSet<>();
-        for (Map.Entry<String, Map<String, String>> entry : overridePartition.entrySet()) {
-          if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
-            writableInDC.add(entry.getKey());
+      try {
+        ZNRecord zNRecord =
+            propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
+        if (!activeDcSet.contains(zkInfo.getDcName())) {
+          assertNull(zNRecord);
+        } else {
+          assertNotNull(zNRecord);
+          Map<String, Map<String, String>> overridePartition = zNRecord.getMapFields();
+          Set<String> writableInDC = new HashSet<>();
+          for (Map.Entry<String, Map<String, String>> entry : overridePartition.entrySet()) {
+            if (entry.getValue().get(ClusterMapUtils.PARTITION_STATE).equals(ClusterMapUtils.READ_WRITE_STR)) {
+              writableInDC.add(entry.getKey());
+            }
           }
+          // Verify writable partitions in DC match writable partitions in Partition Layout
+          assertEquals("Mismatch in writable partitions for partitionLayout and propertyStore",
+              writableInPartitionLayout, writableInDC);
         }
-        // Verify writable partitions in DC match writable partitions in Partition Layout
-        assertEquals("Mismatch in writable partitions for partitionLayout and propertyStore", writableInPartitionLayout,
-            writableInDC);
+      } finally {
+        propertyStore.stop();
       }
     }
     // delete partition override config
@@ -1120,9 +1255,13 @@ public class HelixBootstrapUpgradeToolTest {
       HelixPropertyStore<ZNRecord> propertyStore =
           CommonUtils.createHelixPropertyStore("localhost:" + zkInfo.getPort(), propertyStoreConfig,
               Collections.singletonList(propertyStoreConfig.rootPath));
-      ZNRecord zNRecord =
-          propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
-      assertNull("Partition override config should no longer exist", zNRecord);
+      try {
+        ZNRecord zNRecord =
+            propertyStore.get(ClusterMapUtils.PARTITION_OVERRIDE_ZNODE_PATH, null, AccessOption.PERSISTENT);
+        assertNull("Partition override config should no longer exist", zNRecord);
+      } finally {
+        propertyStore.stop();
+      }
     }
   }
 
@@ -1141,6 +1280,63 @@ public class HelixBootstrapUpgradeToolTest {
       } else {
         assertEquals("Resource count mismatch", expectedResourceCount,
             admin.getResourcesInCluster(CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP).size());
+      }
+    }
+  }
+
+  private void addExpectedPartitionAndInstanceToResource(TestPartitionLayout testPartitionLayout, int resourceId,
+      Map<String, Map<String, Set<String>>> instancesUnderResourcesInDc,
+      Map<String, Map<String, Set<Integer>>> partitionsUnderResourcesInDc) {
+    for (Datacenter dc : testPartitionLayout.testHardwareLayout.getHardwareLayout().getDatacenters()) {
+      String resourceName = String.valueOf(resourceId);
+      Set<String> instances = testPartitionLayout.testHardwareLayout.getAllDataNodesFromDc(dc.getName())
+          .stream()
+          .map(dn -> ClusterMapUtils.getInstanceName(dn.getHostname(), dn.getPort()))
+          .collect(Collectors.toSet());
+      instancesUnderResourcesInDc.get(dc.getName())
+          .computeIfAbsent(resourceName, k -> new HashSet<>())
+          .addAll(instances);
+
+      Set<Integer> partitions = testPartitionLayout.getPartitionLayout()
+          .getAllPartitionNames()
+          .stream()
+          .map(Integer::parseInt)
+          .collect(Collectors.toSet());
+      partitionsUnderResourcesInDc.get(dc.getName())
+          .computeIfAbsent(resourceName, k -> new HashSet<>())
+          .addAll(partitions);
+    }
+  }
+
+  private void verifyResourceInFullAuto(HardwareLayout hardwareLayout,
+      Map<String, Map<String, Set<String>>> instancesUnderResourcesInDc,
+      Map<String, Map<String, Set<Integer>>> partitionsUnderResourcesInDc) {
+    String clusterName = CLUSTER_NAME_PREFIX + CLUSTER_NAME_IN_STATIC_CLUSTER_MAP;
+    for (Datacenter dc : hardwareLayout.getDatacenters()) {
+      ZkInfo zkInfo = dcsToZkInfo.get(dc.getName());
+      ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+      if (activeDcSet.contains(dc.getName())) {
+        Map<String, Set<String>> instancesUnderResources = instancesUnderResourcesInDc.get(dc.getName());
+        Map<String, Set<Integer>> partitionsUnderResources = partitionsUnderResourcesInDc.get(dc.getName());
+        assertEquals("Instances and partitions map must have the same size", instancesUnderResources.size(),
+            partitionsUnderResources.size());
+        List<String> resources = admin.getResourcesInCluster(clusterName);
+        assertEquals("Resource count mismatch", resources.size(), instancesUnderResources.size());
+        for (String resource : resources) {
+          IdealState idealState = admin.getResourceIdealState(clusterName, resource);
+          assertNotNull("Expect resource " + resource + " exist", idealState);
+          Set<Integer> partitions =
+              idealState.getPartitionSet().stream().map(Integer::valueOf).collect(Collectors.toSet());
+          Set<Integer> expectedPartitions = partitionsUnderResources.get(resource);
+          assertEquals("Partition mismatch for resource " + resource, expectedPartitions, partitions);
+
+          Set<String> instances = idealState.getPartitionSet()
+              .stream()
+              .flatMap(pn -> idealState.getInstanceSet(pn).stream())
+              .collect(Collectors.toSet());
+          Set<String> expectedInstances = instancesUnderResources.get(resource);
+          assertEquals("Instances mismatch for resource " + resource, expectedInstances, instances);
+        }
       }
     }
   }

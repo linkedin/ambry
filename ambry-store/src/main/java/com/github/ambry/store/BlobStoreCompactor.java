@@ -618,6 +618,17 @@ class BlobStoreCompactor {
     long logSegmentStartTime = time.milliseconds();
     for (Offset indexSegmentStartOffset : getIndexSegmentDetails(logSegmentToCopy.getName()).keySet()) {
       IndexSegment indexSegmentToCopy = srcIndex.getIndexSegments().get(indexSegmentStartOffset);
+      if (indexSegmentToCopy == null) {
+        // This should not happen
+        Offset startOffsetOfTheSegment = new Offset(logSegmentToCopy.getName(), 0);
+        Offset endOffsetOfTheSegment = new Offset(logSegmentToCopy.getName().getNextPositionName(), 0);
+        // start and end offset would make sure that we copy all the index segments for the log segment.
+        Set<Offset> validOffsets =
+            srcIndex.getIndexSegments().subMap(startOffsetOfTheSegment, endOffsetOfTheSegment).keySet();
+        logger.error("Can't find index segment for start offset {} with {}, the valid offset are {}",
+            indexSegmentStartOffset, storeId, validOffsets);
+        throw new IllegalStateException("Can't find index segment for start off " + indexSegmentStartOffset);
+      }
       logger.info("Processing index segment {} with {}", indexSegmentToCopy.getFile(), storeId);
       long startTime = SystemTime.getInstance().milliseconds();
       if (needsCopying(indexSegmentToCopy.getEndOffset()) && !copyDataByIndexSegment(logSegmentToCopy,

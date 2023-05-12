@@ -29,7 +29,6 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -183,9 +182,9 @@ class FrontendRestRequestService implements RestRequestService {
             clusterMap, quotaManager);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
-            clusterMap, quotaManager);
+            clusterMap, quotaManager, accountService);
     deleteDatasetHandler =
-        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector, deleteBlobHandler);
     headBlobHandler =
         new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager);
@@ -197,7 +196,7 @@ class FrontendRestRequestService implements RestRequestService {
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
     namedBlobPutHandler =
         new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName, quotaManager, accountService);
+            frontendConfig, frontendMetrics, clusterName, quotaManager, accountService, deleteBlobHandler);
 
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);

@@ -417,10 +417,29 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+    lastRequestedPartitionClasses.add(partitionClass);
+    List<PartitionId> partitionIdList = Collections.emptyList();
+    if (!partitionsUnavailable) {
+      partitionIdList = partitionSelectionHelper.getFullyWritablePartitions(partitionClass);
+    }
+    return partitionIdList;
+  }
+
+  @Override
   public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
     lastRequestedPartitionClasses.add(partitionClass);
     if (!partitionsUnavailable) {
       return partitionSelectionHelper.getRandomWritablePartition(partitionClass, partitionsToExclude);
+    }
+    return null;
+  }
+
+  @Override
+  public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+    lastRequestedPartitionClasses.add(partitionClass);
+    if (!partitionsUnavailable) {
+      return partitionSelectionHelper.getRandomFullyWritablePartition(partitionClass, partitionsToExclude);
     }
     return null;
   }
@@ -618,6 +637,8 @@ public class MockClusterMap implements ClusterMap {
       for (ReplicaId replicaId : partition.getReplicaIds()) {
         if (replicaId.getDataNodeId().compareTo(dataNodeId) == 0) {
           newReplica = replicaId;
+          // Decrease available disk capacity in bytes. This is checked in StorageManagerTest#updateDiskSpaceOnReplicaAdditionTest()
+          newReplica.getDiskId().decreaseAvailableSpaceInBytes(replicaId.getCapacityInBytes());
           break;
         }
       }
@@ -631,6 +652,16 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
+  public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+      boolean checkLocalDcOnly) {
+    if (!partitionsUnavailable) {
+      return partitionSelectionHelper.hasEnoughEligibleReplicasAvailableForPut(partitionId,
+          requiredEligibleReplicaCount, checkLocalDcOnly);
+    }
+    return false;
+  }
+
+  @Override
   public void close() {
     // No-op.
   }
@@ -640,6 +671,16 @@ public class MockClusterMap implements ClusterMap {
    */
   public ClusterMapChangeListener getClusterMapChangeListener() {
     return clusterMapChangeListener;
+  }
+
+  /**
+   * Invoke clustermap change listener. This method doesn't really remove the datanode.
+   * @param dataNodeId The removed data node
+   */
+  public void invokeListenerForDataNodeRemoval(DataNodeId dataNodeId) {
+    if (dataNodes.contains(dataNodeId) && clusterMapChangeListener != null) {
+      clusterMapChangeListener.onDataNodeRemoved(dataNodeId);
+    }
   }
 
   /**

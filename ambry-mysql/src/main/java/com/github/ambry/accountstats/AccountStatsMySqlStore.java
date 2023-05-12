@@ -28,7 +28,6 @@ import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
-import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
@@ -86,6 +85,7 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     public final Histogram publishTimeMs;
     public final Histogram insertAccountStatsTimeMs;
     public final Histogram deleteAccountStatsTimeMs;
+    public final Histogram deleteAccountStatsHostTimeMs;
     public final Histogram deleteStatementSize;
     public final Histogram aggregatedBatchSize;
     public final Histogram aggregatedPublishTimeMs;
@@ -117,6 +117,8 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "InsertAccountStatsTimeMs"));
       deleteAccountStatsTimeMs =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteAccountStatsTimeMs"));
+      deleteAccountStatsHostTimeMs =
+          registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteAccountStatsHostTimeMs"));
       deleteStatementSize =
           registry.histogram(MetricRegistry.name(AccountStatsMySqlStore.class, "DeleteStatementSize"));
       aggregatedBatchSize =
@@ -236,9 +238,16 @@ public class AccountStatsMySqlStore implements AccountStatsStore {
     writeStatsToLocalBackupFile();
   }
 
+  @Override
+  public void deleteHostAccountStorageStatsForHost(String hostname, int port) throws Exception {
+    long startTimeMs = System.currentTimeMillis();
+    hostname = hostnameHelper.simplifyHostname(hostname, port);
+    accountReportsDao.deleteStorageUsageForHost(clusterName, hostname);
+    storeMetrics.deleteAccountStatsHostTimeMs.update(System.currentTimeMillis() - startTimeMs);
+  }
+
   /**
    * Read all the container storage usage from local backup file.
-   * @param localBackupFilePath The filepath to local backup file.
    */
   private void readStatsFromLocalBackupFile() {
     if (!Strings.isNullOrEmpty(config.localBackupFilePath)) {

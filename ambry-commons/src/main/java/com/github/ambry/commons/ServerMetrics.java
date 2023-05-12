@@ -170,6 +170,12 @@ public class ServerMetrics {
   public final Histogram blobIndexResponseSendTimeInMs;
   public final Histogram blobIndexRequestTotalTimeInMs;
 
+  public final Histogram forceDeleteRequestQueueTimeInMs;
+  public final Histogram forceDeleteRequestProcessingTimeInMs;
+  public final Histogram forceDeleteResponseQueueTimeInMs;
+  public final Histogram forceDeleteResponseSendTimeInMs;
+  public final Histogram forceDeleteRequestTotalTimeInMs;
+
   public final Histogram blobSizeInBytes;
   public final Histogram blobUserMetadataSizeInBytes;
 
@@ -189,6 +195,7 @@ public class ServerMetrics {
   public final Meter getBlobInfoRequestRate;
   public final Meter deleteBlobRequestRate;
   public final Meter replicateBlobRequestRate;
+  public final Meter replicateDeleteRecordRate;
   public final Meter undeleteBlobRequestRate;
   public final Meter updateBlobTtlRequestRate;
   public final Meter replicaMetadataRequestRate;
@@ -199,6 +206,7 @@ public class ServerMetrics {
   public final Meter blobStoreControlRequestRate;
   public final Meter healthCheckRequestRate;
   public final Meter blobIndexRequestRate;
+  public final Meter forceDeleteRequestRate;
 
   public final Meter putBlobDroppedRate;
   public final Meter getBlobDroppedRate;
@@ -219,6 +227,7 @@ public class ServerMetrics {
   public final Meter blobStoreControlDroppedRate;
   public final Meter healthCheckDroppedRate;
   public final Meter blobIndexDroppedRate;
+  public final Meter forceDeleteDroppedRate;
 
   public final Meter totalRequestDroppedRate;
 
@@ -501,6 +510,17 @@ public class ServerMetrics {
     blobIndexRequestTotalTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "BlobIndexRequestTotalTimeInMs"));
 
+    forceDeleteRequestQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ForceDeleteRequestQueueTimeInMs"));
+    forceDeleteRequestProcessingTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ForceDeleteRequestProcessingTimeInMs"));
+    forceDeleteResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ForceDeleteResponseQueueTimeInMs"));
+    forceDeleteResponseSendTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ForceDeleteResponseSendTimeInMs"));
+    forceDeleteRequestTotalTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "ForceDeleteRequestTotalTimeInMs"));
+
     blobSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobSize"));
     blobUserMetadataSizeInBytes = registry.histogram(MetricRegistry.name(requestClass, "BlobUserMetadataSize"));
 
@@ -530,6 +550,7 @@ public class ServerMetrics {
     undeleteBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "UndeleteBlobRequestRate"));
     updateBlobTtlRequestRate = registry.meter(MetricRegistry.name(requestClass, "UpdateBlobTtlRequestRate"));
     replicateBlobRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicateBlobRequestRate"));
+    replicateDeleteRecordRate = registry.meter(MetricRegistry.name(requestClass, "ReplicateDeleteRecordRate"));
     replicaMetadataRequestRate = registry.meter(MetricRegistry.name(requestClass, "ReplicaMetadataRequestRate"));
     triggerCompactionRequestRate = registry.meter(MetricRegistry.name(requestClass, "TriggerCompactionRequestRate"));
     requestControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "RequestControlRequestRate"));
@@ -538,6 +559,7 @@ public class ServerMetrics {
     blobStoreControlRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobStoreControlRequestRate"));
     healthCheckRequestRate = registry.meter(MetricRegistry.name(requestClass, "HealthCheckRequestRate"));
     blobIndexRequestRate = registry.meter(MetricRegistry.name(requestClass, "BlobIndexRequestRate"));
+    forceDeleteRequestRate = registry.meter(MetricRegistry.name(requestClass, "ForceDeleteRequestRate"));
 
     putBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "PutBlobDroppedRate"));
     getBlobDroppedRate = registry.meter(MetricRegistry.name(requestClass, "GetBlobDroppedRate"));
@@ -560,6 +582,7 @@ public class ServerMetrics {
     blobStoreControlDroppedRate = registry.meter(MetricRegistry.name(requestClass, "BlobStoreControlDroppedRate"));
     healthCheckDroppedRate = registry.meter(MetricRegistry.name(requestClass, "HealthCheckDroppedRate"));
     blobIndexDroppedRate = registry.meter(MetricRegistry.name(requestClass, "BlobIndexDroppedRate"));
+    forceDeleteDroppedRate = registry.meter(MetricRegistry.name(requestClass, "ForceDeleteDroppedRate"));
 
     totalRequestDroppedRate = registry.meter(MetricRegistry.name(requestClass, "TotalRequestDroppedRate"));
 

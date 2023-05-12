@@ -13,6 +13,9 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
@@ -20,9 +23,11 @@ import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Router;
@@ -31,7 +36,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -48,10 +55,11 @@ public class DeleteBlobHandler {
   private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
   private final QuotaManager quotaManager;
+  private final AccountService accountService;
 
   DeleteBlobHandler(Router router, SecurityService securityService, IdConverter idConverter,
       AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
-      QuotaManager quotaManager) {
+      QuotaManager quotaManager, AccountService accountService) {
     this.router = router;
     this.securityService = securityService;
     this.idConverter = idConverter;
@@ -59,6 +67,7 @@ public class DeleteBlobHandler {
     this.metrics = metrics;
     this.clusterMap = clusterMap;
     this.quotaManager = quotaManager;
+    this.accountService = accountService;
   }
 
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
@@ -148,16 +157,38 @@ public class DeleteBlobHandler {
      */
     private Callback<Void> routerCallback() {
       return buildCallback(metrics.deleteBlobRouterMetrics, result -> {
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          try {
+            metrics.deleteDatasetVersionRate.mark();
+            deleteDatasetVersion(restRequest);
+          } catch (RestServiceException e) {
+            metrics.deleteDatasetVersionError.inc();
+            throw e;
+          }
+        }
         LOGGER.debug("Deleted {}", getRequestPath(restRequest).getOperationOrBlobId(false));
-        restResponseChannel.setStatus(ResponseStatus.Accepted);
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
+        //if delete dataset request call this handler to delete all dataset versions under the dataset, we
+        //don't need to set the header and call securityService.processResponse. We should let DeleteDatasetHandler
+        //take care of this.
+        if (!(RequestPath.matchesOperation(restRequest.getUri(), ACCOUNTS_CONTAINERS_DATASETS)
+            && restRequest.getRestMethod() == RestMethod.DELETE)) {
+          restResponseChannel.setStatus(ResponseStatus.Accepted);
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+        }
+        //do not process response when the delete request is coming caused by putting dataset version request.
+        if (restRequest.getRestMethod() != RestMethod.PUT) {
+          securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
+        } else {
+          securityProcessResponseCallback().onCompletion(null, null);
+        }
       }, restRequest.getUri(), LOGGER, (r, e) -> {
         // Even we failed in router operations, we already used some of the resources in router,
         // so let's record the charges for this request.
         securityService.processRequestCharges(restRequest, restResponseChannel, null);
-        finalCallback.onCompletion(null, e);
+        if (finalCallback != null) {
+          finalCallback.onCompletion(null, e);
+        }
       });
     }
 
@@ -168,6 +199,36 @@ public class DeleteBlobHandler {
     private Callback<Void> securityProcessResponseCallback() {
       return buildCallback(metrics.deleteBlobSecurityProcessResponseMetrics,
           securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
+    }
+
+    /**
+     * Support delete dataset version.
+     * @param restRequest restRequest {@link RestRequest} representing the request.
+     * @throws RestServiceException
+     */
+    private void deleteDatasetVersion(RestRequest restRequest) throws RestServiceException {
+      long startDeleteDatasetVersionTime = System.currentTimeMillis();
+      String accountName = null;
+      String containerName = null;
+      String datasetName = null;
+      String version = null;
+      try {
+        Dataset dataset = (Dataset) restRequest.getArgs().get(InternalKeys.TARGET_DATASET);
+        accountName = dataset.getAccountName();
+        containerName = dataset.getContainerName();
+        datasetName = dataset.getDatasetName();
+        version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
+        accountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
+        metrics.deleteDatasetVersionProcessingTimeInMs.update(
+            System.currentTimeMillis() - startDeleteDatasetVersionTime);
+        // If version is null, use the latest version + 1 from DatasetVersionRecord to construct named blob path.
+      } catch (AccountServiceException ex) {
+        LOGGER.error(
+            "Failed to get dataset version for accountName: " + accountName + " containerName: " + containerName
+                + " datasetName: " + datasetName + " version: " + version);
+        throw new RestServiceException(ex.getMessage(),
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      }
     }
   }
 }

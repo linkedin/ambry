@@ -36,10 +36,12 @@ import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -298,7 +300,7 @@ public class VcrReplicationManager extends ReplicationEngine {
    * Remove a replica of given {@link PartitionId} and its {@link RemoteReplicaInfo}s from the backup list.
    * @param partitionId the {@link PartitionId} of the replica to removed.
    */
-  void removeReplica(PartitionId partitionId) {
+  void removeReplica(PartitionId partitionId) throws IOException, StoreException {
     rwLock.writeLock().lock();
     try {
       stopPartitionReplication(partitionId);

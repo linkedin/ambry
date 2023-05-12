@@ -183,8 +183,14 @@ public class NonBlockingRouterMetrics {
   // Misc metrics.
   public final Meter operationErrorRate;
   public final Meter encryptedOperationErrorRate;
+  // total count of slipped put attempts for all chunks.
   public final Counter slippedPutAttemptCount;
+  // count of slipped put attempts for metadata chunks only.
+  public final Counter metadataSlippedPutAttemptCount;
+  // total count of slipped put success for all chunks.
   public final Counter slippedPutSuccessCount;
+  // total count of slipped put success for all metadata chunks only.
+  public final Counter metadataSlippedPutSuccessCount;
   public final Counter ignoredResponseCount;
   public final Counter crossColoRequestCount;
   public final Counter crossColoSuccessCount;
@@ -232,6 +238,7 @@ public class NonBlockingRouterMetrics {
   public final Counter failedMaybeDueToOriginatingDcOfflineReplicasCount;
   public final Counter failedMaybeDueToTotalOfflineReplicasCount;
   public final Counter failedMaybeDueToUnavailableReplicasCount;
+  public final Counter metadataChunkCreationCount;
 
   // Workload characteristics
   public final AgeAtAccessMetrics ageAtGet;
@@ -272,6 +279,13 @@ public class NonBlockingRouterMetrics {
   Map<Resource, CachedHistogram> putBlobResourceToLatency = new HashMap<>();
 
   public final CompressionMetrics compressionMetrics;
+  // Waiting time for a request to get response from network before timing out. Since we increase or decrease the
+  // timeout value based on load, we track the distribution of wait times.
+  public final Histogram requestWaitTimeBeforeExpiryOnNetworkTimeoutMs;
+  // Number of requests timed out waiting for response from network
+  public final Counter requestExpiryOnNetworkTimeoutCount;
+  // Number of requests timed out due to not being able to sent to network
+  public final Counter requestExpiryOnFinalTimeoutCount;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -314,8 +328,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationRate"));
     replicateBlobOperationOnDeleteRate =
         metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationOnDeleteRate"));
-    replicateBlobOperationOnTtlUpdateRate =
-        metricRegistry.meter(MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationOnTtlUpdateRate"));
+    replicateBlobOperationOnTtlUpdateRate = metricRegistry.meter(
+        MetricRegistry.name(ReplicateBlobOperation.class, "ReplicateBlobOperationOnTtlUpdateRate"));
     operationQueuingRate = metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationQueuingRate"));
     operationDequeuingRate =
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "OperationDequeuingRate"));
@@ -492,7 +506,11 @@ public class NonBlockingRouterMetrics {
         metricRegistry.meter(MetricRegistry.name(NonBlockingRouter.class, "EncryptedOperationErrorRate"));
     ignoredResponseCount = metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "IgnoredRequestCount"));
     slippedPutAttemptCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutAttemptCount"));
+    metadataSlippedPutAttemptCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class,"MetadataSlippedPutAttemptCount"));
     slippedPutSuccessCount = metricRegistry.counter(MetricRegistry.name(PutOperation.class, "SlippedPutSuccessCount"));
+    metadataSlippedPutSuccessCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class,"MetadataSlippedPutSuccessCount"));
     crossColoRequestCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "CrossColoRequestCount"));
     crossColoSuccessCount =
@@ -570,6 +588,8 @@ public class NonBlockingRouterMetrics {
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToOriginatingDcOfflineReplicasCount"));
     failedMaybeDueToUnavailableReplicasCount = metricRegistry.counter(
         MetricRegistry.name(SimpleOperationTracker.class, "FailedMaybeDueToUnavailableReplicasCount"));
+    metadataChunkCreationCount = metricRegistry.counter(
+        MetricRegistry.name(PutOperation.class, "MetadataChunkCreationCount"));
 
     // Workload
     ageAtGet = new AgeAtAccessMetrics(metricRegistry, "OnGet");
@@ -629,6 +649,12 @@ public class NonBlockingRouterMetrics {
         metricRegistry.timer(MetricRegistry.name(QuotaAwareOperationController.class, "PollExceedAllowedRequestTime"));
 
     compressionMetrics = new CompressionMetrics(metricRegistry);
+    requestWaitTimeBeforeExpiryOnNetworkTimeoutMs = metricRegistry.histogram(
+        MetricRegistry.name(NonBlockingRouter.class, "RequestWaitTimeBeforeExpiryOnNetworkTimeoutMs"));
+    requestExpiryOnNetworkTimeoutCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RequestExpiryOnNetworkTimeoutCount"));
+    requestExpiryOnFinalTimeoutCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RequestExpiryOnFinalTimeoutCount"));
   }
 
   /**
@@ -740,9 +766,9 @@ public class NonBlockingRouterMetrics {
    */
   public void initializeOperationControllerMetrics(final Thread requestResponseHandlerThread) {
     requestResponseHandlerThreadRunning = () -> requestResponseHandlerThread.isAlive() ? 1L : 0L;
-    metricRegistry.register(
+    metricRegistry.gauge(
         MetricRegistry.name(NonBlockingRouter.class, requestResponseHandlerThread.getName() + "Running"),
-        requestResponseHandlerThreadRunning);
+        () -> requestResponseHandlerThreadRunning);
   }
 
   /**
@@ -787,8 +813,8 @@ public class NonBlockingRouterMetrics {
    */
   public void initializePutManagerMetrics(final Thread chunkFillerThread) {
     chunkFillerThreadRunning = () -> chunkFillerThread.isAlive() ? 1L : 0L;
-    metricRegistry.register(MetricRegistry.name(PutManager.class, chunkFillerThread.getName() + "Running"),
-        chunkFillerThreadRunning);
+    metricRegistry.gauge(MetricRegistry.name(PutManager.class, chunkFillerThread.getName() + "Running"),
+        () -> chunkFillerThreadRunning);
   }
 
   /**
@@ -802,12 +828,12 @@ public class NonBlockingRouterMetrics {
   public void initializeNumActiveOperationsMetrics(final AtomicInteger currentOperationsCount,
       final AtomicInteger currentBackgroundOperationsCount,
       final AtomicInteger concurrentBackgroundDeleteOperationCount) {
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"),
-        (Gauge<Integer>) currentOperationsCount::get);
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
-        (Gauge<Integer>) currentBackgroundOperationsCount::get);
-    metricRegistry.register(MetricRegistry.name(BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
-        (Gauge<Integer>) concurrentBackgroundDeleteOperationCount::get);
+    metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "NumActiveOperations"),
+        () -> (Gauge<Integer>) currentOperationsCount::get);
+    metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "NumActiveBackgroundOperations"),
+        () -> (Gauge<Integer>) currentBackgroundOperationsCount::get);
+    metricRegistry.gauge(MetricRegistry.name(BackgroundDeleter.class, "NumberConcurrentBackgroundDeleteOperations"),
+        () -> (Gauge<Integer>) concurrentBackgroundDeleteOperationCount::get);
   }
 
   /**
@@ -816,8 +842,8 @@ public class NonBlockingRouterMetrics {
    * @param cache which keeps track of blobs not found recently.
    */
   public void initializeNotFoundCacheMetrics(Cache cache) {
-    metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "BlobsNotFoundCacheHitRate"),
-        (Gauge<Double>) () -> cache.stats().hitRate());
+    metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "BlobsNotFoundCacheHitRate"),
+        () -> (Gauge<Double>) () -> cache.stats().hitRate());
   }
 
   /**
@@ -832,11 +858,15 @@ public class NonBlockingRouterMetrics {
         .map(oc -> (QuotaAwareOperationController) oc)
         .collect(Collectors.toList());
     outOfQuotaResourcesInQueue =
-        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "OutOfQuotaResourcesInQueue"),
-            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getOutOfQuotaResourcesInQueue()).sum());
+        metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "OutOfQuotaResourcesInQueue"),
+            () -> () -> quotaAwareOperationControllers.stream()
+                .mapToInt(oc -> oc.getOutOfQuotaResourcesInQueue())
+                .sum());
     delayedQuotaResourcesInQueue =
-        metricRegistry.register(MetricRegistry.name(NonBlockingRouter.class, "DelayedQuotaResourcesInQueue"),
-            () -> quotaAwareOperationControllers.stream().mapToInt(oc -> oc.getDelayedQuotaResourcesInQueue()).sum());
+        metricRegistry.gauge(MetricRegistry.name(NonBlockingRouter.class, "DelayedQuotaResourcesInQueue"),
+            () -> () -> quotaAwareOperationControllers.stream()
+                .mapToInt(oc -> oc.getDelayedQuotaResourcesInQueue())
+                .sum());
   }
 
   /**
