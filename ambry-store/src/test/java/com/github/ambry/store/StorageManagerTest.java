@@ -486,18 +486,19 @@ public class StorageManagerTest {
         createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
     PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
-    ReplicaId newReplica = newPartition.getReplicaIds().get(0);
+    // Get the replica that has been created for this new partition
+    ReplicaId newReplica = newPartition.getReplicaIds()
+        .stream()
+        .filter(replicaId -> replicaId.getDataNodeId().equals(localNode))
+        .findFirst()
+        .get();
     // 1. Get disk space before adding the replica
-    ReplicaId replicaOnSameDisk =
-        localReplicas.stream().filter(r -> r.getDiskId().equals(newReplica.getDiskId())).findFirst().get();
-    long originalDiskSpace =
-        storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).getDisk().getAvailableSpaceInBytes();
+    long diskSpaceBefore = newReplica.getDiskId().getAvailableSpaceInBytes();
     // 2. Induce state transition to add a replica
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
     // 3. Verify disk space is reduced after adding the replica
     assertEquals("Disk space should be reduced after replica addition",
-        originalDiskSpace - newReplica.getCapacityInBytes(),
-        storageManager.partitionToDiskManager.get(newPartition).getDisk().getAvailableSpaceInBytes());
+        diskSpaceBefore - newReplica.getCapacityInBytes(), newReplica.getDiskId().getAvailableSpaceInBytes());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 

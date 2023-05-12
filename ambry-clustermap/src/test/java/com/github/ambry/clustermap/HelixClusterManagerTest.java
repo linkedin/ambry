@@ -661,35 +661,24 @@ public class HelixClusterManagerTest {
         helixClusterManager.getManagerQueryHelper();
     AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
 
-    // Success cases:
-    // 1. All disks have equal free space. Any one of the disks can be picked up
     List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(ambryDataNode));
+    // Initialize disk capacity to some maximum value for tests
+    for (AmbryDisk disk : disks) {
+      disk.increaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES * 10);
+    }
+
     Set<AmbryDisk> potentialDisks = new HashSet<>(disks);
-    ReplicaId bootstrapReplica =
-        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
-    assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
 
-    // 2. Decrease free space on first 5 disks. Verify that one of the last 5 disks are picked up
-    for (int i = 0; i < disks.size() - 5; i++) {
-      disks.get(i).decreaseAvailableSpaceInBytes(5000);
-      potentialDisks.remove(disks.get(i));
-    }
-    bootstrapReplica = helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
-    assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
-
-    // 3. Decrease free space all other disks except last one. Verify that last one is picked up
-    for (int i = disks.size() - 5; i < disks.size() - 1; i++) {
-      disks.get(i).decreaseAvailableSpaceInBytes(5000);
-      potentialDisks.remove(disks.get(i));
-    }
-    bootstrapReplica = helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
-    assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
-
-    // Failure cases
-    // 4. None of the disks have enough space to host the replica
+    // 1. Success case: Verify all disks are used in round-robin fashion
     for (int i = 0; i < disks.size(); i++) {
-      disks.get(i).decreaseAvailableSpaceInBytes(disks.get(i).getAvailableSpaceInBytes());
-      potentialDisks.remove(disks.get(i));
+      ReplicaId bootstrapReplica = helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+      assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
+      potentialDisks.remove((AmbryDisk) bootstrapReplica.getDiskId());
+    }
+
+    // 2. Failure case: None of the disks have enough space to host the replica
+    for (AmbryDisk disk : disks) {
+      disk.decreaseAvailableSpaceInBytes(disk.getAvailableSpaceInBytes() - 100);
     }
     assertNull("Bootstrapping replica should be fail since no disk space is available",
         helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode));

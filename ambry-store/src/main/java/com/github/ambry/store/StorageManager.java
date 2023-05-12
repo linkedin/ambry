@@ -522,6 +522,9 @@ public class StorageManager implements StoreManager {
         // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
         // at some point). Then a brand new store associated with this replica should be created and started.
         if (!addBlobStore(replicaToAdd)) {
+          // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
+          // back since addition of store failed.
+          replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
           logger.error("Failed to add store {} into storage manager", partitionName);
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
               ReplicaOperationFailure);
