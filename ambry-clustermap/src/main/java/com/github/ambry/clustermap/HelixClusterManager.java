@@ -714,6 +714,8 @@ public class HelixClusterManager implements ClusterMap {
           logger.info("Replica addition infos map doesn't contain disk capacity. Disk {} capacity {} is not changed",
               targetDisk, targetDisk.getRawCapacityInBytes());
         }
+        // Update disk usage. However, this is just for tracking. We only check the disk usage in Full-auto mode.
+        targetDisk.decreaseAvailableSpaceInBytes(replicaCapacity);
         // A bootstrap replica is always ReplicaSealedStatus#NOT_SEALED.
         bootstrapReplica = new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity,
             ReplicaSealStatus.NOT_SEALED);
@@ -801,6 +803,7 @@ public class HelixClusterManager implements ClusterMap {
     AmbryDisk disk = potentialDisks.get(0);
 
     // Update disk usage
+    // TODO: Add a metric for this
     disk.decreaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES);
 
     return disk;
