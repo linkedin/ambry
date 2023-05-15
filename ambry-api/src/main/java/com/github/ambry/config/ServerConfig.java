@@ -92,6 +92,12 @@ public class ServerConfig {
   public final boolean serverReplicateTombstoneEnabled;
 
   /**
+   * True to enable On Demand Replication V2
+   */
+  @Config("server.odr.v2.enabled")
+  public final boolean serverODRV2Enabled;
+
+  /**
    * Implementation class for accountServiceFactory
    */
   @Config("server.account.service.factory")
@@ -130,6 +136,7 @@ public class ServerConfig {
     serverHandleForceDeleteRequestEnabled =
         verifiableProperties.getBoolean("server.handle.force.delete.request.enabled", false);
     serverReplicateTombstoneEnabled = verifiableProperties.getBoolean("server.replicate.tombstone.enabled", false);
+    serverODRV2Enabled = verifiableProperties.getBoolean("server.odr.v2.enabled", false);
     serverAccountServiceFactory = verifiableProperties.getString("server.account.service.factory",
         "com.github.ambry.account.InMemoryUnknownAccountServiceFactory");
     serverParticipantsConsistencyCheckerPeriodSec =

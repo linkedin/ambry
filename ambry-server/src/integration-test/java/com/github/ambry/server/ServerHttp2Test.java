@@ -36,6 +36,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -123,19 +124,32 @@ public class ServerHttp2Test {
   }
 
   @Test
-  public void replicateBlobCaseTest() {
+  public void replicatePutBlobV1Format() {
     // ReplicateBlob has two modes: write-repair-mode and non-write-repair mode.
     // Refer to handleReplicateBlobRequest.localStoreHasTheKey
     boolean writeRepair = false;
-    ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, routerProps, testEncryption,
-        notificationSystem, writeRepair);
+    ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem,
+        writeRepair, 1);
   }
 
   @Test
-  public void replicateDeleteRecordTest() {
+  public void replicatePutBlobV2Format() {
+    boolean writeRepair = false;
+    ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem,
+        writeRepair, 2);
+  }
+
+  @Test
+  public void replicateTombstoneV1Format() {
     // test ReplicateBlob delete tombstone record
-    ServerTestUtil.replicateDeleteRecordTest(http2Cluster, clientSSLConfig1, routerProps, testEncryption,
-        notificationSystem);
+    ServerTestUtil.replicateDeleteTomeStoneTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);
+  }
+
+  // LOCAL_CONSISTENCY_TODO enable the test if V2 is enabled.
+  @Ignore
+  @Test
+  public void replicateBlobV2MultipleCases() {
+    ServerTestUtil.replicateBlobV2CaseTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);
   }
 
   @Test

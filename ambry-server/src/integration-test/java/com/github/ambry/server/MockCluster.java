@@ -266,6 +266,7 @@ public class MockCluster {
     props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("server.handle.force.delete.request.enabled", "true");
     props.setProperty("server.replicate.tombstone.enabled", "true");
+    props.setProperty("server.odr.v2.enabled", Boolean.toString(false));
     props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
     props.putAll(sslProperties);
