@@ -145,8 +145,6 @@ public class ServerHttp2Test {
     ServerTestUtil.replicateDeleteTomeStoneTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);
   }
 
-  // LOCAL_CONSISTENCY_TODO enable the test if V2 is enabled.
-  @Ignore
   @Test
   public void replicateBlobV2MultipleCases() {
     ServerTestUtil.replicateBlobV2CaseTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);

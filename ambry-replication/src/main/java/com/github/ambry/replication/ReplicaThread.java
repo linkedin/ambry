@@ -1280,6 +1280,8 @@ public class ReplicaThread implements Runnable {
                   notification.onBlobReplicaCreated(dataNodeId.getHostname(), dataNodeId.getPort(),
                       messageInfo.getStoreKey().getID(), BlobReplicaSourceType.REPAIRED);
                 }
+                // messageInfo is the Blob final state and the operation time is the blob creation time.
+                // So the applyTtlUpdate will use the creation time as the Ttl operation time.
                 if (messageInfo.isTtlUpdated()) {
                   applyTtlUpdate(messageInfo, remoteReplicaInfo);
                 }

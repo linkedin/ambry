@@ -829,6 +829,9 @@ public class AmbryRequests implements RequestAPI {
             store.put(writeset);
 
             // also applyTtlUpdate and applyDelete if needed.
+            // the operation time of TtlUpdate and Delete will be same as the source replica's PutBlob creation time.
+            // But it's ok. Replication thread should have the same behavior.
+            // We don't care the operation time of TtlUpdate and Delete that much.
             if (orgMsgInfo.isTtlUpdated()) {
               applyTtlUpdate(orgMsgInfo, replicateBlobRequest);
             }
@@ -1191,6 +1194,9 @@ public class AmbryRequests implements RequestAPI {
           store.put(writeset);
 
           // also applyTtlUpdate and applyDelete if needed.
+          // the operation time of TtlUpdate and Delete will be same as the source replica's PutBlob creation time.
+          // But it's ok. Replication thread should have the same behavior.
+          // We don't care the operation time of TtlUpdate and Delete that much.
           if (remoteMessageInfo.isTtlUpdated()) {
             applyTtlUpdate(remoteMessageInfo, replicateBlobRequest);
           }
