@@ -13,10 +13,15 @@
  */
 package com.github.ambry.frontend;
 
-import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
@@ -28,13 +33,16 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.mockito.Mockito;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -42,6 +50,7 @@ import static org.junit.Assert.*;
 /**
  * Tests for {@link AmbryUrlSigningService}.
  */
+@RunWith(Parameterized.class)
 public class AmbryUrlSigningServiceTest {
   private static final String UPLOAD_ENDPOINT = "http://uploadUrl:15158";
   private static final String DOWNLOAD_ENDPOINT = "http://downloadUrl:15158";
@@ -51,7 +60,23 @@ public class AmbryUrlSigningServiceTest {
   private static final long CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS = 24 * 1024 * 1024;
   private static final long CHUNK_UPLOAD_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
   private static final String RANDOM_AMBRY_HEADER = AmbryUrlSigningService.AMBRY_PARAMETERS_PREFIX + "random";
-  private static final ClusterMap MOCK_CLUSTER_MAP = Mockito.mock(ClusterMap.class);
+  private final ClusterMap mockClusterMap;
+  private final boolean isReservedMetadataEnabled;
+
+  /**
+   * Constructor for {@link AmbryUrlSigningServiceTest}.
+   * @param isReservedMetadataEnabled {@code true} is reserved metadata feature is enabled. {@code false} otherwise.
+   * @throws Exception in case of any errors.
+   */
+  public AmbryUrlSigningServiceTest(boolean isReservedMetadataEnabled) throws Exception {
+    this.isReservedMetadataEnabled = isReservedMetadataEnabled;
+    this.mockClusterMap = new MockClusterMap();
+  }
+
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
+  }
 
   /**
    * Tests for {@link AmbryUrlSigningServiceFactory}.
@@ -59,6 +84,8 @@ public class AmbryUrlSigningServiceTest {
   @Test
   public void factoryTest() {
     Properties properties = new Properties();
+    CommonTestUtils.populateRequiredRouterProps(properties);
+    properties.setProperty(RouterConfig.RESERVED_METADATA_ENABLED, Boolean.toString(isReservedMetadataEnabled));
     JSONObject jsonObject = new JSONObject().put("POST", UPLOAD_ENDPOINT).put("GET", DOWNLOAD_ENDPOINT);
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
     properties.setProperty("frontend.url.signer.default.url.ttl.secs", Long.toString(DEFAULT_URL_TTL_SECS));
@@ -69,7 +96,7 @@ public class AmbryUrlSigningServiceTest {
     CommonTestUtils.populateRequiredRouterProps(properties);
     properties.setProperty("router.max.put.chunk.size.bytes", Long.toString(CHUNK_UPLOAD_MAX_CHUNK_SIZE));
     UrlSigningService signer = new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
-        MOCK_CLUSTER_MAP).getUrlSigningService();
+        mockClusterMap).getUrlSigningService();
     assertNotNull("UrlSigningService is null", signer);
     assertTrue("UrlSigningService is AmbryUrlSigningService", signer instanceof AmbryUrlSigningService);
     assertTrue(((AmbryUrlSigningService) signer).getUploadEndpoint().contains(UPLOAD_ENDPOINT));
@@ -83,12 +110,12 @@ public class AmbryUrlSigningServiceTest {
   public void factoryTestBadJson() {
     Properties properties = new Properties();
     CommonTestUtils.populateRequiredRouterProps(properties);
+    properties.setProperty(RouterConfig.RESERVED_METADATA_ENABLED, Boolean.toString(isReservedMetadataEnabled));
     // Missing GET
     JSONObject jsonObject = new JSONObject().put("POST", UPLOAD_ENDPOINT);
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
     try {
-      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
-          MOCK_CLUSTER_MAP).getUrlSigningService();
+      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties), mockClusterMap).getUrlSigningService();
       fail("Expected exception");
     } catch (IllegalStateException ex) {
     }
@@ -96,16 +123,14 @@ public class AmbryUrlSigningServiceTest {
     jsonObject = new JSONObject().put("GET", DOWNLOAD_ENDPOINT);
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, jsonObject.toString());
     try {
-      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
-          MOCK_CLUSTER_MAP).getUrlSigningService();
+      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties), mockClusterMap).getUrlSigningService();
       fail("Expected exception");
     } catch (IllegalStateException ex) {
     }
     // Gibberish
     properties.setProperty(FrontendConfig.URL_SIGNER_ENDPOINTS, "[Garbage string &%#123");
     try {
-      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties),
-          MOCK_CLUSTER_MAP).getUrlSigningService();
+      new AmbryUrlSigningServiceFactory(new VerifiableProperties(properties), mockClusterMap).getUrlSigningService();
       fail("Expected exception");
     } catch (IllegalStateException ex) {
     }
@@ -147,11 +172,16 @@ public class AmbryUrlSigningServiceTest {
    * Gets a {@link AmbryUrlSigningService} with some default construction parameters.
    * @param time the {@link Time} instance to use.
    * @return a {@link AmbryUrlSigningService} with some default construction parameters.
+   * @throws Exception in case of any exception.
    */
-  private AmbryUrlSigningService getUrlSignerWithDefaults(Time time) {
+  private AmbryUrlSigningService getUrlSignerWithDefaults(Time time) throws Exception {
+    Properties properties = new Properties();
+    CommonTestUtils.populateRequiredRouterProps(properties);
+    properties.setProperty(RouterConfig.RESERVED_METADATA_ENABLED, Boolean.toString(isReservedMetadataEnabled));
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     return new AmbryUrlSigningService(UPLOAD_ENDPOINT, DOWNLOAD_ENDPOINT, DEFAULT_URL_TTL_SECS, DEFAULT_MAX_UPLOAD_SIZE,
-        MAX_URL_TTL_SECS, CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS, CHUNK_UPLOAD_MAX_CHUNK_SIZE, time, Mockito.mock(
-        ClusterMap.class));
+        MAX_URL_TTL_SECS, CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS, CHUNK_UPLOAD_MAX_CHUNK_SIZE, time, mockClusterMap,
+        new ClusterMapConfig(verifiableProperties), new RouterConfig(verifiableProperties));
   }
 
   /**
@@ -183,6 +213,9 @@ public class AmbryUrlSigningServiceTest {
     if (chunkUpload) {
       request.setArg(RestUtils.Headers.CHUNK_UPLOAD, "true");
     }
+    request.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, InMemAccountService.UNKNOWN_ACCOUNT);
+    request.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY,
+        InMemAccountService.UNKNOWN_ACCOUNT.getContainerById(Container.UNKNOWN_CONTAINER_ID));
     return request;
   }
 
@@ -258,6 +291,7 @@ public class AmbryUrlSigningServiceTest {
     Object blobTtlVal = args.get(RestUtils.Headers.TTL);
     Object chunkUploadVal = args.get(RestUtils.Headers.CHUNK_UPLOAD);
     Object sessionVal = args.get(RestUtils.Headers.SESSION);
+    String reservedMetadataId = (String) args.get(RestUtils.Headers.RESERVED_METADATA_ID);
     if (restMethod.equals(RestMethod.POST)) {
       assertEquals("Max upload size not as expected", maxUploadSize,
           Long.parseLong(args.get(RestUtils.Headers.MAX_UPLOAD_SIZE).toString()));
@@ -269,14 +303,24 @@ public class AmbryUrlSigningServiceTest {
         assertNotNull("Session should be set", sessionVal);
         // ensure that the x-ambry-chunk-upload-session value is a valid UUID.
         UUID.fromString(sessionVal.toString());
+        if (isReservedMetadataEnabled) {
+          assertNotNull("Reserved metadata should be set", reservedMetadataId);
+          try {
+            new BlobId(reservedMetadataId, mockClusterMap);
+          } catch (Exception exception) {
+            fail(String.format("Invalid metadata blob id reserved. Exception: %s", exception.getMessage()));
+          }
+        }
       } else {
         assertNull("Chunk upload should not be set", chunkUploadVal);
         assertNull("Session should not be set", sessionVal);
+        assertNull("Reserved metadata should be set", reservedMetadataId);
       }
     } else {
       assertNull("Blob TTL should not be set", blobTtlVal);
       assertNull("Chunk upload should not be set", chunkUploadVal);
       assertNull("Session should not be set", sessionVal);
+      assertNull("Reserved metadata should be set", reservedMetadataId);
     }
   }
 
@@ -286,10 +330,9 @@ public class AmbryUrlSigningServiceTest {
    * @param request the {@link RestRequest} which contains the url to check
    * @param errorCode the {@link RestServiceErrorCode} expected on verification. If {@code null}, it is assumed that a
    *                  {@link IllegalArgumentException} is expected.
-   * @throws Exception
    */
   private void ensureVerificationFailure(AmbryUrlSigningService signer, RestRequest request,
-      RestServiceErrorCode errorCode) throws Exception {
+      RestServiceErrorCode errorCode) {
     try {
       signer.verifySignedRequest(request);
       fail("Verification of request should have failed");

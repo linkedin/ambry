@@ -35,8 +35,10 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonTestUtils;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -45,7 +47,6 @@ import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.named.PutResult;
 import com.github.ambry.protocol.GetOption;
-import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.quota.AmbryQuotaManager;
 import com.github.ambry.quota.QuotaMetrics;
 import com.github.ambry.quota.SimpleQuotaRecommendationMergePolicy;
@@ -202,6 +203,7 @@ public class FrontendRestRequestServiceTest {
     configProps.setProperty("frontend.path.prefixes.to.remove", "/media");
     configProps.setProperty("frontend.enable.undelete", "true");
     configProps.setProperty(FrontendConfig.CONTAINER_METRICS_EXCLUDED_ACCOUNTS, "random-name," + excludedAccountName);
+    CommonTestUtils.populateRequiredRouterProps(configProps);
     verifiableProperties = new VerifiableProperties(configProps);
     clusterMap = new MockClusterMap();
     clusterMap.setPermanentMetricRegistry(metricRegistry);
@@ -211,7 +213,8 @@ public class FrontendRestRequestServiceTest {
     String endpoint = "http://localhost:1174";
     urlSigningService = new AmbryUrlSigningService(endpoint, endpoint, frontendConfig.urlSignerDefaultUrlTtlSecs,
         frontendConfig.urlSignerDefaultMaxUploadSizeBytes, frontendConfig.urlSignerMaxUrlTtlSecs,
-        frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance(), clusterMap);
+        frontendConfig.chunkUploadInitialChunkTtlSecs, 4 * 1024 * 1024, SystemTime.getInstance(), clusterMap,
+        new ClusterMapConfig(verifiableProperties), new RouterConfig(verifiableProperties));
     idSigningService = new AmbryIdSigningService();
     namedBlobDb = mock(NamedBlobDb.class);
     idConverterFactory =

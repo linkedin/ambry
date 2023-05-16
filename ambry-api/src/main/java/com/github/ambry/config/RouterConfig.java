@@ -718,7 +718,7 @@ public class RouterConfig {
   /**
    * Feature flag to indicate if reserved metadata is enabled.
    */
-  // TODO EMO: get rid of this flag once the efficient metadata operations feature is complete.
+  // TODO EMO: Remove this flag and its usages once the efficient metadata operations feature is complete.
   @Config(RESERVED_METADATA_ENABLED)
   @Default("false")
   public final boolean routerReservedMetadataEnabled;
