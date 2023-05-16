@@ -30,6 +30,9 @@ public class ReservedMetadataIdMetrics {
   public final Counter numReservedPartitionFoundUnavailableInLocalDcCount;
   public final Counter numReservedPartitionFoundUnavailableInAllDcCount;
   public final Counter reserveMetadataIdFailedForPostSignedUrlCount;
+  public final Counter noReservedMetadataFoundForChunkedUploadResponseCount;
+  public final Counter noReservedMetadataForChunkedUploadCount;
+  public final Counter mismatchedReservedMetadataForChunkedUploadCount;
 
   /**
    * Constructor for {@link ReservedMetadataIdMetrics}.
@@ -48,6 +51,12 @@ public class ReservedMetadataIdMetrics {
         MetricRegistry.name(ReservedMetadataIdMetrics.class, "NumReservedPartitionFoundUnavailableInAllDcCount"));
     reserveMetadataIdFailedForPostSignedUrlCount = metricRegistry.counter(
         MetricRegistry.name(ReservedMetadataIdMetrics.class, "ReserveMetadataIdFailedForPostSignedUrlCount"));
+    noReservedMetadataFoundForChunkedUploadResponseCount = metricRegistry.counter(
+        MetricRegistry.name(ReservedMetadataIdMetrics.class, "NoReservedMetadataFoundForChunkedUploadResponseCount"));
+    noReservedMetadataForChunkedUploadCount = metricRegistry.counter(
+        MetricRegistry.name(ReservedMetadataIdMetrics.class, "NoReservedMetadataForChunkedUploadCount"));
+    mismatchedReservedMetadataForChunkedUploadCount = metricRegistry.counter(
+        MetricRegistry.name(ReservedMetadataIdMetrics.class, "MismatchedReservedMetadataForChunkedUploadCount"));
   }
 
   /**

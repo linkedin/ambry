@@ -15,6 +15,7 @@ package com.github.ambry.router;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
@@ -213,4 +214,9 @@ public interface Router extends Closeable {
     undeleteBlob(blobId, serviceId, CallbackUtils.fromCompletableFuture(future), null);
     return future;
   }
+
+  /**
+   * @return RouterConfig object for the {@link Router}.
+   */
+  RouterConfig getRouterConfig();
 }

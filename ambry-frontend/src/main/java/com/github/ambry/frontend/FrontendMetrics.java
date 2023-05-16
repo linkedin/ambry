@@ -263,6 +263,7 @@ public class FrontendMetrics {
   public final Histogram addDatasetVersionProcessingTimeInMs;
   public final Histogram getDatasetVersionProcessingTimeInMs;
   public final Histogram deleteDatasetVersionProcessingTimeInMs;
+  private final MetricRegistry metricRegistry;
 
   /**
    * Creates an instance of FrontendMetrics using the given {@code metricRegistry}.
@@ -671,5 +672,13 @@ public class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionProcessingTimeInMs"));
     deleteDatasetVersionProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobHandler.class, "DeleteDatasetVersionProcessingTimeInMs"));
+    this.metricRegistry = metricRegistry;
+  }
+
+  /**
+   * @return the MetricRegistry object of {@link FrontendMetrics}.
+   */
+  public MetricRegistry getMetricRegistry() {
+    return metricRegistry;
   }
 }

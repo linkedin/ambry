@@ -24,9 +24,12 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.AmbryQuotaManager;
@@ -73,6 +76,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.json.JSONObject;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.*;
@@ -84,6 +89,7 @@ import static org.junit.Assert.*;
  *
  * @todo extract post related test cases from FrontendRestRequestServiceTest
  */
+@RunWith(Parameterized.class)
 public class PostBlobHandlerTest {
   private static final InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
   private static final Account REF_ACCOUNT;
@@ -133,18 +139,37 @@ public class PostBlobHandlerTest {
   private final IdSigningService idSigningService;
   private FrontendConfig frontendConfig;
   private PostBlobHandler postBlobHandler;
+  private String reservedMetadataId;
 
-  public PostBlobHandlerTest() {
+  public PostBlobHandlerTest(boolean isReservedMetadataEnabled) {
     idConverterFactory = new FrontendTestIdConverterFactory();
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     Properties props = new Properties();
+    CommonTestUtils.populateRequiredRouterProps(props);
+    props.setProperty(RouterConfig.RESERVED_METADATA_ENABLED, Boolean.toString(isReservedMetadataEnabled));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
     metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
     injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     idSigningService = new AmbryIdSigningService();
+    if (isReservedMetadataEnabled) {
+      reservedMetadataId =
+          new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),
+              CLUSTER_MAP.getAllPartitionIds(null).get(0), false, BlobId.BlobDataType.DATACHUNK).getID();
+    } else {
+      reservedMetadataId = null;
+    }
     initPostBlobHandler(props);
+  }
+
+  /**
+   * Run with reserved metadata id enabled, as well as disabled.
+   * @return an array with both {@code false} and {@code true}.
+   */
+  @Parameterized.Parameters
+  public static List<Object[]> data() {
+    return Arrays.asList(new Object[][]{{false}, {true}});
   }
 
   /**
@@ -192,28 +217,28 @@ public class PostBlobHandlerTest {
     idConverterFactory.translation = CONVERTED_ID;
     // valid request arguments
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadInitialChunkTtlSecs,
-        null);
+        null, 1);
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1024, frontendConfig.chunkUploadInitialChunkTtlSecs,
-        null);
+        null, 2);
     // blob exceeds max blob size
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1023, 7200,
-        routerExceptionChecker(RouterErrorCode.BlobTooLarge));
+        routerExceptionChecker(RouterErrorCode.BlobTooLarge), 2);
     // no session header
-    doChunkUploadTest(1024, true, null, 1025, 7200, restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
+    doChunkUploadTest(1024, true, null, 1025, 7200, restServiceExceptionChecker(RestServiceErrorCode.MissingArgs), 2);
     // missing max blob size
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), null, 7200,
-        restServiceExceptionChecker(RestServiceErrorCode.MissingArgs));
+        restServiceExceptionChecker(RestServiceErrorCode.MissingArgs), 2);
     // invalid TTL
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, Utils.Infinite_Time,
-        restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs));
+        restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs), 2);
     // TTL > default chunkUploadInitialChunkTtlSecs
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadInitialChunkTtlSecs + 1,
-        null);
+        null, 3);
     // TTL > chunkUploadMaxChunkTtlSecs
     doChunkUploadTest(1024, true, UUID.randomUUID().toString(), 1025, frontendConfig.chunkUploadMaxChunkTtlSecs + 1,
-        restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs));
+        restServiceExceptionChecker(RestServiceErrorCode.InvalidArgs), 3);
     // ensure that the chunk upload request requirements are not enforced for non chunk uploads.
-    doChunkUploadTest(1024, false, null, null, Utils.Infinite_Time, null);
+    doChunkUploadTest(1024, false, null, null, Utils.Infinite_Time, null, 4);
   }
 
   /**
@@ -375,10 +400,12 @@ public class PostBlobHandlerTest {
    * @param blobTtlSecs the blob TTL to use.
    * @param errorChecker if non-null, expect an exception to be thrown by the post flow and verify it using this
    *                     {@link ThrowingConsumer}.
+   * @param callCount number of times this method is called.
    * @throws Exception
    */
   private void doChunkUploadTest(int contentLength, boolean chunkUpload, String uploadSession, Integer maxUploadSize,
-      long blobTtlSecs, ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
+      long blobTtlSecs, ThrowingConsumer<ExecutionException> errorChecker, int callCount)
+      throws Exception {
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, blobTtlSecs, !REF_CONTAINER.isCacheable(), SERVICE_ID,
         CONTENT_TYPE, OWNER_ID, REF_ACCOUNT.getName(), REF_CONTAINER.getName(), null);
@@ -390,6 +417,9 @@ public class PostBlobHandlerTest {
     }
     if (maxUploadSize != null) {
       headers.put(RestUtils.Headers.MAX_UPLOAD_SIZE, maxUploadSize);
+    }
+    if (reservedMetadataId != null) {
+      headers.put(RestUtils.Headers.RESERVED_METADATA_ID, reservedMetadataId);
     }
     byte[] content = TestUtils.getRandomBytes(contentLength);
     RestRequest request = getRestRequest(headers, "/", content);
@@ -409,6 +439,13 @@ public class PostBlobHandlerTest {
         expectedMetadata.put(RestUtils.Headers.SESSION, uploadSession);
         expectedMetadata.put(PostBlobHandler.EXPIRATION_TIME_MS_KEY,
             Long.toString(Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
+        if (reservedMetadataId != null) {
+          expectedMetadata.put(RestUtils.Headers.RESERVED_METADATA_ID, reservedMetadataId);
+        } else {
+          assertEquals(
+              callCount, ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+                  metrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.getCount());
+        }
         assertEquals("Unexpected signed ID metadata", expectedMetadata, metadata);
       } else {
         assertNull("Signed id metadata should not be set on non-chunk uploads", metadata);
@@ -468,7 +505,8 @@ public class PostBlobHandlerTest {
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
-      chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs), null));
+      chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs),
+          reservedMetadataId));
     }
     return chunks;
   }
@@ -484,6 +522,7 @@ public class PostBlobHandlerTest {
     metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(chunkInfo.getChunkSizeInBytes()));
     metadata.put(RestUtils.Headers.SESSION, uploadSession);
     metadata.put(PostBlobHandler.EXPIRATION_TIME_MS_KEY, Long.toString(chunkInfo.getExpirationTimeInMs()));
+    metadata.put(RestUtils.Headers.RESERVED_METADATA_ID, reservedMetadataId);
     try {
       return "/" + idSigningService.getSignedId(chunkInfo.getBlobId(), metadata);
     } catch (RestServiceException e) {
@@ -543,6 +582,10 @@ public class PostBlobHandlerTest {
       //check actual size of stitched blob
       assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
           restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+      if (reservedMetadataId == null) {
+        assertTrue(ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+            metrics.getMetricRegistry()).noReservedMetadataForChunkedUploadCount.getCount() > 0);
+      }
     } else {
       TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
           errorChecker);

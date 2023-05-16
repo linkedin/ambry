@@ -16,6 +16,7 @@ package com.github.ambry.tools.perf.rest;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
@@ -208,6 +209,11 @@ class PerfRouter implements Router {
       completeOperation(futureResult, callback, null, null);
     }
     return futureResult;
+  }
+
+  @Override
+  public RouterConfig getRouterConfig() {
+    return null;
   }
 
   @Override
