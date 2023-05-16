@@ -361,7 +361,7 @@ public class DeleteManagerTest {
     RouterErrorCode expectedErrorCode = RouterErrorCode.BlobDoesNotExist;
     FutureResult<Void> future = new FutureResult<>();
     TestCallback<Void> callback = new TestCallback<>();
-    deleteManager.submitDeleteBlobOperation(blobIdString, localDc, future, callback, quotaChargeCallback);
+    deleteManager.submitDeleteBlobOperation(blobIdString, localDc, future, callback, quotaChargeCallback, true);
 
     router.incrementOperationsCount(1);
     sendRequestsGetResponses(future, deleteManager);

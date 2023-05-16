@@ -80,6 +80,7 @@ class DeleteOperation {
   private final NonBlockingRouter nonBlockingRouter;
   private ReplicateBlobCallback replicateBlobCallback;
   private final String originatingDcName;
+  private final boolean isUserRequest;
 
   /**
    * Instantiates a {@link DeleteOperation}.
@@ -96,7 +97,8 @@ class DeleteOperation {
    */
   DeleteOperation(ClusterMap clusterMap, RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       ResponseHandler responsehandler, BlobId blobId, String serviceId, Callback<Void> callback, Time time,
-      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter) {
+      FutureResult<Void> futureResult, QuotaChargeCallback quotaChargeCallback, NonBlockingRouter nonBlockingRouter,
+      boolean isUserRequest) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -118,6 +120,7 @@ class DeleteOperation {
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
     this.nonBlockingRouter = nonBlockingRouter;
     this.replicateBlobCallback = null;
+    this.isUserRequest = isUserRequest;
   }
 
   /**
@@ -126,6 +129,12 @@ class DeleteOperation {
    *                            that gets created as part of this poll operation.
    */
   void poll(RequestRegistrationCallback<DeleteOperation> requestRegistrationCallback) {
+    if (blobId.getBlobDataType() == BlobId.BlobDataType.DATACHUNK && isUserRequest) {
+      operationException.set(
+          new RouterException("Deleting data chunk is not allowed for user requests", RouterErrorCode.InvalidBlobId));
+      operationCompleted = true;
+      return;
+    }
     cleanupExpiredInflightRequests(requestRegistrationCallback);
     checkAndMaybeComplete();
     if (!isOperationComplete()) {

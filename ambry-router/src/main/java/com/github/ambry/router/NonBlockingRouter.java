@@ -432,7 +432,7 @@ class NonBlockingRouter implements Router {
         // Can skip attemptChunkDeletes if we can determine this is not a metadata blob
         boolean attemptChunkDeletes = isMaybeMetadataBlob(blobId);
         getOperationController().deleteBlob(blobId, serviceId, futureResult,
-            new BlobOperationCallbackWrapper<>(blobId, callback), attemptChunkDeletes, quotaChargeCallback);
+            new BlobOperationCallbackWrapper<>(blobId, callback), attemptChunkDeletes, quotaChargeCallback, true);
         if (!attemptChunkDeletes) {
           routerMetrics.skippedGetBlobCount.inc();
         }
@@ -538,7 +538,7 @@ class NonBlockingRouter implements Router {
               logger.error("Background delete operation failed with exception", exception);
             }
             currentBackgroundOperationsCount.decrementAndGet();
-          }, false, deleteRequest.getQuotaChargeCallback());
+          }, false, deleteRequest.getQuotaChargeCallback(), false);
     }
   }
 
