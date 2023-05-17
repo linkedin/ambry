@@ -15,22 +15,50 @@ package com.github.ambry.store;
 
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.replication.FindToken;
-import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaTokenPersistor;
+import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
  * Tool to assist in dumping data from replica token file in ambry
+ *
+ * 1. Put this in a file called ambry/target/dump_replica.props and change the first three to your filesystem paths.
+ *
+ *    file.to.read=/Users/snalli/projects/ambry/target/replicaTokens
+ *    hardware.layout.file.path=/Users/snalli/projects/ambry/target/HardwareLayoutVideo.json
+ *    partition.layout.file.path=/Users/snalli/projects/ambry/target/PartitionLayoutVideo.json
+ *    clustermap.resolve.hostnames=false
+ *    hostname=localhost
+ *    clustermap.cluster.name=ambry
+ *    clustermap.datacenter.name=prod-lva1
+ *    port=15088
+ *    clustermap.host.name=localhost
+ *    replication.token.factory=com.github.ambry.store.StoreFindTokenFactory
+ *    store.key.factory=com.github.ambry.commons.BlobIdFactory
+ *
+ * 2. Compile ambry open-source.
+ *
+ *    ./gradlew clean && ./gradlew allJar
+ *
+ * 3. Switch to target/ folder
+ *
+ * 4. Run this cmd
+ *
+ *    java -cp ambry.jar -Dlog4j2.configurationFile=file:../config/log4j2.xml com.github.ambry.store.DumpReplicaTokenTool --propsFile ./dump_replica.props
  */
 public class DumpReplicaTokenTool {
 
@@ -39,6 +67,7 @@ public class DumpReplicaTokenTool {
   private final String fileToRead;
 
   private static final Logger logger = LoggerFactory.getLogger(DumpReplicaTokenTool.class);
+  protected ReplicaTokenPersistor.ReplicaTokenSerde replicaTokenSerde;
 
   public DumpReplicaTokenTool(VerifiableProperties verifiableProperties) throws Exception {
     fileToRead = verifiableProperties.getString("file.to.read");
@@ -52,6 +81,15 @@ public class DumpReplicaTokenTool {
     this.clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             hardwareLayoutFilePath, partitionLayoutFilePath)).getClusterMap();
+
+    ReplicationConfig replicationConfig = new ReplicationConfig(verifiableProperties);
+    StoreKeyFactory storeKeyFactory = Utils.getObj(verifiableProperties.getString("store.key.factory"), clusterMap);
+    try {
+      FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
+      this.replicaTokenSerde = new ReplicaTokenPersistor.ReplicaTokenSerde(clusterMap, findTokenHelper);
+    } catch (ReflectiveOperationException e) {
+      throw new ReplicationException("Failed to get FindTokenHelper " + e);
+    }
   }
 
   public static void main(String args[]) throws Exception {
@@ -67,33 +105,13 @@ public class DumpReplicaTokenTool {
   private void dumpReplicaToken() throws Exception {
     logger.info("Dumping replica token file {}", fileToRead);
     DataInputStream stream = new DataInputStream(new FileInputStream(fileToRead));
-    short version = stream.readShort();
-    switch (version) {
-      case 0:
-        int Crc_Size = 8;
-        StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
-        FindTokenFactory findTokenFactory =
-            Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
-        while (stream.available() > Crc_Size) {
-          // read partition id
-          PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
-          // read remote node host name
-          String hostname = Utils.readIntString(stream);
-          // read remote replica path
-          String replicaPath = Utils.readIntString(stream);
-          // read remote port
-          int port = stream.readInt();
-          // read total bytes read from local store
-          long totalBytesReadFromLocalStore = stream.readLong();
-          // read replica token
-          FindToken token = findTokenFactory.getFindToken(stream);
-          logger.info("partitionId {} hostname {} replicaPath {} port {} totalBytesReadFromLocalStore {} token {}",
-              partitionId, hostname, replicaPath, port, totalBytesReadFromLocalStore, token);
-        }
-        logger.info("crc {}", stream.readLong());
-        break;
-      default:
-        logger.error("Version {} unsupported ", version);
+    try {
+      List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList = replicaTokenSerde.deserializeTokens(stream);
+      for (RemoteReplicaInfo.ReplicaTokenInfo replicaTokenInfo : replicaTokenInfoList) {
+        logger.info(replicaTokenInfo.toString() + " " + replicaTokenInfo.getReplicaToken().toString());
+      }
+    } catch (IOException e) {
+      throw new ReplicationException("IO error while reading from replica token file " + fileToRead, e);
     }
   }
 }
