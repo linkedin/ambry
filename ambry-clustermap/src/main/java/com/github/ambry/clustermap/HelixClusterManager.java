@@ -437,6 +437,10 @@ public class HelixClusterManager implements ClusterMap {
     }
   }
 
+  /**
+   * {@inheritDoc}
+   * Notice that this method only works for data nodes from the same datacenter.
+   */
   @Override
   public boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId) {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
@@ -444,6 +448,9 @@ public class HelixClusterManager implements ClusterMap {
       throw new IllegalArgumentException("Instance " + instanceName + " doesn't exist");
     }
     String dcName = dataNodeId.getDatacenterName();
+    if (!dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
+      throw new IllegalArgumentException("Instance " + instanceName + " is from different datacenter");
+    }
     InstanceConfig instanceConfig = localHelixAdmin.getInstanceConfig(clusterName, instanceName);
     if (instanceConfig == null) {
       throw new IllegalArgumentException("Instance config for " + instanceName + " doesn't exist");
@@ -453,7 +460,8 @@ public class HelixClusterManager implements ClusterMap {
       logger.trace("DataNode {} doesn't have any tags", instanceName);
       return false;
     }
-    // Before turn on FULL_AUTO, we have to make sure each host only stores partitions from one resource
+    // Before turn on FULL_AUTO, we have to make sure each host only stores partitions from one resource.
+    // Meaning there should be only one tag in the list
     if (tags.size() != 1) {
       logger.trace("DataNode {} has multiple tags {}", instanceName, tags);
       return false;
