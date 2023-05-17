@@ -78,6 +78,7 @@ public class NamedBlobPutHandlerTest {
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
   private static final Container REF_CONTAINER_WITH_TTL_REQUIRED;
+  private static final Container REF_CONTAINER_NO_UPDATE;
   private static final ClusterMap CLUSTER_MAP;
 
   private static final int TIMEOUT_SECS = 10;
@@ -103,6 +104,9 @@ public class NamedBlobPutHandlerTest {
       Account newAccount = new AccountBuilder(account).addOrUpdateContainer(ttlRequiredContainer).build();
       ACCOUNT_SERVICE.updateAccounts(Collections.singleton(newAccount));
       REF_ACCOUNT = ACCOUNT_SERVICE.getAccountById(newAccount.getId());
+      REF_CONTAINER_NO_UPDATE = new ContainerBuilder((short) 11, "noUpdate", Container.ContainerStatus.ACTIVE, "",
+              REF_ACCOUNT.getId()).setNamedBlobMode(Container.NamedBlobMode.NO_UPDATE).build();
+      ACCOUNT_SERVICE.updateContainers(REF_ACCOUNT.getName(), Arrays.asList(REF_CONTAINER_NO_UPDATE));
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
       REF_CONTAINER_WITH_TTL_REQUIRED = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
       ACCOUNT_SERVICE.addDataset(
@@ -129,6 +133,7 @@ public class NamedBlobPutHandlerTest {
   private FrontendConfig frontendConfig;
   private NamedBlobPutHandler namedBlobPutHandler;
   private final String request_path;
+  private final String request_noupdate_path;
   private final String dataset_version_request_path;
 
   public NamedBlobPutHandlerTest() throws Exception {
@@ -144,6 +149,7 @@ public class NamedBlobPutHandlerTest {
     idSigningService = new AmbryIdSigningService();
     request_path =
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + BLOBNAME;
+    request_noupdate_path = NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER_NO_UPDATE.getName() + SLASH + BLOBNAME;
     dataset_version_request_path =
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + DATASET_NAME
             + SLASH + VERSION;
@@ -151,6 +157,54 @@ public class NamedBlobPutHandlerTest {
         new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     initNamedBlobPutHandler(props);
+  }
+
+  /**
+   * Allow non-upsert put for container with NamedBlobMode = NO_UPDATE
+   */
+  @Test
+  public void updateNamedBlobAllowedTest() throws Exception {
+    idConverterFactory.returnInputIfTranslationNull = true;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+        CONTENT_TYPE, OWNER_ID, null, REF_CONTAINER_NO_UPDATE.getName(), null);
+    headers.put(RestUtils.Headers.NAMED_UPSERT, false);
+    byte[] content = TestUtils.getRandomBytes(1024);
+    RestRequest request = getRestRequest(headers, request_noupdate_path, content);
+
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> future = new FutureResult<>();
+    namedBlobPutHandler.handle(request, restResponseChannel, future::done);
+
+    future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+    assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
+        restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+    InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
+    assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
+    assertEquals("Unexpected TTL in blob", TestUtils.TTL_SECS, blob.getBlobProperties().getTimeToLiveInSeconds());
+    assertEquals("Unexpected TTL in named blob DB", TestUtils.TTL_SECS,
+        idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
+    assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
+  }
+
+  /**
+   * Do NOT allow upsert for container with NamedBlobMode = NO_UPDATE
+   */
+  @Test
+  public void updateNamedBlobNotAllowedTest() throws Exception {
+    idConverterFactory.returnInputIfTranslationNull = true;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+        CONTENT_TYPE, OWNER_ID, null, REF_CONTAINER_NO_UPDATE.getName(), null);
+    headers.put(RestUtils.Headers.NAMED_UPSERT, true);
+    byte[] content = TestUtils.getRandomBytes(1024);
+    RestRequest request = getRestRequest(headers, request_noupdate_path, content);
+
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> future = new FutureResult<>();
+    namedBlobPutHandler.handle(request, restResponseChannel, future::done);
+    TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
+        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
   }
 
   /**

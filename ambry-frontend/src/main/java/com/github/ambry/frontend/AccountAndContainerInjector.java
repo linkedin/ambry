@@ -159,6 +159,12 @@ public class AccountAndContainerInjector {
           "Named blob APIs disabled for this container. account=" + accountName + ", container=" + containerName,
           RestServiceErrorCode.BadRequest);
     }
+    if (targetContainer.getNamedBlobMode() == Container.NamedBlobMode.NO_UPDATE &&
+        RestUtils.isUpsertForNamedBlob(restRequest.getArgs())) {
+      throw new RestServiceException(
+          "Named blob APIs Upsert disabled for this container. account=" + accountName + ", container=" + containerName,
+          RestServiceErrorCode.BadRequest);
+    }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
     setTargetDatasetAndVersionInRestRequestIfNeeded(restRequest, namedBlobPath);
   }

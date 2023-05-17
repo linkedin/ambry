@@ -725,8 +725,13 @@ public class Container {
     DISABLED,
 
     /**
-     * Both named blob APIs and blob ID APIs may be used for this container.
+     * Both named blob APIs and blob ID APIs may be used for this container, existing named blob can be updated
      */
-    OPTIONAL
+    OPTIONAL,
+
+    /**
+     * Both named blob APIs and blob ID APIs may be used for this container, do not allow updating named blob
+     */
+    NO_UPDATE
   }
 }
