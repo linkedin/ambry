@@ -622,12 +622,20 @@ public class HelixClusterManagerTest {
     assumeTrue(!useComposite);
     metricRegistry = new MetricRegistry();
 
-    // Set the node to FullAuto
+    // Set the resource and all data nodes in local dc to FULL_AUTO
     List<String> resourceNames = helixCluster.getResources(localDc);
     String resourceName = resourceNames.get(0);
+    String tag = "TAG_100000";
     IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
     idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    idealState.setInstanceGroupTag(tag);
     helixCluster.refreshIdealState();
+    for (DataNode dataNode : testHardwareLayout.getAllDataNodesFromDc(localDc)) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(tag);
+    }
 
     // Set ZNRecord is NULL in Helix PropertyStore
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
@@ -653,9 +661,18 @@ public class HelixClusterManagerTest {
     // Set the node to FullAuto
     List<String> resourceNames = helixCluster.getResources(localDc);
     String resourceName = resourceNames.get(0);
+    String tag = "TAG_100000";
     IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
     idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    idealState.setInstanceGroupTag(tag);
     helixCluster.refreshIdealState();
+    for (DataNode dataNode : testHardwareLayout.getAllDataNodesFromDc(localDc)) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(tag);
+    }
+
     // Set ZNRecord is NULL in Helix PropertyStore
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
         new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
