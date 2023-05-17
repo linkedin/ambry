@@ -869,7 +869,7 @@ public class AmbryRequests implements RequestAPI {
         errorCode = ServerErrorCode.No_Error;
       } else {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
-        errorCode = ServerErrorCode.Unknown_Error;
+        errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
     } catch (Exception e) {
       // localStoreHasTheKey calls getConvertedStoreKeys which may throw Exception
@@ -1062,7 +1062,7 @@ public class AmbryRequests implements RequestAPI {
     if (replicateBlobRequest.getOperationType() != RequestOrResponseType.PutRequest
         && replicateBlobRequest.getOperationType() != RequestOrResponseType.TtlUpdateRequest
         && replicateBlobRequest.getOperationType() != RequestOrResponseType.DeleteRequest) {
-      logger.info("ReplicateBlobRequest invalid request {}", replicateBlobRequest);
+      logger.error("ReplicateBlobRequest invalid request {}", replicateBlobRequest);
       completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.Bad_Request, startProcessTime);
       return;
     }
@@ -1091,7 +1091,7 @@ public class AmbryRequests implements RequestAPI {
     MessageInfo localMessageInfo = null;
     try {
       StoreKey convertedKey = getConvertedStoreKeys(Collections.singletonList(blobId)).get(0);
-      if (!((BlobId) convertedKey).equals(blobId)) {
+      if (!(convertedKey).equals(blobId)) {
         logger.info("ReplicateBlobRequest replicated Blob {} convert to local key {}", blobId, (BlobId) convertedKey);
         blobId = (BlobId) convertedKey;
       }
@@ -1104,7 +1104,7 @@ public class AmbryRequests implements RequestAPI {
         errorCode = ServerErrorCode.No_Error;
       } else {
         logger.error("ReplicateBlobRequest store.findKey throw exception {} on Blob {},", e.getErrorCode(), blobId);
-        errorCode = ServerErrorCode.Unknown_Error;
+        errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
     } catch (Exception e) {
       // getConvertedStoreKeys which may throw Exception
@@ -1219,7 +1219,7 @@ public class AmbryRequests implements RequestAPI {
       } else {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", convertedBlobId,
             replicateBlobRequest, e);
-        errorCode = ServerErrorCode.Unknown_Error;
+        errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
     } finally {
       if (remoteGetResponse != null && remoteGetResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
@@ -1254,7 +1254,7 @@ public class AmbryRequests implements RequestAPI {
         errorCode = ServerErrorCode.Blob_Expired;
       } else {
         logger.error("ReplicateBlobRequest updateTtl failed {} on Blob {},", e.getErrorCode(), blobId);
-        errorCode = ServerErrorCode.Unknown_Error;
+        errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
     }
     return errorCode;
@@ -1292,7 +1292,7 @@ public class AmbryRequests implements RequestAPI {
           errorCode = ServerErrorCode.No_Error;
         } else {
           logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
-          errorCode = ServerErrorCode.Unknown_Error;
+          errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
         }
       }
     }
@@ -1321,7 +1321,7 @@ public class AmbryRequests implements RequestAPI {
           errorCode = ServerErrorCode.No_Error;
         } else {
           logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
-          errorCode = ServerErrorCode.Unknown_Error;
+          errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
         }
       }
     }
@@ -1336,7 +1336,7 @@ public class AmbryRequests implements RequestAPI {
             errorCode);
     long requestQueueTime = startProcessTime - request.getStartTimeInMs();
     long processingTime = SystemTime.getInstance().milliseconds() - startProcessTime;
-    long totalTimeSpent = requestQueueTime += processingTime;
+    long totalTimeSpent = requestQueueTime + processingTime;
     publicAccessLogger.info("{} {} processingTime {}", replicateBlobRequest, response, processingTime);
     // Update request metrics.
     RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
