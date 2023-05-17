@@ -970,9 +970,24 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          false, Collections.emptySet(), false, false, NamedBlobMode.DISABLED, (short) 0, System.currentTimeMillis(),
+          false, Collections.emptySet(), false, false, getRandomNamedBlobMode(), (short) 0, System.currentTimeMillis(),
           System.currentTimeMillis(), 0, null, null, null);
     }, null);
+  }
+
+  /**
+   * Randomly generate a named blob mode
+   */
+
+  private NamedBlobMode getRandomNamedBlobMode() {
+    int randInt = random.nextInt(3);
+    if (randInt == 0) {
+      return NamedBlobMode.DISABLED;
+    } else if (randInt == 1) {
+      return NamedBlobMode.OPTIONAL;
+    } else {
+      return NamedBlobMode.NO_UPDATE;
+    }
   }
 
   /**
@@ -1029,7 +1044,7 @@ public class AccountContainerTest {
       refContainerTtlRequiredValues.add(random.nextBoolean());
       refContainerSignedPathRequiredValues.add(random.nextBoolean());
       refContainerOverrideAccountAcls.add(random.nextBoolean());
-      refContainerNamedBlobModes.add(random.nextBoolean() ? NamedBlobMode.DISABLED : NamedBlobMode.OPTIONAL);
+      refContainerNamedBlobModes.add(getRandomNamedBlobMode());
       refContainerDeleteTriggerTime.add((long) 0);
       if (i == 0) {
         refContainerContentTypeAllowListForFilenamesOnDownloadValues.add(null);
