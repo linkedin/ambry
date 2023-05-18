@@ -142,26 +142,18 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
-    boolean result = cachedAccountService.addAccountUpdateConsumer(accountUpdateConsumer);
-    if (config.enableNewDatabaseForMigration) {
-      boolean resultNew = cachedAccountServiceNew.addAccountUpdateConsumer(accountUpdateConsumer);
-      if (config.enableGetFromNewDbOnly) {
-        return resultNew;
-      }
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.addAccountUpdateConsumer(accountUpdateConsumer);
     }
-    return result;
+    return cachedAccountService.addAccountUpdateConsumer(accountUpdateConsumer);
   }
 
   @Override
   public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
-    boolean result = cachedAccountService.removeAccountUpdateConsumer(accountUpdateConsumer);
-    if (config.enableNewDatabaseForMigration) {
-      boolean resultNew = cachedAccountServiceNew.removeAccountUpdateConsumer(accountUpdateConsumer);
-      if (config.enableGetFromNewDbOnly) {
-        return resultNew;
-      }
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.removeAccountUpdateConsumer(accountUpdateConsumer);
     }
-    return result;
+    return cachedAccountService.removeAccountUpdateConsumer(accountUpdateConsumer);
   }
 
   /**
