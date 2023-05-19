@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -41,6 +40,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
+import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.NotificationContext;
@@ -48,11 +48,13 @@ import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.RoutingTableChangeListener;
 import org.apache.helix.model.IdealState;
+import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.apache.helix.zookeeper.zkclient.IZkDataListener;
+import org.apache.logging.log4j.util.Strings;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -90,9 +92,8 @@ public class HelixClusterManager implements ClusterMap {
   // Routing table snapshot reference used in aggregated cluster view.
   private final AtomicReference<RoutingTableSnapshot> globalRoutingTableSnapshotRef = new AtomicReference<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
-  private final Map<String, ConcurrentHashMap<String, Set<String>>> dcToInstanceNameToResources =
-      new ConcurrentHashMap<>();
-  private final Map<String, ConcurrentHashMap<String, ResourceProperty>> dcToResourceNameToResourceProperty =
+  private final Map<String, ConcurrentHashMap<String, Set<String>>> dcToInstanceNameToTags = new ConcurrentHashMap<>();
+  private final Map<String, ConcurrentHashMap<String, ResourceProperty>> dcToTagToResourceProperty =
       new ConcurrentHashMap<>();
   private final AtomicLong errorCount = new AtomicLong(0);
   private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
@@ -105,6 +106,7 @@ public class HelixClusterManager implements ClusterMap {
   private final Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
   private final Map<String, ReplicaId> bootstrapReplicas = new ConcurrentHashMap<>();
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStoreInLocalDc = null;
+  private HelixAdmin localHelixAdmin = null;
   // The current xid currently does not change after instantiation. This can change in the future, allowing the cluster
   // manager to dynamically incorporate newer changes in the cluster. This variable is atomic so that the gauge metric
   // reflects the current value.
@@ -236,6 +238,8 @@ public class HelixClusterManager implements ClusterMap {
     helixPropertyStoreInLocalDc = manager.getHelixPropertyStore();
     logger.info("HelixPropertyStore from local datacenter {} is: {}", dcZkInfo.getDcName(),
         helixPropertyStoreInLocalDc);
+    localHelixAdmin = manager.getClusterManagmentTool();
+    logger.info("HelixAdmin from local datacenter {} is: {}", dcZkInfo.getDcName(), localHelixAdmin);
     IZkDataListener dataListener = new IZkDataListener() {
       @Override
       public void handleDataChange(String dataPath, Object data) {
@@ -433,6 +437,10 @@ public class HelixClusterManager implements ClusterMap {
     }
   }
 
+  /**
+   * {@inheritDoc}
+   * Notice that this method only works for data nodes from the same datacenter.
+   */
   @Override
   public boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId) {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
@@ -440,18 +448,27 @@ public class HelixClusterManager implements ClusterMap {
       throw new IllegalArgumentException("Instance " + instanceName + " doesn't exist");
     }
     String dcName = dataNodeId.getDatacenterName();
-    Set<String> resourceNames = dcToInstanceNameToResources.get(dcName).get(instanceName);
-    if (resourceNames == null || resourceNames.isEmpty()) {
-      logger.trace("DataNode {} doesn't have any resources", instanceName);
+    if (!dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
+      throw new IllegalArgumentException("Instance " + instanceName + " is from different datacenter");
+    }
+    InstanceConfig instanceConfig = localHelixAdmin.getInstanceConfig(clusterName, instanceName);
+    if (instanceConfig == null) {
+      throw new IllegalArgumentException("Instance config for " + instanceName + " doesn't exist");
+    }
+    List<String> tags = instanceConfig.getTags();
+    if (tags == null || tags.isEmpty()) {
+      logger.trace("DataNode {} doesn't have any tags", instanceName);
       return false;
     }
-    // Before turn on FULL_AUTO, we have to make sure each host only stores partitions from one resource
-    if (resourceNames.size() != 1) {
+    // Before turn on FULL_AUTO, we have to make sure each host only stores partitions from one resource.
+    // Meaning there should be only one tag in the list
+    if (tags.size() != 1) {
+      logger.trace("DataNode {} has multiple tags {}", instanceName, tags);
       return false;
     }
     // Make sure all the resources turned on FULL_AUTO mode
-    String resourceName = resourceNames.iterator().next();
-    ResourceProperty property = dcToResourceNameToResourceProperty.get(dcName).get(resourceName);
+    String tag = tags.iterator().next();
+    ResourceProperty property = dcToTagToResourceProperty.get(dcName).get(tag);
     return property != null && property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO);
   }
 
@@ -477,6 +494,10 @@ public class HelixClusterManager implements ClusterMap {
     }
     if (helixPropertyStoreInLocalDc != null) {
       helixPropertyStoreInLocalDc.stop();
+    }
+
+    if (localHelixAdmin != null) {
+      localHelixAdmin.close();
     }
   }
 
@@ -1315,8 +1336,7 @@ public class HelixClusterManager implements ClusterMap {
       if (dcName != null) {
         // Rebuild the entire partition-to-resource map in current dc
         ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
-        ConcurrentHashMap<String, Set<String>> instanceNameToResourceNames = new ConcurrentHashMap<>();
-        ConcurrentHashMap<String, ResourceProperty> resourceNameToProperty = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, ResourceProperty> tagToProperty = new ConcurrentHashMap<>();
         for (IdealState state : idealStates) {
           String resourceName = state.getResourceName();
           for (String partitionName : state.getPartitionSet()) {
@@ -1324,17 +1344,13 @@ public class HelixClusterManager implements ClusterMap {
                 partitionToResourceMap.compute(partitionName, resourceNameReplaceFunc(resourceName));
             if (mappedResourceName.equals(resourceName)) {
               ResourceProperty resourceProperty = new ResourceProperty(resourceName, state.getRebalanceMode());
-              resourceNameToProperty.put(resourceName, resourceProperty);
-
-              for (String instanceName : state.getInstanceSet(partitionName)) {
-                instanceNameToResourceNames.computeIfAbsent(instanceName, k -> ConcurrentHashMap.newKeySet())
-                    .add(resourceName);
+              if (!Strings.isEmpty(state.getInstanceGroupTag())) {
+                tagToProperty.put(state.getInstanceGroupTag(), resourceProperty);
               }
             }
           }
         }
-        dcToResourceNameToResourceProperty.put(dcName, resourceNameToProperty);
-        dcToInstanceNameToResources.put(dcName, instanceNameToResourceNames);
+        dcToTagToResourceProperty.put(dcName, tagToProperty);
         partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
       } else {
         logger.warn("Partition to resource mapping for aggregated cluster view would be built from external view");
@@ -1643,11 +1659,10 @@ public class HelixClusterManager implements ClusterMap {
         Collection<String> partiallySealedReplicas) {
       ReplicaSealStatus replicaSealStatus = ReplicaSealStatus.NOT_SEALED;
       if (clusterMapConfig.clusterMapEnablePartitionOverride && partitionOverrideInfoMap.containsKey(partitionName)) {
-        replicaSealStatus =
-            ClusterMapUtils.partitionStateStrToReplicaSealStatus(partitionOverrideInfoMap.get(partitionName)
-                .get(ClusterMapUtils.PARTITION_STATE));
+        replicaSealStatus = ClusterMapUtils.partitionStateStrToReplicaSealStatus(
+            partitionOverrideInfoMap.get(partitionName).get(ClusterMapUtils.PARTITION_STATE));
         if (replicaSealStatus == ReplicaSealStatus.SEALED) {
-          return  replicaSealStatus;
+          return replicaSealStatus;
         }
       } else {
         if (sealedReplicas.contains(partitionName)) {

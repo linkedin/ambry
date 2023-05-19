@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
@@ -61,7 +62,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-import com.github.ambry.clustermap.HelixClusterManager.HelixClusterChangeHandler;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.TestUtils.*;
@@ -187,18 +187,21 @@ public class HelixClusterManagerTest {
         new PartitionRangeCheckParams(defaultRo.rangeEnd + 1, 5, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY);
     testPartitionLayout.addNewPartitions(specialRo.count, SPECIAL_PARTITION_CLASS, PartitionState.READ_ONLY, localDc);
     // add 5 PRW partitions for default class
-    defaultPrw =
-        new PartitionRangeCheckParams(specialRo.rangeEnd + 1, 5, DEFAULT_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE);
-    testPartitionLayout.addNewPartitions(defaultPrw.count, DEFAULT_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE, localDc);
+    defaultPrw = new PartitionRangeCheckParams(specialRo.rangeEnd + 1, 5, DEFAULT_PARTITION_CLASS,
+        PartitionState.PARTIAL_READ_WRITE);
+    testPartitionLayout.addNewPartitions(defaultPrw.count, DEFAULT_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE,
+        localDc);
     // add 5 PRW partitions for special class
-    specialPrw =
-        new PartitionRangeCheckParams(defaultPrw.rangeEnd + 1, 5, SPECIAL_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE);
-    testPartitionLayout.addNewPartitions(specialPrw.count, SPECIAL_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE, localDc);
+    specialPrw = new PartitionRangeCheckParams(defaultPrw.rangeEnd + 1, 5, SPECIAL_PARTITION_CLASS,
+        PartitionState.PARTIAL_READ_WRITE);
+    testPartitionLayout.addNewPartitions(specialPrw.count, SPECIAL_PARTITION_CLASS, PartitionState.PARTIAL_READ_WRITE,
+        localDc);
     // add 3 RW partition for the default class (these will be overridden to PRW for tests)
     defaultRwForPrw =
         new PartitionRangeCheckParams(specialPrw.rangeEnd + 1, numOfPartialReadWrite, DEFAULT_PARTITION_CLASS,
             PartitionState.READ_WRITE);
-    testPartitionLayout.addNewPartitions(defaultRwForPrw.count, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, localDc);
+    testPartitionLayout.addNewPartitions(defaultRwForPrw.count, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE,
+        localDc);
 
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
@@ -206,7 +209,8 @@ public class HelixClusterManagerTest {
 
     // Mock the override partition map
     Random rand = new Random();
-    int totalPartitionNum = testPartitionLayout.getPartitionCount() - numOfPartialReadWrite; // - numOfPartialReadWrite because last 3 partitions are reserved to be overrideen to PRW
+    int totalPartitionNum = testPartitionLayout.getPartitionCount()
+        - numOfPartialReadWrite; // - numOfPartialReadWrite because last 3 partitions are reserved to be overrideen to PRW
     numOfReadOnly = rand.nextInt(totalPartitionNum / 2 - 1);
     numOfReadWrite = totalPartitionNum - numOfReadOnly;
     partitionOverrideMap = new HashMap<>();
@@ -618,12 +622,20 @@ public class HelixClusterManagerTest {
     assumeTrue(!useComposite);
     metricRegistry = new MetricRegistry();
 
-    // Set the node to FullAuto
+    // Set the resource and all data nodes in local dc to FULL_AUTO
     List<String> resourceNames = helixCluster.getResources(localDc);
     String resourceName = resourceNames.get(0);
+    String tag = "TAG_100000";
     IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
     idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    idealState.setInstanceGroupTag(tag);
     helixCluster.refreshIdealState();
+    for (DataNode dataNode : testHardwareLayout.getAllDataNodesFromDc(localDc)) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(tag);
+    }
 
     // Set ZNRecord is NULL in Helix PropertyStore
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
@@ -649,9 +661,18 @@ public class HelixClusterManagerTest {
     // Set the node to FullAuto
     List<String> resourceNames = helixCluster.getResources(localDc);
     String resourceName = resourceNames.get(0);
+    String tag = "TAG_100000";
     IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
     idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    idealState.setInstanceGroupTag(tag);
     helixCluster.refreshIdealState();
+    for (DataNode dataNode : testHardwareLayout.getAllDataNodesFromDc(localDc)) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(tag);
+    }
+
     // Set ZNRecord is NULL in Helix PropertyStore
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
         new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
@@ -671,7 +692,8 @@ public class HelixClusterManagerTest {
 
     // 1. Success case: Verify all disks are used in round-robin fashion
     for (int i = 0; i < disks.size(); i++) {
-      ReplicaId bootstrapReplica = helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+      ReplicaId bootstrapReplica =
+          helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
       assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
       potentialDisks.remove((AmbryDisk) bootstrapReplica.getDiskId());
     }
@@ -880,8 +902,11 @@ public class HelixClusterManagerTest {
     }
     List<DataNode> allRemoteDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(remoteDc);
     for (DataNode dataNode : allRemoteDcDataNodes) {
-      assertFalse("By default, remote node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+      try {
+        helixClusterManager.isDataNodeInFullAutoMode(dataNode);
+        fail("By default, remote node should throw an exception");
+      } catch (IllegalArgumentException e) {
+      }
     }
 
     // Should have only one Resource when bootup
@@ -904,36 +929,65 @@ public class HelixClusterManagerTest {
     idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
     helixCluster.refreshIdealState();
     for (DataNode dataNode : allLocalDcDataNodes) {
-      assertTrue("FULL_AUTO mode, local node should be on FULL_AUTO",
+      assertFalse("IdealState is on FULL_AUTO, but there is no tag for resource",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
-    // Remote data nodes should not be impacted
-    for (DataNode dataNode : allRemoteDcDataNodes) {
-      assertFalse("Local DC change, remote node should not on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
-
-    // Now add new resource to the local dc, it will make hosts back to off FULL_AUTO.
-    // User MockHelixAdmin::addResource to add resource and external view
-    MockHelixAdmin localHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
-    // 1. add new resource
-    // 2. update partition to resource map
-    // 3. generate different states for different instances for again
-    String newResourceName = String.valueOf(Integer.valueOf(resourceName) + 1000);
-    localHelixAdmin.addResource("", newResourceName, cloneIdealState(idealState, newResourceName));
+    // Now update resource to have a tag
+    final String instanceGroupTag = "TAG_1000000";
+    idealState.setInstanceGroupTag(instanceGroupTag);
     helixCluster.refreshIdealState();
-
-    resourceNames = helixCluster.getResources(localDc);
-    assertEquals("Should have two resources after adding a new resource", 2, resourceNames.size());
     for (DataNode dataNode : allLocalDcDataNodes) {
-      assertFalse("More than one resources, local node should not on FULL_AUTO",
+      assertFalse("IdealState is on FULL_AUTO with tag, but instances don't have tags",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
 
-    helixCluster.removeResourceIdealState(newResourceName, localDc);
+    // Now update data node to have the same tag
     for (DataNode dataNode : allLocalDcDataNodes) {
-      assertTrue("Back to one resource, local node should on FULL_AUTO",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(instanceGroupTag);
+      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // Now update data node to have another tag
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(instanceGroupTag + "_another_one");
+      assertFalse("Instance has multiple tags", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // Now update data node to remove the extra tag
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.removeTag(instanceGroupTag + "_another_one");
+      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // Now update data node to remove the tag and add a new tag
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.removeTag(instanceGroupTag);
+      instanceConfig.addTag("random_tag");
+      assertFalse("Instance has random tag", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // Now update data node to has the same tag but switch resource back to semi auto
+    idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
+    helixCluster.refreshIdealState();
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.removeTag("random_tag");
+      instanceConfig.addTag(instanceGroupTag);
+      assertFalse("Resource is in SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
   }
 
@@ -1544,11 +1598,12 @@ public class HelixClusterManagerTest {
     // "good" cases for getPartitions() and getWritablePartitions() only
     // getPartitions(), class null
     List<? extends PartitionId> returnedPartitions = clusterManager.getAllPartitionIds(null);
-    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, defaultRo, defaultPrw, specialRw, specialRo,
-        specialPrw, defaultRwForPrw));
+    checkReturnedPartitions(returnedPartitions,
+        Arrays.asList(defaultRw, defaultRo, defaultPrw, specialRw, specialRo, specialPrw, defaultRwForPrw));
     // getWritablePartitions(), class null
     returnedPartitions = clusterManager.getWritablePartitionIds(null);
-    checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, specialRw, specialPrw, defaultPrw, defaultRwForPrw));
+    checkReturnedPartitions(returnedPartitions,
+        Arrays.asList(defaultRw, specialRw, specialPrw, defaultPrw, defaultRwForPrw));
     // getFullyWritablePartitions(), class null
     returnedPartitions = clusterManager.getFullyWritablePartitionIds(null);
     checkReturnedPartitions(returnedPartitions, Arrays.asList(defaultRw, specialRw, defaultRwForPrw));
@@ -1612,8 +1667,8 @@ public class HelixClusterManagerTest {
       assertEquals(ReplicaSealStatus.PARTIALLY_SEALED,
           helixClusterChangeHandler.resolveReplicaSealStatus(Integer.toString(firstPartitionId), sealedList,
               partiallySealedList));
-      assertEquals(ReplicaSealStatus.NOT_SEALED, helixClusterChangeHandler.resolveReplicaSealStatus(partitionName3,
-          sealedList, partiallySealedList));
+      assertEquals(ReplicaSealStatus.NOT_SEALED,
+          helixClusterChangeHandler.resolveReplicaSealStatus(partitionName3, sealedList, partiallySealedList));
     }
   }
 
