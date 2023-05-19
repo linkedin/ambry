@@ -98,6 +98,9 @@ public class MySqlAccountService extends AbstractAccountService {
    * @return set (LRA cache) of containers not found in recent get attempts. Used in only tests.
    */
   Set<String> getRecentNotFoundContainersCache() {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.getRecentNotFoundContainersCache();
+    }
     return cachedAccountService.getRecentNotFoundContainersCache();
   }
 
@@ -108,27 +111,48 @@ public class MySqlAccountService extends AbstractAccountService {
   synchronized void fetchAndUpdateCache() throws SQLException {
     cachedAccountService.fetchAndUpdateCache();
     if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.fetchAndUpdateCache();
+      try {
+        cachedAccountServiceNew.fetchAndUpdateCache();
+      } catch (SQLException e) {
+        if (config.ignoreNewDatabaseUploadError) {
+          accountServiceMetricsNew.fetchAndUpdateCacheErrorCount.inc();
+          logger.error("failed to do fetchAndUpdateCache for new db");
+        } else {
+          throw e;
+        }
+      }
     }
   }
 
   @Override
   public Account getAccountById(short accountId) {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.getAccountById(accountId);
+    }
     return cachedAccountService.getAccountById(accountId);
   }
 
   @Override
   public Account getAccountByName(String accountName) {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.getAccountByName(accountName);
+    }
     return cachedAccountService.getAccountByName(accountName);
   }
 
   @Override
   public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.addAccountUpdateConsumer(accountUpdateConsumer);
+    }
     return cachedAccountService.addAccountUpdateConsumer(accountUpdateConsumer);
   }
 
   @Override
   public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.removeAccountUpdateConsumer(accountUpdateConsumer);
+    }
     return cachedAccountService.removeAccountUpdateConsumer(accountUpdateConsumer);
   }
 
@@ -146,18 +170,44 @@ public class MySqlAccountService extends AbstractAccountService {
     return cachedAccountServiceNew.getAccountByName(accountName);
   }
 
+  /**
+   * This method is used for uploading data to old db for testing purpose only.
+   */
+  protected Account getAccountByIdOld(short accountId) {
+    return cachedAccountService.getAccountById(accountId);
+  }
+
+  /**
+   * This method is used for uploading data to old db for testing purpose only.
+   */
+  protected Account getAccountByNameOld(String accountName) {
+    return cachedAccountService.getAccountByName(accountName);
+  }
+
   protected CachedAccountService getCachedAccountService() {return cachedAccountService;}
 
   @Override
   public void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     cachedAccountService.updateAccounts(accounts);
     if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.updateAccounts(accounts);
+      try {
+        cachedAccountServiceNew.updateAccounts(accounts);
+      } catch (AccountServiceException e) {
+        if (config.ignoreNewDatabaseUploadError) {
+          accountServiceMetricsNew.updateAccountsErrorCount.inc();
+          logger.error("failed to do updateAccounts for new db");
+        } else {
+          throw e;
+        }
+      }
     }
   }
 
   @Override
   public Collection<Account> getAllAccounts() {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.getAllAccountsHelper();
+    }
     return cachedAccountService.getAllAccountsHelper();
   }
 
@@ -190,6 +240,9 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.getContainersByStatus(containerStatus);
+    }
     return cachedAccountService.getContainersByStatus(containerStatus);
   }
 
@@ -210,8 +263,12 @@ public class MySqlAccountService extends AbstractAccountService {
         cachedAccountServiceNew.updateContainers(accountName, containers);
       } catch (AccountServiceException e) {
         // if before migration, update container for new db would fail due to the account does not exist.
-        accountServiceMetricsNew.updateContainerErrorCount.inc();
-        logger.trace("This is expected due to the account {} does not exist in new db", accountName);
+        if (config.ignoreNewDatabaseUploadError) {
+          accountServiceMetricsNew.updateContainersErrorCount.inc();
+          logger.trace("This is expected due to the account {} does not exist in new db", accountName);
+        } else {
+          throw e;
+        }
       }
     }
     return containerList;
@@ -227,6 +284,9 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerByName(String accountName, String containerName) throws AccountServiceException {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.getContainerByNameHelper(accountName, containerName);
+    }
     return cachedAccountService.getContainerByNameHelper(accountName, containerName);
   }
 
@@ -240,14 +300,10 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerById(short accountId, Short containerId) throws AccountServiceException {
+    if (config.enableGetFromNewDbOnly) {
+      return cachedAccountServiceNew.getContainerByIdHelper(accountId, containerId);
+    }
     return cachedAccountService.getContainerByIdHelper(accountId, containerId);
-  }
-
-  /**
-   * @return the total number of containers in all accounts.
-   */
-  public int getContainerCount() {
-    return cachedAccountService.getContainerCount();
   }
 
   @FunctionalInterface
@@ -271,143 +327,79 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public void addDataset(Dataset dataset) throws AccountServiceException {
-    try {
-      String accountName = dataset.getAccountName();
-      String containerName = dataset.getContainerName();
-      Container container = getContainerByName(accountName, containerName);
-      if (container == null) {
-        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
-            AccountServiceErrorCode.BadRequest);
-      }
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      mySqlAccountStore.addDataset(accountId, containerId, dataset);
-    } catch (SQLException e) {
-      throw translateSQLException(e);
+    if (config.enableNewDatabaseForMigration) {
+      cachedAccountServiceNew.addDataset(dataset);
+    } else {
+      cachedAccountService.addDataset(dataset);
     }
   }
 
   @Override
   public void updateDataset(Dataset dataset) throws AccountServiceException {
-    try {
-      String accountName = dataset.getAccountName();
-      String containerName = dataset.getContainerName();
-      Container container = getContainerByName(accountName, containerName);
-      if (container == null) {
-        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
-            AccountServiceErrorCode.BadRequest);
-      }
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      mySqlAccountStore.updateDataset(accountId, containerId, dataset);
-    } catch (SQLException e) {
-      throw translateSQLException(e);
+    if (config.enableNewDatabaseForMigration) {
+      cachedAccountServiceNew.updateDataset(dataset);
+    } else {
+      cachedAccountService.updateDataset(dataset);
     }
   }
 
   @Override
   public Dataset getDataset(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
-    try {
-      Container container = getContainerByName(accountName, containerName);
-      if (container == null) {
-        throw new AccountServiceException(
-            "Can't find the container: " + containerName + " in account: " + accountName,
-            AccountServiceErrorCode.BadRequest);
-      }
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      return mySqlAccountStore.getDataset(accountId, containerId, accountName, containerName, datasetName);
-    } catch (SQLException e) {
-      throw translateSQLException(e);
+    if (config.enableNewDatabaseForMigration) {
+      return cachedAccountServiceNew.getDataset(accountName, containerName, datasetName);
     }
+    return cachedAccountService.getDataset(accountName, containerName, datasetName);
   }
 
   @Override
   public void deleteDataset(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
-    try {
-      Container container = getContainerByName(accountName, containerName);
-      if (container == null) {
-        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
-            AccountServiceErrorCode.BadRequest);
-      }
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      mySqlAccountStore.deleteDataset(accountId, containerId, datasetName);
-    } catch (SQLException e) {
-      throw translateSQLException(e);
+    if (config.enableNewDatabaseForMigration) {
+      cachedAccountServiceNew.deleteDataset(accountName, containerName, datasetName);
+    } else {
+      cachedAccountService.deleteDataset(accountName, containerName, datasetName);
     }
   }
 
   @Override
   public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
-      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled) throws AccountServiceException {
-    try {
-      Container container = getContainerByName(accountName, containerName);
-      if (container == null) {
-        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
-            AccountServiceErrorCode.BadRequest);
-      }
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      return mySqlAccountStore.addDatasetVersion(accountId, containerId, accountName, containerName, datasetName,
-          version, timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
-    } catch (SQLException e) {
-      throw translateSQLException(e);
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled)
+      throws AccountServiceException {
+    if (config.enableNewDatabaseForMigration) {
+      return cachedAccountServiceNew.addDatasetVersion(accountName, containerName, datasetName, version,
+          timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
     }
+    return cachedAccountService.addDatasetVersion(accountName, containerName, datasetName, version, timeToLiveInSeconds,
+        creationTimeInMs, datasetVersionTtlEnabled);
   }
 
   @Override
   public DatasetVersionRecord getDatasetVersion(String accountName, String containerName, String datasetName,
       String version) throws AccountServiceException {
-    try {
-      Container container = getContainerByName(accountName, containerName);
-      if (container == null) {
-        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
-            AccountServiceErrorCode.BadRequest);
-      }
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      return mySqlAccountStore.getDatasetVersion(accountId, containerId, accountName, containerName, datasetName,
-          version);
-    } catch (SQLException e) {
-      throw translateSQLException(e);
+    if (config.enableNewDatabaseForMigration) {
+      return cachedAccountServiceNew.getDatasetVersion(accountName, containerName, datasetName, version);
     }
+    return cachedAccountService.getDatasetVersion(accountName, containerName, datasetName, version);
   }
 
   @Override
   public void deleteDatasetVersion(String accountName, String containerName, String datasetName,
       String version) throws AccountServiceException {
-    try {
-      Container container = getContainerByName(accountName, containerName);
-      if (container == null) {
-        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
-            AccountServiceErrorCode.BadRequest);
-      }
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      mySqlAccountStore.deleteDatasetVersion(accountId, containerId, datasetName, version);
-    } catch (SQLException e) {
-      throw translateSQLException(e);
+    if (config.enableNewDatabaseForMigration) {
+      cachedAccountServiceNew.deleteDatasetVersion(accountName, containerName, datasetName, version);
+    } else {
+      cachedAccountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
     }
   }
 
   @Override
   public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
-    try {
-      Container container = getContainerByName(accountName, containerName);
-      if (container == null) {
-        throw new AccountServiceException("Can't find the container: " + containerName + " in account: " + accountName,
-            AccountServiceErrorCode.BadRequest);
-      }
-      short accountId = container.getParentAccountId();
-      short containerId = container.getId();
-      return mySqlAccountStore.getAllValidVersion(accountId, containerId, datasetName);
-    } catch (SQLException e) {
-      throw translateSQLException(e);
+    if (config.enableNewDatabaseForMigration) {
+      return cachedAccountServiceNew.getAllValidVersion(accountName, containerName, datasetName);
     }
+      return cachedAccountService.getAllValidVersion(accountName, containerName, datasetName);
   }
 
   /**

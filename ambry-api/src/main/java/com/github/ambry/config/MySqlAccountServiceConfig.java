@@ -33,7 +33,12 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String WRITE_CACHE_AFTER_UPDATE = MYSQL_ACCOUNT_SERVICE_PREFIX + "write.cache.after.update";
   public static final String MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "max.major.version.for.semantic.schema.dataset";
-  public static final String ENABLE_NEW_DATABASE_FOR_MIGRATION = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.new.database.for.migration";
+  public static final String ENABLE_NEW_DATABASE_FOR_MIGRATION =
+      MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.new.database.for.migration";
+  public static final String IGNORE_NEW_DATABASE_UPLOAD_ERROR =
+      MYSQL_ACCOUNT_SERVICE_PREFIX + "ignore.new.database.upload.error";
+  public static final String ENABLE_GET_FROM_NEW_DB_ONLY = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.get.from.new.db.only";
+
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -151,6 +156,20 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("false")
   public final boolean enableNewDatabaseForMigration;
 
+  /**
+   * If true, ignore the error when uploading data to new database.
+   */
+  @Config(IGNORE_NEW_DATABASE_UPLOAD_ERROR)
+  @Default("true")
+  public final boolean ignoreNewDatabaseUploadError;
+
+  /**
+   * If true, enable get from new database only.
+   */
+  @Config(ENABLE_GET_FROM_NEW_DB_ONLY)
+  @Default("false")
+  public final boolean enableGetFromNewDbOnly;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -161,6 +180,8 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
     updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
     enableNewDatabaseForMigration = verifiableProperties.getBoolean(ENABLE_NEW_DATABASE_FOR_MIGRATION, false);
+    ignoreNewDatabaseUploadError = verifiableProperties.getBoolean(IGNORE_NEW_DATABASE_UPLOAD_ERROR, true);
+    enableGetFromNewDbOnly = verifiableProperties.getBoolean(ENABLE_GET_FROM_NEW_DB_ONLY, false);
     dbInfoNew = enableNewDatabaseForMigration ? verifiableProperties.getString(DB_INFO_NEW)
         : verifiableProperties.getString(DB_INFO_NEW, "");
     backupDirNew = verifiableProperties.getString(BACKUP_DIRECTORY_KEY_NEW, "");

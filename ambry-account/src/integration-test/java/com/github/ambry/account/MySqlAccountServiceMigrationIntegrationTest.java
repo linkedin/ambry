@@ -137,6 +137,21 @@ public class MySqlAccountServiceMigrationIntegrationTest {
     assertEquals("Mismatch in container retrieved by name", updatedContainer,
         mySqlAccountService.getContainerByName(testAccount2.getName(), testContainer2.getName()));
     assertNull(mySqlAccountService.getAccountByIdNew(testAccount2.getId()));
+
+    // add testAccount2 to new db, enable the config for enableGetFromNewDbOnly
+    mySqlAccountService.updateAccounts(Collections.singletonList(testAccount2));
+    mySqlConfigProps.setProperty(ENABLE_GET_FROM_NEW_DB_ONLY, "true");
+    mySqlAccountService = getAccountService();
+    assertEquals("Mismatch in account retrieved by name",
+        mySqlAccountService.getAccountByNameOld(testAccount1.getName()),
+        mySqlAccountService.getAccountByName(testAccount1.getName()));
+    assertEquals("Mismatch in account retrieved by id", mySqlAccountService.getAccountByIdOld(testAccount1.getId()),
+        mySqlAccountService.getAccountById(testAccount1.getId()));
+    assertEquals("Mismatch in account retrieved by name",
+        mySqlAccountService.getAccountByNameOld(testAccount2.getName()),
+        mySqlAccountService.getAccountByName(testAccount2.getName()));
+    assertEquals("Mismatch in account retrieved by id", mySqlAccountService.getAccountByIdOld(testAccount2.getId()),
+        mySqlAccountService.getAccountById(testAccount2.getId()));
   }
 
   private void cleanup() throws SQLException {
