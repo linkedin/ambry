@@ -149,7 +149,7 @@ public class MySqlAccountServiceTest {
     verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(argThat(accountsInfo -> {
       Account account = accountsInfo.get(0).getAccount();
       return account.equals(finalTestAccount);
-    }));
+    }), eq(false));
     List<Account> accounts = new ArrayList<>(mySqlAccountService.getAllAccounts());
     assertEquals("Mismatch in number of accounts", 1, accounts.size());
     assertEquals("Mismatch in account retrieved by ID", testAccount,
@@ -166,7 +166,7 @@ public class MySqlAccountServiceTest {
       return accountUpdateInfo.getAccount().equals(finalTestAccount0) && !accountUpdateInfo.isAdded()
           && accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers().isEmpty()
           && accountUpdateInfo.getUpdatedContainers().isEmpty();
-    }));
+    }), eq(false));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
@@ -182,7 +182,7 @@ public class MySqlAccountServiceTest {
       return accountUpdateInfo.getAccount().equals(finalTestAccount1) && !accountUpdateInfo.isAdded()
           && !accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers()
           .equals(Collections.singletonList(testContainer2)) && accountUpdateInfo.getUpdatedContainers().isEmpty();
-    }));
+    }), eq(false));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
@@ -198,7 +198,7 @@ public class MySqlAccountServiceTest {
       return accountUpdateInfo.getAccount().equals(finalTestAccount2) && !accountUpdateInfo.isAdded()
           && !accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers().isEmpty()
           && accountUpdateInfo.getUpdatedContainers().equals(Collections.singletonList(finalTestContainer));
-    }));
+    }), eq(false));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
     assertTrue("Sync time not updated",

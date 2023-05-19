@@ -78,7 +78,7 @@ public class MySqlAccountService extends AbstractAccountService {
     this.accountServiceMetricsNew = accountServiceMetricsWrapper.getAccountServiceMetricsNew();
     cachedAccountService = new CachedAccountService(mySqlAccountStore,
         callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStore),
-        accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler);
+        accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler, false);
     if (config.enableNewDatabaseForMigration) {
       try {
         this.mySqlAccountStoreNew = mySqlAccountStoreFactory.getMySqlAccountStoreNew();
@@ -90,7 +90,8 @@ public class MySqlAccountService extends AbstractAccountService {
       }
       cachedAccountServiceNew = new CachedAccountService(mySqlAccountStoreNew,
           callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStoreNew),
-          accountServiceMetricsWrapper.getAccountServiceMetricsNew(), config, notifier, config.backupDirNew, scheduler);
+          accountServiceMetricsWrapper.getAccountServiceMetricsNew(), config, notifier, config.backupDirNew, scheduler,
+          true);
     }
   }
 

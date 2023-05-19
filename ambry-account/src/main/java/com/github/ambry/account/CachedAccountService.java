@@ -63,13 +63,14 @@ public class CachedAccountService extends AbstractAccountService {
   private volatile MySqlAccountStore mySqlAccountStore;
   private boolean needRefresh = false;
   private long lastSyncTime = -1;
+  private boolean disableGenerateColumn;
 
   /**
    * The service used for mysql migration which includes all common logic.
    */
   public CachedAccountService(MySqlAccountStore mySqlAccountStore, Supplier<MySqlAccountStore> supplier,
       AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config, Notifier<String> notifier,
-      String backupDir, ScheduledExecutorService scheduler) throws IOException {
+      String backupDir, ScheduledExecutorService scheduler, boolean disableGenerateColumn) throws IOException {
     super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"), notifier);
     this.mySqlAccountStore = mySqlAccountStore;
     this.accountServiceMetrics = accountServiceMetrics;
@@ -86,6 +87,7 @@ public class CachedAccountService extends AbstractAccountService {
     this.backupFileManager = new BackupFileManager(accountServiceMetrics, backupDir, config.maxBackupFileCount);
     this.scheduler = scheduler;
     this.supplier = supplier;
+    this.disableGenerateColumn = disableGenerateColumn;
     accountServiceMetrics.trackTimeSinceLastSync(this::getTimeInSecondsSinceLastSync);
     accountServiceMetrics.trackContainerCount(this::getContainerCount);
     // Initialize cache from backup file on disk
@@ -690,7 +692,7 @@ public class CachedAccountService extends AbstractAccountService {
     }
 
     // Write changes to MySql db.
-    mySqlAccountStore.updateAccounts(accountsUpdateInfo);
+    mySqlAccountStore.updateAccounts(accountsUpdateInfo, disableGenerateColumn);
 
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     logger.trace("Completed updating accounts={} in MySql DB, took time={} ms", accounts, timeForUpdate);
@@ -714,7 +716,7 @@ public class CachedAccountService extends AbstractAccountService {
             addedOrUpdatedContainers.getSecond());
 
     // Write changes to MySql db.
-    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
+    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo), disableGenerateColumn);
 
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     logger.trace("Completed updating containers={} for accountId={} in MySqlDB in time={} ms", containers,

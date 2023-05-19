@@ -229,7 +229,7 @@ public class MySqlAccountsDBTool {
       accountUpdateInfos.add(
           new AccountUpdateInfo(account, true, false, new ArrayList<>(account.getAllContainers()), new ArrayList<>()));
     }
-    mySqlAccountStore.updateAccounts(accountUpdateInfos);
+    mySqlAccountStore.updateAccounts(accountUpdateInfos, false);
 
     logger.info("Initialized account metadata in DB from ZK path {}, took time={} ms", fullZKAccountMetadataPath,
         System.currentTimeMillis() - zkFetchTimeMs);
