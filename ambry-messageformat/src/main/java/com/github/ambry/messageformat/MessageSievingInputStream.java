@@ -268,7 +268,7 @@ public class MessageSievingInputStream extends InputStream {
       if (output.getException() != null) {
         if (output.getException() instanceof MessageFormatException) {
           logger.error(
-              "Error validating/transforming the message at {} with messageInfo {} and hence skipping the message",
+              "Error validating/transforming the message at {} with messageInfo {} and hence skipping the message. Ex = {}",
               msgOffset, inMsg.getMessageInfo(), output.getException());
           hasInvalidMessages = true;
           messageSievingCorruptMessagesDiscardedCount.inc();
