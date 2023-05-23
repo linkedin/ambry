@@ -27,6 +27,7 @@ import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.HelixVcrUtil;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.VcrClusterParticipant;
@@ -353,7 +354,8 @@ public class VcrReplicationManager extends ReplicationEngine {
       logger.error("Can't start cloudstore for replica {}", cloudReplica);
       throw new ReplicationException("Can't start cloudstore for replica " + cloudReplica);
     }
-    List<? extends ReplicaId> peerReplicas = cloudReplica.getPeerReplicaIds();
+    String localDc = vcrClusterParticipant.getCurrentDataNodeId().getDatacenterName();
+    List<? extends ReplicaId> peerReplicas = partitionId.getReplicaIdsByState(ReplicaState.LEADER, localDc);
     List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
     Store store = storeManager.getStore(partitionId);
     if (peerReplicas != null) {
