@@ -19,6 +19,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceErrorCode;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
@@ -519,6 +520,91 @@ public class FrontendRestRequestServiceTest {
         Container.DEFAULT_PUBLIC_CONTAINER);
     doPostGetHeadUpdateDeleteUndeleteTest(null, null, "unknown_service_id", true, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PRIVATE_CONTAINER);
+  }
+
+  /**
+   * Test the dataset version fallback when uploading named blob failed.
+   */
+  @Test
+  public void testDatasetVersionFallback() throws Exception {
+    //Add dataset
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    Dataset.VersionSchema versionSchema = Dataset.VersionSchema.TIMESTAMP;
+    long datasetTtl = 3600;
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
+            .setRetentionTimeInSeconds(datasetTtl)
+            .setRetentionCount(2)
+            .build();
+    byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    RestRequest restRequest =
+        createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+
+    // add dataset version and mock named blob put failed.
+    String version = "0";
+    String blobName = DATASET_NAME + SLASH + version;
+    String namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName;
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(10));
+    body = new LinkedList<>();
+    body.add(content);
+    body.add(null);
+    headers = new JSONObject();
+    setAmbryHeadersForPut(headers, 7200, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null,
+        null, null);
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+
+    when(namedBlobDb.put(any(), any(), any())).thenThrow(new RuntimeException());
+
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Should fail due to force to mock named blob put throw exception");
+    } catch (Exception e) {
+      //no-op
+    }
+
+    try {
+      accountService.getDatasetVersion(testAccount.getName(), testContainer.getName(), DATASET_NAME, version);
+      fail("Should fail due to dataset version has been deleted by best effort");
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch on error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
+
+    // add dataset versio and mock router.putBlob failed.
+    Router mockRouter = mock(Router.class);
+    when(mockRouter.putBlob(any(), any(), any(), any(), any(), any())).thenThrow(new RuntimeException());
+    frontendRestRequestService =
+        new FrontendRestRequestService(frontendConfig, frontendMetrics, mockRouter, clusterMap, idConverterFactory,
+            securityServiceFactory, urlSigningService, idSigningService, namedBlobDb, accountService,
+            accountAndContainerInjector, datacenterName, hostname, clusterName, accountStatsStore, QUOTA_MANAGER);
+    frontendRestRequestService.setupResponseHandler(responseHandler);
+
+    restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+
+    try {
+      doOperation(restRequest, restResponseChannel);
+      fail("Should fail due to force to mock router.putBlob throw exception");
+    } catch (Exception e) {
+      //no-op
+    }
+
+    try {
+      accountService.getDatasetVersion(testAccount.getName(), testContainer.getName(), DATASET_NAME, version);
+      fail("Should fail due to dataset version has been deleted by best effort");
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch on error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
   }
 
   /**
