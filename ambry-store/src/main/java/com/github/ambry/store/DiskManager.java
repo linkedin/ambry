@@ -544,6 +544,7 @@ public class DiskManager {
     File mountPath = new File(disk.getMountPath());
     if (!mountPath.exists() && diskHealthStatus != DiskHealthStatus.MOUNT_NOT_ACCESSIBLE) {
       metrics.diskMountPathFailures.inc();
+      diskHealthStatus = DiskHealthStatus.MOUNT_NOT_ACCESSIBLE;
       throw new StoreException("Mount path does not exist: " + mountPath + " ; cannot start stores on this disk",
           StoreErrorCodes.Initialization_Error);
     }
