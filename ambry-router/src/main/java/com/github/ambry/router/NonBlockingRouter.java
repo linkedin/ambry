@@ -524,6 +524,11 @@ class NonBlockingRouter implements Router {
     return futureResult;
   }
 
+  @Override
+  public RouterConfig getRouterConfig() {
+    return routerConfig;
+  }
+
   /**
    * Initiated deletes of the blobIds in the given list of ids via the {@link BackgroundDeleter}
    * @param deleteRequests the list of {@link BackgroundDeleteRequest}s to execute.

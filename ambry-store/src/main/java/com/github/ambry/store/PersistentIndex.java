@@ -1382,7 +1382,7 @@ class PersistentIndex {
               putValue.getAccountId(), putValue.getContainerId(), putValue.getOperationTimeInMs(),
               value.getLifeVersion()));
     } else {
-      // PUT record no longer available. When the PutBlob is compacted, it throws the ID_Deleted exception.
+      // PUT record no longer available. When the PutBlob is compacted or it's force deleted, it throws the ID_Deleted exception.
       throw new StoreException("Did not find PUT index entry for key [" + key
           + "] and the the original offset in value of the DELETE entry was [" + value.getOriginalMessageOffset() + "]",
           StoreErrorCodes.ID_Deleted);

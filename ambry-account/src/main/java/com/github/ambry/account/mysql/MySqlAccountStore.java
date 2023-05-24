@@ -63,10 +63,11 @@ public class MySqlAccountStore {
   /**
    * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
    * @param accountsInfo information of updated Accounts
+   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
-  public void updateAccounts(List<AccountUpdateInfo> accountsInfo) throws SQLException {
-    accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize);
+  public void updateAccounts(List<AccountUpdateInfo> accountsInfo, boolean disableGenerateColumn) throws SQLException {
+    accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize, disableGenerateColumn);
   }
 
   /**
@@ -181,28 +182,33 @@ public class MySqlAccountStore {
    * @param containerName the name for the container.
    * @param datasetName the name of the dataset.
    * @param version the version of the dataset.
-   * @param expirationTimeMs the expiration time of the version of the dataset.
+   * @param timeToLiveInSeconds The dataset version level ttl.
+   * @param creationTimeInMs the creation time of the dataset.
+   * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
    * @return the corresponding {@link Dataset}
    * @throws SQLException
    */
-  public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName, String containerName,
-      String datasetName, String version, long expirationTimeMs) throws SQLException, AccountServiceException {
+  public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName,
+      String containerName, String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
+      boolean datasetVersionTtlEnabled) throws SQLException, AccountServiceException {
     return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
-        expirationTimeMs);
+        timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
   }
 
   /**
    * Get a version of {@link Dataset}
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
    * @param datasetName the name of the dataset.
    * @param version the version of the dataset.
    * @return the {@link DatasetVersionRecord}
    * @throws SQLException
    */
-  public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String datasetName,
-      String version) throws SQLException, AccountServiceException {
-    return accountDao.getDatasetVersions(accountId, containerId, datasetName, version);
+  public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String accountName,
+      String containerName, String datasetName, String version) throws SQLException, AccountServiceException {
+    return accountDao.getDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version);
   }
 
   /**
@@ -220,16 +226,31 @@ public class MySqlAccountStore {
   }
 
   /**
-   * Get the latest version value of the dataset versions.
+   * Get a list of dataset versions which is not expired or been deleted for specific dataset.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
    * @param datasetName the name of the dataset.
-   * @return the latest version of the dataset.
+   * @return a list of dataset versions which is not expired for specific dataset.
    * @throws SQLException
    */
-  public long getLatestVersion(short accountId, short containerId, String datasetName)
-      throws SQLException, AccountServiceException {
-    return accountDao.getLatestVersion(accountId, containerId, datasetName);
+  public List<DatasetVersionRecord> getAllValidVersion(short accountId, short containerId, String datasetName)
+      throws SQLException {
+    return accountDao.getAllValidVersion(accountId, containerId, datasetName);
+  }
+
+  /**
+   * Get all versions from a dataset which has not expired and out of retentionCount by checking the last modified time.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @return a list of {@link DatasetVersionRecord}
+   * @throws SQLException
+   */
+  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId, short containerId,
+      String accountName, String containerName, String datasetName) throws SQLException, AccountServiceException {
+     return accountDao.getAllValidVersionsOutOfRetentionCount(accountId, containerId, accountName, containerName, datasetName);
   }
 
   /**

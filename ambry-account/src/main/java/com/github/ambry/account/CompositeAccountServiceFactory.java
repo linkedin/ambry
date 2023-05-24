@@ -40,7 +40,7 @@ public class CompositeAccountServiceFactory implements AccountServiceFactory {
    */
   public CompositeAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry)
       throws ReflectiveOperationException {
-    this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
+    this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry, false);
     this.compositeAccountServiceConfig = new CompositeAccountServiceConfig(verifiableProperties);
     this.primaryAccountServiceFactory =
         Utils.getObj(compositeAccountServiceConfig.primaryAccountServiceFactory, verifiableProperties, metricRegistry);

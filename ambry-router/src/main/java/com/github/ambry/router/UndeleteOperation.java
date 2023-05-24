@@ -67,6 +67,9 @@ public class UndeleteOperation {
   private boolean operationCompleted = false;
   private static final Logger LOGGER = LoggerFactory.getLogger(UndeleteOperation.class);
 
+  // True when the operationTrackerType is UndeleteOperationTracker.
+  // If true, operation will verify that life versions received from replicas are the same
+  private final boolean verifyLifeVersion;
   private Short lifeVersion = null;
   // The replica that sends back the first response
   private ReplicaId firstResponseReplicaId = null;
@@ -95,8 +98,20 @@ public class UndeleteOperation {
     this.callback = callback;
     this.time = time;
     this.operationTimeMs = operationTimeMs;
-    this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(),
-        clusterMap.getDatacenterName(blobId.getDatacenterId()), routerMetrics);
+    if (routerConfig.routerUndeleteOperationTrackerType.equals(UndeleteOperationTracker.class.getSimpleName())) {
+      this.operationTracker = new UndeleteOperationTracker(routerConfig, blobId.getPartition(),
+          clusterMap.getDatacenterName(blobId.getDatacenterId()), routerMetrics);
+      this.verifyLifeVersion = true;
+    } else if (routerConfig.routerUndeleteOperationTrackerType.equals(SimpleOperationTracker.class.getSimpleName())) {
+      String originatingDcName = clusterMap.getDatacenterName(this.blobId.getDatacenterId());
+      this.operationTracker =
+          new SimpleOperationTracker(routerConfig, RouterOperation.UndeleteOperation, this.blobId.getPartition(),
+              originatingDcName, true, routerMetrics, blobId);
+      this.verifyLifeVersion = false;
+    } else {
+      throw new IllegalArgumentException(
+          "Unrecognized tracker type: " + routerConfig.routerUndeleteOperationTrackerType);
+    }
     this.quotaChargeCallback = quotaChargeCallback;
     operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
@@ -218,7 +233,7 @@ public class UndeleteOperation {
               firstResponseReplicaId = replica;
               operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
             } else {
-              if (lifeVersion != undeleteResponse.getLifeVersion()) {
+              if (verifyLifeVersion && lifeVersion != undeleteResponse.getLifeVersion()) {
                 String message = "LifeVersion of " + blobId + " from Replica " + firstResponseReplicaId
                     + " is different than the lifeVersion from replica " + replica + " " + lifeVersion + " != "
                     + undeleteResponse.getLifeVersion();
@@ -231,6 +246,16 @@ public class UndeleteOperation {
                 operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
               }
             }
+          } else if (serverError == ServerErrorCode.Blob_Not_Deleted && !verifyLifeVersion) {
+            LOGGER.trace(
+                "Replica {} returned Blob_Not_Deleted for an undelete request with correlationId : {}, don't verify life version",
+                replica, undeleteRequest.getCorrelationId());
+            if (RouterUtils.isRemoteReplica(routerConfig, replica)) {
+              LOGGER.trace("Cross colo request successful for remote replica {} in {} ", replica.getDataNodeId(),
+                  replica.getDataNodeId().getDatacenterName());
+              routerMetrics.crossColoSuccessCount.inc();
+            }
+            operationTracker.onResponse(replica, TrackedRequestFinalState.SUCCESS);
           } else if (serverError == ServerErrorCode.Disk_Unavailable) {
             LOGGER.trace("Replica {} returned Disk_Unavailable for an undelete request with correlationId : {} ",
                 replica, undeleteRequest.getCorrelationId());

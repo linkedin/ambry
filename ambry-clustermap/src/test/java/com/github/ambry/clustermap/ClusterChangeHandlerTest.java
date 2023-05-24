@@ -694,8 +694,22 @@ public class ClusterChangeHandlerTest {
     Properties properties = new Properties();
     properties.putAll(props);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    Set<DataNodeId> removedDataNodesFromListener = new HashSet<>();
+    Set<ReplicaId> removedReplicasFromListener = new HashSet<>();
+    ClusterMapChangeListener listener = new ClusterMapChangeListener() {
+      @Override
+      public void onReplicaAddedOrRemoved(List<ReplicaId> addedReplicas, List<ReplicaId> removedReplicas) {
+        removedReplicasFromListener.addAll(removedReplicas);
+      }
+
+      @Override
+      public void onDataNodeRemoved(DataNodeId removedDataNode) {
+        removedDataNodesFromListener.add(removedDataNode);
+      }
+    };
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+    helixClusterManager.registerClusterMapListener(listener);
 
     // Pick up a nodes from hardware layout to remove
     Set<DataNode> removedDataNodes = new HashSet<>();
@@ -755,6 +769,9 @@ public class ClusterChangeHandlerTest {
         assertFalse("Removed replicas should be no longer present in any partition", replicas.contains(removedReplica));
       }
     }
+    // Verify the clustermap change listener is invoked
+    assertEquals(removedAmbryDataNodes, removedDataNodesFromListener);
+    assertEquals(removedReplicas, removedReplicasFromListener);
 
     helixClusterManager.close();
   }

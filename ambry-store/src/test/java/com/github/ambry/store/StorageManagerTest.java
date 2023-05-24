@@ -15,6 +15,7 @@
 package com.github.ambry.store;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.accountstats.AccountStatsStore;
@@ -26,6 +27,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockDiskId;
 import com.github.ambry.clustermap.MockHelixManagerFactory;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -468,6 +470,61 @@ public class StorageManagerTest {
     mockHelixParticipant.getReplicaSyncUpManager().onDisconnectionComplete(testReplica);
     assertTrue("Helix participant transition didn't get invoked within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Test disk free space is decreased after replica is added.
+   */
+  @Test
+  public void updateDiskSpaceOnReplicaAdditionTest() throws InterruptedException, StoreException {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
+    // Get the replica that has been created for this new partition
+    ReplicaId newReplica = newPartition.getReplicaIds()
+        .stream()
+        .filter(replicaId -> replicaId.getDataNodeId().equals(localNode))
+        .findFirst()
+        .get();
+    // 1. Get disk space before adding the replica
+    long diskSpaceBefore = newReplica.getDiskId().getAvailableSpaceInBytes();
+    // 2. Induce state transition to add a replica
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
+    // 3. Verify disk space is reduced after adding the replica
+    assertEquals("Disk space should be reduced after replica addition",
+        diskSpaceBefore - newReplica.getCapacityInBytes(), newReplica.getDiskId().getAvailableSpaceInBytes());
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Test disk free space is increased after replica is removed.
+   */
+  @Test
+  public void updateDiskSpaceOnReplicaRemovalTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    ReplicaId oldReplica = localReplicas.get(0);
+    MockClusterParticipant mockHelixParticipant = Mockito.spy(new MockClusterParticipant());
+    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+    // Get disk space before dropping the replica
+    MockDiskId diskId = (MockDiskId) oldReplica.getDiskId();
+    long originalSpace = diskId.getAvailableSpaceInBytes();
+    storageManager.controlCompactionForBlobStore(oldReplica.getPartitionId(), false);
+    storageManager.shutdownBlobStore(oldReplica.getPartitionId());
+    mockHelixParticipant.onPartitionBecomeDroppedFromOffline(oldReplica.getPartitionId().toPathString());
+    // Verify disk space is increased on removing replica
+    assertEquals("Disk free space should be increased after removing replica",
+        originalSpace + oldReplica.getCapacityInBytes(), oldReplica.getDiskId().getAvailableSpaceInBytes());
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
 
@@ -1215,10 +1272,10 @@ public class StorageManagerTest {
   }
 
   /**
-   * @return the value of {@link StorageManagerMetrics#unexpectedDirsOnDisk}.
+   * @return the value of unexpected directory.
    */
-  private long getNumUnrecognizedPartitionsReported() {
-    return getCounterValue(metricRegistry.getCounters(), DiskManager.class.getName(), "UnexpectedDirsOnDisk");
+  private int getNumUnrecognizedPartitionsReported() {
+    return getGaugeValue(metricRegistry.getGauges(), DiskManager.class.getName(), "UnexpectedDirsOnDisk");
   }
 
   /**
@@ -1230,6 +1287,17 @@ public class StorageManagerTest {
    */
   private long getCounterValue(Map<String, Counter> counters, String className, String suffix) {
     return counters.get(className + "." + suffix).getCount();
+  }
+
+  /**
+   * Get the gauge value for the metric in {@link StorageManagerMetrics} for the given class and suffix.
+   * @param gauges Map of gauge metrics to use
+   * @param className the class to which the metric belongs to
+   * @param suffix the suffix of the metric that distinguishes it from other metrics in the class.
+   * @return the value of the counter.
+   */
+  private int getGaugeValue(Map<String, Gauge> gauges, String className, String suffix) {
+    return (int) gauges.get(className + "." + suffix).getValue();
   }
 
   /**

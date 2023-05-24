@@ -44,6 +44,7 @@ public class QuotaMetrics {
   public final Meter recommendRate;
   public final Meter chargeAndRecommendRate;
   public final Counter accountUpdateNotificationCount;
+  public Counter highSystemResourceUsageCount;
   private final MetricRegistry metricRegistry;
   public Gauge<Integer> frontendUsageWriteAmplificationGauge;
   public Gauge<Integer> frontendUsageReadAmplificationGauge;
@@ -77,6 +78,8 @@ public class QuotaMetrics {
     chargeAndRecommendRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "ChargeAndRecommendRate"));
     accountUpdateNotificationCount =
         metricRegistry.counter(MetricRegistry.name(QuotaManager.class, "AccountUpdateNotificationCount"));
+    highSystemResourceUsageCount =
+        metricRegistry.counter(MetricRegistry.name(QuotaManager.class, "HighSystemResourceUsageCount"));
     noChargeRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoChargeRate"));
     noRecommendationRate = metricRegistry.meter(MetricRegistry.name(QuotaManager.class, "NoRecommendationRate"));
   }

@@ -48,6 +48,21 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  * Common utility functions that will be used across frontend package
  */
 class FrontendUtils {
+  static final String NAMED_BLOB_PREFIX = "/named";
+  static final String SLASH = "/";
+
+  /**
+   * Throws the specified {@link RestServiceException} if isEnabled is {@code true}. No-op otherwise.
+   * @param restServiceException {@link RestServiceException} object to throw.
+   * @param isEnabled if {@code true} then throw the specified exception. do nothing otherwise.
+   * @throws RestServiceException the exception to throw.
+   */
+  static void throwRestServiceExceptionIfEnabled(RestServiceException restServiceException, boolean isEnabled)
+      throws RestServiceException {
+    if (isEnabled) {
+      throw restServiceException;
+    }
+  }
 
   /**
    * Fetches {@link BlobId} from the given string representation of BlobId

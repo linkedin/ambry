@@ -364,7 +364,7 @@ public class StorageManager implements StoreManager {
   }
 
   @Override
-  public boolean removeBlobStore(PartitionId id) {
+  public boolean removeBlobStore(PartitionId id) throws IOException, StoreException {
     DiskManager diskManager = partitionToDiskManager.get(id);
     if (diskManager == null) {
       logger.info("Store {} is not found in storage manager", id);
@@ -522,6 +522,9 @@ public class StorageManager implements StoreManager {
         // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
         // at some point). Then a brand new store associated with this replica should be created and started.
         if (!addBlobStore(replicaToAdd)) {
+          // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
+          // back since addition of store failed.
+          replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
           logger.error("Failed to add store {} into storage manager", partitionName);
           throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
               ReplicaOperationFailure);
@@ -713,10 +716,14 @@ public class StorageManager implements StoreManager {
       // the store could be started if it failed on decommission last time. Helix may directly reset it to OFFLINE
       // without stopping it)
       BlobStore store = (BlobStore) getStore(replica.getPartitionId(), true);
-      // 1. check is the store is recovering from decommission
-      if (store.recoverFromDecommission()) {
-        // if the store is recovering from previous decommission failure, then resume decommission (this will ensure
-        // peer replicas have caught up with local replica and update InstanceConfig in Helix)
+
+      // 1. Check if the store is recovering from decommission or directly transitioning from OFFLINE to DROPPED in
+      // full-auto (i.e. if this replica has been reassigned to a different host when it is down, Helix may directly
+      // transition the replica from OFFLINE -> DROPPED without going through OFFLINE -> BOOTSTRAP -> STANDBY ->
+      // INACTIVE -> OFFLINE -> DROPPED steps). If so, go through decommission steps to make sure peer replicas are
+      // caught up with local replica and we update DataNodeConfig in Helix.
+      if (store.recoverFromDecommission() || (clusterMap.isDataNodeInFullAutoMode(replica.getDataNodeId())
+          && store.getPreviousState() == ReplicaState.OFFLINE)) {
         try {
           resumeDecommission(partitionName);
         } catch (Exception e) {
@@ -735,16 +742,14 @@ public class StorageManager implements StoreManager {
       if (replicationManagerListener != null) {
         replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
       }
-      // 3. remove store associated with given replica in Storage Manager
-      if (removeBlobStore(replica.getPartitionId())) {
-        try {
-          store.deleteStoreFiles();
-        } catch (Exception e) {
-          throw new StateTransitionException("Failed to delete directory for store " + partitionName,
+      // 3. remove store and delete all files associated with given replica in Storage Manager
+      try {
+        if (!removeBlobStore(replica.getPartitionId())) {
+          throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
               ReplicaOperationFailure);
         }
-      } else {
-        throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
+      } catch (IOException | StoreException e) {
+        throw new StateTransitionException("Failed to delete directory for store " + partitionName,
             ReplicaOperationFailure);
       }
       partitionNameToReplicaId.remove(partitionName);

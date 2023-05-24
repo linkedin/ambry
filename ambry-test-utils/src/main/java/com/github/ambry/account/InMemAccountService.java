@@ -22,16 +22,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
-
-import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -58,9 +58,7 @@ public class InMemAccountService implements AccountService {
   private final ScheduledExecutorService scheduler;
   private boolean shouldUpdateSucceed = true;
   private final Map<Pair<String, String>, Map<String, Dataset>> nameToDatasetMap = new HashMap<>();
-  private final Map<Pair<Short, Short>, Map<String, DatasetVersionRecord>> idToDatasetVersionMap = new HashMap<>();
-  private final Map<Pair<Short, Short>, Map<String, Dataset>> idToDatasetMap = new HashMap<>();
-  private Map<String, String> userTags;
+  private final Map<Pair<Short, Short>, Map<Pair<String, String>, DatasetVersionRecord>> idToDatasetVersionMap = new HashMap<>();
 
   /**
    * Constructor.
@@ -132,21 +130,21 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized DatasetVersionRecord addDatasetVersion(String accountName, String containerName,
-      String datasetName, String version, long expirationTimeMs) throws AccountServiceException {
+      String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
+      boolean datasetVersionTtlEnabled) throws AccountServiceException {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
     idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
     Dataset dataset = getDataset(accountName, containerName, datasetName);
-    long updatedExpirationTimeMs = expirationTimeMs;
-    if (expirationTimeMs == Infinite_Time || dataset.getExpirationTimeMs() == Infinite_Time) {
-      updatedExpirationTimeMs = expirationTimeMs == Infinite_Time ? dataset.getExpirationTimeMs() : expirationTimeMs;
-    } else if (dataset.getExpirationTimeMs() <= expirationTimeMs) {
-      updatedExpirationTimeMs = dataset.getExpirationTimeMs();
+    long updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
+    if (datasetVersionTtlEnabled) {
+      updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
     }
     DatasetVersionRecord datasetVersionRecord =
         new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs);
-    idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).put(datasetName + version, datasetVersionRecord);
+    idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
+        .put(new Pair<>(datasetName, version), datasetVersionRecord);
     return datasetVersionRecord;
   }
 
@@ -157,7 +155,7 @@ public class InMemAccountService implements AccountService {
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
     DatasetVersionRecord datasetVersionRecord =
-        idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(datasetName + version);
+        idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(new Pair<>(datasetName, version));
     if (datasetVersionRecord == null) {
       throw new AccountServiceException("Dataset version has been deleted", AccountServiceErrorCode.Deleted);
     }
@@ -166,11 +164,39 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized void deleteDatasetVersion(String accountName, String containerName,
-      String datasetName, String version) {
+      String datasetName, String version) throws AccountServiceException {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
-    idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).remove(datasetName + version);
+    idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).remove(new Pair<>(datasetName, version));
+  }
+
+  @Override
+  public synchronized List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(String accountName,
+      String containerName, String datasetName) throws AccountServiceException {
+    List<DatasetVersionRecord> datasetVersionRecordList = new ArrayList<>();
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    Dataset dataset = getDataset(accountName, containerName, datasetName);
+    Integer retentionCount = dataset.getRetentionCount();
+    if (retentionCount != null && idToDatasetVersionMap.get(new Pair<>(accountId, containerId)) != null) {
+      List<Map.Entry<Pair<String, String>, DatasetVersionRecord>> datasetToDatasetVersionList =
+          new ArrayList<>(idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).entrySet());
+      datasetToDatasetVersionList.sort(
+          (entry1, entry2) -> entry2.getValue().getVersion().compareTo(entry1.getValue().getVersion()));
+      for (Map.Entry<Pair<String, String>, DatasetVersionRecord> entry : datasetToDatasetVersionList) {
+        retentionCount--;
+        if (retentionCount >= 0) {
+          continue;
+        }
+        Pair<String, String> key = entry.getKey();
+        if (key.getFirst().equals(datasetName)) {
+          datasetVersionRecordList.add(entry.getValue());
+        }
+      }
+    }
+    return datasetVersionRecordList;
   }
 
   @Override
@@ -217,7 +243,42 @@ public class InMemAccountService implements AccountService {
 
   @Override
   public synchronized void deleteDataset(String accountName, String containerName, String datasetName) {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    Map<Pair<String, String>, DatasetVersionRecord> datasetToDatasetVersionMap =
+        idToDatasetVersionMap.get(new Pair<>(accountId, containerId));
+    if (datasetToDatasetVersionMap != null) {
+      for (Map.Entry<Pair<String, String>, DatasetVersionRecord> entry : datasetToDatasetVersionMap.entrySet()) {
+        Pair<String, String> key = entry.getKey();
+        if (key.getFirst().equals(datasetName)) {
+          idToDatasetVersionMap.remove(key);
+        }
+      }
+    }
     nameToDatasetMap.get(new Pair<>(accountName, containerName)).remove(datasetName);
+  }
+
+  @Override
+  public synchronized List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName,
+      String datasetName) {
+    List<DatasetVersionRecord> datasetVersionRecords = new ArrayList<>();
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    Map<Pair<String, String>, DatasetVersionRecord> datasetToDatasetVersionMap =
+        idToDatasetVersionMap.get(new Pair<>(accountId, containerId));
+    if (datasetToDatasetVersionMap != null) {
+      for (Map.Entry<Pair<String, String>, DatasetVersionRecord> entry : datasetToDatasetVersionMap.entrySet()) {
+        Pair<String, String> key = entry.getKey();
+        DatasetVersionRecord datasetVersionRecord = entry.getValue();
+        if (key.getFirst().equals(datasetName)
+            && Utils.compareTimes(datasetVersionRecord.getExpirationTimeMs(), System.currentTimeMillis()) > 0) {
+          datasetVersionRecords.add(datasetVersionRecord);
+        }
+      }
+    }
+    return datasetVersionRecords;
   }
 
   @Override

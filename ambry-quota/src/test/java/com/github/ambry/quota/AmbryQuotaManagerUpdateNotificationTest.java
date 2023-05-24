@@ -51,7 +51,7 @@ public class AmbryQuotaManagerUpdateNotificationTest {
         new SimpleQuotaRecommendationMergePolicy(quotaConfig);
     AccountServiceForConsumerTest accountService =
         new AccountServiceForConsumerTest(new AccountServiceConfig(verifiableProperties),
-            new AccountServiceMetrics(metricRegistry), null);
+            new AccountServiceMetrics(metricRegistry, false), null);
     AmbryQuotaManager ambryQuotaManager =
         new AmbryQuotaManager(quotaConfig, quotaRecommendationMergePolicy, accountService, null,
             new QuotaMetrics(metricRegistry), QuotaTestUtils.getDefaultRouterConfig());

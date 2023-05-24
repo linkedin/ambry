@@ -105,9 +105,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   public void waitDeactivationCompleted(String partitionName) throws InterruptedException {
     CountDownLatch latch = partitionToDeactivationLatch.get(partitionName);
     if (latch == null) {
-      logger.error("Partition {} is not found for deactivation", partitionName);
-      throw new StateTransitionException("No deactivation latch is found for partition " + partitionName,
-          ReplicaNotFound);
+      logger.info("Skipping deactivation. Partition {} is either not present or empty", partitionName);
     } else {
       logger.info("Waiting for partition {} to be deactivated", partitionName);
       latch.await();
@@ -124,9 +122,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
   public void waitDisconnectionCompleted(String partitionName) throws InterruptedException {
     CountDownLatch latch = partitionToDisconnectionLatch.get(partitionName);
     if (latch == null) {
-      logger.error("Partition {} is not found for disconnection", partitionName);
-      throw new StateTransitionException("No disconnection latch is found for partition " + partitionName,
-          ReplicaNotFound);
+      logger.info("Skipping disconnection. Partition {} is either not present or empty", partitionName);
     } else {
       logger.info("Waiting for partition {} to be disconnected", partitionName);
       latch.await();

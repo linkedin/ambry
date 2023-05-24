@@ -58,8 +58,6 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 public class GetBlobHandler {
   private static final Logger LOGGER = LoggerFactory.getLogger(GetBlobHandler.class);
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
-  private static final String NAMED_BLOB_PREFIX = "/named";
-  private static final String SLASH = "/";
   static final String BLOB_CHUNK_IDS_KEY = "blobChunkIds";
 
   private final FrontendConfig frontendConfig;

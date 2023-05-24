@@ -13,6 +13,13 @@
  */
 package com.github.ambry.clustermap;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.Account;
+import com.github.ambry.account.Container;
+import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.ReservedMetadataIdMetrics;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import java.util.ArrayList;
@@ -21,7 +28,9 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -233,10 +242,82 @@ public class ClusterMapUtilsTest {
   }
 
   /**
-   * @param hostname the host name of the {@link MockDataNodeId}.
-   * @param dc the name of the dc of the {@link MockDataNodeId}.
-   * @return a {@link MockDataNodeId} based on {@code hostname} and {@code dc}.
+   * Tests for {@link ClusterMapUtils#reserveMetadataBlobId}.
+   * @throws Exception in case of any errors.
    */
+  @Test
+  public void testReserveMetadataBlobId() throws Exception {
+    String partitionClass = MockClusterMap.SPECIAL_PARTITION_CLASS;
+    String invalidPartitionClass = "test";
+    List<PartitionId> partitionsToExclude = null;
+    ReservedMetadataIdMetrics reservedMetadataIdMetrics =
+        ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(new MetricRegistry());
+    ClusterMap clusterMap = new MockClusterMap();
+    short accountId = 1;
+    short containerId = 1;
+    boolean isEncrypted = false;
+    Properties properties = new Properties();
+    properties.setProperty(RouterConfig.ROUTER_HOSTNAME, "localhost");
+    properties.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, "DEV");
+    RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(properties));
+
+    // test a simple success case.
+    BlobId blobId =
+        ClusterMapUtils.reserveMetadataBlobId(partitionClass, partitionsToExclude, reservedMetadataIdMetrics,
+            clusterMap, accountId, containerId, isEncrypted, routerConfig);
+    assertNotNull(blobId);
+    assertEquals(partitionClass, blobId.getPartition().getPartitionClass());
+    assertEquals(0, reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.getCount());
+    assertEquals(0, reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.getCount());
+
+    // test for non-existent partition class.
+    blobId =
+        ClusterMapUtils.reserveMetadataBlobId(invalidPartitionClass, partitionsToExclude, reservedMetadataIdMetrics,
+            clusterMap, accountId, containerId, isEncrypted, routerConfig);
+    assertNotNull(blobId);
+    assertNotEquals(partitionClass, blobId.getPartition().getPartitionClass());
+    assertEquals(MockClusterMap.DEFAULT_PARTITION_CLASS, blobId.getPartition().getPartitionClass());
+    assertEquals(0, reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.getCount());
+    assertEquals(1, reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.getCount());
+
+    // test when no partitions were selected from cluster map
+    List<PartitionId> partitionIdList = clusterMap.getAllPartitionIds(null).stream().map(p -> ((PartitionId) p)).collect(
+        Collectors.toList());
+    assertNull(ClusterMapUtils.reserveMetadataBlobId(partitionClass, partitionIdList, reservedMetadataIdMetrics,
+        clusterMap, accountId, containerId, isEncrypted, routerConfig));
+    assertEquals(1, reservedMetadataIdMetrics.numFailedPartitionReserveAttempts.getCount());
+    assertEquals(1, reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.getCount());
+  }
+
+  /**
+   * Tests for {@link ClusterMapUtils#getPartitionClass}.
+   */
+  @Test
+  public void testGetPartitionClass() {
+    Container container = Mockito.mock(Container.class);
+    Account account = Mockito.mock(Account.class);
+
+    // test when account is null but container is not.
+    assertEquals("test", ClusterMapUtils.getPartitionClass(null, container, "test"));
+
+    // test when account is null and container is null.
+    assertEquals("test", ClusterMapUtils.getPartitionClass(null, null, "test"));
+
+    // test when container has empty replication policy.
+    when(container.getReplicationPolicy()).thenReturn("");
+    assertEquals("test", ClusterMapUtils.getPartitionClass(account, container, "test"));
+
+    // test when container has a valid replication policy.
+    when(container.getReplicationPolicy()).thenReturn("test123");
+    assertEquals("test123", ClusterMapUtils.getPartitionClass(account, container, "test"));
+  }
+
+
+    /**
+     * @param hostname the host name of the {@link MockDataNodeId}.
+     * @param dc the name of the dc of the {@link MockDataNodeId}.
+     * @return a {@link MockDataNodeId} based on {@code hostname} and {@code dc}.
+     */
   private MockDataNodeId getDataNodeId(String hostname, String dc) {
     return new MockDataNodeId(hostname, Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
         Collections.singletonList("/tmp"), dc);

@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -50,7 +51,6 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
   private final RequestResponseHandlerMetrics metrics;
 
   private final List<AsyncRequestWorker> asyncRequestWorkers = new ArrayList<>();
-  private final AtomicInteger currIndex = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(AsyncRequestResponseHandler.class);
 
   private AsyncResponseHandler asyncResponseHandler = null;
@@ -251,10 +251,9 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    */
   private AsyncRequestWorker getWorker() {
     long startTime = System.currentTimeMillis();
-    int absIndex = currIndex.getAndIncrement();
-    int realIndex = absIndex % requestWorkersCount;
-    logger.trace("Monotonically increasing value {} was used to pick worker at index {}", absIndex, realIndex);
-    AsyncRequestWorker worker = asyncRequestWorkers.get(realIndex);
+    int index = ThreadLocalRandom.current().nextInt(requestWorkersCount);
+    logger.trace("Request worker thread at randomly generated index {} is used", index);
+    AsyncRequestWorker worker = asyncRequestWorkers.get(index);
     metrics.requestWorkerSelectionTimeInMs.update(System.currentTimeMillis() - startTime);
     return worker;
   }

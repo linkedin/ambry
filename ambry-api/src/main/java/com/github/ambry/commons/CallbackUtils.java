@@ -46,14 +46,14 @@ public class CallbackUtils {
     return (result, exception) -> {
       try {
         asyncOperationTracker.markOperationEnd();
-        if (exception == null) {
+        if (exception == null && successAction != null) {
           successAction.accept(result);
         }
       } catch (Exception e) {
         asyncOperationTracker.markCallbackProcessingError();
         exception = e;
       } finally {
-        if (exception != null) {
+        if (exception != null && failureCallback != null) {
           failureCallback.onCompletion(null, exception);
         }
         asyncOperationTracker.markCallbackProcessingEnd();

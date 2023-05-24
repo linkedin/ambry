@@ -20,6 +20,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -27,12 +28,14 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -107,6 +110,7 @@ import static com.github.ambry.utils.Utils.*;
  *}
  */
 public class HelixBootstrapUpgradeUtil {
+  static final int FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER = 10000;
   static final int DEFAULT_MAX_PARTITIONS_PER_RESOURCE = 100;
   static final String HELIX_DISABLED_PARTITION_STR =
       InstanceConfig.InstanceConfigProperty.HELIX_DISABLED_PARTITION.name();
@@ -137,6 +141,7 @@ public class HelixBootstrapUpgradeUtil {
   private final DataNodeConfigSourceType dataNodeConfigSourceType;
   private final boolean overrideReplicaStatus;
   private boolean expectMoreInHelixDuringValidate = false;
+  private final int maxInstancesInOneResourceForFullAuto;
   private ConcurrentHashMap<String, Set<String>> instancesNotForceRemovedByDc = new ConcurrentHashMap<>();
   private ConcurrentHashMap<String, Set<String>> partitionsNotForceRemovedByDc = new ConcurrentHashMap<>();
   private final AtomicInteger instancesAdded = new AtomicInteger();
@@ -215,6 +220,8 @@ public class HelixBootstrapUpgradeUtil {
    *                           InstanceConfig will be updated by nodes themselves.
    * @param dataNodeConfigSourceType the {@link DataNodeConfigSourceType} to use when bootstrapping cluster.
    * @param overrideReplicaStatus whether to override sealed/stopped/disabled replica status lists.
+   * @param maxInstancesInOneResourceForFullAuto max number of instances to be assigned under one resource when the resources
+   *                                             are in full auto compatible mode.
    * @throws IOException if there is an error reading a file.
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
@@ -222,7 +229,7 @@ public class HelixBootstrapUpgradeUtil {
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory, boolean startValidatingClusterManager, String stateModelDef,
       HelixAdminOperation helixAdminOperation, DataNodeConfigSourceType dataNodeConfigSourceType,
-      boolean overrideReplicaStatus) throws Exception {
+      boolean overrideReplicaStatus, int maxInstancesInOneResourceForFullAuto) throws Exception {
     if (dryRun) {
       info("==== This is a dry run ====");
       info("No changes will be made to the information in Helix (except adding the cluster if it does not exist.");
@@ -230,7 +237,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             maxPartitionsInOneResource, dryRun, forceRemove, helixAdminFactory, stateModelDef, null, null, null,
-            helixAdminOperation, dataNodeConfigSourceType, overrideReplicaStatus);
+            helixAdminOperation, dataNodeConfigSourceType, overrideReplicaStatus, maxInstancesInOneResourceForFullAuto);
     if (dryRun) {
       info("To drop the cluster, run this tool again with the '--dropCluster {}' argument.",
           clusterMapToHelixMapper.clusterName);
@@ -266,7 +273,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, forceRemove, null, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF,
-            null, null, null, null, null, false);
+            null, null, null, null, null, false, 0);
     if (forceRemove) {
       for (String adminType : adminTypes) {
         removeAdminInfosFromCluster(clusterMapToHelixMapper, adminType);
@@ -285,7 +292,8 @@ public class HelixBootstrapUpgradeUtil {
       String clusterNamePrefix, String dcs, String stateModelDef) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
-            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, stateModelDef, null, null, null, null, null, false);
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, stateModelDef, null, null, null, null, null, false,
+            0);
     clusterMapToHelixMapper.addStateModelDef();
     info("State model def is successfully added");
   }
@@ -305,11 +313,12 @@ public class HelixBootstrapUpgradeUtil {
    * @throws JSONException if there is an error parsing the JSON content in any of the files.
    */
   static void validate(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String clusterNamePrefix, String dcs, String stateModelDef, DataNodeConfigSourceType dataNodeConfigSourceType) throws Exception {
+      String clusterNamePrefix, String dcs, String stateModelDef, DataNodeConfigSourceType dataNodeConfigSourceType,
+      int maxInstancesInOneResourceForFullAuto) throws Exception {
     HelixBootstrapUpgradeUtil clusterMapToHelixMapper =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, stateModelDef, null, null, null,
-            HelixAdminOperation.ValidateCluster, dataNodeConfigSourceType, false);
+            HelixAdminOperation.ValidateCluster, dataNodeConfigSourceType, false, maxInstancesInOneResourceForFullAuto);
     clusterMapToHelixMapper.validateAndClose();
     clusterMapToHelixMapper.logSummary();
   }
@@ -331,7 +340,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, null,
-            null, null, HelixAdminOperation.ListSealedPartition, dataNodeConfigSourceType, false);
+            null, null, HelixAdminOperation.ListSealedPartition, dataNodeConfigSourceType, false, 0);
     return helixBootstrapUpgradeUtil.getSealedPartitionsInHelixCluster();
   }
 
@@ -356,7 +365,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, null, Objects.requireNonNull(hostname), portNum,
-            Objects.requireNonNull(partitionName), operation, null, false);
+            Objects.requireNonNull(partitionName), operation, null, false, 0);
     if (operation == HelixAdminOperation.ResetPartition) {
       helixBootstrapUpgradeUtil.resetPartition();
     } else {
@@ -381,7 +390,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
         new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, null, null, null, null,
-            HelixAdminOperation.MigrateToPropertyStore, PROPERTY_STORE, false);
+            HelixAdminOperation.MigrateToPropertyStore, PROPERTY_STORE, false, 0);
     helixBootstrapUpgradeUtil.migrateToPropertyStore();
   }
 
@@ -486,7 +495,7 @@ public class HelixBootstrapUpgradeUtil {
       String clusterNamePrefix, String dcs, int maxPartitionsInOneResource, boolean dryRun, boolean forceRemove,
       HelixAdminFactory helixAdminFactory, String stateModelDef, String hostname, Integer portNum, String partitionName,
       HelixAdminOperation helixAdminOperation, DataNodeConfigSourceType dataNodeConfigSourceType,
-      boolean overrideReplicaStatus) throws Exception {
+      boolean overrideReplicaStatus, int maxInstancesInOneResourceForFullAuto) throws Exception {
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     this.dryRun = dryRun;
     this.forceRemove = forceRemove;
@@ -498,6 +507,7 @@ public class HelixBootstrapUpgradeUtil {
     this.helixAdminOperation = helixAdminOperation;
     this.dataNodeConfigSourceType = dataNodeConfigSourceType == null ? PROPERTY_STORE : dataNodeConfigSourceType;
     this.overrideReplicaStatus = overrideReplicaStatus;
+    this.maxInstancesInOneResourceForFullAuto = maxInstancesInOneResourceForFullAuto;
     dataCenterToZkAddress = parseAndUpdateDcInfoFromArg(dcs, zkLayoutPath);
     // The following properties are immaterial for the tool, but the ClusterMapConfig mandates their presence.
     ClusterMapConfig clusterMapConfig = getClusterMapConfig("", "", null);
@@ -684,11 +694,11 @@ public class HelixBootstrapUpgradeUtil {
               info("[{}] New replica of partition[{}] will be added to instance {} on {}", dcName.toUpperCase(),
                   partitionStr, instance, replica.getMountPath());
               newAddedReplicasInDc.computeIfAbsent(partitionStr, key -> {
-                Map<String, String> partitionMap = new HashMap<>();
-                partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
-                partitionMap.put(REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
-                return partitionMap;
-              })
+                    Map<String, String> partitionMap = new HashMap<>();
+                    partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
+                    partitionMap.put(REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
+                    return partitionMap;
+                  })
                   .put(instance,
                       replica.getMountPath() + DISK_CAPACITY_DELIM_STR + replica.getDiskId().getRawCapacityInBytes());
             }
@@ -918,15 +928,16 @@ public class HelixBootstrapUpgradeUtil {
     final CountDownLatch bootstrapLatch = new CountDownLatch(adminForDc.size());
     for (Datacenter dc : staticClusterMap.hardwareLayout.getDatacenters()) {
       if (adminForDc.containsKey(dc.getName())) {
-        Utils.newThread(() -> {
+        newThread(() -> {
           info("\n=======Starting datacenter: {}=========\n", dc.getName());
+          boolean resourcesAreFullAutoCompatible = maybeVerifyResourcesAreFullAutoCompatible(dc, clusterName);
+          if (resourcesAreFullAutoCompatible) {
+            verifyPartitionPlacementIsFullAutoCompatibleInStatic(dc);
+          }
           Map<String, Set<String>> partitionsToInstancesInDc = new HashMap<>();
           addUpdateInstances(dc.getName(), partitionsToInstancesInDc);
           // Process those partitions that are already under resources. Just update their instance sets if that has changed.
-          info(
-              "[{}] Done adding all instances in {}, now scanning resources in Helix and ensuring instance set for partitions are the same.",
-              dc.getName().toUpperCase(), dc.getName());
-          addUpdateResources(dc.getName(), partitionsToInstancesInDc);
+          addUpdateResources(dc.getName(), partitionsToInstancesInDc, resourcesAreFullAutoCompatible);
           bootstrapLatch.countDown();
         }, false).start();
       } else {
@@ -935,6 +946,342 @@ public class HelixBootstrapUpgradeUtil {
     }
     // make sure bootstrap has completed in all dcs (can extend timeout if amount of resources in each datacenter is really large)
     bootstrapLatch.await(15, TimeUnit.MINUTES);
+  }
+
+  /**
+   * Partitions has multiple replicas that are assigned to multiple instances. Therefore instances share partitions with
+   * each other. This method would group all the instances that share any partition with each other and return those groups.
+   *
+   * For example, given such partition placement
+   * {
+   *   "partition1": {"host1", "host2", "host3"},
+   *   "partition2": {"host4", "host5", "host6"},
+   *   "partition3": {"host1", "host4", "host6"},
+   *   "partition4": {"host10", "host11", "host12"},
+   * }
+   * we know that host1 to host6 shared some partitions and should be placed in the same group and host10 to host12 share
+   * some partitions and should be a group. Instances in different groups never share partitions with each other.
+   * @param partitionToInstances A map from partition id to a list of instances this partition is assigned to
+   * @return A list of instance group. Each item of this list is a group of instances that share partitions with each other
+   * but never share partitions outside this group.
+   */
+  List<Set<String>> groupInstancesBasedOnSharedPartition(Map<String, Set<String>> partitionToInstances) {
+    int maxId = 0;
+    TreeMap<Integer, Set<String>> instanceGroups = new TreeMap<>();
+    Map<String, Integer> instanceNameToGroupId = new HashMap<>();
+    TreeMap<Integer, Set<String>> orderedPartitionToInstances = new TreeMap<>();
+    for (Map.Entry<String, Set<String>> ent : partitionToInstances.entrySet()) {
+      orderedPartitionToInstances.put(Integer.parseInt(ent.getKey()), ent.getValue());
+    }
+
+    for (Map.Entry<Integer, Set<String>> ent : orderedPartitionToInstances.entrySet()) {
+      Set<Integer> groupIds = new HashSet<>();
+      for (String instanceName : ent.getValue()) {
+        if (!instanceNameToGroupId.containsKey(instanceName)) {
+          instanceNameToGroupId.put(instanceName, maxId++);
+          instanceGroups.put(instanceNameToGroupId.get(instanceName),
+              new HashSet<>(Collections.singleton(instanceName)));
+        }
+        groupIds.add(instanceNameToGroupId.get(instanceName));
+      }
+      if (groupIds.size() != 1) {
+        // Merge groups
+        List<Integer> idList = new ArrayList<>(groupIds);
+        int mergeTo = idList.get(0);
+        for (int i = 1; i < idList.size(); i++) {
+          instanceGroups.get(mergeTo).addAll(instanceGroups.get(idList.get(i)));
+          for (String instanceName : instanceGroups.get(idList.get(i))) {
+            instanceNameToGroupId.put(instanceName, mergeTo);
+          }
+          instanceGroups.remove(idList.get(i));
+        }
+      }
+    }
+    return new ArrayList<>(instanceGroups.values());
+  }
+
+  /**
+   * Given a map from partition to a set of instances, create reverse map from instances to a set of partitions.
+   * @param partitionToInstances The partition placement map
+   * @return A map from instances to a set of partitions.
+   */
+  private Map<String, Set<String>> generateInstanceToPartitionsMap(Map<String, Set<String>> partitionToInstances) {
+    Map<String, Set<String>> result = new HashMap<>();
+    for (Map.Entry<String, Set<String>> entry : partitionToInstances.entrySet()) {
+      entry.getValue().forEach(in -> result.computeIfAbsent(in, k -> new HashSet<>()).add(entry.getKey()));
+    }
+    return result;
+  }
+
+  /**
+   * Verify that partition placement in static layout is FULL_AUTO compatible.
+   * In order to be FULL_AUTO compatible, the size of instance group should not exceed the given max number of instances
+   * in one resource.
+   * @param dc The datacenter.
+   */
+  private void verifyPartitionPlacementIsFullAutoCompatibleInStatic(Datacenter dc) {
+    // First, for all partitions, find the instances
+    Map<String, Set<String>> partitionToInstances = new HashMap<>();
+    for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
+      for (ReplicaId replicaId : partitionId.getReplicaIds()) {
+        if (replicaId.getDataNodeId().getDatacenterName().equals(dc.getName())) {
+          partitionToInstances.computeIfAbsent(String.valueOf(partitionId.getId()), k -> new HashSet<>())
+              .add(getInstanceName(replicaId.getDataNodeId()));
+        }
+      }
+    }
+    for (Set<String> instanceNames : groupInstancesBasedOnSharedPartition(partitionToInstances)) {
+      ensureOrThrow(instanceNames.size() <= maxInstancesInOneResourceForFullAuto,
+          "A group of instances who share partitions is bigger than " + maxInstancesInOneResourceForFullAuto + ": "
+              + instanceNames);
+    }
+    info("[{}] Done verify partition placement in static file is full auto compatible", dc.getName().toUpperCase());
+  }
+
+  /**
+   * Build and create a new IdealState for the given resource name and partition layout.
+   * @param dcName The name of the datacenter
+   * @param resourceName The name of the newly created resource
+   * @param partitionsUnderResource The partition layout
+   */
+  private void buildAndCreateIdealState(String dcName, String resourceName,
+      List<Map.Entry<String, Set<String>>> partitionsUnderResource) {
+    IdealState idealState = buildIdealState(dcName, resourceName, partitionsUnderResource);
+    HelixAdmin dcAdmin = adminForDc.get(dcName);
+    if (!dryRun) {
+      dcAdmin.addResource(clusterName, resourceName, idealState);
+      info("[{}] Added {} new partitions under resource {} in datacenter {}", dcName.toUpperCase(),
+          partitionsUnderResource.size(), resourceName, dcName);
+    } else {
+      info("[{}] Under DryRun mode, {} new partitions are added to resource {} in datacenter {}", dcName.toUpperCase(),
+          partitionsUnderResource.size(), resourceName, dcName);
+    }
+    resourcesAdded.getAndIncrement();
+  }
+
+  /**
+   * Build a new IdealState for the given resource name and partition layout
+   * @param dcName The name of the datacenter
+   * @param resourceName The name of the newly created resource
+   * @param partitionsUnderResource The partition layout
+   * @return The new IdealState
+   */
+  private IdealState buildIdealState(String dcName, String resourceName,
+      List<Map.Entry<String, Set<String>>> partitionsUnderResource) {
+    IdealState idealState = new IdealState(resourceName);
+    idealState.setStateModelDefRef(stateModelDef);
+    info("[{}] Adding partitions for next resource {} in {}. {}.", dcName.toUpperCase(), resourceName, dcName,
+        dryRun ? "Actual IdealState is not changed as dry run" : "IdealState is being updated");
+    updateIdealStatePartitions(idealState, partitionsUnderResource);
+    if (!idealState.isValid()) {
+      throw new IllegalStateException("IdealState could not be validated for new resource " + resourceName);
+    }
+    return idealState;
+  }
+
+  /**
+   * Update the partition layout in the given ideal state.
+   * @param idealState The ideal state to change partition layout
+   * @param partitionsUnderResource The partition layout.
+   */
+  private void updateIdealStatePartitions(IdealState idealState,
+      List<Map.Entry<String, Set<String>>> partitionsUnderResource) {
+    for (Map.Entry<String, Set<String>> entry : partitionsUnderResource) {
+      String partitionName = entry.getKey();
+      ArrayList<String> instances = new ArrayList<>(entry.getValue());
+      Collections.shuffle(instances);
+      idealState.setPreferenceList(partitionName, instances);
+    }
+    idealState.setNumPartitions(idealState.getPartitionSet().size());
+    idealState.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.name());
+  }
+
+  /**
+   * When resources and static partition layout are both FULL_AUTO compatible, this method would iterate through the new
+   * partitions and find corresponding resources for them if possible.
+   * Before calling this method, we should already verify that each instance has only one assigned resource. So if a
+   * partition's instances are already assigned to the same resource, then this partition would be assigned to this resource
+   * as well. If a partition's instances are assigned to different resources, then this method would fail.
+   *
+   * This method would also remove all the new partitions that are assigned to an existing resource from partitionToInstancesInDc.
+   * @param dcName The name of the datacenter
+   * @param partitionsToInstancesInDc The map of partition layout.
+   * @param instanceNameToOneResource The map from instance name to its corresponding assigned resource id
+   * @param resourceIdToInstances The map from resource id to a list of instance names that are assigned to this resource
+   * @param resourceIdToIdealState The map from resource id to IdealState
+   */
+  private void updateIdealStateWithNewPartitionsForFullAuto(String dcName,
+      Map<String, Set<String>> partitionsToInstancesInDc, Map<String, Integer> instanceNameToOneResource,
+      Map<Integer, Set<String>> resourceIdToInstances, Map<Integer, IdealState> resourceIdToIdealState) {
+    HelixAdmin dcAdmin = adminForDc.get(dcName);
+
+    // Find the partitions whose instances already exist in resources and assign those partitions to the corresponding resources.
+    int round = 1;
+    boolean allPartitionsDontHaveResources;
+    while (round >= 0) {
+      allPartitionsDontHaveResources = true;
+      for (Map.Entry<String, Set<String>> ent : partitionsToInstancesInDc.entrySet()) {
+        Set<String> instanceNames = ent.getValue();
+        Set<Integer> resources = instanceNames.stream()
+            .map(in -> instanceNameToOneResource.get(in))
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+        if (resources.isEmpty()) {
+          // Partition doesn't belong to any host that are already in the helix
+        } else if (resources.size() == 1) {
+          allPartitionsDontHaveResources = false;
+          int resourceId = resources.iterator().next();
+          resourceIdToInstances.get(resourceId).addAll(instanceNames);
+          // Some instance names might not have a resource name, now assign the resource name to it
+          instanceNames.forEach(in -> instanceNameToOneResource.put(in, resourceId));
+          Set<String> instances = resourceIdToInstances.get(resourceId);
+          ensureOrThrow(instances.size() <= maxInstancesInOneResourceForFullAuto,
+              "Resource has more than " + maxInstancesInOneResourceForFullAuto + " hosts: " + instances);
+        } else {
+          String errorMessage =
+              String.format("Partition %s belong to different hosts of different resources, hosts: %s, resources %s",
+                  ent.getKey(), instanceNames, resources);
+          ensureOrThrow(false, errorMessage);
+        }
+      }
+      // Run this logic for two rounds so that we can use the later partitions to exam prior partitions
+      if (allPartitionsDontHaveResources) {
+        info("[{}] All new partitions don't have hosts exist in old resources for cluster {}.", dcName.toUpperCase(),
+            clusterName);
+        break;
+      }
+      round--;
+    }
+
+    Map<Integer, IdealState> resourceToUpdate = new HashMap<>();
+    Map<Integer, Integer> resourceToPartitionSize = new HashMap<>();
+    Iterator<Map.Entry<String, Set<String>>> partitionIterator = partitionsToInstancesInDc.entrySet().iterator();
+    int numPartitions = 0;
+    while (partitionIterator.hasNext()) {
+      Map.Entry<String, Set<String>> partitionToInstances = partitionIterator.next();
+      // If we are here, we know that all partitions' instances would either belong to one resource or no resource at all.
+      String anyInstance = partitionToInstances.getValue().iterator().next();
+      if (instanceNameToOneResource.containsKey(anyInstance)) {
+        Integer resourceId = instanceNameToOneResource.get(anyInstance);
+        if (!resourceToUpdate.containsKey(resourceId)) {
+          resourceToUpdate.put(resourceId, resourceIdToIdealState.get(resourceId));
+          resourceToPartitionSize.put(resourceId, resourceIdToIdealState.get(resourceId).getPartitionSet().size());
+        }
+        IdealState idealState = resourceToUpdate.get(resourceId);
+        ArrayList<String> newInstances = new ArrayList<>(partitionToInstances.getValue());
+        Collections.shuffle(newInstances);
+        idealState.setPreferenceList(partitionToInstances.getKey(), newInstances);
+        partitionIterator.remove();
+        numPartitions++;
+      }
+    }
+
+    if (numPartitions > 0) {
+      info(
+          "[{}] We have {} partitions to add to existing resources, and we have {} existing resources to update for cluster {}",
+          dcName.toUpperCase(), numPartitions, resourceToUpdate.size(), clusterName);
+      for (Map.Entry<Integer, IdealState> entry : resourceToUpdate.entrySet()) {
+        String resourceName = String.valueOf(entry.getKey());
+        IdealState idealState = entry.getValue();
+        int sizeBefore = resourceToPartitionSize.get(entry.getKey());
+        if (!dryRun) {
+          dcAdmin.setResourceIdealState(clusterName, resourceName, idealState);
+          info("[{}] Update resource {} in datacenter {} from {} partitions to {} partitions", dcName.toUpperCase(),
+              resourceName, dcName, sizeBefore, idealState.getPartitionSet().size());
+        } else {
+          info("[{}] Under DryRun mode, update resource {} in datacenter {} from {} partitions to {} partitions",
+              dcName.toUpperCase(), resourceName, dcName, sizeBefore, idealState.getPartitionSet().size());
+        }
+        resourcesUpdated.incrementAndGet();
+      }
+      info("[{}] Successfully add partitions to existing resources for cluster {}", dcName.toUpperCase(), clusterName);
+    } else {
+      info("[{}] We don't have any partition to add to existing resources for cluster {}", dcName.toUpperCase(),
+          clusterName);
+    }
+  }
+
+  /**
+   * Create or update ideal state for given partition layout when the resources and static layout are both FULL_AUTO
+   * compatible. When calling this method, make sure that given partitions' instances are not assigned to any existing
+   * resources, so they are all new partitions in new instances.
+   * This method would first find all the instance group and partitions that belong to each group. It will then try to
+   * merge those groups if the size of the group is less than the max number of instances in one resource. Also this
+   * method would try to merge with last existing resource if the size allows.
+   * @param dcName The name of the datacenter
+   * @param partitionsToInstancesInDc The map of partition layout.
+   * @param resourceIdToInstances The map from resource id to a list of instance names that are assigned to this resource
+   * @param resourceIdToIdealState The map from resource id to IdealState
+   */
+  private void createOrUpdateIdealStateForFullAuto(String dcName, Map<String, Set<String>> partitionsToInstancesInDc,
+      TreeMap<Integer, Set<String>> resourceIdToInstances, Map<Integer, IdealState> resourceIdToIdealState) {
+    // The remaining partition would form a list of instance group. Each group would be added to the new partitions
+    int remainingPartition = partitionsToInstancesInDc.size();
+    HelixAdmin dcAdmin = adminForDc.get(dcName);
+    List<Set<String>> instanceGroups = groupInstancesBasedOnSharedPartition(partitionsToInstancesInDc);
+    Map<String, Set<String>> instanceToPartitions = generateInstanceToPartitionsMap(partitionsToInstancesInDc);
+    info("[{}] Found {} groups of instances for cluster {}", dcName.toUpperCase(), instanceGroups.size(), clusterName);
+    Iterator<Set<String>> instanceGroupIterator = instanceGroups.iterator();
+    int startResourceId = FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER;
+    int maxResource = -1;
+    Set<String> currentInstances = new HashSet<>();
+    // The last resource might still be able to take some group
+    if (!resourceIdToInstances.isEmpty()) {
+      Map.Entry<Integer, Set<String>> lastEntry = resourceIdToInstances.lastEntry();
+      startResourceId = lastEntry.getKey();
+      maxResource = startResourceId;
+      currentInstances.addAll(lastEntry.getValue());
+      info("[{}] Already has resources, will try to use last resource {}, current size: {}, target size {}",
+          dcName.toUpperCase(), startResourceId, currentInstances.size(), maxInstancesInOneResourceForFullAuto);
+    }
+    int curResourceId = startResourceId;
+    while (instanceGroupIterator.hasNext()) {
+      Set<String> group = instanceGroupIterator.next();
+      if (currentInstances.size() + group.size() > maxInstancesInOneResourceForFullAuto) {
+        resourceIdToInstances.put(curResourceId, new HashSet<>(currentInstances));
+        curResourceId++;
+        currentInstances.clear();
+      }
+      currentInstances.addAll(group);
+    }
+    if (currentInstances.size() != 0) {
+      resourceIdToInstances.put(curResourceId, currentInstances);
+    }
+
+    for (; startResourceId <= curResourceId; startResourceId++) {
+      String resourceName = Integer.toString(startResourceId);
+      List<Map.Entry<String, Set<String>>> partitionsUnderResource = resourceIdToInstances.get(startResourceId)
+          .stream()
+          .map(in -> instanceToPartitions.get(in))
+          .filter(Objects::nonNull) // instances in last resource id might not have partitions in this map
+          .flatMap(ps -> ps.stream())
+          .collect(Collectors.toSet())
+          .stream()
+          .map(p -> new AbstractMap.SimpleEntry<>(p, partitionsToInstancesInDc.get(p)))
+          .collect(Collectors.toList());
+      if (startResourceId == maxResource) {
+        if (!partitionsUnderResource.isEmpty()) {
+          // Update ideal state for this resource
+          IdealState idealState = resourceIdToIdealState.get(startResourceId);
+          int sizeBefore = idealState.getPartitionSet().size();
+          updateIdealStatePartitions(idealState, partitionsUnderResource);
+          if (!dryRun) {
+            dcAdmin.setResourceIdealState(clusterName, resourceName, idealState);
+            info("[{}] Update resource {} in datacenter {} from {} partitions to {} partitions", dcName.toUpperCase(),
+                resourceName, dcName, sizeBefore, partitionsUnderResource.size());
+          } else {
+            info("[{}] Under DryRun mode, update resource {} in datacenter {} from {} partitions to {} partitions",
+                dcName.toUpperCase(), resourceName, dcName, sizeBefore, partitionsUnderResource.size());
+          }
+          resourcesUpdated.incrementAndGet();
+        } else {
+          info("[{}] No changes made to resource {}, skip", dcName.toUpperCase(), resourceName);
+        }
+      } else {
+        buildAndCreateIdealState(dcName, resourceName, partitionsUnderResource);
+      }
+    }
+    info("[{}] Successfully added {} partitions to cluster {}", dcName.toUpperCase(), remainingPartition, clusterName);
   }
 
   /**
@@ -1037,6 +1384,9 @@ public class HelixBootstrapUpgradeUtil {
         }
       }
     }
+    info(
+        "[{}] Done adding all instances in {}, now scanning resources in Helix and ensuring instance set for partitions are the same.",
+        dcName.toUpperCase(), dcName);
   }
 
   private List<String> getInstanceNamesInHelix(String dcName, PropertyStoreToDataNodeConfigAdapter adapter) {
@@ -1119,12 +1469,16 @@ public class HelixBootstrapUpgradeUtil {
    * @param partitionsToInstancesInDc a map to be filled with the mapping of partitions to their instance sets in the
    *                                  given datacenter.
    */
-  private void addUpdateResources(String dcName, Map<String, Set<String>> partitionsToInstancesInDc) {
+  private void addUpdateResources(String dcName, Map<String, Set<String>> partitionsToInstancesInDc,
+      boolean resourcesAreFullAutoCompatible) {
     HelixAdmin dcAdmin = adminForDc.get(dcName);
     List<String> resourcesInCluster = dcAdmin.getResourcesInCluster(clusterName);
     List<String> instancesWithDisabledPartition = new ArrayList<>();
     HelixPropertyStore<ZNRecord> helixPropertyStore =
         helixAdminOperation == HelixAdminOperation.DisablePartition ? createHelixPropertyStore(dcName) : null;
+    TreeMap<Integer, Set<String>> resourceIdToInstances = new TreeMap<>();
+    Map<String, Set<Integer>> instanceNameToResources = new HashMap<>();
+    Map<Integer, IdealState> resourceIdToIdealState = new HashMap<>();
     // maxResource may vary from one dc to another (special partition class allows partitions to exist in one dc only)
     int maxResource = -1;
     for (String resourceName : resourcesInCluster) {
@@ -1134,8 +1488,10 @@ public class HelixBootstrapUpgradeUtil {
         // cluster map. These will be ignored.
         continue;
       }
-      maxResource = Math.max(maxResource, Integer.parseInt(resourceName));
+      int resourceId = Integer.parseInt(resourceName);
+      maxResource = Math.max(maxResource, resourceId);
       IdealState resourceIs = dcAdmin.getResourceIdealState(clusterName, resourceName);
+      resourceIdToIdealState.put(resourceId, resourceIs);
       for (String partitionName : new HashSet<>(resourceIs.getPartitionSet())) {
         Set<String> instanceSetInHelix = resourceIs.getInstanceSet(partitionName);
         Set<String> instanceSetInStatic = partitionsToInstancesInDc.remove(partitionName);
@@ -1157,6 +1513,7 @@ public class HelixBootstrapUpgradeUtil {
             partitionsNotForceRemovedByDc.computeIfAbsent(dcName, k -> ConcurrentHashMap.newKeySet())
                 .add(partitionName);
           }
+          resourceIdToInstances.remove(resourceId);
         } else if (!instanceSetInStatic.equals(instanceSetInHelix)) {
           // we change the IdealState only when the operation is meant to bootstrap cluster or indeed update IdealState
           if (EnumSet.of(HelixAdminOperation.UpdateIdealState, HelixAdminOperation.BootstrapCluster)
@@ -1178,6 +1535,9 @@ public class HelixBootstrapUpgradeUtil {
               // not the toString() method for the enum as that is what Helix uses).
               resourceIs.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.name());
             }
+            resourceIdToInstances.computeIfAbsent(resourceId, k -> new HashSet<>()).addAll(instanceSetInStatic);
+            instanceSetInStatic.forEach(
+                ins -> instanceNameToResources.computeIfAbsent(ins, k -> new HashSet<>()).add(resourceId));
             resourceModified = true;
           } else if (helixAdminOperation == HelixAdminOperation.DisablePartition) {
             // if this is DisablePartition operation, we don't modify IdealState and only make InstanceConfig to disable
@@ -1213,6 +1573,10 @@ public class HelixBootstrapUpgradeUtil {
             // will be more than that in static clustermap.
             expectMoreInHelixDuringValidate = true;
           }
+        } else {
+          resourceIdToInstances.computeIfAbsent(resourceId, k -> new HashSet<>()).addAll(instanceSetInStatic);
+          instanceSetInStatic.forEach(
+              ins -> instanceNameToResources.computeIfAbsent(ins, k -> new HashSet<>()).add(resourceId));
         }
       }
       // update state model def if necessary
@@ -1231,11 +1595,11 @@ public class HelixBootstrapUpgradeUtil {
             dcAdmin.dropResource(clusterName, resourceName);
           }
           resourcesDropped.getAndIncrement();
+          resourceIdToIdealState.remove(resourceId);
         } else {
           if (!dryRun) {
             dcAdmin.setResourceIdealState(clusterName, resourceName, resourceIs);
             System.out.println("------------------add resource!");
-            System.out.println(resourceName);
             System.out.println(resourceName);
           }
           resourcesUpdated.getAndIncrement();
@@ -1258,38 +1622,40 @@ public class HelixBootstrapUpgradeUtil {
       helixPropertyStore.stop();
     }
 
-    // Add what is not already in Helix under new resources.
-    int fromIndex = 0;
-    List<Map.Entry<String, Set<String>>> newPartitions = new ArrayList<>(partitionsToInstancesInDc.entrySet());
-    while (fromIndex < newPartitions.size()) {
-      String resourceName = Integer.toString(++maxResource);
-      int toIndex = Math.min(fromIndex + maxPartitionsInOneResource, newPartitions.size());
-      List<Map.Entry<String, Set<String>>> partitionsUnderNextResource = newPartitions.subList(fromIndex, toIndex);
-      fromIndex = toIndex;
-      IdealState idealState = new IdealState(resourceName);
-      idealState.setStateModelDefRef(stateModelDef);
-      info("[{}] Adding partitions for next resource {} in {}. {}.", dcName.toUpperCase(), resourceName, dcName,
-          dryRun ? "Actual IdealState is not changed as dry run" : "IdealState is being updated");
-      for (Map.Entry<String, Set<String>> entry : partitionsUnderNextResource) {
-        String partitionName = entry.getKey();
-        ArrayList<String> instances = new ArrayList<>(entry.getValue());
-        Collections.shuffle(instances);
-        idealState.setPreferenceList(partitionName, instances);
+    // When the cluster is empty and we have maxInstancesInOneResourceForFullAuto greater than 0, we would by default create
+    // resources in FULL_AUTO compatible mode.
+    if (resourcesAreFullAutoCompatible) {
+      // If the resources is FULL_AUTO compatible, then one instance should have partitions under one resource.
+      info(
+          "[{}] Resources are full auto compatible, will create new partitions in resources that are also full auto compatible",
+          dcName.toUpperCase());
+      Map<String, Integer> instanceNameToOneResource = new HashMap<>();
+      for (Map.Entry<String, Set<Integer>> ent : instanceNameToResources.entrySet()) {
+        ensureOrThrow(ent.getValue().size() == 1,
+            "Instance " + ent.getKey() + " has partitions from multiple resources in FULL_AUTO mode: "
+                + ent.getValue());
+        instanceNameToOneResource.put(ent.getKey(), ent.getValue().iterator().next());
       }
-      idealState.setNumPartitions(partitionsUnderNextResource.size());
-      idealState.setReplicas(ResourceConfig.ResourceConfigConstants.ANY_LIVEINSTANCE.name());
-      if (!idealState.isValid()) {
-        throw new IllegalStateException("IdealState could not be validated for new resource " + resourceName);
+      // Partitions that not are in the helix yet, there are two different cases.
+      // The instances this partition is assigned to already in the helix resources, then this partition should go to the same resource.
+      // The instances this partition is assigned to don't yet exist in helix resources, then this partition could go to a new resource.
+      updateIdealStateWithNewPartitionsForFullAuto(dcName, partitionsToInstancesInDc, instanceNameToOneResource,
+          resourceIdToInstances, resourceIdToIdealState);
+      if (!partitionsToInstancesInDc.isEmpty()) {
+        createOrUpdateIdealStateForFullAuto(dcName, partitionsToInstancesInDc, resourceIdToInstances,
+            resourceIdToIdealState);
       }
-      if (!dryRun) {
-        dcAdmin.addResource(clusterName, resourceName, idealState);
-        info("[{}] Added {} new partitions under resource {} in datacenter {}", dcName.toUpperCase(),
-            partitionsUnderNextResource.size(), resourceName, dcName);
-      } else {
-        info("[{}] Under DryRun mode, {} new partitions are added to resource {} in datacenter {}",
-            dcName.toUpperCase(), partitionsUnderNextResource.size(), resourceName, dcName);
+    } else {
+      // Add what is not already in Helix under new resources.
+      int fromIndex = 0;
+      List<Map.Entry<String, Set<String>>> newPartitions = new ArrayList<>(partitionsToInstancesInDc.entrySet());
+      while (fromIndex < newPartitions.size()) {
+        String resourceName = Integer.toString(++maxResource);
+        int toIndex = Math.min(fromIndex + maxPartitionsInOneResource, newPartitions.size());
+        List<Map.Entry<String, Set<String>>> partitionsUnderNextResource = newPartitions.subList(fromIndex, toIndex);
+        fromIndex = toIndex;
+        buildAndCreateIdealState(dcName, resourceName, partitionsUnderNextResource);
       }
-      resourcesAdded.getAndIncrement();
     }
   }
 
@@ -1659,6 +2025,7 @@ public class HelixBootstrapUpgradeUtil {
         try {
           verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
           verifyDataNodeAndDiskEquivalencyInDc(dc, clusterName, partitionLayout);
+          maybeVerifyResourcesAreFullAutoCompatible(dc, clusterName);
         } catch (Throwable t) {
           logger.error("[{}] error message: {}", dc.getName().toUpperCase(), t.getMessage());
           errorCount.getAndIncrement();
@@ -1698,7 +2065,8 @@ public class HelixBootstrapUpgradeUtil {
         DataNode dataNode = (DataNode) dataNodeId;
         String instanceName = getInstanceName(dataNode);
         ensureOrThrow(allInstancesInHelix.remove(instanceName), "Instance not present in Helix " + instanceName);
-        DataNodeConfig dataNodeConfig = getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
+        DataNodeConfig dataNodeConfig =
+            getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreAdapter, instanceConfigConverter);
 
         Map<String, DataNodeConfig.DiskConfig> diskInfos = new HashMap<>(dataNodeConfig.getDiskConfigs());
         for (Disk disk : dataNode.getDisks()) {
@@ -1774,6 +2142,90 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   /**
+   * If the resources are reconstructed to be FULL_AUTO compatible, then make sure that each instance only has partitions
+   * from one resource.
+   * @param dc the datacenter whose information is to be verified.
+   * @param clusterName the cluster to be verified.
+   */
+  private boolean maybeVerifyResourcesAreFullAutoCompatible(Datacenter dc, String clusterName) {
+    String dcName = dc.getName();
+    HelixAdmin admin = adminForDc.get(dc.getName());
+    List<String> resourceNames = admin.getResourcesInCluster(clusterName);
+    if (resourceNames == null || resourceNames.isEmpty()) {
+      info(
+          "[{}] There is no resource found for this cluster {}, max instance in one resource is {}, resource should {} be full auto compatible",
+          dcName.toUpperCase(), clusterName, maxInstancesInOneResourceForFullAuto,
+          maxInstancesInOneResourceForFullAuto > 0 ? "" : "NOT");
+      return maxInstancesInOneResourceForFullAuto > 0;
+    }
+    boolean allResourceFullAutoCompatible = resourceNames.stream()
+        .filter(rn -> rn.matches("\\d+"))
+        .mapToInt(Integer::parseInt)
+        .allMatch(i -> i >= FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER);
+    boolean allResourceNotFullAutoCompatible = resourceNames.stream()
+        .filter(rn -> rn.matches("\\d+"))
+        .mapToInt(Integer::parseInt)
+        .allMatch(i -> i < FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER);
+    ensureOrThrow(allResourceFullAutoCompatible || allResourceNotFullAutoCompatible,
+        "Resource has to be all greater than " + FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER
+            + " or all less than it");
+    if (!allResourceFullAutoCompatible) {
+      info("[{}] Resources are not FULL_AUTO compatible in cluster {}", dcName.toUpperCase(), clusterName);
+      return false;
+    }
+    if (maxInstancesInOneResourceForFullAuto <= 0) {
+      warning("****************************************");
+      warning(
+          "[{}] Cluster {} is in FULL_AUTO compatible mode, but max instances in one resource [{}] is not a valid number for FULL_AUTO",
+          dcName.toUpperCase(), clusterName, maxInstancesInOneResourceForFullAuto);
+      warning("Will not verify resources");
+      return false;
+    }
+    SortedMap<Integer, Set<String>> resourceNameToInstances = new TreeMap<>();
+    Map<String, Set<Integer>> instanceNameToResources = new HashMap<>();
+    for (String resourceName : admin.getResourcesInCluster(clusterName)) {
+      if (!resourceName.matches("\\d+")) {
+        info("[{}] Ignoring resource {} as it is not part of the cluster map", dcName.toUpperCase(), resourceName);
+        continue;
+      }
+      Integer resourceId = Integer.parseInt(resourceName);
+      resourceNameToInstances.put(resourceId, new HashSet<>());
+      IdealState resourceIS = admin.getResourceIdealState(clusterName, resourceName);
+      Set<String> resourcePartitions = resourceIS.getPartitionSet();
+      for (String resourcePartition : resourcePartitions) {
+        Set<String> partitionInstanceSet = resourceIS.getInstanceSet(resourcePartition);
+        partitionInstanceSet.forEach(
+            in -> instanceNameToResources.computeIfAbsent(in, k -> new HashSet<>()).add(resourceId));
+        resourceNameToInstances.get(resourceId).addAll(partitionInstanceSet);
+      }
+    }
+    // Now verify
+    // 1. all instances should only have one resource
+    // 2. all resources except the last one, should have same numbers of instances.
+    for (Map.Entry<String, Set<Integer>> ent : instanceNameToResources.entrySet()) {
+      ensureOrThrow(ent.getValue().size() == 1,
+          "Instances " + ent.getKey() + " has more than one resources, it's not FULL_AUTO compatible:"
+              + ent.getValue());
+    }
+    Integer lastResourceId = resourceNameToInstances.lastKey();
+    for (Map.Entry<Integer, Set<String>> ent : resourceNameToInstances.entrySet()) {
+      if (ent.getKey().equals(lastResourceId)) {
+        ensureOrThrow(maxInstancesInOneResourceForFullAuto >= ent.getValue().size(),
+            "Resource " + ent.getKey() + " has " + ent.getValue().size()
+                + " instances, but we are expecting less than or equal to " + maxInstancesInOneResourceForFullAuto
+                + ": " + ent.getValue());
+      } else {
+        ensureOrThrow(maxInstancesInOneResourceForFullAuto == ent.getValue().size(),
+            "Resource " + ent.getKey() + " has " + ent.getValue().size() + " instances, but we are expecting "
+                + maxInstancesInOneResourceForFullAuto + ": " + ent.getValue());
+      }
+    }
+    info("[{}] Successfully verified resources are FULL_AUTO compatible for cluster {}", dcName.toUpperCase(),
+        clusterName);
+    return true;
+  }
+
+  /**
    * Verify that the partition layout information is in sync.
    * @param dc the datacenter whose information is to be verified.
    * @param clusterName the cluster to be verified.
@@ -1793,6 +2245,8 @@ public class HelixBootstrapUpgradeUtil {
       ensureOrThrow(resourceIS.getStateModelDefRef().equals(stateModelDef),
           "[" + dcName.toUpperCase() + "] StateModel name mismatch for resource " + resourceName);
       Set<String> resourcePartitions = resourceIS.getPartitionSet();
+      info("[{}] resource {} has {} partitions in cluster {}", dcName.toUpperCase(), resourceName,
+          resourcePartitions.size(), clusterName);
       for (String resourcePartition : resourcePartitions) {
         Set<String> partitionInstanceSet = resourceIS.getInstanceSet(resourcePartition);
         ensureOrThrow(allPartitionsToInstancesInHelix.put(resourcePartition, partitionInstanceSet) == null,
@@ -1900,12 +2354,21 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   /**
+   * Log in WARN mode
+   * @param format format
+   * @param arguments arguments
+   */
+  private static void warning(String format, Object... arguments) {
+    logger.warn(format, arguments);
+  }
+
+  /**
    * Log the summary of this run.
    */
   private void logSummary() {
-    if (instancesUpdated.get() + instancesAdded.get() + instancesDropped.get() + resourcesUpdated.get() + resourcesAdded
-        .get() + resourcesDropped.get() + partitionsDisabled.get() + partitionsEnabled.get() + partitionsReset.get()
-        > 0) {
+    if (instancesUpdated.get() + instancesAdded.get() + instancesDropped.get() + resourcesUpdated.get()
+        + resourcesAdded.get() + resourcesDropped.get() + partitionsDisabled.get() + partitionsEnabled.get()
+        + partitionsReset.get() > 0) {
       if (!dryRun) {
         info("========Cluster in Helix was updated, summary:========");
       } else {

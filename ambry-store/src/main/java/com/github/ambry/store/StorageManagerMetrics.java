@@ -36,7 +36,6 @@ public class StorageManagerMetrics {
   public final Counter totalStoreShutdownFailures;
   public final Counter diskMountPathFailures;
   public final Counter diskDownCount;
-  public final Counter unexpectedDirsOnDisk;
   public final Counter resumeDecommissionErrorCount;
 
   // DiskSpaceAllocator related metrics
@@ -58,6 +57,7 @@ public class StorageManagerMetrics {
 
   // A map from mount path to a set of blob store to skip in compactions (error state)
   private final Map<String, Set<BlobStore>> mountPathToStoreSetToSkipInCompactions = new ConcurrentHashMap<>();
+  private final Map<String, Integer> mountPathToNumberOfUnexpectedDirs = new ConcurrentHashMap<>();
 
   /**
    * Create a {@link StorageManagerMetrics} object for handling metrics related to the stores on a node.
@@ -77,7 +77,6 @@ public class StorageManagerMetrics {
     totalStoreShutdownFailures = registry.counter(MetricRegistry.name(DiskManager.class, "TotalStoreShutdownFailures"));
     diskMountPathFailures = registry.counter(MetricRegistry.name(DiskManager.class, "DiskMountPathFailures"));
     diskDownCount = registry.counter(MetricRegistry.name(DiskManager.class, "DiskDownCount"));
-    unexpectedDirsOnDisk = registry.counter(MetricRegistry.name(DiskManager.class, "UnexpectedDirsOnDisk"));
 
     diskSpaceAllocatorStartTimeMs =
         registry.histogram(MetricRegistry.name(DiskSpaceAllocator.class, "DiskSpaceAllocatorStartTimeMs"));
@@ -108,6 +107,10 @@ public class StorageManagerMetrics {
         () -> mountPathToStoreSetToSkipInCompactions.values().stream().mapToLong(Set::size).sum();
     registry.gauge(MetricRegistry.name(CompactionManager.class, "CompactionNumberOfStoresToSkip"),
         () -> storeToSkipGauge);
+
+    Gauge<Integer> unexpectedDirGauge =
+        () -> mountPathToNumberOfUnexpectedDirs.values().stream().mapToInt(v -> v).sum();
+    registry.gauge(MetricRegistry.name(DiskManager.class, "UnexpectedDirsOnDisk"), () -> unexpectedDirGauge);
   }
 
   /**
@@ -129,6 +132,15 @@ public class StorageManagerMetrics {
    */
   void registerStoreSetToSkipInCompactionForMountPath(String mountPath, Set<BlobStore> stores) {
     mountPathToStoreSetToSkipInCompactions.put(mountPath, stores);
+  }
+
+  /**
+   * Register number of unexpected directories with the given mount path.
+   * @param mountPath The mount path
+   * @param numberOfUnexpectedDir The number of unexpected directories
+   */
+  void registerUnexpectedDirsForMountPath(String mountPath, int numberOfUnexpectedDir) {
+    mountPathToNumberOfUnexpectedDirs.put(mountPath, numberOfUnexpectedDir);
   }
 
   /**

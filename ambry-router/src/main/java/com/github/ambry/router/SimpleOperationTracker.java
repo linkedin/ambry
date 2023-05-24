@@ -239,9 +239,7 @@ class SimpleOperationTracker implements OperationTracker {
         crossColoEnabled = true;
         eligibleReplicas =
             getEligibleReplicas(null, EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER));
-        // Undelete operation need to get global quorum. It will require a different criteria for success.
-        // Here set the success target to the number of eligible replicas.
-        replicaSuccessTarget = eligibleReplicas.size();
+        replicaSuccessTarget = routerConfig.routerUndeleteSuccessTarget;
         break;
       case ReplicateBlobOperation:
         // Replicate one blob. Unlike PutBlob, crossColoEnabled is true.

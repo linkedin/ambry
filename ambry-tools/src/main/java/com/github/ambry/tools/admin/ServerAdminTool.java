@@ -47,6 +47,7 @@ import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminResponse;
+import com.github.ambry.protocol.ForceDeleteAdminRequest;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
@@ -109,6 +110,7 @@ public class ServerAdminTool implements Closeable {
     GetUserMetadata,
     GetBlob,
     BlobIndex,
+    ForceDelete,
     TriggerCompaction,
     RequestControl,
     ReplicationControl,
@@ -123,8 +125,8 @@ public class ServerAdminTool implements Closeable {
 
     /**
      * The type of operation.
-     * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,BlobIndex,TriggerCompaction,RequestControl,ReplicationControl,
-     * CatchupStatus,BlobStoreControl
+     * Operations are: GetBlobProperties,GetUserMetadata,GetBlob,BlobIndex,ForceDelete,TriggerCompaction,RequestControl,
+     * ReplicationControl,CatchupStatus,BlobStoreControl
      */
     @Config("type.of.operation")
     final Operation typeOfOperation;
@@ -166,6 +168,14 @@ public class ServerAdminTool implements Closeable {
     @Config("blob.id")
     @Default("")
     final String blobId;
+
+    /**
+     * life version of the Blob
+     * Applicable for: ForceDelete
+     */
+    @Config("life.version")
+    @Default("0")
+    final short lifeVersion;
 
     /**
      * The get option to use to do the get operation (if applicable)
@@ -249,6 +259,7 @@ public class ServerAdminTool implements Closeable {
       hostname = verifiableProperties.getString("hostname", "localhost");
       port = verifiableProperties.getIntInRange("port", 6667, 1, 65535);
       blobId = verifiableProperties.getString("blob.id", "");
+      lifeVersion = verifiableProperties.getShortInRange("life.version", (short) 0, (short) 0, (short) 100);
       getOption = GetOption.valueOf(verifiableProperties.getString("get.option", "None"));
       partitionIds = verifiableProperties.getString("partition.ids", "").split(",");
       requestTypeToControl =
@@ -342,11 +353,22 @@ public class ServerAdminTool implements Closeable {
               biResponse.getFirst());
         }
         break;
+      case ForceDelete:
+        blobId = new BlobId(config.blobId, clusterMap);
+        short lifeVersion = config.lifeVersion;
+        ServerErrorCode errorCode = serverAdminTool.forceDeleteBlob(dataNodeId, blobId, lifeVersion);
+        if (errorCode == ServerErrorCode.No_Error) {
+          LOGGER.info("Force delete {} {} from {} is successful.", blobId, lifeVersion, dataNodeId);
+        } else {
+          LOGGER.error("Failed to run force delete {} {} from {}. Error code is {}", blobId, lifeVersion, dataNodeId,
+              errorCode);
+        }
+        break;
       case TriggerCompaction:
         if (config.partitionIds.length > 0 && !config.partitionIds[0].isEmpty()) {
           for (String partitionIdStr : config.partitionIds) {
             PartitionId partitionId = getPartitionIdFromStr(partitionIdStr, clusterMap);
-            ServerErrorCode errorCode = serverAdminTool.triggerCompaction(dataNodeId, partitionId);
+            errorCode = serverAdminTool.triggerCompaction(dataNodeId, partitionId);
             if (errorCode == ServerErrorCode.No_Error) {
               LOGGER.info("Compaction has been triggered for {} on {}", partitionId, dataNodeId);
             } else {
@@ -681,6 +703,24 @@ public class ServerAdminTool implements Closeable {
       content = new String(adminResponse.getContent());
     }
     return new Pair<>(errorCode, content);
+  }
+
+  /**
+   * Force Delete a not existing blob.
+   * @param dataNodeId the {@link DataNodeId} to contact.
+   * @param blobId the {@link BlobId} to create tombstone.
+   * @param lifeVersion life version of the blob.
+   * @return the {@link ServerErrorCode}
+   * @throws Exception
+   */
+  public ServerErrorCode forceDeleteBlob(DataNodeId dataNodeId, BlobId blobId, short lifeVersion) throws Exception {
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.ForceDelete, null, correlationId.incrementAndGet(), CLIENT_ID);
+    ForceDeleteAdminRequest forceDeleteAdminRequest = new ForceDeleteAdminRequest(blobId, lifeVersion, adminRequest);
+    ResponseInfo response = sendRequestGetResponse(dataNodeId, blobId.getPartition(), forceDeleteAdminRequest);
+    AdminResponse adminResponse = AdminResponse.readFrom(new NettyByteBufDataInputStream(response.content()));
+    response.release();
+    return adminResponse.getError();
   }
 
   /**

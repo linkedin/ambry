@@ -24,6 +24,7 @@ import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -37,6 +38,9 @@ import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.lock.LockScope;
+import org.apache.helix.lock.helix.HelixLockScope;
+import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.store.HelixPropertyStore;
@@ -303,6 +307,41 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public boolean supportsStateChanges() {
     return true;
+  }
+
+  @Override
+  public DistributedLock getDistributedLock(String resource, String message) {
+    LockScope distributedLockScope =
+        new HelixLockScope(HelixLockScope.LockScopeProperty.RESOURCE, Arrays.asList(clusterName, resource));
+    ZKDistributedNonblockingLock lock = new ZKDistributedNonblockingLock(distributedLockScope, zkConnectStr,
+        clusterMapConfig.clustermapDistributedLockLeaseTimeoutInMs, message, clusterMapConfig.clusterMapHostName);
+    return new DistributedLockImpl(lock);
+  }
+
+  /**
+   * A zookeeper based implementation for distributed lock.
+   */
+  static class DistributedLockImpl implements DistributedLock {
+    private final ZKDistributedNonblockingLock lock;
+
+    DistributedLockImpl(ZKDistributedNonblockingLock lock) {
+      this.lock = lock;
+    }
+
+    @Override
+    public boolean tryLock() {
+      return lock.tryLock();
+    }
+
+    @Override
+    public void unlock() {
+      lock.unlock();
+    }
+
+    @Override
+    public void close() {
+      lock.close();
+    }
   }
 
   /**

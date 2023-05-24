@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
 public class MySqlAccountServiceFactory implements AccountServiceFactory {
   private static final Logger logger = LoggerFactory.getLogger(MySqlAccountServiceFactory.class);
   protected final MySqlAccountServiceConfig accountServiceConfig;
-  protected final AccountServiceMetrics accountServiceMetrics;
+  protected final AccountServiceMetricsWrapper accountServiceMetricsWrapper;
   protected final MySqlAccountStoreFactory mySqlAccountStoreFactory;
   protected final Notifier<String> notifier;
 
@@ -43,7 +43,7 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
    */
   public MySqlAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this.accountServiceConfig = new MySqlAccountServiceConfig(verifiableProperties);
-    this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
+    this.accountServiceMetricsWrapper = new AccountServiceMetricsWrapper(metricRegistry);
     this.mySqlAccountStoreFactory = new MySqlAccountStoreFactory(verifiableProperties, metricRegistry);
     this.notifier = accountServiceConfig.zkClientConnectString != null ? new HelixNotifier(
         accountServiceConfig.zkClientConnectString, new HelixPropertyStoreConfig(verifiableProperties)) : null;
@@ -55,10 +55,10 @@ public class MySqlAccountServiceFactory implements AccountServiceFactory {
       long startTimeMs = System.currentTimeMillis();
       logger.info("Starting a MySqlAccountService");
       MySqlAccountService mySqlAccountService =
-          new MySqlAccountService(accountServiceMetrics, accountServiceConfig, mySqlAccountStoreFactory, notifier);
+          new MySqlAccountService(accountServiceMetricsWrapper, accountServiceConfig, mySqlAccountStoreFactory, notifier);
       long spentTimeMs = System.currentTimeMillis() - startTimeMs;
       logger.info("MySqlAccountService started, took {} ms", spentTimeMs);
-      accountServiceMetrics.startupTimeInMs.update(spentTimeMs);
+      accountServiceMetricsWrapper.getAccountServiceMetrics().startupTimeInMs.update(spentTimeMs);
       return mySqlAccountService;
     } catch (Exception e) {
       throw new IllegalStateException("Could not instantiate MySqlAccountService", e);

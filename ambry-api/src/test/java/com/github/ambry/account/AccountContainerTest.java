@@ -91,7 +91,7 @@ public class AccountContainerTest {
   private List<Dataset> refDatasets;
   private List<String> refDatasetNames;
   private List<Dataset.VersionSchema> refDatasetVersionSchemas;
-  private List<Long> refDatasetExpirationTimeMs;
+  private List<Long> refDatasetRetentionTimeInSeconds;
   private List<Integer> refDatasetRetentionCounts;
   private List<Map<String, String>> refDatasetUserTags;
 
@@ -309,7 +309,7 @@ public class AccountContainerTest {
       Dataset datasetFromBuilder = buildDatasetWithOtherFields(
           new DatasetBuilder(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i))
               .setVersionSchema(refDatasetVersionSchemas.get(i))
-              .setExpirationTimeMs(refDatasetExpirationTimeMs.get(i))
+              .setRetentionTimeInSeconds(refDatasetRetentionTimeInSeconds.get(i))
               .setRetentionCount(refDatasetRetentionCounts.get(i))
               .setUserTags(refDatasetUserTags.get(i)), refDatasets.get(i));
       assertDataset(datasetFromBuilder, i);
@@ -828,7 +828,6 @@ public class AccountContainerTest {
     return builder.setAccountName(dataset.getAccountName())
         .setContainerName(dataset.getContainerName())
         .setVersionSchema(dataset.getVersionSchema())
-        .setExpirationTimeMs(dataset.getExpirationTimeMs())
         .build();
   }
 
@@ -842,8 +841,8 @@ public class AccountContainerTest {
     assertEquals("Wrong container name", refContainers.get(0).getName(), dataset.getContainerName());
     assertEquals("Wrong dataset name", refDatasetNames.get(index), dataset.getDatasetName());
     assertEquals("Wrong version schema", refDatasetVersionSchemas.get(index), dataset.getVersionSchema());
-    assertEquals("Wrong expiration time", refDatasetExpirationTimeMs.get(index), dataset.getExpirationTimeMs());
     assertEquals("Wrong retention count", refDatasetRetentionCounts.get(index), dataset.getRetentionCount());
+    assertEquals("Wrong retention time", refDatasetRetentionTimeInSeconds.get(index), dataset.getRetentionTimeInSeconds());
     assertEquals("Wrong user tage", refDatasetUserTags.get(index), dataset.getUserTags());
   }
 
@@ -971,9 +970,24 @@ public class AccountContainerTest {
       boolean previouslyEncrypted, Class<? extends Exception> exceptionClass) throws Exception {
     TestUtils.assertException(exceptionClass, () -> {
       new Container((short) 0, name, status, "description", encrypted, previouslyEncrypted, false, false, null, false,
-          false, Collections.emptySet(), false, false, NamedBlobMode.DISABLED, (short) 0, System.currentTimeMillis(),
+          false, Collections.emptySet(), false, false, getRandomNamedBlobMode(), (short) 0, System.currentTimeMillis(),
           System.currentTimeMillis(), 0, null, null, null);
     }, null);
+  }
+
+  /**
+   * Randomly generate a named blob mode
+   */
+
+  private NamedBlobMode getRandomNamedBlobMode() {
+    int randInt = random.nextInt(3);
+    if (randInt == 0) {
+      return NamedBlobMode.DISABLED;
+    } else if (randInt == 1) {
+      return NamedBlobMode.OPTIONAL;
+    } else {
+      return NamedBlobMode.NO_UPDATE;
+    }
   }
 
   /**
@@ -1030,7 +1044,7 @@ public class AccountContainerTest {
       refContainerTtlRequiredValues.add(random.nextBoolean());
       refContainerSignedPathRequiredValues.add(random.nextBoolean());
       refContainerOverrideAccountAcls.add(random.nextBoolean());
-      refContainerNamedBlobModes.add(random.nextBoolean() ? NamedBlobMode.DISABLED : NamedBlobMode.OPTIONAL);
+      refContainerNamedBlobModes.add(getRandomNamedBlobMode());
       refContainerDeleteTriggerTime.add((long) 0);
       if (i == 0) {
         refContainerContentTypeAllowListForFilenamesOnDownloadValues.add(null);
@@ -1073,7 +1087,7 @@ public class AccountContainerTest {
   private void initializeRefDatasets() {
     refDatasetNames = new ArrayList<>();
     refDatasetVersionSchemas = new ArrayList<>();
-    refDatasetExpirationTimeMs = new ArrayList<>();
+    refDatasetRetentionTimeInSeconds = new ArrayList<>();
     refDatasetRetentionCounts = new ArrayList<>();
     refDatasetUserTags = new ArrayList<>();
     refDatasets = new ArrayList<>();
@@ -1083,15 +1097,15 @@ public class AccountContainerTest {
       refDatasetNames.add(datasetName);
       refDatasetVersionSchemas.add(
           random.nextBoolean() ? Dataset.VersionSchema.MONOTONIC : Dataset.VersionSchema.TIMESTAMP);
-      long expirationTimeMs = random.nextBoolean() ? -1 : Utils.getRandomLong(random, Long.MAX_VALUE);
-      refDatasetExpirationTimeMs.add(expirationTimeMs);
+      long retentionTimeInSeconds = random.nextBoolean() ? -1 : Utils.getRandomLong(random, Long.MAX_VALUE);
+      refDatasetRetentionTimeInSeconds.add(retentionTimeInSeconds);
       int retentionCount = Utils.getRandomShort(random);
       refDatasetRetentionCounts.add(retentionCount);
       Map<String, String> userTags = new HashMap<>();
       userTags.put(UUID.randomUUID().toString(), UUID.randomUUID().toString());
       refDatasetUserTags.add(userTags);
       refDatasets.add(new Dataset(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i),
-          refDatasetVersionSchemas.get(i), refDatasetExpirationTimeMs.get(i), refDatasetRetentionCounts.get(i),
+          refDatasetVersionSchemas.get(i), refDatasetRetentionCounts.get(i), refDatasetRetentionTimeInSeconds.get(i),
           refDatasetUserTags.get(i)));
     }
   }

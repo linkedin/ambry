@@ -280,6 +280,7 @@ project(':ambry-clustermap') {
                 project(':ambry-commons'),
                 project(':ambry-utils')
         compile "org.apache.helix:helix-core:$helixVersion"
+        compile "org.apache.helix:helix-lock:$helixVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-commons')
@@ -384,10 +385,11 @@ project(':ambry-tools') {
                 project(':ambry-server'),
                 project(':ambry-rest'),
                 project(':ambry-frontend'),
-                project(':ambry-cloud')
+                project(':ambry-cloud'),
+                project(':ambry-named-mysql'),
+                project(':ambry-test-utils')
         compile "io.dropwizard.metrics:metrics-jmx:$metricsVersion"
         compile "net.sf.jopt-simple:jopt-simple:$joptSimpleVersion"
-        testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile project(path: ':ambry-account', configuration: 'testArchives')
         testCompile project(path: ':ambry-store', configuration: 'testArchives')

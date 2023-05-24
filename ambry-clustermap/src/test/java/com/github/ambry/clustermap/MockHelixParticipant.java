@@ -186,6 +186,12 @@ public class MockHelixParticipant extends HelixParticipant {
     super.setPartitionDisabledState(partitionName, disable);
   }
 
+  // Override this method so we don't rely on the HelixParticipant to create a distributed lock.
+  @Override
+  public DistributedLock getDistributedLock(String resource, String message) {
+    return new DistributedLockLocalImpl();
+  }
+
   /**
    * @return the {@link HelixParticipantMetrics} associated with this participant.
    */

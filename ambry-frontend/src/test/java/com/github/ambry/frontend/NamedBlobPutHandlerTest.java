@@ -20,10 +20,12 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.account.DatasetBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
+import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -76,6 +78,7 @@ public class NamedBlobPutHandlerTest {
   private static final Account REF_ACCOUNT;
   private static final Container REF_CONTAINER;
   private static final Container REF_CONTAINER_WITH_TTL_REQUIRED;
+  private static final Container REF_CONTAINER_NO_UPDATE;
   private static final ClusterMap CLUSTER_MAP;
 
   private static final int TIMEOUT_SECS = 10;
@@ -87,6 +90,8 @@ public class NamedBlobPutHandlerTest {
   private static final String NAMED_BLOB_PREFIX = "/named";
   private static final String SLASH = "/";
   private static final String BLOBNAME = "ambry_blob_name";
+  private static final String DATASET_NAME = "testDataset";
+  private static final String VERSION = "1";
 
   private final NamedBlobDb namedBlobDb;
 
@@ -99,8 +104,20 @@ public class NamedBlobPutHandlerTest {
       Account newAccount = new AccountBuilder(account).addOrUpdateContainer(ttlRequiredContainer).build();
       ACCOUNT_SERVICE.updateAccounts(Collections.singleton(newAccount));
       REF_ACCOUNT = ACCOUNT_SERVICE.getAccountById(newAccount.getId());
+      REF_CONTAINER_NO_UPDATE = new ContainerBuilder((short) 11, "noUpdate", Container.ContainerStatus.ACTIVE, "",
+              REF_ACCOUNT.getId()).setNamedBlobMode(Container.NamedBlobMode.NO_UPDATE).build();
+      ACCOUNT_SERVICE.updateContainers(REF_ACCOUNT.getName(), Arrays.asList(REF_CONTAINER_NO_UPDATE));
       REF_CONTAINER = REF_ACCOUNT.getContainerById(Container.DEFAULT_PRIVATE_CONTAINER_ID);
       REF_CONTAINER_WITH_TTL_REQUIRED = REF_ACCOUNT.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+      ACCOUNT_SERVICE.addDataset(
+          new DatasetBuilder(REF_ACCOUNT.getName(), REF_CONTAINER.getName(), DATASET_NAME).setRetentionTimeInSeconds(-1)
+              .build());
+      ACCOUNT_SERVICE.addDataset(new DatasetBuilder(REF_ACCOUNT.getName(), REF_CONTAINER_WITH_TTL_REQUIRED.getName(),
+          DATASET_NAME).setRetentionTimeInSeconds(-1).build());
+      ACCOUNT_SERVICE.addDatasetVersion(REF_ACCOUNT.getName(), REF_CONTAINER.getName(), DATASET_NAME, VERSION, -1,
+          System.currentTimeMillis(), false);
+      ACCOUNT_SERVICE.addDatasetVersion(REF_ACCOUNT.getName(), REF_CONTAINER_WITH_TTL_REQUIRED.getName(), DATASET_NAME,
+          VERSION, -1, System.currentTimeMillis(), false);
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -116,11 +133,14 @@ public class NamedBlobPutHandlerTest {
   private FrontendConfig frontendConfig;
   private NamedBlobPutHandler namedBlobPutHandler;
   private final String request_path;
+  private final String request_noupdate_path;
+  private final String dataset_version_request_path;
 
   public NamedBlobPutHandlerTest() throws Exception {
     idConverterFactory = new FrontendTestIdConverterFactory();
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     Properties props = new Properties();
+    CommonTestUtils.populateRequiredRouterProps(props);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
@@ -129,10 +149,62 @@ public class NamedBlobPutHandlerTest {
     idSigningService = new AmbryIdSigningService();
     request_path =
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + BLOBNAME;
+    request_noupdate_path = NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER_NO_UPDATE.getName() + SLASH + BLOBNAME;
+    dataset_version_request_path =
+        NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + DATASET_NAME
+            + SLASH + VERSION;
     NamedBlobDbFactory namedBlobDbFactory =
         new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     initNamedBlobPutHandler(props);
+  }
+
+  /**
+   * Allow non-upsert put for container with NamedBlobMode = NO_UPDATE
+   */
+  @Test
+  public void updateNamedBlobAllowedTest() throws Exception {
+    idConverterFactory.returnInputIfTranslationNull = true;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+        CONTENT_TYPE, OWNER_ID, null, REF_CONTAINER_NO_UPDATE.getName(), null);
+    headers.put(RestUtils.Headers.NAMED_UPSERT, false);
+    byte[] content = TestUtils.getRandomBytes(1024);
+    RestRequest request = getRestRequest(headers, request_noupdate_path, content);
+
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> future = new FutureResult<>();
+    namedBlobPutHandler.handle(request, restResponseChannel, future::done);
+
+    future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+    assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
+        restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+    InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
+    assertEquals("Unexpected blob content stored", ByteBuffer.wrap(content), blob.getBlob());
+    assertEquals("Unexpected TTL in blob", TestUtils.TTL_SECS, blob.getBlobProperties().getTimeToLiveInSeconds());
+    assertEquals("Unexpected TTL in named blob DB", TestUtils.TTL_SECS,
+        idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
+    assertEquals("Unexpected response status", restResponseChannel.getStatus(), ResponseStatus.Ok);
+  }
+
+  /**
+   * Do NOT allow upsert for container with NamedBlobMode = NO_UPDATE
+   */
+  @Test
+  public void updateNamedBlobNotAllowedTest() throws Exception {
+    idConverterFactory.returnInputIfTranslationNull = true;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+        CONTENT_TYPE, OWNER_ID, null, REF_CONTAINER_NO_UPDATE.getName(), null);
+    headers.put(RestUtils.Headers.NAMED_UPSERT, true);
+    byte[] content = TestUtils.getRandomBytes(1024);
+    RestRequest request = getRestRequest(headers, request_noupdate_path, content);
+
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> future = new FutureResult<>();
+    namedBlobPutHandler.handle(request, restResponseChannel, future::done);
+    TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
+        restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
   }
 
   /**
@@ -179,6 +251,27 @@ public class NamedBlobPutHandlerTest {
     doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired - 1, true);
     doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired, true);
     doTtlRequiredEnforcementTest(REF_CONTAINER, frontendConfig.maxAcceptableTtlSecsIfTtlRequired + 1, false);
+  }
+
+  /**
+   * Test flows related to the stitch dataset version operation.
+   * @throws Exception
+   */
+  @Test
+  public void stitchDatasetVersionTest() throws Exception {
+    idConverterFactory.translation = CONVERTED_ID;
+    String uploadSession = UUID.randomUUID().toString();
+    long creationTimeMs = System.currentTimeMillis();
+    String[] prefixToTest = new String[]{"/" + CLUSTER_NAME, ""};
+    for (String prefix : prefixToTest) {
+
+      // multiple chunks
+      List<ChunkInfo> chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 10, 200, 19, 0, 50);
+      List<String> signedChunkIds = chunksToStitch.stream()
+          .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
+          .collect(Collectors.toList());
+      stitchDatasetVersionAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch);
+    }
   }
 
   /**
@@ -242,7 +335,7 @@ public class NamedBlobPutHandlerTest {
           restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
       // invalid blob ID
       stitchBlobAndVerify(
-          getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1), uploadSession))),
+          getStitchRequestBody(Collections.singletonList(getSignedId(new ChunkInfo("abcd", 200, -1, null), uploadSession))),
           null, restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
       // unsigned ID
       stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("/notASignedId")), null,
@@ -325,6 +418,46 @@ public class NamedBlobPutHandlerTest {
           restResponseChannel.getHeader(RestUtils.Headers.NON_COMPLIANCE_WARNING));
     } else {
       assertNull("There should be no warning", restResponseChannel.getHeader(RestUtils.Headers.NON_COMPLIANCE_WARNING));
+    }
+  }
+
+  /**
+   * Make a stitch call using {@link NamedBlobPutHandler} and verify the result of the operation.
+   * @param requestBody the body of the stitch request to supply.
+   * @param expectedStitchedChunks the expected chunks stitched together.
+   * @throws Exception
+   */
+  private void stitchDatasetVersionAndVerify(byte[] requestBody, List<ChunkInfo> expectedStitchedChunks)
+      throws Exception {
+    for (long ttl : new long[]{TestUtils.TTL_SECS, Utils.Infinite_Time}) {
+      JSONObject headers = new JSONObject();
+      FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, ttl, !REF_CONTAINER.isCacheable(), SERVICE_ID,
+          CONTENT_TYPE, OWNER_ID, null, null, null);
+      headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+      headers.put(RestUtils.Headers.UPLOAD_NAMED_BLOB_MODE, "STITCH");
+      RestRequest request = getRestRequest(headers, dataset_version_request_path, requestBody);
+      RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+      FutureResult<Void> future = new FutureResult<>();
+      idConverterFactory.lastInput = null;
+      idConverterFactory.lastBlobInfo = null;
+      idConverterFactory.lastConvertedId = null;
+      namedBlobPutHandler.handle(request, restResponseChannel, future::done);
+      future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
+      assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
+          restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+      InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
+      assertEquals("List of chunks stitched does not match expected", expectedStitchedChunks, blob.getStitchedChunks());
+      ByteArrayOutputStream expectedContent = new ByteArrayOutputStream();
+      expectedStitchedChunks.stream()
+          .map(chunkInfo -> router.getActiveBlobs().get(chunkInfo.getBlobId()).getBlob().array())
+          .forEach(buf -> expectedContent.write(buf, 0, buf.length));
+      assertEquals("Unexpected blob content stored", ByteBuffer.wrap(expectedContent.toByteArray()), blob.getBlob());
+      //check actual size of stitched blob
+      assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
+          restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
+      assertEquals("Unexpected TTL in named blob DB", -1,
+          idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
+      assertEquals("Unexpected TTL in blob", -1, blob.getBlobProperties().getTimeToLiveInSeconds());
     }
   }
 
@@ -413,12 +546,12 @@ public class NamedBlobPutHandlerTest {
       BlobProperties blobProperties =
           new BlobProperties(-1, SERVICE_ID, OWNER_ID, CONTENT_TYPE, !container.isCacheable(), blobTtlSecs,
               creationTimeMs, container.getParentAccountId(), container.getId(), container.isEncrypted(), null, null,
-              null);
+              null, null);
       String blobId =
           router.putBlob(blobProperties, null, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content)),
               new PutBlobOptionsBuilder().chunkUpload(true).build()).get(TIMEOUT_SECS, TimeUnit.SECONDS);
 
-      chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs)));
+      chunks.add(new ChunkInfo(blobId, chunkSize, Utils.addSecondsToEpochTime(creationTimeMs, blobTtlSecs), null));
     }
     return chunks;
   }
@@ -483,10 +616,9 @@ public class NamedBlobPutHandlerTest {
   private void initNamedBlobPutHandler(Properties properties) {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
-    namedBlobPutHandler =
-        new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb, idConverterFactory.getIdConverter(),
-            idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
-            QuotaTestUtils.createDummyQuotaManager(), null);
+    namedBlobPutHandler = new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb,
+        idConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics, CLUSTER_NAME,
+        QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
   }
 
   /**

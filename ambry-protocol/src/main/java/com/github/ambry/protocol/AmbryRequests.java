@@ -15,12 +15,15 @@ package com.github.ambry.protocol;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ErrorMapping;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.ServerConfig;
@@ -63,6 +66,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
@@ -103,6 +107,8 @@ public class AmbryRequests implements RequestAPI {
   protected final MetricRegistry metricRegistry;
   protected final ServerConfig serverConfig;
   protected ThreadLocal<Transformer> transformer;
+  private final ObjectMapper objectMapper = new ObjectMapper();
+
   protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
   private static final Logger logger = LoggerFactory.getLogger(AmbryRequests.class);
 
@@ -148,6 +154,7 @@ public class AmbryRequests implements RequestAPI {
       }
       return null;
     });
+    StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
   }
 
   @Override
@@ -828,7 +835,26 @@ public class AmbryRequests implements RequestAPI {
                 remoteHostPort);
             errorCode = ServerErrorCode.No_Error;
           } // if (output == null)
-        } // if (errorCode == ServerErrorCode.No_Error)
+        } else if (errorCode == ServerErrorCode.Blob_Deleted) {
+          if (serverConfig.serverReplicateTombstoneEnabled) {
+            // If GetBlob with GetOption.Include_All returns Blob_Deleted.
+            // it means the remote peer probably only have a delete tombstone for this blob.
+            // get the tombstone index entry from the remote replica and force write the delete record.
+            metrics.replicateDeleteRecordRate.mark();
+            Pair<ServerErrorCode, MessageInfo> indexEntryResult =
+                getTombStoneFromRemoteReplica(blobId, remoteHostName, remoteHostPort);
+            errorCode = indexEntryResult.getFirst();
+            MessageInfo indexInfo = indexEntryResult.getSecond();
+
+            if (errorCode == ServerErrorCode.No_Error) {
+              Store store = storeManager.getStore(blobId.getPartition());
+              // if forceDelete fail due to local store has the key, it throws Already_Exist exception
+              store.forceDelete(Collections.singletonList(indexInfo));
+              logger.info("ReplicateBlobRequest replicated tombstone {} from remote host {} {} : {}", blobId,
+                  remoteHostName, remoteHostPort, indexInfo);
+            }
+          } // if (serverConfig.serverReplicateTombstoneEnabled)
+        } // if (errorCode == XXX)
       } // if (remoteDataNode.equals(currentNode))
     } catch (StoreException e) { // catch the store write exception
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
@@ -861,6 +887,74 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.replicateBlobResponseQueueTimeInMs, metrics.replicateBlobSendTimeInMs,
             metrics.replicateBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  /**
+   * Get the Tombstone index entry from the remote replica
+   * @param blobId the blob id which we want to get the tombstone record from
+   * @param remoteHostName the host name of the remote replica
+   * @param remoteHostPort the port of the remote replica
+   * @return a pair of the {@link ServerErrorCode} and the tombstone {@link MessageInfo}.
+   */
+  private Pair<ServerErrorCode, MessageInfo> getTombStoneFromRemoteReplica(BlobId blobId, String remoteHostName,
+      int remoteHostPort) {
+    DataNodeId remoteDataNode = clusterMap.getDataNodeId(remoteHostName, remoteHostPort);
+    if (remoteDataNode == null) {
+      logger.error("ReplicateBlobRequest {} couldn't find the remote host {} {} in the clustermap.", blobId,
+          remoteHostName, remoteHostPort);
+      return new Pair(ServerErrorCode.Replica_Unavailable, null);
+    }
+
+    // ON_DEMAND_REPLICATION_TODO: Add configuration as replicationConfig.replicationConnectionPoolCheckoutTimeoutMs
+    final int connectionPoolCheckoutTimeoutMs = 1000;
+    final String clientId = ON_DEMAND_REPLICATION_CLIENTID_PREFIX + currentNode.getHostname();
+
+    DataInputStream stream = null;
+    try {
+      // Get the index entries from the remote replica with AdminRequest
+      int correlationId = 1;
+      AdminRequest adminRequest = new AdminRequest(AdminRequestOrResponseType.BlobIndex, null, correlationId, clientId);
+      BlobIndexAdminRequest blobIndexRequest = new BlobIndexAdminRequest(blobId, adminRequest);
+
+      ConnectedChannel connectedChannel =
+          connectionPool.checkOutConnection(remoteHostName, remoteDataNode.getPortToConnectTo(),
+              connectionPoolCheckoutTimeoutMs);
+      ChannelOutput channelOutput = connectedChannel.sendAndReceive(blobIndexRequest);
+      stream = channelOutput.getInputStream();
+      AdminResponseWithContent adminResponse = AdminResponseWithContent.readFrom(stream);
+      if (adminResponse.getError() != ServerErrorCode.No_Error) {
+        logger.error("ReplicateBlobRequest failed to get tombstone {} from the remote node {} {} {}", blobId,
+            remoteHostName, remoteHostPort, adminResponse.getError());
+        return new Pair(adminResponse.getError(), null);
+      }
+
+      byte[] jsonBytes = adminResponse.getContent();
+      Map<String, MessageInfo> messages =
+          objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
+          });
+      if (messages == null || messages.size() != 1) {
+        logger.error("ReplicateBlobRequest adminRequest for {} from the remote node {} {} return {} entries {}", blobId,
+            remoteHostName, remoteHostPort, messages == null ? 0 : messages.size(), messages);
+        return new Pair<>(ServerErrorCode.Unknown_Error, null);
+      }
+      MessageInfo info = messages.values().stream().findFirst().get();
+      if (info.isDeleted() != true) {
+        logger.error("ReplicateBlobRequest adminRequest {} from {} {} returned unexpected entry {}", blobId,
+            remoteHostName, remoteHostPort, info);
+        return new Pair<>(ServerErrorCode.Unknown_Error, null);
+      }
+
+      return new Pair(ServerErrorCode.No_Error, info);
+    } catch (Exception e) { // catch the getBlob exception
+      logger.error("ReplicateBlobRequest getTombStoneFromRemoteReplica {} from the remote node {} hit exception ",
+          blobId, remoteHostName, e);
+      return new Pair(ServerErrorCode.Unknown_Error, null);
+    } finally {
+      if (stream != null && stream instanceof NettyByteBufDataInputStream) {
+        // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+        ((NettyByteBufDataInputStream) stream).getBuffer().release();
+      }
+    }
   }
 
   /**

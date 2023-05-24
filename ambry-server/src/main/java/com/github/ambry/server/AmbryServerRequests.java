@@ -778,7 +778,6 @@ public class AmbryServerRequests extends AmbryRequests {
     Store store = ((StorageManager) storeManager).getStore(partitionId, true);
     // Attempt to remove store from storage manager.
     if (storeManager.removeBlobStore(partitionId) && store != null) {
-      ((BlobStore) store).deleteStoreFiles();
       for (ReplicaStatusDelegate replicaStatusDelegate : ((BlobStore) store).getReplicaStatusDelegates()) {
         // Remove store from sealed and stopped list (if present)
         logger.info("Removing store from sealed and stopped list(if present)");

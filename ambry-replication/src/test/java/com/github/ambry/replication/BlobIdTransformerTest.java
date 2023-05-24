@@ -527,7 +527,7 @@ public class BlobIdTransformerTest {
       MessageInfo messageInfo;
       BlobProperties blobProperties =
           new BlobProperties(blobPropertiesSize, "serviceId", "ownerId", "contentType", false, 0, 0,
-              blobId.getAccountId(), blobId.getContainerId(), hasEncryption, null, "gzip", "filename");
+              blobId.getAccountId(), blobId.getContainerId(), hasEncryption, null, "gzip", "filename", null);
       if (clazz != null) {
         MessageFormatInputStream messageFormatInputStream;
         if (clazz == PutMessageFormatInputStream.class) {
@@ -639,7 +639,17 @@ public class BlobIdTransformerTest {
       return null;
     }
 
+    @Override
+    public List<? extends PartitionId> getFullyWritablePartitionIds(String partitionClass) {
+      return null;
+    }
+
     public PartitionId getRandomWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
+      return null;
+    }
+
+    @Override
+    public PartitionId getRandomFullyWritablePartition(String partitionClass, List<PartitionId> partitionsToExclude) {
       return null;
     }
 
@@ -690,6 +700,12 @@ public class BlobIdTransformerTest {
 
     @Override
     public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
+    }
+
+    @Override
+    public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
+        boolean checkLocalDcOnly) {
+      return false;
     }
 
     public void close() {

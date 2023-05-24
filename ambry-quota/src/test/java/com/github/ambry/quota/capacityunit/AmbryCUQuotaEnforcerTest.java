@@ -58,9 +58,11 @@ public class AmbryCUQuotaEnforcerTest {
   private final static long FE_WCU = 1024;
   private final static long FE_RCU = 1024;
   private static final InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, false);
+  private static final QuotaMetrics QUOTA_METRICS = new QuotaMetrics(new MetricRegistry());
   private static AmbryCUQuotaEnforcer AMBRY_QUOTA_ENFORCER;
   private static ExceptionQuotaSource QUOTA_SOURCE;
   private static Account ACCOUNT;
+  private static int expectedHighQuotaCount = 0;
 
   private final QuotaAction expectedRecommendationQuotaExceed;
   private final boolean isRequestThrottlingEnabled;
@@ -97,7 +99,7 @@ public class AmbryCUQuotaEnforcerTest {
     QuotaConfig quotaConfig = new QuotaConfig(new VerifiableProperties(properties));
     QUOTA_SOURCE = new ExceptionQuotaSource(quotaConfig, ACCOUNT_SERVICE);
     QUOTA_SOURCE.init();
-    AMBRY_QUOTA_ENFORCER = new AmbryCUQuotaEnforcer(QUOTA_SOURCE, quotaConfig, new QuotaMetrics(new MetricRegistry()));
+    AMBRY_QUOTA_ENFORCER = new AmbryCUQuotaEnforcer(QUOTA_SOURCE, quotaConfig, QUOTA_METRICS);
   }
 
   @Test
@@ -264,6 +266,9 @@ public class AmbryCUQuotaEnforcerTest {
     QUOTA_SOURCE.setFeUsage(QUOTA_SOURCE.getFeQuota().getRcu(), QUOTA_SOURCE.getFeQuota().getWcu());
     assertFalse(AMBRY_QUOTA_ENFORCER.isQuotaExceedAllowed(
         QuotaTestUtils.createRestRequest(ACCOUNT, ACCOUNT.getAllContainers().iterator().next(), RestMethod.GET)));
+    expectedHighQuotaCount++;
+    assertEquals(expectedHighQuotaCount, QUOTA_METRICS.highSystemResourceUsageCount.getCount());
+
 
     // 3. Test that quota exceed allowed doesn't depend upon resource's quota usage.
     Map<String, CapacityUnit> usageMap = QUOTA_SOURCE.getAllQuotaUsage();

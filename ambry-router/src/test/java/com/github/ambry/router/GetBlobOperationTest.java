@@ -898,6 +898,47 @@ public class GetBlobOperationTest {
   }
 
   /**
+   * Test the case where deletes and unavailability happens at the same time, delete should take priority.
+   * @throws Exception
+   */
+  @Test
+  public void testOrigDcUnavailabilityWithDelete() throws Exception {
+    doPut();
+    Properties props = getDefaultNonBlockingRouterProperties(true);
+    props.setProperty(RouterConfig.ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED, "true");
+    props.setProperty(RouterConfig.ROUTER_GET_BLOB_RETRY_LIMIT_COUNT, "10");
+    props.setProperty(RouterConfig.ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, "10");
+    RouterConfig oldRouterConfig = routerConfig;
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    try {
+      // For originating DC, let's bring down two replicas and have one replica return deleted
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      List<ReplicaId> localReplicas = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+          .collect(Collectors.toList());
+      partitionId.setReplicaState(localReplicas.get(0), ReplicaState.LEADER);
+      partitionId.setReplicaState(localReplicas.get(1), ReplicaState.ERROR);
+      partitionId.setReplicaState(localReplicas.get(2), ReplicaState.ERROR);
+      // LEADER should return DELETED
+      ReplicaId leaderReplica = localReplicas.get(0);
+      mockServerLayout.getMockServer(leaderReplica.getDataNodeId().getHostname(),
+          leaderReplica.getDataNodeId().getPort()).setServerErrorForAllRequests(ServerErrorCode.Blob_Deleted);
+
+      // For remote DC, let's bring down all the replicas
+      partitionId.replicaIds.stream()
+          .filter(replicaId -> !replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+          .forEach(rid -> partitionId.setReplicaState(rid, ReplicaState.ERROR));
+
+      getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDeleted);
+      // There is not retry for this error
+      assertEquals(0, routerMetrics.getBlobRetryCount.getCount());
+    } finally {
+      routerConfig = oldRouterConfig;
+    }
+  }
+
+  /**
    * Test the case when all of the replicas in originating DC return NotFound, we should return BlobNotFound.
    * @throws Exception
    */

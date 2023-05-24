@@ -32,6 +32,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Assert;
@@ -483,6 +484,53 @@ public class CompactionLogTest {
 
     Assert.assertEquals(expectedIndexSegmentOffsets, obtainedIndexSegmentOffsets);
     Assert.assertEquals(expectedStartTimes, obtainedStartTimes);
+  }
+
+  @Test
+  public void testCleanupCompactionLogFiles() throws Exception {
+    // First create some compaction logs
+    time.setCurrentMilliseconds(System.currentTimeMillis());
+    long latestTs = 0;
+    long timeGap = 10 * 1000;
+    List<Long> startTimes = new ArrayList<>();
+    String storeName = "store";
+    List<CompactionDetails> detailsList = getCompactionDetailsList(10);
+    for (CompactionDetails details : detailsList) {
+      CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, details, config);
+      Pair<Offset, Offset> pair = addOneIndexSegmentOffsetPair(cLog);
+      cLog.markCopyStart();
+      cLog.markCommitStart();
+      cLog.markCleanupStart();
+      cLog.markCycleComplete();
+      cLog.close();
+      latestTs = cLog.getStartTime();
+      startTimes.add(0, latestTs);
+      Assert.assertFalse(CompactionLog.isCompactionInProgress(tempDirStr, storeName));
+      time.sleep(timeGap);
+    }
+
+    // Add in progress compaction log
+    CompactionDetails details = getCompactionDetailsList(1).get(0);
+    CompactionLog cLog = new CompactionLog(tempDirStr, storeName, time, details, config);
+    startTimes.add(0, cLog.getStartTime());
+    cLog.close();
+    Assert.assertTrue(CompactionLog.isCompactionInProgress(tempDirStr, storeName));
+
+    long cutoffTime = latestTs - 1 - 3 * timeGap;
+    CompactionLog.cleanupCompactionLogs(tempDirStr, storeName, cutoffTime);
+    // The cutoff time would cover latest completed compaction logs and another 3 completed compaction logs and in progress
+    // compaction logs, so we should have 5 compaction logs
+    startTimes = startTimes.subList(0, 5);
+
+    AtomicInteger counter = new AtomicInteger();
+    List<Long> obtainedStartTimes = new ArrayList<>();
+    CompactionLog.processCompactionLogs(tempDirStr, storeName, STORE_KEY_FACTORY, time, config, log -> {
+      counter.addAndGet(1);
+      obtainedStartTimes.add(log.getStartTime());
+      return true;
+    });
+    Assert.assertEquals(5, obtainedStartTimes.size());
+    Assert.assertEquals(startTimes, obtainedStartTimes);
   }
 
   // helpers

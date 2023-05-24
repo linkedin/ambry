@@ -25,6 +25,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
+import java.io.IOException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -273,5 +274,10 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   private void setException(Exception exception) {
     this.exception = exception;
+  }
+
+  @Override
+  public void close() throws IOException {
+    
   }
 }

@@ -16,6 +16,7 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.util.concurrent.atomic.AtomicLong;
 import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
@@ -30,6 +31,7 @@ class AmbryDisk implements DiskId, Resource {
   private final ResourceStatePolicy resourceStatePolicy;
   private final long maxCapacityInBytes;
   private volatile long rawCapacityBytes;
+  private final AtomicLong availableSpaceInBytes;
 
   /**
    * Instantiate an AmbryDisk object.
@@ -50,6 +52,7 @@ class AmbryDisk implements DiskId, Resource {
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
     this.maxCapacityInBytes = clusterMapConfig.clustermapMaxDiskCapacityInBytes;
     validate();
+    this.availableSpaceInBytes = new AtomicLong(rawCapacityBytes);
   }
 
   /**
@@ -153,6 +156,21 @@ class AmbryDisk implements DiskId, Resource {
    */
   void onDiskOk() {
     resourceStatePolicy.onSuccess();
+  }
+
+  @Override
+  public void decreaseAvailableSpaceInBytes(long delta) {
+    availableSpaceInBytes.getAndAdd(-delta);
+  }
+
+  @Override
+  public void increaseAvailableSpaceInBytes(long delta) {
+    availableSpaceInBytes.getAndAdd(delta);
+  }
+
+  @Override
+  public long getAvailableSpaceInBytes() {
+    return availableSpaceInBytes.get();
   }
 }
 

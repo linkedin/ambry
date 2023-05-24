@@ -211,4 +211,16 @@ public final class ToolUtils {
       }
     }
   }
+
+  /**
+   * Provide a password prompt to user for password input.
+   * @param prompt The prompt to print out for user
+   * @return The password
+   */
+  public static String passwordInput(String prompt) {
+    if (System.console() == null) {
+      throw new IllegalStateException("Script must be run from a terminal to support user prompts");
+    }
+    return new String(System.console().readPassword(prompt));
+  }
 }
