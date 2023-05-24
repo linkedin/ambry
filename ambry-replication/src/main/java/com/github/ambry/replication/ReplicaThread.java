@@ -1310,7 +1310,7 @@ public class ReplicaThread implements Runnable {
               }
 
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
-                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
+                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), remoteReplicaInfo.getToken());
             } catch (StoreException e) {
               if (e.getErrorCode() != StoreErrorCodes.Already_Exist) {
                 replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
