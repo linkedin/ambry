@@ -1305,10 +1305,9 @@ public class ReplicaThread implements Runnable {
                     messageInfoList);
               }
 
-              remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
-              remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-              // reset stored metadata response for this replica
-              remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
+              if (!validMessageDetectionInputStream.hasInvalidMessages()) {
+                advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
+              }
 
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
@@ -1340,6 +1339,18 @@ public class ReplicaThread implements Runnable {
     long batchStoreWriteTime = time.milliseconds() - startTime;
     replicationMetrics.updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed,
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName, remoteColoGetRequestForStandby);
+  }
+
+  /**
+   * Advances local token to make progress on replication
+   * @param remoteReplicaInfo Remote replica info object
+   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   */
+  protected void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
+    remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
+    // reset stored metadata response for this replica so that we send next request for metadata
+    remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
   }
 
   /**
