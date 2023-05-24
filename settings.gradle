@@ -28,5 +28,6 @@ include 'ambry-api',
         'log4j-test-config',
         'ambry-all',
         'ambry-quota',
-        'ambry-mysql'
+        'ambry-mysql',
+        'ambry-filesystem'
 
