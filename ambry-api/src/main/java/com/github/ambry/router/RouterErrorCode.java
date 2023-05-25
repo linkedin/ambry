@@ -32,6 +32,12 @@ public enum RouterErrorCode {
   InvalidBlobId,
 
   /**
+   * Caller passed in an invalid reserved metadata chunk id or the reserved metadata chunk id didn't match for all the
+   * chunks to stitch. May occur only for {@link Router#stitchBlob} operation or chunked uploads.
+   */
+  InvalidOrMismatchedStitchBlobReservedMetadataChunkId,
+
+  /**
    * Caller passed in an illegal argument for
    * {@link Router#putBlob(com.github.ambry.messageformat.BlobProperties, byte[], ReadableStreamChannel, PutBlobOptions)}
    * operation (and its variant).
