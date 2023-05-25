@@ -115,6 +115,7 @@ public class NonBlockingRouterTestBase {
   protected DeleteManager deleteManager;
   protected final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
   protected String localDcName;
+  protected final PutBlobOptions putOptionsForChunkedUpload;
 
   /**
    * Initialize parameters common to all tests. This constructor is exposed for use by {@link CloudRouterTest}.
@@ -138,6 +139,7 @@ public class NonBlockingRouterTestBase {
     cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     accountService = new InMemAccountService(false, true);
+    putOptionsForChunkedUpload = new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(maxPutChunkSize).build();
   }
 
   @Before
