@@ -18,6 +18,7 @@ import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.Dataset;
+import com.github.ambry.account.InMemoryUnknownAccountService;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobProperties;
@@ -55,12 +56,14 @@ public class AccountAndContainerInjector {
   private final AccountService accountService;
   private final FrontendMetrics frontendMetrics;
   private final FrontendConfig frontendConfig;
+  private final boolean unknownAccountContainerAllowed;
 
   public AccountAndContainerInjector(AccountService accountService, FrontendMetrics frontendMetrics,
       FrontendConfig frontendConfig) {
     this.accountService = accountService;
     this.frontendMetrics = frontendMetrics;
     this.frontendConfig = frontendConfig;
+    unknownAccountContainerAllowed = (accountService instanceof InMemoryUnknownAccountService);
   }
 
   /**
@@ -362,14 +365,14 @@ public class AccountAndContainerInjector {
     if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
       namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
     }
-    if (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
+    if (!unknownAccountContainerAllowed && (Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.TARGET_ACCOUNT_NAME, false))
         || Account.UNKNOWN_ACCOUNT_NAME.equals(getHeader(restRequest.getArgs(), Headers.SERVICE_ID, false)) || (
-        namedBlobPath != null && Account.UNKNOWN_ACCOUNT_NAME.equals(namedBlobPath.getAccountName()))) {
+        namedBlobPath != null && Account.UNKNOWN_ACCOUNT_NAME.equals(namedBlobPath.getAccountName())))) {
       throw new RestServiceException("Invalid account for putting blob", RestServiceErrorCode.InvalidAccount);
     }
     String targetContainerName = getHeader(restRequest.getArgs(), Headers.TARGET_CONTAINER_NAME, false);
-    if (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || (namedBlobPath != null
-        && Container.UNKNOWN_CONTAINER_NAME.equals(namedBlobPath.getContainerName()))) {
+    if (!unknownAccountContainerAllowed && (Container.UNKNOWN_CONTAINER_NAME.equals(targetContainerName) || (namedBlobPath != null
+        && Container.UNKNOWN_CONTAINER_NAME.equals(namedBlobPath.getContainerName())))) {
       throw new RestServiceException("Invalid container for putting blob", RestServiceErrorCode.InvalidContainer);
     }
     //when delete the dataset, we need to delete the dataset version as well, so the InternalKeys.TARGET_ACCOUNT_KEY
