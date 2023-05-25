@@ -566,11 +566,13 @@ public class StorageManager implements StoreManager {
               StoreNotStarted);
         }
 
-        // Delete any decommission file if present. This could have been created during STANDBY -> INACTIVE transition.
-        // But, if we decide to bring up the replica on same host, we should delete this.
         File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
         if (decommissionFile.exists()) {
-          // if not present, create one.
+          // Delete any decommission file if present.
+          // During migration from semi-auto to full-auto, we observed that helix could issue state transitions from
+          // Standby -> Inactive -> Offline -> Bootstrap -> Standby. We would have created decommission file during
+          // Standby -> Inactive step of this process. Delete this file now since the same replica is being bootstrapped
+          // again.
           decommissionFile.delete();
           logger.info("Old decommission file is deleted for replica {}", replica.getReplicaPath());
           ((BlobStore) store).setRecoverFromDecommission(false);
@@ -730,7 +732,7 @@ public class StorageManager implements StoreManager {
       if (!shutdownBlobStore(replica.getPartitionId())) {
         throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
       }
-      logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
+      logger.info("Store {} is successfully shut down during Offline-To-Dropped transition", partitionName);
 
       // 3. Remove replica from data node configs
       if (primaryClusterParticipant != null) {
