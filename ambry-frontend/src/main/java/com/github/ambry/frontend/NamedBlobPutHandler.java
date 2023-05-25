@@ -152,6 +152,7 @@ public class NamedBlobPutHandler {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final Callback<Void> finalCallback;
+    private final Callback<Void> deleteDatasetCallback;
     private final String uri;
 
     /**
@@ -164,6 +165,7 @@ public class NamedBlobPutHandler {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
+      this.deleteDatasetCallback = deleteDatasetVersionIfUploadFailedCallBack(finalCallback);
       this.uri = restRequest.getUri();
     }
 
@@ -217,7 +219,7 @@ public class NamedBlobPutHandler {
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
-      }, uri, LOGGER, finalCallback);
+      }, uri, LOGGER, deleteDatasetCallback);
     }
 
     /**
@@ -230,7 +232,7 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
-      }, uri, LOGGER, finalCallback);
+      }, uri, LOGGER, deleteDatasetCallback);
     }
 
     /**
@@ -245,7 +247,7 @@ public class NamedBlobPutHandler {
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)),
-          uri, LOGGER, finalCallback);
+          uri, LOGGER, deleteDatasetCallback);
     }
 
     /**
@@ -257,7 +259,7 @@ public class NamedBlobPutHandler {
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
           blobId -> idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId)), uri,
-          LOGGER, finalCallback);
+          LOGGER, deleteDatasetCallback);
     }
 
     /**
@@ -285,7 +287,7 @@ public class NamedBlobPutHandler {
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());
         }
-      }, uri, LOGGER, finalCallback);
+      }, uri, LOGGER, deleteDatasetCallback);
     }
 
     /**
@@ -321,7 +323,7 @@ public class NamedBlobPutHandler {
           deleteDatasetVersionOutOfRetentionCount();
         }
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
-      }, uri, LOGGER, finalCallback);
+      }, uri, LOGGER, deleteDatasetCallback);
     }
 
     /**
@@ -651,6 +653,28 @@ public class NamedBlobPutHandler {
         restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
         deleteBlobHandler.handle(restRequest, restResponseChannel, nextCallBack);
       }, uri, LOGGER, null);
+    }
+
+    /**
+     * When upload named blob failed, we take the best effort to delete the dataset version which create before uploading.
+     * @param callback the final callback which submit the response.
+     */
+    private <T> Callback<T> deleteDatasetVersionIfUploadFailedCallBack(Callback<T> callback) {
+      return (r, e) -> {
+        try {
+          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+            Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
+            String version = (String) restResponseChannel.getHeader(Headers.TARGET_DATASET_VERSION);
+            accountService.deleteDatasetVersion(dataset.getAccountName(), dataset.getContainerName(),
+                dataset.getDatasetName(), version);
+          }
+        } catch (Exception ex) {
+          LOGGER.error("Best effort to delete the dataset version when upload failed");
+        }
+        if (callback != null) {
+          callback.onCompletion(r, e);
+        }
+      };
     }
   }
 }
