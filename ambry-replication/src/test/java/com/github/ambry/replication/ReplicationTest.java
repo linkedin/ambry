@@ -389,6 +389,93 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Test that state transition in replication manager from STANDBY to STANDBY (STANDBY -> INACTIVE -> OFFLINE ->
+   * BOOTSTRAP -> STANDBY)
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromStandbyToStandbyTest() throws Exception {
+    MockClusterMap clusterMap = new MockClusterMap();
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    MockHelixParticipant.metricRegistry = new MetricRegistry();
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(clusterMapConfig);
+    DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
+    Pair<StorageManager, ReplicationManager> managers =
+        createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant);
+    StorageManager storageManager = managers.getFirst();
+    MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
+
+    // get an existing partition
+    PartitionId existingPartition = replicationManager.partitionToPartitionInfo.keySet().iterator().next();
+    ReplicaId localReplica = storageManager.getReplica(existingPartition.toPathString());
+    Store localStore = storageManager.getStore(existingPartition);
+
+    mockHelixParticipant.registerPartitionStateChangeListener(StateModelListenerType.ReplicationManagerListener,
+        replicationManager.replicationListener);
+    replicationManager.listenerExecutionLatch = new CountDownLatch(3);
+    CountDownLatch standbyToInactiveParticipantLatch = new CountDownLatch(1);
+    CountDownLatch inactiveToOfflineParticipantLatch = new CountDownLatch(1);
+    CountDownLatch bootstrapToStandbyParticipantLatch = new CountDownLatch(1);
+
+    // 1. Verify STANDBY to INACTIVE goes through
+    // put a decommission-in-progress file into local store dir
+    File decommissionFile = new File(localReplica.getReplicaPath(), "decommission_in_progress");
+    assertTrue("Couldn't create decommission file in local store", decommissionFile.createNewFile());
+    decommissionFile.deleteOnExit();
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeInactiveFromStandby(existingPartition.toPathString());
+      standbyToInactiveParticipantLatch.countDown();
+    }, false).start();
+    Thread.sleep(1000);
+    assertEquals(
+        "Partition state change listener in ReplicationManager for STANDBY to INACTIVE transition didn't get called within 1 sec",
+        2, replicationManager.listenerExecutionLatch.getCount());
+    assertEquals("Local store state should be INACTIVE", ReplicaState.INACTIVE, localStore.getCurrentState());
+    assertTrue("Standby-To-Inactive transition didn't complete within 1 sec",
+        standbyToInactiveParticipantLatch.await(1, TimeUnit.SECONDS));
+
+    //2. Verify INACTIVE to OFFLINE transition goes through
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeOfflineFromInactive(existingPartition.toPathString());
+      inactiveToOfflineParticipantLatch.countDown();
+    }, false).start();
+    Thread.sleep(1000);
+    assertEquals(
+        "Partition state change listener in ReplicationManager for INACTIVE to OFFLINE transition didn't get called within 1 sec",
+        1, replicationManager.listenerExecutionLatch.getCount());
+    // the state of local store should be updated to OFFLINE
+    assertEquals("Local store state is not expected", ReplicaState.OFFLINE, localStore.getCurrentState());
+    // Transition should be able to proceed.
+    assertTrue("Inactive-To-Offline transition didn't complete within 1 sec",
+        inactiveToOfflineParticipantLatch.await(1, TimeUnit.SECONDS));
+    assertTrue("Local store should be running since it would be stopped on offline to dropped transition",
+        localStore.isStarted());
+
+    // 3. Verify OFFLINE to BOOTSTRAP transition goes through
+    assertTrue("partitionToPartitionInfo should contain existing partition",
+        replicationManager.partitionToPartitionInfo.containsKey(existingPartition));
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(existingPartition.toPathString());
+    // Verify decommission file that was created during STANDBY -> INACTIVE transition is deleted now
+    assertFalse("Decommission file in local store shouldn't be present", decommissionFile.exists());
+
+    // 4. Verify BOOTSTRAP to STANDBY transition goes through
+    Utils.newThread(() -> {
+      mockHelixParticipant.onPartitionBecomeStandbyFromBootstrap(existingPartition.toPathString());
+      bootstrapToStandbyParticipantLatch.countDown();
+    }, false).start();
+    assertTrue(
+        "Partition state change listener in ReplicationManager for BOOTSTRAP to STANDBY transition didn't get called within 1 sec",
+        replicationManager.listenerExecutionLatch.await(1, TimeUnit.SECONDS));
+    assertEquals("Replica should be in BOOTSTRAP state before bootstrap is complete", ReplicaState.BOOTSTRAP,
+        localStore.getCurrentState());
+    // make bootstrap succeed
+    mockHelixParticipant.getReplicaSyncUpManager().onBootstrapComplete(localReplica);
+    assertTrue("Bootstrap-To-Standby transition didn't complete within 1 sec",
+        bootstrapToStandbyParticipantLatch.await(1, TimeUnit.SECONDS));
+    storageManager.shutdown();
+  }
+
+  /**
    * Test that state transition in replication manager from OFFLINE to BOOTSTRAP
    * @throws Exception
    */
@@ -752,7 +839,8 @@ public class ReplicationTest extends ReplicationTestHelper {
     // Now, sync-up should complete and transition should be able to proceed.
     assertTrue("Inactive-To-Offline transition didn't complete within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
-    assertFalse("Local store should be stopped after transition", localStore.isStarted());
+    assertTrue("Local store should be running since it would be stopped on offline to dropped transition",
+        localStore.isStarted());
     storageManager.shutdown();
   }
 
@@ -796,7 +884,8 @@ public class ReplicationTest extends ReplicationTestHelper {
     // Since replica is empty, no sync-up is needed and transition should be able to proceed.
     assertTrue("Inactive-To-Offline transition didn't complete within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
-    assertFalse("Local store should be stopped after transition", localStore.isStarted());
+    assertTrue("Local store should be running since it is stopped on offline to dropped transition",
+        localStore.isStarted());
     storageManager.shutdown();
   }
 
