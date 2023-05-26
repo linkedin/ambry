@@ -192,11 +192,7 @@ public class AmbryRequests implements RequestAPI {
           handleUndeleteRequest(networkRequest);
           break;
         case ReplicateBlobRequest:
-          if (serverConfig.serverODRV2Enabled) {
-            handleReplicateBlobRequestV2(networkRequest);
-          } else {
-            handleReplicateBlobRequest(networkRequest);
-          }
+          handleReplicateBlobRequest(networkRequest);
           break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
@@ -788,6 +784,12 @@ public class AmbryRequests implements RequestAPI {
     } else {
       replicateBlobRequest = ReplicateBlobRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     }
+
+    if (replicateBlobRequest.versionId == ReplicateBlobRequest.VERSION_2) {
+      handleReplicateBlobRequestV2(request, replicateBlobRequest);
+      return;
+    }
+
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
     long startTime = SystemTime.getInstance().milliseconds();
@@ -1037,21 +1039,14 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
-  // LOCAL_CONSISTENCY_TODO handleReplicateBlobRequestV2 will replace handleReplicateBlobRequest totally when it's verified.
-  public void handleReplicateBlobRequestV2(NetworkRequest request) throws IOException, InterruptedException {
-    if (connectionPool == null || transformer == null || transformer.get() == null) {
-      throw new UnsupportedOperationException("ReplicateBlobRequest is not supported on this node.");
-    }
-
-    ReplicateBlobRequest replicateBlobRequest;
-    if (request instanceof LocalChannelRequest) {
-      // This is a case where handleReplicateBlobRequest is called when frontends are talking to Azure. In this case, this method
-      // is called by request handler threads running within the frontend router itself. So, the request can be directly
-      // referenced as java objects without any need for deserialization.
-      replicateBlobRequest = (ReplicateBlobRequest) ((LocalChannelRequest) request).getRequestInfo().getRequest();
-    } else {
-      replicateBlobRequest = ReplicateBlobRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
-    }
+  // LOCAL_CONSISTENCY_TODO handleReplicateBlobRequestV2 will replace handleReplicateBlobRequest totally.
+  // The deployment procedure will be
+  // 1. We'll deploy the server code everywhere
+  // 2. Switch frontend from v1 to v2 to test it in Perf and EI
+  // 3. Switch frontend from v1 to v2 in PROD
+  // 4. Remove old code handleReplicateBlobRequest code which supports v1 in server
+  public void handleReplicateBlobRequestV2(NetworkRequest request, ReplicateBlobRequest replicateBlobRequest)
+      throws IOException, InterruptedException {
     long startProcessTime = SystemTime.getInstance().milliseconds();
     // Get the parameters from the replicateBlobRequest: the blobId, the remoteHostName and the remoteHostPort.
     BlobId blobId = replicateBlobRequest.getBlobId();
@@ -1059,8 +1054,8 @@ public class AmbryRequests implements RequestAPI {
     int remoteHostPort = replicateBlobRequest.getSourceHostPort();
 
     // check the request parameters.
-    if (replicateBlobRequest.getOperationType() != RequestOrResponseType.PutRequest
-        && replicateBlobRequest.getOperationType() != RequestOrResponseType.TtlUpdateRequest
+    // operationType should be either TtlUpdateRequest or DeleteRequest to fix TtlUpdate record or delete record.
+    if (replicateBlobRequest.getOperationType() != RequestOrResponseType.TtlUpdateRequest
         && replicateBlobRequest.getOperationType() != RequestOrResponseType.DeleteRequest) {
       logger.error("ReplicateBlobRequest invalid request {}", replicateBlobRequest);
       completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.Bad_Request, startProcessTime);
@@ -1068,20 +1063,16 @@ public class AmbryRequests implements RequestAPI {
     }
     // LOCAL_CONSISTENCY_TODO
     // For lifeVersion, suppose we should always provide MessageInfo.LIFE_VERSION_FROM_FRONTEND. Any other cases?
-    if (replicateBlobRequest.getOperationType() == RequestOrResponseType.TtlUpdateRequest
-        || replicateBlobRequest.getOperationType() == RequestOrResponseType.DeleteRequest) {
-      // For RequestOrResponseType.PutRequest, we don't care about the life version.
-      if (replicateBlobRequest.getLifeVersion() != MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
-        logger.info("ReplicateBlobRequest invalid life version {}", replicateBlobRequest);
-        completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.Bad_Request, startProcessTime);
-        return;
-      }
+    if (replicateBlobRequest.getLifeVersion() != MessageInfo.LIFE_VERSION_FROM_FRONTEND) {
+      logger.info("ReplicateBlobRequest invalid life version {}", replicateBlobRequest);
+      completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.Bad_Request, startProcessTime);
+      return;
     }
 
     // this replica itself is the source replica. Don't need do anything. Return success status.
     DataNodeId remoteDataNode = clusterMap.getDataNodeId(remoteHostName, remoteHostPort);
     if (remoteDataNode != null && remoteDataNode.equals(currentNode)) {
-      logger.info("ReplicateBlobRequest this is the source replica, return immediately. {}", replicateBlobRequest);
+      logger.error("ReplicateBlobRequest this is the source replica, return immediately. {}", replicateBlobRequest);
       completeReplicateRequest(request, replicateBlobRequest, ServerErrorCode.No_Error, startProcessTime);
       return;
     }
@@ -1097,7 +1088,7 @@ public class AmbryRequests implements RequestAPI {
       }
       Store store = storeManager.getStore(blobId.getPartition());
       localMessageInfo = store.findKey(convertedKey);
-      logger.info("ReplicateBlobRequest replicated Blob {}, local Store has the Key", blobId);
+      logger.trace("ReplicateBlobRequest replicated Blob {}, local Store has the Key", blobId);
     } catch (StoreException e) {
       // store.findKey throws e.getErrorCode() == StoreErrorCodes.ID_Not_Found if it doesn't exist.
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
@@ -1112,106 +1103,73 @@ public class AmbryRequests implements RequestAPI {
           replicateBlobRequest, e);
       errorCode = ServerErrorCode.Unknown_Error;
     }
-    if (errorCode != ServerErrorCode.No_Error || (
-        replicateBlobRequest.getOperationType() == RequestOrResponseType.PutRequest && localMessageInfo != null)) {
-      // If we want to replicate PutBlob and local host has the key already, return.
+    if (errorCode != ServerErrorCode.No_Error) {
       completeReplicateRequest(request, replicateBlobRequest, errorCode, startProcessTime);
       return;
     }
 
-    // Step 1: Repair the PutBlob if local store doesn't have the blob when repair type is RequestOrResponseType.PutRequest or RequestOrResponseType.TtlUpdateRequest
-    boolean remoteIsDeleted = false;
-    if (replicateBlobRequest.getOperationType() == RequestOrResponseType.PutRequest || (
-        replicateBlobRequest.getOperationType() == RequestOrResponseType.TtlUpdateRequest
-            && localMessageInfo == null)) {
-      Pair<ServerErrorCode, GetResponse> remoteGetResult = getBlobFromRemoteReplica(replicateBlobRequest);
-      ServerErrorCode remoteErrorCode = remoteGetResult.getFirst();
-      GetResponse remoteGetResponse = remoteGetResult.getSecond();
-      if (remoteErrorCode == ServerErrorCode.No_Error) {
-        errorCode = repairPutBlob(replicateBlobRequest, blobId, remoteErrorCode, remoteGetResponse);
-      } else {
-        // remote returned error status like ServerErrorCode.Blob_Not_Found
-        errorCode = remoteErrorCode;
-        // LOCAL_CONSISTENCY_TODO: clean it up after we add VERSION_2 support in the frontend.
-        // If it's the VERSION_1, operationType is PutRequest by default.
-        // But if the blob is deleted, we need repair the tombstone
-        if (remoteErrorCode == ServerErrorCode.Blob_Deleted
-            && replicateBlobRequest.versionId == ReplicateBlobRequest.VERSION_1) {
-          errorCode = ServerErrorCode.No_Error;
-          remoteIsDeleted = true;
+    if (replicateBlobRequest.getOperationType() == RequestOrResponseType.TtlUpdateRequest) {
+      // Repair the PutBlob if local store doesn't have the blob when repair type is RequestOrResponseType.TtlUpdateRequest
+      if (localMessageInfo == null) {
+        Pair<ServerErrorCode, GetResponse> remoteGetResult = getBlobFromRemoteReplica(replicateBlobRequest);
+        errorCode = remoteGetResult.getFirst();
+        GetResponse remoteGetResponse = remoteGetResult.getSecond();
+        if (errorCode == ServerErrorCode.No_Error) {
+          errorCode = repairPutBlob(replicateBlobRequest, blobId, remoteGetResponse);
         }
       }
-      if (errorCode != ServerErrorCode.No_Error) {
-        completeReplicateRequest(request, replicateBlobRequest, errorCode, startProcessTime);
-        return;
+      // now repair the TtlUpdate
+      if (errorCode == ServerErrorCode.No_Error) {
+        errorCode = repairTtlUpdate(replicateBlobRequest, blobId);
       }
-    }
-
-    // Step 2: Repair the TtlUpdate if needed. Only ReplicateBlobRequest.VERSION_2 has this type
-    if (replicateBlobRequest.getOperationType() == RequestOrResponseType.TtlUpdateRequest) {
-      errorCode = repairTtlUpdate(replicateBlobRequest, blobId);
-      if (errorCode != ServerErrorCode.No_Error) {
-        completeReplicateRequest(request, replicateBlobRequest, errorCode, startProcessTime);
-        return;
-      }
-    }
-
-    // Step 3: Repair the Delete if needed
-    if ((replicateBlobRequest.getOperationType() == RequestOrResponseType.DeleteRequest) || (
-        replicateBlobRequest.getOperationType() == RequestOrResponseType.PutRequest && remoteIsDeleted)) {
+    } else {
+      // replicateBlobRequest.getOperationType() == RequestOrResponseType.DeleteRequest
       errorCode = repairDeleteRecord(replicateBlobRequest, blobId, localMessageInfo);
     }
 
-    // LOCAL_CONSISTENCY_TODO: add metrics for the three type of repairs.
-
+    // LOCAL_CONSISTENCY_TODO: add metrics for the two type of repairs.
     completeReplicateRequest(request, replicateBlobRequest, errorCode, startProcessTime);
   }
 
   public ServerErrorCode repairPutBlob(ReplicateBlobRequest replicateBlobRequest, BlobId convertedBlobId,
-      ServerErrorCode remoteErrorCode, GetResponse remoteGetResponse) throws IOException {
+      GetResponse remoteGetResponse) throws IOException {
     String remoteHostName = replicateBlobRequest.getSourceHostName();
     int remoteHostPort = replicateBlobRequest.getSourceHostPort();
     Store store = storeManager.getStore(convertedBlobId.getPartition());
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
+    ServerErrorCode errorCode;
     try {
-      if (remoteErrorCode == ServerErrorCode.No_Error) {
-        // getBlobFromRemoteReplicate has checked partitionResponseInfoList's size is 1 and it has one MessageInfo.
-        PartitionResponseInfo partitionResponseInfo = remoteGetResponse.getPartitionResponseInfoList().get(0);
-        List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
-        MessageInfo remoteMessageInfo = messageInfoList.get(0);
+      // getBlobFromRemoteReplicate has checked partitionResponseInfoList's size is 1 and it has one MessageInfo.
+      PartitionResponseInfo partitionResponseInfo = remoteGetResponse.getPartitionResponseInfoList().get(0);
+      List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
+      MessageInfo remoteMessageInfo = messageInfoList.get(0);
 
-        // Transfer the input stream with transformer
-        Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer.get()),
-            remoteGetResponse.getInputStream(), remoteMessageInfo);
-        if (output == null) {
-          logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", remoteMessageInfo,
-              remoteHostName, remoteHostPort, convertedBlobId);
-          errorCode = ServerErrorCode.Unknown_Error;
-        } else {
-          // write the message to the local store
-          MessageFormatWriteSet writeset =
-              new MessageFormatWriteSet(output.getStream(), Collections.singletonList(output.getMessageInfo()), false);
-          store.put(writeset);
-
-          // also applyTtlUpdate and applyDelete if needed.
-          // the operation time of TtlUpdate and Delete will be same as the source replica's PutBlob creation time.
-          // But it's ok. Replication thread should have the same behavior.
-          // We don't care the operation time of TtlUpdate and Delete that much.
-          if (remoteMessageInfo.isTtlUpdated()) {
-            applyTtlUpdate(remoteMessageInfo, replicateBlobRequest);
-          }
-          if (remoteMessageInfo.isDeleted()) {
-            applyDelete(remoteMessageInfo, replicateBlobRequest);
-          }
-          logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", convertedBlobId, remoteHostName,
-              remoteHostPort);
-          errorCode = ServerErrorCode.No_Error;
-        } // if (output == null)
-      } else if (remoteErrorCode == ServerErrorCode.Blob_Deleted) {
-        errorCode = ServerErrorCode.No_Error;
+      // Transfer the input stream with transformer
+      Message output = MessageSievingInputStream.transferInputStream(Collections.singletonList(transformer.get()),
+          remoteGetResponse.getInputStream(), remoteMessageInfo);
+      if (output == null) {
+        logger.error("ReplicateBlobRequest transferInputStream {} returned null, {} {} {}", remoteMessageInfo,
+            remoteHostName, remoteHostPort, convertedBlobId);
+        errorCode = ServerErrorCode.Unknown_Error;
       } else {
-        errorCode = remoteErrorCode;
-      }
+        // write the message to the local store
+        MessageFormatWriteSet writeset =
+            new MessageFormatWriteSet(output.getStream(), Collections.singletonList(output.getMessageInfo()), false);
+        store.put(writeset);
+
+        // also applyTtlUpdate and applyDelete if needed.
+        // the operation time of TtlUpdate and Delete will be same as the source replica's PutBlob creation time.
+        // But it's ok. Replication thread should have the same behavior.
+        // We don't care the operation time of TtlUpdate and Delete that much.
+        if (remoteMessageInfo.isTtlUpdated()) {
+          applyTtlUpdate(remoteMessageInfo, replicateBlobRequest);
+        }
+        if (remoteMessageInfo.isDeleted()) {
+          applyDelete(remoteMessageInfo, replicateBlobRequest);
+        }
+        logger.info("ReplicateBlobRequest replicated Blob {} from remote host {} {}", convertedBlobId, remoteHostName,
+            remoteHostPort);
+        errorCode = ServerErrorCode.No_Error;
+      } // if (output == null)
     } catch (StoreException e) { // catch the store write exception
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         logger.info("ReplicateBlobRequest Blob {} already exists for {}", convertedBlobId, replicateBlobRequest);

@@ -128,14 +128,7 @@ public class ServerHttp2Test {
     // Refer to handleReplicateBlobRequest.localStoreHasTheKey
     boolean writeRepair = false;
     ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem,
-        writeRepair, 1);
-  }
-
-  @Test
-  public void replicatePutBlobV2Format() {
-    boolean writeRepair = false;
-    ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem,
-        writeRepair, 2);
+        writeRepair);
   }
 
   @Test
