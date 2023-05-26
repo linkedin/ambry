@@ -39,6 +39,7 @@ import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.GregorianCalendar;
+import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -100,6 +101,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetStatsReportHandler getStatsReportHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
+  private final Random random = new Random();
 
   /**
    * Create a new instance of FrontendRestRequestService by supplying it with config, metrics, cluster map, a
@@ -209,7 +211,7 @@ class FrontendRestRequestService implements RestRequestService {
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
       namedBlobsCleanupTask =
-          namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, 60 * 10, 60 * 10, TimeUnit.SECONDS);
+          namedBlobsCleanupScheduler.schedule(namedBlobsCleanupRunner, random.nextInt(60*60*24*7), TimeUnit.SECONDS);
       logger.info("Named Blob Stale Data Cleanup Process has started");
     }
 
