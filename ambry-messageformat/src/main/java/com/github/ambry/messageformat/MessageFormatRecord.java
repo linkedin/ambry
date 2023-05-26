@@ -1817,9 +1817,7 @@ public class MessageFormatRecord {
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
         StringBuilder sb = new StringBuilder();
-        sb.append("ExpectedCrc: ")
-            .append(crc)
-            .append(" ActualCrc: ")
+        sb.append("ComputedCrc: ").append(crc).append(" ReceivedCrc: ")
             .append(streamCrc)
             .append(" Blob Format version: 3")
             .append(" BlobType: ")
