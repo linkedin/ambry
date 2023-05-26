@@ -16,7 +16,6 @@ package com.github.ambry.utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.epoll.Epoll;
-import io.netty.channel.kqueue.KQueue;
 import io.netty.channel.unix.Errors;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -724,6 +723,20 @@ public class UtilsTest {
       thrownEx = ex;
     }
     assertTrue(thrownEx instanceof IllegalArgumentException);
+  }
+
+  @Test
+  public void testByteToHex() {
+    char[] chars = Utils.HEX_CHARS;
+    byte b;
+    for (int i = 0; i < 255; i++) {
+      b = (byte) i;
+      String result = Utils.byteToHex(b);
+      char hi = chars[i / 16];
+      char lo = chars[i % 16];
+      String expected = "0x" + hi + lo;
+      assertEquals(expected, result);
+    }
   }
 }
 

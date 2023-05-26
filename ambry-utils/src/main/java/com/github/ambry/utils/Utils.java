@@ -96,6 +96,11 @@ public class Utils {
    */
   public static final int MAX_PORT_NUM = 65535;
   /**
+   * The char array for hex string
+   */
+  public static final char[] HEX_CHARS =
+      {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+  /**
    * The separator used to construct account-container pair in stats report.
    */
   public static final String ACCOUNT_CONTAINER_SEPARATOR = "___";
@@ -1387,6 +1392,18 @@ public class Utils {
     } catch (Exception e) {
       logger.warn("Closing resource", e);
     }
+  }
+
+  /**
+   * Return a string representation in hex for a byte
+   * @param b The byte
+   * @return A hex string for the given byte with "0x" prefix.
+   */
+  public static String byteToHex(byte b) {
+    StringBuilder sb = new StringBuilder("0x");
+    sb.append(HEX_CHARS[(b & 0xf0) >> 4]);
+    sb.append(HEX_CHARS[b & 0x0f]);
+    return sb.toString();
   }
 
   /**

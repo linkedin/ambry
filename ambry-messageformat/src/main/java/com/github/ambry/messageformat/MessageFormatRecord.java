@@ -241,9 +241,8 @@ public class MessageFormatRecord {
   }
 
   static boolean isValidBlobRecordVersion(short blobRecordVersion) {
-    return blobRecordVersion == Blob_Version_V1 ||
-        blobRecordVersion == Blob_Version_V2 ||
-        blobRecordVersion == Blob_Version_V3;
+    return blobRecordVersion == Blob_Version_V1 || blobRecordVersion == Blob_Version_V2
+        || blobRecordVersion == Blob_Version_V3;
   }
 
   /**
@@ -1817,13 +1816,62 @@ public class MessageFormatRecord {
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
-        logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
+        StringBuilder sb = new StringBuilder();
+        sb.append("ExpectedCrc: ")
+            .append(crc)
+            .append(" ActualCrc: ")
+            .append(streamCrc)
+            .append(" Blob Format version: 3")
+            .append(" BlobType: ")
+            .append(blobContentType)
+            .append(" isCompressed: ")
+            .append(isCompressed)
+            .append(" DataSize: ")
+            .append(dataSize)
+            .append(byteBufSummary(byteBuf));
+        logger.error("corrupt data while parsing blob content: " + sb);
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
 
       return new BlobData(blobContentType, dataSize, byteBuf, isCompressed);
     }
+  }
+
+  /**
+   * Get a summary of bytes in the given {@link ByteBuf}.
+   * @param bb THe {@link ByteBuf}.
+   * @return A summary of bytes in the byte buf.
+   */
+  static String byteBufSummary(ByteBuf bb) {
+    StringBuilder sb = new StringBuilder();
+    if (bb.readableBytes() <= 30) {
+      sb.append("[");
+      while (bb.isReadable()) {
+        sb.append(Utils.byteToHex(bb.readByte())).append(", ");
+      }
+      sb.append("]");
+    } else {
+      byte[] chunk = new byte[10];
+      // get the first 10 bytes
+      bb.getBytes(0, chunk);
+      sb.append("First 10 bytes: [");
+      for (byte b : chunk) {
+        sb.append(Utils.byteToHex(b)).append(", ");
+      }
+      sb.append("]\n10 bytes in the middle: [");
+      bb.getBytes(bb.readableBytes() / 2 - 5, chunk);
+      for (byte b : chunk) {
+        sb.append(Utils.byteToHex(b)).append(", ");
+      }
+      sb.append("]\nLast 10 bytes: [");
+      bb.getBytes(bb.readableBytes() - 10, chunk);
+      for (byte b : chunk) {
+        sb.append(Utils.byteToHex(b)).append(", ");
+      }
+      sb.append("]");
+    }
+    return sb.toString();
   }
 
   // Metadata_Content_Format_V1 (layout below) was unused and was removed to clean up the range request handling code.

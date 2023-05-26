@@ -25,6 +25,8 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -831,7 +833,8 @@ public class MessageFormatRecordTest {
     // corrupt blob record by modifying a byte, the CRC check should fail.
     entireBlob.put(entireBlob.position() - 9, (byte) (entireBlob.get(entireBlob.position() - 9) / 2 + 1));
     entireBlob.flip();
-    Exception ex = TestUtils.getException(() -> MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob)));
+    Exception ex =
+        TestUtils.getException(() -> MessageFormatRecord.deserializeBlob(new ByteBufferInputStream(entireBlob)));
     Assert.assertTrue(ex instanceof MessageFormatException);
   }
 
@@ -872,6 +875,52 @@ public class MessageFormatRecordTest {
       Assert.assertEquals(sum, list.get(i).getOffset());
       sum += list.get(i).getSize();
     }
+  }
+
+  @Test
+  public void testByteBufSummary() {
+    // Empty
+    ByteBuf bb = Unpooled.buffer();
+    String summary = byteBufSummary(bb);
+    assertEquals("[]", summary);
+
+    // Byte buf with one byte
+    bb = Unpooled.buffer(1);
+    bb.writeByte((byte) 1);
+    summary = byteBufSummary(bb);
+    assertEquals("[0x01, ]", summary);
+
+    // Byte buf with 10 bytes
+    bb = Unpooled.buffer(10);
+    for (int i = 1; i < 11; i++) {
+      bb.writeByte((byte) i);
+    }
+    summary = byteBufSummary(bb);
+    assertEquals("[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, ]", summary);
+
+    // Byte buf with 30 byte
+    bb = Unpooled.buffer(30);
+    String expected = "";
+    for (int i = 1; i < 31; i++) {
+      bb.writeByte((byte) i);
+      expected += Utils.byteToHex((byte) i) + ", ";
+    }
+    summary = byteBufSummary(bb);
+    assertEquals("[" + expected + "]", summary);
+
+    // ByteBuf with 100 byte
+    bb = Unpooled.buffer(100);
+    for (int i = 1; i < 101; i++) {
+      bb.writeByte((byte) i);
+    }
+    // Making sure there is no exception
+    summary = byteBufSummary(bb);
+    String firstTen = "0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, ";
+    String middleTen = "0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, ";
+    String lastTen = "0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x61, 0x62, 0x63, 0x64, ";
+    assertTrue(summary.contains(firstTen));
+    assertTrue(summary.contains(middleTen));
+    assertTrue(summary.contains(lastTen));
   }
 
   private void testBlobCorruption(ByteBuffer blob, long blobSize, int metadataContentSize) throws IOException {
