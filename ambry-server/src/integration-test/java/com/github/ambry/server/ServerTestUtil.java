@@ -3977,27 +3977,80 @@ final class ServerTestUtil {
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
       cluster.time.sleep(1000);
 
+      // 15. On the sourceDataNode blob is deleted and compacted. On the targetDataNode, blob doesn't exist.
+      BlobId compactedBlobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
+      // Force delete compactedBlobId1 on source replica. It is used to simulate the compacted tombstone.
+      short lifeVersion = 0;
+      ForceDeleteAdminRequest forceDeleteAdminRequest = new ForceDeleteAdminRequest(compactedBlobId1, lifeVersion,
+          new AdminRequest(AdminRequestOrResponseType.ForceDelete, partitionIds.get(0), 1, "clientid"));
+      DataInputStream stream = sourceChannel.sendAndReceive(forceDeleteAdminRequest).getInputStream();
+      AdminResponse adminResponse = AdminResponse.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.No_Error, adminResponse.getError());
+      // verify compactedBlobId1 only has a delete tombstone.
+      getBlobAndVerify(compactedBlobId1, sourceChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata,
+          data, encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+      MessageInfo sourceDelInfo = getDeleteRecord(sourceChannel, clusterMap, compactedBlobId1);
+      delOperationTime = sourceDelInfo.getOperationTimeMs();
+      // ReplicateBlob only replicate the delete record to the target host.
+      replicateDeleteBlob(targetChannel, compactedBlobId1, sourceDataNode, delOperationTime, ServerErrorCode.No_Error);
+      getBlobAndVerify(compactedBlobId1, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata,
+          data, encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+      checkDeleteRecord(targetChannel, clusterMap, compactedBlobId1, delOperationTime);
+
+      // 16. On the sourceDataNode blob is deleted and compacted. On the targetDataNode, blob exists
+      BlobId compactedBlobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
+      // Force delete compactedBlobId2 on the source host
+      lifeVersion = 0;
+      forceDeleteAdminRequest = new ForceDeleteAdminRequest(compactedBlobId2, lifeVersion,
+          new AdminRequest(AdminRequestOrResponseType.ForceDelete, partitionIds.get(0), 1, "clientid2"));
+      stream = sourceChannel.sendAndReceive(forceDeleteAdminRequest).getInputStream();
+      adminResponse = AdminResponse.readFrom(stream);
+      releaseNettyBufUnderneathStream(stream);
+      assertEquals(ServerErrorCode.No_Error, adminResponse.getError());
+      // verify compactedBlobId2 only has a delete tombstone.
+      getBlobAndVerify(compactedBlobId2, sourceChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata,
+          data, encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+      sourceDelInfo = getDeleteRecord(sourceChannel, clusterMap, compactedBlobId2);
+      delOperationTime = sourceDelInfo.getOperationTimeMs();
+      // PutBlob on the target
+      putRequest = new PutRequest(1, "client1", compactedBlobId2, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      // ReplicateBlob only replicate the delete record to the target host.
+      replicateDeleteBlob(targetChannel, compactedBlobId2, sourceDataNode, delOperationTime, ServerErrorCode.No_Error);
+      getBlobAndVerify(compactedBlobId2, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+      checkDeleteRecord(targetChannel, clusterMap, compactedBlobId2, delOperationTime);
+
       /*
        * Stage 2: Enable regular replication.
        * sourceDataNode, targetDataNode and thirdDataNode should be synced up after the regular replication.
-                  sourceDataNode targetDataNode   thirdDataNode   targetAfterODR  sourceAfter/targetAfter/thirdAfter
-        blobId1      put           not_exist        not_exist         not_exist       put
-        blobId2      put           not_exist        put/ttl           put/ttl         ttl
-        blobId3      put           not_exist        put/delete        put/delete      delete
-        blobId4      put           not_exist        put/delete        put/ttl         delete
-        blobId5      put           not_exist        put/ttl           put/delete      delete
+                        sourceDataNode targetDataNode   thirdDataNode   targetAfterODR  sourceA/target/thirdAfter
+        blobId1              put           not_exist        not_exist         not_exist       put
+        blobId2              put           not_exist        put/ttl           put/ttl         ttl
+        blobId3              put           not_exist        put/delete        put/delete      delete
+        blobId4              put           not_exist        put/delete        put/ttl         delete
+        blobId5              put           not_exist        put/ttl           put/delete      delete
 
-        blobId6    put/ttl         not_exist        not_exist         put/ttl         ttl
-        blobId7    put/ttl         put              not_exist         put/ttl         ttl
-        blobId8    put/ttl         put/ttl          not_exist         put/ttl/del     deleted or not_exist
-        blobId9    put/ttl         put/del          not_exist         put/del         deleted or not_exist
+        blobId6            put/ttl         not_exist        not_exist         put/ttl         ttl
+        blobId7            put/ttl         put              not_exist         put/ttl         ttl
+        blobId8            put/ttl         put/ttl          not_exist         put/ttl/del     deleted or not_exist
+        blobId9            put/ttl         put/del          not_exist         put/del         deleted or not_exist
 
-        blobId10   put/ttl/del     not_exist        not_exist         put/ttl/del     deleted or not_exist
-        blobId11   put/ttl/del     put              not_exist         put/del         deleted or not_exist
-        blobId12   put/del         put/ttl          not_exist         put/ttl/del     deleted or not_exist
-        blobId13   put/del         put/del          not_exist         put/del         deleted or not_exist
+        blobId10           put/ttl/del     not_exist        not_exist         put/ttl/del     deleted or not_exist
+        blobId11           put/ttl/del     put              not_exist         put/del         deleted or not_exist
+        blobId12           put/del         put/ttl          not_exist         put/ttl/del     deleted or not_exist
+        blobId13           put/del         put/del          not_exist         put/del         deleted or not_exist
 
-        blobId14   not_exist       not_exist        not_exist         not_exist       not_exist
+        blobId14           not_exist       not_exist        not_exist         not_exist       not_exist
+        compactedBlobId1   tombstone       not_exist        not_exist         del             not_exist or del
+        compactedBlobId2   tombstone       put              not_exist         put/del         not_exist or del
        */
 
       // create a new Blob on the sourceDataNode which is TtlUpdated.
@@ -4143,6 +4196,27 @@ final class ServerTestUtil {
 
         getBlobAndVerify(blobId14, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
             encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+
+        if (channel == targetChannel || channel == sourceChannel) {
+          getBlobAndVerify(compactedBlobId1, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata,
+              data, encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
+        } else {
+          getBlobAndVerify(compactedBlobId1, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata,
+              data, encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+        }
+
+        if (channel == sourceChannel) {
+          getBlobAndVerify(compactedBlobId2, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata,
+              data, encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
+        } else if (channel == targetChannel) {
+          getBlobAndVerify(compactedBlobId2, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata,
+              data, encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
+          getBlobAndVerify(compactedBlobId2, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
+        } else {
+          getBlobAndVerify(compactedBlobId2, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata,
+              data, encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+        }
 
         // newBlobId1
         getBlobAndVerify(newBlobId1, channel, ServerErrorCode.No_Error, properties, userMetadata, data, encryptionKey,
@@ -4694,7 +4768,8 @@ final class ServerTestUtil {
     assertEquals(null, ttlUpdateRecord.getCrc());
   }
 
-  static void checkDeleteRecord(ConnectedChannel channel, ClusterMap clusterMap, BlobId blobId, long operationTime) throws IOException{
+  static MessageInfo getDeleteRecord(ConnectedChannel channel, ClusterMap clusterMap, BlobId blobId)
+      throws IOException {
     // Use BlobIndexAdminRequest to verify we have the right delete record
     BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId,
         new AdminRequest(AdminRequestOrResponseType.BlobIndex, blobId.getPartition(), 1, "clientid2"));
@@ -4717,6 +4792,13 @@ final class ServerTestUtil {
         break;
       }
     }
+    return deleteRecordInfo;
+  }
+
+  static void checkDeleteRecord(ConnectedChannel channel, ClusterMap clusterMap, BlobId blobId, long operationTime)
+      throws IOException {
+    MessageInfo deleteRecordInfo = getDeleteRecord(channel, clusterMap, blobId);
+
     assertTrue(deleteRecordInfo != null);
     assertEquals(blobId.getAccountId(), deleteRecordInfo.getAccountId());
     assertEquals(blobId.getContainerId(), deleteRecordInfo.getContainerId());
