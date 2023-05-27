@@ -3677,10 +3677,12 @@ final class ServerTestUtil {
       putBlob(putRequest, thirdChannel, ServerErrorCode.No_Error);
       operationTime = cluster.time.milliseconds();
       deleteBlob(thirdChannel, blobId, operationTime, ServerErrorCode.No_Error);
-      // replicateType is RequestOrResponse.DeleteRequest. It repair the DeleteRecord directly without PutBlob.
+      // replicateType is RequestOrResponse.DeleteRequest. It repair the PutRecord and the DeleteRecord.
       replicateDeleteBlob(targetChannel, blobId, sourceDataNode, operationTime, ServerErrorCode.No_Error);
-      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, properties, userMetadata, data,
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
       checkDeleteRecord(targetChannel, clusterMap, blobId, operationTime);
       cluster.time.sleep(1000);
 
@@ -3722,10 +3724,12 @@ final class ServerTestUtil {
       operationTime = cluster.time.milliseconds();
       updateBlobTtl(thirdChannel, blobId, operationTime);
       checkTtlUpdateStatus(thirdChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
-      // replicateType is RequestOrResponse.DeleteRequest. It repair the DeleteRecord directly without PutBlob.
+      // replicateType is RequestOrResponse.DeleteRequest. It repair the PutBlob and DeleteRecord.
       replicateDeleteBlob(targetChannel, blobId, sourceDataNode, operationTime, ServerErrorCode.No_Error);
-      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
       checkDeleteRecord(targetChannel, clusterMap, blobId, operationTime);
       cluster.time.sleep(1000);
 
@@ -3968,10 +3972,9 @@ final class ServerTestUtil {
       replicatePutBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.Bad_Request);
       replicateTtlUpdate(targetChannel, blobId, sourceDataNode, operationTime, Utils.Infinite_Time,
           ServerErrorCode.Blob_Not_Found);
-      replicateDeleteBlob(targetChannel, blobId, sourceDataNode, operationTime, ServerErrorCode.No_Error);
-      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+      replicateDeleteBlob(targetChannel, blobId, sourceDataNode, operationTime, ServerErrorCode.Blob_Not_Found);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
-      checkDeleteRecord(targetChannel, clusterMap, blobId, operationTime);
       cluster.time.sleep(1000);
 
       /*
@@ -3980,9 +3983,9 @@ final class ServerTestUtil {
                   sourceDataNode targetDataNode   thirdDataNode   targetAfterODR  sourceAfter/targetAfter/thirdAfter
         blobId1      put           not_exist        not_exist         not_exist       put
         blobId2      put           not_exist        put/ttl           put/ttl         ttl
-        blobId3      put           not_exist        put/delete        delete          delete
+        blobId3      put           not_exist        put/delete        put/delete      delete
         blobId4      put           not_exist        put/delete        put/ttl         delete
-        blobId5      put           not_exist        put/ttl           delete          delete
+        blobId5      put           not_exist        put/ttl           put/delete      delete
 
         blobId6    put/ttl         not_exist        not_exist         put/ttl         ttl
         blobId7    put/ttl         put              not_exist         put/ttl         ttl
@@ -3994,7 +3997,7 @@ final class ServerTestUtil {
         blobId12   put/del         put/ttl          not_exist         put/ttl/del     deleted or not_exist
         blobId13   put/del         put/del          not_exist         put/del         deleted or not_exist
 
-        blobId14   not_exist       not_exist        not_exist         delete          deleted or not_exist
+        blobId14   not_exist       not_exist        not_exist         not_exist       not_exist
        */
 
       // create a new Blob on the sourceDataNode which is TtlUpdated.
@@ -4138,13 +4141,8 @@ final class ServerTestUtil {
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
         }
 
-        if (channel == targetChannel) {
-          getBlobAndVerify(blobId14, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_Deleted_Blobs);
-        } else {
-          getBlobAndVerify(blobId14, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
-              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
-        }
+        getBlobAndVerify(blobId14, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
 
         // newBlobId1
         getBlobAndVerify(newBlobId1, channel, ServerErrorCode.No_Error, properties, userMetadata, data, encryptionKey,
