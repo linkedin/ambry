@@ -565,6 +565,19 @@ public class StorageManager implements StoreManager {
               "Store " + partitionName + " didn't start correctly, replica should be set to ERROR state",
               StoreNotStarted);
         }
+
+        File decommissionFile = new File(replica.getReplicaPath(), BlobStore.DECOMMISSION_FILE_NAME);
+        if (decommissionFile.exists()) {
+          // Delete any decommission file if present.
+          // During migration from semi-auto to full-auto, we observed that helix could issue state transitions from
+          // Standby -> Inactive -> Offline -> Bootstrap -> Standby. We would have created decommission file during
+          // Standby -> Inactive step of this process. Delete this file now since the same replica is being bootstrapped
+          // again.
+          decommissionFile.delete();
+          logger.info("Old decommission file is deleted for replica {}", replica.getReplicaPath());
+          ((BlobStore) store).setRecoverFromDecommission(false);
+        }
+
         // if store's used capacity is less than or equal to header size, we create a bootstrap_in_progress file and force
         // it to stay in BOOTSTRAP state when catching up with peers.
         long storeUsedCapacity = store.getSizeInBytes();
@@ -666,27 +679,7 @@ public class StorageManager implements StoreManager {
 
     @Override
     public void onPartitionBecomeOfflineFromInactive(String partitionName) {
-      // if code arrives here, which means replica exists on current node. This is guaranteed by replication manager,
-      // which checks existence of local replica (see onPartitionBecomeOfflineFromInactive method in ReplicationManager)
-      ReplicaId replica = partitionNameToReplicaId.get(partitionName);
-      if (!shutdownBlobStore(replica.getPartitionId())) {
-        throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
-      }
-      logger.info("Store {} is successfully shut down during Inactive-To-Offline transition", partitionName);
-      if (primaryClusterParticipant != null) {
-        // update InstanceConfig in Helix
-        try {
-          if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replica, false)) {
-            logger.error("Failed to remove partition {} from InstanceConfig of current node", partitionName);
-            throw new StateTransitionException("Failed to remove partition " + partitionName + " from InstanceConfig",
-                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
-          }
-          logger.info("Partition {} is successfully removed from InstanceConfig of current node", partitionName);
-        } catch (IllegalStateException e) {
-          throw new StateTransitionException(e.getMessage(),
-              StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
-        }
-      }
+      // no op
     }
 
     @Override
@@ -734,7 +727,29 @@ public class StorageManager implements StoreManager {
               "Exception occurred when resuming decommission on replica " + partitionName, ReplicaOperationFailure);
         }
       }
-      // 2. invoke PartitionStateChangeListener in Replication Manager and Stats Manager to remove replica
+
+      // 2. Shut down the store
+      if (!shutdownBlobStore(replica.getPartitionId())) {
+        throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
+      }
+      logger.info("Store {} is successfully shut down during Offline-To-Dropped transition", partitionName);
+
+      // 3. Remove replica from data node configs
+      if (primaryClusterParticipant != null) {
+        try {
+          if (!primaryClusterParticipant.updateDataNodeInfoInCluster(replica, false)) {
+            logger.error("Failed to remove partition {} from DataNodeConfig of current node", partitionName);
+            throw new StateTransitionException("Failed to remove partition " + partitionName + " from DataNodeConfig",
+                StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+          }
+          logger.info("Partition {} is successfully removed from DataNodeConfig of current node", partitionName);
+        } catch (IllegalStateException e) {
+          throw new StateTransitionException(e.getMessage(),
+              StateTransitionException.TransitionErrorCode.HelixUpdateFailure);
+        }
+      }
+
+      // 4. invoke PartitionStateChangeListener in Replication Manager and Stats Manager to remove replica
       logger.info("Invoking state listeners to remove replica {} from stats and replication manager", partitionName);
       if (statsManagerListener != null) {
         statsManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
@@ -742,7 +757,8 @@ public class StorageManager implements StoreManager {
       if (replicationManagerListener != null) {
         replicationManagerListener.onPartitionBecomeDroppedFromOffline(partitionName);
       }
-      // 3. remove store and delete all files associated with given replica in Storage Manager
+
+      // 5. remove store and delete all files associated with given replica in Storage Manager
       try {
         if (!removeBlobStore(replica.getPartitionId())) {
           throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
@@ -778,10 +794,8 @@ public class StorageManager implements StoreManager {
         replicationManagerListener.onPartitionBecomeOfflineFromInactive(partitionName);
         replicaSyncUpManager.waitDisconnectionCompleted(partitionName);
       }
-      // 4. perform Inactive-To-Offline transition in StorageManager. This comes last because in this step it shuts down
-      //    store and updates InstanceConfig in Helix to remove replica from clustermap. Hence, we have to ensure the
-      //    data in store have been replicated to peer nodes (before store is shut down or removed), which requires
-      //    deactivation and disconnection to complete first.
+      // 4. perform Inactive-To-Offline transition in StorageManager. However, we don't do anything currently during
+      // this transition
       onPartitionBecomeOfflineFromInactive(partitionName);
       logger.info("Decommission on replica {} is almost done, dropping it from current node", partitionName);
     }

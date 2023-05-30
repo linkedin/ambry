@@ -440,34 +440,26 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test shutting down blob store failure during Inactive-To-Offline transition.
+   * Test Offline-To-Dropped transition.
    * @throws Exception
    */
   @Test
-  public void replicaFromInactiveToOfflineTest() throws Exception {
+  public void replicaFromOfflineToDroppedTest() throws Exception {
     generateConfigs(true, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
     ReplicaId testReplica = localReplicas.get(0);
-    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    MockClusterParticipant mockHelixParticipant = Mockito.spy(new MockClusterParticipant());
+    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
     StorageManager storageManager =
         createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
     storageManager.start();
-    // test shutdown store failure (this is induced by shutting down disk manager)
-    storageManager.getDiskManager(testReplica.getPartitionId()).shutdown();
-    mockHelixParticipant.getReplicaSyncUpManager().initiateDisconnection(testReplica);
+    storageManager.controlCompactionForBlobStore(testReplica.getPartitionId(), false);
     CountDownLatch participantLatch = new CountDownLatch(1);
     Utils.newThread(() -> {
-      try {
-        mockHelixParticipant.onPartitionBecomeOfflineFromInactive(testReplica.getPartitionId().toPathString());
-        fail("should fail because of shutting down store failure");
-      } catch (StateTransitionException e) {
-        assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
-        participantLatch.countDown();
-      }
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(testReplica.getPartitionId().toPathString());
+      participantLatch.countDown();
     }, false).start();
-    // make sync-up complete to let code proceed and encounter exception in storage manager.
-    mockHelixParticipant.getReplicaSyncUpManager().onDisconnectionComplete(testReplica);
     assertTrue("Helix participant transition didn't get invoked within 1 sec",
         participantLatch.await(1, TimeUnit.SECONDS));
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
@@ -529,7 +521,7 @@ public class StorageManagerTest {
   }
 
   /**
-   * Test failure cases when updating InstanceConfig in Helix for both Offline-To-Bootstrap and Inactive-To-Offline.
+   * Test failure cases when updating InstanceConfig in Helix for both Offline-To-Bootstrap and Offline-To-Dropped.
    */
   @Test
   public void updateInstanceConfigFailureTest() throws Exception {
@@ -552,8 +544,8 @@ public class StorageManagerTest {
           e.getErrorCode());
     }
     try {
-      mockHelixParticipant.onPartitionBecomeOfflineFromInactive(localReplicas.get(0).getPartitionId().toPathString());
-      fail("should fail because updating InstanceConfig didn't succeed during Inactive-To-Offline");
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(localReplicas.get(0).getPartitionId().toPathString());
+      fail("should fail because updating InstanceConfig didn't succeed during Offline-To-Dropped");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.HelixUpdateFailure,
           e.getErrorCode());
@@ -569,8 +561,8 @@ public class StorageManagerTest {
           e.getErrorCode());
     }
     try {
-      mockHelixParticipant.onPartitionBecomeOfflineFromInactive(localReplicas.get(1).getPartitionId().toPathString());
-      fail("should fail because InstanceConfig is not found during Inactive-To-Offline");
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(localReplicas.get(1).getPartitionId().toPathString());
+      fail("should fail because InstanceConfig is not found during Offline-To-Dropped");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", StateTransitionException.TransitionErrorCode.HelixUpdateFailure,
           e.getErrorCode());

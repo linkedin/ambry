@@ -1122,6 +1122,14 @@ public class BlobStore implements Store {
   }
 
   /**
+   * Set if the store is recovering from decommission
+   * @param value {@code true if store is recovering from decommission}. {@code false} otherwise.
+   */
+  public void setRecoverFromDecommission(boolean value) {
+    recoverFromDecommission = value;
+  }
+
+  /**
    * Fetch {@link CompactionDetails} based on the {@link CompactionPolicy} for this {@link BlobStore} containing
    * information about log segments to be compacted
    * @param compactionPolicy the {@link CompactionPolicy} that needs to be used to determine the {@link CompactionDetails}
