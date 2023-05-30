@@ -186,6 +186,11 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public void forceDelete(List<MessageInfo> infos) throws StoreException {
+      delete(infos);
+    }
+
+    @Override
     public void updateTtl(List<MessageInfo> infos) throws StoreException {
       operationReceived = RequestOrResponseType.TtlUpdateRequest;
       List<MessageInfo> infosToUpdate = new ArrayList<>(infos.size());

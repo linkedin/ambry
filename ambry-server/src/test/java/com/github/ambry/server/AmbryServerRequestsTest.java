@@ -1232,6 +1232,167 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
   }
 
   /**
+   * Tests ReplicateBlobRequestV2: either invalid request or no-op requests.
+   */
+  @Test
+  public void testReplicateBlobV2InvalidOrNoOpRequest() throws Exception {
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockHost sourceHost = null; // the remote source host to replicate the blob from
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
+      if (dataNodeId != host.dataNodeId && sourceHost == null) {
+        sourceHost = host;
+      }
+      hosts.put(host.dataNodeId, host);
+    }
+    StoreKey storeKey = addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(sourceHost), 1).get(0);
+
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    BlobId blobId = (BlobId) storeKey;
+
+    storageManager.resetStore();
+
+    // ReplicateBlobRequest operationType RequestOrResponseType.GetRequest is wrong, expect to return Bad_Request.
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+            sourceHost.dataNodeId.getPort(), RequestOrResponseType.GetRequest, 0, (short) 0, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    sendRequestGetResponse(request, ServerErrorCode.Bad_Request);
+    assertEquals("expect no operation is received", null, MockStorageManager.operationReceived);
+
+    // ReplicateBlobRequest operationType RequestOrResponseType.PutRequest is wrong, expect to return Bad_Request.
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+        sourceHost.dataNodeId.getPort(), RequestOrResponseType.PutRequest, 0, (short) 0, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    sendRequestGetResponse(request, ServerErrorCode.Bad_Request);
+    assertEquals("expect no operation is received", null, MockStorageManager.operationReceived);
+
+    // ReplicateBlobRequest operationType RequestOrResponseType.PutResponse is wrong, expect to return Bad_Request.
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+        sourceHost.dataNodeId.getPort(), RequestOrResponseType.PutResponse, 0, (short) 0, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    sendRequestGetResponse(request, ServerErrorCode.Bad_Request);
+    assertEquals("expect no operation is received", null, MockStorageManager.operationReceived);
+
+    // lifeVersion is not expected
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, dataNodeId.getHostname(), dataNodeId.getPort(),
+        RequestOrResponseType.TtlUpdateRequest, System.currentTimeMillis(), (short) 0, -1);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    sendRequestGetResponse(request, ServerErrorCode.Bad_Request);
+    assertEquals("expect no operation is received", null, MockStorageManager.operationReceived);
+
+    // source replica is itself, do nothing
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, dataNodeId.getHostname(), dataNodeId.getPort(),
+        RequestOrResponseType.TtlUpdateRequest, System.currentTimeMillis(), (short) -1, -1);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    Response response = sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    assertEquals("expect no operation is received", null, MockStorageManager.operationReceived);
+    ReplicateBlobResponse replicateBlobResponse = (ReplicateBlobResponse) response;
+    assertEquals("expect ReplicateBlobRequest is successful. ", replicateBlobResponse.getError(),
+        ServerErrorCode.No_Error);
+  }
+
+  /**
+   * Tests ReplicateBlobRequestV2 to repair TtlUpdate or Delete.
+   */
+  @Test
+  public void testReplicateBlobV2() throws Exception {
+    Assume.assumeTrue(
+        MessageFormatRecord.getCurrentMessageHeaderVersion() >= MessageFormatRecord.Message_Header_Version_V3);
+    Map<DataNodeId, MockHost> hosts = new HashMap<>();
+    MockPartitionId partitionId =
+        (MockPartitionId) clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    MockHost sourceHost = null; // the remote source host to replicate the blob from
+    for (ReplicaId replica : partitionId.getReplicaIds()) {
+      MockHost host = new MockHost(replica.getDataNodeId(), clusterMap);
+      if (dataNodeId != host.dataNodeId) {
+        if (sourceHost == null) {
+          sourceHost = host;
+        }
+      }
+      hosts.put(host.dataNodeId, host);
+    }
+
+    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 5);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, storeKeyFactory,
+        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant, connectionPool);
+    int correlationId = TestUtils.RANDOM.nextInt();
+    String clientId = TestUtils.getRandomString(10);
+    storageManager.resetStore();
+
+    // PutBlob and TtlUpdate exists on the source host
+    BlobId blobId = (BlobId) addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(sourceHost), 1).get(0);
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, (StoreKey) blobId, Arrays.asList(sourceHost), -1);
+    ReplicateBlobRequest request =
+        new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+            sourceHost.dataNodeId.getPort(), RequestOrResponseType.PutRequest, 0, (short) 0, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    sendRequestGetResponse(request, ServerErrorCode.Bad_Request);
+
+    storageManager.resetStore();
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+        sourceHost.dataNodeId.getPort(), RequestOrResponseType.TtlUpdateRequest, 0, (short) -1, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    validKeysInStore.add(blobId);
+    sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    assertEquals("Received operation is not expected.", RequestOrResponseType.TtlUpdateRequest,
+        MockStorageManager.operationReceived);
+    validKeysInStore.remove(blobId);
+
+    // PutBlob, TtlUpdate and Delete exists on the source host
+    blobId = (BlobId) addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(sourceHost), 1).get(0);
+    addTtlUpdateMessagesToReplicasOfPartition(partitionId, (StoreKey) blobId, Arrays.asList(sourceHost), -1);
+    addDeleteMessagesToReplicasOfPartition(partitionId, (StoreKey) blobId, Arrays.asList(sourceHost));
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+        sourceHost.dataNodeId.getPort(), RequestOrResponseType.PutRequest, 0, (short) 0, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    sendRequestGetResponse(request, ServerErrorCode.Bad_Request);
+
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+        sourceHost.dataNodeId.getPort(), RequestOrResponseType.TtlUpdateRequest, 0, (short) -1, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    validKeysInStore.add(blobId);
+    sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    assertEquals("Received operation is not expected.", RequestOrResponseType.TtlUpdateRequest,
+        MockStorageManager.operationReceived);
+    validKeysInStore.remove(blobId);
+
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+        sourceHost.dataNodeId.getPort(), RequestOrResponseType.DeleteRequest, 0, (short) -1, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    validKeysInStore.add(blobId);
+    sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    assertEquals("Received operation is not expected.", RequestOrResponseType.DeleteRequest,
+        MockStorageManager.operationReceived);
+    validKeysInStore.remove(blobId);
+
+    // PutBlob and Delete exists on the source host
+    blobId = (BlobId) addPutMessagesToReplicasOfPartition(partitionId, Arrays.asList(sourceHost), 1).get(0);
+    addDeleteMessagesToReplicasOfPartition(partitionId, (StoreKey) blobId, Arrays.asList(sourceHost));
+    request = new ReplicateBlobRequest(correlationId, clientId, blobId, sourceHost.dataNodeId.getHostname(),
+        sourceHost.dataNodeId.getPort(), RequestOrResponseType.DeleteRequest, 0, (short) -1, 0);
+    assertEquals(ReplicateBlobRequest.VERSION_2, request.getVersionId());
+    validKeysInStore.add(blobId);
+    sendRequestGetResponse(request, ServerErrorCode.No_Error);
+    assertEquals("Received operation is not expected.", RequestOrResponseType.DeleteRequest,
+        MockStorageManager.operationReceived);
+    validKeysInStore.remove(blobId);
+
+    // We test the cases that target under different conditions with integration test.
+  }
+
+  /**
    * Test that cross-colo metrics are updated correctly when {@link AmbryRequests} handles {@link GetRequest} and
    * {@link ReplicaMetadataRequest}
    * @throws Exception
