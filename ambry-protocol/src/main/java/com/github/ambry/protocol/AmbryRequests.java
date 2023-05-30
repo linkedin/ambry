@@ -1123,7 +1123,7 @@ public class AmbryRequests implements RequestAPI {
       } else {
         // local doesn't have the blob,
         // 1. try to replicate the blob from the source replica and repair the delete record.
-        // 2. if source doesn't have the PutBlob, get the tombstone from the source and repair the delete record.
+        // 2. if source doesn't have the PutBlob, write the tombstone to the local store.
         Pair<ServerErrorCode, GetResponse> remoteGetResult = getBlobFromRemoteReplica(replicateBlobRequest);
         errorCode = remoteGetResult.getFirst();
         if (errorCode == ServerErrorCode.No_Error) {
@@ -1131,8 +1131,8 @@ public class AmbryRequests implements RequestAPI {
           if (errorCode == ServerErrorCode.No_Error) {
             errorCode = repairDeleteRecordToLocalBlob(replicateBlobRequest, blobId);
           }
-        } else if (errorCode == ServerErrorCode.Blob_Deleted) {
-          errorCode = repairDeleteRecordFromSourceTombstone(replicateBlobRequest, blobId);
+        } else if (errorCode == ServerErrorCode.Blob_Deleted || errorCode == ServerErrorCode.Blob_Not_Found) {
+          errorCode = repairTombStoneToLocalStore(replicateBlobRequest, blobId);
         }
       }
     }
@@ -1228,34 +1228,26 @@ public class AmbryRequests implements RequestAPI {
     return errorCode;
   }
 
-  private ServerErrorCode repairDeleteRecordFromSourceTombstone(ReplicateBlobRequest replicateBlobRequest,
-      BlobId blobId) {
-    String remoteHostName = replicateBlobRequest.getSourceHostName();
-    int remoteHostPort = replicateBlobRequest.getSourceHostPort();
+  private ServerErrorCode repairTombStoneToLocalStore(ReplicateBlobRequest replicateBlobRequest, BlobId blobId) {
     Store store = storeManager.getStore(blobId.getPartition());
     ServerErrorCode errorCode = ServerErrorCode.No_Error;
 
     try {
-      // get the tombstone index entry from the remote replica and force write the delete record.
       metrics.replicateDeleteRecordRate.mark();
-      Pair<ServerErrorCode, MessageInfo> indexEntryResult =
-          getTombStoneFromRemoteReplica(blobId, remoteHostName, remoteHostPort);
-      errorCode = indexEntryResult.getFirst();
-      MessageInfo indexInfo = indexEntryResult.getSecond();
-
-      if (errorCode == ServerErrorCode.No_Error) {
-        store.forceDelete(Collections.singletonList(indexInfo));
-        logger.info("ReplicateBlobRequest replicated tombstone {} from remote host {} {} : {}", blobId, remoteHostName,
-            remoteHostPort, indexInfo);
-      }
+      // Force write tombstone with lifeVersion = 0.
+      MessageInfo deleteRecord = new MessageInfo.Builder(blobId, -1, blobId.getAccountId(), blobId.getContainerId(),
+          replicateBlobRequest.getOperationTimeInMs()).isDeleted(true).lifeVersion((short) 0).build();
+      store.forceDelete(Collections.singletonList(deleteRecord));
+      logger.info("ReplicateBlobRequest repair tombstone {} : {}", blobId, deleteRecord);
     } catch (StoreException e) { // catch the store write exception
-      // if forceDelete fail due to local store has the key, it throws Already_Exist exception
+      // if forceDelete fail due to local store has the key, it throws Already_Exist exception.
+      // Let it fail and retry will go with the regular delete.
+      // LOCAL_BLOB_CONSISTENCY: add a concurrent test to verify the Already_Exist case
+      errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
-        logger.info("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);
-        errorCode = ServerErrorCode.No_Error;
+        logger.error("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);
       } else {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", blobId, replicateBlobRequest, e);
-        errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       }
     }
 

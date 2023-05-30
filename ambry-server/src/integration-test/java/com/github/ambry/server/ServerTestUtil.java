@@ -3966,14 +3966,14 @@ final class ServerTestUtil {
       cluster.time.sleep(1000);
 
       // 14. On the sourceDataNode, the blob doesn't exist.
-      // ReplicateBlob fails with Blob_Not_Found status
+      // ReplicateBlob with DeleteOperation is successful
       blobId = blobId14;
       operationTime = cluster.time.milliseconds();
       replicatePutBlob(targetChannel, blobId, sourceDataNode, ServerErrorCode.Bad_Request);
       replicateTtlUpdate(targetChannel, blobId, sourceDataNode, operationTime, Utils.Infinite_Time,
           ServerErrorCode.Blob_Not_Found);
-      replicateDeleteBlob(targetChannel, blobId, sourceDataNode, operationTime, ServerErrorCode.Blob_Not_Found);
-      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
+      replicateDeleteBlob(targetChannel, blobId, sourceDataNode, operationTime, ServerErrorCode.No_Error);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
       cluster.time.sleep(1000);
 
@@ -4048,7 +4048,7 @@ final class ServerTestUtil {
         blobId12           put/del         put/ttl          not_exist         put/ttl/del     deleted or not_exist
         blobId13           put/del         put/del          not_exist         put/del         deleted or not_exist
 
-        blobId14           not_exist       not_exist        not_exist         not_exist       not_exist
+        blobId14           not_exist       not_exist        deleted           not_exist       not_exist
         compactedBlobId1   tombstone       not_exist        not_exist         del             not_exist or del
         compactedBlobId2   tombstone       put              not_exist         put/del         not_exist or del
        */
@@ -4194,8 +4194,13 @@ final class ServerTestUtil {
               encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
         }
 
-        getBlobAndVerify(blobId14, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
-            encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+        if (channel == targetChannel) {
+          getBlobAndVerify(blobId14, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+        } else {
+          getBlobAndVerify(blobId14, channel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
+              encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+        }
 
         if (channel == targetChannel || channel == sourceChannel) {
           getBlobAndVerify(compactedBlobId1, channel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata,
