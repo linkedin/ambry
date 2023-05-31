@@ -64,6 +64,11 @@ public class SocketServer implements NetworkServer {
   private SSLFactory sslFactory;
 
   public SocketServer(NetworkConfig config, SSLConfig sslConfig, MetricRegistry registry, ArrayList<Port> portList) {
+    this(config, (SSLFactory) null, registry, portList);
+    this.initializeSSLFactory(sslConfig);
+  }
+
+  public SocketServer(NetworkConfig config, SSLFactory sslFactory, MetricRegistry registry, ArrayList<Port> portList) {
     this.networkConfig = config;
     this.host = config.hostName;
     this.port = config.port;
@@ -76,7 +81,7 @@ public class SocketServer implements NetworkServer {
     this.acceptors = new ArrayList<>();
     this.ports = new HashMap<>();
     this.validatePorts(portList);
-    this.initializeSSLFactory(sslConfig);
+    this.sslFactory = sslFactory;
   }
 
   public String getHost() {
