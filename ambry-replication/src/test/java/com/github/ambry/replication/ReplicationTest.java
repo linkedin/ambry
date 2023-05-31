@@ -105,6 +105,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.*;
 
 
@@ -1917,31 +1918,29 @@ public class ReplicationTest extends ReplicationTestHelper {
       idsToExpectByPartition.put(partitionId, expectedIds);
     }
 
-    // Do the replica metadata exchange.
-    List<ReplicaThread.ExchangeMetadataResponse> responses =
-        testSetup.replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-            testSetup.replicasToReplicate.get(remoteHost.dataNodeId));
-
-    Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
-        idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
-        responses.stream()
-            .map(ReplicaThread.ExchangeMetadataResponse::getMissingStoreKeys)
-            .flatMap(Collection::stream)
-            .collect(Collectors.toSet()));
-
-    // Now delete a message in the remote before doing the Get requests (for every partition). Remove these keys from
-    // expected key set. Even though they are requested, they should not go into the local store. However, this cycle
-    // of replication must be successful.
-    for (PartitionId partitionId : partitionIds) {
+    testSetup.replicaThread.setExchangeMetadataListener((partitionId, exception) -> {
+      // Now delete a message in the remote before doing the Get requests (for every partition). Remove these keys from
+      // expected key set. Even though they are requested, they should not go into the local store. However, this cycle
+      // of replication must be successful.
       Iterator<StoreKey> iter = idsToExpectByPartition.get(partitionId).iterator();
       iter.next();
       StoreKey keyToDelete = iter.next();
-      addDeleteMessagesToReplicasOfPartition(partitionId, keyToDelete, Collections.singletonList(remoteHost));
+      try {
+        addDeleteMessagesToReplicasOfPartition(partitionId, keyToDelete, Collections.singletonList(remoteHost));
+      } catch (Exception e) {
+      }
       iter.remove();
-    }
+    });
 
-    testSetup.replicaThread.fixMissingStoreKeys(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-        testSetup.replicasToReplicate.get(remoteHost.dataNodeId), responses, false);
+    testSetup.replicaThread.replicate();
+    Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",
+        idsToExpectByPartition.values().stream().flatMap(Collection::stream).collect(Collectors.toSet()),
+        testSetup.replicaThread.getExchangeMetadataResponsesInEachCycle()
+            .get(remoteHost.dataNodeId)
+            .stream()
+            .map(ReplicaThread.ExchangeMetadataResponse::getMissingStoreKeys)
+            .flatMap(Collection::stream)
+            .collect(Collectors.toSet()));
 
     Assert.assertEquals(idsToExpectByPartition.keySet(), localHost.infosByPartition.keySet());
     Assert.assertEquals("Actual keys in Exchange Metadata Response different from expected",

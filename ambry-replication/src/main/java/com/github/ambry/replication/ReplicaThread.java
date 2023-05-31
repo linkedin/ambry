@@ -127,6 +127,8 @@ public class ReplicaThread implements Runnable {
   // This is used in the test cases
   private Map<DataNodeId, List<ExchangeMetadataResponse>> exchangeMetadataResponsesInEachCycle = null;
 
+  private volatile ExchangeMetadataListener exchangeMetadataListener = null;
+
   public ReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ReplicationConfig replicationConfig,
       ReplicationMetrics replicationMetrics, NotificationSystem notification, StoreKeyConverter storeKeyConverter,
@@ -441,6 +443,10 @@ public class ReplicaThread implements Runnable {
           replicatingFromRemoteColo, datacenterName);
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
+  }
+
+  void setExchangeMetadataListener(ExchangeMetadataListener exchangeMetadataListener) {
+    this.exchangeMetadataListener = exchangeMetadataListener;
   }
 
   /**
@@ -2090,6 +2096,10 @@ public class ReplicaThread implements Runnable {
         setException(new IOException("NetworkClientErrorCode: " + networkClientErrorCode),
             "Failed to send ReplicaMetadataRequest");
       }
+      if (exchangeMetadataListener != null) {
+        remoteReplicaInfos.forEach(
+            r -> exchangeMetadataListener.onComplete(r.getReplicaId().getPartitionId(), exception));
+      }
     }
 
     /**
@@ -2167,5 +2177,10 @@ public class ReplicaThread implements Runnable {
     public Exception getException() {
       return exception;
     }
+  }
+
+  @FunctionalInterface
+  interface ExchangeMetadataListener {
+    void onComplete(PartitionId partitionId, Exception exception);
   }
 }
