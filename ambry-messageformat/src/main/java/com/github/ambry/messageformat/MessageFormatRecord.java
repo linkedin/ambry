@@ -1795,6 +1795,7 @@ public class MessageFormatRecord {
 
     public static BlobData deserializeBlobRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
+      long crcFirst = crcStream.getValue();
       // Get the BlobType.
       short blobTypeOrdinal = dataStream.readShort();
       if (blobTypeOrdinal >= BlobType.values().length) {
@@ -1812,13 +1813,20 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
+      long crcSecond = crcStream.getValue();
       ByteBuf byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
         StringBuilder sb = new StringBuilder();
-        sb.append("ComputedCrc: ").append(crc).append(" ReceivedCrc: ")
+        sb.append("ComputedCrc: ")
+            .append(crc)
+            .append(" ReceivedCrc: ")
             .append(streamCrc)
+            .append(" First CRC: ")
+            .append(crcFirst)
+            .append(" Second CRC: ")
+            .append(crcSecond)
             .append(" Blob Format version: 3")
             .append(" BlobType: ")
             .append(blobContentType)
@@ -1826,6 +1834,7 @@ public class MessageFormatRecord {
             .append(isCompressed)
             .append(" DataSize: ")
             .append(dataSize)
+            .append(" ")
             .append(byteBufSummary(byteBuf));
         logger.error("corrupt data while parsing blob content: " + sb);
         throw new MessageFormatException("corrupt data while parsing blob content",
@@ -1843,32 +1852,11 @@ public class MessageFormatRecord {
    */
   static String byteBufSummary(ByteBuf bb) {
     StringBuilder sb = new StringBuilder();
-    if (bb.readableBytes() <= 30) {
-      sb.append("[");
-      while (bb.isReadable()) {
-        sb.append(Utils.byteToHex(bb.readByte())).append(", ");
-      }
-      sb.append("]");
-    } else {
-      byte[] chunk = new byte[10];
-      // get the first 10 bytes
-      bb.getBytes(0, chunk);
-      sb.append("First 10 bytes: [");
-      for (byte b : chunk) {
-        sb.append(Utils.byteToHex(b)).append(", ");
-      }
-      sb.append("]\n10 bytes in the middle: [");
-      bb.getBytes(bb.readableBytes() / 2 - 5, chunk);
-      for (byte b : chunk) {
-        sb.append(Utils.byteToHex(b)).append(", ");
-      }
-      sb.append("]\nLast 10 bytes: [");
-      bb.getBytes(bb.readableBytes() - 10, chunk);
-      for (byte b : chunk) {
-        sb.append(Utils.byteToHex(b)).append(", ");
-      }
-      sb.append("]");
+    sb.append("[");
+    while (bb.isReadable()) {
+      sb.append(Utils.byteToHex(bb.readByte())).append(", ");
     }
+    sb.append("]");
     return sb.toString();
   }
 
