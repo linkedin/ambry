@@ -23,11 +23,18 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.Send;
+import com.github.ambry.protocol.CompositeSend;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
@@ -38,12 +45,17 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import java.io.IOException;
+import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,6 +69,7 @@ public class RecoveryNetworkClient implements NetworkClient {
   private final ClusterMap clustermap;
   private final FindTokenHelper findTokenHelper;
   private final StoreManager storeManager;
+  private final ConcurrentHashMap<StoreKey, MessageInfo> messageInfoCache = new ConcurrentHashMap<>();
   protected final CosmosContainer cosmosContainer;
 
   public RecoveryNetworkClient(ClusterMap clustermap, FindTokenHelper findTokenHelper, StoreManager storeManager,
@@ -76,14 +89,18 @@ public class RecoveryNetworkClient implements NetworkClient {
       RequestOrResponseType type = null;
       Send send = null;
       try {
-        content.readLong(); // Skip the size of the
+        content.readLong(); // Skip the size of the requests
         type = RequestOrResponseType.values()[content.readShort()];
         // RecoveryNetworkClient only cares about the ReplicaMetadataRequest and GetRequest
         switch (type) {
           case ReplicaMetadataRequest:
             send = handleReplicaMetadataRequest(content);
             break;
+          case GetRequest:
+            send = handleGetRequest(content);
+            break;
           default:
+            throw new IllegalArgumentException("RecoveryNetworkClient doesn't support request: " + type);
         }
       } catch (Exception exception) {
         logger.error("Failed to handle request: type {}", type, exception);
@@ -92,7 +109,9 @@ public class RecoveryNetworkClient implements NetworkClient {
       }
       ResponseInfo responseInfo;
       if (send != null) {
-        responseInfo = new ResponseInfo(requestInfo, null, requestInfo.getReplicaId().getDataNodeId(), send);
+        ByteBuf byteBuf = send.content();
+        byteBuf.readLong(); // skip the size of the response.
+        responseInfo = new ResponseInfo(requestInfo, null, byteBuf, requestInfo.getReplicaId().getDataNodeId(), false);
       } else {
         responseInfo = new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError,
             requestInfo.getReplicaId().getDataNodeId(), null);
@@ -143,6 +162,8 @@ public class RecoveryNetworkClient implements NetworkClient {
           requestCharge += page.getRequestCharge();
           for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
             MessageInfo messageInfo = getMessageInfoFromMetadata(cloudBlobMetadata);
+            // Adding this MessageInfo in the cache, we can later use it in the GetRequest.
+            messageInfoCache.put(messageInfo.getStoreKey(), messageInfo);
             messageEntries.add(messageInfo);
             totalBlobBytesRead += cloudBlobMetadata.getSize();
             if (backupStartTime == -1 || (cloudBlobMetadata.getCreationTime() < backupStartTime)) {
@@ -230,6 +251,51 @@ public class RecoveryNetworkClient implements NetworkClient {
     return store.getSizeInBytes() - totalBytesRead;
   }
 
+  private GetResponse handleGetRequest(ByteBuf content) throws IOException {
+    GetRequest request = GetRequest.readFrom(new NettyByteBufDataInputStream(content), clustermap);
+    if (request.getMessageFormatFlag() != MessageFormatFlags.All) {
+      throw new IllegalArgumentException("GetRequest should have MessageFormatFlags being ALL");
+    }
+    List<PartitionResponseInfo> partitionResponseInfos = new ArrayList<>();
+    List<Send> blobsToSend = new ArrayList<>();
+    for (PartitionRequestInfo partitionRequestInfo : request.getPartitionInfoList()) {
+      boolean hasError = false;
+      List<MessageInfo> messageInfos = new ArrayList<>();
+      List<MessageMetadata> messageMetadatas = new ArrayList<>();
+      long allMessageInfoSize = 0;
+      for (StoreKey storeKey : partitionRequestInfo.getBlobIds()) {
+        // MessageInfo for the given store key is put in the cache in ReplicaMetadataRequest. All store keys in GetRequest
+        // should already have MessageInfos in the cache. If replication thread retries, it would send the ReplicaMetadataRequest
+        // again before the GetRequest.
+        MessageInfo info = messageInfoCache.remove(storeKey);
+        if (info != null) {
+          messageInfos.add(info);
+          messageMetadatas.add(null);
+          allMessageInfoSize += info.getSize();
+        } else {
+          logger.error("Failed to find MessageInfo for store key {} at partition {}", storeKey,
+              partitionRequestInfo.getPartition());
+          hasError = true;
+          break;
+        }
+      }
+      PartitionResponseInfo partitionResponseInfo;
+      if (!hasError) {
+        partitionResponseInfo =
+            new PartitionResponseInfo(partitionRequestInfo.getPartition(), messageInfos, messageMetadatas);
+      } else {
+        partitionResponseInfo =
+            new PartitionResponseInfo(partitionRequestInfo.getPartition(), ServerErrorCode.Blob_Not_Found);
+      }
+      partitionResponseInfos.add(partitionResponseInfo);
+      logger.trace("Create a AllZeroSend for length {} at partition {}", allMessageInfoSize,
+          partitionRequestInfo.getPartition());
+      blobsToSend.add(new AllZeroSend(allMessageInfoSize));
+    }
+    return new GetResponse(request.getCorrelationId(), request.getClientId(), partitionResponseInfos,
+        new CompositeSend(blobsToSend), ServerErrorCode.No_Error);
+  }
+
   @Override
   public int warmUpConnections(List<DataNodeId> dataNodeIds, int connectionWarmUpPercentagePerDataNode,
       long timeForWarmUp, List<ResponseInfo> responseInfoList) {
@@ -245,5 +311,43 @@ public class RecoveryNetworkClient implements NetworkClient {
   @Override
   public void close() {
     logger.info("Close is called");
+  }
+
+  /**
+   * A helper implementation of {@link Send} to return all zeros.
+   */
+  public static class AllZeroSend extends AbstractByteBufHolder<AllZeroSend> implements Send {
+    private final long size;
+    private final ByteBuf content;
+
+    public AllZeroSend(long size) {
+      this.size = size;
+      this.content = Unpooled.wrappedBuffer(new byte[(int) size]);
+    }
+
+    @Override
+    public long writeTo(WritableByteChannel channel) throws IOException {
+      return 0;
+    }
+
+    @Override
+    public boolean isSendComplete() {
+      return false;
+    }
+
+    @Override
+    public long sizeInBytes() {
+      return size;
+    }
+
+    @Override
+    public ByteBuf content() {
+      return content;
+    }
+
+    @Override
+    public AllZeroSend replace(ByteBuf content) {
+      return null;
+    }
   }
 }
