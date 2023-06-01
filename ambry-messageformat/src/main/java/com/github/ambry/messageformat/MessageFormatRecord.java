@@ -1854,7 +1854,7 @@ public class MessageFormatRecord {
     StringBuilder sb = new StringBuilder();
     sb.append("[");
     while (bb.isReadable()) {
-      sb.append(Utils.byteToHex(bb.readByte())).append(", ");
+      sb.append(Utils.byteToHex(bb.readByte())).append(",");
     }
     sb.append("]");
     return sb.toString();
