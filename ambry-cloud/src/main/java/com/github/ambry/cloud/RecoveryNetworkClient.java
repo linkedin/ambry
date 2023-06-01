@@ -251,6 +251,12 @@ public class RecoveryNetworkClient implements NetworkClient {
     return store.getSizeInBytes() - totalBytesRead;
   }
 
+  /**
+   * Handle GetRequest but return fake blob content with all zero value bytes
+   * @param content
+   * @return
+   * @throws IOException
+   */
   private GetResponse handleGetRequest(ByteBuf content) throws IOException {
     GetRequest request = GetRequest.readFrom(new NettyByteBufDataInputStream(content), clustermap);
     if (request.getMessageFormatFlag() != MessageFormatFlags.All) {
