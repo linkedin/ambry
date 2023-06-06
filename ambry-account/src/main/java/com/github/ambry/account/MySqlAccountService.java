@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -51,7 +52,7 @@ public class MySqlAccountService extends AbstractAccountService {
   private final ScheduledExecutorService scheduler;
   private volatile MySqlAccountStore mySqlAccountStore;
   private volatile MySqlAccountStore mySqlAccountStoreNew;
-  private final CachedAccountService cachedAccountService;
+  private CachedAccountService cachedAccountService;
   private CachedAccountService cachedAccountServiceNew;
   private final AccountServiceMetrics accountServiceMetricsNew;
 
@@ -62,23 +63,26 @@ public class MySqlAccountService extends AbstractAccountService {
     this.config = config;
     this.scheduler =
         config.updaterPollingIntervalSeconds > 0 ? Utils.newScheduler(1, MYSQL_ACCOUNT_UPDATER_PREFIX, false) : null;
-    try {
-      this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
-    } catch (SQLException e) {
-      logger.error("MySQL account store creation failed", e);
-      // If it is a non-transient error like credential issue, creation should fail.
-      // Otherwise, continue account service creation and initialize cache with metadata from local file copy
-      // to serve read requests. Connection to MySql DB will be retried during periodic sync. Until then, write
-      // requests will be blocked.
-      if (MySqlDataAccessor.isCredentialError(e)) {
-        // Fatal error, fail fast
-        throw e;
-      }
-    }
     this.accountServiceMetricsNew = accountServiceMetricsWrapper.getAccountServiceMetricsNew();
-    cachedAccountService = new CachedAccountService(mySqlAccountStore,
-        callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStore),
-        accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler, false);
+    if (!config.disablePutForOldDb) {
+      try {
+        this.mySqlAccountStore = mySqlAccountStoreFactory.getMySqlAccountStore();
+      } catch (SQLException e) {
+        logger.error("MySQL account store creation failed", e);
+        // If it is a non-transient error like credential issue, creation should fail.
+        // Otherwise, continue account service creation and initialize cache with metadata from local file copy
+        // to serve read requests. Connection to MySql DB will be retried during periodic sync. Until then, write
+        // requests will be blocked.
+        if (MySqlDataAccessor.isCredentialError(e)) {
+          // Fatal error, fail fast
+          throw e;
+        }
+      }
+      cachedAccountService = new CachedAccountService(mySqlAccountStore,
+          callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStore),
+          accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler,
+          false);
+    }
     if (config.enableNewDatabaseForMigration) {
       try {
         this.mySqlAccountStoreNew = mySqlAccountStoreFactory.getMySqlAccountStoreNew();
@@ -110,7 +114,9 @@ public class MySqlAccountService extends AbstractAccountService {
    * last modified/sync time and loads into in-memory {@link AccountInfoMap}.
    */
   synchronized void fetchAndUpdateCache() throws SQLException {
-    cachedAccountService.fetchAndUpdateCache();
+    if (!config.disablePutForOldDb) {
+      cachedAccountService.fetchAndUpdateCache();
+    }
     if (config.enableNewDatabaseForMigration) {
       try {
         cachedAccountServiceNew.fetchAndUpdateCache();
@@ -189,7 +195,9 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
-    cachedAccountService.updateAccounts(accounts);
+    if (!config.disablePutForOldDb) {
+      cachedAccountService.updateAccounts(accounts);
+    }
     if (config.enableNewDatabaseForMigration) {
       try {
         cachedAccountServiceNew.updateAccounts(accounts);
@@ -217,7 +225,9 @@ public class MySqlAccountService extends AbstractAccountService {
     if (scheduler != null) {
       shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
     }
-    cachedAccountService.close();
+    if (!config.disablePutForOldDb) {
+      cachedAccountService.close();
+    }
     if (config.enableNewDatabaseForMigration) {
       cachedAccountServiceNew.close();
     }
@@ -225,7 +235,9 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   protected void checkOpen() {
-    cachedAccountService.checkOpen();
+    if (!config.disablePutForOldDb) {
+      cachedAccountService.checkOpen();
+    }
     if (config.enableNewDatabaseForMigration) {
       cachedAccountServiceNew.checkOpen();
     }
@@ -249,7 +261,9 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public void selectInactiveContainersAndMarkInStore(AggregatedAccountStorageStats aggregatedAccountStorageStats) {
-    cachedAccountService.selectInactiveContainersAndMarkInStore(aggregatedAccountStorageStats);
+    if (!config.disablePutForOldDb) {
+      cachedAccountService.selectInactiveContainersAndMarkInStore(aggregatedAccountStorageStats);
+    }
     if (config.enableNewDatabaseForMigration) {
       cachedAccountServiceNew.selectInactiveContainersAndMarkInStore(aggregatedAccountStorageStats);
     }
@@ -258,7 +272,10 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
-    Collection<Container> containerList = cachedAccountService.updateContainers(accountName, containers);
+    Collection<Container> containerList = new ArrayList<>();
+    if (!config.disablePutForOldDb) {
+      containerList = cachedAccountService.updateContainers(accountName, containers);
+    }
     if (config.enableNewDatabaseForMigration) {
       try {
         cachedAccountServiceNew.updateContainers(accountName, containers);

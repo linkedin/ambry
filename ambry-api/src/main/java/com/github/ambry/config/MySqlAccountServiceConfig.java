@@ -38,6 +38,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String IGNORE_NEW_DATABASE_UPLOAD_ERROR =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "ignore.new.database.upload.error";
   public static final String ENABLE_GET_FROM_NEW_DB_ONLY = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.get.from.new.db.only";
+  public static final String DISABLE_PUT_FOR_OLD_DB = MYSQL_ACCOUNT_SERVICE_PREFIX + "disable.put.for.old.db";
 
 
   /**
@@ -170,6 +171,13 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("false")
   public final boolean enableGetFromNewDbOnly;
 
+  /**
+   * If true, disable put for old db.
+   */
+  @Config(DISABLE_PUT_FOR_OLD_DB)
+  @Default("false")
+  public final boolean disablePutForOldDb;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -182,6 +190,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     enableNewDatabaseForMigration = verifiableProperties.getBoolean(ENABLE_NEW_DATABASE_FOR_MIGRATION, false);
     ignoreNewDatabaseUploadError = verifiableProperties.getBoolean(IGNORE_NEW_DATABASE_UPLOAD_ERROR, true);
     enableGetFromNewDbOnly = verifiableProperties.getBoolean(ENABLE_GET_FROM_NEW_DB_ONLY, false);
+    disablePutForOldDb = verifiableProperties.getBoolean(DISABLE_PUT_FOR_OLD_DB, false);
     dbInfoNew = enableNewDatabaseForMigration ? verifiableProperties.getString(DB_INFO_NEW)
         : verifiableProperties.getString(DB_INFO_NEW, "");
     backupDirNew = verifiableProperties.getString(BACKUP_DIRECTORY_KEY_NEW, "");
