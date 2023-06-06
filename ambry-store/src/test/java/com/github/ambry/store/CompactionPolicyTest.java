@@ -92,7 +92,7 @@ public class CompactionPolicyTest {
     properties.setProperty("store.compaction.policy.factory", compactionPolicyFactoryStr);
     Pair<MockBlobStore, StoreConfig> initState = initializeBlobStore(properties, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
     config = initState.getSecond();
-    messageRetentionTimeInMs = TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours);
+    messageRetentionTimeInMs = TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes);
     blobStore = initState.getFirst();
     mockBlobStoreStats = blobStore.getBlobStoreStats();
     CompactionPolicyFactory compactionPolicyFactory = Utils.getObj(compactionPolicyFactoryStr, config, time);
@@ -213,7 +213,7 @@ public class CompactionPolicyTest {
 
   /**
    * Tests {@link CompactionManager#getCompactionDetails(BlobStore)} for different values for
-   * {@link StoreConfig#storeDeletedMessageRetentionHours}
+   * {@link StoreConfig#storeDeletedMessageRetentionMinutes}
    */
   @Test
   public void testDifferentMessageRetentionDays() throws StoreException, InterruptedException {
@@ -222,7 +222,7 @@ public class CompactionPolicyTest {
     for (int messageRetentionHours : messageRetentionHoursValues) {
       time = new MockTime();
       Pair<MockBlobStore, StoreConfig> initState =
-          initializeBlobStore(properties, time, -1, messageRetentionHours, DEFAULT_MAX_BLOB_SIZE);
+          initializeBlobStore(properties, time, -1, messageRetentionHours * 60, DEFAULT_MAX_BLOB_SIZE);
       if (compactionPolicy instanceof StatsBasedCompactionPolicy) {
         bestCandidates = setUpStateForStatsBasedCompactionPolicy(blobStore, mockBlobStoreStats);
         compactionPolicy = new StatsBasedCompactionPolicy(initState.getSecond(), time);
@@ -232,7 +232,7 @@ public class CompactionPolicyTest {
         compactionPolicy = new CompactAllPolicy(initState.getSecond(), time);
       }
       verifyCompactionDetails(
-          new CompactionDetails(time.milliseconds() - TimeUnit.HOURS.toMillis(messageRetentionHours), bestCandidates,
+          new CompactionDetails(time.milliseconds() - TimeUnit.HOURS.toMillis(messageRetentionHours * 60), bestCandidates,
               null), blobStore, compactionPolicy);
     }
   }
@@ -243,7 +243,7 @@ public class CompactionPolicyTest {
    * Initializes {@link BlobStore}
    * @param minLogSizeToTriggerCompactionInPercentage Property value to be set for
    * {@link StoreConfig#storeMinUsedCapacityToTriggerCompactionInPercentage}
-   * @param messageRetentionInHours Property value to be set for {@link StoreConfig#storeDeletedMessageRetentionHours
+   * @param messageRetentionInHours Property value to be set for {@link StoreConfig#storeDeletedMessageRetentionMinutes}
    * @throws InterruptedException
    */
   static Pair<MockBlobStore, StoreConfig> initializeBlobStore(Properties properties, Time time,
@@ -255,10 +255,10 @@ public class CompactionPolicyTest {
           String.valueOf(minLogSizeToTriggerCompactionInPercentage));
     }
     if (messageRetentionInHours != -1) {
-      properties.setProperty("store.deleted.message.retention.hours", String.valueOf(messageRetentionInHours));
+      properties.setProperty("store.deleted.message.retention.minutes", String.valueOf(messageRetentionInHours * 60));
     }
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
-    time.sleep(10 * TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours));
+    time.sleep(10 * TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes));
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
     MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(maxBlobSize);
