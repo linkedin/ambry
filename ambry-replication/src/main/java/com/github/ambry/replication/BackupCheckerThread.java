@@ -21,7 +21,6 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.network.ConnectedChannel;
-import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.ServerErrorCode;
@@ -34,7 +33,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.nio.file.StandardOpenOption;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
@@ -44,6 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 /**
  * This class extends the replication logic encapsulated in ReplicaThread. Instead of apply updates
@@ -71,16 +70,15 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
-      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, networkClient,
-        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
-        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-        leaderBasedReplicationAdmin);
+    super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
+        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
+        datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     try {
       fileManager = Utils.getObj(replicationConfig.backupCheckerFileManagerType, replicationConfig, metricRegistry);
     } catch (ReflectiveOperationException e) {
@@ -142,7 +140,8 @@ public class BackupCheckerThread extends ReplicaThread {
    * @param remoteReplicaInfo Info about remote replica from which we are replicating
    */
   @Override
-  protected void applyPut(MessageSievingInputStream validMessageDetectionInputStream, RemoteReplicaInfo remoteReplicaInfo) {
+  protected void applyPut(MessageSievingInputStream validMessageDetectionInputStream,
+      RemoteReplicaInfo remoteReplicaInfo) {
     throw new IllegalStateException("We should not be in applyPut since we override fixMissingStoreKeys");
   }
 
@@ -156,9 +155,9 @@ public class BackupCheckerThread extends ReplicaThread {
    *                                       non-leader replica pairs during leader-based replication.
    */
   @Override
-  protected void fixMissingStoreKeys(
-      ConnectedChannel connectedChannel, List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<ExchangeMetadataResponse> exchangeMetadataResponseList, boolean remoteColoGetRequestForStandby) {
+  protected void fixMissingStoreKeys(ConnectedChannel connectedChannel,
+      List<RemoteReplicaInfo> replicasToReplicatePerNode, List<ExchangeMetadataResponse> exchangeMetadataResponseList,
+      boolean remoteColoGetRequestForStandby) {
     /**
      * Instead of over-riding applyPut, it is better to override fixMissingStoreKeys.
      * We already know the missing keys. We know they are not deleted or expired on the remote node.
@@ -171,9 +170,10 @@ public class BackupCheckerThread extends ReplicaThread {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
-        for (MessageInfo messageInfo: exchangeMetadataResponse.getMissingStoreMessages()) {
+        for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
           // Check local store once before logging an error
-          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates, acceptableStoreErrorCodes);
+          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates,
+              acceptableStoreErrorCodes);
         }
         // Advance token so that we make progress in spite of missing keys,
         // else the replication code will be stuck waiting for missing keys to appear in local store.
@@ -215,7 +215,8 @@ public class BackupCheckerThread extends ReplicaThread {
       if (messageInfoTypes.isEmpty()) {
         fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE),
             String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
-                DATE_FORMAT.format(remoteBlob.getOperationTimeMs()), getBlobStates(remoteBlob), getBlobStates(localBlob)));
+                DATE_FORMAT.format(remoteBlob.getOperationTimeMs()), getBlobStates(remoteBlob),
+                getBlobStates(localBlob)));
       }
     } catch (StoreException e) {
       EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
@@ -261,9 +262,10 @@ public class BackupCheckerThread extends ReplicaThread {
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {
     // This will help us know when to stop DR process for sealed partitions
-    String text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
-        remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
-        exchangeMetadataResponse.localLagFromRemoteInBytes);
+    String text =
+        String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n", remoteReplicaInfo,
+            remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
+            exchangeMetadataResponse.localLagFromRemoteInBytes);
     fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), text);
   }
 
@@ -276,8 +278,7 @@ public class BackupCheckerThread extends ReplicaThread {
   protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
     return String.join(File.separator, replicationConfig.backupCheckerReportDir,
         Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
-        fileName);
+        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(), fileName);
   }
 
   /**

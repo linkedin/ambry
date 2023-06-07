@@ -17,10 +17,10 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.MockVcrClusterSpectator;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.clustermap.MockHelixParticipant;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.MockVcrClusterSpectator;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ClusterMapConfig;
@@ -141,9 +141,8 @@ public class CloudToStoreReplicationManagerTest {
             new InMemAccountService(false, false));
     CloudToStoreReplicationManager cloudToStoreReplicationManager =
         new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-            storeKeyFactory, clusterMap, mockScheduler, currentNode, null, clusterMap.getMetricRegistry(), null,
-            storeKeyConverterFactory, serverConfig.serverMessageTransformer, mockClusterSpectator,
-            mockHelixParticipant);
+            storeKeyFactory, clusterMap, mockScheduler, currentNode, clusterMap.getMetricRegistry(), null,
+            storeKeyConverterFactory, serverConfig.serverMessageTransformer, mockClusterSpectator, mockHelixParticipant);
     storageManager.start();
     cloudToStoreReplicationManager.start();
     mockClusterSpectator.spectate();
@@ -182,9 +181,8 @@ public class CloudToStoreReplicationManagerTest {
             new InMemAccountService(false, false));
     CloudToStoreReplicationManager cloudToStoreReplicationManager =
         new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-            storeKeyFactory, clusterMap, mockScheduler, currentNode, null, clusterMap.getMetricRegistry(), null,
-            storeKeyConverterFactory, serverConfig.serverMessageTransformer, mockClusterSpectator,
-            mockHelixParticipant);
+            storeKeyFactory, clusterMap, mockScheduler, currentNode, clusterMap.getMetricRegistry(), null,
+            storeKeyConverterFactory, serverConfig.serverMessageTransformer, mockClusterSpectator, mockHelixParticipant);
     storageManager.start();
     cloudToStoreReplicationManager.start();
     mockClusterSpectator.spectate();

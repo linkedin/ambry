@@ -28,7 +28,6 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
@@ -119,24 +118,24 @@ public class ReplicationManager extends ReplicationEngine {
    */
   @Override
   protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
-      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
-      NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics,
-      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
-      MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
-      Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
+      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     switch (replicationConfig.replicationThreadType) {
       case ReplicationConfig.BACKUP_CHECKER_THREAD:
         return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-            connectionPool, networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter,
-            transformer, metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time,
-            replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+            networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
+            metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager,
+            skipPredicate, leaderBasedReplicationAdmin);
       case ReplicationConfig.DEFAULT_REPLICATION_THREAD:
       default:
-        return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-            connectionPool, networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter,
-            transformer, metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time,
-            replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+        return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+            replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+            replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+            leaderBasedReplicationAdmin);
     }
   }
 

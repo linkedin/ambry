@@ -264,9 +264,8 @@ public class AmbryServer {
         vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
         cloudToStoreReplicationManager =
             new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-                storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
-                storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
-                clusterParticipants.get(0));
+                storeKeyFactory, clusterMap, scheduler, nodeId, registry, notificationSystem, storeKeyConverterFactory,
+                serverConfig.serverMessageTransformer, vcrClusterSpectator, clusterParticipants.get(0));
         cloudToStoreReplicationManager.start();
       }
 

@@ -48,6 +48,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -132,6 +133,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.replicationConfig = replicationConfig;
     this.storeConfig = storeConfig;
     this.storeKeyFactory = storeKeyFactory;
+    this.networkClientFactory = Objects.requireNonNull(networkClientFactory, "NetworkClientFactory can't be null");
     if (findTokenHelper == null) {
       try {
         this.tokenHelper = new FindTokenHelper(this.storeKeyFactory, this.replicationConfig);
@@ -150,7 +152,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     this.scheduler = scheduler;
     this.correlationIdGenerator = new AtomicInteger(0);
     this.dataNodeId = dataNode;
-    this.networkClientFactory = networkClientFactory;
     this.notification = requestNotification;
     this.metricRegistry = metricRegistry;
     this.dataNodeIdToReplicaThread = new ConcurrentHashMap<>();
@@ -388,21 +389,9 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         StoreKeyConverter threadSpecificKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
         Transformer threadSpecificTransformer =
             Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
-        NetworkClient networkClient = null;
-        if (!dataNodeId.getDatacenterName().equals(datacenter)) {
-          // Inter-DC replication
-          if (replicationConfig.replicationUsingNonblockingNetworkClientForRemoteColo) {
-            networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
-          }
-        } else {
-          // Intra-DC replication
-          if (replicationConfig.replicationUsingNonblockingNetworkClientForLocalColo) {
-            networkClient = networkClientFactory != null ? networkClientFactory.getNetworkClient() : null;
-          }
-        }
         ReplicaThread replicaThread =
             getReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-                connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
+                networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
                 threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
                 responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
         replicaThreads.add(replicaThread);

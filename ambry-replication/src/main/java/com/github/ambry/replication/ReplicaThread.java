@@ -401,7 +401,7 @@ public class ReplicaThread implements Runnable {
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
       // A map from correlation id to RequestInfo. This is used to find timed out RequestInfos.
       Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
-      while (!remoteReplicaGroups.stream().allMatch(RemoteReplicaGroup::isDone)) {
+      while (remoteReplicaGroups.size() > 0 && !remoteReplicaGroups.stream().allMatch(RemoteReplicaGroup::isDone)) {
         if (!running) {
           break;
         }
@@ -510,7 +510,7 @@ public class ReplicaThread implements Runnable {
           logger.error("Thread name: {} Request {} timed out", threadName, entry.getKey());
         }
       } else {
-        // The correlationIdToRequest should be a LinkedHashMap that has a predictable iteration order based on insertion.
+        // The correlationIdToRequest should be a LinkedHashMap .size()that has a predictable iteration order based on insertion.
         // The correlation id increases as we insert it to the map. So if current request is not timed out, then all the
         // requests after are not timed out.
         break;
@@ -634,40 +634,6 @@ public class ReplicaThread implements Runnable {
         }
       }
       activeReplicasPerNode.add(remoteReplicaInfo);
-    }
-  }
-
-  /**
-   * Gets all the metadata about messages from the remote replicas since last token. Checks the messages with the local
-   * store and finds all the messages that are missing. For the messages that are not missing, updates the delete
-   * and ttl state.
-   * @param connectedChannel The connected channel that represents a connection to the remote replica
-   * @param replicasToReplicatePerNode The information about the replicas that is being replicated
-   * @return - List of ExchangeMetadataResponse that contains the set of store keys that are missing from the local
-   *           store and are present in the remote replicas and also the new token from the remote replicas
-   * @throws IOException Any IO Exception
-   * @throws ReplicationException Any other exception that will be wrapped
-   */
-  List<ExchangeMetadataResponse> exchangeMetadata(ConnectedChannel connectedChannel,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode) throws ReplicationException {
-    long exchangeMetadataStartTimeInMs = time.milliseconds();
-    if (replicasToReplicatePerNode.isEmpty()) {
-      return Collections.emptyList();
-    }
-    try {
-      DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
-      ReplicaMetadataResponse response =
-          getReplicaMetadataResponse(replicasToReplicatePerNode, connectedChannel, remoteNode);
-      return handleReplicaMetadataResponse(response, replicasToReplicatePerNode, remoteNode);
-    } catch (Exception e) {
-      if (e instanceof ReplicationException) {
-        throw (ReplicationException) e;
-      }
-      throw new ReplicationException(e);
-    } finally {
-      long exchangeMetadataTime = time.milliseconds() - exchangeMetadataStartTimeInMs;
-      replicationMetrics.updateExchangeMetadataTime(exchangeMetadataTime, replicatingFromRemoteColo, replicatingOverSsl,
-          datacenterName);
     }
   }
 

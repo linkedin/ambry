@@ -18,12 +18,12 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -96,13 +96,13 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    */
   public CloudToStoreReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
-      ScheduledExecutorService scheduler, DataNodeId currentNode, ConnectionPool connectionPool,
-      MetricRegistry metricRegistry, NotificationSystem requestNotification,
-      StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
+      ScheduledExecutorService scheduler, DataNodeId currentNode, MetricRegistry metricRegistry,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
+      String transformerClassName, VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant)
+      throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
-        Collections.emptyList(), connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory,
-        transformerClassName, clusterParticipant, storeManager, null, false);
+        Collections.emptyList(), metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName,
+        clusterParticipant, storeManager, null, false);
     this.clusterMapConfig = clusterMapConfig;
     this.vcrClusterSpectator = vcrClusterSpectator;
     this.clusterParticipant = clusterParticipant;

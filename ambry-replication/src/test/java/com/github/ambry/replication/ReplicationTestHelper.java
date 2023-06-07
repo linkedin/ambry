@@ -44,8 +44,6 @@ import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
-import com.github.ambry.network.ConnectionPool;
-import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -97,11 +95,9 @@ public class ReplicationTestHelper {
   protected VerifiableProperties verifiableProperties;
   protected ReplicationConfig replicationConfig;
   protected final AccountService accountService;
-  protected final boolean shouldUseNetworkClient;
 
-  public ReplicationTestHelper(short requestVersion, short responseVersion, boolean shouldUseNetworkClient) {
+  public ReplicationTestHelper(short requestVersion, short responseVersion) {
     System.out.println("The request version: " + requestVersion + " ResponseVersion: " + responseVersion);
-    this.shouldUseNetworkClient = shouldUseNetworkClient;
     List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC1", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -121,7 +117,7 @@ public class ReplicationTestHelper {
     properties.setProperty("replication.track.local.from.remote.per.partition.lag", "true");
     properties.setProperty("replication.max.partition.count.per.request", Integer.toString(0));
     properties.setProperty(ReplicationConfig.REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO,
-        String.valueOf(shouldUseNetworkClient));
+        String.valueOf(true));
     properties.put("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
@@ -262,8 +258,8 @@ public class ReplicationTestHelper {
    * @throws Exception
    */
   protected Pair<StorageManager, ReplicationManager> createStorageManagerAndReplicationManager(ClusterMap clusterMap,
-      ClusterMapConfig clusterMapConfig, MockHelixParticipant clusterParticipant, ConnectionPool mockConnectionPool)
-      throws Exception {
+      ClusterMapConfig clusterMapConfig, MockHelixParticipant clusterParticipant,
+      MockNetworkClientFactory mockNetworkClientFactory) throws Exception {
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
     DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
 
@@ -280,15 +276,10 @@ public class ReplicationTestHelper {
             new InMemAccountService(false, false));
     storageManager.start();
 
-    FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
-    MockConnectionPool mockPool = (MockConnectionPool) mockConnectionPool;
-    NetworkClientFactory mockNetworkClientFactory =
-        shouldUseNetworkClient && mockConnectionPool != null ? new MockNetworkClientFactory(mockPool.getHosts(),
-            mockPool.getClusterMap(), mockPool.getMaxEntriesToReturn(), findTokenHelper) : null;
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            dataNodeId, storeKeyConverterFactory, clusterParticipant, mockConnectionPool, mockNetworkClientFactory,
-            findTokenHelper, BlobIdTransformer.class.getName(), storeKeyFactory, time);
+            dataNodeId, storeKeyConverterFactory, clusterParticipant, mockNetworkClientFactory,
+            mockNetworkClientFactory.getFindTokenHelper(), BlobIdTransformer.class.getName(), storeKeyFactory, time);
 
     return new Pair<>(storageManager, replicationManager);
   }
@@ -305,7 +296,7 @@ public class ReplicationTestHelper {
       ClusterMapConfig clusterMapConfig, MockHelixParticipant clusterParticipant) throws Exception {
 
     return createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, clusterParticipant,
-        new MockConnectionPool(new HashMap<>(), clusterMap, 0));
+        new MockNetworkClientFactory(new HashMap<>(), clusterMap, 0, new FindTokenHelper()));
   }
 
   /**
@@ -337,12 +328,10 @@ public class ReplicationTestHelper {
       hosts.put(remoteHost.dataNodeId, remoteHost);
     }
     FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
-    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
-    MockNetworkClient networkClient =
-        shouldUseNetworkClient ? new MockNetworkClient(hosts, clusterMap, batchSize, findTokenHelper) : null;
+    MockNetworkClient networkClient = new MockNetworkClient(hosts, clusterMap, batchSize, findTokenHelper);
     ReplicaThread replicaThread =
         new ReplicaThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), localHost.dataNodeId,
-            connectionPool, networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+            networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
             clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
             new ResponseHandler(clusterMap), time, replicaSyncUpManager, null, null);
     for (MockHost remoteHost : remoteHosts) {
@@ -410,21 +399,20 @@ public class ReplicationTestHelper {
   /**
    * Asserts the number of missing keys between the local and remote replicas
    * @param expectedMissingKeysSum the number of missing keys expected for each replica
-   * @param batchSize how large of a batch size the internal MockConnection will use for fixing missing store keys
-   * @param replicaThread replicaThread that will be performing replication
    * @param remoteHost the remote host that keys are being pulled from
-   * @param replicasToReplicate list of replicas to replicate between
+   * @param replicaThread replicaThread that will be performing replication
    * @throws Exception
    */
-  protected void assertMissingKeys(int[] expectedMissingKeysSum, int batchSize, ReplicaThread replicaThread,
-      MockHost remoteHost, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
-    List<ReplicaThread.ExchangeMetadataResponse> response =
-        replicaThread.exchangeMetadata(new MockConnectionPool.MockConnection(remoteHost, batchSize),
-            replicasToReplicate.get(remoteHost.dataNodeId));
-    assertEquals("Response should contain a response for each replica",
-        replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
-    for (int i = 0; i < response.size(); i++) {
-      assertEquals(expectedMissingKeysSum[i], response.get(i).missingStoreMessages.size());
+  protected void assertMissingKeys(int[] expectedMissingKeysSum, MockHost remoteHost, ReplicaThread replicaThread) {
+    Map<DataNodeId, List<RemoteReplicaInfo>> remoteReplicaInfoByDataNode = replicaThread.getRemoteReplicaInfos();
+    for (int i = 0; i < expectedMissingKeysSum.length; i++) {
+      RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfoByDataNode.get(remoteHost.dataNodeId).get(i);
+      MockFindToken token = (MockFindToken) remoteReplicaInfo.getToken();
+      int ind = token.getIndex();
+      PartitionId partitionId = remoteReplicaInfo.getReplicaId().getPartitionId();
+      List<MessageInfo> messageInfos = remoteHost.infosByPartition.get(partitionId);
+      assertEquals("MessageInfo list size: " + messageInfos.size() + " index : " + ind, expectedMissingKeysSum[i],
+          messageInfos.size() - ind - 1);
     }
   }
 
@@ -502,13 +490,7 @@ public class ReplicationTestHelper {
         .collect(Collectors.toList());
 
     // Do the replica metadata exchange.
-    List<ReplicaThread.ExchangeMetadataResponse> responses = testSetup.replicaThread.exchangeMetadata(
-        new MockConnectionPool.MockConnection(testSetup.remoteHost, 10, testSetup.remoteConversionMap),
-        singleReplicaList);
-    // Do Get request to fix missing keys
-    testSetup.replicaThread.fixMissingStoreKeys(
-        new MockConnectionPool.MockConnection(testSetup.remoteHost, 10, testSetup.remoteConversionMap),
-        singleReplicaList, responses, false);
+    testSetup.replicaThread.replicate();
 
     // Verify
     String[] expectedResults = expectedStr.equals("") ? new String[0] : expectedStr.split("\\s");
