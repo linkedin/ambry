@@ -124,10 +124,11 @@ public class HelixBootstrapUpgradeTool {
             + "       \"zkConnectStr\":\"abc.example.com:2199\",\n" + "     },\n" + "     {\n"
             + "       \"datacenter\":\"dc2\",\n" + "       \"zkConnectStr\":\"def.example.com:2300\",\n" + "     },\n"
             + "     {\n" + "       \"datacenter\":\"dc3\",\n" + "       \"zkConnectStr\":\"ghi.example.com:2400\",\n"
-            + "     }\n" + "  ]\n" + "}").requiredUnless(dropClusterOpt).
-        withRequiredArg().
-        describedAs("zk_connect_info_path").
-        ofType(String.class);
+            + "     }\n" + "  ]\n" + "}")
+        .requiredUnless(dropClusterOpt)
+        .withRequiredArg()
+        .describedAs("zk_connect_info_path")
+        .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> clusterNamePrefixOpt =
         parser.accepts("clusterNamePrefix", "The prefix for the cluster in Helix to bootstrap or upgrade")
@@ -151,7 +152,7 @@ public class HelixBootstrapUpgradeTool {
 
     ArgumentAcceptingOptionSpec<String> maxPartitionsInOneResourceOpt = parser.accepts("maxPartitionsInOneResource",
         "(Optional argument) The maximum number of partitions that should be grouped under a Helix resource. "
-              + "If the resources are reconstructed to be FULL_AUTO compatible, then this option would be ignored")
+            + "If the resources are reconstructed to be FULL_AUTO compatible, then this option would be ignored")
         .withRequiredArg()
         .describedAs("max_partitions_in_one_resource")
         .ofType(String.class);
@@ -180,6 +181,7 @@ public class HelixBootstrapUpgradeTool {
             + " '--adminOperation ListSealedPartition' # List all sealed partitions in Helix cluster (aggregated across all datacenters)"
             + " '--adminOperation ValidateCluster' # Validates the information in static clustermap is consistent with the information in Helix"
             + " '--adminOperation MigrateToPropertyStore' # Migrate custom instance config properties to DataNodeConfigs in the property store"
+            + " '--adminOperation MigrateToFullAuto' # Migrate resources to Full Auto"
             + " '--adminOperation BootstrapCluster' # (Default operation if not specified) Bootstrap cluster based on static clustermap")
         .withRequiredArg()
         .describedAs("admin_operation")
@@ -230,14 +232,21 @@ public class HelixBootstrapUpgradeTool {
     OptionSpecBuilder overrideReplicaStatus = parser.accepts("overrideReplicaStatus",
         "(Optional argument) whether to override replica status lists (i.e. sealed/stopped/disabled lists) in instance(datanode) config");
 
-    ArgumentAcceptingOptionSpec<Integer> maxInstancesInOneResourceForFullAutoOpt = parser.accepts("maxInstancesInOneResourceForFullAuto",
+    ArgumentAcceptingOptionSpec<Integer> maxInstancesInOneResourceForFullAutoOpt =
+        parser.accepts("maxInstancesInOneResourceForFullAuto",
             "Maximum number of instance in a resource when the resources are constructed as FULL_AUTO compatible "
-            + "or the cluster is empty without any resources.\n"
-            + "This is only required when bootstrapping a cluster or update ideal state, or validating a cluster\n\n"
-            + "When the cluster is empty, if you provide 0 to this option, this tool would create resources in the old way, not full auto compatible way")
+                + "or the cluster is empty without any resources.\n"
+                + "This is only required when bootstrapping a cluster or update ideal state, or validating a cluster\n\n"
+                + "When the cluster is empty, if you provide 0 to this option, this tool would create resources in the old way, not full auto compatible way")
+            .withRequiredArg()
+            .describedAs("max_instances_in_one_resource_for_full_auto")
+            .ofType(Integer.class);
+
+    ArgumentAcceptingOptionSpec<String> resourcesNameOpt = parser.accepts("resources",
+        "The comma-separated resources to migrate to Full Auto. Use '--resources all' to migrate all resources")
         .withRequiredArg()
-        .describedAs("max_instances_in_one_resource_for_full_auto")
-        .ofType(Integer.class);
+        .describedAs("resources")
+        .ofType(String.class);
 
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
@@ -261,6 +270,7 @@ public class HelixBootstrapUpgradeTool {
     DataNodeConfigSourceType dataNodeConfigSourceType =
         options.valueOf(dataNodeConfigSourceOpt) == null ? DataNodeConfigSourceType.PROPERTY_STORE
             : DataNodeConfigSourceType.valueOf(options.valueOf(dataNodeConfigSourceOpt));
+    String resources = options.valueOf(resourcesNameOpt) == null ? "all" : options.valueOf(resourcesNameOpt);
     ArrayList<OptionSpec> listOpt = new ArrayList<>();
     listOpt.add(hardwareLayoutPathOpt);
     listOpt.add(partitionLayoutPathOpt);
@@ -301,6 +311,10 @@ public class HelixBootstrapUpgradeTool {
         case MigrateToPropertyStore:
           HelixBootstrapUpgradeUtil.migrateToPropertyStore(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
               clusterNamePrefix, dcs);
+          break;
+        case MigrateToFullAuto:
+          HelixBootstrapUpgradeUtil.migrateToFullAuto(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
+              clusterNamePrefix, dcs, resources, options.has(dryRun));
           break;
         case ResetPartition:
         case EnablePartition:
