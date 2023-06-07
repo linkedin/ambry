@@ -114,13 +114,13 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, List<? extends ReplicaId> replicaIds,
-      MetricRegistry metricRegistry, NotificationSystem requestNotification,
+      NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       ClusterParticipant clusterParticipant, StoreManager storeManager, Predicate<MessageInfo> skipPredicate,
       boolean enableClusterMapListener) throws ReplicationException {
     this(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, dataNode, replicaIds,
-        null, metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName, clusterParticipant,
-        storeManager, skipPredicate, null, SystemTime.getInstance(), enableClusterMapListener);
+        networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory, transformerClassName,
+        clusterParticipant, storeManager, skipPredicate, null, SystemTime.getInstance(), enableClusterMapListener);
   }
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,

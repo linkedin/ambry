@@ -34,6 +34,7 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.NettyConfig;
@@ -46,6 +47,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
+import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
@@ -55,6 +57,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.SocketServer;
+import com.github.ambry.network.http2.Http2BlockingChannelPool;
 import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
@@ -196,6 +199,7 @@ public class AmbryServer {
       DiskManagerConfig diskManagerConfig = new DiskManagerConfig(properties);
       ServerConfig serverConfig = new ServerConfig(properties);
       ReplicationConfig replicationConfig = new ReplicationConfig(properties);
+      ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(properties);
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
@@ -242,10 +246,12 @@ public class AmbryServer {
         Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
         networkClientFactory =
             new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
+        connectionPool = new Http2BlockingChannelPool(sslHttp2Factory, http2ClientConfig, http2ClientMetrics);
       } else {
         networkClientFactory =
             new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
                 time);
+        connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
       }
 
       StoreKeyConverterFactory storeKeyConverterFactory =
@@ -264,8 +270,9 @@ public class AmbryServer {
         vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
         cloudToStoreReplicationManager =
             new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-                storeKeyFactory, clusterMap, scheduler, nodeId, registry, notificationSystem, storeKeyConverterFactory,
-                serverConfig.serverMessageTransformer, vcrClusterSpectator, clusterParticipants.get(0));
+                storeKeyFactory, clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
+                clusterParticipants.get(0));
         cloudToStoreReplicationManager.start();
       }
 
@@ -303,7 +310,6 @@ public class AmbryServer {
         logger.info("Http2 port {} is enabled. Starting HTTP/2 service.", nodeId.getHttp2Port());
         NettyServerRequestResponseChannel requestResponseChannel =
             new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, metrics);
-
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
                 findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,

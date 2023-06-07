@@ -20,8 +20,8 @@ import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
+import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.commons.ServerMetrics;
@@ -36,15 +36,16 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.BlockingChannelConnectionPool;
-import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
+import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.SocketServer;
-import com.github.ambry.network.http2.Http2BlockingChannelPool;
 import com.github.ambry.network.http2.Http2ClientMetrics;
+import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
@@ -58,6 +59,7 @@ import com.github.ambry.rest.StorageServerNettyFactory;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -88,7 +90,6 @@ public class VcrServer {
   private VcrClusterParticipant vcrClusterParticipant;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
-  private ConnectionPool connectionPool = null;
   private final NotificationSystem notificationSystem;
   private final Function<MetricRegistry, JmxReporter> reporterFactory;
   private CloudDestinationFactory cloudDestinationFactory;
@@ -184,16 +185,22 @@ public class VcrServer {
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
 
-      SSLFactory sslFactory = new NettySslHttp2Factory(sslConfig);
+      SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
+      SSLFactory sslSocketFactory = SSLFactory.getNewInstance(sslConfig);
+      NetworkClientFactory networkClientFactory = null;
+      Time time = SystemTime.getInstance();
       if (clusterMapConfig.clusterMapEnableHttp2Replication) {
-        connectionPool = new Http2BlockingChannelPool(sslFactory, new Http2ClientConfig(properties),
-            new Http2ClientMetrics(registry));
+        Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
+        Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
+        networkClientFactory =
+            new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
         logger.info("Using http2 for VCR replication.");
       } else {
-        connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+        networkClientFactory =
+            new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
+                time);
         logger.info("Using blocking channel for VCR replication.");
       }
-      connectionPool.start();
 
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
@@ -202,7 +209,7 @@ public class VcrServer {
           new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
       vcrReplicationManager =
           new VcrReplicationManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig, cloudStorageManager,
-              storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler, connectionPool,
+              storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler, networkClientFactory,
               vcrMetrics, notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer);
       vcrReplicationManager.start();
 
@@ -246,8 +253,8 @@ public class VcrServer {
                 vcrRequestsForHttp2);
 
         NioServerFactory nioServerFactory =
-            new StorageServerNettyFactory(currentNode.getHttp2Port(), requestResponseChannel, sslFactory, nettyConfig,
-                http2ClientConfig, serverMetrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
+            new StorageServerNettyFactory(currentNode.getHttp2Port(), requestResponseChannel, sslHttp2Factory,
+                nettyConfig, http2ClientConfig, serverMetrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }
@@ -285,9 +292,6 @@ public class VcrServer {
       }
       if (vcrReplicationManager != null) {
         vcrReplicationManager.shutdown();
-      }
-      if (connectionPool != null) {
-        connectionPool.shutdown();
       }
       if (reporter != null) {
         reporter.stop();
