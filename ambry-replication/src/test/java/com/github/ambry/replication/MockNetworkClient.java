@@ -46,7 +46,7 @@ public class MockNetworkClient implements NetworkClient {
   private final Map<DataNodeId, MockConnectionPool.MockConnection> connections;
   private final ClusterMap clusterMap;
   private final FindTokenHelper findTokenHelper;
-  private final int batchSize;
+  private volatile int batchSize;
   private final Map<Integer, RequestInfo> correlationIdToRequestInfos = new HashMap<>();
 
   private volatile NetworkClientErrorCode expectedNetworkClientErrorCode = null;
@@ -82,6 +82,13 @@ public class MockNetworkClient implements NetworkClient {
 
   void setSendAndPollCallback(Runnable callback) {
     sendAndPoolCallback = callback;
+  }
+
+  void setBatchSize(int batchSize) {
+    this.batchSize = batchSize;
+    for (MockConnectionPool.MockConnection connection : connections.values()) {
+      connection.setMaxSizeToReturn(batchSize);
+    }
   }
 
   @Override

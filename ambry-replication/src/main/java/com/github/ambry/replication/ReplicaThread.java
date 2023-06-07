@@ -510,7 +510,7 @@ public class ReplicaThread implements Runnable {
           logger.error("Thread name: {} Request {} timed out", threadName, entry.getKey());
         }
       } else {
-        // The correlationIdToRequest should be a LinkedHashMap .size()that has a predictable iteration order based on insertion.
+        // The correlationIdToRequest should be a LinkedHashMap that has a predictable iteration order based on insertion.
         // The correlation id increases as we insert it to the map. So if current request is not timed out, then all the
         // requests after are not timed out.
         break;

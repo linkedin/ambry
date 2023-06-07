@@ -296,7 +296,8 @@ public class ReplicationTestHelper {
       ClusterMapConfig clusterMapConfig, MockHelixParticipant clusterParticipant) throws Exception {
 
     return createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, clusterParticipant,
-        new MockNetworkClientFactory(new HashMap<>(), clusterMap, 0, new FindTokenHelper()));
+        new MockNetworkClientFactory(new HashMap<>(), clusterMap, 0,
+            new MockFindTokenHelper(new BlobIdFactory(clusterMap), replicationConfig)));
   }
 
   /**

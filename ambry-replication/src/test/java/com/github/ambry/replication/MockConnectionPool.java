@@ -16,7 +16,6 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
@@ -33,6 +32,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.Response;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.AbstractByteBufHolder;
@@ -163,7 +163,7 @@ public class MockConnectionPool implements ConnectionPool {
     }
 
     private final MockHost host;
-    private final int maxSizeToReturn;
+    private volatile int maxSizeToReturn;
 
     private List<ByteBuffer> buffersToReturn;
     private Map<PartitionId, List<MessageInfo>> infosToReturn;
@@ -322,6 +322,10 @@ public class MockConnectionPool implements ConnectionPool {
     @Override
     public int getRemotePort() {
       return host.dataNodeId.getPort();
+    }
+
+    public void setMaxSizeToReturn(int maxSizeToReturn) {
+      this.maxSizeToReturn = maxSizeToReturn;
     }
   }
 }
