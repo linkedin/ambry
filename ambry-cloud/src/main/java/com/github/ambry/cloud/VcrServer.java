@@ -186,7 +186,6 @@ public class VcrServer {
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
 
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
-      SSLFactory sslSocketFactory = SSLFactory.getNewInstance(sslConfig);
       NetworkClientFactory networkClientFactory = null;
       Time time = SystemTime.getInstance();
       if (clusterMapConfig.clusterMapEnableHttp2Replication) {
@@ -196,6 +195,8 @@ public class VcrServer {
             new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
         logger.info("Using http2 for VCR replication.");
       } else {
+        SSLFactory sslSocketFactory =
+            clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? SSLFactory.getNewInstance(sslConfig) : null;
         networkClientFactory =
             new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
                 time);

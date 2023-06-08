@@ -29,6 +29,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
@@ -141,9 +142,9 @@ public class CloudToStoreReplicationManagerTest {
             new InMemAccountService(false, false));
     CloudToStoreReplicationManager cloudToStoreReplicationManager =
         new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-            storeKeyFactory, clusterMap, mockScheduler, currentNode, null, clusterMap.getMetricRegistry(), null,
-            storeKeyConverterFactory, serverConfig.serverMessageTransformer, mockClusterSpectator,
-            mockHelixParticipant);
+            storeKeyFactory, clusterMap, mockScheduler, currentNode, mock(NetworkClientFactory.class),
+            clusterMap.getMetricRegistry(), null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
+            mockClusterSpectator, mockHelixParticipant);
     storageManager.start();
     cloudToStoreReplicationManager.start();
     mockClusterSpectator.spectate();
@@ -182,9 +183,9 @@ public class CloudToStoreReplicationManagerTest {
             new InMemAccountService(false, false));
     CloudToStoreReplicationManager cloudToStoreReplicationManager =
         new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-            storeKeyFactory, clusterMap, mockScheduler, currentNode, null, clusterMap.getMetricRegistry(), null,
-            storeKeyConverterFactory, serverConfig.serverMessageTransformer, mockClusterSpectator,
-            mockHelixParticipant);
+            storeKeyFactory, clusterMap, mockScheduler, currentNode, mock(NetworkClientFactory.class),
+            clusterMap.getMetricRegistry(), null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
+            mockClusterSpectator, mockHelixParticipant);
     storageManager.start();
     cloudToStoreReplicationManager.start();
     mockClusterSpectator.spectate();

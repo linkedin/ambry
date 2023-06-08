@@ -239,7 +239,6 @@ public class AmbryServer {
       storageManager.start();
 
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
-      SSLFactory sslSocketFactory = SSLFactory.getNewInstance(sslConfig);
 
       if (clusterMapConfig.clusterMapEnableHttp2Replication) {
         Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
@@ -248,6 +247,8 @@ public class AmbryServer {
             new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
         connectionPool = new Http2BlockingChannelPool(sslHttp2Factory, http2ClientConfig, http2ClientMetrics);
       } else {
+        SSLFactory sslSocketFactory =
+            clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? SSLFactory.getNewInstance(sslConfig) : null;
         networkClientFactory =
             new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
                 time);
@@ -291,7 +292,7 @@ public class AmbryServer {
       if (nodeId.hasSSLPort()) {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
-      networkServer = new SocketServer(networkConfig, sslSocketFactory, registry, ports);
+      networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
       FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
           registry, metrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
