@@ -20,7 +20,6 @@ import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.MessageSievingInputStream;
-import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.ServerErrorCode;
@@ -146,39 +145,36 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
-   * Checks if missing blobs from remote replica are present locally and then logs an error if they are missing.
-   * @param connectedChannel The connected channel that represents a connection to the remote replica
-   * @param replicasToReplicatePerNode The information about the replicas that is being replicated
-   * @param exchangeMetadataResponseList The missing keys in the local stores whose message needs to be retrieved
-   *                                     from the remote stores
-   * @param remoteColoGetRequestForStandby boolean which indicates if we are getting missing keys for standby or
-   *                                       non-leader replica pairs during leader-based replication.
+   * Instead of over-riding applyPut, it is better to override {@link #afterHandleReplicaMetadataResponse}.
+   * We already know the missing keys. We know they are not deleted or expired on the remote node.
+   * There is no benefit in fetching the entire blob only to discard it, unless we are doing a data comparison also.
+   * TODO: We should probably fetch just checksums if we want to compare blob-content in the future.
    */
   @Override
-  protected void fixMissingStoreKeys(ConnectedChannel connectedChannel,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode, List<ExchangeMetadataResponse> exchangeMetadataResponseList,
-      boolean remoteColoGetRequestForStandby) {
-    /**
-     * Instead of over-riding applyPut, it is better to override fixMissingStoreKeys.
-     * We already know the missing keys. We know they are not deleted or expired on the remote node.
-     * There is no benefit in fetching the entire blob only to discard it, unless we are doing a data comparison also.
-     * TODO: We should probably fetch just checksums if we want to compare blob-content in the future.
-     */
-    EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.PUT);
-    EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
-    for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
-      ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
-      RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
-      if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
-        for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
-          // Check local store once before logging an error
-          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates,
-              acceptableStoreErrorCodes);
+  protected void afterHandleReplicaMetadataResponse(RemoteReplicaGroup group) {
+    List<ExchangeMetadataResponse> exchangeMetadataResponseList = group.getExchangeMetadataResponseList();
+    List<RemoteReplicaInfo> replicasToReplicatePerNode = group.getRemoteReplicaInfos();
+    try {
+      EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.PUT);
+      EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
+      for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
+        ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
+        RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
+        if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
+          for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
+            // Check local store once before logging an error
+            checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates,
+                acceptableStoreErrorCodes);
+          }
+          // Advance token so that we make progress in spite of missing keys,
+          // else the replication code will be stuck waiting for missing keys to appear in local store.
+          advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
         }
-        // Advance token so that we make progress in spite of missing keys,
-        // else the replication code will be stuck waiting for missing keys to appear in local store.
-        advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
       }
+    } catch (Exception e) {
+      logger.error("Fail to check Local store", e);
+    } finally {
+      group.setState(ReplicaGroupReplicationState.DONE);
     }
   }
 

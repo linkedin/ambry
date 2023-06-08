@@ -450,6 +450,24 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * A callback method to invoke after calling handleReplicaMetadataResponse method for given RemoteReplicaGroup.
+   * Subclass can override this method to put more control to each group.
+   * @param group
+   */
+  protected void afterHandleReplicaMetadataResponse(RemoteReplicaGroup group) {
+    // noop
+  }
+
+  /**
+   * A callback method to invoke after calling handleGetResponse method for given RemoteReplicaGroup.
+   * Subclass can override this method to put more control to each group.
+   * @param group
+   */
+  protected void afterHandleGetResponse(RemoteReplicaGroup group) {
+    // noop
+  }
+
+  /**
    * Polling the request from each {@link RemoteReplicaGroup}. Adding new requests to the {@code correlationIdToRequestInfo}
    * map and the {@code correlationIdToRemoteReplicaGroup} map.
    * @param remoteReplicaGroups The list of the {@link RemoteReplicaGroup} to poll requests from.
@@ -552,9 +570,11 @@ public class ReplicaThread implements Runnable {
           switch (type) {
             case ReplicaMetadataRequest:
               remoteReplicaGroup.handleReplicaMetadataResponse(responseInfo);
+              afterHandleReplicaMetadataResponse(remoteReplicaGroup);
               break;
             case GetRequest:
               remoteReplicaGroup.handleGetResponse(responseInfo);
+              afterHandleGetResponse(remoteReplicaGroup);
               break;
             default:
               logger.error(
@@ -773,48 +793,6 @@ public class ReplicaThread implements Runnable {
     logger.trace("Remote node: {} Thread name: {} processMetadataResponseTime: {}", remoteNode, threadName,
         processMetadataResponseTimeInMs);
     return exchangeMetadataResponseList;
-  }
-
-  /**
-   * Gets all the messages from the remote node for the missing keys and writes them to the local store
-   * @param connectedChannel The connected channel that represents a connection to the remote replica
-   * @param replicasToReplicatePerNode The information about the replicas that is being replicated
-   * @param exchangeMetadataResponseList The missing keys in the local stores whose message needs to be retrieved
-   *                                     from the remote stores
-   * @param remoteColoGetRequestForStandby boolean which indicates if we are getting missing keys for standby or
-   *                                       non-leader replica pairs during leader-based replication.
-   * @throws IOException
-   * @throws ReplicationException
-   */
-  protected void fixMissingStoreKeys(ConnectedChannel connectedChannel,
-      List<RemoteReplicaInfo> replicasToReplicatePerNode, List<ExchangeMetadataResponse> exchangeMetadataResponseList,
-      boolean remoteColoGetRequestForStandby) throws IOException, ReplicationException {
-    long fixMissingStoreKeysStartTimeInMs = time.milliseconds();
-    GetResponse getResponse = null;
-    try {
-      if (exchangeMetadataResponseList.size() != replicasToReplicatePerNode.size()
-          || replicasToReplicatePerNode.size() == 0) {
-        throw new IllegalArgumentException("ExchangeMetadataResponseList size " + exchangeMetadataResponseList.size()
-            + " and replicasToReplicatePerNode size " + replicasToReplicatePerNode.size()
-            + " should be the same and greater than zero");
-      }
-      DataNodeId remoteNode = replicasToReplicatePerNode.get(0).getReplicaId().getDataNodeId();
-      getResponse =
-          getMessagesForMissingKeys(connectedChannel, exchangeMetadataResponseList, replicasToReplicatePerNode,
-              remoteNode, remoteColoGetRequestForStandby);
-      if (getResponse != null) {
-        handleGetResponse(getResponse, replicasToReplicatePerNode, exchangeMetadataResponseList, remoteNode,
-            remoteColoGetRequestForStandby);
-      }
-    } finally {
-      if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
-        // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
-        ((NettyByteBufDataInputStream) (getResponse.getInputStream())).getBuffer().release();
-      }
-      long fixMissingStoreKeysTime = time.milliseconds() - fixMissingStoreKeysStartTimeInMs;
-      replicationMetrics.updateFixMissingStoreKeysTime(fixMissingStoreKeysTime, replicatingFromRemoteColo,
-          replicatingOverSsl, datacenterName);
-    }
   }
 
   /**
@@ -1861,7 +1839,7 @@ public class ReplicaThread implements Runnable {
    * network client. After getting the response from tne network client, it handles the response and moves to DONE
    * state. Any error happens in the middle of processing would force group to DONE state.
    */
-  private class RemoteReplicaGroup {
+  class RemoteReplicaGroup {
     private final List<RemoteReplicaInfo> remoteReplicaInfos;
     private List<ExchangeMetadataResponse> exchangeMetadataResponseList;
 
@@ -1926,6 +1904,10 @@ public class ReplicaThread implements Runnable {
 
     public boolean isDone() {
       return state == ReplicaGroupReplicationState.DONE;
+    }
+
+    public void setState(ReplicaGroupReplicationState state) {
+      this.state = state;
     }
 
     public int getId() {
