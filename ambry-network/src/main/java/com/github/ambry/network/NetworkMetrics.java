@@ -178,8 +178,8 @@ public class NetworkMetrics {
       }
       return activeConnectionsCount;
     };
-    registry.register(MetricRegistry.name(Selector.class, "SelectorActiveConnectionsCount"),
-        selectorActiveConnectionsCount);
+    registry.gauge(MetricRegistry.name(Selector.class, "SelectorActiveConnectionsCount"),
+        () -> selectorActiveConnectionsCount);
 
     final Gauge<Long> selectorUnreadyConnectionsCount = () -> {
       long unreadyConnectionCount = 0;
@@ -188,8 +188,8 @@ public class NetworkMetrics {
       }
       return unreadyConnectionCount;
     };
-    registry.register(MetricRegistry.name(Selector.class, "SelectorUnreadyConnectionsCount"),
-        selectorUnreadyConnectionsCount);
+    registry.gauge(MetricRegistry.name(Selector.class, "SelectorUnreadyConnectionsCount"),
+        () -> selectorUnreadyConnectionsCount);
 
     final Gauge<Long> networkClientPendingRequestsCount = () -> {
       long pendingRequestsCount = 0;
@@ -198,8 +198,8 @@ public class NetworkMetrics {
       }
       return pendingRequestsCount;
     };
-    registry.register(MetricRegistry.name(NetworkClient.class, "NetworkClientPendingConnectionsCount"),
-        networkClientPendingRequestsCount);
+    registry.gauge(MetricRegistry.name(NetworkClient.class, "NetworkClientPendingConnectionsCount"),
+        () -> networkClientPendingRequestsCount);
   }
 
   /**
