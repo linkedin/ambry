@@ -25,6 +25,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -46,6 +47,7 @@ public class MockNetworkClient implements NetworkClient {
   private final Map<DataNodeId, MockConnectionPool.MockConnection> connections;
   private final ClusterMap clusterMap;
   private final FindTokenHelper findTokenHelper;
+  private Map<StoreKey, StoreKey> remoteConversionMap;
   private volatile int batchSize;
   private final Map<Integer, RequestInfo> correlationIdToRequestInfos = new HashMap<>();
 
@@ -57,11 +59,17 @@ public class MockNetworkClient implements NetworkClient {
 
   public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
       FindTokenHelper findTokenHelper) {
+    this(hosts, clusterMap, batchSize, findTokenHelper, null);
+  }
+
+  public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
+      FindTokenHelper findTokenHelper, Map<StoreKey, StoreKey> remoteConversionMap) {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
     this.findTokenHelper = findTokenHelper;
     this.batchSize = batchSize;
     this.connections = new HashMap<>();
+    this.remoteConversionMap = remoteConversionMap;
   }
 
   void setExpectedNetworkClientErrorCode(NetworkClientErrorCode code) {
@@ -89,6 +97,10 @@ public class MockNetworkClient implements NetworkClient {
     for (MockConnectionPool.MockConnection connection : connections.values()) {
       connection.setMaxSizeToReturn(batchSize);
     }
+  }
+
+  void setConversionMap(Map<StoreKey, StoreKey> remoteConversionMap) {
+    this.remoteConversionMap = remoteConversionMap;
   }
 
   @Override
@@ -165,7 +177,8 @@ public class MockNetworkClient implements NetworkClient {
         responseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
       } else {
         if (!connections.containsKey(dataNodeId)) {
-          connections.put(dataNodeId, new MockConnectionPool.MockConnection(hosts.get(dataNodeId), batchSize));
+          connections.put(dataNodeId,
+              new MockConnectionPool.MockConnection(hosts.get(dataNodeId), batchSize, remoteConversionMap));
         }
         correlationIdToRequestInfos.put(correlationId, requestInfo);
       }

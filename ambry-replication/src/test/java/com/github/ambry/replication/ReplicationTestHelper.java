@@ -75,7 +75,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.mockito.Mockito;
 
@@ -484,17 +483,13 @@ public class ReplicationTestHelper {
    * @throws Exception
    */
   protected void replicateAndVerify(ReplicationTestSetup testSetup, String expectedStr) throws Exception {
-    PartitionId partitionId = testSetup.partitionIds.get(0);
-    List<RemoteReplicaInfo> singleReplicaList = testSetup.replicasToReplicate.get(testSetup.remoteHost.dataNodeId)
-        .stream()
-        .filter(e -> e.getReplicaId().getPartitionId() == partitionId)
-        .collect(Collectors.toList());
 
     // Do the replica metadata exchange.
     testSetup.replicaThread.replicate();
 
     // Verify
     String[] expectedResults = expectedStr.equals("") ? new String[0] : expectedStr.split("\\s");
+    PartitionId partitionId = testSetup.partitionIds.get(0);
     int size = testSetup.localHost.infosByPartition.get(partitionId).size();
     assertEquals("Mismatch in number of messages on local host after replication", expectedResults.length, size);
     for (int i = 0; i < size; ++i) {
@@ -1097,6 +1092,7 @@ public class ReplicationTestHelper {
               null, remoteHost);
       replicasToReplicate = replicasAndThread.getFirst();
       replicaThread = replicasAndThread.getSecond();
+      ((MockNetworkClient) replicaThread.getNetworkClient()).setConversionMap(remoteConversionMap);
     }
   }
 
