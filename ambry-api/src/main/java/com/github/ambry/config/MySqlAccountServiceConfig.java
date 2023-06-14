@@ -38,6 +38,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String IGNORE_NEW_DATABASE_UPLOAD_ERROR =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "ignore.new.database.upload.error";
   public static final String ENABLE_GET_FROM_NEW_DB_ONLY = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.get.from.new.db.only";
+  public static final String LIST_DATASETS_MAX_RESULT = MYSQL_ACCOUNT_SERVICE_PREFIX + "list.datasets.max.results";
 
 
   /**
@@ -170,6 +171,13 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("false")
   public final boolean enableGetFromNewDbOnly;
 
+  /**
+   * Max number of dataset names for a list datasets call.
+   */
+  @Config(LIST_DATASETS_MAX_RESULT)
+  @Default("100")
+  public final int listDatasetsMaxResult;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -191,5 +199,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     writeCacheAfterUpdate = verifiableProperties.getBoolean(WRITE_CACHE_AFTER_UPDATE, true);
     maxMajorVersionForSemanticSchemaDataset =
         verifiableProperties.getIntInRange(MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET, 999, 1, Integer.MAX_VALUE);
+    listDatasetsMaxResult = verifiableProperties.getIntInRange(LIST_DATASETS_MAX_RESULT, 100, 1, Integer.MAX_VALUE);
   }
 }

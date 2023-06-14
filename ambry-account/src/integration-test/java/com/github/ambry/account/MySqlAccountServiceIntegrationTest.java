@@ -21,6 +21,7 @@ import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.utils.SystemTime;
@@ -825,6 +826,26 @@ public class MySqlAccountServiceIntegrationTest {
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME_WITH_TTL);
     assertEquals("Mismatch in updated dataset ttl", (Long) datasetTtl, datasetFromMysql.getRetentionTimeInSeconds());
+
+    //list all datasets
+    Page<String> allDatasets = mySqlAccountStore.listAllValidDatasets(testAccount.getId(), testContainer.getId(), null);
+    List<String> expectedDatasets = Arrays.asList(DATASET_NAME, DATASET_NAME_BASIC, DATASET_NAME_WITH_TTL);
+    assertEquals("Mismatch for datasets list", expectedDatasets, allDatasets.getEntries());
+
+    //update the listDatasetsMaxResult
+    mySqlConfigProps.setProperty(LIST_DATASETS_MAX_RESULT, "2");
+    mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+        new MetricRegistry()).getMySqlAccountStore());
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
+    mySqlAccountService = getAccountService();
+    Page<String> partialDatasets = mySqlAccountStore.listAllValidDatasets(testAccount.getId(), testContainer.getId(), null);
+    expectedDatasets = Arrays.asList(DATASET_NAME, DATASET_NAME_BASIC);
+    assertEquals("Mismatch for datasets list", expectedDatasets, partialDatasets.getEntries());
+    assertEquals("Mismatch on next page token", DATASET_NAME_WITH_TTL, partialDatasets.getNextPageToken());
+
+    partialDatasets = mySqlAccountStore.listAllValidDatasets(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL);
+    expectedDatasets = Arrays.asList(DATASET_NAME_WITH_TTL);
+    assertEquals("Mismatch for datasets list", expectedDatasets, partialDatasets.getEntries());
 
     //delete a dataset
     mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME);

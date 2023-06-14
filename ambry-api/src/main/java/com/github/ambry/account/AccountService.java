@@ -13,6 +13,7 @@
  */
 package com.github.ambry.account;
 
+import com.github.ambry.frontend.Page;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import java.io.Closeable;
 import java.util.Collection;
@@ -215,6 +216,19 @@ public interface AccountService extends Closeable {
    * @throws AccountServiceException
    */
   default void deleteDataset(String accountName, String containerName, String DatasetName)
+      throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
+   * List all datasets under a container.
+   * @param accountName The name of the parent account.
+   * @param containerName The name of the container.
+   * @param pageToken the start point to list the dataset, if it's null, will start at the beginning.
+   * @return a page of all valid datasets under the container start with page token.
+   * @throws AccountServiceException
+   */
+  default Page<String> listAllValidDatasets(String accountName, String containerName, String pageToken)
       throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }

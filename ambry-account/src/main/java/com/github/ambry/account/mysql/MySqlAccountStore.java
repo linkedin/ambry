@@ -20,6 +20,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.Dataset;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
@@ -236,6 +237,18 @@ public class MySqlAccountStore {
   public List<DatasetVersionRecord> getAllValidVersion(short accountId, short containerId, String datasetName)
       throws SQLException {
     return accountDao.getAllValidVersion(accountId, containerId, datasetName);
+  }
+
+  /**
+   * Get all valid datasets of the container start with page token.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param pageToken the start page token, if it's null, will start at beginning.
+   * @return the page of the dataset names.
+   * @throws SQLException
+   */
+  public Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken) throws SQLException {
+    return accountDao.listAllValidDatasets(accountId, containerId, pageToken);
   }
 
   /**

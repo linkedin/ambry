@@ -1537,6 +1537,53 @@ public class FrontendRestRequestServiceTest {
     }
   }
 
+  @Test
+  public void listDatasetTest() throws Exception {
+    //add dataset
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    Dataset.VersionSchema versionSchema = Dataset.VersionSchema.TIMESTAMP;
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
+            .build();
+    byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    RestRequest restRequest =
+        createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+
+    //add dataset
+    dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(),
+        DATASET_NAME_WITHOUT_USER_TAGS).setVersionSchema(versionSchema).build();
+    datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+
+    //list datasets
+    headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    restRequest = createRestRequest(RestMethod.GET, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    Page<String> response = Page.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody())),
+        jsonObject -> jsonObject.getString("datasetName"));
+    List<String> expectedDatasetNames = new ArrayList<>();
+    expectedDatasetNames.add(DATASET_NAME);
+    assertEquals("Unexpected dataset name returned", expectedDatasetNames, response.getEntries());
+    assertEquals("Unexpected page token returned", DATASET_NAME_WITHOUT_USER_TAGS, response.getNextPageToken());
+  }
+
   /**
    * Test add, get and delete {@link Dataset}.
    * @throws Exception
