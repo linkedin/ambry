@@ -19,7 +19,6 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.ServerErrorCode;
@@ -32,8 +31,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -66,8 +63,6 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String MISSING_KEYS_FILE = "missingKeys";
   public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
 
-  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
-
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
@@ -86,6 +81,14 @@ public class BackupCheckerThread extends ReplicaThread {
     }
     this.replicationConfig = replicationConfig;
     logger.info("Created BackupCheckerThread {}", threadName);
+  }
+
+  /**
+   * Return the {@link BackupCheckerFileManager}. This is only for test
+   * @return
+   */
+  BackupCheckerFileManager getFileManager() {
+    return this.fileManager;
   }
 
   /**
@@ -132,22 +135,10 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
-   * Checks if a blob from remote replica is present locally
-   * We should not be here since we are overriding fixMissingStoreKeys but still need to override in case someone
-   * makes a change in the future, and we end up here.
-   * @param validMessageDetectionInputStream Stream of valid blob IDs
-   * @param remoteReplicaInfo Info about remote replica from which we are replicating
-   */
-  @Override
-  protected void applyPut(MessageSievingInputStream validMessageDetectionInputStream,
-      RemoteReplicaInfo remoteReplicaInfo) {
-    throw new IllegalStateException("We should not be in applyPut since we override fixMissingStoreKeys");
-  }
-
-  /**
-   * Instead of over-riding applyPut, it is better to override {@link #afterHandleReplicaMetadataResponse}.
+   * Instead of over-riding applyPut, it is better to override the {@link #afterHandleReplicaMetadataResponse}.
    * We already know the missing keys. We know they are not deleted or expired on the remote node.
    * There is no benefit in fetching the entire blob only to discard it, unless we are doing a data comparison also.
+   * That's why we set the state of this group to be DONE.
    * TODO: We should probably fetch just checksums if we want to compare blob-content in the future.
    */
   @Override
@@ -200,7 +191,6 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
-    String errMsg = "%s | Missing %s | %s | Optime = %s | RemoteBlobState = %s | LocalBlobState = %s \n";
     try {
       EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
       // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
@@ -209,19 +199,18 @@ public class BackupCheckerThread extends ReplicaThread {
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       messageInfoTypes.retainAll(getBlobStates(localBlob));
       if (messageInfoTypes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE),
-            String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
-                DATE_FORMAT.format(remoteBlob.getOperationTimeMs()), getBlobStates(remoteBlob),
-                getBlobStates(localBlob)));
+        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), remoteReplicaInfo,
+            acceptableLocalBlobStates, remoteBlob.getStoreKey(), remoteBlob.getOperationTimeMs(),
+            getBlobStates(remoteBlob), getBlobStates(localBlob));
       }
     } catch (StoreException e) {
       EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE),
-            String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
-                DATE_FORMAT.format(remoteBlob.getOperationTimeMs()), getBlobStates(remoteBlob), e.getErrorCode()));
+        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), remoteReplicaInfo,
+            acceptableLocalBlobStates, remoteBlob.getStoreKey(), remoteBlob.getOperationTimeMs(),
+            getBlobStates(remoteBlob), e.getErrorCode());
       }
     }
   }
@@ -258,11 +247,8 @@ public class BackupCheckerThread extends ReplicaThread {
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse) {
     // This will help us know when to stop DR process for sealed partitions
-    String text =
-        String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n", remoteReplicaInfo,
-            remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
-            exchangeMetadataResponse.localLagFromRemoteInBytes);
-    fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), text);
+    fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), remoteReplicaInfo,
+        exchangeMetadataResponse.localLagFromRemoteInBytes);
   }
 
   /**

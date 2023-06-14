@@ -44,7 +44,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
 import com.github.ambry.messageformat.ValidatingTransformer;
-import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.Port;
@@ -1870,8 +1869,8 @@ public class ReplicationTest extends ReplicationTestHelper {
 
   /**
    * Test the case where a blob gets deleted after a replication metadata exchange completes and identifies the blob as
-   * a candidate. The subsequent GetRequest should succeed as Replication makes a Include_All call, and
-   * fixMissingStoreKeys() should succeed without exceptions. The blob should not be put locally.
+   * a candidate. The subsequent GetRequest should succeed as Replication makes a Include_All call and succeed without
+   * exceptions. The blob should not be put locally.
    */
   @Test
   public void deletionAfterMetadataExchangeTest() throws Exception {
@@ -1959,8 +1958,8 @@ public class ReplicationTest extends ReplicationTestHelper {
 
   /**
    * Test the case where a blob expires after a replication metadata exchange completes and identifies the blob as
-   * a candidate. The subsequent GetRequest should succeed as Replication makes a Include_All call, and
-   * fixMissingStoreKeys() should succeed without exceptions. The blob should not be put locally.
+   * a candidate. The subsequent GetRequest should succeed as Replication makes a Include_All call and succeed
+   * without exceptions. The blob should not be put locally.
    */
   @Test
   public void expiryAfterMetadataExchangeTest() throws Exception {
@@ -2130,8 +2129,7 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
-   * Tests {@link ReplicaThread#exchangeMetadata(ConnectedChannel, List)} and
-   * {@link ReplicaThread#fixMissingStoreKeys(ConnectedChannel, List, List, boolean)} for valid puts, deletes, expired keys and
+   * Tests {@link ReplicaThread#replicate()} for valid puts, deletes, expired keys and
    * corrupt blobs.
    * @throws Exception
    */
@@ -2284,7 +2282,7 @@ public class ReplicationTest extends ReplicationTestHelper {
           assertEquals(1, response.get(i).missingStoreMessages.size());
           assertEquals(expectedIndex + 1, ((MockFindToken) response.get(i).remoteToken).getIndex());
         }
-        assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
+        assertEquals("Token should have been set correctly", response.get(i).remoteToken,
             replicasToReplicate.get(rHost.dataNodeId).get(i).getToken());
       }
     }
@@ -2607,10 +2605,6 @@ public class ReplicationTest extends ReplicationTestHelper {
     replicaThread.replicate();
     missingKeys = new int[replicasToReplicate.get(remoteHost.dataNodeId).size()];
     assertMissingKeys(missingKeys, remoteHost, replicaThread);
-
-    // Since, now we moved setting of remoteReplicaInfo::setReEnableReplicationTime inside replicaThread::exchangeMetaData and
-    // above assertMissingKeys() does exchangeMetadata() for replicas up to date, each replica will have
-    // ReEnableReplicationTime set by replicationSyncedReplicaBackoffDurationMs. Forward the time here.
     time.sleep(replicationConfig.replicationSyncedReplicaBackoffDurationMs);
 
     // 4. add more put messages and verify that replication continues and is throttled appropriately.
@@ -2621,10 +2615,6 @@ public class ReplicationTest extends ReplicationTestHelper {
         currentTimeMs + expectedThrottleDurationMs, time.milliseconds());
 
     assertMissingKeys(missingKeys, remoteHost, replicaThread);
-
-    // Since, now we moved setting of remoteReplicaInfo::setReEnableReplicationTime inside replicaThread::exchangeMetaData and
-    // above assertMissingKeys() does exchangeMetadata() for replicas up to date, each replica will have
-    // ReEnableReplicationTime set by replicationSyncedReplicaBackoffDurationMs. Forward the time here.
     time.sleep(replicationConfig.replicationSyncedReplicaBackoffDurationMs);
 
     // verify that throttling on the replica thread is disabled when relevant configs are 0.
@@ -2941,7 +2931,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
     for (int i = 0; i < response.size(); i++) {
       assertEquals(missingKeyCount, response.get(i).missingStoreMessages.size());
-      assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
+      assertEquals("Token should have been set correctly", response.get(i).remoteToken,
           remoteReplicaInfos.get(i).getToken());
     }
     // Don't compare buffers here, PutBuffer might be different since we might change the lifeVersion.

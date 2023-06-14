@@ -46,8 +46,10 @@ import com.github.ambry.messageformat.TtlUpdateMessageFormatInputStream;
 import com.github.ambry.messageformat.UndeleteMessageFormatInputStream;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageInfoType;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyFactory;
@@ -64,6 +66,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -115,9 +118,9 @@ public class ReplicationTestHelper {
     properties.setProperty("replication.replica.thread.idle.sleep.duration.ms", "1000");
     properties.setProperty("replication.track.local.from.remote.per.partition.lag", "true");
     properties.setProperty("replication.max.partition.count.per.request", Integer.toString(0));
-    properties.setProperty(ReplicationConfig.REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO,
-        String.valueOf(true));
-    properties.put("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
+    properties.setProperty("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 2L));
+    properties.setProperty(ReplicationConfig.BACKUP_CHECKER_FILE_MANAGER_TYPE,
+        MockBackupCheckerFileManager.class.getName());
     verifiableProperties = new VerifiableProperties(properties);
     replicationConfig = new ReplicationConfig(verifiableProperties);
     accountService = Mockito.mock(AccountService.class);
@@ -316,6 +319,28 @@ public class ReplicationTestHelper {
       int batchSize, ClusterMap clusterMap, MockHost localHost, StoreKeyConverter storeKeyConverter,
       Transformer transformer, StoreEventListener listener, ReplicaSyncUpManager replicaSyncUpManager,
       MockHost... remoteHosts) throws ReflectiveOperationException {
+    return getRemoteReplicasAndReplicaThread(false, batchSize, clusterMap, localHost, storeKeyConverter, transformer,
+        listener, replicaSyncUpManager, remoteHosts);
+  }
+
+  /**
+   * Creates and gets the remote replicas that the local host will deal with and the {@link ReplicaThread} to perform
+   * replication with.
+   * @param createBackupCheckerThread true to create a {@link BackupCheckerThread}, other, create {@link ReplicaThread}.
+   * @param batchSize the number of messages to be returned in each iteration of replication
+   * @param clusterMap the {@link ClusterMap} to use
+   * @param localHost the local {@link MockHost} (the one running the replica thread)
+   * @param storeKeyConverter the {@link StoreKeyConverter} to be used in {@link ReplicaThread}
+   * @param transformer the {@link Transformer} to be used in {@link ReplicaThread}
+   * @param listener the {@link StoreEventListener} to use.
+   * @param replicaSyncUpManager the {@link ReplicaSyncUpManager} to help create replica thread
+   * @param remoteHosts the list of remote {@link MockHost} (the target of replication)
+   * @return a pair whose first element is the set of remote replicas and the second element is the {@link ReplicaThread}
+   */
+  protected Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> getRemoteReplicasAndReplicaThread(
+      boolean createBackupCheckerThread, int batchSize, ClusterMap clusterMap, MockHost localHost,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, StoreEventListener listener,
+      ReplicaSyncUpManager replicaSyncUpManager, MockHost... remoteHosts) throws ReflectiveOperationException {
     ReplicationMetrics replicationMetrics =
         new ReplicationMetrics(new MetricRegistry(), clusterMap.getReplicaIds(localHost.dataNodeId));
     StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", clusterMap);
@@ -329,11 +354,20 @@ public class ReplicationTestHelper {
     }
     FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     MockNetworkClient networkClient = new MockNetworkClient(hosts, clusterMap, batchSize, findTokenHelper);
-    ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), localHost.dataNodeId,
-            networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
-            clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
-            new ResponseHandler(clusterMap), time, replicaSyncUpManager, null, null);
+    ReplicaThread replicaThread = null;
+    if (createBackupCheckerThread) {
+      replicaThread =
+          new BackupCheckerThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), localHost.dataNodeId,
+              networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+              clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+              new ResponseHandler(clusterMap), time, replicaSyncUpManager, null, null);
+    } else {
+      replicaThread =
+          new ReplicaThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), localHost.dataNodeId,
+              networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+              clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
+              new ResponseHandler(clusterMap), time, replicaSyncUpManager, null, null);
+    }
     for (MockHost remoteHost : remoteHosts) {
       for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicate.get(remoteHost.dataNodeId)) {
         replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
@@ -389,7 +423,7 @@ public class ReplicationTestHelper {
         assertEquals(expectedMissingKeysSum, response.get(i).missingStoreMessages.size());
         assertEquals(i % 2 == 0 ? expectedIndex : expectedIndexOdd,
             ((MockFindToken) response.get(i).remoteToken).getIndex());
-        assertEquals("Token should have been set correctly in fixMissingStoreKeys()", response.get(i).remoteToken,
+        assertEquals("Token should have been set correctly", response.get(i).remoteToken,
             replicasToReplicate.get(dataNodeId).get(i).getToken());
       }
     }
@@ -1107,5 +1141,51 @@ public class ReplicationTestHelper {
       this.byteBuffer = bytebuffer;
       this.messageInfo = messageInfo;
     }
+  }
+
+  public static class MockBackupCheckerFileManager extends BackupCheckerFileManager {
+    Map<PartitionId, Map<StoreKey, BackupCheckerAppendRecord>> appendRecordsForPartitions = new HashMap<>();
+
+    public MockBackupCheckerFileManager(ReplicationConfig replicationConfig, MetricRegistry metricRegistry) {
+      super(replicationConfig, metricRegistry);
+    }
+
+    @Override
+    protected boolean appendToFile(String filePath, RemoteReplicaInfo remoteReplicaInfo,
+        EnumSet<MessageInfoType> acceptableLocalBlobStates, StoreKey storeKey, long operationTime,
+        EnumSet<MessageInfoType> remoteBlobState, Object localBlobState) {
+      PartitionId partitionId = remoteReplicaInfo.getReplicaId().getPartitionId();
+      BackupCheckerAppendRecord record = new BackupCheckerAppendRecord();
+      record.filePath = filePath;
+      record.remoteReplicaInfo = remoteReplicaInfo;
+      record.acceptableLocalBlobStates = acceptableLocalBlobStates;
+      record.storeKey = storeKey;
+      record.operationTime = operationTime;
+      record.remoteBlobState = remoteBlobState;
+      if (localBlobState instanceof StoreErrorCodes) {
+        record.storeErrorCodes = (StoreErrorCodes) localBlobState;
+      } else {
+        record.localBlobState = (EnumSet<MessageInfoType>) localBlobState;
+      }
+      appendRecordsForPartitions.computeIfAbsent(partitionId, k -> new HashMap<>()).put(storeKey, record);
+      return true;
+    }
+
+    @Override
+    protected boolean truncateAndWriteToFile(String filePath, RemoteReplicaInfo remoteReplicaInfo,
+        long localLagFromRemoteInBytes) {
+      return false;
+    }
+  }
+
+  public static class BackupCheckerAppendRecord {
+    String filePath;
+    RemoteReplicaInfo remoteReplicaInfo;
+    EnumSet<MessageInfoType> acceptableLocalBlobStates;
+    StoreKey storeKey;
+    long operationTime;
+    EnumSet<MessageInfoType> remoteBlobState;
+    EnumSet<MessageInfoType> localBlobState;
+    StoreErrorCodes storeErrorCodes;
   }
 }

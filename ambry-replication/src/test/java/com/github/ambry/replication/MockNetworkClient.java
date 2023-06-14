@@ -37,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -56,6 +57,7 @@ public class MockNetworkClient implements NetworkClient {
   private volatile ServerErrorCode expectedGetResponseError = ServerErrorCode.No_Error;
   private volatile boolean shouldReturnResponseForDroppedRequests = true;
   private Runnable sendAndPoolCallback = null;
+  final AtomicInteger numGetRequest = new AtomicInteger();
 
   public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
       FindTokenHelper findTokenHelper) {
@@ -145,6 +147,7 @@ public class MockNetworkClient implements NetworkClient {
           } else if (requestInfo.getRequest()
               .getRequestOrResponseType()
               .equals(RequestOrResponseType.GetRequest.name())) {
+            numGetRequest.incrementAndGet();
             if (expectedGetResponseError == ServerErrorCode.No_Error) {
               responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
             } else {
