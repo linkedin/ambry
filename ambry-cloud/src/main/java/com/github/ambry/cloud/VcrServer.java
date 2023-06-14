@@ -200,7 +200,7 @@ public class VcrServer {
         networkClientFactory =
             new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
                 time);
-        logger.info("Using blocking channel for VCR replication.");
+        logger.info("Using socket channel for VCR replication.");
       }
 
       StoreKeyConverterFactory storeKeyConverterFactory =
