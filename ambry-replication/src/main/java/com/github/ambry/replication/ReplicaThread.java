@@ -252,6 +252,10 @@ public class ReplicaThread implements Runnable {
       }
       logger.info("Begin iteration for thread {}", threadName);
       while (running) {
+        // TODO: Replicate method performs one cycle of replication for every replica and faster replicas would be
+        //  blocked by the slower replicas. There is an optimization we can do, which is let each replica runs replication
+        //  independently without waiting for each other. This would make sure that slower replicas won't block faster
+        //  replicas.
         replicate();
         lock.lock();
         try {
