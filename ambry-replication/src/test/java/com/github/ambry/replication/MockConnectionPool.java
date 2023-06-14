@@ -260,23 +260,21 @@ public class MockConnectionPool implements ConnectionPool {
               host.infosByPartition.getOrDefault(requestInfo.getPartitionId(), new ArrayList<>());
           int startIndex = ((MockFindToken) (requestInfo.getToken())).getIndex();
           int endIndex = Math.min(allMessageInfos.size(), startIndex + maxSizeToReturn);
-          int indexRequested = 0;
           Set<StoreKey> processedKeys = new HashSet<>();
           for (int i = startIndex; i < endIndex; i++) {
             StoreKey key = allMessageInfos.get(i).getStoreKey();
             if (processedKeys.add(key)) {
               messageInfosToReturn.add(getMergedMessageInfo(key, allMessageInfos));
             }
-            indexRequested = i;
           }
-          long bytesRead = allMessageInfos.size() > 0 ? allMessageInfos.subList(0, indexRequested + 1)
+          long bytesRead = allMessageInfos.size() > 0 ? allMessageInfos.subList(0, endIndex)
               .stream()
               .mapToLong(MessageInfo::getSize)
               .sum() : 0;
           long total = allMessageInfos.stream().mapToLong(MessageInfo::getSize).sum();
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(), requestInfo.getReplicaType(),
-                  new MockFindToken(indexRequested + 1, bytesRead), messageInfosToReturn, total - bytesRead,
+                  new MockFindToken(endIndex, bytesRead), messageInfosToReturn, total - bytesRead,
                   ReplicaMetadataResponse.getCompatibleResponseVersion(metadataRequest.getVersionId()));
           responseInfoList.add(replicaMetadataResponseInfo);
         }

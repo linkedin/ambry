@@ -1284,12 +1284,12 @@ public class ReplicationTest extends ReplicationTestHelper {
         MockFindToken token = (MockFindToken) replicaInfo.getToken();
         int lastProgress = progressTracker.computeIfAbsent(id, id1 -> 0);
         int currentProgress = token.getIndex();
-        boolean partDone = currentProgress + 1 == remoteHost.infosByPartition.get(id).size();
+        boolean partDone = currentProgress == remoteHost.infosByPartition.get(id).size();
         if (allStopped || (onlyOneResumed && !id.equals(partitionToResumeFirst)) || (allReenabled
             && !shutdownStoreRestarted && id.equals(partitionToShutdownLocally))) {
           assertEquals("There should have been no progress", lastProgress, currentProgress);
         } else if (!partDone) {
-          assertTrue("There has been no progress", currentProgress > lastProgress);
+          assertTrue("There has been no progress", currentProgress >= lastProgress);
           progressTracker.put(id, currentProgress);
         }
         replicationDone = replicationDone && partDone;
@@ -1431,7 +1431,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     }
     storeKeyConverter.setConversionMap(conversionMap);
 
-    int expectedIndex = assertMissingKeysAndFixMissingStoreKeys(0, 2, 1, replicaThread, replicasToReplicate);
+    int expectedIndex = assertMissingKeysAndFixMissingStoreKeys(0, 3, 1, replicaThread, replicasToReplicate);
 
     //Check that there are no missing buffers between expectedLocalHost and LocalHost
     Map<PartitionId, List<ByteBuffer>> missingBuffers =
@@ -1483,7 +1483,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     // 3 unconverted + 2 unconverted deleted expected missing buffers
     replicaThread.replicate();
     verifyNoMoreMissingKeysAndExpectedMissingBufferCount(remoteHost, localHost, replicaThread, replicasToReplicate,
-        idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex, 5);
+        idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, 5);
   }
 
   /**
@@ -1767,35 +1767,26 @@ public class ReplicationTest extends ReplicationTestHelper {
       assertEquals("Missing buffers count mismatch", 7, entry.getValue().size());
     }
 
-    // 1st iteration - 0 missing keys (3 puts already present, one put missing but del in remote, 1 ttl update will be
-    // applied, 1 delete will be applied): Remote returns: id0T, id1TD, id2T, id3TD. id3 put missing, but it's deleted.
-    // id1 apply delete, id2 apply ttl update. Token index is pointing to id3.
-    // 2nd iteration - 1 missing key, 1 of which will also be ttl updated (one key with put + ttl update missing but
-    // del in remote, one put and ttl update replicated): Remote returns: id3TD, id4T. id4 put missing, id3 deleted.
-    // Token index is pointing to id3T.
-    // 3rd iteration - 0 missing keys (1 ttl update missing but del in remote, 1 already ttl updated in iter 1, 1 key
-    // already ttl updated in local, 1 key del local): Remote returns: id3TD, id2T, id1TD, id0T. Token index is pointing
-    // to id0T.
-    // 4th iteration - 0 missing keys (1 key del local, 1 key already deleted, 1 key missing but del in remote, 1 key
-    // with ttl update missing but del remote): Remote returns: id0T, id1D, id3TD, idTD. Token index is pointing to idT.
-    // 5th iteration - 0 missing keys (1 key - two records - missing but del remote, 2 puts already present but TTL
-    // update of one of them is applied): Remote returns: idTD, b0T, b1T. b1 apply ttl update. Token index is pointing to
-    // b1.
-    // 6th iteration - 1 missing key (put + ttl update for a key, 1 deprecated id ignored, 1 TTL update already applied):
-    // Remote returns: b1T, b2T, b3T, b0T. b2 missing, and ttl updated. b3 has no local key.
-    // 7th iteration - 0 missing keys (2 TTL updates already applied, 1 TTL update of a deprecated ID ignored)
-    //                                                                                                              |1st iter |2nd iter|3rd iter|4th iter|5th iter|6th iter|7th iter|
-    // L|id0|id1|id2|id0D|id1T|   |   |    |    |    |    |    |    |    |   |   |b0p|b1p|   |  |b0pT|    |    |    |id1D|id2T|id4|id4T|        |        |b1pT    |b2p|b2pT|
+    // 1st iteration - 0 missing keys  Remote returns: id0T, id1TD, id2T, id3TD. id3 put missing, but it's deleted.
+    // id1 apply delete, id2 apply ttl update. Token index is pointing to id4.
+    // 2nd iteration - 1 missing key, 1 of which will also be ttl updated: Remote returns: id2T, id3TD, id4T. id4 put
+    // missing, id3 deleted. Token index is pointing to id1T.
+    // 3rd iteration - 0 missing key: Remote returns: id3TD, id1TD, id0T. Token index is pointing to idT.
+    // 4th iteration - 0 missing key: Remote returns: idTD, b0T, b1T. Token index is pointing to b2.
+    // 5th iteration - 1 missing keys: Remote returns: b2T, b3T, b0T, b1T. Token index is pointing to b2T.
+    // 6th iteration - 0 missing key: Remote returns: b2T, b3T. b3 has no local key.
+    //                                                                                                              |1st iter |2nd iter|3rd iter|4th iter|5th iter|6th iter|
+    // L|id0|id1|id2|id0D|id1T|   |   |    |    |    |    |    |    |    |   |   |b0p|b1p|   |  |b0pT|    |    |    |id1D|id2T|id4|id4T|        |b1pT    |b2p|b2pT|
     // R|id0|id1|id2|    |    |id3|id4|id4T|id3T|id2T|id1T|id0T|id1D|id3D|idT|idD|b0 |b1 |b2 |b3|b0T |b1T |b2T | b3T|
     // E|id0|id1|id2|id0D|id1T|   |id4|id4T|    |id2T|    |    |id1D|    |   |   |b0p|b1p|b2p|  |b0pT|b1pT|b2pT|    |
 
-    int[] missingKeysCounts = {0, 1, 0, 0, 0, 1, 0};
-    int[] missingBuffersCount = {5, 3, 3, 3, 2, 0, 0};
+    int[] missingKeysCounts = {0, 1, 0, 0, 1, 0};
+    int[] missingBuffersCount = {5, 3, 3, 2, 0, 0};
     int expectedIndex = 0;
     int missingBuffersIndex = 0;
 
     for (int missingKeysCount : missingKeysCounts) {
-      expectedIndex = Math.min(expectedIndex + batchSize, numMessagesInEachPart) - 1;
+      expectedIndex = Math.min(expectedIndex + batchSize, numMessagesInEachPart);
       replicaThread.replicate();
       List<ReplicaThread.ExchangeMetadataResponse> response =
           replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
@@ -2209,8 +2200,7 @@ public class ReplicationTest extends ReplicationTestHelper {
       addDeleteMessagesToReplicasOfPartition(partitionId, id, remoteHosts);
       idsToBeIgnored.add(id);
 
-      // add 2 or 3 messages (depending on whether partition is even-numbered or odd-numbered) to the remote host only
-      addPutMessagesToReplicasOfPartition(partitionId, remoteHosts, i % 2 == 0 ? 2 : 3);
+      addPutMessagesToReplicasOfPartition(partitionId, remoteHosts, 3);
 
       idsToBeIgnoredByPartition.put(partitionId, idsToBeIgnored);
 
@@ -2231,43 +2221,28 @@ public class ReplicationTest extends ReplicationTestHelper {
     for (MockHost rHost : remoteHosts) {
       Map<PartitionId, List<ByteBuffer>> missingBuffers = rHost.getMissingBuffers(localHost.buffersByPartition);
       for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
-        if (partitionIds.indexOf(entry.getKey()) % 2 == 0) {
-          assertEquals("Missing buffers count mismatch", 13, entry.getValue().size());
-        } else {
-          assertEquals("Missing buffers count mismatch", 14, entry.getValue().size());
-        }
+        assertEquals("Missing buffers count mismatch", 14, entry.getValue().size());
       }
     }
 
-    // 1st and 2nd iterations - no keys missing because all data is in both hosts
-    // 3rd iteration - 3 missing keys (one expired)
-    // 4th iteration - 3 missing keys (one expired) - the corrupt key also shows up as missing but is ignored later
-    // 5th iteration - 1 missing key (1 key from prev cycle, 1 deleted key, 1 never present key but deleted in remote)
-    // 6th iteration - 2 missing keys (2 entries i.e put,delete of never present key)
-    int[] missingKeysCounts = {0, 0, 3, 3, 1, 2};
-    int[] missingBuffersCount = {12, 12, 9, 7, 6, 4};
+    int[] missingKeysCounts = {0, 1, 4, 2, 3};
+    int[] missingBuffersCount = {13, 12, 9, 7, 4};
     int expectedIndex = 0;
     int missingBuffersIndex = 0;
 
     for (int missingKeysCount : missingKeysCounts) {
-      expectedIndex =
-          assertMissingKeysAndFixMissingStoreKeys(expectedIndex, batchSize - 1, missingKeysCount, replicaThread,
-              replicasToReplicate);
+      expectedIndex = assertMissingKeysAndFixMissingStoreKeys(expectedIndex, batchSize, missingKeysCount, replicaThread,
+          replicasToReplicate);
 
       Map<PartitionId, List<ByteBuffer>> missingBuffers = remoteHost.getMissingBuffers(localHost.buffersByPartition);
       for (Map.Entry<PartitionId, List<ByteBuffer>> entry : missingBuffers.entrySet()) {
-        if (partitionIds.indexOf(entry.getKey()) % 2 == 0) {
-          assertEquals("Missing buffers count mismatch for iteration count " + missingBuffersIndex,
-              missingBuffersCount[missingBuffersIndex], entry.getValue().size());
-        } else {
-          assertEquals("Missing buffers count mismatch for iteration count " + missingBuffersIndex,
-              missingBuffersCount[missingBuffersIndex] + 1, entry.getValue().size());
-        }
+        assertEquals("Missing buffers count mismatch for iteration count " + missingBuffersIndex,
+            missingBuffersCount[missingBuffersIndex], entry.getValue().size());
       }
       missingBuffersIndex++;
     }
 
-    // Test the case where some partitions have missing keys, but not all.
+    // All partitions are sync with remote host
     replicaThread.replicate();
     for (MockHost rHost : remoteHosts) {
       List<ReplicaThread.ExchangeMetadataResponse> response =
@@ -2275,13 +2250,8 @@ public class ReplicationTest extends ReplicationTestHelper {
       List<RemoteReplicaInfo> remoteReplicaInfos = replicasToReplicate.get(rHost.dataNodeId);
       assertEquals("Response should contain a response for each replica", remoteReplicaInfos.size(), response.size());
       for (int i = 0; i < response.size(); i++) {
-        if (i % 2 == 0) {
-          assertEquals(0, response.get(i).missingStoreMessages.size());
-          assertEquals(expectedIndex, ((MockFindToken) response.get(i).remoteToken).getIndex());
-        } else {
-          assertEquals(1, response.get(i).missingStoreMessages.size());
-          assertEquals(expectedIndex + 1, ((MockFindToken) response.get(i).remoteToken).getIndex());
-        }
+        assertEquals(0, response.get(i).missingStoreMessages.size());
+        assertEquals(expectedIndex, ((MockFindToken) response.get(i).remoteToken).getIndex());
         assertEquals("Token should have been set correctly", response.get(i).remoteToken,
             replicasToReplicate.get(rHost.dataNodeId).get(i).getToken());
       }
@@ -2291,7 +2261,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     for (MockHost rHost : remoteHosts) {
       // 1 expired + 1 corrupt + 1 put (never present) + 1 deleted (never present) expected missing buffers
       verifyNoMoreMissingKeysAndExpectedMissingBufferCount(rHost, localHost, replicaThread, replicasToReplicate,
-          idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, expectedIndex + 1, 4);
+          idsToBeIgnoredByPartition, storeKeyConverter, expectedIndex, 4);
     }
   }
 
@@ -2447,7 +2417,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     assertEquals(remoteReplicaInfos.size(), exchangeMetadataResponseList.size());
     for (ReplicaThread.ExchangeMetadataResponse metadata : exchangeMetadataResponseList) {
       assertEquals(5, metadata.missingStoreMessages.size());
-      assertEquals(4, ((MockFindToken) metadata.remoteToken).getIndex());
+      assertEquals(5, ((MockFindToken) metadata.remoteToken).getIndex());
     }
 
     Map<PartitionId, List<MessageInfo>> missingInfos = remoteHost.getMissingInfos(localHost.infosByPartition);

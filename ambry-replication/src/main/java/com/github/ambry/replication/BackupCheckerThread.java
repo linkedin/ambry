@@ -154,8 +154,7 @@ public class BackupCheckerThread extends ReplicaThread {
         if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
           for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
             // Check local store once before logging an error
-            checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates,
-                acceptableStoreErrorCodes);
+            checkLocalStore(messageInfo, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
           }
           // Advance token so that we make progress in spite of missing keys,
           // else the replication code will be stuck waiting for missing keys to appear in local store.

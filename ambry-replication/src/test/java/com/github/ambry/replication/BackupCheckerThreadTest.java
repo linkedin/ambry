@@ -21,6 +21,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.store.MessageInfoType;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
@@ -84,7 +85,7 @@ public class BackupCheckerThreadTest extends ReplicationTestHelper {
 
     // Test case 1. all the records are on both local and remote host
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(null);
-    int expectedIndex = -1;
+    int expectedIndex = 0;
     for (int i = 0; i < partitionIds.size(); i++) {
       PartitionId partitionId = partitionIds.get(i);
       // Adding 1 store key that ends with PUT
@@ -127,6 +128,8 @@ public class BackupCheckerThreadTest extends ReplicationTestHelper {
       expectedDeletedKeysByPartition.put(partitionId, new HashSet<>(keys));
     }
     expectedIndex += 2;
+    fileManager.appendRecordsForPartitions.clear();
+
     checkerThread.replicate();
     Assert.assertEquals(expectedDeletedKeysByPartition.size(), fileManager.appendRecordsForPartitions.size());
     for (Map.Entry<PartitionId, Set<StoreKey>> expectedDeletedKeys : expectedDeletedKeysByPartition.entrySet()) {
@@ -145,6 +148,82 @@ public class BackupCheckerThreadTest extends ReplicationTestHelper {
         Assert.assertEquals(EnumSet.of(MessageInfoType.DELETE), record.acceptableLocalBlobStates);
         Assert.assertEquals(EnumSet.of(MessageInfoType.PUT, MessageInfoType.DELETE), record.remoteBlobState);
         Assert.assertEquals(EnumSet.of(MessageInfoType.PUT), record.localBlobState);
+      }
+    }
+    Assert.assertEquals(0, mockNetworkClient.numGetRequest.get());
+    responses = checkerThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
+    for (ReplicaThread.ExchangeMetadataResponse response : responses) {
+      Assert.assertEquals(expectedIndex, ((MockFindToken) response.remoteToken).getIndex());
+    }
+
+    // Test case 3. Missing ttl update in the local host
+    Map<PartitionId, Set<StoreKey>> expectedTtlUpdateKeysByPartition = new HashMap<>();
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+      // Adding 1 store key that ends with PUT to local, but PUT and delete to remote
+      List<StoreKey> keys = addPutMessagesToReplicasOfPartition(partitionId, allHosts, 1);
+      StoreKey key = keys.get(0);
+      addTtlUpdateMessagesToReplicasOfPartition(partitionId, key, Collections.singletonList(remoteHost),
+          Utils.Infinite_Time);
+      expectedTtlUpdateKeysByPartition.put(partitionId, new HashSet<>(keys));
+    }
+    expectedIndex += 2;
+    fileManager.appendRecordsForPartitions.clear();
+
+    checkerThread.replicate();
+    Assert.assertEquals(expectedTtlUpdateKeysByPartition.size(), fileManager.appendRecordsForPartitions.size());
+    for (Map.Entry<PartitionId, Set<StoreKey>> expectedTtlUpdateKeys : expectedTtlUpdateKeysByPartition.entrySet()) {
+      Map<StoreKey, BackupCheckerAppendRecord> records =
+          fileManager.appendRecordsForPartitions.get(expectedTtlUpdateKeys.getKey());
+      Assert.assertNotNull(records);
+      Set<StoreKey> keys = expectedTtlUpdateKeys.getValue();
+      Assert.assertEquals(keys.size(), records.size());
+      for (StoreKey key : keys) {
+        BackupCheckerAppendRecord record = records.get(key);
+        Assert.assertNotNull(record);
+        Assert.assertEquals(
+            "/tmp/" + expectedTtlUpdateKeys.getKey().getId() + "/" + record.remoteReplicaInfo.getReplicaId()
+                .getDataNodeId()
+                .getHostname() + "/missingKeys", record.filePath);
+        Assert.assertEquals(EnumSet.of(MessageInfoType.TTL_UPDATE), record.acceptableLocalBlobStates);
+        Assert.assertEquals(EnumSet.of(MessageInfoType.PUT, MessageInfoType.TTL_UPDATE), record.remoteBlobState);
+        Assert.assertEquals(EnumSet.of(MessageInfoType.PUT), record.localBlobState);
+      }
+    }
+    Assert.assertEquals(0, mockNetworkClient.numGetRequest.get());
+    responses = checkerThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
+    for (ReplicaThread.ExchangeMetadataResponse response : responses) {
+      Assert.assertEquals(expectedIndex, ((MockFindToken) response.remoteToken).getIndex());
+    }
+
+    // Test case 4. Missing Put in the local host
+    Map<PartitionId, Set<StoreKey>> expectedPutKeysByPartition = new HashMap<>();
+    for (int i = 0; i < partitionIds.size(); i++) {
+      PartitionId partitionId = partitionIds.get(i);
+      // Adding 1 store key that ends with PUT to local, but PUT and delete to remote
+      List<StoreKey> keys = addPutMessagesToReplicasOfPartition(partitionId, Collections.singletonList(remoteHost), 1);
+      expectedPutKeysByPartition.put(partitionId, new HashSet<>(keys));
+    }
+    expectedIndex += 1;
+    fileManager.appendRecordsForPartitions.clear();
+
+    checkerThread.replicate();
+    Assert.assertEquals(expectedPutKeysByPartition.size(), fileManager.appendRecordsForPartitions.size());
+    for (Map.Entry<PartitionId, Set<StoreKey>> expectedPutKeys : expectedPutKeysByPartition.entrySet()) {
+      Map<StoreKey, BackupCheckerAppendRecord> records =
+          fileManager.appendRecordsForPartitions.get(expectedPutKeys.getKey());
+      Assert.assertNotNull(records);
+      Set<StoreKey> keys = expectedPutKeys.getValue();
+      Assert.assertEquals(keys.size(), records.size());
+      for (StoreKey key : keys) {
+        BackupCheckerAppendRecord record = records.get(key);
+        Assert.assertNotNull(record);
+        Assert.assertEquals("/tmp/" + expectedPutKeys.getKey().getId() + "/" + record.remoteReplicaInfo.getReplicaId()
+            .getDataNodeId()
+            .getHostname() + "/missingKeys", record.filePath);
+        Assert.assertEquals(EnumSet.of(MessageInfoType.PUT), record.acceptableLocalBlobStates);
+        Assert.assertEquals(EnumSet.of(MessageInfoType.PUT), record.remoteBlobState);
+        Assert.assertEquals(StoreErrorCodes.ID_Not_Found, record.storeErrorCodes);
       }
     }
     Assert.assertEquals(0, mockNetworkClient.numGetRequest.get());

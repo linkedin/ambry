@@ -1024,8 +1024,11 @@ public class ReplicaThread implements Runnable {
       if (!deletedLocally) {
         // Only adds record when it's not deleted yet. Since delete is the final state for this lifeVersion, if there
         // is a delete record for the current lifeVersion, then nothing needs to be done.
-        MessageInfo info = new MessageInfo(localKey, 0, localKey.getAccountId(), localKey.getContainerId(),
-            messageInfo.getOperationTimeMs(), remoteLifeVersion);
+        MessageInfo info = new MessageInfo.Builder(messageInfo).storeKey(localKey)
+            .size(0)
+            .accountId(localKey.getAccountId())
+            .containerId(localKey.getContainerId())
+            .build();
         if (messageInfo.isTtlUpdated() && !ttlUpdatedLocally) {
           applyTtlUpdate(info, remoteReplicaInfo);
         }

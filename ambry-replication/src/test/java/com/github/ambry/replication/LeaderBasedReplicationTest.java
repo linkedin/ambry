@@ -514,7 +514,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       if (leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())) {
         assertEquals("remote token mismatch for leader replicas",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize - 1);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize);
       } else {
         assertEquals("remote token should not move forward for standby replicas until missing keys are fetched",
             ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), 0);
@@ -527,7 +527,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // verify that remote token will be moved for all intra-colo replicas with token index = batchSize-1
     for (RemoteReplicaInfo replicaInfo : remoteReplicaInfosForLocalDC) {
       assertEquals("mismatch in remote token set for intra colo replicas",
-          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize - 1);
+          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize);
     }
 
     // process missing keys for cross colo replicas from previous metadata exchange
@@ -539,7 +539,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // as missing keys must now be obtained via intra-dc replication
     for (RemoteReplicaInfo replicaInfo : remoteReplicaInfosForRemoteDC) {
       assertEquals("mismatch in remote token set for inter colo replicas",
-          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize - 1);
+          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize);
     }
 
     // If we have a local standby replica with leader partition on remote node, change its state to leader
@@ -558,10 +558,10 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
       if (leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())
           || (remoteReplicaInfo.getLocalReplicaId().equals(localStandbyReplicaWithLeaderPartitionOnRemoteNode))) {
         assertEquals("remote token mismatch for leader replicas",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize * 2 - 2);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize * 2);
       } else {
         assertEquals("remote token should not move forward for standby replicas until missing keys are fetched",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize - 1);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize);
       }
     }
 
@@ -571,7 +571,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // verify that remote token is moved forward for all intra-colo replicas.
     for (RemoteReplicaInfo replicaInfo : remoteReplicaInfosForLocalDC) {
       assertEquals("mismatch in remote token set for intra colo replicas",
-          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize * 2 - 2);
+          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize * 2);
     }
 
     // process missing keys for cross colo replicas from previous metadata exchange
@@ -583,7 +583,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // via intra-dc replication.
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       assertEquals("mismatch in remote token set for intra colo replicas",
-          ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize * 2 - 2);
+          ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize * 2);
     }
 
     storageManager.shutdown();
@@ -710,7 +710,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       if (leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())) {
         assertEquals("remote token mismatch for leader replicas",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize - 1);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize);
       } else {
         assertEquals("remote token should not move forward for standby replicas until missing keys are fetched",
             ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), 0);
@@ -723,7 +723,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // verify that remote token will be moved for all replicas as it is intra-dc replication
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForLocalDC) {
       assertEquals("mismatch in remote token set for intra colo replicas",
-          ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), numOfMessagesOnRemoteNodeInLocalDC - 1);
+          ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), numOfMessagesOnRemoteNodeInLocalDC);
     }
 
     // process missing messages if any from previous metadata exchange for cross colo replicas as they must now be obtained
@@ -776,7 +776,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       if (!leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())) {
         assertEquals("mismatch in remote token set for standby cross colo replicas",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize - 1);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize);
         assertFalse("missing store messages should be empty for standby replicas now",
             crossColoReplicaThread.containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo));
       }

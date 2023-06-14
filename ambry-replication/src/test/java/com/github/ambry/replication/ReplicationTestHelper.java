@@ -393,26 +393,7 @@ public class ReplicationTestHelper {
   protected int assertMissingKeysAndFixMissingStoreKeys(int expectedIndex, int expectedIndexInc,
       int expectedMissingKeysSum, ReplicaThread replicaThread,
       Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
-    return assertMissingKeysAndFixMissingStoreKeys(expectedIndex, expectedIndex, expectedIndexInc,
-        expectedMissingKeysSum, replicaThread, replicasToReplicate);
-  }
-
-  /**
-   * Asserts the number of missing keys between the local and remote replicas and fixes the keys
-   * @param expectedIndex initial expected index for even numbered partitions
-   * @param expectedIndexOdd initial expected index for odd numbered partitions
-   * @param expectedIndexInc increment level for the expected index (how much the findToken index is expected to increment)
-   * @param expectedMissingKeysSum the number of missing keys expected
-   * @param replicaThread replicaThread that will be performing replication
-   * @param replicasToReplicate list of replicas to replicate between
-   * @return expectedIndex + expectedIndexInc
-   * @throws Exception
-   */
-  protected int assertMissingKeysAndFixMissingStoreKeys(int expectedIndex, int expectedIndexOdd, int expectedIndexInc,
-      int expectedMissingKeysSum, ReplicaThread replicaThread,
-      Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate) throws Exception {
     expectedIndex += expectedIndexInc;
-    expectedIndexOdd += expectedIndexInc;
     replicaThread.replicate();
     for (DataNodeId dataNodeId : replicasToReplicate.keySet()) {
       List<ReplicaThread.ExchangeMetadataResponse> response =
@@ -421,8 +402,7 @@ public class ReplicationTestHelper {
           response.size());
       for (int i = 0; i < response.size(); i++) {
         assertEquals(expectedMissingKeysSum, response.get(i).missingStoreMessages.size());
-        assertEquals(i % 2 == 0 ? expectedIndex : expectedIndexOdd,
-            ((MockFindToken) response.get(i).remoteToken).getIndex());
+        assertEquals(expectedIndex, ((MockFindToken) response.get(i).remoteToken).getIndex());
         assertEquals("Token should have been set correctly", response.get(i).remoteToken,
             replicasToReplicate.get(dataNodeId).get(i).getToken());
       }
@@ -446,7 +426,7 @@ public class ReplicationTestHelper {
       PartitionId partitionId = remoteReplicaInfo.getReplicaId().getPartitionId();
       List<MessageInfo> messageInfos = remoteHost.infosByPartition.get(partitionId);
       assertEquals("MessageInfo list size: " + messageInfos.size() + " index : " + ind, expectedMissingKeysSum[i],
-          messageInfos.size() - ind - 1);
+          messageInfos.size() - ind);
     }
   }
 
@@ -460,14 +440,13 @@ public class ReplicationTestHelper {
    * @param idsToBeIgnoredByPartition
    * @param storeKeyConverter
    * @param expectedIndex
-   * @param expectedIndexOdd
    * @param expectedMissingBuffers
    * @throws Exception
    */
   protected void verifyNoMoreMissingKeysAndExpectedMissingBufferCount(MockHost remoteHost, MockHost localHost,
       ReplicaThread replicaThread, Map<DataNodeId, List<RemoteReplicaInfo>> replicasToReplicate,
       Map<PartitionId, List<StoreKey>> idsToBeIgnoredByPartition, StoreKeyConverter storeKeyConverter,
-      int expectedIndex, int expectedIndexOdd, int expectedMissingBuffers) throws Exception {
+      int expectedIndex, int expectedMissingBuffers) throws Exception {
     // no more missing keys
     List<ReplicaThread.ExchangeMetadataResponse> response =
         replicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHost.dataNodeId);
@@ -475,8 +454,7 @@ public class ReplicationTestHelper {
         replicasToReplicate.get(remoteHost.dataNodeId).size(), response.size());
     for (int i = 0; i < response.size(); i++) {
       assertEquals(0, response.get(i).missingStoreMessages.size());
-      assertEquals(i % 2 == 0 ? expectedIndex : expectedIndexOdd,
-          ((MockFindToken) response.get(i).remoteToken).getIndex());
+      assertEquals(expectedIndex, ((MockFindToken) response.get(i).remoteToken).getIndex());
     }
 
     Map<PartitionId, List<MessageInfo>> missingInfos =
