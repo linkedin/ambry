@@ -28,7 +28,6 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
@@ -62,24 +61,24 @@ public class ReplicationManager extends ReplicationEngine {
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
-      ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
-      NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, NotificationSystem requestNotification,
+      ScheduledExecutorService scheduler, DataNodeId dataNode, NetworkClientFactory networkClientFactory,
+      MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate) throws ReplicationException {
     this(replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory, clusterMap, scheduler,
-        dataNode, connectionPool, networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
+        dataNode, networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, skipPredicate, null, SystemTime.getInstance());
   }
 
   public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
-      ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
-      NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, NotificationSystem requestNotification,
+      ScheduledExecutorService scheduler, DataNodeId dataNode, NetworkClientFactory networkClientFactory,
+      MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate, FindTokenHelper findTokenHelper,
       Time time) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, dataNode,
-        clusterMap.getReplicaIds(dataNode), connectionPool, networkClientFactory, metricRegistry, requestNotification,
+        clusterMap.getReplicaIds(dataNode), networkClientFactory, metricRegistry, requestNotification,
         storeKeyConverterFactory, transformerClassName, clusterParticipant, storeManager, skipPredicate,
         findTokenHelper, time, true);
     trackPerPartitionLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
@@ -119,24 +118,24 @@ public class ReplicationManager extends ReplicationEngine {
    */
   @Override
   protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
-      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
-      NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics,
-      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
-      MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
-      Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
+      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    switch(replicationConfig.replicationThreadType) {
+    switch (replicationConfig.replicationThreadType) {
       case ReplicationConfig.BACKUP_CHECKER_THREAD:
         return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-            connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
-            storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
-            responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+            networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
+            metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager,
+            skipPredicate, leaderBasedReplicationAdmin);
       case ReplicationConfig.DEFAULT_REPLICATION_THREAD:
       default:
-        return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-            connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
-            storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
-            responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+        return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+            replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+            replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+            leaderBasedReplicationAdmin);
     }
   }
 
