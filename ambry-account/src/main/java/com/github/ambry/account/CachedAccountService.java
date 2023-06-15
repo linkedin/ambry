@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -615,6 +616,20 @@ public class CachedAccountService extends AbstractAccountService {
       }
       return mySqlAccountStore.getAllValidVersion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public Page<String> listAllValidDatasets(String accountName, String containerName, String pageToken) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.listAllValidDatasets(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), pageToken);
     } catch (SQLException e) {
       throw translateSQLException(e);
     }

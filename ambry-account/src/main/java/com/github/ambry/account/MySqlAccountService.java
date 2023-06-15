@@ -17,6 +17,7 @@ import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.Utils;
@@ -401,6 +402,15 @@ public class MySqlAccountService extends AbstractAccountService {
       return cachedAccountServiceNew.getAllValidVersion(accountName, containerName, datasetName);
     }
       return cachedAccountService.getAllValidVersion(accountName, containerName, datasetName);
+  }
+
+  @Override
+  public Page<String> listAllValidDatasets(String accountName, String containerName, String pageToken)
+      throws AccountServiceException {
+    if (config.enableNewDatabaseForMigration) {
+      return cachedAccountServiceNew.listAllValidDatasets(accountName, containerName, pageToken);
+    }
+    return cachedAccountService.listAllValidDatasets(accountName, containerName, pageToken);
   }
 
   /**

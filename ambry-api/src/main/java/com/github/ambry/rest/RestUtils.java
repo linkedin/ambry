@@ -176,6 +176,10 @@ public class RestUtils {
      */
     public final static String TARGET_DATASET_VERSION = "x-ambry-target-dataset-version";
     /**
+     * The page token parameter for a list dataset call.
+     */
+    public final static String TARGET_PAGE_PARAM = "x-ambry-target-page-param";
+    /**
      * optional in request; date string; default unset ("infinite ttl")
      */
     public final static String TTL = "x-ambry-ttl";

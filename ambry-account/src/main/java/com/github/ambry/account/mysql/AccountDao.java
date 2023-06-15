@@ -25,6 +25,7 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.Dataset;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -121,6 +122,7 @@ public class AccountDao {
   private final String updateDatasetSql;
   private final String updateDatasetIfExpiredSql;
   private final String deleteDatasetByIdSql;
+  private final String listValidDatasetsSql;
   /**
    * Types of MySql statements.
    */
@@ -194,6 +196,9 @@ public class AccountDao {
     deleteDatasetByIdSql = String.format(
         "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
         DATASET_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    listValidDatasetsSql = String.format(
+        "select %1$s from %2$s where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and (%1$s >= ? or ? IS NULL) "
+            + "ORDER BY %1$s ASC LIMIT ?", DATASET_NAME, DATASET_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID);
     getVersionSchemaSql =
         String.format("select %s from %s where %s = ? and %s = ? and %s = ?", VERSION_SCHEMA, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
@@ -852,6 +857,30 @@ public class AccountDao {
   }
 
   /**
+   * List all valid datasets under a container.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param pageToken the pageToken if total datasets number has reached out to limit.
+   * @return a page of dataset names.
+   * @throws SQLException
+   */
+  public synchronized Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken)
+      throws SQLException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(false);
+      PreparedStatement listAllValidDatasetsStatement = dataAccessor.getPreparedStatement(listValidDatasetsSql, false);
+      Page<String> datasetNameList =
+          executeListAllValidDatasetsStatement(listAllValidDatasetsStatement, accountId, containerId, pageToken);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return datasetNameList;
+    } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
+    }
+  }
+
+  /**
    * Get all versions from a dataset which has not expired and out of retentionCount by checking the last modified time.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
@@ -1128,6 +1157,41 @@ public class AccountDao {
         datasetVersionRecords.add(datasetVersionRecord);
       }
       return datasetVersionRecords;
+    } finally {
+      closeQuietly(resultSet);
+    }
+  }
+
+  /**
+   * Execute listValidDatasetsSql statement.
+   * @param statement the listValidDatasetsSql statement.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param pageToken the page token.
+   * @return the page of the dataset names.
+   * @throws SQLException
+   */
+  private Page<String> executeListAllValidDatasetsStatement(PreparedStatement statement, int accountId,
+      int containerId, String pageToken) throws SQLException {
+    ResultSet resultSet = null;
+    try {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, pageToken);
+      statement.setString(4, pageToken);
+      statement.setInt(5, mySqlAccountServiceConfig.listDatasetsMaxResult + 1);
+      resultSet = statement.executeQuery();
+      List<String> entries = new ArrayList<>();
+      String nextContinuationToken = null;
+      int resultIndex = 0;
+      while (resultSet.next()) {
+        if (resultIndex++ == mySqlAccountServiceConfig.listDatasetsMaxResult) {
+          nextContinuationToken = resultSet.getString(1);
+          break;
+        }
+        entries.add(resultSet.getString(1));
+      }
+      return new Page<>(entries, nextContinuationToken);
     } finally {
       closeQuietly(resultSet);
     }
