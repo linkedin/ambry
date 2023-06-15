@@ -38,7 +38,10 @@ public class FrontendNettyFactoryTest {
   private static final RestRequestHandler REST_REQUEST_HANDLER =
       new AsyncRequestResponseHandler(new RequestResponseHandlerMetrics(new MetricRegistry()), 1,
           new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter()));
-  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
+  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER =
+      new PublicAccessLogger(new String[]{}, new String[]{}, false);
+  private static final PublicAccessLogger STRUCTURED_PUBLIC_ACCESS_LOGGER =
+      new PublicAccessLogger(new String[]{}, new String[]{}, true);
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();
 
@@ -103,10 +106,10 @@ public class FrontendNettyFactoryTest {
         SSL_FACTORY);
     doConstructionFailureTest(verifiableProperties, metricRegistry, REST_REQUEST_HANDLER, null, REST_SERVER_STATE,
         SSL_FACTORY);
-    doConstructionFailureTest(verifiableProperties, metricRegistry, REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER, null,
-        SSL_FACTORY);
-    doConstructionFailureTest(verifiableProperties, metricRegistry, REST_REQUEST_HANDLER, PUBLIC_ACCESS_LOGGER,
-        REST_SERVER_STATE, null);
+    doConstructionFailureTest(verifiableProperties, metricRegistry, REST_REQUEST_HANDLER,
+        STRUCTURED_PUBLIC_ACCESS_LOGGER, null, SSL_FACTORY);
+    doConstructionFailureTest(verifiableProperties, metricRegistry, REST_REQUEST_HANDLER,
+        STRUCTURED_PUBLIC_ACCESS_LOGGER, REST_SERVER_STATE, null);
   }
 
   /**

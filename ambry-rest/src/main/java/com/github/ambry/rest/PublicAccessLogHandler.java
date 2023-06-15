@@ -28,8 +28,9 @@ import java.security.cert.X509Certificate;
 import java.util.Collection;
 import javax.net.ssl.SSLEngine;
 import javax.security.auth.x500.X500Principal;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.message.StringMapMessage;
 
 
 /**
@@ -44,11 +45,13 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private long responseFirstChunkStartTimeInMs;
   private long responseBytesSent;
   private StringBuilder logMessage;
+  private StringMapMessage structuredLogMessage;
   private HttpRequest request;
   private StringBuilder sslLogMessage;
 
   private static final long INIT_TIME = -1;
-  private static final Logger logger = LoggerFactory.getLogger(PublicAccessLogHandler.class);
+  //private static final Logger logger = LoggerFactory.getLogger(PublicAccessLogHandler.class);
+  private static final Logger logger = LogManager.getLogger(PublicAccessLogHandler.class);
 
   public PublicAccessLogHandler(PublicAccessLogger publicAccessLogger, NettyMetrics nettyMetrics) {
     this.publicAccessLogger = publicAccessLogger;
@@ -71,8 +74,11 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
       requestArrivalTimeInMs = System.currentTimeMillis();
       request = (HttpRequest) obj;
       logMessage.append(ctx.channel().remoteAddress()).append(" ");
+      structuredLogMessage.put("remoteAddress", String.valueOf(ctx.channel().remoteAddress()));
       logMessage.append(request.method().toString()).append(" ");
+      structuredLogMessage.put("method", String.valueOf(request.method()));
       logMessage.append(request.uri()).append(", ");
+      structuredLogMessage.put("uri", String.valueOf(request.uri()));
       logSSLInfo(ctx);
       logMessage.append(", ");
       logHeaders("Request", request, publicAccessLogger.getRequestHeaders());
@@ -100,6 +106,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         logMessage.append(", ");
         logMessage.append("status=").append(response.status().code());
         logMessage.append(", ");
+        structuredLogMessage.put("status", String.valueOf(response.status().code()));
         if (HttpUtil.isTransferEncodingChunked(response)) {
           responseFirstChunkStartTimeInMs = System.currentTimeMillis();
         } else {
@@ -116,7 +123,14 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
       }
       if (shouldReset) {
         logDurations();
-        publicAccessLogger.logInfo(logMessage.toString());
+
+        if (publicAccessLogger.structuredLoggingEnabled()) {
+          // Write out the old log message as a full string, as well as add each field individually.
+          structuredLogMessage.put("message", logMessage.toString());
+          publicAccessLogger.logInfo(structuredLogMessage);
+        } else {
+          publicAccessLogger.logInfo(logMessage.toString());
+        }
         reset();
       }
     }
@@ -151,11 +165,13 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
     for (String header : headers) {
       if (message.headers().get(header) != null) {
         logMessage.append("[").append(header).append("=").append(message.headers().get(header)).append("] ");
+        structuredLogMessage.put(header, message.headers().get(header));
       }
     }
     boolean isChunked = HttpUtil.isTransferEncodingChunked(message);
     logMessage.append("[isChunked=").append(isChunked).append("]");
     logMessage.append(")");
+    structuredLogMessage.put("isChunked", String.valueOf(isChunked));
   }
 
   /**
@@ -165,14 +181,20 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private void logDurations() {
     long nowMs = System.currentTimeMillis();
     logMessage.append("bytes sent=").append(responseBytesSent).append(" ");
+    structuredLogMessage.put("bytesSent", String.valueOf(responseBytesSent));
     logMessage.append("duration=").append(nowMs - requestArrivalTimeInMs).append("ms ");
+    structuredLogMessage.put("duration", String.valueOf(nowMs - requestArrivalTimeInMs).concat("ms"));
     if (requestLastChunkArrivalTimeInMs != INIT_TIME) {
       logMessage.append("(chunked request receive=")
           .append(requestLastChunkArrivalTimeInMs - requestArrivalTimeInMs)
           .append("ms) ");
+      structuredLogMessage.put("chunkedRequestReceive",
+          String.valueOf(requestLastChunkArrivalTimeInMs - requestArrivalTimeInMs).concat("ms"));
     }
     if (responseFirstChunkStartTimeInMs != INIT_TIME) {
       logMessage.append("(chunked response send=").append(nowMs - responseFirstChunkStartTimeInMs).append("ms) ");
+      structuredLogMessage.put("chunkedResponseSend",
+          String.valueOf(nowMs - responseFirstChunkStartTimeInMs).concat("ms"));
     }
   }
 
@@ -185,6 +207,7 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
     requestArrivalTimeInMs = INIT_TIME;
     responseBytesSent = 0;
     logMessage = new StringBuilder();
+    structuredLogMessage = new StringMapMessage();
     request = null;
   }
 
@@ -195,7 +218,13 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
   private void logError(String msg) {
     logDurations();
     logMessage.append(msg);
-    publicAccessLogger.logError(logMessage.toString());
+    structuredLogMessage.put("error", msg);
+
+    if (publicAccessLogger.structuredLoggingEnabled()) {
+      publicAccessLogger.logError(structuredLogMessage);
+    } else {
+      publicAccessLogger.logError(logMessage.toString());
+    }
   }
 
   /**
@@ -210,6 +239,8 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
         SslHandler sslHandler = ctx.pipeline().get(SslHandler.class);
         boolean sslUsed = sslHandler != null;
         sslLogMessage.append("[used=").append(sslUsed).append("]");
+        structuredLogMessage.put("used", String.valueOf(sslUsed));
+
         if (sslUsed) {
           SSLEngine sslEngine = sslHandler.engine();
           if (sslEngine.getNeedClientAuth()) {
@@ -218,7 +249,9 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
                 X500Principal principal = ((X509Certificate) certificate).getSubjectX500Principal();
                 Collection subjectAlternativeNames = ((X509Certificate) certificate).getSubjectAlternativeNames();
                 sslLogMessage.append(", [principal=").append(principal).append("]");
+                structuredLogMessage.put("principal", principal.toString());
                 sslLogMessage.append(", [san=").append(subjectAlternativeNames).append("]");
+                structuredLogMessage.put("san", String.valueOf(subjectAlternativeNames));
               }
             }
           }
