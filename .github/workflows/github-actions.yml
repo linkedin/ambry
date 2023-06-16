@@ -92,6 +92,8 @@ jobs:
           mysql -e 'USE ambry_container_storage_stats; SOURCE ./ambry-mysql/src/main/resources/AmbryContainerStorageStats.ddl;' -uroot -proot
           mysql -e 'CREATE DATABASE AmbryNamedBlobs;' -uroot -proot
           mysql -e 'USE AmbryNamedBlobs; SOURCE ./ambry-named-mysql/src/main/resources/NamedBlobsSchema.ddl;' -uroot -proot
+          mysql -e 'CREATE DATABASE AmbryRepairRequests;' -uroot -proot
+          mysql -e 'USE AmbryRepairRequests; SOURCE ./ambry-mysql/src/main/resources/AmbryRepairRequests.ddl;' -uroot -proot
 
       - name: Add custom MySQL user
         # Temporary settings to use same username and password as travis ci
