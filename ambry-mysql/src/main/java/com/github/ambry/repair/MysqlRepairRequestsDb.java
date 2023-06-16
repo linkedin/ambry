@@ -94,16 +94,9 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   // @formatter:on
 
   private final DataSource dataSource;
-  private final Connection connection;
 
-  public MysqlRepairRequestsDb(DataSource dataSource, String localDatacenter) throws SQLException {
+  public MysqlRepairRequestsDb(DataSource dataSource) {
     this.dataSource = dataSource;
-    try {
-      connection = dataSource.getConnection();
-    } catch (SQLException e) {
-      logger.error("Unable to connect to endpoint {} due to {}", dataSource, e.getMessage());
-      throw e;
-    }
   }
 
   /**
@@ -117,11 +110,12 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
     //     + "WHERE %s=? AND %s=?",
     //     REPAIR_REQUESTS_TABLE,
     //     BLOB_ID, OPERATION_TYPE);
-    try {
-      PreparedStatement statement = connection.prepareStatement(DELETE_QUERY);
-      statement.setBytes(1, Base64.decodeBase64(blobId));
-      statement.setShort(2, (short) operationType.ordinal());
-      statement.executeUpdate();
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement statement = connection.prepareStatement(DELETE_QUERY)) {
+        statement.setBytes(1, Base64.decodeBase64(blobId));
+        statement.setShort(2, (short) operationType.ordinal());
+        statement.executeUpdate();
+      }
     } catch (SQLException e) {
       // LOCAL_CONSISTENCY_TODO: add metrics for all the SQLException.
       logger.error("failed to delete record from {} due to {}", dataSource, e.getMessage());
@@ -139,21 +133,22 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
     //    + "(%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     //    REPAIR_REQUESTS_TABLE,
     //    BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE);
-    try {
-      PreparedStatement statement = connection.prepareStatement(INSERT_QUERY);
-      statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
-      statement.setLong(2, record.getPartitionId());
-      statement.setString(3, record.getSourceHostName());
-      statement.setInt(4, record.getSourceHostPort());
-      statement.setShort(5, (short) record.getOperationType().ordinal());
-      statement.setTimestamp(6, new Timestamp(record.getOperationTimeMs()));
-      statement.setShort(7, record.getLifeVersion());
-      if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
-        statement.setTimestamp(8, new Timestamp(record.getExpirationTimeMs()));
-      } else {
-        statement.setTimestamp(8, null);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
+        statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
+        statement.setLong(2, record.getPartitionId());
+        statement.setString(3, record.getSourceHostName());
+        statement.setInt(4, record.getSourceHostPort());
+        statement.setShort(5, (short) record.getOperationType().ordinal());
+        statement.setTimestamp(6, new Timestamp(record.getOperationTimeMs()));
+        statement.setShort(7, record.getLifeVersion());
+        if (record.getExpirationTimeMs() != Utils.Infinite_Time) {
+          statement.setTimestamp(8, new Timestamp(record.getExpirationTimeMs()));
+        } else {
+          statement.setTimestamp(8, null);
+        }
+        statement.executeUpdate();
       }
-      statement.executeUpdate();
     } catch (SQLException e) {
       logger.error("failed to insert record to {} due to {}", dataSource, e.getMessage());
       throw e;
@@ -177,27 +172,28 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
     //    PARTITION_ID,
     //    OPERATION_TIME);
     ResultSet resultSet = null;
-    try {
-      PreparedStatement statement = connection.prepareStatement(GET_QUERY);
-      statement.setLong(1, partitionId);
-      resultSet = statement.executeQuery();
-      List<RepairRequestRecord> result = new ArrayList<>();
-      while (resultSet.next()) {
-        String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-        // resultSet.getLong(2) is the partition id.
-        String sourceHostName = resultSet.getString(3);
-        int sourceHostPort = resultSet.getInt(4);
-        OperationType operationType = OperationType.values()[resultSet.getShort(5)];
-        Timestamp operationTime = resultSet.getTimestamp(6);
-        short lifeVersion = resultSet.getShort(7);
-        Timestamp expirationTime = resultSet.getTimestamp(8);
-        RepairRequestRecord record =
-            new RepairRequestRecord(blobId, partitionId, sourceHostName, sourceHostPort, operationType,
-                operationTime.getTime(), lifeVersion,
-                expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
-        result.add(record);
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
+        statement.setLong(1, partitionId);
+        resultSet = statement.executeQuery();
+        List<RepairRequestRecord> result = new ArrayList<>();
+        while (resultSet.next()) {
+          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+          // resultSet.getLong(2) is the partition id.
+          String sourceHostName = resultSet.getString(3);
+          int sourceHostPort = resultSet.getInt(4);
+          OperationType operationType = OperationType.values()[resultSet.getShort(5)];
+          Timestamp operationTime = resultSet.getTimestamp(6);
+          short lifeVersion = resultSet.getShort(7);
+          Timestamp expirationTime = resultSet.getTimestamp(8);
+          RepairRequestRecord record =
+              new RepairRequestRecord(blobId, partitionId, sourceHostName, sourceHostPort, operationType,
+                  operationTime.getTime(), lifeVersion,
+                  expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
+          result.add(record);
+        }
+        return result;
       }
-      return result;
     } catch (SQLException e) {
       logger.error("failed to get records from {} due to {}", dataSource, e.getMessage());
       closeQuietly(resultSet);
@@ -207,10 +203,10 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
 
   /**
    * Exposed for integration test usage.
-   * @return a {@link Connection}.
+   * @return the {@link Connection}.
    */
-  public Connection getConnection() {
-    return connection;
+  public DataSource getDataSource() {
+    return dataSource;
   }
 
   @Override

@@ -27,8 +27,7 @@ CREATE TABLE IF NOT EXISTS ambry_repair_requests (
     lifeVersion smallint NOT NULL,
     expirationTime datetime(6) DEFAULT NULL,
     PRIMARY KEY (blobId, operationType),
-    INDEX operationTimeIndex (operationTime),
-    INDEX partitionIdIndex (partitionId)
+    INDEX operationTimeIndex (partitionId, operationTime)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

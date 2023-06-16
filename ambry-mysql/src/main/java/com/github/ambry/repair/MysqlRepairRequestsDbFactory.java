@@ -36,14 +36,12 @@ public class MysqlRepairRequestsDbFactory implements RepairRequestsDbFactory {
   private static final Logger logger = LoggerFactory.getLogger(MysqlRepairRequestsDb.class);
 
   private final MysqlRepairRequestsDbConfig config;
-  private final String localDatacenter;
   private final MetricRegistry metrics;
   private final DataSource dataSource;
 
   public MysqlRepairRequestsDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       String localDatacenter) throws Exception {
     this.config = new MysqlRepairRequestsDbConfig(verifiableProperties);
-    this.localDatacenter = localDatacenter;
     this.metrics = metricRegistry;
 
     // Get the db endpoint for this local data center.
@@ -67,8 +65,8 @@ public class MysqlRepairRequestsDbFactory implements RepairRequestsDbFactory {
   }
 
   @Override
-  public MysqlRepairRequestsDb getRepairRequestsDb() throws SQLException {
-    return new MysqlRepairRequestsDb(dataSource, localDatacenter);
+  public MysqlRepairRequestsDb getRepairRequestsDb() {
+    return new MysqlRepairRequestsDb(dataSource);
   }
 
   /**

@@ -15,8 +15,8 @@
 package com.github.ambry.repair;
 
 import java.io.Closeable;
-import java.sql.Connection;
 import java.util.List;
+import javax.sql.DataSource;
 
 import static com.github.ambry.repair.RepairRequestRecord.OperationType;
 
@@ -51,7 +51,7 @@ public interface RepairRequestsDb extends Closeable {
 
   /**
    * Exposed for integration test usage.
-   * @return a {@link Connection}.
+   * @return a {@link DataSource}.
    */
-  Connection getConnection();
+  DataSource getDataSource();
 }

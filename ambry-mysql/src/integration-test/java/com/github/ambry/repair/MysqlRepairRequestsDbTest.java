@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import javax.sql.DataSource;
 import org.junit.Test;
 
 import static com.github.ambry.repair.RepairRequestRecord.OperationType.*;
@@ -154,9 +155,11 @@ public class MysqlRepairRequestsDbTest {
    */
   private void cleanup() throws SQLException {
     try {
-      Connection connection = repairRequestsDb.getConnection();
-      Statement statement = connection.createStatement();
-      statement.executeUpdate("DELETE FROM " + MysqlRepairRequestsDb.REPAIR_REQUESTS_TABLE + ";");
+      DataSource dataSource = repairRequestsDb.getDataSource();
+      try (Connection connection = dataSource.getConnection()) {
+        Statement statement = connection.createStatement();
+        statement.executeUpdate("DELETE FROM " + MysqlRepairRequestsDb.REPAIR_REQUESTS_TABLE + ";");
+      }
     } catch (SQLException e) {
       throw e;
     }
