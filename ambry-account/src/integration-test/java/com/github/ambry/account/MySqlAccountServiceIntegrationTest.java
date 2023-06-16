@@ -24,6 +24,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
+import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -73,7 +74,6 @@ public class MySqlAccountServiceIntegrationTest {
   private static final String DATASET_NAME_WITH_TTL = "testDatasetWithTtl";
   private static final String DATASET_NAME_WITH_SEMANTIC = "testDatasetWithSemantic";
   private static final String DATASET_NAME_EXPIRED = "testDatasetExpired";
-
 
   public MySqlAccountServiceIntegrationTest() throws Exception {
     mySqlConfigProps = Utils.loadPropsFromResource("mysql.properties");
@@ -185,8 +185,8 @@ public class MySqlAccountServiceIntegrationTest {
 
     // 2. Update existing account by adding new container. Verify account is updated in cache.
     Container testContainer2 =
-        new ContainerBuilder((short) 2, "testContainer2", Container.ContainerStatus.ACTIVE, "testContainer2", (short) 1)
-            .build();
+        new ContainerBuilder((short) 2, "testContainer2", Container.ContainerStatus.ACTIVE, "testContainer2",
+            (short) 1).build();
     testAccount = new AccountBuilder(testAccount).addOrUpdateContainer(testContainer2).build();
     mySqlAccountService.updateAccounts(Collections.singletonList(testAccount));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
@@ -396,8 +396,10 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals(2, accountServiceMetricsWrapper.getAccountServiceMetrics().conflictRetryCount.getCount());
 
     // Check gauge values
-    assertTrue("Sync time not updated", accountServiceMetricsWrapper.getAccountServiceMetrics().timeInSecondsSinceLastSyncGauge.getValue() < 10);
-    assertEquals("Unexpected container count", 7, accountServiceMetricsWrapper.getAccountServiceMetrics().containerCountGauge.getValue().intValue());
+    assertTrue("Sync time not updated",
+        accountServiceMetricsWrapper.getAccountServiceMetrics().timeInSecondsSinceLastSyncGauge.getValue() < 10);
+    assertEquals("Unexpected container count", 7,
+        accountServiceMetricsWrapper.getAccountServiceMetrics().containerCountGauge.getValue().intValue());
   }
 
   /** Container on-demand fetch for multiple account services. */
@@ -722,6 +724,81 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mismatch in account read from db", a1, mySqlAccountStore.getNewAccounts(0).iterator().next());
   }
 
+  @Test
+  public void testDatasetVersionState() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
+        Dataset.VersionSchema.MONOTONIC).setRetentionCount(1).build();
+
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // add dataset version which is in progress state.
+    DatasetVersionRecord datasetVersionRecordFromMysql;
+    String version = "LATEST";
+    DatasetVersionRecord expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, "1", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.IN_PROGRESS);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    // get a latest dataset version when no version exist, should fail.
+    try {
+      mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME, version);
+      fail();
+    } catch (AccountServiceException e) {
+      assertEquals("Mismatch on error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
+    }
+
+    //Upload a new latest version, should be version 2 since we have version 1 in progress
+    expectedDatasetVersionRecord =
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, "2", -1);
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    //get the latest version which is version2.
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version);
+    assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    //retention add version 3 with in progress, should not be considered as a valid version, so retention count still meet requirement.
+    datasetVersionRecordFromMysql =
+        mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.IN_PROGRESS);
+    List<DatasetVersionRecord> datasetVersionRecordList =
+        mySqlAccountStore.getAllValidVersionsOutOfRetentionCount(testAccount.getId(), testContainer.getId(),
+            testAccount.getName(), testContainer.getName(), DATASET_NAME);
+    assertEquals("Mismatch in datasetVersionRecordList size", 0, datasetVersionRecordList.size());
+
+    //update the version3 states to ready, should be considered as a valid version and delete version 2.
+    mySqlAccountStore.updateDatasetVersionState(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME, "3", DatasetVersionState.READY);
+    datasetVersionRecordList =
+        mySqlAccountStore.getAllValidVersionsOutOfRetentionCount(testAccount.getId(), testContainer.getId(),
+            testAccount.getName(), testContainer.getName(), DATASET_NAME);
+    assertEquals("Mismatch in datasetVersionRecordList size", 1, datasetVersionRecordList.size());
+
+    //delete the dataset, and can't get the in progress dataset version.
+    mySqlAccountStore.deleteDataset(testAccount.getId(), testContainer.getId(), DATASET_NAME);
+    version = "1";
+    try {
+      mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false, null);
+      fail("Should fail due to the dataset already gone");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
+    }
+  }
+
   /**
    * Test add, get and update dataset.
    * @throws Exception
@@ -779,8 +856,8 @@ public class MySqlAccountServiceIntegrationTest {
     //update the expiration time.
     long datasetTtl = 30;
     datasetForUpdate =
-        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setRetentionTimeInSeconds(datasetTtl)
-            .build();
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setRetentionTimeInSeconds(
+            datasetTtl).build();
     mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME);
@@ -819,9 +896,8 @@ public class MySqlAccountServiceIntegrationTest {
 
     //update expiration to permanent.
     datasetTtl = -1;
-    datasetForUpdate =
-        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_TTL).setRetentionTimeInSeconds(
-            datasetTtl).build();
+    datasetForUpdate = new DatasetBuilder(testAccount.getName(), testContainer.getName(),
+        DATASET_NAME_WITH_TTL).setRetentionTimeInSeconds(datasetTtl).build();
     mySqlAccountStore.updateDataset(testAccount.getId(), testContainer.getId(), datasetForUpdate);
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME_WITH_TTL);
@@ -838,12 +914,14 @@ public class MySqlAccountServiceIntegrationTest {
         new MetricRegistry()).getMySqlAccountStore());
     when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
     mySqlAccountService = getAccountService();
-    Page<String> partialDatasets = mySqlAccountStore.listAllValidDatasets(testAccount.getId(), testContainer.getId(), null);
+    Page<String> partialDatasets =
+        mySqlAccountStore.listAllValidDatasets(testAccount.getId(), testContainer.getId(), null);
     expectedDatasets = Arrays.asList(DATASET_NAME, DATASET_NAME_BASIC);
     assertEquals("Mismatch for datasets list", expectedDatasets, partialDatasets.getEntries());
     assertEquals("Mismatch on next page token", DATASET_NAME_WITH_TTL, partialDatasets.getNextPageToken());
 
-    partialDatasets = mySqlAccountStore.listAllValidDatasets(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL);
+    partialDatasets =
+        mySqlAccountStore.listAllValidDatasets(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_TTL);
     expectedDatasets = Arrays.asList(DATASET_NAME_WITH_TTL);
     assertEquals("Mismatch for datasets list", expectedDatasets, partialDatasets.getEntries());
 
@@ -896,7 +974,8 @@ public class MySqlAccountServiceIntegrationTest {
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, "1", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     // Add a new LATEST dataset version
@@ -904,7 +983,8 @@ public class MySqlAccountServiceIntegrationTest {
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, "2", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     // Get the LATEST dataset version
@@ -921,7 +1001,8 @@ public class MySqlAccountServiceIntegrationTest {
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, "3", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     // Add a dataset with semantic version
@@ -948,14 +1029,16 @@ public class MySqlAccountServiceIntegrationTest {
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC, "1.0.0", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
     // add second major version
     expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC, "2.0.0", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     // add a patch version.
@@ -964,14 +1047,16 @@ public class MySqlAccountServiceIntegrationTest {
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC, "2.0.1", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
     // add second path version
     expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC, "2.0.2", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     // add a minor version.
@@ -980,14 +1065,16 @@ public class MySqlAccountServiceIntegrationTest {
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC, "2.1.0", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
     // add second minor version
     expectedDatasetVersionRecord =
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME_WITH_SEMANTIC, "2.2.0", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+            testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+            DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     //get the latest version.
@@ -1027,7 +1114,7 @@ public class MySqlAccountServiceIntegrationTest {
             Utils.addSecondsToEpochTime(creationTimeInMs, datasetTtl));
     DatasetVersionRecord datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME, version, -1, creationTimeInMs, false);
+            testContainer.getName(), DATASET_NAME, version, -1, creationTimeInMs, false, DatasetVersionState.READY);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
 
     // Get the dataset version
@@ -1049,7 +1136,8 @@ public class MySqlAccountServiceIntegrationTest {
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version,
             Utils.addSecondsToEpochTime(creationTimeInMs, datasetVersionTtl));
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME, version, datasetVersionTtl, creationTimeInMs, datasetVersionTtlEnable);
+        testContainer.getName(), DATASET_NAME, version, datasetVersionTtl, creationTimeInMs, datasetVersionTtlEnable,
+        DatasetVersionState.READY);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME, version);
@@ -1066,7 +1154,8 @@ public class MySqlAccountServiceIntegrationTest {
         new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, version,
             Utils.addSecondsToEpochTime(creationTimeInMs, datasetTtl));
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME, version, datasetVersionTtl, creationTimeInMs, datasetVersionTtlEnable);
+        testContainer.getName(), DATASET_NAME, version, datasetVersionTtl, creationTimeInMs, datasetVersionTtlEnable,
+        DatasetVersionState.READY);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME, version);
@@ -1079,7 +1168,7 @@ public class MySqlAccountServiceIntegrationTest {
     versions.add(versionNumber);
     creationTimeInMs = System.currentTimeMillis();
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME, version, -1, creationTimeInMs, false);
+        testContainer.getName(), DATASET_NAME, version, -1, creationTimeInMs, false, DatasetVersionState.READY);
     DatasetVersionRecord datasetVersionRecordWithTtl =
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME, version);
@@ -1094,7 +1183,8 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     version = "1.2.4";
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+        DatasetVersionState.READY);
     DatasetVersionRecord datasetVersionRecordWithSemanticVersion =
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version);
@@ -1103,7 +1193,8 @@ public class MySqlAccountServiceIntegrationTest {
     // Add dataset version for non-existing dataset.
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), "NonExistingDataset", version, -1, System.currentTimeMillis(), false);
+          testContainer.getName(), "NonExistingDataset", version, -1, System.currentTimeMillis(), false,
+          DatasetVersionState.READY);
       fail("Add dataset version should fail without dataset");
     } catch (AccountServiceException e) {
       assertEquals("Unexpected ErrorCode", AccountServiceErrorCode.NotFound, e.getErrorCode());
@@ -1112,7 +1203,7 @@ public class MySqlAccountServiceIntegrationTest {
     //add same dataset version, should fail
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, 0, false);
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, 0, false, DatasetVersionState.READY);
       fail("Should fail due to dataset version already exist");
     } catch (AccountServiceException e) {
       assertEquals("Unexpected error code", AccountServiceErrorCode.ResourceConflict, e.getErrorCode());
@@ -1124,7 +1215,8 @@ public class MySqlAccountServiceIntegrationTest {
 
     //add dataset version again, should succeed.
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+        testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+        DatasetVersionState.READY);
 
     //get the new added dataset version, should not fail.
     mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
@@ -1134,7 +1226,8 @@ public class MySqlAccountServiceIntegrationTest {
     version = "1.2";
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false);
+          testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version, -1, System.currentTimeMillis(), false,
+          DatasetVersionState.READY);
       fail("Add dataset version should fail with wrong format of semantic version");
     } catch (IllegalArgumentException e) {
       // do nothing
@@ -1145,7 +1238,8 @@ public class MySqlAccountServiceIntegrationTest {
     version = "1";
     try {
       mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-          testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false);
+          testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false,
+          DatasetVersionState.READY);
       fail("Should fail due to the dataset already gone");
     } catch (AccountServiceException e) {
       assertEquals("Unexpected error code", AccountServiceErrorCode.Deleted, e.getErrorCode());
@@ -1160,13 +1254,15 @@ public class MySqlAccountServiceIntegrationTest {
     }
 
     List<DatasetVersionRecord> datasetVersionRecords =
-        mySqlAccountStore.getAllValidVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME);
+        mySqlAccountStore.getAllValidVersionForDatasetDeletion(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME);
     assertEquals("Mismatch on number of valid dataset versions", 4, datasetVersionRecords.size());
 
-    mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME,
-        "1");
+    mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, "1");
 
-    datasetVersionRecords = mySqlAccountStore.getAllValidVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME);
+    datasetVersionRecords =
+        mySqlAccountStore.getAllValidVersionForDatasetDeletion(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME);
     assertEquals("Mismatch on number of valid dataset versions", 3, datasetVersionRecords.size());
   }
 
@@ -1188,21 +1284,21 @@ public class MySqlAccountServiceIntegrationTest {
     long creationTimeInMs = System.currentTimeMillis();
     DatasetVersionRecord datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME, version1, -1, creationTimeInMs, false);
+            testContainer.getName(), DATASET_NAME, version1, -1, creationTimeInMs, false, DatasetVersionState.READY);
 
     // Add 2nd dataset version
     String version2 = "1.2.4";
     creationTimeInMs = System.currentTimeMillis();
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME, version2, -1, creationTimeInMs, false);
+            testContainer.getName(), DATASET_NAME, version2, -1, creationTimeInMs, false, DatasetVersionState.READY);
 
     // Add 3rd dataset version
     String version3 = "1.2.5";
     creationTimeInMs = System.currentTimeMillis();
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
-            testContainer.getName(), DATASET_NAME, version3, -1, creationTimeInMs, false);
+            testContainer.getName(), DATASET_NAME, version3, -1, creationTimeInMs, false, DatasetVersionState.READY);
 
     List<DatasetVersionRecord> datasetVersionRecordList =
         mySqlAccountStore.getAllValidVersionsOutOfRetentionCount(testAccount.getId(), testContainer.getId(),

@@ -27,6 +27,7 @@ import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.PreparedStatement;
@@ -82,6 +83,7 @@ public class AccountDao {
 
   // Dataset version table fields
   public static final String DATASET_VERSION_TABLE = "DatasetVersions";
+  public static final String DATASET_VERSION_STATE = "datasetVersionState";
 
   // Common fields
   public static final String VERSION = "version";
@@ -107,12 +109,13 @@ public class AccountDao {
 
   // Dataset version table query strings.
   private final String insertDatasetVersionSql;
+  private final String updateDatasetVersionStateSql;
   private final String getDatasetVersionByNameSql;
   private final String deleteDatasetVersionByIdSql;
   private final String updateDatasetVersionIfExpiredSql;
   private final String listLatestVersionSqlForUpload;
   private final String getLatestVersionSqlForDownload;
-  private final String listValidVersionSql;
+  private final String listValidVersionForDatasetDeletionSql;
   private final String listVersionByModifiedTimeSql;
 
   // Dataset table query strings
@@ -203,32 +206,39 @@ public class AccountDao {
         String.format("select %s from %s where %s = ? and %s = ? and %s = ?", VERSION_SCHEMA, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
     insertDatasetVersionSql =
-        String.format("insert into %s (%s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?)", DATASET_VERSION_TABLE,
-            ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, LAST_MODIFIED_TIME, DELETE_TS);
+        String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), now(3), ?, ?)",
+            DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, CREATION_TIME, LAST_MODIFIED_TIME,
+            DELETE_TS, DATASET_VERSION_STATE);
+    updateDatasetVersionStateSql =
+        String.format("update %s set %s = ?, %s = now(3) where %s = ? and %s = ? and %s = ? and %s = ?",
+            DATASET_VERSION_TABLE, DATASET_VERSION_STATE, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
+            VERSION);
     getLatestVersionSqlForDownload = String.format("select %1$s, %2$s from %3$s "
-            + "where (%4$s IS NULL or %4$s > now(3)) and (%5$s, %6$s, %7$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
-        VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+            + "where (%4$s IS NULL or %4$s > now(3)) and (%5$s, %6$s, %7$s, %8$s) = (?, ?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
+        VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
+        DATASET_VERSION_STATE);
     listLatestVersionSqlForUpload =
         String.format("select %1$s from %2$s " + "where (%4$s, %5$s, %6$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
             VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
-    listValidVersionSql =
+    listValidVersionForDatasetDeletionSql =
         String.format("select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
             VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     // list all valid versions sorted by last modified time, and skip the first N records which is not out of retentionCount.
     listVersionByModifiedTimeSql = String.format("select %s, %s from %s "
-            + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? ORDER BY %s DESC LIMIT ?, 100", VERSION,
-        DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
-        LAST_MODIFIED_TIME);
+            + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? and %s = ? ORDER BY %s DESC LIMIT ?, 100",
+        VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
+        DATASET_VERSION_STATE, LAST_MODIFIED_TIME);
     getDatasetVersionByNameSql =
-        String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
-            DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
+        String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
+            DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
     deleteDatasetVersionByIdSql = String.format(
         "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? and %s = ?",
         DATASET_VERSION_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
         DATASET_NAME, VERSION);
     updateDatasetVersionIfExpiredSql = String.format(
-        "update %s set %s = ?, %s = now(3), %s = ? where %s = ? and %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
-        DATASET_VERSION_TABLE, VERSION, LAST_MODIFIED_TIME, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION);
+        "update %s set %s = ?, %s = now(3), %s = now(3), %s = ?, %s = ? where %s = ? and %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
+        DATASET_VERSION_TABLE, VERSION, CREATION_TIME, LAST_MODIFIED_TIME, DELETE_TS, DATASET_VERSION_STATE, ACCOUNT_ID,
+        CONTAINER_ID, DATASET_NAME, VERSION);
   }
 
   /**
@@ -381,6 +391,37 @@ public class AccountDao {
   }
 
   /**
+   * Update the dataset version state.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @param datasetVersionState the {@link DatasetVersionState}
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  public synchronized void updateDatasetVersionState(int accountId, int containerId, String accountName,
+      String containerName, String datasetName, String version, DatasetVersionState datasetVersionState)
+      throws SQLException, AccountServiceException {
+    long startTimeMs = System.currentTimeMillis();
+    try {
+      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
+      long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
+      dataAccessor.getDatabaseConnection(true);
+      PreparedStatement updateDatasetVersionStateStatement =
+          dataAccessor.getPreparedStatement(updateDatasetVersionStateSql, true);
+      executeUpdateDatasetVersionStateStatement(updateDatasetVersionStateStatement, accountId, containerId,
+          dataset.getDatasetName(), versionNumber, datasetVersionState);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException | AccountServiceException e) {
+      dataAccessor.onException(e, Write);
+      throw e;
+    }
+  }
+
+  /**
    * Add a version of {@link Dataset} based on the supplied properties.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
@@ -391,12 +432,13 @@ public class AccountDao {
    * @param timeToLiveInSeconds The dataset version level ttl.
    * @param creationTimeInMs the creation time of the dataset.
    * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @param datasetVersionState the {@link DatasetVersionState}
    * @return the {@link DatasetVersionRecord}.
    * @throws SQLException
    */
   public synchronized DatasetVersionRecord addDatasetVersions(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
-      boolean datasetVersionTtlEnabled)
+      boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState)
       throws SQLException, AccountServiceException {
     long startTimeMs = System.currentTimeMillis();
     long versionNumber = 0;
@@ -408,12 +450,12 @@ public class AccountDao {
       if (isAutoCreatedVersionForUpload(version)) {
         datasetVersionRecord =
             retryWithLatestAutoIncrementedVersion(accountId, containerId, dataset, version, timeToLiveInSeconds,
-                creationTimeInMs, datasetVersionTtlEnabled);
+                creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
       } else {
         versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
         datasetVersionRecord =
             addDatasetVersionHelper(accountId, containerId, dataset, version, timeToLiveInSeconds, creationTimeInMs,
-                datasetVersionTtlEnabled, versionNumber);
+                datasetVersionTtlEnabled, versionNumber, datasetVersionState);
       }
       dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
       return datasetVersionRecord;
@@ -422,7 +464,7 @@ public class AccountDao {
         try {
           datasetVersionRecord =
               updateDatasetVersionHelper(accountId, containerId, dataset, version, timeToLiveInSeconds,
-                  creationTimeInMs, datasetVersionTtlEnabled, versionNumber);
+                  creationTimeInMs, datasetVersionTtlEnabled, versionNumber, datasetVersionState);
           dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
           return datasetVersionRecord;
         } catch (SQLException | AccountServiceException ex) {
@@ -444,18 +486,20 @@ public class AccountDao {
    * @param timeToLiveInSeconds The dataset version level ttl.
    * @param creationTimeInMs the creation time of the dataset.
    * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @param datasetVersionState the {@link DatasetVersionState}
    * @return the {@link DatasetVersionRecord} and the latest version.
    * @throws SQLException
    * @throws AccountServiceException
    */
   private DatasetVersionRecord addDatasetVersionHelper(int accountId, int containerId, Dataset dataset, String version,
-      long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled, long versionNumber)
+      long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled, long versionNumber,
+      DatasetVersionState datasetVersionState)
       throws SQLException, AccountServiceException {
     dataAccessor.getDatabaseConnection(true);
     PreparedStatement insertDatasetVersionStatement = dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
     long newExpirationTimeMs = executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId,
         dataset.getDatasetName(), versionNumber, timeToLiveInSeconds, creationTimeInMs, dataset,
-        datasetVersionTtlEnabled);
+        datasetVersionTtlEnabled, datasetVersionState);
     return new DatasetVersionRecord(accountId, containerId, dataset.getDatasetName(), version, newExpirationTimeMs);
   }
 
@@ -468,12 +512,14 @@ public class AccountDao {
    * @param timeToLiveInSeconds The dataset version level ttl.
    * @param creationTimeInMs the creation time of the dataset.
    * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @param datasetVersionState the {@link DatasetVersionState}
    * @return the {@link DatasetVersionRecord} with the latest auto incremented dataset version
    * @throws AccountServiceException
    * @throws SQLException
    */
   private DatasetVersionRecord retryWithLatestAutoIncrementedVersion(int accountId, int containerId, Dataset dataset,
-      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled)
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled,
+      DatasetVersionState datasetVersionState)
       throws AccountServiceException, SQLException {
     long versionNumber;
     while (true) {
@@ -484,7 +530,7 @@ public class AccountDao {
         version = convertVersionValueToVersion(versionNumber, dataset.getVersionSchema());
         //always retry with the latest version + 1 until it has been successfully uploading without conflict or failed with exception.
         return addDatasetVersionHelper(accountId, containerId, dataset, version, timeToLiveInSeconds, creationTimeInMs,
-            datasetVersionTtlEnabled, versionNumber);
+            datasetVersionTtlEnabled, versionNumber, datasetVersionState);
       } catch (SQLException | AccountServiceException ex) {
         // if the version already exist in database, retry with the new latest version +1.
         if (!(ex instanceof SQLIntegrityConstraintViolationException)) {
@@ -504,19 +550,20 @@ public class AccountDao {
    * @param creationTimeInMs the creation time of the dataset.
    * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
    * @param versionNumber the version number converted by version string.
+   * @param datasetVersionState the {@link DatasetVersionState}
    * @return
    * @throws SQLException
    * @throws AccountServiceException
    */
   private DatasetVersionRecord updateDatasetVersionHelper(int accountId, int containerId, Dataset dataset,
       String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled,
-      long versionNumber) throws SQLException, AccountServiceException {
+      long versionNumber, DatasetVersionState datasetVersionState) throws SQLException, AccountServiceException {
     PreparedStatement updateDatasetVersionSqlIfExpiredStatement =
         dataAccessor.getPreparedStatement(updateDatasetVersionIfExpiredSql, true);
     long newExpirationTimeMs =
         executeUpdateDatasetVersionIfExpiredSqlStatement(updateDatasetVersionSqlIfExpiredStatement, accountId,
             containerId, dataset.getDatasetName(), versionNumber, timeToLiveInSeconds, creationTimeInMs, dataset,
-            datasetVersionTtlEnabled);
+            datasetVersionTtlEnabled, datasetVersionState);
     return new DatasetVersionRecord(accountId, containerId, dataset.getDatasetName(), version, newExpirationTimeMs);
   }
 
@@ -600,11 +647,12 @@ public class AccountDao {
    * @param creationTimeInMs The time at which the blob is created.
    * @param dataset the {@link Dataset} including the metadata.
    * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @param datasetVersionState the {@link DatasetVersionState}
    * @throws SQLException
    */
   private long executeAddDatasetVersionStatement(PreparedStatement statement, int accountId, int containerId,
       String datasetName, long version, long timeToLiveInSeconds, long creationTimeInMs, Dataset dataset,
-      boolean datasetVersionTtlEnabled) throws SQLException {
+      boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState) throws SQLException {
     statement.setInt(1, accountId);
     statement.setInt(2, containerId);
     statement.setString(3, datasetName);
@@ -620,8 +668,30 @@ public class AccountDao {
     } else {
       statement.setTimestamp(5, new Timestamp(updatedExpirationTimeMs));
     }
+    statement.setInt(6, datasetVersionState.ordinal());
     statement.executeUpdate();
     return updatedExpirationTimeMs;
+  }
+
+  /**
+   * Execute the updateDatasetVersionStateSql statement.
+   * @param statement the updateDatasetVersionStateSql statement.
+   * @param statement the mysql statement to delete dataset version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param versionValue the version value of the dataset.
+   * @param datasetVersionState the {@link DatasetVersionState}
+   * @throws SQLException
+   */
+  private void executeUpdateDatasetVersionStateStatement(PreparedStatement statement, int accountId, int containerId,
+      String datasetName, long versionValue, DatasetVersionState datasetVersionState) throws SQLException {
+    statement.setInt(1, datasetVersionState.ordinal());
+    statement.setInt(2, accountId);
+    statement.setInt(3, containerId);
+    statement.setString(4, datasetName);
+    statement.setLong(5, versionValue);
+    statement.executeUpdate();
   }
 
   /**
@@ -659,13 +729,15 @@ public class AccountDao {
    * @param creationTimeInMs the creation time of the dataset version.
    * @param dataset the {@link Dataset} including the metadata.
    * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @param datasetVersionState the {@link DatasetVersionState}
    * @return the updated expiration time.
    * @throws SQLException
    * @throws AccountServiceException
    */
   private long executeUpdateDatasetVersionIfExpiredSqlStatement(PreparedStatement statement, int accountId,
       int containerId, String datasetName, long version, long timeToLiveInSeconds, long creationTimeInMs,
-      Dataset dataset, boolean datasetVersionTtlEnabled) throws SQLException, AccountServiceException {
+      Dataset dataset, boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState)
+      throws SQLException, AccountServiceException {
     statement.setLong(1, version);
     long updatedExpirationTimeMs;
     if (datasetVersionTtlEnabled || dataset.getRetentionTimeInSeconds() == null) {
@@ -678,10 +750,11 @@ public class AccountDao {
     } else {
       statement.setTimestamp(2, new Timestamp(updatedExpirationTimeMs));
     }
-    statement.setInt(3, accountId);
-    statement.setInt(4, containerId);
-    statement.setString(5, datasetName);
-    statement.setLong(6, version);
+    statement.setInt(3, datasetVersionState.ordinal());
+    statement.setInt(4, accountId);
+    statement.setInt(5, containerId);
+    statement.setString(6, datasetName);
+    statement.setLong(7, version);
     int count = statement.executeUpdate();
     if (count <= 0) {
       throw new AccountServiceException("The dataset version already exist", AccountServiceErrorCode.ResourceConflict);
@@ -834,20 +907,23 @@ public class AccountDao {
 
   /**
    * Get a list of dataset versions which is not expired or been deleted which belongs to the related dataset.
+   * Since this is used for delete all version under a dataset, we should list all version including the in_progress states.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
    * @param datasetName the name of the dataset.
    * @return a list of dataset versions which is not expired or been deleted.
    * @throws SQLException
    */
-  public synchronized List<DatasetVersionRecord> getAllValidVersion(short accountId, short containerId,
-      String datasetName) throws SQLException {
+  public synchronized List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId,
+      short containerId, String datasetName) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
       dataAccessor.getDatabaseConnection(false);
-      PreparedStatement listAllValidVersionStatement = dataAccessor.getPreparedStatement(listValidVersionSql, false);
+      PreparedStatement listAllValidVersionForDatasetDeletionStatement =
+          dataAccessor.getPreparedStatement(listValidVersionForDatasetDeletionSql, false);
       List<DatasetVersionRecord> datasetVersionRecords =
-          executeListAllValidVersionStatement(listAllValidVersionStatement, accountId, containerId, datasetName);
+          executeListAllValidVersionForDatasetDeletionStatement(listAllValidVersionForDatasetDeletionStatement,
+              accountId, containerId, datasetName);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return datasetVersionRecords;
     } catch (SQLException e) {
@@ -943,7 +1019,8 @@ public class AccountDao {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
-      statement.setInt(4, retentionCount);
+      statement.setInt(4, DatasetVersionState.READY.ordinal());
+      statement.setInt(5, retentionCount);
       resultSet = statement.executeQuery();
       while (resultSet.next()) {
         long versionValue = resultSet.getLong(VERSION);
@@ -1003,6 +1080,7 @@ public class AccountDao {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
+      //we should list all versions including in_progress version in order to get the latest version for next upload.
       resultSet = statement.executeQuery();
       if (!resultSet.next()) {
         throw new AccountServiceException(
@@ -1034,6 +1112,7 @@ public class AccountDao {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
+      statement.setInt(4, DatasetVersionState.READY.ordinal());
       resultSet = statement.executeQuery();
       if (!resultSet.next()) {
         throw new AccountServiceException(
@@ -1140,8 +1219,8 @@ public class AccountDao {
    * @return a list of all dataset versions which is not expired or been deleted which belongs to the related dataset.
    * @throws SQLException
    */
-  private List<DatasetVersionRecord> executeListAllValidVersionStatement(PreparedStatement statement, int accountId,
-      int containerId, String datasetName) throws SQLException {
+  private List<DatasetVersionRecord> executeListAllValidVersionForDatasetDeletionStatement(PreparedStatement statement,
+      int accountId, int containerId, String datasetName) throws SQLException {
     ResultSet resultSet = null;
     List<DatasetVersionRecord> datasetVersionRecords = new ArrayList<>();
     try {
@@ -1733,6 +1812,7 @@ public class AccountDao {
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
       statement.setLong(4, versionValue);
+      statement.setInt(5, DatasetVersionState.READY.ordinal());
       resultSet = statement.executeQuery();
       if (!resultSet.next()) {
         throw new AccountServiceException(
