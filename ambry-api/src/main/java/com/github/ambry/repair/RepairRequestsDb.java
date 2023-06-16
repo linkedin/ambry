@@ -48,10 +48,4 @@ public interface RepairRequestsDb extends Closeable {
    * @return the oldest {@link RepairRequestRecord}s.
    */
   List<RepairRequestRecord> getRepairRequests(long partitionId) throws Exception;
-
-  /**
-   * Exposed for integration test usage.
-   * @return a {@link DataSource}.
-   */
-  DataSource getDataSource();
 }

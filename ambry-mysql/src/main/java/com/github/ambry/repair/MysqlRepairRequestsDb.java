@@ -14,6 +14,7 @@
  */
 package com.github.ambry.repair;
 
+import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -28,7 +29,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.repair.RepairRequestRecord.OperationType;
-import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -54,7 +54,6 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   private static final String EXPIRATION_TYPE = "expirationTime";
 
   // LOCAL_CONSISTENCY_TODO continue the Get from one token
-  // LOCAL_CONSISTENCY_TODO set the max ResultSet count
   /**
    * Select the records for one partition with the oldest operation time.
    */
@@ -64,7 +63,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
       + "FROM %s "
       + "WHERE %s = ? "
       + "ORDER BY %s ASC "
-      + "LIMIT 100",
+      + "LIMIT ?",
       BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
       REPAIR_REQUESTS_TABLE,
       PARTITION_ID,
@@ -94,9 +93,11 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   // @formatter:on
 
   private final DataSource dataSource;
+  private final MysqlRepairRequestsDbConfig config;
 
-  public MysqlRepairRequestsDb(DataSource dataSource) {
+  public MysqlRepairRequestsDb(DataSource dataSource, MysqlRepairRequestsDbConfig config) {
     this.dataSource = dataSource;
+    this.config = config;
   }
 
   /**
@@ -104,6 +105,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    * @param blobId the blob id
    * @param operationType the operation time, either TtlUpdate or Delete
    */
+  @Override
   public void removeRepairRequests(String blobId, OperationType operationType) throws SQLException {
     // private static final String DELETE_QUERY = String.format(""
     //     + "DELETE FROM %s "
@@ -127,6 +129,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    * Insert one {@link RepairRequestRecord}
    * @param record the record to insert
    */
+  @Override
   public void putRepairRequests(RepairRequestRecord record) throws SQLException {
     // private static final String INSERT_QUERY = String.format(""
     //    + "INSERT INTO %1$s "
@@ -160,43 +163,44 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    * @param partitionId partition id
    * @return the oldest {@link RepairRequestRecord}s.
    */
+  @Override
   public List<RepairRequestRecord> getRepairRequests(long partitionId) throws SQLException {
     // private static final String GET_QUERY = String.format(""
     //    + "SELECT %s, %s, %s, %s, %s, %s, %s, %s "
     //    + "FROM %s "
     //    + "WHERE %s = ? "
     //    + "ORDER BY %s ASC "
-    //    + "LIMIT 100",
+    //    + "LIMIT ?",
     //    BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
     //    REPAIR_REQUESTS_TABLE,
     //    PARTITION_ID,
     //    OPERATION_TIME);
-    ResultSet resultSet = null;
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
         statement.setLong(1, partitionId);
-        resultSet = statement.executeQuery();
-        List<RepairRequestRecord> result = new ArrayList<>();
-        while (resultSet.next()) {
-          String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-          // resultSet.getLong(2) is the partition id.
-          String sourceHostName = resultSet.getString(3);
-          int sourceHostPort = resultSet.getInt(4);
-          OperationType operationType = OperationType.values()[resultSet.getShort(5)];
-          Timestamp operationTime = resultSet.getTimestamp(6);
-          short lifeVersion = resultSet.getShort(7);
-          Timestamp expirationTime = resultSet.getTimestamp(8);
-          RepairRequestRecord record =
-              new RepairRequestRecord(blobId, partitionId, sourceHostName, sourceHostPort, operationType,
-                  operationTime.getTime(), lifeVersion,
-                  expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
-          result.add(record);
+        statement.setInt(2, config.listMaxResults);
+        try (ResultSet resultSet = statement.executeQuery()) {
+          List<RepairRequestRecord> result = new ArrayList<>();
+          while (resultSet.next()) {
+            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+            // resultSet.getLong(2) is the partition id.
+            String sourceHostName = resultSet.getString(3);
+            int sourceHostPort = resultSet.getInt(4);
+            OperationType operationType = OperationType.values()[resultSet.getShort(5)];
+            Timestamp operationTime = resultSet.getTimestamp(6);
+            short lifeVersion = resultSet.getShort(7);
+            Timestamp expirationTime = resultSet.getTimestamp(8);
+            RepairRequestRecord record =
+                new RepairRequestRecord(blobId, partitionId, sourceHostName, sourceHostPort, operationType,
+                    operationTime.getTime(), lifeVersion,
+                    expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
+            result.add(record);
+          }
+          return result;
         }
-        return result;
       }
     } catch (SQLException e) {
       logger.error("failed to get records from {} due to {}", dataSource, e.getMessage());
-      closeQuietly(resultSet);
       throw e;
     }
   }
