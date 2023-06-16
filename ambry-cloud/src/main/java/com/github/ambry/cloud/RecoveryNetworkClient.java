@@ -39,6 +39,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.server.ServerErrorCode;
@@ -47,7 +48,6 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.AbstractByteBufHolder;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
@@ -85,27 +85,24 @@ public class RecoveryNetworkClient implements NetworkClient {
       int pollTimeoutMs) {
     List<ResponseInfo> responseInfos = new ArrayList<>();
     for (RequestInfo requestInfo : requestsToSend) {
-      ByteBuf content = requestInfo.getRequest().content();
-      RequestOrResponseType type = null;
+      // Don't have to serialize the request, we can just use it
+      RequestOrResponse request = (RequestOrResponse) requestInfo.getRequest();
+      RequestOrResponseType type = request.getRequestType();
       Send send = null;
       try {
-        content.readLong(); // Skip the size of the requests
-        type = RequestOrResponseType.values()[content.readShort()];
         // RecoveryNetworkClient only cares about the ReplicaMetadataRequest and GetRequest
         switch (type) {
           case ReplicaMetadataRequest:
-            send = handleReplicaMetadataRequest(content);
+            send = handleReplicaMetadataRequest((ReplicaMetadataRequest) request);
             break;
           case GetRequest:
-            send = handleGetRequest(content);
+            send = handleGetRequest((GetRequest) request);
             break;
           default:
             throw new IllegalArgumentException("RecoveryNetworkClient doesn't support request: " + type);
         }
       } catch (Exception exception) {
         logger.error("Failed to handle request: type {}", type, exception);
-      } finally {
-        content.release();
       }
       ResponseInfo responseInfo;
       if (send != null) {
@@ -121,9 +118,12 @@ public class RecoveryNetworkClient implements NetworkClient {
     return responseInfos;
   }
 
-  private ReplicaMetadataResponse handleReplicaMetadataRequest(ByteBuf content) throws IOException {
-    ReplicaMetadataRequest request =
-        ReplicaMetadataRequest.readFrom(new NettyByteBufDataInputStream(content), clustermap, findTokenHelper);
+  /**
+   * Handle ReplicaMetataRequest and return a response.
+   * @param request The {@link ReplicaMetadataRequest} to handle
+   * @return A {@link ReplicaMetadataResponse}.
+   */
+  private ReplicaMetadataResponse handleReplicaMetadataRequest(ReplicaMetadataRequest request) {
     final String COSMOS_QUERY = "select * from c where c.partitionId = \"%s\"";
     List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
         new ArrayList<>(request.getReplicaMetadataRequestInfoList().size());
@@ -135,6 +135,7 @@ public class RecoveryNetworkClient implements NetworkClient {
       Store store = storeManager.getStore(partitionId);
 
       RecoveryToken currRecoveryToken = (RecoveryToken) replicaMetadataRequestInfo.getToken();
+      logger.trace("Current recovery token is: {}", currRecoveryToken);
       RecoveryToken nextRecoveryToken = new RecoveryToken();
       List<MessageInfo> messageEntries = new ArrayList<>();
       String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
@@ -253,12 +254,11 @@ public class RecoveryNetworkClient implements NetworkClient {
 
   /**
    * Handle GetRequest but return fake blob content with all zero value bytes
-   * @param content
-   * @return
+   * @param request The {@link GetRequest} to handle
+   * @return A {@link GetResponse}.
    * @throws IOException
    */
-  private GetResponse handleGetRequest(ByteBuf content) throws IOException {
-    GetRequest request = GetRequest.readFrom(new NettyByteBufDataInputStream(content), clustermap);
+  private GetResponse handleGetRequest(GetRequest request) throws IOException {
     if (request.getMessageFormatFlag() != MessageFormatFlags.All) {
       throw new IllegalArgumentException("GetRequest should have MessageFormatFlags being ALL");
     }
