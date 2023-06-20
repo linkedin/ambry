@@ -638,7 +638,7 @@ public class DiskManager {
           if (successfulThusFar) {
             diskHealthStatus = diskHealthStatus.DELETE_IO_EXCEPTION;
           }
-          logger.error("Exception occurred when deleting a file for disk healthcheck", e);
+          logger.error("Exception occurred when deleting a file for disk healthcheck {}", disk.getMountPath(), e);
           return false;
         }
       }
@@ -651,12 +651,12 @@ public class DiskManager {
      * @param fileChannel used to perform the read/write operation
      * @param buffer either used to write from or read to the buffer in the respective operation
      * @param timeoutStatus indicate if the timeout is from reading or writing
-     * @param otherStatus indicate if the other exceptions are from reading or writing
+     * @param exceptionStatus indicate if the other exceptions are from reading or writing
      * @param isWriting inform the function to either write or read with the buffer and filechannel
      * @return True/False to indicate if the operation completed with no issues or not
      */
     private boolean performOperation(AsynchronousFileChannel fileChannel, ByteBuffer buffer,
-        DiskHealthStatus timeoutStatus, DiskHealthStatus otherStatus, boolean isWriting) {
+        DiskHealthStatus timeoutStatus, DiskHealthStatus exceptionStatus, boolean isWriting) {
       Future<Integer> result = null;
       try {
         if (isWriting) {
@@ -668,10 +668,11 @@ public class DiskManager {
         return true;
       } catch (TimeoutException e) {
         diskHealthStatus = timeoutStatus;
-        logger.error("Timeout Exception occurred when operating on a file for disk healthcheck", e);
+        logger.error("Timeout Exception occurred when operating on a file for disk healthcheck {}", disk.getMountPath(),
+            e);
       } catch (Exception e) {
-        diskHealthStatus = otherStatus;
-        logger.error("Exception occurred when operating on a file for disk healthcheck", e);
+        diskHealthStatus = exceptionStatus;
+        logger.error("Exception occurred when operating on a file for disk healthcheck {}", disk.getMountPath(), e);
       }
       if (result != null) {
         result.cancel(true);
@@ -697,11 +698,11 @@ public class DiskManager {
       } catch (StoreException e) {
         if (e.getErrorCode() == StoreErrorCodes.Initialization_Error) {
           diskHealthStatus = DiskHealthStatus.MOUNT_NOT_ACCESSIBLE;
-          logger.error("Exception occurred when checking if the mount is accessible", e);
+          logger.error("Exception occurred when checking if the mount is accessible {}", disk.getMountPath(), e);
         }
       } catch (Exception e) {
         diskHealthStatus = DiskHealthStatus.CREATE_EXCEPTION;
-        logger.error("Exception occurred when creating a file/directory for disk healthcheck", e);
+        logger.error("Exception occurred when creating a file/directory for disk healthcheck {}", disk.getMountPath(), e);
       }
       return null;
     }
