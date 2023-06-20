@@ -248,6 +248,12 @@ public class HelixBootstrapUpgradeTool {
         .describedAs("resources")
         .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> wagedConfigFilePathOpt = parser.accepts("wagedConfigFilePathOpt",
+        "The path to the waged config file path")
+        .withRequiredArg()
+        .describedAs("waged_config_file_path")
+        .ofType(String.class);
+
     OptionSet options = parser.parse(args);
     String hardwareLayoutPath = options.valueOf(hardwareLayoutPathOpt);
     String partitionLayoutPath = options.valueOf(partitionLayoutPathOpt);
@@ -262,6 +268,7 @@ public class HelixBootstrapUpgradeTool {
     String partitionName = options.valueOf(partitionIdOpt);
     String portStr = options.valueOf(portOpt);
     Integer maxInstancesInOneResourceForFullAuto = options.valueOf(maxInstancesInOneResourceForFullAutoOpt);
+    String wagedConfigFilePath = options.valueOf(wagedConfigFilePathOpt);
     int maxPartitionsInOneResource =
         options.valueOf(maxPartitionsInOneResourceOpt) == null ? DEFAULT_MAX_PARTITIONS_PER_RESOURCE
             : Integer.parseInt(options.valueOf(maxPartitionsInOneResourceOpt));
@@ -313,8 +320,10 @@ public class HelixBootstrapUpgradeTool {
               clusterNamePrefix, dcs);
           break;
         case MigrateToFullAuto:
+          listOpt.add(wagedConfigFilePathOpt);
+          ToolUtils.ensureOrExit(listOpt, options, parser);
           HelixBootstrapUpgradeUtil.migrateToFullAuto(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-              clusterNamePrefix, dcs, resources, options.has(dryRun));
+              clusterNamePrefix, dcs, resources, options.has(dryRun), wagedConfigFilePath);
           break;
         case ResetPartition:
         case EnablePartition:
