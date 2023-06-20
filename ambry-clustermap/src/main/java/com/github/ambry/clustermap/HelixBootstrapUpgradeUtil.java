@@ -905,15 +905,33 @@ public class HelixBootstrapUpgradeUtil {
           // 3. No resource config to update for now
 
           // 4. Validate configs
+          // 4.1 Instance validation
           Map<String, Boolean> instanceValidationResultMap =
               helixAdmin.validateInstancesForWagedRebalance(clusterName, new ArrayList<>(allInstances));
-          if (instanceValidationResultMap.containsValue(Boolean.FALSE)) {
-            throw new IllegalStateException("Instances are not configured correctly for waged rebalancer");
+          Set<String> invalidInstances = new HashSet<>();
+          for (Map.Entry<String, Boolean> entry : instanceValidationResultMap.entrySet()) {
+            if (entry.getValue() == Boolean.FALSE) {
+              invalidInstances.add(entry.getKey());
+            }
           }
+          if (!invalidInstances.isEmpty()) {
+            logger.error("Validation of waged rebalancer configuration failed for instances {}", invalidInstances);
+            throw new IllegalStateException(
+                "Instances" + invalidInstances + "are not configured correctly for waged rebalancer");
+          }
+          // 4.2 Resource validation
           Map<String, Boolean> resourceValidationResultMap =
               helixAdmin.validateResourcesForWagedRebalance(clusterName, new ArrayList<>(resources));
-          if (resourceValidationResultMap.containsValue(Boolean.FALSE)) {
-            throw new IllegalStateException("Resources are not configured correctly for waged rebalancer");
+          Set<String> invalidResources = new HashSet<>();
+          for (Map.Entry<String, Boolean> entry : resourceValidationResultMap.entrySet()) {
+            if (entry.getValue() == Boolean.FALSE) {
+              invalidResources.add(entry.getKey());
+            }
+          }
+          if (!invalidResources.isEmpty()) {
+            logger.error("Validation of waged rebalancer configuration failed for resources {}", invalidResources);
+            throw new IllegalStateException(
+                "Resources" + invalidResources + "are not configured correctly for waged rebalancer");
           }
 
           if (!dryRun) {
@@ -992,37 +1010,52 @@ public class HelixBootstrapUpgradeUtil {
    */
   private void setupCluster(ConfigAccessor configAccessor, WagedClusterConfigFields wagedClusterConfigFields) {
     ClusterConfig clusterConfig = configAccessor.getClusterConfig(clusterName);
-    // 1. Set topology awareness
+
+    // 1. Set topology awareness. For example, if fault_zone_type is rack, helix avoids placing replicas on the hosts
+    // in same rack
     clusterConfig.setTopologyAwareEnabled(true);
     clusterConfig.setTopology(TOPOLOGY);
     clusterConfig.setFaultZoneType(FAULT_ZONE_TYPE);
-    // 2. Set max number of concurrent state transitions
+
+    // 2. Set max number of concurrent state transitions. This avoids too many replica movements in the cluster.
     StateTransitionThrottleConfig stateTransitionThrottleConfig =
         new StateTransitionThrottleConfig(StateTransitionThrottleConfig.RebalanceType.LOAD_BALANCE,
             StateTransitionThrottleConfig.ThrottleScope.INSTANCE, wagedClusterConfigFields.maxPartitionInTransition);
     clusterConfig.setStateTransitionThrottleConfigs(Collections.singletonList(stateTransitionThrottleConfig));
-    // 3. Set delay re-balancing to true to avoid replica movements during deployments
+
+    // 3. Set delay re-balancing to true to avoid replica movements if host is temporarily down due to deployment,
+    // maintenance, etc
     clusterConfig.setDelayRebalaceEnabled(true);
     clusterConfig.setRebalanceDelayTime(wagedClusterConfigFields.delayRebalanceTimeInSecs);
-    // 4. Set persistence of best possible assignment
+
+    // 4. Set persistence of best possible assignment. This will allow us to see the partition assignment in IDEAL state.
     clusterConfig.setPersistBestPossibleAssignment(true);
 
-    // Set WAGED specific configs
-    // 5. Set default weight for each partition
+    // 5. Set default weight for each partition. Helix will do partition assignment based on partition weight and host
+    // capacity.
     Map<String, Integer> defaultPartitionWeightMap = new HashMap<>();
     defaultPartitionWeightMap.put(DISK_KEY, wagedClusterConfigFields.partitionDiskWeightInGB);
     clusterConfig.setDefaultPartitionWeightMap(defaultPartitionWeightMap);
+
     // 6. Set instance capacity keys
     clusterConfig.setInstanceCapacityKeys(Collections.singletonList(DISK_KEY));
-    // 7. Set evenness and less movement for cluster
+
+    // 7. Set evenness and less movement for cluster. These help to balance evenness and replica movements in cluster.
+    // Below are calculated values based on simulation.
     Map<ClusterConfig.GlobalRebalancePreferenceKey, Integer> globalRebalancePreferenceKeyIntegerMap = new HashMap<>();
     globalRebalancePreferenceKeyIntegerMap.put(ClusterConfig.GlobalRebalancePreferenceKey.EVENNESS,
         wagedClusterConfigFields.evenness);
     globalRebalancePreferenceKeyIntegerMap.put(ClusterConfig.GlobalRebalancePreferenceKey.LESS_MOVEMENT,
         wagedClusterConfigFields.lessMovement);
     clusterConfig.setGlobalRebalancePreference(globalRebalancePreferenceKeyIntegerMap);
+
     // Update cluster config in Helix/ZK
     configAccessor.setClusterConfig(clusterName, clusterConfig);
+    info("Updated cluster config fields to: topology {}, fault_zone_type {}, max_partition_in_transition {}, "
+            + "delay_rebalance_time_in_secs {}, partition_disk_weight_in_gb {}, evenness {}, less_movement {} ", TOPOLOGY,
+        FAULT_ZONE_TYPE, wagedClusterConfigFields.maxPartitionInTransition,
+        wagedClusterConfigFields.delayRebalanceTimeInSecs, wagedClusterConfigFields.partitionDiskWeightInGB,
+        wagedClusterConfigFields.evenness, wagedClusterConfigFields.lessMovement);
   }
 
   /**
@@ -1062,10 +1095,13 @@ public class HelixBootstrapUpgradeUtil {
         .mapToLong(DataNodeConfig.DiskConfig::getDiskCapacityInBytes)
         .sum();
     long capacityInGB = capacity / 1024 / 1024 / 1024;
-    capacityMap.put(DISK_KEY, (int) ((double) INSTANCE_MAX_CAPACITY_PERCENTAGE / 100 * capacityInGB));
+    int actualCapacityInGB = (int) ((double) INSTANCE_MAX_CAPACITY_PERCENTAGE / 100 * capacityInGB);
+    capacityMap.put(DISK_KEY, actualCapacityInGB);
     instanceConfig.setInstanceCapacityMap(capacityMap);
     // Update instance config in Helix/ZK
     configAccessor.updateInstanceConfig(clusterName, instanceName, instanceConfig);
+    info("Updated instance config fields to: tags {}, rack Id {}, host key {}, instance capacity {}",
+        instanceConfig.getTags(), nodeConfigFromHelix.getRackId(), instanceName, actualCapacityInGB);
   }
 
   /**
