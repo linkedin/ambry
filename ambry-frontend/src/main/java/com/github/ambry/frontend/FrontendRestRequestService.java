@@ -213,11 +213,11 @@ class FrontendRestRequestService implements RestRequestService {
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
-      int oneWeekInSeconds = 60 * 60 * 24 * 7;
-      int initialDelayInSeconds = random.nextInt(oneWeekInSeconds);
+      int oneDayInSeconds = 60 * 60 * 24;
+      int initialDelayInSeconds = random.nextInt(oneDayInSeconds);
       namedBlobsCleanupTask =
           namedBlobsCleanupScheduler.scheduleAtFixedRate(
-              namedBlobsCleanupRunner, initialDelayInSeconds, oneWeekInSeconds, TimeUnit.SECONDS);
+              namedBlobsCleanupRunner, initialDelayInSeconds, oneDayInSeconds, TimeUnit.SECONDS);
       logger.info("Named Blob Stale Data Cleanup Process has started with {} seconds initial delay", initialDelayInSeconds);
     }
 

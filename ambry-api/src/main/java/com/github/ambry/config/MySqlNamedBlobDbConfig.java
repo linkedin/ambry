@@ -58,14 +58,14 @@ public class MySqlNamedBlobDbConfig {
    * The maximum number of entries to return per each stale blobs pull request.
    */
   @Config(QUERY_STALE_DATA_MAX_RESULTS)
-  @Default("1000")
+  @Default("10000")
   public final int queryStaleDataMaxResults;
 
   /**
    * The maximum number of days for a stale blob to say uncleaned.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
-  @Default("5")
+  @Default("20")
   public final int staleDataRetentionDays;
 
   /**
@@ -86,8 +86,8 @@ public class MySqlNamedBlobDbConfig {
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
     this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
-    this.queryStaleDataMaxResults = verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
-    this.staleDataRetentionDays = verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
+    this.queryStaleDataMaxResults = verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 10000, 1, Integer.MAX_VALUE);
+    this.staleDataRetentionDays = verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
     this.dbTransition = verifiableProperties.getBoolean(DB_TRANSITION, false);
     this.dbRelyOnNewTable = verifiableProperties.getBoolean(DB_RELY_ON_NEW_TABLE, false);
   }

@@ -154,24 +154,22 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * It will pull out any stale record (limit to be config.queryStaleDataMaxResults [Default 1000] records at most)
    * meeting below conditions:
    * 1. created more than config.staleDataRetentionDays [Default 5] days ago, and
-   * 2. it's NOT a VLR (Valid Latest Record) for any named blob.
+   * 2. its blob_id does NOT show in any VLR (Valid Latest Record) of any named blob.
    * VLR of a named blob is the record whose blob_state=1 (READY), and has the max version for the named blob.
    *
-   * To pull out the rows that meet the 2nd condition above, we are using left join and then pull out the rows where
-   * right side table's keys are all NULL
    */
   // @formatter:off
   private static final String GET_STALE_QUERY = String.format(""
           + "SELECT t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, %s "
-          + "FROM %s t1 "
-          + "LEFT JOIN "
-          + "(SELECT account_id, container_id, blob_name, max(version) as version "
           + "FROM %s "
-          + "WHERE blob_state=1 "
-          + "      GROUP BY account_id, container_id, blob_name) t2 "
-          + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE t1.%s<? and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL "
-          + "LIMIT ?",
+          + "WHERE blob_id not in "
+          + "   (SELECT distinct(blob_id) "
+          + "    FROM %s "
+          + "    WHERE version in  (SELECT max(version) as version "
+          + "      FROM %s "
+          + "      WHERE blob_state = 1 and version != 0 "
+          + "      GROUP BY account_id, container_id, blob_name))"
+          + " AND t1.%s<? ORDER BY blob_id LIMIT ?",
       ACCOUNT_ID,
       CONTAINER_ID,
       BLOB_NAME,
@@ -181,7 +179,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       CURRENT_TIME,
       NAMED_BLOBS_V2,
       NAMED_BLOBS_V2,
-      VERSION);
+      NAMED_BLOBS_V2,
+      VERSION
+      );
   // @formatter:on
 
   private final AccountService accountService;
