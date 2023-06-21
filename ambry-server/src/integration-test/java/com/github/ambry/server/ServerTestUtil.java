@@ -3563,6 +3563,9 @@ final class ServerTestUtil {
       cluster.time.sleep(1000);
 
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+      BlobId blobId0 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
           properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
           BlobId.BlobDataType.DATACHUNK);
@@ -3621,6 +3624,45 @@ final class ServerTestUtil {
       BlobId blobId;
       long operationTime;
       PutRequest putRequest;
+
+      /*
+       * Stage 0: Verify the ODP's notification system
+       */
+      // On the sourceDataNode putBlob and TtlUpdate. On the targetDataNode, blob doesn't exist.
+      // BlobId0 is only used to test notification System to verify ODP notification works.
+      blobId = blobId0;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      operationTime = cluster.time.milliseconds();
+      updateBlobTtl(sourceChannel, blobId, operationTime);
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      // replicateType is RequestOrResponse.TtlUpdateRequest, it replicates PutBlob and then repair the TtlUpdate
+      final BlobId asyncBlob = blobId;
+      final long asyncOperationTime = operationTime;
+      Runnable asyncODP = () -> {
+        try {
+          Thread.sleep(2000);
+          replicateTtlUpdate(targetChannel, asyncBlob, sourceDataNode, asyncOperationTime, Utils.Infinite_Time,
+              ServerErrorCode.No_Error);
+        } catch (InterruptedException e) {
+
+        } catch (IOException e) {
+          assertTrue("ReplicateTtlUpdate failure " + e.getMessage(), false);
+        }
+      };
+      new Thread(asyncODP).start();
+      // wait for targetDataNode to finish
+      notificationSystem.awaitBlobReplicates(blobId.getID());
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      // the TtlUpdate Operation Time will be same as the PutBlob time since we apply TtlUpdate from the GetRequest.
+      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(),
+          Utils.Infinite_Time);
+      cluster.time.sleep(1000);
+
       /*
        * Stage 1: Test the correctness of the ReplicateBlob. Replicate blobs from sourceDataNode to the targetDataNode
        * On the sourceDataNode and the targetDataNode, the blob is under different states.
