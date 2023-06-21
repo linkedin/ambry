@@ -37,6 +37,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.Http2ClientConfig;
+import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -49,6 +50,8 @@ import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.LocalNetworkClientFactory;
+import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NettyServerRequestResponseChannel;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
@@ -64,6 +67,8 @@ import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
+import com.github.ambry.repair.RepairRequestsDb;
+import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
@@ -86,6 +91,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -136,6 +142,14 @@ public class AmbryServer {
   private ServerSecurityService serverSecurityService;
   private final NettyInternalMetrics nettyInternalMetrics;
   private AccountStatsMySqlStore accountStatsMySqlStore = null;
+
+  // variables to handle repair requests.
+  private LocalRequestResponseChannel localChannel = null;
+  private AmbryRequests repairRequests = null;
+  private RequestHandlerPool repairHandlerPool = null;
+  private LocalNetworkClientFactory localClientFactory = null;
+  private RepairRequestsDb repairRequestsDb = null;
+  private RepairRequestsSender repairRequestsSender = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       VcrClusterAgentsFactory vcrClusterAgentsFactory, Time time) throws InstantiationException {
@@ -326,6 +340,42 @@ public class AmbryServer {
         nettyHttp2Server.start();
       }
 
+      if (serverConfig.serverRepairRequestsDbFactory != null) {
+        // if we have a RepairRequestsDB, start the threads to fix the partially failed requests.
+        try {
+          Properties repairProperties = new Properties();
+          repairProperties.setProperty(MysqlRepairRequestsDbConfig.DB_INFO, serverConfig.serverRepairRequestsDbInfo);
+          repairProperties.setProperty(MysqlRepairRequestsDbConfig.LIST_MAX_RESULTS,
+              serverConfig.serverRepairRequestsDbListMaxResult);
+          repairProperties.setProperty(MysqlRepairRequestsDbConfig.LOCAL_POOL_SIZE,
+              serverConfig.serverRepairRequestsDbLocalPoolSize);
+
+          VerifiableProperties repairVProperties = new VerifiableProperties(repairProperties);
+          RepairRequestsDbFactory factory =
+              Utils.getObj(serverConfig.serverRepairRequestsDbFactory, repairVProperties, registry,
+                  nodeId.getDatacenterName());
+          repairRequestsDb = factory.getRepairRequestsDb();
+
+          localChannel = new LocalRequestResponseChannel();
+          localClientFactory =
+              new LocalNetworkClientFactory(localChannel, networkConfig, new NetworkMetrics(registry), time);
+          repairRequests = new AmbryServerRequests(storageManager, localChannel, clusterMap, nodeId, registry, metrics,
+              findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig, diskManagerConfig,
+              storeKeyConverterFactory, statsManager, clusterParticipants.get(0), connectionPool);
+          // Right now we only open single thread for the repairHandlerPool
+          repairHandlerPool = new RequestHandlerPool(1, localChannel, repairRequests, "Repair-");
+          // start the repairRequestSender. It sends requests through the localChannel to the repairHandlerPool
+          repairRequestsSender =
+              new RepairRequestsSender(localChannel, localClientFactory, clusterMap, nodeId, repairRequestsDb,
+                  clusterParticipants.get(0));
+          Thread repairThread = Utils.daemonThread("Repair-Sender", repairRequestsSender);
+          repairThread.start();
+          logger.info("RepairRequests: open the db and started the handling thread {}.", repairRequestsDb);
+        } catch (Exception e) {
+          logger.error("RepairRequests: Cannot connect to the RepairRequestsDB. ", e);
+        }
+      }
+
       // Other code
       List<AmbryStatsReport> ambryStatsReports = new ArrayList<>();
       Set<String> validStatsTypes = new HashSet<>();
@@ -406,6 +456,15 @@ public class AmbryServer {
       }
       if (requestHandlerPool != null) {
         requestHandlerPool.shutdown();
+      }
+      if (repairRequestsSender != null) {
+        repairRequestsSender.shutdown();
+      }
+      if (repairHandlerPool != null) {
+        repairHandlerPool.shutdown();
+      }
+      if (localChannel != null) {
+        localChannel.shutdown();
       }
       if (cloudToStoreReplicationManager != null) {
         cloudToStoreReplicationManager.shutdown();

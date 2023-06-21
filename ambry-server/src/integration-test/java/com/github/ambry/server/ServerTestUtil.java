@@ -47,6 +47,7 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.Http2ClientConfig;
+import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -95,6 +96,10 @@ import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaTestUtils;
+import com.github.ambry.repair.MysqlRepairRequestsDb;
+import com.github.ambry.repair.MysqlRepairRequestsDbFactory;
+import com.github.ambry.repair.RepairRequestRecord;
+import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
@@ -127,6 +132,9 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -152,6 +160,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import javax.net.ssl.SSLSocketFactory;
+import javax.sql.DataSource;
 
 import static org.junit.Assert.*;
 
@@ -4347,6 +4356,39 @@ final class ServerTestUtil {
     }
   }
 
+  /**
+   * Enable or disable replication on the replicas
+   * @param channels the connection channel to the replicas.
+   * @param partitionIds the partitions that the control requests are targeting.
+   * @param enable if true, enable the replication. If false, disable the replication
+   * @throws Exception any exception
+   */
+  public static void controlReplicationForPartition(List<ConnectedChannel> channels, List<PartitionId> partitionIds,
+      boolean enable) throws Exception {
+    for (PartitionId id : partitionIds) {
+      controlReplicationForPartition(channels, id, enable);
+    }
+  }
+
+  /**
+   * Enable or disable the BlobStore on the replica
+   * @param channel the connection channel to the replica.
+   * @param partitionId the partitions that the control request is targeting.
+   * @param enable if true, enable the blob store. If false, disable the blob store
+   * @throws Exception any exception
+   */
+  public static void controlBlobStore(ConnectedChannel channel, PartitionId partitionId, boolean enable)
+      throws Exception {
+    AdminRequest adminRequest =
+        new AdminRequest(AdminRequestOrResponseType.BlobStoreControl, partitionId, 1, "clientid");
+    BlobStoreControlAdminRequest controlRequest = new BlobStoreControlAdminRequest((short) 0,
+        enable ? BlobStoreControlAction.StartStore : BlobStoreControlAction.StopStore, adminRequest);
+    DataInputStream stream = channel.sendAndReceive(controlRequest).getInputStream();
+    AdminResponse adminResponse = AdminResponse.readFrom(stream);
+    releaseNettyBufUnderneathStream(stream);
+    assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
+  }
+
   private static List<PartitionRequestInfo> getPartitionRequestInfoListFromBlobId(BlobId blobId) {
     return Collections.singletonList(
         new PartitionRequestInfo(blobId.getPartition(), Collections.singletonList(blobId)));
@@ -4982,5 +5024,235 @@ final class ServerTestUtil {
       // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
       ((NettyByteBufDataInputStream) stream).getBuffer().release();
     }
+  }
+
+  /**
+   * Test the background RepairRequestsSender and the repair requests handlers.
+   */
+  static void repairRequestTest(MockCluster cluster, SSLConfig clientSSLConfig, boolean testEncryption,
+      MockNotificationSystem notificationSystem) throws Exception {
+    List<MockDataNodeId> allNodes = cluster.getAllDataNodes();
+    MockClusterMap clusterMap = cluster.getClusterMap();
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+
+    /*
+     * sourceDataNode is the data node we send PutBlob, TtlUpdate, Delete requests.
+     * targetDataNode is xxx
+     * thirdDataNode is xxx
+     */
+    DataNodeId sourceDataNode = allNodes.get(0);
+    DataNodeId targetDataNode = allNodes.get(1);
+    PartitionId partitionId1 = partitionIds.get(0);
+    PartitionId partitionId2 = partitionIds.get(1);
+    ConnectedChannel sourceChannel = null;
+    ConnectedChannel targetChannel = null;
+
+    // Open the db connection and use it to generate repair requests.
+    RepairRequestsDb db = createRepairRequestsConnection(sourceDataNode.getDatacenterName());
+
+    // open connection channel to all data nodes.
+    List<ConnectedChannel> channels = new ArrayList<>();
+    for (DataNodeId node : allNodes) {
+      Port port = new Port(node.getHttp2Port(), PortType.HTTP2);
+      ConnectedChannel channel = getBlockingChannelBasedOnPortType(port, "localhost", null, clientSSLConfig);
+      channel.connect();
+      channels.add(channel);
+      if (channel.getRemoteHost().equals(sourceDataNode.getHostname())
+          && channel.getRemotePort() == sourceDataNode.getPortToConnectTo().getPort()) {
+        sourceChannel = channel;
+      } else if (channel.getRemoteHost().equals(targetDataNode.getHostname())
+          && channel.getRemotePort() == targetDataNode.getPortToConnectTo().getPort()) {
+        targetChannel = channel;
+      }
+    }
+
+    // stop replication on all data nodes
+    controlReplicationForPartition(channels, partitionIds, false);
+    // stop blobs store on all data nodes except for the sourceChannel and the targetChannel. So we can monitor the ODR on the target node.
+    for (ConnectedChannel channel : channels) {
+      if (channel == sourceChannel || channel == targetChannel) {
+        continue;
+      }
+      for (PartitionId id : partitionIds) {
+        controlBlobStore(channel, id, false);
+      }
+    }
+
+    BlobIdFactory blobIdFactory = new BlobIdFactory(clusterMap);
+    short dataSize = 31870;
+    byte[] userMetadata = new byte[1000];
+    byte[] data = new byte[dataSize];
+    byte[] encryptionKey = new byte[100];
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    TestUtils.RANDOM.nextBytes(userMetadata);
+    TestUtils.RANDOM.nextBytes(data);
+    TestUtils.RANDOM.nextBytes(encryptionKey);
+
+    // property with 7days expiration
+    BlobProperties propertiesWithTtl =
+        new BlobProperties(dataSize, "serviceid1", "ownerid", "image/png", false, TestUtils.TTL_SECS,
+            cluster.time.milliseconds(), accountId, containerId, testEncryption, null, null, null, null);
+    long ttlUpdateBlobExpiryTimeMs = getExpiryTimeMs(propertiesWithTtl);
+    // property of blob with the infinite TTL
+    BlobProperties properties =
+        new BlobProperties(dataSize, "serviceid1", accountId, containerId, testEncryption, cluster.time.milliseconds());
+    cluster.time.sleep(1000);
+
+    short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
+    BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+        properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
+        BlobId.BlobDataType.DATACHUNK);
+    BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
+        BlobId.BlobDataType.DATACHUNK);
+
+    BlobId blobId;
+    long operationTime;
+    PutRequest putRequest;
+
+    try {
+      /*
+       * Stage 1: Test the correctness of the ReplicateBlob. Replicate blobs from sourceDataNode to the targetDataNode
+       * On the sourceDataNode and the targetDataNode, the blob is under different states.
+       */
+      //
+      // sourceDataNode has PutBlob and TtlUpdate
+      //
+      // 1. On the sourceDataNode, the blob is ttlUpdated. On the targetDataNode, it doesn't exist.
+      // ReplicateBlob will replicate both the putBlob and the TtlUpdate
+      blobId = blobId1;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, false, ttlUpdateBlobExpiryTimeMs);
+      operationTime = cluster.time.milliseconds();
+      updateBlobTtl(sourceChannel, blobId, operationTime);
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      addRepairRequestForTtlUpdate(db, sourceDataNode, blobId, operationTime, Utils.Infinite_Time);
+      // wait for the replication to catch up
+      notificationSystem.awaitBlobReplicates(blobId.getID());
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      // the TtlUpdate Operation Time will be same as the PutBlob time since we apply TtlUpdate from the GetRequest.
+      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(),
+          Utils.Infinite_Time);
+      cluster.time.sleep(1000);
+
+      // 2. On the sourceDataNode, the blob is deleted. On the targetDataNode, it doesn't exist.
+      // ReplicateBlob will replicate both the putBlob and the delete
+      blobId = blobId2;
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, false, ttlUpdateBlobExpiryTimeMs);
+      operationTime = cluster.time.milliseconds();
+      deleteBlob(sourceChannel, blobId, operationTime, ServerErrorCode.No_Error);
+      addRepairRequestForDelete(db, sourceDataNode, blobId, operationTime);
+      // wait for the replication to catch up
+      notificationSystem.awaitBlobReplicates(blobId.getID());
+      //Thread.sleep(5000);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+      checkDeleteRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs());
+      cluster.time.sleep(1000);
+
+      // source doesn't have it, repair delete
+
+      // restart the blobs stores
+      for (ConnectedChannel channel : channels) {
+        if (channel == sourceChannel || channel == targetChannel) {
+          continue;
+        }
+        for (PartitionId id : partitionIds) {
+          controlBlobStore(channel, id, true);
+        }
+      }
+      // now restart replication on all data nodes
+      controlReplicationForPartition(channels, partitionIds, true);
+      // close all the connections
+      for (ConnectedChannel channel : channels) {
+        channel.disconnect();
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      assertNull(e);
+    } finally {
+      List<? extends ReplicaId> replicaIds = cluster.getClusterMap()
+          .getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS)
+          .get(0)
+          .getReplicaIds();
+      for (ReplicaId replicaId : replicaIds) {
+        MockReplicaId mockReplicaId = (MockReplicaId) replicaId;
+        ((MockDiskId) mockReplicaId.getDiskId()).setDiskState(HardwareState.AVAILABLE, true);
+      }
+    }
+  }
+
+  /*
+   * Create a db connection to the RepairRequests db and cleanup the db.
+   * @param localDc : name of the local data center.
+   */
+  static RepairRequestsDb createRepairRequestsConnection(String localDc) throws Exception {
+    try {
+      Properties properties = Utils.loadPropsFromResource("repairRequests_mysql.properties");
+      properties.setProperty(MysqlRepairRequestsDbConfig.LIST_MAX_RESULTS, Integer.toString(100));
+      properties.setProperty(MysqlRepairRequestsDbConfig.LOCAL_POOL_SIZE, "5");
+
+      VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+      MetricRegistry metrics = new MetricRegistry();
+      MysqlRepairRequestsDbFactory factory = new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, localDc);
+      MysqlRepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
+
+      // cleanup the database
+      DataSource dataSource = repairRequestsDb.getDataSource();
+
+      Connection connection = dataSource.getConnection();
+      Statement statement = connection.createStatement();
+      statement.executeUpdate("DELETE FROM ambry_repair_requests;");
+
+      return repairRequestsDb;
+    } catch (SQLException e) {
+      throw e;
+    } catch (IOException e) {
+      throw e;
+    }
+  }
+
+  /*
+   * Add a Delete RepairRequestRecord to the RepairRequests db
+   * @param db the testing RepairRequestsDb
+   * @param sourceNode the source data node to replicate the blob from
+   * @param blobId the blob id in string
+   * @param operationTime the operation time of the delete.
+   */
+  static void addRepairRequestForDelete(RepairRequestsDb db, DataNodeId sourceNode, BlobId blobId, long operationTime)
+      throws Exception {
+    RepairRequestRecord record =
+        new RepairRequestRecord(blobId.toString(), (int) blobId.getPartition().getId(), sourceNode.getHostname(),
+            sourceNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, 0);
+    db.putRepairRequests(record);
+  }
+
+  /*
+   * Add a TtlUpdate RepairRequestRecord to the RepairRequests db
+   * @param db the testing RepairRequestsDb
+   * @param sourceNode the source data node to replicate the blob from
+   * @param blobId the blob id in string
+   * @param operationTime the operation time of the ttlUpdate
+   * @param expiration the Ttl expiration time
+   */
+  static void addRepairRequestForTtlUpdate(RepairRequestsDb db, DataNodeId sourceNode, BlobId blobId,
+      long operationTime, long expiration) throws Exception {
+    RepairRequestRecord record =
+        new RepairRequestRecord(blobId.toString(), (int) blobId.getPartition().getId(), sourceNode.getHostname(),
+            sourceNode.getPort(), RepairRequestRecord.OperationType.TtlUpdateRequest, operationTime, (short) -1,
+            expiration);
+    db.putRepairRequests(record);
   }
 }
