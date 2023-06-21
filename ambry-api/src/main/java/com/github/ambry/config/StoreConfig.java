@@ -17,6 +17,8 @@ import com.github.ambry.store.IndexMemState;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -24,6 +26,7 @@ import java.util.Set;
  */
 
 public class StoreConfig {
+  private static final Logger logger = LoggerFactory.getLogger(StoreConfig.class);
 
   /**
    * The factory class the store uses to creates its keys
@@ -80,6 +83,13 @@ public class StoreConfig {
   @Config("store.deleted.message.retention.hours")
   @Default("168")
   public final int storeDeletedMessageRetentionHours;
+
+  /**
+   * How long (in minutes) a key must be in deleted state before it is hard deleted.
+   */
+  @Config("store.deleted.message.retention.minutes")
+  @Default("-1")
+  public final int storeDeletedMessageRetentionMinutes;
 
   /**
    * How often the HybridCompactionPolicy switch from StatsBasedCompactionPolicy to CompactAllPolicy based on timestamp.
@@ -622,5 +632,16 @@ public class StoreConfig {
         verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);
     storePersistRemoteTokenIntervalInSeconds =
         verifiableProperties.getIntInRange(storePersistRemoteTokenIntervalInSecondsName, 0, 0, 60 * 60 * 24);
+
+    // While making transition from StoreConfig#storeDeletedMessageRetentionHours to StoreConfig#storeDeletedMessageRetentionMinutes
+    // we need to make sure that the storeDeletedMessageRetentionHours isn't set by any hidden config that's missed.
+    int deletedMessageRetentionMinutes =
+        verifiableProperties.getIntInRange("store.deleted.message.retention.minutes", -1, -1, Integer.MAX_VALUE);
+    if (deletedMessageRetentionMinutes == -1 && storeDeletedMessageRetentionHours != 168) {
+      logger.warn("storeDeletedMessageRetentionHours config is overridden from default value.");
+    }
+    storeDeletedMessageRetentionMinutes =
+        (deletedMessageRetentionMinutes == -1) ? storeDeletedMessageRetentionHours * 60
+            : deletedMessageRetentionMinutes;
   }
 }

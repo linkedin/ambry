@@ -512,35 +512,31 @@ public class StatsManagerTest {
     MockClusterMap clusterMap = new MockClusterMap();
     DataNodeId currentNode = clusterMap.getDataNodeIds().get(0);
     List<ReplicaId> localReplicas = clusterMap.getReplicaIds(currentNode);
+    MockHelixParticipant mockHelixParticipant = Mockito.spy(clusterParticipant);
     StorageManager storageManager =
         new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
-            new MetricRegistry(), null, clusterMap, currentNode, null, Collections.singletonList(clusterParticipant),
+            new MetricRegistry(), null, clusterMap, currentNode, null, Collections.singletonList(mockHelixParticipant),
             new MockTime(), null, new InMemAccountService(false, false));
     storageManager.start();
     MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     MockReplicationManager mockReplicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            currentNode, storeKeyConverterFactory, clusterParticipant);
+            currentNode, storeKeyConverterFactory, mockHelixParticipant);
     MockStatsManager mockStatsManager =
         new MockStatsManager(storageManager, mockClusterMap, localReplicas, new MetricRegistry(), statsManagerConfig,
-            clusterParticipant, dataNodeId);
-    // 1. attempt to remove replica while store is still running (remove store failure case)
+            mockHelixParticipant, dataNodeId);
+    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
     ReplicaId replicaToDrop = localReplicas.get(0);
-    try {
-      clusterParticipant.onPartitionBecomeDroppedFromOffline(replicaToDrop.getPartitionId().toPathString());
-      fail("should fail because store is still running");
-    } catch (StateTransitionException e) {
-      assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
-    }
-    // 2. shutdown the store but introduce file deletion failure (put a invalid dir in store dir)
+
+    // 1. Failure case : shutdown the store but introduce file deletion failure (put a invalid dir in store dir)
     storageManager.shutdownBlobStore(replicaToDrop.getPartitionId());
     File invalidDir = new File(replicaToDrop.getReplicaPath(), "invalidDir");
     invalidDir.deleteOnExit();
     assertTrue("Couldn't create dir within store dir", invalidDir.mkdir());
     assertTrue("Could not make unreadable", invalidDir.setReadable(false));
     try {
-      clusterParticipant.onPartitionBecomeDroppedFromOffline(replicaToDrop.getPartitionId().toPathString());
+      mockHelixParticipant.onPartitionBecomeDroppedFromOffline(replicaToDrop.getPartitionId().toPathString());
       fail("should fail because store deletion fails");
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
@@ -548,11 +544,10 @@ public class StatsManagerTest {
     // reset permission to allow deletion to succeed.
     assertTrue("Could not make readable", invalidDir.setReadable(true));
     assertTrue("Could not delete invalid dir", invalidDir.delete());
-    // 3. success case (remove another replica because previous replica has been removed from in-mem data structures)
+
+    // 2. success case : Drop the replica when the store is shutdown (remove another replica because previous replica has been removed from in-mem data structures)
     ReplicaId replica = localReplicas.get(1);
     storageManager.shutdownBlobStore(replica.getPartitionId());
-    MockHelixParticipant mockHelixParticipant = Mockito.spy(clusterParticipant);
-    doNothing().when(mockHelixParticipant).setPartitionDisabledState(anyString(), anyBoolean());
     mockHelixParticipant.onPartitionBecomeDroppedFromOffline(replica.getPartitionId().toPathString());
     // verify that the replica is no longer present in StorageManager
     assertNull("Store of removed replica should not exist", storageManager.getStore(replica.getPartitionId(), true));
@@ -561,6 +556,18 @@ public class StatsManagerTest {
     // purposely remove the same replica in StatsManager again to verify it no longer exists
     assertFalse("Should return false because replica no longer exists", mockStatsManager.removeReplica(replica));
     verify(mockHelixParticipant).setPartitionDisabledState(replica.getPartitionId().toPathString(), false);
+
+    // 3. success case : Drop the replica when the store is up (remove another replica because previous replica has been removed from in-mem data structures)
+    replica = localReplicas.get(2);
+    mockHelixParticipant.onPartitionBecomeDroppedFromOffline(replica.getPartitionId().toPathString());
+    // verify that the replica is no longer present in StorageManager
+    assertNull("Store of removed replica should not exist", storageManager.getStore(replica.getPartitionId(), true));
+    // purposely remove the same replica in ReplicationManager again to verify it no longer exists
+    assertFalse("Should return false because replica no longer exists", mockReplicationManager.removeReplica(replica));
+    // purposely remove the same replica in StatsManager again to verify it no longer exists
+    assertFalse("Should return false because replica no longer exists", mockStatsManager.removeReplica(replica));
+    verify(mockHelixParticipant).setPartitionDisabledState(replica.getPartitionId().toPathString(), false);
+
     storageManager.shutdown();
     mockStatsManager.shutdown();
   }

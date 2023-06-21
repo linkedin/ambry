@@ -29,6 +29,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -96,6 +97,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
   private GetAccountsHandler getAccountsHandler;
   private GetDatasetsHandler getDatasetsHandler;
+  private ListDatasetsHandler listDatasetsHandler;
   private PostAccountsHandler postAccountsHandler;
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
@@ -203,6 +205,7 @@ class FrontendRestRequestService implements RestRequestService {
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getDatasetsHandler = new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    listDatasetsHandler = new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
@@ -270,8 +273,13 @@ class FrontendRestRequestService implements RestRequestService {
         getSignedUrlHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
-        getDatasetsHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        if (RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, false) == null) {
+          listDatasetsHandler.handle(restRequest, restResponseChannel,
+              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        } else {
+          getDatasetsHandler.handle(restRequest, restResponseChannel,
+              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        }
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         getAccountsHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));

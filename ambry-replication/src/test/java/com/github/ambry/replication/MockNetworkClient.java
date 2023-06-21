@@ -25,6 +25,7 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -36,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 /**
@@ -46,7 +48,8 @@ public class MockNetworkClient implements NetworkClient {
   private final Map<DataNodeId, MockConnectionPool.MockConnection> connections;
   private final ClusterMap clusterMap;
   private final FindTokenHelper findTokenHelper;
-  private final int batchSize;
+  private Map<StoreKey, StoreKey> remoteConversionMap;
+  private volatile int batchSize;
   private final Map<Integer, RequestInfo> correlationIdToRequestInfos = new HashMap<>();
 
   private volatile NetworkClientErrorCode expectedNetworkClientErrorCode = null;
@@ -54,14 +57,21 @@ public class MockNetworkClient implements NetworkClient {
   private volatile ServerErrorCode expectedGetResponseError = ServerErrorCode.No_Error;
   private volatile boolean shouldReturnResponseForDroppedRequests = true;
   private Runnable sendAndPoolCallback = null;
+  final AtomicInteger numGetRequest = new AtomicInteger();
 
   public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
       FindTokenHelper findTokenHelper) {
+    this(hosts, clusterMap, batchSize, findTokenHelper, null);
+  }
+
+  public MockNetworkClient(Map<DataNodeId, MockHost> hosts, ClusterMap clusterMap, int batchSize,
+      FindTokenHelper findTokenHelper, Map<StoreKey, StoreKey> remoteConversionMap) {
     this.hosts = hosts;
     this.clusterMap = clusterMap;
     this.findTokenHelper = findTokenHelper;
     this.batchSize = batchSize;
     this.connections = new HashMap<>();
+    this.remoteConversionMap = remoteConversionMap;
   }
 
   void setExpectedNetworkClientErrorCode(NetworkClientErrorCode code) {
@@ -82,6 +92,17 @@ public class MockNetworkClient implements NetworkClient {
 
   void setSendAndPollCallback(Runnable callback) {
     sendAndPoolCallback = callback;
+  }
+
+  void setBatchSize(int batchSize) {
+    this.batchSize = batchSize;
+    for (MockConnectionPool.MockConnection connection : connections.values()) {
+      connection.setMaxSizeToReturn(batchSize);
+    }
+  }
+
+  void setConversionMap(Map<StoreKey, StoreKey> remoteConversionMap) {
+    this.remoteConversionMap = remoteConversionMap;
   }
 
   @Override
@@ -126,6 +147,7 @@ public class MockNetworkClient implements NetworkClient {
           } else if (requestInfo.getRequest()
               .getRequestOrResponseType()
               .equals(RequestOrResponseType.GetRequest.name())) {
+            numGetRequest.incrementAndGet();
             if (expectedGetResponseError == ServerErrorCode.No_Error) {
               responseInfos.add(new ResponseInfo(requestInfo, null, Unpooled.wrappedBuffer(bytes)));
             } else {
@@ -158,7 +180,8 @@ public class MockNetworkClient implements NetworkClient {
         responseInfos.add(new ResponseInfo(requestInfo, NetworkClientErrorCode.NetworkError, null));
       } else {
         if (!connections.containsKey(dataNodeId)) {
-          connections.put(dataNodeId, new MockConnectionPool.MockConnection(hosts.get(dataNodeId), batchSize));
+          connections.put(dataNodeId,
+              new MockConnectionPool.MockConnection(hosts.get(dataNodeId), batchSize, remoteConversionMap));
         }
         correlationIdToRequestInfos.put(correlationId, requestInfo);
       }

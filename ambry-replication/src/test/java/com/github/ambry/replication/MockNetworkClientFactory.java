@@ -41,4 +41,8 @@ public class MockNetworkClientFactory implements NetworkClientFactory {
   public NetworkClient getNetworkClient() throws IOException {
     return new MockNetworkClient(hosts, clusterMap, batchSize, findTokenHelper);
   }
+
+  public FindTokenHelper getFindTokenHelper() {
+    return findTokenHelper;
+  }
 }

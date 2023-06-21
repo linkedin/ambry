@@ -23,7 +23,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKey;
@@ -37,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -82,8 +83,8 @@ public class MockReplicationManager extends ReplicationManager {
       StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant)
       throws ReplicationException {
     this(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap, dataNodeId,
-        storeKeyConverterFactory, clusterParticipant, null, null, null, BlobIdTransformer.class.getName(),
-        new StoreKeyFactory() {
+        storeKeyConverterFactory, clusterParticipant, mock(NetworkClientFactory.class), null,
+        BlobIdTransformer.class.getName(), new StoreKeyFactory() {
           @Override
           public StoreKey getStoreKey(DataInputStream stream) {
             return null;
@@ -99,11 +100,11 @@ public class MockReplicationManager extends ReplicationManager {
   public MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
       StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant,
-      ConnectionPool connectionPool, NetworkClientFactory factory, FindTokenHelper findTokenHelper,
-      String transformerClassName, StoreKeyFactory storeKeyFactory, Time time) throws ReplicationException {
+      NetworkClientFactory factory, FindTokenHelper findTokenHelper, String transformerClassName,
+      StoreKeyFactory storeKeyFactory, Time time) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory, clusterMap, null,
-        dataNodeId, connectionPool, factory, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory,
-        transformerClassName, clusterParticipant, null, findTokenHelper, time);
+        dataNodeId, factory, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory, transformerClassName,
+        clusterParticipant, null, findTokenHelper, time);
     reset();
   }
 

@@ -14,6 +14,7 @@
 
 package com.github.ambry.account;
 
+import com.github.ambry.frontend.Page;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -50,6 +51,7 @@ public class InMemAccountService implements AccountService {
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER), Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
   static final String INMEM_ACCOUNT_UPDATER_PREFIX = "in-memory-account-updater";
+  private static final int PAGE_SIZE = 1;
   private final boolean shouldReturnOnlyUnknown;
   private final boolean notifyConsumers;
   private final Map<Short, Account> idToAccountMap = new HashMap<>();
@@ -239,6 +241,17 @@ public class InMemAccountService implements AccountService {
       throw new AccountServiceException("Dataset has been deleted", AccountServiceErrorCode.Deleted);
     }
     return dataset;
+  }
+
+  @Override
+  public synchronized Page<String> listAllValidDatasets(String accountName, String containerName, String pageToken) {
+    List<String> datasets = new ArrayList<>(nameToDatasetMap.get(new Pair<>(accountName, containerName)).keySet());
+    Collections.sort(datasets);
+    int index = 0;
+    if (pageToken != null) {
+      index = Collections.binarySearch(datasets, pageToken);
+    }
+    return new Page<>(datasets.subList(index, index + PAGE_SIZE), datasets.get(index + PAGE_SIZE));
   }
 
   @Override

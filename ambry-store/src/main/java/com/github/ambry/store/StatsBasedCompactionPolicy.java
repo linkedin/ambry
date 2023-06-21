@@ -40,7 +40,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
   StatsBasedCompactionPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;
     this.time = time;
-    this.messageRetentionTimeInMs = TimeUnit.HOURS.toMillis(storeConfig.storeDeletedMessageRetentionHours);
+    this.messageRetentionTimeInMs = TimeUnit.MINUTES.toMillis(storeConfig.storeDeletedMessageRetentionMinutes);
   }
 
   @Override
