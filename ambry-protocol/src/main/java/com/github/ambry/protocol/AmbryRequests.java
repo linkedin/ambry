@@ -1072,8 +1072,16 @@ public class AmbryRequests implements RequestAPI {
       return;
     }
 
+    PartitionId partitionId = blobId.getPartition();
+    ServerErrorCode errorCode = validateRequest(partitionId, RequestOrResponseType.ReplicateBlobRequest, false);
+    if (errorCode != ServerErrorCode.No_Error) {
+      logger.error("Validating ReplicateBlobRequest request failed with error {} for request {}", errorCode,
+          replicateBlobRequest);
+      completeReplicateRequest(request, replicateBlobRequest, errorCode, startProcessTime);
+      return;
+    }
+
     // check if local store has the key already
-    ServerErrorCode errorCode = ServerErrorCode.No_Error;
     MessageInfo localMessageInfo = null;
     try {
       StoreKey convertedKey = getConvertedStoreKeys(Collections.singletonList(blobId)).get(0);
@@ -1242,7 +1250,7 @@ public class AmbryRequests implements RequestAPI {
     } catch (StoreException e) { // catch the store write exception
       // if forceDelete fail due to local store has the key, it throws Already_Exist exception.
       // Let it fail and retry will go with the regular delete.
-      // LOCAL_BLOB_CONSISTENCY: add a concurrent test to verify the Already_Exist case
+      // LOCAL_CONSISTENCY_TODO: add a concurrent test to verify the Already_Exist case
       errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         logger.error("ReplicateBlobRequest Blob {} already exists for {}", blobId, replicateBlobRequest);
@@ -1289,6 +1297,12 @@ public class AmbryRequests implements RequestAPI {
     long requestQueueTime = startProcessTime - request.getStartTimeInMs();
     long processingTime = SystemTime.getInstance().milliseconds() - startProcessTime;
     long totalTimeSpent = requestQueueTime + processingTime;
+
+    if (notification != null && errorCode == ServerErrorCode.No_Error) {
+      notification.onBlobReplicaReplicated(currentNode.getHostname(), currentNode.getPort(),
+          replicateBlobRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
+    }
+
     publicAccessLogger.info("{} {} processingTime {}", replicateBlobRequest, response, processingTime);
     // Update request metrics.
     RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
