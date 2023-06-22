@@ -160,7 +160,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    */
   // @formatter:off
   private static final String GET_STALE_QUERY = String.format(""
-          + "SELECT t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, %s "
+          + "SELECT %s, %s, %s, %s, %s, %s, %s "
           + "FROM %s "
           + "WHERE blob_id not in "
           + "   (SELECT distinct(blob_id) "
@@ -169,7 +169,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "      FROM %s "
           + "      WHERE blob_state = 1 and version != 0 "
           + "      GROUP BY account_id, container_id, blob_name))"
-          + " AND t1.%s<? ORDER BY blob_id LIMIT ?",
+          + " AND %s<? ORDER BY blob_id LIMIT ?",
       ACCOUNT_ID,
       CONTAINER_ID,
       BLOB_NAME,
