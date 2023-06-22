@@ -363,7 +363,7 @@ public class AmbryServer {
               findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig, diskManagerConfig,
               storeKeyConverterFactory, statsManager, clusterParticipants.get(0), connectionPool);
           // Right now we only open single thread for the repairHandlerPool
-          repairHandlerPool = new RequestHandlerPool(1, localChannel, repairRequests, "Repair-");
+          repairHandlerPool = new RequestHandlerPool(1, localChannel, repairRequests, "Repair-", false);
           // start the repairRequestSender. It sends requests through the localChannel to the repairHandlerPool
           repairRequestsSender =
               new RepairRequestsSender(localChannel, localClientFactory, clusterMap, nodeId, repairRequestsDb,

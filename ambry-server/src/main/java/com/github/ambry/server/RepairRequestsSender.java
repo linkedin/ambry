@@ -72,6 +72,8 @@ class RepairRequestsSender implements Runnable {
   private final Map<Long, ReplicaId> partition2Replicas;
   // generator to generate the correlation ids.
   private final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
+  // shutdown flag
+  private boolean shutdown = false;
 
   /**
    * RepairRequestsSender constructor
@@ -106,13 +108,17 @@ class RepairRequestsSender implements Runnable {
   public void run() {
     List<RequestInfo> requestInfos = null;
 
-    while (true) {
+    while (!shutdown) {
       try {
         // sleep for some time
         Thread.sleep(SLEEP_TIME_MS);
 
         // loop all the partitions
         for (long partitionId : partitionIds) {
+          if (shutdown) {
+            return;
+          }
+
           // get the repair requests for this partition
           requestInfos = getAmbryRequest(partitionId);
           if (requestInfos == null || requestInfos.isEmpty()) {
@@ -220,6 +226,6 @@ class RepairRequestsSender implements Runnable {
   }
 
   public void shutdown() throws InterruptedException {
-    requestChannel.sendRequest(EmptyRequest.getInstance());
+    shutdown = true;
   }
 }
