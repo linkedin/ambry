@@ -48,4 +48,13 @@ public interface RepairRequestsDb extends Closeable {
    * @return the oldest {@link RepairRequestRecord}s.
    */
   List<RepairRequestRecord> getRepairRequests(long partitionId) throws Exception;
+
+  /**
+   * Select the records from one partition but excluding this source host
+   * @param partitionId partition id
+   * @param hostName the host name of the source replica to exclude
+   * @param hostPort the port number of the source replica to exclude
+   * @return the oldest {@link RepairRequestRecord}s.
+   */
+  List<RepairRequestRecord> getRepairRequests(long partitionId, String hostName, int hostPort) throws Exception;
 }
