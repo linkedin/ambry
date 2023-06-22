@@ -13,6 +13,7 @@
  */
 package com.github.ambry.clustermap;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.commons.CommonUtils;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.HelixPropertyStoreConfig;
@@ -45,10 +46,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
+import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.api.config.StateTransitionThrottleConfig;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKUtil;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
+import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
@@ -158,6 +162,15 @@ public class HelixBootstrapUpgradeUtil {
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
   private static final String ALL = "all";
 
+  // Waged auto rebalancer default configs
+  static final String DISK_KEY = "DISK";
+  static final String RACK_KEY = "rack";
+  static final String HOST_KEY = "host";
+  static final String TOPOLOGY = "/" + RACK_KEY + "/" + HOST_KEY;
+  static final String FAULT_ZONE_TYPE = "rack";
+  // Allow a host to be filled upto 95%
+  static final int INSTANCE_MAX_CAPACITY_PERCENTAGE = 95;
+
   public enum HelixAdminOperation {
     BootstrapCluster,
     ValidateCluster,
@@ -166,7 +179,8 @@ public class HelixBootstrapUpgradeUtil {
     EnablePartition,
     ResetPartition,
     ListSealedPartition,
-    MigrateToPropertyStore
+    MigrateToPropertyStore,
+    MigrateToFullAuto
   }
 
   /**
@@ -392,6 +406,33 @@ public class HelixBootstrapUpgradeUtil {
             DEFAULT_MAX_PARTITIONS_PER_RESOURCE, false, false, null, null, null, null, null,
             HelixAdminOperation.MigrateToPropertyStore, PROPERTY_STORE, false, 0);
     helixBootstrapUpgradeUtil.migrateToPropertyStore();
+  }
+
+  /**
+   * Migrate resources from semi-auto to full-auto.
+   * @param hardwareLayoutPath the path to the hardware layout file.
+   * @param partitionLayoutPath the path to the partition layout file.
+   * @param zkLayoutPath the path to the zookeeper layout file.
+   * @param clusterNamePrefix the prefix that when combined with the cluster name in the static cluster map files
+   *                          will give the cluster name in Helix to bootstrap or upgrade.
+   * @param dcs the comma-separated list of data centers that needs to be migrated
+   * @param resources the comma-separated list of resources that needs to be migrated
+   * @param dryRun if true, perform a dry run; do not update anything in Helix.
+   * @param wagedConfigFilePath disk capacity of each partition. This is used as a weight in Waged rebalancer.
+   * @throws Exception
+   */
+  static void migrateToFullAuto(String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String clusterNamePrefix, String dcs, String resources, boolean dryRun, String wagedConfigFilePath)
+      throws Exception {
+    HelixBootstrapUpgradeUtil helixBootstrapUpgradeUtil =
+        new HelixBootstrapUpgradeUtil(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
+            DEFAULT_MAX_PARTITIONS_PER_RESOURCE, dryRun, false, null, null, null, null, null,
+            HelixAdminOperation.MigrateToFullAuto, PROPERTY_STORE, false, 0);
+
+    WagedHelixConfig wagedHelixConfig =
+        new ObjectMapper().readValue(Utils.readStringFromFile(wagedConfigFilePath), WagedHelixConfig.class);
+
+    helixBootstrapUpgradeUtil.migrateToFullAuto(resources, wagedHelixConfig);
   }
 
   /**
@@ -694,11 +735,11 @@ public class HelixBootstrapUpgradeUtil {
               info("[{}] New replica of partition[{}] will be added to instance {} on {}", dcName.toUpperCase(),
                   partitionStr, instance, replica.getMountPath());
               newAddedReplicasInDc.computeIfAbsent(partitionStr, key -> {
-                    Map<String, String> partitionMap = new HashMap<>();
-                    partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
-                    partitionMap.put(REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
-                    return partitionMap;
-                  })
+                Map<String, String> partitionMap = new HashMap<>();
+                partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
+                partitionMap.put(REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
+                return partitionMap;
+              })
                   .put(instance,
                       replica.getMountPath() + DISK_CAPACITY_DELIM_STR + replica.getDiskId().getRawCapacityInBytes());
             }
@@ -786,6 +827,281 @@ public class HelixBootstrapUpgradeUtil {
     }, false).start());
 
     migrationComplete.await();
+  }
+
+  /**
+   * Convert resources from semi-auto to full-auto.
+   * @param commaSeparatedResources the comma-separated list of resources that needs to be migrated
+   * @param wagedHelixConfig
+   *
+   */
+  public void migrateToFullAuto(String commaSeparatedResources, WagedHelixConfig wagedHelixConfig)
+      throws InterruptedException {
+    CountDownLatch migrationComplete = new CountDownLatch(adminForDc.size());
+    // different DCs can be migrated in parallel
+    adminForDc.forEach((dcName, helixAdmin) -> Utils.newThread(() -> {
+      try {
+
+        // 0. Check if all resources in the cluster are full-auto compatible
+        boolean resourcesAreFullAutoCompatible = maybeVerifyResourcesAreFullAutoCompatible(dcName, clusterName);
+        if (!resourcesAreFullAutoCompatible) {
+          throw new IllegalStateException("Resources are not full auto compatible");
+        }
+        verifyPartitionPlacementIsFullAutoCompatibleInStatic(dcName);
+        // Get property store
+        ClusterMapConfig config = getClusterMapConfig(clusterName, dcName, null);
+        String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+        try (PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = new PropertyStoreToDataNodeConfigAdapter(
+            zkConnectStr, config)) {
+
+          // Get resources to migrate from user input.
+          Set<String> helixResources = helixAdmin.getResourcesInCluster(clusterName)
+              .stream()
+              .filter(s -> s.matches("\\d+"))
+              .collect(Collectors.toSet());
+          Set<String> resources;
+          if (commaSeparatedResources.equalsIgnoreCase(ALL)) {
+            resources = helixResources;
+          } else {
+            resources = Arrays.stream(commaSeparatedResources.replaceAll("\\p{Space}", "").split(","))
+                .collect(Collectors.toSet());
+            resources.removeIf(resource -> {
+              if (!helixResources.contains(resource)) {
+                logger.info("Resource {} is not present in data center {}", resource, dcName);
+                return true;
+              }
+              return false;
+            });
+          }
+
+          Map<String, IdealState> resourceToIdealState = new HashMap<>();
+          for (String resource : resources) {
+            resourceToIdealState.put(resource, helixAdmin.getResourceIdealState(clusterName, resource));
+          }
+
+          ConfigAccessor configAccessor =
+              new ConfigAccessor(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
+
+          // 1. Update cluster config
+          setupCluster(configAccessor, wagedHelixConfig.getClusterConfigFields());
+
+          // 2. Update instance config for all instances present in each resource
+          Set<String> allInstances = new HashSet<>();
+          for (String resource : resources) {
+            // a. Get list of instances sharing partitions in this resource
+            IdealState idealState = resourceToIdealState.get(resource);
+            Set<String> partitions = idealState.getPartitionSet();
+            Set<String> instances = new HashSet<>();
+            for (String partition : partitions) {
+              instances.addAll(idealState.getInstanceSet(partition));
+            }
+            // b. Update instance config for each instance
+            for (String instance : instances) {
+              setupInstanceConfig(dcName, instance, resource, configAccessor, propertyStoreAdapter);
+            }
+            allInstances.addAll(instances);
+          }
+
+          // 3. No resource config to update for now
+
+          // 4. Validate configs
+          // 4.1 Instance validation
+          Map<String, Boolean> instanceValidationResultMap =
+              helixAdmin.validateInstancesForWagedRebalance(clusterName, new ArrayList<>(allInstances));
+          Set<String> invalidInstances = new HashSet<>();
+          for (Map.Entry<String, Boolean> entry : instanceValidationResultMap.entrySet()) {
+            if (entry.getValue() == Boolean.FALSE) {
+              invalidInstances.add(entry.getKey());
+            }
+          }
+          if (!invalidInstances.isEmpty()) {
+            logger.error("Validation of waged rebalancer configuration failed for instances {}", invalidInstances);
+            throw new IllegalStateException(
+                "Instances" + invalidInstances + "are not configured correctly for waged rebalancer");
+          }
+          // 4.2 Resource validation
+          Map<String, Boolean> resourceValidationResultMap =
+              helixAdmin.validateResourcesForWagedRebalance(clusterName, new ArrayList<>(resources));
+          Set<String> invalidResources = new HashSet<>();
+          for (Map.Entry<String, Boolean> entry : resourceValidationResultMap.entrySet()) {
+            if (entry.getValue() == Boolean.FALSE) {
+              invalidResources.add(entry.getKey());
+            }
+          }
+          if (!invalidResources.isEmpty()) {
+            logger.error("Validation of waged rebalancer configuration failed for resources {}", invalidResources);
+            throw new IllegalStateException(
+                "Resources" + invalidResources + "are not configured correctly for waged rebalancer");
+          }
+
+          if (!dryRun) {
+            info("[{}] Migrating resources {} in cluster {} from semi-auto to full-auto", dcName.toUpperCase(),
+                resources, clusterName);
+
+            // 5. Enter maintenance mode
+            helixAdmin.manuallyEnableMaintenanceMode(clusterName, true, "Migrating to Full auto",
+                Collections.emptyMap());
+
+            // 6. Update ideal state and enable waged rebalancer
+            for (String resource : resources) {
+              IdealState idealState = resourceToIdealState.get(resource);
+              idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+              // Set resource tag
+              idealState.setInstanceGroupTag(getResourceTag(resource));
+              // Set number of replicas
+              idealState.setReplicas(String.valueOf(wagedHelixConfig.getIdealStateConfigFields().getNumReplicas()));
+              idealState.setMinActiveReplicas(wagedHelixConfig.getIdealStateConfigFields().getMinActiveReplicas());
+              helixAdmin.updateIdealState(clusterName, resource, idealState);
+            }
+            helixAdmin.enableWagedRebalance(clusterName, new ArrayList<>(resources));
+
+            // 7. Exit maintenance mode
+            helixAdmin.manuallyEnableMaintenanceMode(clusterName, false, "Complete migrating to Full auto",
+                Collections.emptyMap());
+
+            info("[{}] Successfully migrated resources {} in cluster {} from semi-auto to full-auto",
+                dcName.toUpperCase(), resources, clusterName);
+          } else {
+            info("[{}] DryRun. Migrating resources {} in cluster {} from semi-auto to full-auto", dcName.toUpperCase(),
+                resources, clusterName);
+          }
+        }
+      } catch (Throwable t) {
+        logger.error("Error while migrating resources to full-auto in {}", dcName, t);
+      } finally {
+        migrationComplete.countDown();
+      }
+    }, false).start());
+
+    migrationComplete.await();
+  }
+
+  /**
+   * Return tag for resources and their instances
+   * @param resource resource name
+   * @return tag name
+   */
+  private String getResourceTag(String resource) {
+    return "TAG_" + resource;
+  }
+
+  /**
+   * Get replica placement.
+   * @param helixAdmin {@link HelixAdmin} to talk to helix
+   * @param resources list of resources for which we need the partition-replica placement.
+   * @return
+   */
+  private Map<String, Set<String>> getReplicaPlacement(HelixAdmin helixAdmin, Set<String> resources) {
+    Map<String, Set<String>> partitionToInstances = new HashMap<>();
+    for (String resource : resources) {
+      // TODO: To check - In Helix full auto, ideal state may contain intermediate states.
+      IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resource);
+      for (String partitionName : idealState.getPartitionSet()) {
+        partitionToInstances.put(partitionName, idealState.getInstanceSet(partitionName));
+      }
+    }
+    return partitionToInstances;
+  }
+
+  /**
+   * Sets up cluster to use waged rebalancer
+   * @param configAccessor the {@link ConfigAccessor} to access configuration in Helix.
+   * @param wagedClusterConfigFields disk capacity of each partition.
+   */
+  private void setupCluster(ConfigAccessor configAccessor, WagedClusterConfigFields wagedClusterConfigFields) {
+    ClusterConfig clusterConfig = configAccessor.getClusterConfig(clusterName);
+
+    // 1. Set topology awareness. For example, if fault_zone_type is rack, helix avoids placing replicas on the hosts
+    // in same rack
+    clusterConfig.setTopologyAwareEnabled(true);
+    clusterConfig.setTopology(TOPOLOGY);
+    clusterConfig.setFaultZoneType(FAULT_ZONE_TYPE);
+
+    // 2. Set max number of concurrent state transitions. This avoids too many replica movements in the cluster.
+    StateTransitionThrottleConfig stateTransitionThrottleConfig =
+        new StateTransitionThrottleConfig(StateTransitionThrottleConfig.RebalanceType.LOAD_BALANCE,
+            StateTransitionThrottleConfig.ThrottleScope.INSTANCE, wagedClusterConfigFields.maxPartitionInTransition);
+    clusterConfig.setStateTransitionThrottleConfigs(Collections.singletonList(stateTransitionThrottleConfig));
+
+    // 3. Set delay re-balancing to true to avoid replica movements if host is temporarily down due to deployment,
+    // maintenance, etc
+    clusterConfig.setDelayRebalaceEnabled(true);
+    clusterConfig.setRebalanceDelayTime(wagedClusterConfigFields.delayRebalanceTimeInSecs);
+
+    // 4. Set persistence of best possible assignment. This will allow us to see the partition assignment in IDEAL state.
+    clusterConfig.setPersistBestPossibleAssignment(true);
+
+    // 5. Set default weight for each partition. Helix will do partition assignment based on partition weight and host
+    // capacity.
+    Map<String, Integer> defaultPartitionWeightMap = new HashMap<>();
+    defaultPartitionWeightMap.put(DISK_KEY, wagedClusterConfigFields.partitionDiskWeightInGB);
+    clusterConfig.setDefaultPartitionWeightMap(defaultPartitionWeightMap);
+
+    // 6. Set instance capacity keys
+    clusterConfig.setInstanceCapacityKeys(Collections.singletonList(DISK_KEY));
+
+    // 7. Set evenness and less movement for cluster. These help to balance evenness and replica movements in cluster.
+    // Below are calculated values based on simulation.
+    Map<ClusterConfig.GlobalRebalancePreferenceKey, Integer> globalRebalancePreferenceKeyIntegerMap = new HashMap<>();
+    globalRebalancePreferenceKeyIntegerMap.put(ClusterConfig.GlobalRebalancePreferenceKey.EVENNESS,
+        wagedClusterConfigFields.evenness);
+    globalRebalancePreferenceKeyIntegerMap.put(ClusterConfig.GlobalRebalancePreferenceKey.LESS_MOVEMENT,
+        wagedClusterConfigFields.lessMovement);
+    clusterConfig.setGlobalRebalancePreference(globalRebalancePreferenceKeyIntegerMap);
+
+    // Update cluster config in Helix/ZK
+    configAccessor.setClusterConfig(clusterName, clusterConfig);
+    info("Updated cluster config fields to: topology {}, fault_zone_type {}, max_partition_in_transition {}, "
+            + "delay_rebalance_time_in_secs {}, partition_disk_weight_in_gb {}, evenness {}, less_movement {} ", TOPOLOGY,
+        FAULT_ZONE_TYPE, wagedClusterConfigFields.maxPartitionInTransition,
+        wagedClusterConfigFields.delayRebalanceTimeInSecs, wagedClusterConfigFields.partitionDiskWeightInGB,
+        wagedClusterConfigFields.evenness, wagedClusterConfigFields.lessMovement);
+  }
+
+  /**
+   * Sets up instance to use waged rebalancer
+   * @param dcName data center name
+   * @param instanceName instance name
+   * @param resource resource name
+   * @param configAccessor the {@link ConfigAccessor} to access configuration in Helix.
+   * @param propertyStoreToDataNodeConfigAdapter {@link PropertyStoreToDataNodeConfigAdapter} to access property store data.
+   */
+  private void setupInstanceConfig(String dcName, String instanceName, String resource, ConfigAccessor configAccessor,
+      PropertyStoreToDataNodeConfigAdapter propertyStoreToDataNodeConfigAdapter) {
+    InstanceConfig instanceConfig = configAccessor.getInstanceConfig(clusterName, instanceName);
+    DataNodeConfig nodeConfigFromHelix =
+        getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreToDataNodeConfigAdapter, null);
+
+    // 1. Add tag
+    // Remove previous tags
+    List<String> tags = instanceConfig.getTags();
+    for (String tag : tags) {
+      instanceConfig.removeTag(tag);
+    }
+    // Add latest tag
+    instanceConfig.addTag(getResourceTag(resource));
+
+    // 2. Setup domain information
+    Map<String, String> domainMap = new HashMap<>();
+    domainMap.put(RACK_KEY, nodeConfigFromHelix.getRackId());
+    domainMap.put(HOST_KEY, instanceName);
+    instanceConfig.setDomain(domainMap);
+
+    // 3. Set instance capacity
+    Map<String, Integer> capacityMap = new HashMap<>();
+    long capacity = nodeConfigFromHelix.getDiskConfigs()
+        .values()
+        .stream()
+        .mapToLong(DataNodeConfig.DiskConfig::getDiskCapacityInBytes)
+        .sum();
+    long capacityInGB = capacity / 1024 / 1024 / 1024;
+    int actualCapacityInGB = (int) ((double) INSTANCE_MAX_CAPACITY_PERCENTAGE / 100 * capacityInGB);
+    capacityMap.put(DISK_KEY, actualCapacityInGB);
+    instanceConfig.setInstanceCapacityMap(capacityMap);
+    // Update instance config in Helix/ZK
+    configAccessor.updateInstanceConfig(clusterName, instanceName, instanceConfig);
+    info("Updated instance config fields to: tags {}, rack Id {}, host key {}, instance capacity {}",
+        instanceConfig.getTags(), nodeConfigFromHelix.getRackId(), instanceName, actualCapacityInGB);
   }
 
   /**
@@ -930,9 +1246,9 @@ public class HelixBootstrapUpgradeUtil {
       if (adminForDc.containsKey(dc.getName())) {
         newThread(() -> {
           info("\n=======Starting datacenter: {}=========\n", dc.getName());
-          boolean resourcesAreFullAutoCompatible = maybeVerifyResourcesAreFullAutoCompatible(dc, clusterName);
+          boolean resourcesAreFullAutoCompatible = maybeVerifyResourcesAreFullAutoCompatible(dc.getName(), clusterName);
           if (resourcesAreFullAutoCompatible) {
-            verifyPartitionPlacementIsFullAutoCompatibleInStatic(dc);
+            verifyPartitionPlacementIsFullAutoCompatibleInStatic(dc.getName());
           }
           Map<String, Set<String>> partitionsToInstancesInDc = new HashMap<>();
           addUpdateInstances(dc.getName(), partitionsToInstancesInDc);
@@ -1017,14 +1333,14 @@ public class HelixBootstrapUpgradeUtil {
    * Verify that partition placement in static layout is FULL_AUTO compatible.
    * In order to be FULL_AUTO compatible, the size of instance group should not exceed the given max number of instances
    * in one resource.
-   * @param dc The datacenter.
+   * @param dcName The datacenter.
    */
-  private void verifyPartitionPlacementIsFullAutoCompatibleInStatic(Datacenter dc) {
+  private void verifyPartitionPlacementIsFullAutoCompatibleInStatic(String dcName) {
     // First, for all partitions, find the instances
     Map<String, Set<String>> partitionToInstances = new HashMap<>();
     for (PartitionId partitionId : staticClusterMap.getAllPartitionIds(null)) {
       for (ReplicaId replicaId : partitionId.getReplicaIds()) {
-        if (replicaId.getDataNodeId().getDatacenterName().equals(dc.getName())) {
+        if (replicaId.getDataNodeId().getDatacenterName().equals(dcName)) {
           partitionToInstances.computeIfAbsent(String.valueOf(partitionId.getId()), k -> new HashSet<>())
               .add(getInstanceName(replicaId.getDataNodeId()));
         }
@@ -1035,7 +1351,7 @@ public class HelixBootstrapUpgradeUtil {
           "A group of instances who share partitions is bigger than " + maxInstancesInOneResourceForFullAuto + ": "
               + instanceNames);
     }
-    info("[{}] Done verify partition placement in static file is full auto compatible", dc.getName().toUpperCase());
+    info("[{}] Done verify partition placement in static file is full auto compatible", dcName.toUpperCase());
   }
 
   /**
@@ -1885,6 +2201,90 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   /**
+   * Class for ideal state configs.
+   */
+  static class WagedIdealStateConfigFields {
+    private int numReplicas;
+    private int minActiveReplicas;
+
+    /**
+     * @return {@code numReplicas}
+     */
+    public int getNumReplicas() {
+      return numReplicas;
+    }
+
+    /**
+     * @return {@code minActiveReplicas}
+     */
+    public int getMinActiveReplicas() {
+      return minActiveReplicas;
+    }
+  }
+
+  /**
+   * Class for cluster config fields.
+   */
+  static class WagedClusterConfigFields {
+    private int evenness;
+    private int lessMovement;
+    private int partitionDiskWeightInGB;
+    private int maxPartitionInTransition;
+    private int delayRebalanceTimeInSecs;
+
+    /**
+     * @return evenness of cluster
+     */
+    public int getEvenness() {
+      return evenness;
+    }
+
+    /**
+     * @return stickyness of cluster
+     */
+    public int getLessMovement() {
+      return lessMovement;
+    }
+
+    /**
+     * @return disk capacity in GB
+     */
+    public int getPartitionDiskWeightInGB() {
+      return partitionDiskWeightInGB;
+    }
+
+    public int getMaxPartitionInTransition() {
+      return maxPartitionInTransition;
+    }
+
+    public int getDelayRebalanceTimeInSecs() {
+      return delayRebalanceTimeInSecs;
+    }
+  }
+
+  /**
+   * Class for Full-auto waged helix configs
+   */
+  public static class WagedHelixConfig {
+    private WagedIdealStateConfigFields wagedIdealStateConfigFields;
+    private WagedClusterConfigFields wagedClusterConfigFields;
+
+    /**
+     * @return {@code wagedIdealStateConfigFields}
+     */
+    public WagedIdealStateConfigFields getIdealStateConfigFields() {
+      return wagedIdealStateConfigFields;
+    }
+
+    /**
+     * @return {@code wagedClusterConfigFields}
+     */
+    public WagedClusterConfigFields getClusterConfigFields() {
+      return wagedClusterConfigFields;
+    }
+  }
+
+  /**
    * Validate that the information in Helix is consistent with the information in the static clustermap; and close
    * all the admin connections to ZK hosts.
    */
@@ -2025,7 +2425,7 @@ public class HelixBootstrapUpgradeUtil {
         try {
           verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
           verifyDataNodeAndDiskEquivalencyInDc(dc, clusterName, partitionLayout);
-          maybeVerifyResourcesAreFullAutoCompatible(dc, clusterName);
+          maybeVerifyResourcesAreFullAutoCompatible(dc.getName(), clusterName);
         } catch (Throwable t) {
           logger.error("[{}] error message: {}", dc.getName().toUpperCase(), t.getMessage());
           errorCount.getAndIncrement();
@@ -2144,12 +2544,11 @@ public class HelixBootstrapUpgradeUtil {
   /**
    * If the resources are reconstructed to be FULL_AUTO compatible, then make sure that each instance only has partitions
    * from one resource.
-   * @param dc the datacenter whose information is to be verified.
+   * @param dcName the datacenter whose information is to be verified.
    * @param clusterName the cluster to be verified.
    */
-  private boolean maybeVerifyResourcesAreFullAutoCompatible(Datacenter dc, String clusterName) {
-    String dcName = dc.getName();
-    HelixAdmin admin = adminForDc.get(dc.getName());
+  private boolean maybeVerifyResourcesAreFullAutoCompatible(String dcName, String clusterName) {
+    HelixAdmin admin = adminForDc.get(dcName);
     List<String> resourceNames = admin.getResourcesInCluster(clusterName);
     if (resourceNames == null || resourceNames.isEmpty()) {
       info(
@@ -2366,9 +2765,9 @@ public class HelixBootstrapUpgradeUtil {
    * Log the summary of this run.
    */
   private void logSummary() {
-    if (instancesUpdated.get() + instancesAdded.get() + instancesDropped.get() + resourcesUpdated.get()
-        + resourcesAdded.get() + resourcesDropped.get() + partitionsDisabled.get() + partitionsEnabled.get()
-        + partitionsReset.get() > 0) {
+    if (instancesUpdated.get() + instancesAdded.get() + instancesDropped.get() + resourcesUpdated.get() + resourcesAdded
+        .get() + resourcesDropped.get() + partitionsDisabled.get() + partitionsEnabled.get() + partitionsReset.get()
+        > 0) {
       if (!dryRun) {
         info("========Cluster in Helix was updated, summary:========");
       } else {
