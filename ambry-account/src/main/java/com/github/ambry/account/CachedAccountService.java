@@ -607,6 +607,21 @@ public class CachedAccountService extends AbstractAccountService {
   }
 
   @Override
+  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(String accountName,
+      String containerName, String datasetName) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.getAllValidVersionsOutOfRetentionCount(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
   public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
     try {

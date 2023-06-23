@@ -396,6 +396,16 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
+  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(String accountName,
+      String containerName, String datasetName) throws AccountServiceException {
+    if (config.enableNewDatabaseForMigration) {
+      return cachedAccountServiceNew.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
+    } else {
+      return cachedAccountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
+    }
+  }
+
+  @Override
   public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
     if (config.enableNewDatabaseForMigration) {

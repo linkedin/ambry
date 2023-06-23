@@ -620,6 +620,7 @@ public class NamedBlobPutHandler {
               recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName));
         }
       } catch (Exception e) {
+        frontendMetrics.deleteDatasetVersionOutOfRetentionError.inc();
         LOGGER.error("Failed to delete dataset version out of retention count for this dataset: " + dataset.toString());
       }
     }
