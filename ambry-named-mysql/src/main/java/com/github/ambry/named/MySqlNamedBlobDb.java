@@ -336,6 +336,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                   accountId, containerId, record.getBlobName(), e);
             }
             if (recordCurrent != null && !isUpsert) {
+              logger.error(
+                  "PUT conflict: Named blob {} already exist, the existing blob id is {}, the new blob id is {}",
+                  record.getBlobName(), recordCurrent.getBlobId(), record.getBlobId());
               throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
                   record.getContainerName(), record.getBlobName());
             }
