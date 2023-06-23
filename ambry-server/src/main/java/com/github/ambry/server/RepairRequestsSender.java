@@ -179,7 +179,8 @@ class RepairRequestsSender implements Runnable {
    */
   private List<RequestInfo> getAmbryRequest(long partitionId) throws Exception {
     List<RequestInfo> requestInfos = new ArrayList<>();
-    List<RepairRequestRecord> records = db.getRepairRequests(partitionId);
+    // get the repair requests for this partition and this node is not the source replica.
+    List<RepairRequestRecord> records = db.getRepairRequests(partitionId, nodeId.getHostname(), nodeId.getPort());
 
     for (RepairRequestRecord record : records) {
       BlobId blobId;
@@ -208,8 +209,13 @@ class RepairRequestsSender implements Runnable {
       }
 
       if (record.getSourceHostName().equals(nodeId.getHostname()) && record.getSourceHostPort() == nodeId.getPort()) {
-        logger.info("RepairRequests Sender: Skip the records since this node is the source node. " + record);
-        continue;
+        // shouldn't happen
+        logger.error(
+            "RepairRequests Sender: Shouldn't get the repair requests of which this node is the source replica, "
+                + record);
+        throw new Exception(
+            "RepairRequests Sender: Shouldn't get the repair requests of which this node is the source replica, "
+                + record);
       }
 
       int correlationId = correlationIdGenerator.incrementAndGet();
