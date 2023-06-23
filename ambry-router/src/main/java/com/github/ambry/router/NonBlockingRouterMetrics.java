@@ -872,7 +872,7 @@ public class NonBlockingRouterMetrics {
   /**
    * @return the MetricRegistry being used in {@link NonBlockingRouterMetrics}
    */
-  MetricRegistry getMetricRegistry() {
+  public MetricRegistry getMetricRegistry() {
     return metricRegistry;
   }
 

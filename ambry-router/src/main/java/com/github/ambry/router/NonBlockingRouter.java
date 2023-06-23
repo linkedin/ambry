@@ -51,7 +51,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Streaming, non-blocking router implementation for Ambry.
  */
-class NonBlockingRouter implements Router {
+public class NonBlockingRouter implements Router {
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
   static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
@@ -93,7 +93,7 @@ class NonBlockingRouter implements Router {
    * @throws IOException if the OperationController could not be successfully created.
    * @throws ReflectiveOperationException if the OperationController could not be successfully created.
    */
-  NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+  public NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
       AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
@@ -710,7 +710,7 @@ class NonBlockingRouter implements Router {
    * Return the count of the number of operations submitted to the router that are not yet completed.
    * @return number of operations being handled at the time of this call.
    */
-  int getOperationsCount() {
+  public int getOperationsCount() {
     return currentOperationsCount.get();
   }
 
