@@ -157,10 +157,16 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * 2. its blob_id does NOT show in any VLR (Valid Latest Record) of any named blob.
    * VLR of a named blob is the record whose blob_state=1 (READY), and has the max version for the named blob.
    *
+   * We construct the SQL query in a below steps:
+   * STEP 1: We first pull out the max version per valid record.
+   * STEP 2: Then we pull out the distinct blob_ids for those max versions.
+   * STEP 3: At last we exclude the record with blob_ids in step 2,
+   * and only pull records which are not deleted/expired yet.
+   * We order result by blob_id (which is indexed) to have deterministic results within the limit
    */
   // @formatter:off
   private static final String GET_STALE_QUERY = String.format(""
-          + "SELECT %s, %s, %s, %s, %s, %s, %s "
+          + "SELECT %s, %s, %s, %s, %s, %s "
           + "FROM %s "
           + "WHERE blob_id not in "
           + "   (SELECT distinct(blob_id) "
@@ -169,18 +175,20 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "      FROM %s "
           + "      WHERE blob_state = 1 and version != 0 "
           + "      GROUP BY account_id, container_id, blob_name))"
-          + " AND %s<? ORDER BY blob_id LIMIT ?",
+          + " AND %s<? AND (%s IS NULL OR %s>%s) ORDER BY blob_id LIMIT ?",
       ACCOUNT_ID,
       CONTAINER_ID,
       BLOB_NAME,
       BLOB_ID,
       VERSION,
-      DELETED_TS,
       CURRENT_TIME,
       NAMED_BLOBS_V2,
       NAMED_BLOBS_V2,
       NAMED_BLOBS_V2,
-      VERSION
+      VERSION,
+      DELETED_TS,
+      DELETED_TS,
+      CURRENT_TIME
       );
   // @formatter:on
 
@@ -693,12 +701,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           String blobName = resultSet.getString(3);
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
           long version = resultSet.getLong(5);
-          Timestamp deletionTime = resultSet.getTimestamp(6);
-          Timestamp currentTime = resultSet.getTimestamp(7);
-          if (compareTimestamp(deletionTime, currentTime.getTime()) > 0) {
-            StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime);
-            resultList.add(result);
-          }
+          Timestamp currentTime = resultSet.getTimestamp(6);
+          StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime);
+          resultList.add(result);
         }
         return resultList;
       }
@@ -733,7 +738,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * @param timestamp the nullable {@link Timestamp} to compare.
    * @param otherTimeMs the time value to compare against.
    * @return -1 if the timestamp is earlier than {@code otherTimeMs}, 0 if the times are equal, and 1 if
-   *         {@code otherTimeMs} is later than the timestamp. {@code null} is considered greater than any other time.
+   *         the timestamp is later than {@code otherTimeMs}. {@code null} is considered greater than any other time.
    */
   private static int compareTimestamp(Timestamp timestamp, long otherTimeMs) {
     return Utils.compareTimes(timestampToMs(timestamp), otherTimeMs);
