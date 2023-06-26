@@ -106,9 +106,8 @@ public class NettyServer implements NioServer {
     logger.info("Shutting down NettyServer");
     if (bossGroup != null && workerGroup != null && (!bossGroup.isTerminated() || !workerGroup.isTerminated())) {
       long shutdownBeginTime = System.currentTimeMillis();
-      // Shutdown boss first to stop accepting new connections, then close existing connections.
-      bossGroup.shutdownGracefully();
       workerGroup.shutdownGracefully();
+      bossGroup.shutdownGracefully();
       try {
         if (!(workerGroup.awaitTermination(30, TimeUnit.SECONDS) && bossGroup.awaitTermination(30, TimeUnit.SECONDS))) {
           logger.error("NettyServer shutdown failed after waiting for 30 seconds");
