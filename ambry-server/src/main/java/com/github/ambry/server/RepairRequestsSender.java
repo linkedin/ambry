@@ -110,8 +110,6 @@ class RepairRequestsSender implements Runnable {
   }
 
   public void run() {
-    List<RequestInfo> requestInfos = null;
-
     while (!shutdown) {
       try {
         // sleep for some time
@@ -129,7 +127,7 @@ class RepairRequestsSender implements Runnable {
               return;
             }
             // get the repair requests for this partition
-            requestInfos = getAmbryRequest(partitionId);
+            List<RequestInfo> requestInfos = getAmbryRequest(partitionId);
             if (requestInfos.isEmpty()) {
               continue;
             }
@@ -140,8 +138,7 @@ class RepairRequestsSender implements Runnable {
 
             Set<Integer> requestsToDrop = new HashSet<>();
             // send the repair requests to the handler and wait for the responses.
-            while (!requestInfos.isEmpty()) {
-              RequestInfo reqInfo = requestInfos.get(requestInfos.size() - 1);
+            for (RequestInfo reqInfo : requestInfos) {
               List<ResponseInfo> responses =
                   client.sendAndPoll(Collections.singletonList(reqInfo), requestsToDrop, POLL_TIMEOUT_MS);
               if (responses == null || responses.size() == 0) {
@@ -167,20 +164,13 @@ class RepairRequestsSender implements Runnable {
                 logger.error("RepairRequests Sender: failed to repair {} response {}", req, res);
                 hasError = true;
               }
-              requestInfos.remove(requestInfos.size() - 1);
             }
-            requestInfos.forEach(ri -> ri.getRequest().release());
-            requestInfos = null;
           } // loop all the partitions
         }  // loop until all the partitions are clean
       } catch (Throwable e) {
         // LOCAL_CONSISTENCY_TODO add metric to track background threads
         logger.error("RepairRequests Sender: Exception when handling request", e);
       } finally {
-        if (requestInfos != null) {
-          requestInfos.forEach(ri -> ri.getRequest().release());
-          requestInfos = null;
-        }
       }
     }
   }
