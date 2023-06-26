@@ -38,23 +38,23 @@ public class RequestHandlerPool implements Closeable {
    * @param numThreads the number of handler threads to create.
    * @param requestResponseChannel the {@link RequestResponseChannel} for the handlers to use.
    * @param requests the {@link RequestAPI} instance used by the handlers for dispatching requests.
-   * @param handlerSignature the prefix of the thread name.
+   * @param handlerPrefix the prefix of the thread name.
    * @param enableDropper enable the dropper thread if it's true
    */
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, RequestAPI requests,
-      String handlerSignature, boolean enableDropper) {
+      String handlerPrefix, boolean enableDropper) {
     threads = new Thread[numThreads];
     handlers = new RequestHandler[numThreads];
     this.requestResponseChannel = requestResponseChannel;
     for (int i = 0; i < numThreads; i++) {
       handlers[i] = new RequestHandler(i, requestResponseChannel, requests);
-      threads[i] = Utils.daemonThread(handlerSignature + "request-handler-" + i, handlers[i]);
+      threads[i] = Utils.daemonThread(handlerPrefix + "request-handler-" + i, handlers[i]);
       threads[i].start();
     }
     // Also, start a thread to drop any un-queued and expired requests in requestResponceChannel.
     if (enableDropper) {
       requestDropper = new RequestDropper(requestResponseChannel, requests);
-      requestDropperThread = Utils.daemonThread(handlerSignature + "request-dropper", requestDropper);
+      requestDropperThread = Utils.daemonThread(handlerPrefix + "request-dropper", requestDropper);
       requestDropperThread.start();
     }
   }

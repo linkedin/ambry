@@ -43,11 +43,11 @@ public interface RepairRequestsDb extends Closeable {
   void putRepairRequests(RepairRequestRecord record) throws Exception;
 
   /**
-   * Select the records from one partition ordered by the operation time.
+   * Select the records for one partition ordered by the operation time.
    * @param partitionId partition id
    * @return the oldest {@link RepairRequestRecord}s.
    */
-  List<RepairRequestRecord> getRepairRequests(long partitionId) throws Exception;
+  List<RepairRequestRecord> getRepairRequestsForPartition(long partitionId) throws Exception;
 
   /**
    * Select the records from one partition but excluding this source host
@@ -56,5 +56,12 @@ public interface RepairRequestsDb extends Closeable {
    * @param hostPort the port number of the source replica to exclude
    * @return the oldest {@link RepairRequestRecord}s.
    */
-  List<RepairRequestRecord> getRepairRequests(long partitionId, String hostName, int hostPort) throws Exception;
+  List<RepairRequestRecord> getRepairRequestsExcludingHost(long partitionId, String hostName, int hostPort)
+      throws Exception;
+
+  /**
+   * The max number of result sets it will return for each query
+   * @return the max number of result sets to return
+   */
+  int getListMaxResults();
 }

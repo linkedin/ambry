@@ -133,6 +133,8 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -4386,7 +4388,7 @@ final class ServerTestUtil {
     DataInputStream stream = channel.sendAndReceive(controlRequest).getInputStream();
     AdminResponse adminResponse = AdminResponse.readFrom(stream);
     releaseNettyBufUnderneathStream(stream);
-    assertEquals("Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
+    assertEquals("start/Stop store admin request should succeed", ServerErrorCode.No_Error, adminResponse.getError());
   }
 
   private static List<PartitionRequestInfo> getPartitionRequestInfoListFromBlobId(BlobId blobId) {
@@ -5036,19 +5038,21 @@ final class ServerTestUtil {
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
 
     /*
-     * sourceDataNode is the data node we send PutBlob, TtlUpdate, Delete requests.
-     * targetDataNode is xxx
-     * thirdDataNode is xxx
+     * sourceDataNode is the source datanode which successfully acks the requests.
+     * targetDataNode is the datanode which was temporarily unavailable and then gets back to fix the requests.
+     * thirdDataNode is the third data node which was temporarily unavailable for a while.
      */
     DataNodeId sourceDataNode = allNodes.get(0);
     DataNodeId targetDataNode = allNodes.get(1);
+    DataNodeId thirdDataNode = allNodes.get(2);
     PartitionId partitionId1 = partitionIds.get(0);
     PartitionId partitionId2 = partitionIds.get(1);
     ConnectedChannel sourceChannel = null;
     ConnectedChannel targetChannel = null;
+    ConnectedChannel thirdChannel = null;
 
     // Open the db connection and use it to generate repair requests.
-    RepairRequestsDb db = createRepairRequestsConnection(sourceDataNode.getDatacenterName());
+    MysqlRepairRequestsDb db = createRepairRequestsConnection(sourceDataNode.getDatacenterName());
 
     // open connection channel to all data nodes.
     List<ConnectedChannel> channels = new ArrayList<>();
@@ -5063,6 +5067,10 @@ final class ServerTestUtil {
       } else if (channel.getRemoteHost().equals(targetDataNode.getHostname())
           && channel.getRemotePort() == targetDataNode.getPortToConnectTo().getPort()) {
         targetChannel = channel;
+      } else if (channel.getRemoteHost().equals(thirdDataNode.getHostname()) && channel.getRemotePort() == thirdDataNode
+          .getPortToConnectTo()
+          .getPort()) {
+        thirdChannel = channel;
       }
     }
 
@@ -5106,6 +5114,9 @@ final class ServerTestUtil {
     BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
         properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
+    BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
+        BlobId.BlobDataType.DATACHUNK);
 
     BlobId blobId;
     long operationTime;
@@ -5120,6 +5131,7 @@ final class ServerTestUtil {
       // sourceDataNode has PutBlob and TtlUpdate
       //
       // 1. On the sourceDataNode, the blob is ttlUpdated. On the targetDataNode, it doesn't exist.
+      // Add TtlUpdate RepairRequest to the db.
       // ReplicateBlob will replicate both the putBlob and the TtlUpdate
       blobId = blobId1;
       putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
@@ -5127,6 +5139,7 @@ final class ServerTestUtil {
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
       checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, false, ttlUpdateBlobExpiryTimeMs);
+      cluster.time.sleep(1000);
       operationTime = cluster.time.milliseconds();
       updateBlobTtl(sourceChannel, blobId, operationTime);
       checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
@@ -5142,6 +5155,7 @@ final class ServerTestUtil {
       cluster.time.sleep(1000);
 
       // 2. On the sourceDataNode, the blob is deleted. On the targetDataNode, it doesn't exist.
+      // Add Delete RepairRequest to the db.
       // ReplicateBlob will replicate both the putBlob and the delete
       blobId = blobId2;
       putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
@@ -5149,12 +5163,12 @@ final class ServerTestUtil {
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
       checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, false, ttlUpdateBlobExpiryTimeMs);
+      cluster.time.sleep(1000);
       operationTime = cluster.time.milliseconds();
       deleteBlob(sourceChannel, blobId, operationTime, ServerErrorCode.No_Error);
       addRepairRequestForDelete(db, sourceDataNode, blobId, operationTime);
       // wait for the replication to catch up
       notificationSystem.awaitBlobReplicates(blobId.getID());
-      //Thread.sleep(5000);
       getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
       getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
@@ -5162,11 +5176,79 @@ final class ServerTestUtil {
       checkDeleteRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs());
       cluster.time.sleep(1000);
 
-      // source doesn't have it, repair delete
+      // source doesn't have the PutBlob. Add Delete RepairRequest to the db.
+      // ODR will repair the tombstone.
+      blobId = blobId3;
+      getBlobAndVerify(blobId, sourceChannel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      cluster.time.sleep(1000);
+      operationTime = cluster.time.milliseconds();
+      addRepairRequestForDelete(db, sourceDataNode, blobId, operationTime);
+      // wait for the replication to catch up
+      notificationSystem.awaitBlobReplicates(blobId.getID());
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
+      checkDeleteRecord(targetChannel, clusterMap, blobId, operationTime);
+      cluster.time.sleep(1000);
 
+      /*
+       * Stage 2: Start the third data node. Now three data nodes are running.
+       * Randomly generate failure requests. Each node will pick up some RepairRequests and fix them.
+       */
+      for (PartitionId id : partitionIds) {
+        controlBlobStore(thirdChannel, id, true);
+      }
+      List<BlobId> blobIds = new ArrayList<>();
+      for (int i = 0; i < 100; i++) {
+        PartitionId partitionId = TestUtils.RANDOM.nextInt(2) == 0 ? partitionId1 : partitionId2;
+        blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+            propertiesWithTtl.getAccountId(), propertiesWithTtl.getContainerId(), partitionId, testEncryption,
+            BlobId.BlobDataType.SIMPLE);
+        putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+            Unpooled.wrappedBuffer(data), propertiesWithTtl.getBlobSize(), BlobType.DataBlob,
+            testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+        int successOne = TestUtils.RANDOM.nextInt(3);
+        ConnectedChannel successChannel =
+            successOne == 0 ? sourceChannel : (successOne == 1 ? targetChannel : thirdChannel);
+        DataNodeId successNode = successOne == 0 ? sourceDataNode : (successOne == 1 ? targetDataNode : thirdDataNode);
+        putBlob(putRequest, successChannel, ServerErrorCode.No_Error);
+        cluster.time.sleep(1000);
+        operationTime = cluster.time.milliseconds();
+        if (TestUtils.RANDOM.nextInt(2) == 0) {
+          deleteBlob(successChannel, blobId, operationTime, ServerErrorCode.No_Error);
+          addRepairRequestForDelete(db, successNode, blobId, operationTime);
+        } else {
+          updateBlobTtl(successChannel, blobId, operationTime);
+          addRepairRequestForTtlUpdate(db, successNode, blobId, operationTime, Utils.Infinite_Time);
+        }
+        blobIds.add(blobId);
+        cluster.time.sleep(1000);
+      }
+      for (BlobId id : blobIds) {
+        notificationSystem.awaitBlobReplicates(id.getID());
+      }
+
+      // although we check the notification. DB update is in the RepairRequestsSender not in the handler threads.
+      // wait for some time more.
+      DataSource dataSource = db.getDataSource();
+      long numberOfRows = 0;
+      String rowQuerySql = "SELECT COUNT(*) as total FROM ambry_repair_requests";
+      do {
+        try (Connection connection = dataSource.getConnection()) {
+          try (PreparedStatement statement = connection.prepareStatement(rowQuerySql)) {
+            try (ResultSet result = statement.executeQuery()) {
+              while (result.next()) {
+                numberOfRows = result.getLong("total");
+              }
+            }
+          }
+        }
+      } while (numberOfRows != 0);
+
+      // Test is done.
       // restart the blobs stores
       for (ConnectedChannel channel : channels) {
-        if (channel == sourceChannel || channel == targetChannel) {
+        if (channel == sourceChannel || channel == targetChannel || channel == thirdChannel) {
           continue;
         }
         for (PartitionId id : partitionIds) {
@@ -5198,7 +5280,7 @@ final class ServerTestUtil {
    * Create a db connection to the RepairRequests db and cleanup the db.
    * @param localDc : name of the local data center.
    */
-  static RepairRequestsDb createRepairRequestsConnection(String localDc) throws Exception {
+  static MysqlRepairRequestsDb createRepairRequestsConnection(String localDc) throws Exception {
     try {
       Properties properties = Utils.loadPropsFromResource("repairRequests_mysql.properties");
       properties.setProperty(MysqlRepairRequestsDbConfig.LIST_MAX_RESULTS, Integer.toString(100));

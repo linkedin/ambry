@@ -121,7 +121,7 @@ public class MysqlRepairRequestsDbTest {
     // we should run ODR to fix the requests on the nodes except the source replica
     for (PartitionId id : partitionIds) {
       List<RepairRequestRecord> recordFromStore =
-          repairRequestsDb.getRepairRequests((int) id.getId(), thisNodeName, thisNodePort);
+          repairRequestsDb.getRepairRequestsExcludingHost((int) id.getId(), thisNodeName, thisNodePort);
       Map<String, RepairRequestRecord> orgRecords = records.get((int) id.getId());
       for (RepairRequestRecord record : recordFromStore) {
         RepairRequestRecord org = orgRecords.get(record.getBlobId());
@@ -135,7 +135,7 @@ public class MysqlRepairRequestsDbTest {
 
     // get the remaining records.
     for (PartitionId id : partitionIds) {
-      List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequests((int) id.getId());
+      List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequestsForPartition((int) id.getId());
       Map<String, RepairRequestRecord> orgRecords = records.get((int) id.getId());
       assertEquals("Record number doesn't match.", orgRecords.size(), recordFromStore.size());
       for (RepairRequestRecord record : recordFromStore) {
@@ -153,7 +153,7 @@ public class MysqlRepairRequestsDbTest {
 
     // delete the records and check that they cannot be fetched with a get call.
     for (PartitionId id : partitionIds) {
-      List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequests((int) id.getId());
+      List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequestsForPartition((int) id.getId());
       assertTrue("No more records", recordFromStore.isEmpty());
     }
 
@@ -193,7 +193,8 @@ public class MysqlRepairRequestsDbTest {
     assertEquals("Record number is not expected", records.size(), total_result);
 
     // get records just inserted. Only get list_max_result numbers.
-    List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequests((int) partitionId.getId());
+    List<RepairRequestRecord> recordFromStore =
+        repairRequestsDb.getRepairRequestsForPartition((int) partitionId.getId());
     assertEquals("Record number is not expected", recordFromStore.size(), list_max_result);
     assertTrue("only read one page", total_result > list_max_result);
   }

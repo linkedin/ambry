@@ -118,24 +118,6 @@ public class ServerConfig {
   @Config("server.repair.requests.db.factory")
   public final String serverRepairRequestsDbFactory;
 
-  /**
-   * The serverRepairRequestsDbInfo has the information to setup the connection to the repair requests db.
-   */
-  @Config("server.repair.requests.db.info")
-  public final String serverRepairRequestsDbInfo;
-
-  /**
-   * The max ResultSet entries to get in one db query
-   */
-  @Config("server.repair.requests.db.list.max.result")
-  public final String serverRepairRequestsDbListMaxResult;
-
-  /**
-   * The local pool size of the db connection
-   */
-  @Config("server.repair.requests.db.local.pool.size")
-  public final String serverRepairRequestsDbLocalPoolSize;
-
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -161,10 +143,5 @@ public class ServerConfig {
     serverSecurityServiceFactory = verifiableProperties.getString("server.security.service.factory",
         "com.github.ambry.server.AmbryServerSecurityServiceFactory");
     serverRepairRequestsDbFactory = verifiableProperties.getString("server.repair.requests.db.factory", null);
-    serverRepairRequestsDbInfo = verifiableProperties.getString("server.repair.requests.db.info", "");
-    serverRepairRequestsDbListMaxResult =
-        verifiableProperties.getString("server.repair.requests.db.list.max.result", "100");
-    serverRepairRequestsDbLocalPoolSize =
-        verifiableProperties.getString("server.repair.requests.db.local.pool.size", "5");
   }
 }

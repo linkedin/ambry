@@ -32,6 +32,7 @@ import com.github.ambry.repair.RepairRequestRecord;
 import com.github.ambry.repair.RepairRequestsDb;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -51,7 +52,7 @@ class RepairRequestsSender implements Runnable {
   private static final Logger logger = LoggerFactory.getLogger(RepairRequestsSender.class);
   private static final String SERVICE_ID = "RepairRequestsSender";
   // ODR can take some time to execute due to remote call to the peer replica.
-  private static int POLL_TIMEOUT_MS = 20000;
+  private static int POLL_TIMEOUT_MS = 10000;
   private static int SLEEP_TIME_MS = 5000;
 
   // the channel to talk to the requests handler
@@ -72,8 +73,10 @@ class RepairRequestsSender implements Runnable {
   private final Map<Long, ReplicaId> partition2Replicas;
   // generator to generate the correlation ids.
   private final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
+  // max result sets it can get from each query
+  private final int maxResults;
   // shutdown flag
-  private boolean shutdown = false;
+  private volatile boolean shutdown = false;
 
   /**
    * RepairRequestsSender constructor
@@ -94,6 +97,7 @@ class RepairRequestsSender implements Runnable {
     this.clusterParticipant = clusterParticipant;
 
     this.db = repairRequestsDb;
+    this.maxResults = db.getListMaxResults();
 
     // LOCAL_CONSISTENCY_TODO. listen to the clustermap change and make the modification accordingly.
     partitionIds = new ArrayList<>();
@@ -113,59 +117,68 @@ class RepairRequestsSender implements Runnable {
         // sleep for some time
         Thread.sleep(SLEEP_TIME_MS);
 
-        // loop all the partitions
-        for (long partitionId : partitionIds) {
-          if (shutdown) {
-            return;
-          }
-
-          // get the repair requests for this partition
-          requestInfos = getAmbryRequest(partitionId);
-          if (requestInfos == null || requestInfos.isEmpty()) {
-            continue;
-          }
-
-          // send the repair requests to the handler and wait for all the responses.
-          Set<Integer> requestsToDrop = new HashSet<>();
-          int inflightReqCount = requestInfos.size();
-          logger.info("RepairRequests Sender: {} sending {} repair requests ", nodeId, inflightReqCount);
-          List<ResponseInfo> responses = client.sendAndPoll(requestInfos, requestsToDrop, POLL_TIMEOUT_MS);
-          requestInfos.clear();
-
-          for (ResponseInfo info : responses) {
-            inflightReqCount--;
-            ReplicateBlobResponse res = (ReplicateBlobResponse) info.getResponse();
-            ReplicateBlobRequest req = (ReplicateBlobRequest) info.getRequestInfo().getRequest();
-            if (res.getError() == ServerErrorCode.No_Error) {
-              RepairRequestRecord.OperationType type;
-              if (req.getOperationType() == RequestOrResponseType.TtlUpdateRequest) {
-                type = RepairRequestRecord.OperationType.TtlUpdateRequest;
-              } else {
-                type = RepairRequestRecord.OperationType.DeleteRequest;
-              }
-              db.removeRepairRequests(req.getBlobId().toString(), type);
-              logger.info("RepairRequests Sender: Repaired {}", req);
-            } else {
-              // LOCAL_CONSISTENCY_TODO: metrics for all the errors happens in RepairRequestsSender.
-              // Ideally we may need create alert if we cannot repair the requests in timely matter.
-              logger.info("RepairRequests Sender: failed to repair {} response {} ", req, res);
+        boolean hasMore = true;
+        boolean hasError = false;
+        // if some partitions have more requests, continue to handle them.
+        while (hasMore && !hasError) {
+          hasMore = false;
+          hasError = false;
+          // loop all the partitions. For each partition, we handle maxResults number of requests.
+          for (long partitionId : partitionIds) {
+            if (shutdown) {
+              return;
             }
-          }
+            // get the repair requests for this partition
+            requestInfos = getAmbryRequest(partitionId);
+            if (requestInfos.isEmpty()) {
+              continue;
+            }
+            // this partition may have more requests.
+            if (requestInfos.size() >= maxResults) {
+              hasMore = true;
+            }
 
-          if (inflightReqCount > 0) {
-            logger.error("RepairRequests Sender: timeout waiting for repairs {} {}", nodeId, inflightReqCount);
-          }
-        } // loop all the partitions
+            Set<Integer> requestsToDrop = new HashSet<>();
+            // send the repair requests to the handler and wait for the responses.
+            while (!requestInfos.isEmpty()) {
+              RequestInfo reqInfo = requestInfos.get(requestInfos.size() - 1);
+              List<ResponseInfo> responses =
+                  client.sendAndPoll(Collections.singletonList(reqInfo), requestsToDrop, POLL_TIMEOUT_MS);
+              if (responses == null || responses.size() == 0) {
+                logger.error("RepairRequests Sender: timeout waiting for repairs {} {}", nodeId, reqInfo.getRequest());
+                hasError = true;
+                break;
+              }
+              ResponseInfo resInfo = responses.get(0);
+              ReplicateBlobResponse res = (ReplicateBlobResponse) resInfo.getResponse();
+              ReplicateBlobRequest req = (ReplicateBlobRequest) resInfo.getRequestInfo().getRequest();
+              if (res.getError() == ServerErrorCode.No_Error) {
+                RepairRequestRecord.OperationType type;
+                if (req.getOperationType() == RequestOrResponseType.TtlUpdateRequest) {
+                  type = RepairRequestRecord.OperationType.TtlUpdateRequest;
+                } else {
+                  type = RepairRequestRecord.OperationType.DeleteRequest;
+                }
+                db.removeRepairRequests(req.getBlobId().toString(), type);
+                logger.info("RepairRequests Sender: Repaired {}", req);
+              } else {
+                // LOCAL_CONSISTENCY_TODO: metrics for all the errors happens in RepairRequestsSender.
+                // Ideally we may need create alert if we cannot repair the requests in timely matter.
+                logger.error("RepairRequests Sender: failed to repair {} response {}", req, res);
+                hasError = true;
+              }
+              requestInfos.remove(requestInfos.size() - 1);
+            }
+            requestInfos.forEach(ri -> ri.getRequest().release());
+            requestInfos = null;
+          } // loop all the partitions
+        }  // loop until all the partitions are clean
       } catch (Throwable e) {
-        // TODO add metric to track background threads
+        // LOCAL_CONSISTENCY_TODO add metric to track background threads
         logger.error("RepairRequests Sender: Exception when handling request", e);
-        // this is bad and we need to shutdown the app
-        Runtime.getRuntime().halt(1);
       } finally {
         if (requestInfos != null) {
-          for (RequestInfo reqInfo : requestInfos) {
-            reqInfo.getRequest().release();
-          }
+          requestInfos.forEach(ri -> ri.getRequest().release());
           requestInfos = null;
         }
       }
@@ -180,7 +193,8 @@ class RepairRequestsSender implements Runnable {
   private List<RequestInfo> getAmbryRequest(long partitionId) throws Exception {
     List<RequestInfo> requestInfos = new ArrayList<>();
     // get the repair requests for this partition and this node is not the source replica.
-    List<RepairRequestRecord> records = db.getRepairRequests(partitionId, nodeId.getHostname(), nodeId.getPort());
+    List<RepairRequestRecord> records =
+        db.getRepairRequestsExcludingHost(partitionId, nodeId.getHostname(), nodeId.getPort());
 
     for (RepairRequestRecord record : records) {
       BlobId blobId;
@@ -188,12 +202,14 @@ class RepairRequestsSender implements Runnable {
         blobId = new BlobId(record.getBlobId(), clusterMap);
       } catch (IOException e) {
         // new BlobId may generate IOException
+        // LOCAL_CONSISTENCY_TODO add metrics for RepairRequestsSender class
         logger.error("RepairRequests Sender: Failed to generate Blob ID {}", record, e);
         continue;
       }
 
       ReplicaId replicaId = partition2Replicas.get(partitionId);
       if (replicaId == null) {
+        // LOCAL_CONSISTENCY_TODO add metrics for RepairRequestsSender class
         logger.error("RepairRequests Sender: Replica is null {} {} {}", partitionId, record, replicaId);
         continue;
       }
@@ -210,12 +226,11 @@ class RepairRequestsSender implements Runnable {
 
       if (record.getSourceHostName().equals(nodeId.getHostname()) && record.getSourceHostPort() == nodeId.getPort()) {
         // shouldn't happen
-        logger.error(
+        String errorMsg =
             "RepairRequests Sender: Shouldn't get the repair requests of which this node is the source replica, "
-                + record);
-        throw new Exception(
-            "RepairRequests Sender: Shouldn't get the repair requests of which this node is the source replica, "
-                + record);
+                + record;
+        logger.error(errorMsg);
+        throw new Exception(errorMsg);
       }
 
       int correlationId = correlationIdGenerator.incrementAndGet();
@@ -231,7 +246,7 @@ class RepairRequestsSender implements Runnable {
     return requestInfos;
   }
 
-  public void shutdown() throws InterruptedException {
+  public void shutdown() {
     shutdown = true;
   }
 }

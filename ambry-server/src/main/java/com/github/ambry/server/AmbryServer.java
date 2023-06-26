@@ -145,10 +145,7 @@ public class AmbryServer {
 
   // variables to handle repair requests.
   private LocalRequestResponseChannel localChannel = null;
-  private AmbryRequests repairRequests = null;
   private RequestHandlerPool repairHandlerPool = null;
-  private LocalNetworkClientFactory localClientFactory = null;
-  private RepairRequestsDb repairRequestsDb = null;
   private RepairRequestsSender repairRequestsSender = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
@@ -343,25 +340,19 @@ public class AmbryServer {
       if (serverConfig.serverRepairRequestsDbFactory != null) {
         // if we have a RepairRequestsDB, start the threads to fix the partially failed requests.
         try {
-          Properties repairProperties = new Properties();
-          repairProperties.setProperty(MysqlRepairRequestsDbConfig.DB_INFO, serverConfig.serverRepairRequestsDbInfo);
-          repairProperties.setProperty(MysqlRepairRequestsDbConfig.LIST_MAX_RESULTS,
-              serverConfig.serverRepairRequestsDbListMaxResult);
-          repairProperties.setProperty(MysqlRepairRequestsDbConfig.LOCAL_POOL_SIZE,
-              serverConfig.serverRepairRequestsDbLocalPoolSize);
-
-          VerifiableProperties repairVProperties = new VerifiableProperties(repairProperties);
           RepairRequestsDbFactory factory =
-              Utils.getObj(serverConfig.serverRepairRequestsDbFactory, repairVProperties, registry,
+              Utils.getObj(serverConfig.serverRepairRequestsDbFactory, properties, registry,
                   nodeId.getDatacenterName());
-          repairRequestsDb = factory.getRepairRequestsDb();
+          RepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
 
           localChannel = new LocalRequestResponseChannel();
-          localClientFactory =
+          LocalNetworkClientFactory localClientFactory =
               new LocalNetworkClientFactory(localChannel, networkConfig, new NetworkMetrics(registry), time);
-          repairRequests = new AmbryServerRequests(storageManager, localChannel, clusterMap, nodeId, registry, metrics,
-              findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig, diskManagerConfig,
-              storeKeyConverterFactory, statsManager, clusterParticipants.get(0), connectionPool);
+          AmbryRequests repairRequests =
+              new AmbryServerRequests(storageManager, localChannel, clusterMap, nodeId, registry, metrics,
+                  findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
+                  diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0),
+                  connectionPool);
           // Right now we only open single thread for the repairHandlerPool
           repairHandlerPool = new RequestHandlerPool(1, localChannel, repairRequests, "Repair-", false);
           // start the repairRequestSender. It sends requests through the localChannel to the repairHandlerPool

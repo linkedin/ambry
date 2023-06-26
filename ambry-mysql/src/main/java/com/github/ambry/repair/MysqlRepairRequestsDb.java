@@ -59,12 +59,12 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    */
   // @formatter:off
   private static final String GET_QUERY = String.format(""
-      + "SELECT %s, %s, %s, %s, %s, %s, %s, %s "
+      + "SELECT %s, %s, %s, %s, %s, %s, %s "
       + "FROM %s "
       + "WHERE %s = ? "
       + "ORDER BY %s ASC "
       + "LIMIT ?",
-      BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
+      BLOB_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
       REPAIR_REQUESTS_TABLE,
       PARTITION_ID,
       OPERATION_TIME);
@@ -75,12 +75,12 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    */
   // @formatter:off
   private static final String GET_QUERY_EXCLUDE_SOURCE_REPLICA = String.format(""
-          + "SELECT %s, %s, %s, %s, %s, %s, %s, %s "
+          + "SELECT %s, %s, %s, %s, %s, %s, %s "
           + "FROM %s "
           + "WHERE %s = ? and (%s != ? or %s != ?) "
           + "ORDER BY %s ASC "
           + "LIMIT ?",
-      BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
+      BLOB_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
       REPAIR_REQUESTS_TABLE,
       PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT,
       OPERATION_TIME);
@@ -175,19 +175,19 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   }
 
   /**
-   * Select the records from one partition ordered by the operation time.
+   * Select the records for one partition ordered by the operation time.
    * @param partitionId partition id
    * @return the oldest {@link RepairRequestRecord}s.
    */
   @Override
-  public List<RepairRequestRecord> getRepairRequests(long partitionId) throws SQLException {
+  public List<RepairRequestRecord> getRepairRequestsForPartition(long partitionId) throws SQLException {
     // private static final String GET_QUERY = String.format(""
-    //    + "SELECT %s, %s, %s, %s, %s, %s, %s, %s "
+    //    + "SELECT %s, %s, %s, %s, %s, %s, %s "
     //    + "FROM %s "
     //    + "WHERE %s = ? "
     //    + "ORDER BY %s ASC "
     //    + "LIMIT ?",
-    //    BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
+    //    BLOB_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
     //    REPAIR_REQUESTS_TABLE,
     //    PARTITION_ID,
     //    OPERATION_TIME);
@@ -199,13 +199,12 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
           List<RepairRequestRecord> result = new ArrayList<>();
           while (resultSet.next()) {
             String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-            // resultSet.getLong(2) is the partition id.
-            String sourceHostName = resultSet.getString(3);
-            int sourceHostPort = resultSet.getInt(4);
-            OperationType operationType = OperationType.values()[resultSet.getShort(5)];
-            Timestamp operationTime = resultSet.getTimestamp(6);
-            short lifeVersion = resultSet.getShort(7);
-            Timestamp expirationTime = resultSet.getTimestamp(8);
+            String sourceHostName = resultSet.getString(2);
+            int sourceHostPort = resultSet.getInt(3);
+            OperationType operationType = OperationType.values()[resultSet.getShort(4)];
+            Timestamp operationTime = resultSet.getTimestamp(5);
+            short lifeVersion = resultSet.getShort(6);
+            Timestamp expirationTime = resultSet.getTimestamp(7);
             RepairRequestRecord record =
                 new RepairRequestRecord(blobId, partitionId, sourceHostName, sourceHostPort, operationType,
                     operationTime.getTime(), lifeVersion,
@@ -229,15 +228,15 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    * @return the oldest {@link RepairRequestRecord}s.
    */
   @Override
-  public List<RepairRequestRecord> getRepairRequests(long partitionId, String sourceHostName, int sourceHostPort)
-      throws SQLException {
+  public List<RepairRequestRecord> getRepairRequestsExcludingHost(long partitionId, String sourceHostName,
+      int sourceHostPort) throws SQLException {
     // private static final String GET_QUERY_EXCLUDE_SOURCE_REPLICA = String.format(""
-    //    + "SELECT %s, %s, %s, %s, %s, %s, %s, %s "
+    //    + "SELECT %s, %s, %s, %s, %s, %s, %s "
     //    + "FROM %s "
     //    + "WHERE %s = ? and (%s != ? or %s != ?) "
     //    + "ORDER BY %s ASC "
     //    + "LIMIT ?",
-    //    BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
+    //    BLOB_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
     //    REPAIR_REQUESTS_TABLE,
     //    PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT,
     //    OPERATION_TIME);
@@ -251,13 +250,12 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
           List<RepairRequestRecord> result = new ArrayList<>();
           while (resultSet.next()) {
             String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-            // resultSet.getLong(2) is the partition id.
-            String hostName = resultSet.getString(3);
-            int hostPort = resultSet.getInt(4);
-            OperationType operationType = OperationType.values()[resultSet.getShort(5)];
-            Timestamp operationTime = resultSet.getTimestamp(6);
-            short lifeVersion = resultSet.getShort(7);
-            Timestamp expirationTime = resultSet.getTimestamp(8);
+            String hostName = resultSet.getString(2);
+            int hostPort = resultSet.getInt(3);
+            OperationType operationType = OperationType.values()[resultSet.getShort(4)];
+            Timestamp operationTime = resultSet.getTimestamp(5);
+            short lifeVersion = resultSet.getShort(6);
+            Timestamp expirationTime = resultSet.getTimestamp(7);
             RepairRequestRecord record =
                 new RepairRequestRecord(blobId, partitionId, hostName, hostPort, operationType, operationTime.getTime(),
                     lifeVersion, expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
@@ -270,6 +268,15 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
       logger.error("failed to get records from {} due to {}", dataSource, e.getMessage());
       throw e;
     }
+  }
+
+  /**
+   * The max number of result sets it will return for each query
+   * @return the max number of result sets to return
+   */
+  @Override
+  public int getListMaxResults() {
+    return config.listMaxResults;
   }
 
   /**
