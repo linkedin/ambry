@@ -99,6 +99,10 @@ public class Utils {
    * The separator used to construct account-container pair in stats report.
    */
   public static final String ACCOUNT_CONTAINER_SEPARATOR = "___";
+  /**
+   * Default retention policy for dataset.
+   */
+  public static final String DEFAULT_RETENTION_POLICY = "DefaultCounterBasedPolicy";
   private static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
   private static final String CLIENT_BROKEN_PIPE_EXCEPTION_MSG = "Broken pipe";
   // This is found in Netty's SslHandler, which does not expose the exception message as a constant. Be careful, since

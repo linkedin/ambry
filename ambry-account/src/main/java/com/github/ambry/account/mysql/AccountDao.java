@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.github.ambry.account.AccountUtils.*;
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 import static com.github.ambry.utils.Utils.*;
 
@@ -75,6 +76,7 @@ public class AccountDao {
   public static final String DATASET_TABLE = "Datasets";
   public static final String DATASET_NAME = "datasetName";
   public static final String VERSION_SCHEMA = "versionSchema";
+  public static final String RETENTION_POLICY = "retentionPolicy";
   public static final String RETENTION_COUNT = "retentionCount";
   public static final String RETENTION_TIME_IN_SECONDS = "retentionTimeInSeconds";
   public static final String USER_TAGS = "userTags";
@@ -176,23 +178,24 @@ public class AccountDao {
         String.format("select %s, %s, %s, %s from %s where %s = ? and %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
             LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID, CONTAINER_ID);
     insertDatasetSql =
-        String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?)",
-            DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT,
-            RETENTION_TIME_IN_SECONDS, USER_TAGS);
+        String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?, ?)",
+            DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY,
+            RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS);
     updateDatasetIfExpiredSql = String.format(
-        "update %s set %s = ?, %s = now(3), %s = ?, %s = ?, %s = ?, %s = NULL where %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
-        DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS,
-        DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+        "update %s set %s = ?, %s = now(3), %s = ?, %s = ?, %s = ?, %s = ?, %s = NULL where %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
+        DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
+        RETENTION_TIME_IN_SECONDS, USER_TAGS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     //update the dataset field, in order to support partial update, if one parameter is null, keep the original value.
     updateDatasetSql = String.format(
-        "update %1$s set %2$s = now(3)," + "`retentionCount` = IFNULL(?, `retentionCount`), "
+        "update %1$s set %2$s = now(3)," + "`retentionPolicy` = IFNULL(?, `retentionPolicy`), "
+            + "`retentionCount` = IFNULL(?, `retentionCount`), "
             + "`retentionTimeInSeconds` = IFNULL(?, `retentionTimeInSeconds`)," + "`userTags` = IFNULL(?, `userTags`)"
-            + " where %6$s = ? and %7$s = ? and %8$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_COUNT,
+            + " where %7$s = ? and %8$s = ? and %9$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
         RETENTION_TIME_IN_SECONDS, USER_TAGS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getDatasetByNameSql =
-        String.format("select %s, %s, %s, %s, %s, %s , %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
-            VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS, DELETE_TS, DATASET_TABLE,
-            ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+        String.format("select %s, %s, %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
+            VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
+            RETENTION_TIME_IN_SECONDS, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     deleteDatasetByIdSql = String.format(
         "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
         DATASET_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
@@ -1414,6 +1417,7 @@ public class AccountDao {
           AccountServiceErrorCode.BadRequest);
     }
     int schemaVersionOrdinal = dataset.getVersionSchema().ordinal();
+    String retentionPolicy = dataset.getRetentionPolicy();
     Integer retentionCount = dataset.getRetentionCount();
     Long retentionTimeInSeconds = dataset.getRetentionTimeInSeconds();
     Map<String, String> userTags = dataset.getUserTags();
@@ -1428,20 +1432,26 @@ public class AccountDao {
     statement.setInt(2, containerId);
     statement.setString(3, datasetName);
     statement.setInt(4, schemaVersionOrdinal);
-    if (retentionCount != null) {
-      statement.setInt(5, retentionCount);
+    if (retentionPolicy != null) {
+      statement.setString(5, retentionPolicy);
     } else {
-      statement.setObject(5, null);
+      //set to the default
+      statement.setString(5, DEFAULT_RETENTION_POLICY);
     }
-    if (retentionTimeInSeconds != null) {
-      statement.setLong(6, retentionTimeInSeconds);
+    if (retentionCount != null) {
+      statement.setInt(6, retentionCount);
     } else {
       statement.setObject(6, null);
     }
-    if (userTags != null) {
-      statement.setString(7, userTagsInJson);
+    if (retentionTimeInSeconds != null) {
+      statement.setLong(7, retentionTimeInSeconds);
     } else {
-      statement.setString(7, null);
+      statement.setObject(7, null);
+    }
+    if (userTags != null) {
+      statement.setString(8, userTagsInJson);
+    } else {
+      statement.setString(8, null);
     }
     statement.executeUpdate();
   }
@@ -1464,6 +1474,7 @@ public class AccountDao {
           AccountServiceErrorCode.BadRequest);
     }
     int schemaVersionOrdinal = dataset.getVersionSchema().ordinal();
+    String retentionPolicy = dataset.getRetentionPolicy();
     Integer retentionCount = dataset.getRetentionCount();
     Long retentionTimeInSeconds = dataset.getRetentionTimeInSeconds();
     Map<String, String> userTags = dataset.getUserTags();
@@ -1475,24 +1486,29 @@ public class AccountDao {
           AccountServiceErrorCode.BadRequest);
     }
     statement.setInt(1, schemaVersionOrdinal);
-    if (retentionCount != null) {
-      statement.setInt(2, retentionCount);
+    if (retentionPolicy != null) {
+      statement.setString(2, retentionPolicy);
     } else {
-      statement.setObject(2, null);
+      statement.setString(2, DEFAULT_RETENTION_POLICY);
     }
-    if (retentionTimeInSeconds != null) {
-      statement.setLong(3, retentionTimeInSeconds);
+    if (retentionCount != null) {
+      statement.setInt(3, retentionCount);
     } else {
       statement.setObject(3, null);
     }
-    if (userTags != null) {
-      statement.setString(4, userTagsInJson);
+    if (retentionTimeInSeconds != null) {
+      statement.setLong(4, retentionTimeInSeconds);
     } else {
-      statement.setString(4, null);
+      statement.setObject(4, null);
     }
-    statement.setInt(5, accountId);
-    statement.setInt(6, containerId);
-    statement.setString(7, datasetName);
+    if (userTags != null) {
+      statement.setString(5, userTagsInJson);
+    } else {
+      statement.setString(5, null);
+    }
+    statement.setInt(6, accountId);
+    statement.setInt(7, containerId);
+    statement.setString(8, datasetName);
     return statement.executeUpdate();
   }
 
@@ -1522,22 +1538,28 @@ public class AccountDao {
             AccountServiceErrorCode.BadRequest);
       }
     }
+    String retentionPolicy = dataset.getRetentionPolicy();
+    if (retentionPolicy != null) {
+      statement.setString(1, retentionPolicy);
+    } else {
+      statement.setString(1, DEFAULT_RETENTION_POLICY);
+    }
     Integer retentionCount = dataset.getRetentionCount();
     if (retentionCount != null) {
-      statement.setInt(1, retentionCount);
-    } else {
-      statement.setObject(1, null);
-    }
-    Long retentionTimeInSeconds = dataset.getRetentionTimeInSeconds();
-    if (retentionTimeInSeconds != null) {
-      statement.setLong(2, retentionTimeInSeconds);
+      statement.setInt(2, retentionCount);
     } else {
       statement.setObject(2, null);
     }
-    statement.setString(3, userTagsInJson);
-    statement.setInt(4, accountId);
-    statement.setInt(5, containerId);
-    statement.setString(6, dataset.getDatasetName());
+    Long retentionTimeInSeconds = dataset.getRetentionTimeInSeconds();
+    if (retentionTimeInSeconds != null) {
+      statement.setLong(3, retentionTimeInSeconds);
+    } else {
+      statement.setObject(3, null);
+    }
+    statement.setString(4, userTagsInJson);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setString(7, dataset.getDatasetName());
     return statement.executeUpdate();
   }
 
@@ -1555,6 +1577,7 @@ public class AccountDao {
   private Dataset executeGetDatasetStatement(PreparedStatement statement, int accountId, int containerId,
       String accountName, String containerName, String datasetName) throws SQLException, AccountServiceException {
     Dataset.VersionSchema versionSchema;
+    String retentionPolicy;
     Integer retentionCount;
     Long retentionTimeInSeconds;
     Timestamp deletionTime;
@@ -1578,6 +1601,7 @@ public class AccountDao {
             AccountServiceErrorCode.Deleted);
       }
       versionSchema = Dataset.VersionSchema.values()[resultSet.getInt(VERSION_SCHEMA)];
+      retentionPolicy = resultSet.getObject(RETENTION_POLICY, String.class);
       retentionCount = resultSet.getObject(RETENTION_COUNT, Integer.class);
       retentionTimeInSeconds = resultSet.getObject(RETENTION_TIME_IN_SECONDS, Long.class);
       String userTagsInJson = resultSet.getString(USER_TAGS);
@@ -1593,7 +1617,8 @@ public class AccountDao {
       //If result set is not created in a try-with-resources block, it needs to be closed in a finally block.
       closeQuietly(resultSet);
     }
-    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionCount, retentionTimeInSeconds, userTags);
+    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionPolicy, retentionCount,
+        retentionTimeInSeconds, userTags);
   }
 
   /**

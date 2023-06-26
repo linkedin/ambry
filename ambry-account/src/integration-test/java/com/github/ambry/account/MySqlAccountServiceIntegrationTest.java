@@ -51,6 +51,7 @@ import static com.github.ambry.config.MySqlAccountServiceConfig.*;
 import static com.github.ambry.mysql.MySqlUtils.*;
 import static com.github.ambry.utils.AccountTestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
+import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -756,7 +757,8 @@ public class MySqlAccountServiceIntegrationTest {
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME);
 
-    assertEquals("Mistmatch in dataset read from db", dataset, datasetFromMysql);
+    assertEquals("Mismatch in dataset read from db", dataset, datasetFromMysql);
+    assertEquals("Mismatch in retentionPolicy", DEFAULT_RETENTION_POLICY, datasetFromMysql.getRetentionPolicy());
 
     // Add dataset again, should fail due to already exist.
     try {

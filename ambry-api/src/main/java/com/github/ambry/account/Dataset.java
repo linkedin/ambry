@@ -41,6 +41,7 @@ import java.util.regex.Pattern;
  *    "datasetName": "MyPrivateDataset",
  *    "versionSchema": "TIMESTAMP",
  *    "expirationTimeMs": -1,
+ *    "retentionPolicy": "DefaultCounterBasedPolicy",
  *    "retentionCount": 10,
  *    "retentionTimeInSeconds": 3600,
  *    "userTags": "{userTag1:tagValue1}"
@@ -61,6 +62,7 @@ public class Dataset {
   static final String CONTAINER_NAME_KEY = "containerName";
   static final String DATASET_NAME_KEY = "datasetName";
   static final String JSON_VERSION_SCHEMA_KEY = "versionSchema";
+  static final String JSON_RETENTION_POLICY = "retentionPolicy";
   static final String JSON_RETENTION_COUNT_KEY = "retentionCount";
   static final String JSON_RETENTION_TIME_KEY = "retentionTimeInSeconds";
   static final String JSON_USER_TAGS_KEY = "userTags";
@@ -73,6 +75,8 @@ public class Dataset {
   private final String datasetName;
   @JsonProperty(JSON_VERSION_SCHEMA_KEY)
   private final VersionSchema versionSchema;
+  @JsonProperty(JSON_RETENTION_POLICY)
+  private final String retentionPolicy;
   @JsonProperty(JSON_RETENTION_COUNT_KEY)
   @JsonInclude(JsonInclude.Include.NON_DEFAULT)
   private final Integer retentionCount;
@@ -88,17 +92,19 @@ public class Dataset {
    * @param containerName The name of the container. Cannot be null.
    * @param datasetName The name of the dataset. Cannot be null.
    * @param versionSchema The schema of the version. Cannot be null.
+   * @param retentionPolicy The retention policy which based on count value we have.
    * @param retentionCount The retention of dataset by count. The older versions will be deprecated. Can be null.
    * @param retentionTimeInSeconds The time-to-live for versions of this dataset. Numbers equals to -1 indicate an unlimited retention.
    * @param userTags The user defined metadata. Can be null.
    */
   public Dataset(String accountName, String containerName, String datasetName, VersionSchema versionSchema,
-      Integer retentionCount, Long retentionTimeInSeconds, Map<String, String> userTags) {
+      String retentionPolicy, Integer retentionCount, Long retentionTimeInSeconds, Map<String, String> userTags) {
     checkPreconditions(accountName, containerName, datasetName);
     this.accountName = accountName;
     this.containerName = containerName;
     this.datasetName = datasetName;
     this.versionSchema = versionSchema;
+    this.retentionPolicy = retentionPolicy;
     this.retentionCount = retentionCount;
     this.retentionTimeInSeconds = retentionTimeInSeconds;
     this.userTags = userTags;
@@ -143,6 +149,11 @@ public class Dataset {
   public Integer getRetentionCount() {
     return retentionCount;
   }
+
+  /**
+   * @return the retention policy based on count values.
+   */
+  public String getRetentionPolicy() {return retentionPolicy; }
 
   /**
    * @return the time-to-live for versions of this dataset.
@@ -194,6 +205,7 @@ public class Dataset {
         && Objects.equals(containerName, dataset.containerName)
         && Objects.equals(datasetName, dataset.datasetName)
         && versionSchema == dataset.versionSchema
+        && Objects.equals(retentionPolicy, dataset.retentionPolicy)
         && Objects.equals(retentionCount, dataset.retentionCount)
         && Objects.equals(retentionTimeInSeconds, dataset.retentionTimeInSeconds)
         && Objects.equals(userTags, dataset.userTags);

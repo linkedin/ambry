@@ -40,6 +40,7 @@ import org.junit.runners.Parameterized;
 
 import static com.github.ambry.account.Account.*;
 import static com.github.ambry.account.Container.*;
+import static com.github.ambry.utils.Utils.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
@@ -93,6 +94,7 @@ public class AccountContainerTest {
   private List<Dataset.VersionSchema> refDatasetVersionSchemas;
   private List<Long> refDatasetRetentionTimeInSeconds;
   private List<Integer> refDatasetRetentionCounts;
+  private List<String> refDatasetRetentionPolicy;
   private List<Map<String, String>> refDatasetUserTags;
 
 
@@ -309,6 +311,7 @@ public class AccountContainerTest {
       Dataset datasetFromBuilder = buildDatasetWithOtherFields(
           new DatasetBuilder(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i))
               .setVersionSchema(refDatasetVersionSchemas.get(i))
+              .setRetentionPolicy(refDatasetRetentionPolicy.get(i))
               .setRetentionTimeInSeconds(refDatasetRetentionTimeInSeconds.get(i))
               .setRetentionCount(refDatasetRetentionCounts.get(i))
               .setUserTags(refDatasetUserTags.get(i)), refDatasets.get(i));
@@ -841,6 +844,7 @@ public class AccountContainerTest {
     assertEquals("Wrong container name", refContainers.get(0).getName(), dataset.getContainerName());
     assertEquals("Wrong dataset name", refDatasetNames.get(index), dataset.getDatasetName());
     assertEquals("Wrong version schema", refDatasetVersionSchemas.get(index), dataset.getVersionSchema());
+    assertEquals("Wrong retention policy", refDatasetRetentionPolicy.get(index), dataset.getRetentionPolicy());
     assertEquals("Wrong retention count", refDatasetRetentionCounts.get(index), dataset.getRetentionCount());
     assertEquals("Wrong retention time", refDatasetRetentionTimeInSeconds.get(index), dataset.getRetentionTimeInSeconds());
     assertEquals("Wrong user tage", refDatasetUserTags.get(index), dataset.getUserTags());
@@ -1088,6 +1092,7 @@ public class AccountContainerTest {
     refDatasetNames = new ArrayList<>();
     refDatasetVersionSchemas = new ArrayList<>();
     refDatasetRetentionTimeInSeconds = new ArrayList<>();
+    refDatasetRetentionPolicy = new ArrayList<>();
     refDatasetRetentionCounts = new ArrayList<>();
     refDatasetUserTags = new ArrayList<>();
     refDatasets = new ArrayList<>();
@@ -1104,9 +1109,10 @@ public class AccountContainerTest {
       Map<String, String> userTags = new HashMap<>();
       userTags.put(UUID.randomUUID().toString(), UUID.randomUUID().toString());
       refDatasetUserTags.add(userTags);
+      refDatasetRetentionPolicy.add(DEFAULT_RETENTION_POLICY);
       refDatasets.add(new Dataset(refAccountName, refContainers.get(0).getName(), refDatasetNames.get(i),
-          refDatasetVersionSchemas.get(i), refDatasetRetentionCounts.get(i), refDatasetRetentionTimeInSeconds.get(i),
-          refDatasetUserTags.get(i)));
+          refDatasetVersionSchemas.get(i), refDatasetRetentionPolicy.get(i), refDatasetRetentionCounts.get(i),
+          refDatasetRetentionTimeInSeconds.get(i), refDatasetUserTags.get(i)));
     }
   }
 
