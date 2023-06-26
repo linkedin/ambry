@@ -29,6 +29,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -282,7 +283,7 @@ public class NamedBlobPutHandler {
               routerTtlUpdateCallback(blobInfo, blobId));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            deleteDatasetVersionOutOfRetentionCount();
+            updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount();
           }
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());
@@ -320,7 +321,7 @@ public class NamedBlobPutHandler {
             namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
         namedBlobDb.updateBlobStateToReady(record).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-          deleteDatasetVersionOutOfRetentionCount();
+          updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount();
         }
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, deleteDatasetCallback);
@@ -567,7 +568,7 @@ public class NamedBlobPutHandler {
         DatasetVersionRecord datasetVersionRecord =
             accountService.addDatasetVersion(accountName, containerName, datasetName, version,
                 blobProperties.getTimeToLiveInSeconds(), blobProperties.getCreationTimeInMs(),
-                datasetVersionTtlEnabled);
+                datasetVersionTtlEnabled, DatasetVersionState.IN_PROGRESS);
         FrontendUtils.replaceRequestPathWithNewOperationOrBlobIdIfNeeded(restRequest, datasetVersionRecord, version);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
@@ -594,12 +595,15 @@ public class NamedBlobPutHandler {
     /**
      * Support delete the dataset version out of retentionCount
      */
-    private void deleteDatasetVersionOutOfRetentionCount() {
+    private void updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount() {
       Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
       try {
         String accountName = dataset.getAccountName();
         String containerName = dataset.getContainerName();
         String datasetName = dataset.getDatasetName();
+        String targetVersion = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
+        accountService.updateDatasetVersionState(accountName, containerName, datasetName, targetVersion,
+            DatasetVersionState.READY);
         List<DatasetVersionRecord> datasetVersionRecordList =
             accountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
         if (datasetVersionRecordList.size() > 0) {

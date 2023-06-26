@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS DatasetVersions (
     containerId INT NOT NULL,
     datasetName VARCHAR(235) NOT NULL,
     version BIGINT NOT NULL,
+    datasetVersionState SMALLINT NOT NULL,
+    creationTime DATETIME(3) NOT NULL,
     lastModifiedTime DATETIME(3) NOT NULL,
     delete_ts DATETIME(6) DEFAULT NULL,
     PRIMARY KEY (accountId, containerId, datasetName, version)

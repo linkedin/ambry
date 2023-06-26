@@ -15,6 +15,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.frontend.Page;
+import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -23,14 +24,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
@@ -133,7 +132,7 @@ public class InMemAccountService implements AccountService {
   @Override
   public synchronized DatasetVersionRecord addDatasetVersion(String accountName, String containerName,
       String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
-      boolean datasetVersionTtlEnabled) throws AccountServiceException {
+      boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState) throws AccountServiceException {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
@@ -292,6 +291,12 @@ public class InMemAccountService implements AccountService {
       }
     }
     return datasetVersionRecords;
+  }
+
+  @Override
+  public synchronized void updateDatasetVersionState (String accountName, String containerName, String datasetName,
+      String version, DatasetVersionState datasetVersionState) {
+    //no-op
   }
 
   @Override

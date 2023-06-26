@@ -19,6 +19,7 @@ import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -366,14 +367,26 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
-      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled)
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled,
+      DatasetVersionState datasetVersionState)
       throws AccountServiceException {
     if (config.enableNewDatabaseForMigration) {
       return cachedAccountServiceNew.addDatasetVersion(accountName, containerName, datasetName, version,
-          timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
+          timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
     }
     return cachedAccountService.addDatasetVersion(accountName, containerName, datasetName, version, timeToLiveInSeconds,
-        creationTimeInMs, datasetVersionTtlEnabled);
+        creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
+  }
+
+  @Override
+  public void updateDatasetVersionState(String accountName, String containerName, String datasetName, String version,
+      DatasetVersionState datasetVersionState) throws AccountServiceException {
+    if (config.enableNewDatabaseForMigration) {
+      cachedAccountServiceNew.updateDatasetVersionState(accountName, containerName, datasetName, version,
+          datasetVersionState);
+    }
+    cachedAccountService.updateDatasetVersionState(accountName, containerName, datasetName, version,
+        datasetVersionState);
   }
 
   @Override

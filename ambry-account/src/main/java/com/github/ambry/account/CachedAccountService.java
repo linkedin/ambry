@@ -17,6 +17,7 @@ import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.frontend.Page;
+import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -562,7 +563,8 @@ public class CachedAccountService extends AbstractAccountService {
 
   @Override
   public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
-      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled) throws AccountServiceException {
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled,
+      DatasetVersionState datasetVersionState) throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
       if (mySqlAccountStore == null) {
@@ -570,7 +572,22 @@ public class CachedAccountService extends AbstractAccountService {
       }
       return mySqlAccountStore.addDatasetVersion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version, timeToLiveInSeconds,
-          creationTimeInMs, datasetVersionTtlEnabled);
+          creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public void updateDatasetVersionState(String accountName, String containerName, String datasetName,
+      String version, DatasetVersionState datasetVersionState) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      mySqlAccountStore.updateDatasetVersionState(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version, datasetVersionState);
     } catch (SQLException e) {
       throw translateSQLException(e);
     }
@@ -629,7 +646,7 @@ public class CachedAccountService extends AbstractAccountService {
       if (mySqlAccountStore == null) {
         mySqlAccountStore = this.supplier.get();
       }
-      return mySqlAccountStore.getAllValidVersion(accountAndContainerIdPair.getFirst(),
+      return mySqlAccountStore.getAllValidVersionForDatasetDeletion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), datasetName);
     } catch (SQLException e) {
       throw translateSQLException(e);

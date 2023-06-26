@@ -24,6 +24,7 @@ import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.protocol.DatasetVersionState;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
@@ -186,14 +187,22 @@ public class MySqlAccountStore {
    * @param timeToLiveInSeconds The dataset version level ttl.
    * @param creationTimeInMs the creation time of the dataset.
    * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @param datasetVersionState the {@link DatasetVersionState}
    * @return the corresponding {@link Dataset}
    * @throws SQLException
    */
   public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
-      boolean datasetVersionTtlEnabled) throws SQLException, AccountServiceException {
+      boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState) throws SQLException, AccountServiceException {
     return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
-        timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
+        timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
+  }
+
+  public void updateDatasetVersionState(int accountId, int containerId, String accountName, String containerName,
+      String datasetName, String version, DatasetVersionState datasetVersionState)
+      throws SQLException, AccountServiceException {
+    accountDao.updateDatasetVersionState(accountId, containerId, accountName, containerName, datasetName, version,
+        datasetVersionState);
   }
 
   /**
@@ -234,9 +243,9 @@ public class MySqlAccountStore {
    * @return a list of dataset versions which is not expired for specific dataset.
    * @throws SQLException
    */
-  public List<DatasetVersionRecord> getAllValidVersion(short accountId, short containerId, String datasetName)
-      throws SQLException {
-    return accountDao.getAllValidVersion(accountId, containerId, datasetName);
+  public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId, short containerId,
+      String datasetName) throws SQLException {
+    return accountDao.getAllValidVersionForDatasetDeletion(accountId, containerId, datasetName);
   }
 
   /**
