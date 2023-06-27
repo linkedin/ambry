@@ -85,7 +85,7 @@ public class FrontendConfig {
    * The time interval in seconds for named blob stale data cleanup process
    */
   @Config("frontend.named.blob.cleanup.seconds")
-  @Default("24 * 60 * 60")
+  @Default("60 * 60 * 24 * 7")
   public final int namedBlobCleanupSeconds;
 
 
@@ -284,7 +284,7 @@ public class FrontendConfig {
     cacheValiditySeconds = verifiableProperties.getLong("frontend.cache.validity.seconds", 365 * 24 * 60 * 60);
     optionsValiditySeconds = verifiableProperties.getLong("frontend.options.validity.seconds", 24 * 60 * 60);
     enableNamedBlobCleanupTask = verifiableProperties.getBoolean("frontend.enable.named.blob.cleanup.task", false);
-    namedBlobCleanupSeconds = verifiableProperties.getInt("frontend.named.blob.cleanup.seconds", 24 * 60 * 60);
+    namedBlobCleanupSeconds = verifiableProperties.getInt("frontend.named.blob.cleanup.seconds", 60 * 60 * 24 * 7);
     permanentNamedBlobInitialPutTtl =
         verifiableProperties.getLong("permanent.named.blob.initial.put.ttl", 25 * 60 * 60);
     optionsAllowMethods =
