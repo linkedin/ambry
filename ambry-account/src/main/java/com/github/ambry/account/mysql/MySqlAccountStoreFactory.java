@@ -58,7 +58,7 @@ public class MySqlAccountStoreFactory {
    * @throws SQLException
    */
   public MySqlAccountStore getMySqlAccountStore() throws SQLException {
-    Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(config.dbInfo);
+    Map<String, List<DbEndpoint>> dcToMySqlDBEndpoints = getDbEndpointsPerDC(config.dbInfoNew);
     // Flatten to List (TODO: does utility method need to return map?)
     List<DbEndpoint> dbEndpoints = new ArrayList<>();
     dcToMySqlDBEndpoints.values().forEach(dbEndpoints::addAll);

@@ -56,6 +56,7 @@ public class MySqlAccountServiceTest {
 
   public MySqlAccountServiceTest() throws Exception {
     mySqlConfigProps.setProperty(DB_INFO, "");
+    mySqlConfigProps.setProperty(DB_INFO_NEW, "");
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
@@ -80,6 +81,7 @@ public class MySqlAccountServiceTest {
   public void testInitCacheFromDisk() throws IOException, SQLException {
     Path accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     mySqlConfigProps.setProperty(BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
+    mySqlConfigProps.setProperty(BACKUP_DIRECTORY_KEY_NEW, accountBackupDir.toString());
 
     // write test account to backup file
     long lastModifiedTime = 100;
