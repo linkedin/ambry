@@ -18,11 +18,12 @@ CREATE TABLE IF NOT EXISTS Accounts
     version INT NOT NULL,
     creationTime DATETIME(3) NOT NULL,
     lastModifiedTime DATETIME(3) NOT NULL,
-    accountId INT GENERATED ALWAYS AS (accountInfo->>"$.accountId") STORED NOT NULL,
-    accountName VARCHAR(255) GENERATED ALWAYS AS (accountInfo->>"$.accountName") NOT NULL,
-    status VARCHAR(50) GENERATED ALWAYS AS (accountInfo->>"$.status") STORED NOT NULL,
+    accountId INT NOT NULL,
+    accountName VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    deleted_ts datetime(6) DEFAULT NULL,
     PRIMARY KEY (accountId),
-    UNIQUE INDEX uniqueName (accountName),
+    INDEX accountName (accountName),
     INDEX lmtIndex (lastModifiedTime),
     INDEX statusIndex (status)
 )
@@ -35,11 +36,12 @@ CREATE TABLE IF NOT EXISTS Containers
     version INT NOT NULL,
     creationTime DATETIME(3) NOT NULL,
     lastModifiedTime DATETIME(3) NOT NULL,
-    containerId INT GENERATED ALWAYS AS (containerInfo->>"$.containerId") STORED NOT NULL,
-    containerName VARCHAR(255) GENERATED ALWAYS AS (containerInfo->>"$.containerName") NOT NULL,
-    status VARCHAR(50) GENERATED ALWAYS AS (containerInfo->>"$.status") STORED NOT NULL,
+    containerId INT NOT NULL,
+    containerName VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    deleted_ts datetime(6) DEFAULT NULL,
     PRIMARY KEY (accountId, containerId),
-    UNIQUE INDEX uniqueName (accountId, containerName),
+    INDEX containerNameIndex (accountId, containerName),
     INDEX lmtIndex (lastModifiedTime),
     INDEX statusIndex (status)
 )
@@ -57,7 +59,7 @@ CREATE TABLE IF NOT EXISTS Datasets (
     lastModifiedTime DATETIME(3) NOT NULL,
     delete_ts DATETIME(6) DEFAULT NULL,
     PRIMARY KEY (accountId, containerId, datasetName)
-    )
+)
 CHARACTER SET utf8 COLLATE utf8_bin;
 
 CREATE TABLE IF NOT EXISTS DatasetVersions (
@@ -70,5 +72,5 @@ CREATE TABLE IF NOT EXISTS DatasetVersions (
     lastModifiedTime DATETIME(3) NOT NULL,
     delete_ts DATETIME(6) DEFAULT NULL,
     PRIMARY KEY (accountId, containerId, datasetName, version)
-    )
+)
 CHARACTER SET utf8 COLLATE utf8_bin;

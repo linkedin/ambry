@@ -153,7 +153,7 @@ public class MySqlAccountServiceIntegrationTest {
     AccountUpdateInfo accountUpdateInfo =
         new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
             new ArrayList<>());
-    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo), false);
+    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
     mySqlAccountService = getAccountService();
     // Test in-memory cache is updated with accounts from mysql store on start up.
     List<Account> accounts = new ArrayList<>(mySqlAccountService.getAllAccounts());
@@ -265,7 +265,7 @@ public class MySqlAccountServiceIntegrationTest {
     // Add account to DB (could use second AS for this)
     mySqlAccountStore.updateAccounts(Collections.singletonList(
         new AccountUpdateInfo(testAccount, true, false, new ArrayList<>(testAccount.getAllContainers()),
-            new ArrayList<>())), false);
+            new ArrayList<>())));
 
     // sleep for polling interval time
     Thread.sleep(Long.parseLong(mySqlConfigProps.getProperty(UPDATER_POLLING_INTERVAL_SECONDS)) * 1000 + 100);
@@ -318,7 +318,7 @@ public class MySqlAccountServiceIntegrationTest {
       AccountUpdateInfo accountInfo = accountInfos.get(0);
       return accountInfo.getAccount().equals(finalA) && accountInfo.getAddedContainers().equals(containers)
           && accountInfo.isAdded() && !accountInfo.isUpdated() && accountInfo.getUpdatedContainers().isEmpty();
-    }), eq(false));
+    }));
     // Note: because consumer is notified of changes, its cache should already be in sync with DB
     //this use the abstract accountInfoMapRef
     long lmt = consumerAccountService.getCachedAccountService().accountInfoMapRef.get().getLastModifiedTime();
@@ -333,7 +333,7 @@ public class MySqlAccountServiceIntegrationTest {
       AccountUpdateInfo accountInfo = accountInfos.get(0);
       return accountInfo.getAccount().equals(finalA1) && accountInfo.getAddedContainers().isEmpty()
           && !accountInfo.isAdded() && accountInfo.isUpdated() && accountInfo.getUpdatedContainers().isEmpty();
-    }), eq(false));
+    }));
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
     verify(consumerAccountStore).getNewContainers(eq(lmt));
     assertEquals("Account mismatch", a1, consumerAccountService.getAccountByName(newAccountName));
@@ -348,7 +348,7 @@ public class MySqlAccountServiceIntegrationTest {
         producerAccountService.updateContainers(accountName, Collections.singletonList(c1Mod));
     // Account should not have been touched
     verify(producerAccountStore).updateAccounts(
-        argThat(accountsInfo -> accountsInfo.get(0).getUpdatedContainers().size() == 1), eq(false));
+        argThat(accountsInfo -> accountsInfo.get(0).getUpdatedContainers().size() == 1));
     assertEquals("Expected one result", 1, result.size());
     assertEquals("Container mismatch", c1Mod, result.iterator().next());
     verify(consumerAccountStore).getNewAccounts(eq(lmt));
@@ -361,7 +361,7 @@ public class MySqlAccountServiceIntegrationTest {
     Container cNew = makeNewContainer("c4", accountId, ContainerStatus.ACTIVE);
     result = producerAccountService.updateContainers(accountName, Collections.singletonList(cNew));
     verify(producerAccountStore).updateAccounts(
-        argThat(accountsInfo -> accountsInfo.get(0).getAddedContainers().size() == 1), eq(false));
+        argThat(accountsInfo -> accountsInfo.get(0).getAddedContainers().size() == 1));
     assertEquals("Expected one result", 1, result.size());
     cNew = result.iterator().next();
     containers.add(cNew);

@@ -39,7 +39,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import static com.github.ambry.account.AccountUtils.*;
 import static com.github.ambry.mysql.MySqlDataAccessor.OperationType.*;
 import static com.github.ambry.utils.Utils.*;
 
@@ -128,6 +127,7 @@ public class AccountDao {
   private final String updateDatasetIfExpiredSql;
   private final String deleteDatasetByIdSql;
   private final String listValidDatasetsSql;
+
   /**
    * Types of MySql statements.
    */
@@ -186,19 +186,19 @@ public class AccountDao {
             RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS);
     updateDatasetIfExpiredSql = String.format(
         "update %s set %s = ?, %s = now(3), %s = ?, %s = ?, %s = ?, %s = ?, %s = NULL where %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
-        DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
-        RETENTION_TIME_IN_SECONDS, USER_TAGS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+        DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS,
+        USER_TAGS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     //update the dataset field, in order to support partial update, if one parameter is null, keep the original value.
     updateDatasetSql = String.format(
         "update %1$s set %2$s = now(3)," + "`retentionPolicy` = IFNULL(?, `retentionPolicy`), "
             + "`retentionCount` = IFNULL(?, `retentionCount`), "
             + "`retentionTimeInSeconds` = IFNULL(?, `retentionTimeInSeconds`)," + "`userTags` = IFNULL(?, `userTags`)"
-            + " where %7$s = ? and %8$s = ? and %9$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
-        RETENTION_TIME_IN_SECONDS, USER_TAGS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+            + " where %7$s = ? and %8$s = ? and %9$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_POLICY,
+        RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     getDatasetByNameSql =
         String.format("select %s, %s, %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
-            VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
-            RETENTION_TIME_IN_SECONDS, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+            VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS,
+            DELETE_TS, DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     deleteDatasetByIdSql = String.format(
         "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
         DATASET_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
@@ -232,8 +232,9 @@ public class AccountDao {
         VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
         DATASET_VERSION_STATE, LAST_MODIFIED_TIME);
     getDatasetVersionByNameSql =
-        String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
-            DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
+        String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ? and %s = ?",
+            LAST_MODIFIED_TIME, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION,
+            DATASET_VERSION_STATE);
     deleteDatasetVersionByIdSql = String.format(
         "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? and %s = ?",
         DATASET_VERSION_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
@@ -496,8 +497,7 @@ public class AccountDao {
    */
   private DatasetVersionRecord addDatasetVersionHelper(int accountId, int containerId, Dataset dataset, String version,
       long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled, long versionNumber,
-      DatasetVersionState datasetVersionState)
-      throws SQLException, AccountServiceException {
+      DatasetVersionState datasetVersionState) throws SQLException, AccountServiceException {
     dataAccessor.getDatabaseConnection(true);
     PreparedStatement insertDatasetVersionStatement = dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
     long newExpirationTimeMs = executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId,
@@ -522,8 +522,7 @@ public class AccountDao {
    */
   private DatasetVersionRecord retryWithLatestAutoIncrementedVersion(int accountId, int containerId, Dataset dataset,
       String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled,
-      DatasetVersionState datasetVersionState)
-      throws AccountServiceException, SQLException {
+      DatasetVersionState datasetVersionState) throws AccountServiceException, SQLException {
     long versionNumber;
     while (true) {
       try {
@@ -707,8 +706,8 @@ public class AccountDao {
    * @throws SQLException the {@link Dataset} including the metadata.
    * @throws AccountServiceException
    */
-  private void executeDeleteDatasetVersionStatement(PreparedStatement statement, int accountId,
-      int containerId, String datasetName, long versionValue) throws SQLException, AccountServiceException {
+  private void executeDeleteDatasetVersionStatement(PreparedStatement statement, int accountId, int containerId,
+      String datasetName, long versionValue) throws SQLException, AccountServiceException {
     statement.setInt(1, accountId);
     statement.setInt(2, containerId);
     statement.setString(3, datasetName);
@@ -990,7 +989,8 @@ public class AccountDao {
             dataAccessor.getPreparedStatement(listVersionByModifiedTimeSql, false);
         List<DatasetVersionRecord> datasetVersionRecordList =
             executeListAllValidVersionsOrderedByLastModifiedTimeStatement(
-                listAllValidVersionsOrderedByLastModifiedTimeStatement, accountId, containerId, datasetName, retentionCount, versionSchema);
+                listAllValidVersionsOrderedByLastModifiedTimeStatement, accountId, containerId, datasetName,
+                retentionCount, versionSchema);
         dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
         return datasetVersionRecordList;
       } catch (SQLException e) {
@@ -1253,8 +1253,8 @@ public class AccountDao {
    * @return the page of the dataset names.
    * @throws SQLException
    */
-  private Page<String> executeListAllValidDatasetsStatement(PreparedStatement statement, int accountId,
-      int containerId, String pageToken) throws SQLException {
+  private Page<String> executeListAllValidDatasetsStatement(PreparedStatement statement, int accountId, int containerId,
+      String pageToken) throws SQLException {
     ResultSet resultSet = null;
     try {
       statement.setInt(1, accountId);
@@ -1310,28 +1310,17 @@ public class AccountDao {
    * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
    * @param accountsInfo information of updated Accounts
    * @param batchSize number of statements to be executed in one batch
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
-  public synchronized void updateAccounts(List<AccountUpdateInfo> accountsInfo, int batchSize,
-      boolean disableGenerateColumn) throws SQLException {
+  public synchronized void updateAccounts(List<AccountUpdateInfo> accountsInfo, int batchSize) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
 
       AccountUpdateBatch accountUpdateBatch;
-      if (disableGenerateColumn) {
-        accountUpdateBatch =
-            new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSqlNew, true),
-                dataAccessor.getPreparedStatement(updateAccountsSqlNew, true),
-                dataAccessor.getPreparedStatement(insertContainersSqlNew, true),
-                dataAccessor.getPreparedStatement(updateContainersSqlNew, true));
-      } else {
-        accountUpdateBatch =
-            new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSql, true),
-                dataAccessor.getPreparedStatement(updateAccountsSql, true),
-                dataAccessor.getPreparedStatement(insertContainersSql, true),
-                dataAccessor.getPreparedStatement(updateContainersSql, true));
-      }
+      accountUpdateBatch = new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSqlNew, true),
+          dataAccessor.getPreparedStatement(updateAccountsSqlNew, true),
+          dataAccessor.getPreparedStatement(insertContainersSqlNew, true),
+          dataAccessor.getPreparedStatement(updateContainersSqlNew, true));
 
       // Disable auto commits
       dataAccessor.setAutoCommit(false);
@@ -1362,17 +1351,17 @@ public class AccountDao {
 
         // Add account to insert/update batch if it was either added or modified.
         if (isAccountAdded) {
-          accountUpdateBatch.addAccount(account, disableGenerateColumn);
+          accountUpdateBatch.addAccount(account);
         } else if (isAccountUpdated) {
-          accountUpdateBatch.updateAccount(account, disableGenerateColumn);
+          accountUpdateBatch.updateAccount(account);
         }
         // Add new containers for batch inserts
         for (Container container : addedContainers) {
-          accountUpdateBatch.addContainer(account.getId(), container, disableGenerateColumn);
+          accountUpdateBatch.addContainer(account.getId(), container);
         }
         // Add updated containers for batch updates
         for (Container container : updatedContainers) {
-          accountUpdateBatch.updateContainer(account.getId(), container, disableGenerateColumn);
+          accountUpdateBatch.updateContainer(account.getId(), container);
         }
 
         batchCount += accountUpdateCount;
@@ -1401,11 +1390,9 @@ public class AccountDao {
    * @param statement {@link PreparedStatement} for mysql queries
    * @param account {@link Account} being added to mysql
    * @param statementType {@link StatementType} of mysql query such as insert or update.
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
-  private void bindAccount(PreparedStatement statement, Account account, StatementType statementType,
-      boolean disableGenerateColumn)
+  private void bindAccount(PreparedStatement statement, Account account, StatementType statementType)
       throws SQLException {
     String accountInJson;
     try {
@@ -1417,22 +1404,16 @@ public class AccountDao {
       case Insert:
         statement.setString(1, accountInJson);
         statement.setInt(2, account.getSnapshotVersion());
-        if (disableGenerateColumn) {
-          statement.setInt(3, account.getId());
-          statement.setString(4, account.getName());
-          statement.setString(5, account.getStatus().toString());
-        }
+        statement.setInt(3, account.getId());
+        statement.setString(4, account.getName());
+        statement.setString(5, account.getStatus().toString());
         break;
       case Update:
         statement.setString(1, accountInJson);
         statement.setInt(2, (account.getSnapshotVersion() + 1));
-        if (disableGenerateColumn) {
-          statement.setString(3, account.getName());
-          statement.setString(4, account.getStatus().toString());
-          statement.setInt(5, account.getId());
-        } else {
-          statement.setInt(3, account.getId());
-        }
+        statement.setString(3, account.getName());
+        statement.setString(4, account.getStatus().toString());
+        statement.setInt(5, account.getId());
         break;
     }
   }
@@ -1443,11 +1424,10 @@ public class AccountDao {
    * @param accountId Id of {@link Account} whose {@link Container} is being added to mysql
    * @param container {@link Container} being added to mysql
    * @param statementType {@link StatementType} of mysql query such as insert or update.
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
   private void bindContainer(PreparedStatement statement, int accountId, Container container,
-      StatementType statementType, boolean disableGenerateColumn) throws SQLException {
+      StatementType statementType) throws SQLException {
     String containerInJson;
     try {
       containerInJson = objectMapper.writeValueAsString(container);
@@ -1459,24 +1439,17 @@ public class AccountDao {
         statement.setInt(1, accountId);
         statement.setString(2, containerInJson);
         statement.setInt(3, container.getSnapshotVersion());
-        if (disableGenerateColumn) {
-          statement.setInt(4, container.getId());
-          statement.setString(5, container.getName());
-          statement.setString(6, container.getStatus().toString());
-        }
+        statement.setInt(4, container.getId());
+        statement.setString(5, container.getName());
+        statement.setString(6, container.getStatus().toString());
         break;
       case Update:
         statement.setString(1, containerInJson);
         statement.setInt(2, (container.getSnapshotVersion() + 1));
-        if (disableGenerateColumn) {
-          statement.setString(3, container.getName());
-          statement.setString(4, container.getStatus().toString());
-          statement.setInt(5, accountId);
-          statement.setInt(6, container.getId());
-        } else {
-          statement.setInt(3, accountId);
-          statement.setInt(4, container.getId());
-        }
+        statement.setString(3, container.getName());
+        statement.setString(4, container.getStatus().toString());
+        statement.setInt(5, accountId);
+        statement.setInt(6, container.getId());
     }
   }
 
@@ -1545,8 +1518,8 @@ public class AccountDao {
    * @throws SQLException
    * @throws AccountServiceException
    */
-  private int executeUpdateDatasetSqlIfExpiredStatement(PreparedStatement statement, int accountId, int containerId, Dataset dataset)
-      throws SQLException, AccountServiceException {
+  private int executeUpdateDatasetSqlIfExpiredStatement(PreparedStatement statement, int accountId, int containerId,
+      Dataset dataset) throws SQLException, AccountServiceException {
     String datasetName = dataset.getDatasetName();
     if (dataset.getVersionSchema() == null) {
       throw new AccountServiceException("Must set the version schema info during dataset creation",
@@ -1924,11 +1897,10 @@ public class AccountDao {
     /**
      * Adds {@link Account} to its insert {@link PreparedStatement}'s batch.
      * @param account {@link Account} to be inserted.
-     * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
      * @throws SQLException
      */
-    public void addAccount(Account account, boolean disableGenerateColumn) throws SQLException {
-      bindAccount(insertAccountStatement, account, StatementType.Insert, disableGenerateColumn);
+    public void addAccount(Account account) throws SQLException {
+      bindAccount(insertAccountStatement, account, StatementType.Insert);
       insertAccountStatement.addBatch();
       ++insertAccountCount;
     }
@@ -1936,11 +1908,10 @@ public class AccountDao {
     /**
      * Adds {@link Account} to its update {@link PreparedStatement}'s batch.
      * @param account {@link Account} to be updated.
-     * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
      * @throws SQLException
      */
-    public void updateAccount(Account account, boolean disableGenerateColumn) throws SQLException {
-      bindAccount(updateAccountStatement, account, StatementType.Update, disableGenerateColumn);
+    public void updateAccount(Account account) throws SQLException {
+      bindAccount(updateAccountStatement, account, StatementType.Update);
       updateAccountStatement.addBatch();
       ++updateAccountCount;
     }
@@ -1949,11 +1920,10 @@ public class AccountDao {
      * Adds {@link Container} to its insert {@link PreparedStatement}'s batch.
      * @param accountId account id of the Container.
      * @param container {@link Container} to be inserted.
-     * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
      * @throws SQLException
      */
-    public void addContainer(int accountId, Container container, boolean disableGenerateColumn) throws SQLException {
-      bindContainer(insertContainerStatement, accountId, container, StatementType.Insert, disableGenerateColumn);
+    public void addContainer(int accountId, Container container) throws SQLException {
+      bindContainer(insertContainerStatement, accountId, container, StatementType.Insert);
       insertContainerStatement.addBatch();
       ++insertContainerCount;
     }
@@ -1962,11 +1932,10 @@ public class AccountDao {
      * Adds {@link Container} to its update {@link PreparedStatement}'s batch.
      * @param accountId account id of the Container.
      * @param container {@link Container} to be updated.
-     * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
      * @throws SQLException
      */
-    public void updateContainer(int accountId, Container container, boolean disableGenerateColumn) throws SQLException {
-      bindContainer(updateContainerStatement, accountId, container, StatementType.Update, disableGenerateColumn);
+    public void updateContainer(int accountId, Container container) throws SQLException {
+      bindContainer(updateContainerStatement, accountId, container, StatementType.Update);
       updateContainerStatement.addBatch();
       ++updateContainerCount;
     }

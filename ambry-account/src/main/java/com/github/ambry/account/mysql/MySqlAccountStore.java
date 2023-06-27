@@ -65,11 +65,10 @@ public class MySqlAccountStore {
   /**
    * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
    * @param accountsInfo information of updated Accounts
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
-  public void updateAccounts(List<AccountUpdateInfo> accountsInfo, boolean disableGenerateColumn) throws SQLException {
-    accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize, disableGenerateColumn);
+  public void updateAccounts(List<AccountUpdateInfo> accountsInfo) throws SQLException {
+    accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize);
   }
 
   /**

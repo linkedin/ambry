@@ -52,13 +52,11 @@ public class MySqlAccountService extends AbstractAccountService {
   // lock to protect in-memory metadata cache
   private final ScheduledExecutorService scheduler;
   private volatile MySqlAccountStore mySqlAccountStore;
-  private volatile MySqlAccountStore mySqlAccountStoreNew;
   private final CachedAccountService cachedAccountService;
-  private CachedAccountService cachedAccountServiceNew;
-  private final AccountServiceMetrics accountServiceMetricsNew;
 
-  public MySqlAccountService(AccountServiceMetricsWrapper accountServiceMetricsWrapper, MySqlAccountServiceConfig config,
-      MySqlAccountStoreFactory mySqlAccountStoreFactory, Notifier<String> notifier) throws IOException, SQLException {
+  public MySqlAccountService(AccountServiceMetricsWrapper accountServiceMetricsWrapper,
+      MySqlAccountServiceConfig config, MySqlAccountStoreFactory mySqlAccountStoreFactory, Notifier<String> notifier)
+      throws IOException, SQLException {
     super(config, Objects.requireNonNull(accountServiceMetricsWrapper.getAccountServiceMetrics(),
         "accountServiceMetrics cannot be null"), notifier);
     this.config = config;
@@ -77,33 +75,15 @@ public class MySqlAccountService extends AbstractAccountService {
         throw e;
       }
     }
-    this.accountServiceMetricsNew = accountServiceMetricsWrapper.getAccountServiceMetricsNew();
     cachedAccountService = new CachedAccountService(mySqlAccountStore,
         callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStore),
-        accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler, false);
-    if (config.enableNewDatabaseForMigration) {
-      try {
-        this.mySqlAccountStoreNew = mySqlAccountStoreFactory.getMySqlAccountStoreNew();
-      } catch (SQLException e) {
-        logger.error("MySQL account store creation failed", e);
-        if (MySqlDataAccessor.isCredentialError(e)) {
-          throw e;
-        }
-      }
-      cachedAccountServiceNew = new CachedAccountService(mySqlAccountStoreNew,
-          callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStoreNew),
-          accountServiceMetricsWrapper.getAccountServiceMetricsNew(), config, notifier, config.backupDirNew, scheduler,
-          true);
-    }
+        accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler);
   }
 
   /**
    * @return set (LRA cache) of containers not found in recent get attempts. Used in only tests.
    */
   Set<String> getRecentNotFoundContainersCache() {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.getRecentNotFoundContainersCache();
-    }
     return cachedAccountService.getRecentNotFoundContainersCache();
   }
 
@@ -113,104 +93,39 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   synchronized void fetchAndUpdateCache() throws SQLException {
     cachedAccountService.fetchAndUpdateCache();
-    if (config.enableNewDatabaseForMigration) {
-      try {
-        cachedAccountServiceNew.fetchAndUpdateCache();
-      } catch (SQLException e) {
-        if (config.ignoreNewDatabaseUploadError) {
-          accountServiceMetricsNew.fetchAndUpdateCacheErrorCount.inc();
-          logger.error("failed to do fetchAndUpdateCache for new db");
-        } else {
-          throw e;
-        }
-      }
-    }
   }
 
   @Override
   public Account getAccountById(short accountId) {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.getAccountById(accountId);
-    }
     return cachedAccountService.getAccountById(accountId);
   }
 
   @Override
   public Account getAccountByName(String accountName) {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.getAccountByName(accountName);
-    }
     return cachedAccountService.getAccountByName(accountName);
   }
 
   @Override
   public boolean addAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.addAccountUpdateConsumer(accountUpdateConsumer);
-    }
     return cachedAccountService.addAccountUpdateConsumer(accountUpdateConsumer);
   }
 
   @Override
   public boolean removeAccountUpdateConsumer(Consumer<Collection<Account>> accountUpdateConsumer) {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.removeAccountUpdateConsumer(accountUpdateConsumer);
-    }
     return cachedAccountService.removeAccountUpdateConsumer(accountUpdateConsumer);
   }
 
-  /**
-   * This method is used for uploading data to new db for testing purpose only.
-   */
-  protected Account getAccountByIdNew(short accountId) {
-    return cachedAccountServiceNew.getAccountById(accountId);
+  protected CachedAccountService getCachedAccountService() {
+    return cachedAccountService;
   }
-
-  /**
-   * This method is used for uploading data to new db for testing purpose only.
-   */
-  protected Account getAccountByNameNew(String accountName) {
-    return cachedAccountServiceNew.getAccountByName(accountName);
-  }
-
-  /**
-   * This method is used for uploading data to old db for testing purpose only.
-   */
-  protected Account getAccountByIdOld(short accountId) {
-    return cachedAccountService.getAccountById(accountId);
-  }
-
-  /**
-   * This method is used for uploading data to old db for testing purpose only.
-   */
-  protected Account getAccountByNameOld(String accountName) {
-    return cachedAccountService.getAccountByName(accountName);
-  }
-
-  protected CachedAccountService getCachedAccountService() {return cachedAccountService;}
 
   @Override
   public void updateAccounts(Collection<Account> accounts) throws AccountServiceException {
     cachedAccountService.updateAccounts(accounts);
-    if (config.enableNewDatabaseForMigration) {
-      try {
-        cachedAccountServiceNew.updateAccounts(accounts);
-      } catch (AccountServiceException e) {
-        if (config.ignoreNewDatabaseUploadError) {
-          accountServiceMetricsNew.updateAccountsErrorCount.inc();
-          logger.error("failed to do updateAccounts for new db");
-        } else {
-          throw e;
-        }
-      }
-    }
   }
 
   @Override
   public Collection<Account> getAllAccounts() {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.getAllAccountsHelper();
-    }
     return cachedAccountService.getAllAccountsHelper();
   }
 
@@ -220,17 +135,11 @@ public class MySqlAccountService extends AbstractAccountService {
       shutDownExecutorService(scheduler, config.updaterShutDownTimeoutMinutes, TimeUnit.MINUTES);
     }
     cachedAccountService.close();
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.close();
-    }
   }
 
   @Override
   protected void checkOpen() {
     cachedAccountService.checkOpen();
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.checkOpen();
-    }
   }
 
   ExecutorService getScheduler() {
@@ -243,38 +152,18 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public Set<Container> getContainersByStatus(Container.ContainerStatus containerStatus) {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.getContainersByStatus(containerStatus);
-    }
     return cachedAccountService.getContainersByStatus(containerStatus);
   }
 
   @Override
   public void selectInactiveContainersAndMarkInStore(AggregatedAccountStorageStats aggregatedAccountStorageStats) {
     cachedAccountService.selectInactiveContainersAndMarkInStore(aggregatedAccountStorageStats);
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.selectInactiveContainersAndMarkInStore(aggregatedAccountStorageStats);
-    }
   }
 
   @Override
   public Collection<Container> updateContainers(String accountName, Collection<Container> containers)
       throws AccountServiceException {
-    Collection<Container> containerList = cachedAccountService.updateContainers(accountName, containers);
-    if (config.enableNewDatabaseForMigration) {
-      try {
-        cachedAccountServiceNew.updateContainers(accountName, containers);
-      } catch (AccountServiceException e) {
-        // if before migration, update container for new db would fail due to the account does not exist.
-        if (config.ignoreNewDatabaseUploadError) {
-          accountServiceMetricsNew.updateContainersErrorCount.inc();
-          logger.trace("This is expected due to the account {} does not exist in new db", accountName);
-        } else {
-          throw e;
-        }
-      }
-    }
-    return containerList;
+    return cachedAccountService.updateContainers(accountName, containers);
   }
 
   /**
@@ -287,9 +176,6 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerByName(String accountName, String containerName) throws AccountServiceException {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.getContainerByNameHelper(accountName, containerName);
-    }
     return cachedAccountService.getContainerByNameHelper(accountName, containerName);
   }
 
@@ -303,9 +189,6 @@ public class MySqlAccountService extends AbstractAccountService {
    */
   @Override
   public Container getContainerById(short accountId, Short containerId) throws AccountServiceException {
-    if (config.enableGetFromNewDbOnly) {
-      return cachedAccountServiceNew.getContainerByIdHelper(accountId, containerId);
-    }
     return cachedAccountService.getContainerByIdHelper(accountId, containerId);
   }
 
@@ -330,50 +213,30 @@ public class MySqlAccountService extends AbstractAccountService {
 
   @Override
   public void addDataset(Dataset dataset) throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.addDataset(dataset);
-    } else {
-      cachedAccountService.addDataset(dataset);
-    }
+    cachedAccountService.addDataset(dataset);
   }
 
   @Override
   public void updateDataset(Dataset dataset) throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.updateDataset(dataset);
-    } else {
-      cachedAccountService.updateDataset(dataset);
-    }
+    cachedAccountService.updateDataset(dataset);
   }
 
   @Override
   public Dataset getDataset(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      return cachedAccountServiceNew.getDataset(accountName, containerName, datasetName);
-    }
     return cachedAccountService.getDataset(accountName, containerName, datasetName);
   }
 
   @Override
   public void deleteDataset(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.deleteDataset(accountName, containerName, datasetName);
-    } else {
-      cachedAccountService.deleteDataset(accountName, containerName, datasetName);
-    }
+    cachedAccountService.deleteDataset(accountName, containerName, datasetName);
   }
 
   @Override
   public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
       String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled,
-      DatasetVersionState datasetVersionState)
-      throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      return cachedAccountServiceNew.addDatasetVersion(accountName, containerName, datasetName, version,
-          timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
-    }
+      DatasetVersionState datasetVersionState) throws AccountServiceException {
     return cachedAccountService.addDatasetVersion(accountName, containerName, datasetName, version, timeToLiveInSeconds,
         creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
   }
@@ -381,10 +244,6 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   public void updateDatasetVersionState(String accountName, String containerName, String datasetName, String version,
       DatasetVersionState datasetVersionState) throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.updateDatasetVersionState(accountName, containerName, datasetName, version,
-          datasetVersionState);
-    }
     cachedAccountService.updateDatasetVersionState(accountName, containerName, datasetName, version,
         datasetVersionState);
   }
@@ -392,47 +251,30 @@ public class MySqlAccountService extends AbstractAccountService {
   @Override
   public DatasetVersionRecord getDatasetVersion(String accountName, String containerName, String datasetName,
       String version) throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      return cachedAccountServiceNew.getDatasetVersion(accountName, containerName, datasetName, version);
-    }
     return cachedAccountService.getDatasetVersion(accountName, containerName, datasetName, version);
   }
 
   @Override
-  public void deleteDatasetVersion(String accountName, String containerName, String datasetName,
-      String version) throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      cachedAccountServiceNew.deleteDatasetVersion(accountName, containerName, datasetName, version);
-    } else {
-      cachedAccountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
-    }
+  public void deleteDatasetVersion(String accountName, String containerName, String datasetName, String version)
+      throws AccountServiceException {
+    cachedAccountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
   }
 
   @Override
-  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(String accountName,
-      String containerName, String datasetName) throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      return cachedAccountServiceNew.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
-    } else {
-      return cachedAccountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
-    }
+  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(String accountName, String containerName,
+      String datasetName) throws AccountServiceException {
+    return cachedAccountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
   }
 
   @Override
   public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      return cachedAccountServiceNew.getAllValidVersion(accountName, containerName, datasetName);
-    }
-      return cachedAccountService.getAllValidVersion(accountName, containerName, datasetName);
+    return cachedAccountService.getAllValidVersion(accountName, containerName, datasetName);
   }
 
   @Override
   public Page<String> listAllValidDatasets(String accountName, String containerName, String pageToken)
       throws AccountServiceException {
-    if (config.enableNewDatabaseForMigration) {
-      return cachedAccountServiceNew.listAllValidDatasets(accountName, containerName, pageToken);
-    }
     return cachedAccountService.listAllValidDatasets(accountName, containerName, pageToken);
   }
 
