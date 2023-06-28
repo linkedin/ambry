@@ -634,9 +634,8 @@ public class FrontendRestRequestServiceTest {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
 
-
     // add first dataset version
-    long version = 0;
+    String version = "LATEST";
     String blobName = DATASET_NAME + SLASH + version;
     String namedBlobPathUri =
         NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName;
@@ -645,8 +644,8 @@ public class FrontendRestRequestServiceTest {
     body.add(content);
     body.add(null);
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, 7200, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null, null,
-        null);
+    setAmbryHeadersForPut(headers, 7200, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null,
+        null, null);
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri, headers, body);
     restResponseChannel = new MockRestResponseChannel();
@@ -658,23 +657,23 @@ public class FrontendRestRequestServiceTest {
     String blobIdFromRouter =
         router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
     reset(namedBlobDb);
-    NamedBlobRecord namedBlobRecord = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName,
-        blobIdFromRouter, Utils.Infinite_Time);
+    String blobNameNew = DATASET_NAME + SLASH + "1";
+    NamedBlobRecord namedBlobRecord =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobNameNew, blobIdFromRouter,
+            Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
     when(namedBlobDb.delete(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(),
-        blobName)).thenReturn(
-        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
-    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(),
-        blobName, GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
+        blobNameNew)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
+    when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobNameNew,
+        GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
     when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
     doOperation(restRequest, restResponseChannel);
 
-
     //add second dataset version
-    long version1 = 1;
+    String version1 = "LATEST";
     String blobName1 = DATASET_NAME + SLASH + version1;
     String namedBlobPathUri1 =
         NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName1;
@@ -683,8 +682,8 @@ public class FrontendRestRequestServiceTest {
     body.add(content);
     body.add(null);
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, 7200, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null, null,
-        null);
+    setAmbryHeadersForPut(headers, 7200, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null,
+        null, null);
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri1, headers, body);
     restResponseChannel = new MockRestResponseChannel();
@@ -692,15 +691,16 @@ public class FrontendRestRequestServiceTest {
     byteBufferContent = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(10));
     String blobIdFromRouter1 =
         router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
-    NamedBlobRecord namedBlobRecord1 = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName1,
-        blobIdFromRouter1, Utils.Infinite_Time);
+    String blobNameNew1 = DATASET_NAME + SLASH + "2";
+    NamedBlobRecord namedBlobRecord1 =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobNameNew1, blobIdFromRouter1,
+            Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord1)));
     when(namedBlobDb.delete(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(),
-        blobName1)).thenReturn(
-        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter1, false)));
-    when(namedBlobDb.get(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(),
-        blobName1, GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord1));
+        blobNameNew1)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter1, false)));
+    when(namedBlobDb.get(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(), blobNameNew1,
+        GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord1));
     when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord1)));
 
@@ -721,7 +721,7 @@ public class FrontendRestRequestServiceTest {
     doOperation(restRequest, restResponseChannel);
 
     //add third version
-    long version2 = 2;
+    String version2 = "LATEST";
     String blobName2 = DATASET_NAME + SLASH + version2;
     String namedBlobPathUri2 =
         NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + blobName2;
@@ -730,8 +730,8 @@ public class FrontendRestRequestServiceTest {
     body.add(content);
     body.add(null);
     headers = new JSONObject();
-    setAmbryHeadersForPut(headers, 7200, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null, null,
-        null);
+    setAmbryHeadersForPut(headers, 7200, testContainer.isCacheable(), "test", "application/octet-stream", "owner", null,
+        null, null);
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     restRequest = createRestRequest(RestMethod.PUT, namedBlobPathUri2, headers, body);
     restResponseChannel = new MockRestResponseChannel();
@@ -739,19 +739,30 @@ public class FrontendRestRequestServiceTest {
     byteBufferContent = new ByteBufferReadableStreamChannel(ByteBuffer.allocate(10));
     String blobIdFromRouter2 =
         router.putBlobWithIdVersion(blobProperties, new byte[0], byteBufferContent, BlobId.BLOB_ID_V6).get();
-    NamedBlobRecord namedBlobRecord2 = new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobName2,
-        blobIdFromRouter2, Utils.Infinite_Time);
+    String blobNameNew2 = DATASET_NAME + SLASH + "3";
+    NamedBlobRecord namedBlobRecord2 =
+        new NamedBlobRecord(testAccount.getName(), testContainer.getName(), blobNameNew2, blobIdFromRouter2,
+            Utils.Infinite_Time);
     when(namedBlobDb.put(any(), any(), any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord2)));
     when(namedBlobDb.delete(namedBlobRecord2.getAccountName(), namedBlobRecord2.getContainerName(),
-        blobName2)).thenReturn(
-        CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter2, false)));
-    when(namedBlobDb.get(namedBlobRecord2.getAccountName(), namedBlobRecord2.getContainerName(),
-        blobName2, GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord2));
+        blobNameNew2)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter2, false)));
+    when(namedBlobDb.get(namedBlobRecord2.getAccountName(), namedBlobRecord2.getContainerName(), blobNameNew2,
+        GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord2));
     when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord2)));
 
     doOperation(restRequest, restResponseChannel);
+
+    namedBlobPathUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + DATASET_NAME
+            + SLASH + "1";
+    namedBlobPathUri1 =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + DATASET_NAME
+            + SLASH + "2";
+    namedBlobPathUri2 =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + DATASET_NAME
+            + SLASH + "3";
 
     //get the 1st dataset version under the dataset, should be deleted.
     headers = new JSONObject();
@@ -762,7 +773,7 @@ public class FrontendRestRequestServiceTest {
     //get the 2nd dataset version, should be deleted.
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
-    restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri2, headers, null);
+    restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri1, headers, null);
     restResponseChannel = new MockRestResponseChannel();
 
     //get the 3rd dataset version, should exist

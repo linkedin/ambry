@@ -595,15 +595,23 @@ public class NamedBlobPutHandler {
     /**
      * Support delete the dataset version out of retentionCount
      */
-    private void updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount() {
+    private void updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount() throws RestServiceException {
       Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
+      String accountName = dataset.getAccountName();
+      String containerName = dataset.getContainerName();
+      String datasetName = dataset.getDatasetName();
+      String targetVersion = (String) restResponseChannel.getHeader(Headers.TARGET_DATASET_VERSION);
       try {
-        String accountName = dataset.getAccountName();
-        String containerName = dataset.getContainerName();
-        String datasetName = dataset.getDatasetName();
-        String targetVersion = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
         accountService.updateDatasetVersionState(accountName, containerName, datasetName, targetVersion,
             DatasetVersionState.READY);
+      } catch (AccountServiceException ex) {
+        LOGGER.error(
+            "Dataset version update failed for accountName: " + accountName + " containerName: " + containerName
+                + " datasetName: " + datasetName + " version: " + targetVersion);
+        throw new RestServiceException(ex.getMessage(),
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      }
+      try {
         List<DatasetVersionRecord> datasetVersionRecordList =
             accountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
         if (datasetVersionRecordList.size() > 0) {
@@ -616,6 +624,7 @@ public class NamedBlobPutHandler {
               new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
                   NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
                       + version, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+          LOGGER.trace("New request path : " + newRequestPath);
           // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
           restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
           restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
@@ -625,7 +634,7 @@ public class NamedBlobPutHandler {
         }
       } catch (Exception e) {
         frontendMetrics.deleteDatasetVersionOutOfRetentionError.inc();
-        LOGGER.error("Failed to delete dataset version out of retention count for this dataset: " + dataset.toString());
+        LOGGER.error("Failed to delete dataset version out of retention count for this dataset: " + dataset, e);
       }
     }
 
@@ -652,6 +661,7 @@ public class NamedBlobPutHandler {
             new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
                 NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
                 requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+        LOGGER.trace("New request path : " + newRequestPath);
         // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
         restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
         restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
