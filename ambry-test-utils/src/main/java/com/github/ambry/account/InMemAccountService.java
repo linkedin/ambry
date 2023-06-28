@@ -142,6 +142,17 @@ public class InMemAccountService implements AccountService {
     if (datasetVersionTtlEnabled) {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
     }
+    if ("LATEST".equals(version)) {
+      List<Map.Entry<Pair<String, String>, DatasetVersionRecord>> datasetToDatasetVersionList =
+          new ArrayList<>(idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).entrySet());
+      datasetToDatasetVersionList.sort(
+          (entry1, entry2) -> entry2.getValue().getVersion().compareTo(entry1.getValue().getVersion()));
+      if (datasetToDatasetVersionList.size() == 0) {
+        version = "1";
+      } else {
+        version = String.valueOf(Integer.parseInt(datasetToDatasetVersionList.get(0).getValue().getVersion()) + 1);
+      }
+    }
     DatasetVersionRecord datasetVersionRecord =
         new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs);
     idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
