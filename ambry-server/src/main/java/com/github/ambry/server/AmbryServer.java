@@ -358,7 +358,7 @@ public class AmbryServer {
           // start the repairRequestSender. It sends requests through the localChannel to the repairHandlerPool
           repairRequestsSender =
               new RepairRequestsSender(localChannel, localClientFactory, clusterMap, nodeId, repairRequestsDb,
-                  clusterParticipants.get(0));
+                  clusterParticipants.get(0), registry);
           Thread repairThread = Utils.daemonThread("Repair-Sender", repairRequestsSender);
           repairThread.start();
           logger.info("RepairRequests: open the db and started the handling thread {}.", repairRequestsDb);

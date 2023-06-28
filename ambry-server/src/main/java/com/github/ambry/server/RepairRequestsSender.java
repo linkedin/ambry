@@ -15,6 +15,9 @@
 
 package com.github.ambry.server;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -77,6 +80,8 @@ class RepairRequestsSender implements Runnable {
   private final int maxResults;
   // shutdown flag
   private volatile boolean shutdown = false;
+  // metrics
+  private final Metrics metrics;
 
   /**
    * RepairRequestsSender constructor
@@ -86,10 +91,11 @@ class RepairRequestsSender implements Runnable {
    * @param nodeId this {@link DataNodeId}
    * @param repairRequestsDb the database to get the RepairRequestRecord
    * @param clusterParticipant {@link ClusterParticipant}
+   * @param metricsRegistry the {@link MetricRegistry} to record metrics
    */
   public RepairRequestsSender(RequestResponseChannel requestChannel, LocalNetworkClientFactory factory,
       ClusterMap clusterMap, DataNodeId nodeId, RepairRequestsDb repairRequestsDb,
-      ClusterParticipant clusterParticipant) {
+      ClusterParticipant clusterParticipant, MetricRegistry metricsRegistry) {
     this.requestChannel = requestChannel;
     this.client = factory.getNetworkClient();
     this.clusterMap = clusterMap;
@@ -98,6 +104,7 @@ class RepairRequestsSender implements Runnable {
 
     this.db = repairRequestsDb;
     this.maxResults = db.getListMaxResults();
+    this.metrics = new Metrics(metricsRegistry);
 
     // LOCAL_CONSISTENCY_TODO. listen to the clustermap change and make the modification accordingly.
     partitionIds = new ArrayList<>();
@@ -112,9 +119,6 @@ class RepairRequestsSender implements Runnable {
   public void run() {
     while (!shutdown) {
       try {
-        // sleep for some time
-        Thread.sleep(SLEEP_TIME_MS);
-
         boolean hasMore = true;
         boolean hasError = false;
         // if some partitions have more requests, continue to handle them.
@@ -139,9 +143,12 @@ class RepairRequestsSender implements Runnable {
             Set<Integer> requestsToDrop = new HashSet<>();
             // send the repair requests to the handler and wait for the responses.
             for (RequestInfo reqInfo : requestInfos) {
+              long startTime = System.currentTimeMillis();
               List<ResponseInfo> responses =
                   client.sendAndPoll(Collections.singletonList(reqInfo), requestsToDrop, POLL_TIMEOUT_MS);
+              metrics.repairSenderHandleTimeInMs.update(System.currentTimeMillis() - startTime);
               if (responses == null || responses.size() == 0) {
+                metrics.repairSenderErrorHandleCount.inc();
                 logger.error("RepairRequests Sender: timeout waiting for repairs {} {}", nodeId, reqInfo.getRequest());
                 hasError = true;
                 break;
@@ -157,20 +164,23 @@ class RepairRequestsSender implements Runnable {
                   type = RepairRequestRecord.OperationType.DeleteRequest;
                 }
                 db.removeRepairRequests(req.getBlobId().toString(), type);
+                metrics.repairSenderSuccessHandleCount.inc();
                 logger.info("RepairRequests Sender: Repaired {}", req);
               } else {
-                // LOCAL_CONSISTENCY_TODO: metrics for all the errors happens in RepairRequestsSender.
                 // Ideally we may need create alert if we cannot repair the requests in timely matter.
+                metrics.repairSenderErrorHandleCount.inc();
                 logger.error("RepairRequests Sender: failed to repair {} response {}", req, res);
                 hasError = true;
               }
             }
           } // loop all the partitions
         }  // loop until all the partitions are clean
+
+        // sleep for some time
+        Thread.sleep(SLEEP_TIME_MS);
       } catch (Throwable e) {
-        // LOCAL_CONSISTENCY_TODO add metric to track background threads
+        metrics.repairSenderErrorHandleCount.inc();
         logger.error("RepairRequests Sender: Exception when handling request", e);
-      } finally {
       }
     }
   }
@@ -192,14 +202,14 @@ class RepairRequestsSender implements Runnable {
         blobId = new BlobId(record.getBlobId(), clusterMap);
       } catch (IOException e) {
         // new BlobId may generate IOException
-        // LOCAL_CONSISTENCY_TODO add metrics for RepairRequestsSender class
+        metrics.repairSenderErrorGenerateReqCount.inc();
         logger.error("RepairRequests Sender: Failed to generate Blob ID {}", record, e);
         continue;
       }
 
       ReplicaId replicaId = partition2Replicas.get(partitionId);
       if (replicaId == null) {
-        // LOCAL_CONSISTENCY_TODO add metrics for RepairRequestsSender class
+        metrics.repairSenderErrorGenerateReqCount.inc();
         logger.error("RepairRequests Sender: Replica is null {} {} {}", partitionId, record, replicaId);
         continue;
       }
@@ -210,6 +220,7 @@ class RepairRequestsSender implements Runnable {
       } else if (record.getOperationType() == RepairRequestRecord.OperationType.TtlUpdateRequest) {
         type = RequestOrResponseType.TtlUpdateRequest;
       } else {
+        metrics.repairSenderErrorGenerateReqCount.inc();
         logger.error("RepairRequests Sender: Un-supported repair operation type " + record);
         continue;
       }
@@ -220,6 +231,7 @@ class RepairRequestsSender implements Runnable {
             "RepairRequests Sender: Shouldn't get the repair requests of which this node is the source replica, "
                 + record;
         logger.error(errorMsg);
+        metrics.repairSenderErrorGenerateReqCount.inc();
         throw new Exception(errorMsg);
       }
 
@@ -238,5 +250,28 @@ class RepairRequestsSender implements Runnable {
 
   public void shutdown() {
     shutdown = true;
+  }
+
+  private static class Metrics {
+    public final Counter repairSenderErrorGenerateReqCount;
+    public final Counter repairSenderErrorHandleCount;
+    public final Counter repairSenderSuccessHandleCount;
+
+    public final Histogram repairSenderHandleTimeInMs;
+    /**
+     * Constructor to create the Metrics.
+     * @param metricRegistry The {@link MetricRegistry}.
+     */
+    public Metrics(MetricRegistry metricRegistry) {
+      repairSenderErrorGenerateReqCount =
+          metricRegistry.counter(MetricRegistry.name(RepairRequestsSender.class, "RepairSenderErrorGenerateReqCount"));
+      repairSenderErrorHandleCount =
+          metricRegistry.counter(MetricRegistry.name(RepairRequestsSender.class, "RepairSenderErrorHandleCount"));
+      repairSenderSuccessHandleCount =
+          metricRegistry.counter(MetricRegistry.name(RepairRequestsSender.class, "RepairSenderSuccessHandleCount"));
+
+      repairSenderHandleTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(RepairRequestsSender.class, "RepairSenderHandleTimeInMs"));
+    }
   }
 }
