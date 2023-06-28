@@ -36,6 +36,7 @@ import java.util.List;
 public class MySqlAccountStore {
 
   private final AccountDao accountDao;
+  private final DatasetDao datasetDao;
   private final MySqlDataAccessor mySqlDataAccessor;
   private final MySqlAccountServiceConfig config;
 
@@ -50,7 +51,8 @@ public class MySqlAccountStore {
   public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics,
       MySqlAccountServiceConfig config) throws SQLException {
     mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
-    accountDao = new AccountDao(mySqlDataAccessor, config);
+    accountDao = new AccountDao(mySqlDataAccessor);
+    datasetDao = new DatasetDao(mySqlDataAccessor, config);
     this.config = config;
   }
 
@@ -60,68 +62,6 @@ public class MySqlAccountStore {
    */
   public MySqlDataAccessor getMySqlDataAccessor() {
     return mySqlDataAccessor;
-  }
-
-  /**
-   * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
-   * @param accountsInfo information of updated Accounts
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
-   * @throws SQLException
-   */
-  public void updateAccounts(List<AccountUpdateInfo> accountsInfo, boolean disableGenerateColumn) throws SQLException {
-    accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize, disableGenerateColumn);
-  }
-
-  /**
-   * Add dataset to the database.
-   * @param accountId the id of the {@link Account}.
-   * @param containerId the id of the {@link Container}
-   * @param dataset the {@link Dataset}.
-   * @throws SQLException
-   */
-  public void addDataset(short accountId, short containerId, Dataset dataset)
-      throws SQLException, AccountServiceException {
-    accountDao.addDataset(accountId, containerId, dataset);
-  }
-
-  /**
-   * Update dataset to the database.
-   * @param accountId the id of the {@link Account}
-   * @param containerId the id of the {@link Container}
-   * @param dataset the {@link Dataset}.
-   * @throws SQLException
-   */
-  public void updateDataset(short accountId, short containerId, Dataset dataset)
-      throws SQLException, AccountServiceException {
-    accountDao.updateDataset(accountId, containerId, dataset);
-  }
-
-  /**
-   * Get dataset from the database.
-   * @param accountId the id of the {@link Account}.
-   * @param containerId the id of the {@link Container}
-   * @param accountName the name of the {@link Account}.
-   * @param containerName the name of the {@link Container}
-   * @param datasetName the name of the dataset.
-   * @return the {@link Dataset}
-   * @throws SQLException
-   */
-  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
-      String datasetName) throws SQLException, AccountServiceException {
-    return accountDao.getDataset(accountId, containerId, accountName, containerName, datasetName);
-  }
-
-  /**
-   * Delete dataset from the database.
-   * @param accountId the id of the {@link Account}.
-   * @param containerId the id of the {@link Container}
-   * @param datasetName the name of the dataset.
-   * @throws AccountServiceException
-   * @throws SQLException
-   */
-  public void deleteDataset(short accountId, short containerId, String datasetName)
-      throws AccountServiceException, SQLException {
-    accountDao.deleteDataset(accountId, containerId, datasetName);
   }
 
   /**
@@ -177,6 +117,68 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
+   * @param accountsInfo information of updated Accounts
+   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
+   * @throws SQLException
+   */
+  public void updateAccounts(List<AccountUpdateInfo> accountsInfo, boolean disableGenerateColumn) throws SQLException {
+    accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize, disableGenerateColumn);
+  }
+
+  /**
+   * Add dataset to the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param dataset the {@link Dataset}.
+   * @throws SQLException
+   */
+  public void addDataset(short accountId, short containerId, Dataset dataset)
+      throws SQLException, AccountServiceException {
+    datasetDao.addDataset(accountId, containerId, dataset);
+  }
+
+  /**
+   * Update dataset to the database.
+   * @param accountId the id of the {@link Account}
+   * @param containerId the id of the {@link Container}
+   * @param dataset the {@link Dataset}.
+   * @throws SQLException
+   */
+  public void updateDataset(short accountId, short containerId, Dataset dataset)
+      throws SQLException, AccountServiceException {
+    datasetDao.updateDataset(accountId, containerId, dataset);
+  }
+
+  /**
+   * Get dataset from the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param accountName the name of the {@link Account}.
+   * @param containerName the name of the {@link Container}
+   * @param datasetName the name of the dataset.
+   * @return the {@link Dataset}
+   * @throws SQLException
+   */
+  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
+      String datasetName) throws SQLException, AccountServiceException {
+    return datasetDao.getDataset(accountId, containerId, accountName, containerName, datasetName);
+  }
+
+  /**
+   * Delete dataset from the database.
+   * @param accountId the id of the {@link Account}.
+   * @param containerId the id of the {@link Container}
+   * @param datasetName the name of the dataset.
+   * @throws AccountServiceException
+   * @throws SQLException
+   */
+  public void deleteDataset(short accountId, short containerId, String datasetName)
+      throws AccountServiceException, SQLException {
+    datasetDao.deleteDataset(accountId, containerId, datasetName);
+  }
+
+  /**
    * Add a version of {@link Dataset}
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
@@ -194,14 +196,14 @@ public class MySqlAccountStore {
   public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
       boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState) throws SQLException, AccountServiceException {
-    return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
+    return datasetDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
         timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
   }
 
   public void updateDatasetVersionState(int accountId, int containerId, String accountName, String containerName,
       String datasetName, String version, DatasetVersionState datasetVersionState)
       throws SQLException, AccountServiceException {
-    accountDao.updateDatasetVersionState(accountId, containerId, accountName, containerName, datasetName, version,
+    datasetDao.updateDatasetVersionState(accountId, containerId, accountName, containerName, datasetName, version,
         datasetVersionState);
   }
 
@@ -218,7 +220,7 @@ public class MySqlAccountStore {
    */
   public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String accountName,
       String containerName, String datasetName, String version) throws SQLException, AccountServiceException {
-    return accountDao.getDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version);
+    return datasetDao.getDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version);
   }
 
   /**
@@ -232,7 +234,7 @@ public class MySqlAccountStore {
    */
   public void deleteDatasetVersion(short accountId, short containerId, String datasetName, String version)
       throws SQLException, AccountServiceException {
-    accountDao.deleteDatasetVersion(accountId, containerId, datasetName, version);
+    datasetDao.deleteDatasetVersion(accountId, containerId, datasetName, version);
   }
 
   /**
@@ -245,7 +247,7 @@ public class MySqlAccountStore {
    */
   public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId, short containerId,
       String datasetName) throws SQLException {
-    return accountDao.getAllValidVersionForDatasetDeletion(accountId, containerId, datasetName);
+    return datasetDao.getAllValidVersionForDatasetDeletion(accountId, containerId, datasetName);
   }
 
   /**
@@ -257,7 +259,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken) throws SQLException {
-    return accountDao.listAllValidDatasets(accountId, containerId, pageToken);
+    return datasetDao.listAllValidDatasets(accountId, containerId, pageToken);
   }
 
   /**
@@ -272,7 +274,7 @@ public class MySqlAccountStore {
    */
   public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId, short containerId,
       String accountName, String containerName, String datasetName) throws SQLException, AccountServiceException {
-     return accountDao.getAllValidVersionsOutOfRetentionCount(accountId, containerId, accountName, containerName, datasetName);
+     return datasetDao.getAllValidVersionsOutOfRetentionCount(accountId, containerId, accountName, containerName, datasetName);
   }
 
   /**
