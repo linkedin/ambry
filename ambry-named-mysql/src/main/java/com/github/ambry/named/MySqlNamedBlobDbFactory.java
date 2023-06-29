@@ -71,6 +71,9 @@ public class MySqlNamedBlobDbFactory implements NamedBlobDbFactory {
     hikariConfig.addDataSourceProperty("prepStmtCacheSize", "250");
     hikariConfig.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
     hikariConfig.addDataSourceProperty("useServerPrepStmts", "true");
+    if (!config.transactionIsolationLevel.equals(TransactionIsolationLevel.TRANSACTION_NONE)) {
+      hikariConfig.setTransactionIsolation(config.transactionIsolationLevel.name());
+    }
     hikariConfig.setMetricRegistry(metricRegistry);
     return new HikariDataSource(hikariConfig);
   }
