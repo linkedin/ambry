@@ -119,7 +119,8 @@ public class StorageManagerMetrics {
    */
   void initializeHostUtilizationTracker(final StorageManager storageManager) {
     Gauge<Double> percentageUsedCapacity = storageManager::getHostPercentageUsedCapacity;
-    registry.register(MetricRegistry.name(StorageManager.class, "HostPercentageUsedCapacity"), percentageUsedCapacity);
+    registry.gauge(MetricRegistry.name(StorageManager.class, "HostUsedCapacityPercentage"),
+        () -> percentageUsedCapacity);
   }
 
   /**
