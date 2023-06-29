@@ -137,9 +137,9 @@ public class DatasetDao {
             + "where (%4$s IS NULL or %4$s > now(3)) and (%5$s, %6$s, %7$s, %8$s) = (?, ?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
         VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
         DATASET_VERSION_STATE);
-    listLatestVersionSqlForUpload =
-        String.format("select %1$s from %2$s " + "where (%4$s, %5$s, %6$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
-            VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    listLatestVersionSqlForUpload = String.format("select %1$s from %2$s "
+            + "where (%3$s IS NULL or %3$s > now(3)) and (%4$s, %5$s, %6$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1", VERSION,
+        DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     listValidVersionForDatasetDeletionSql =
         String.format("select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
             VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
@@ -358,8 +358,9 @@ public class DatasetDao {
                 dataset.getDatasetName(), version);
         version = convertVersionValueToVersion(versionNumber, dataset.getVersionSchema());
         //always retry with the latest version + 1 until it has been successfully uploading without conflict or failed with exception.
-        return addDatasetVersionHelper(accountId, containerId, dataset, version, timeToLiveInSeconds, creationTimeInMs,
-            datasetVersionTtlEnabled, versionNumber, datasetVersionState);
+        return addDatasetVersions(accountId, containerId, dataset.getAccountName(), dataset.getContainerName(),
+            dataset.getDatasetName(), version, timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled,
+            datasetVersionState);
       } catch (SQLException | AccountServiceException ex) {
         // if the version already exist in database, retry with the new latest version +1.
         if (!(ex instanceof SQLIntegrityConstraintViolationException)) {

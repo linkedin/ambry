@@ -384,9 +384,10 @@ public class MySqlAccountService extends AbstractAccountService {
     if (config.enableNewDatabaseForMigration) {
       cachedAccountServiceNew.updateDatasetVersionState(accountName, containerName, datasetName, version,
           datasetVersionState);
+    } else {
+      cachedAccountService.updateDatasetVersionState(accountName, containerName, datasetName, version,
+          datasetVersionState);
     }
-    cachedAccountService.updateDatasetVersionState(accountName, containerName, datasetName, version,
-        datasetVersionState);
   }
 
   @Override
