@@ -774,7 +774,7 @@ public class FrontendRestRequestServiceTest {
     headers = new JSONObject();
     headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
     restRequest = createRestRequest(RestMethod.GET, namedBlobPathUri1, headers, null);
-    restResponseChannel = new MockRestResponseChannel();
+    verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
 
     //get the 3rd dataset version, should exist
     headers = new JSONObject();
@@ -3735,6 +3735,11 @@ class BadRestRequest extends BadRSC implements RestRequest {
   @Override
   public RestMethod getRestMethod() {
     return null;
+  }
+
+  @Override
+  public void setRestMethod(RestMethod restMethod) {
+    throw new IllegalStateException("Not implemented");
   }
 
   @Override

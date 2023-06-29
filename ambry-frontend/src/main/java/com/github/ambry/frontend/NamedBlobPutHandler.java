@@ -33,6 +33,7 @@ import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -629,6 +630,8 @@ public class NamedBlobPutHandler {
           restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
           restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
           restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+          //set the rest method to delete in order to delete data in named blob.
+          restRequest.setRestMethod(RestMethod.DELETE);
           deleteBlobHandler.handle(restRequest, restResponseChannel,
               recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName));
         }
@@ -649,6 +652,8 @@ public class NamedBlobPutHandler {
     private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx, String accountName,
         String containerName, String datasetName) {
       if (idx == datasetVersionRecordList.size()) {
+        //set the rest method back.
+        restRequest.setRestMethod(RestMethod.PUT);
         return null;
       }
       Callback<Void> nextCallBack =

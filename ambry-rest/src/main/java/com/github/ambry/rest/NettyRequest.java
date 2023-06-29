@@ -79,7 +79,6 @@ public class NettyRequest implements RestRequest {
 
   private final long size;
   private final QueryStringDecoder query;
-  private final RestMethod restMethod;
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
   private final AtomicBoolean channelOpen = new AtomicBoolean(true);
   protected final AtomicLong bytesReceived = new AtomicLong(0);
@@ -88,6 +87,7 @@ public class NettyRequest implements RestRequest {
   private final RecvByteBufAllocator recvByteBufAllocator = new DefaultMaxBytesRecvByteBufAllocator();
   private final SSLSession sslSession;
 
+  private RestMethod restMethod;
   private MessageDigest digest;
   private byte[] digestBytes;
   private long digestCalculationTimeInMs = -1;
@@ -240,6 +240,11 @@ public class NettyRequest implements RestRequest {
   @Override
   public RestMethod getRestMethod() {
     return restMethod;
+  }
+
+  @Override
+  public void setRestMethod(RestMethod restMethod) {
+    this.restMethod = restMethod;
   }
 
   @Override

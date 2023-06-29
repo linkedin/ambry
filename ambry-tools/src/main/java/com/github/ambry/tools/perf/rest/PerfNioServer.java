@@ -208,7 +208,7 @@ class PerfNioServer implements NioServer {
     private static final String PERF_URI = "perf-uri";
     private static final String MULTIPLE_HEADER_VALUE_DELIMITER = ", ";
 
-    private final RestMethod restMethod;
+    private RestMethod restMethod;
     private final ReadableStreamChannel readableStreamChannel;
     private final Map<String, Object> args;
     private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
@@ -238,6 +238,11 @@ class PerfNioServer implements NioServer {
     @Override
     public RestMethod getRestMethod() {
       return restMethod;
+    }
+
+    @Override
+    public void setRestMethod(RestMethod restMethod) {
+      this.restMethod = restMethod;
     }
 
     @Override
