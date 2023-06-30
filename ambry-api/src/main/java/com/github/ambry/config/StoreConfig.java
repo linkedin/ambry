@@ -523,6 +523,16 @@ public class StoreConfig {
   public static final String storePersistRemoteTokenIntervalInSecondsName =
       "store.persist.remote.token.interval.in.seconds";
 
+  @Config(storeDiskFailureHandlerTaskIntervalInSecondsName)
+  public final int storeDiskFailureHandlerTaskIntervalInSeconds;
+  public static final String storeDiskFailureHandlerTaskIntervalInSecondsName =
+      "store.disk.failure.handler.task.interval.in.seconds";
+
+  @Config(storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName)
+  public final int storeDiskFailureHandlerRetryLockBackoffTimeInSeconds;
+  public static final String storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName =
+      "store.disk.failure.handler.retry.lock.backoff.time.in.seconds";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -656,5 +666,16 @@ public class StoreConfig {
     storeDeletedMessageRetentionMinutes =
         (deletedMessageRetentionMinutes == -1) ? storeDeletedMessageRetentionHours * 60
             : deletedMessageRetentionMinutes;
+    storeDiskFailureHandlerTaskIntervalInSeconds =
+        verifiableProperties.getIntInRange(storeDiskFailureHandlerTaskIntervalInSecondsName, 10 * 60, 1,
+            Integer.MAX_VALUE);
+    storeDiskFailureHandlerRetryLockBackoffTimeInSeconds =
+        verifiableProperties.getIntInRange(storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName, 30, 0,
+            Integer.MAX_VALUE);
+    if (storeDiskFailureHandlerRetryLockBackoffTimeInSeconds > storeDiskFailureHandlerTaskIntervalInSeconds) {
+      throw new IllegalStateException("Retry lock backoff time should be shorter than task interval: "
+          + storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName + " < "
+          + storeDiskFailureHandlerTaskIntervalInSeconds);
+    }
   }
 }

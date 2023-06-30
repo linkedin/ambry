@@ -20,6 +20,8 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
+import com.github.ambry.clustermap.DistributedLock;
+import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
@@ -47,6 +49,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -211,6 +215,11 @@ public class StorageManager implements StoreManager {
         });
       }
       diskToDiskManager.values().forEach(diskManager -> unexpectedDirs.addAll(diskManager.getUnexpectedDirs()));
+
+      // Add the background task to update the disk capacity
+      DiskFailureHandler diskFailureHandler = new DiskFailureHandler();
+      scheduler.scheduleAtFixedRate(diskFailureHandler, storeConfig.storeDiskFailureHandlerTaskIntervalInSeconds,
+          storeConfig.storeDiskFailureHandlerTaskIntervalInSeconds, TimeUnit.SECONDS);
       logger.info("Starting storage manager complete");
     } finally {
       metrics.storageManagerStartTimeMs.update(time.milliseconds() - startTimeMs);
@@ -815,6 +824,140 @@ public class StorageManager implements StoreManager {
       // this transition
       onPartitionBecomeOfflineFromInactive(partitionName);
       logger.info("Decommission on replica {} is almost done, dropping it from current node", partitionName);
+    }
+  }
+
+  private class DiskFailureHandler implements Runnable {
+    // All the failed unavailable disks are the failed disks
+    List<DiskId> failedDisk = diskToDiskManager.keySet()
+        .stream()
+        .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
+        .collect(Collectors.toList());
+
+    @Override
+    public void run() {
+      if (!clusterMap.isDataNodeInFullAutoMode(currentNode)) {
+        return;
+      }
+      logger.info("Current Node is in FULL_AUTO, try to detect disk failure.");
+      // First, we have to detect if there is a new disk failure
+      List<DiskId> newFailedDisks = diskToDiskManager.keySet().stream()
+          .filter(diskId -> !isDiskAvailable(diskId) && !failedDisk.contains(diskId))
+          .collect(Collectors.toList());
+      if (newFailedDisks.isEmpty()) {
+        return;
+      }
+      logger.info("Failed disk detected: {}", newFailedDisks);
+      storeMainMetrics.handleDiskFailureCount.inc();
+
+      // When there is a new disk failure, we need to do several things
+      // 1. remove replicasOnFailedDisks from the property store
+      // 2. reset the partitions
+      // 3. update the capacity to instance config
+      // When reset the partitions, we don't expect Helix sending downward state transition messages to this host, to
+      // transition those replicasOnFailedDisks from LEADER/STANDBY all the way down to DROPPED. Even if helix does send state
+      // transition messages, we won't be able to do anything since the disk is not healthy. In this case, we have to
+      // remove the replica from property store right away.
+      // StorageManager relies on state transition messages to add and remove replicasOnFailedDisks, if there is no state transition
+      // messages, then when we reset the partitions, replica list in the StorageManager would be obsolete. Fortunately
+      // all the replicasOnFailedDisks in the failed disks are already stopped, we just have to remove the disk from disk maps.
+      failedDisk.addAll(newFailedDisks);
+      long healthyDiskCapacity = diskToDiskManager.keySet()
+          .stream()
+          .filter(((Predicate<DiskId>) failedDisk::contains).negate())
+          .mapToLong(DiskId::getRawCapacityInBytes)
+          .sum();
+      List<ReplicaId> replicasOnFailedDisks = partitionNameToReplicaId.values()
+          .stream()
+          .filter(replica -> newFailedDisks.contains(replica.getDiskId()))
+          .collect(Collectors.toList());
+      logger.info("Replicas on the failed disk: {}", replicasOnFailedDisks);
+
+      long startTime = System.currentTimeMillis();
+      boolean success = true;
+      DistributedLock lock = primaryClusterParticipant.getDistributedLock("DISK_FAILURE", "Lock for disk failure");
+      while (true) {
+        if (lock.tryLock()) {
+          boolean inMaintenanceMode = false;
+          try {
+            // 1. enter maintenance mode
+            String reason = currentNode.getHostname() + "_" + currentNode.getPort() + "_DISK_FAILURE";
+            inMaintenanceMode = primaryClusterParticipant.enterMaintenanceMode(reason);
+            if (!inMaintenanceMode) {
+              throw new IllegalStateException("Failed to enter maintenance mode for reason: " + reason);
+            }
+            // 2. remove all the replicasOnFailedDisks from the property store
+            for (ReplicaId replicaId : replicasOnFailedDisks) {
+              primaryClusterParticipant.updateDataNodeInfoInCluster(replicaId, false);
+              logger.info(
+                  "Partition {} is successfully removed from DataNodeConfig of current node when handling disk failure",
+                  replicaId.getPartitionId().toPathString());
+            }
+            // 3: update disk availability
+            newFailedDisks.forEach(diskId -> diskId.setState(HardwareState.UNAVAILABLE));
+            if (!primaryClusterParticipant.setDisksState(newFailedDisks, HardwareState.UNAVAILABLE)) {
+              throw new IllegalStateException("Failed to update disk availability");
+            } else {
+              logger.info("Successfully update disk availability when handling disk failure");
+            }
+            // 4. reset partitions, we have to update disk availability before reset the partitions. This way, we know
+            // The partitions won't be re-assigned back to the same disks.
+            boolean resetSuccessfully = primaryClusterParticipant.resetPartitionState(replicasOnFailedDisks.stream()
+                .map(ReplicaId::getPartitionId)
+                .map(PartitionId::toPathString)
+                .collect(Collectors.toList()));
+            if (!resetSuccessfully) {
+              throw new IllegalStateException("Failed to reset partitions");
+            } else {
+              logger.info("Replicas {} are successfully reset when handling disk failure", replicasOnFailedDisks);
+            }
+            // 5. update disk capacity
+            final long GB = 1024 * 1024 * 1024;
+            long capacityInGB = healthyDiskCapacity / GB;
+            int actualCapacityInGB = (int) ((double) capacityInGB * 0.95);
+            if (!primaryClusterParticipant.updateDiskCapacity(actualCapacityInGB)) {
+              throw new IllegalStateException("Failed to update disk capacity");
+            } else {
+              logger.info("Successfully update disk capacity to {} when handling disk failure", actualCapacityInGB);
+            }
+
+            // 6. Remove disks from the maps.
+            newFailedDisks.forEach(diskToDiskManager::remove);
+            replicasOnFailedDisks.forEach(replicaId -> {
+              partitionToDiskManager.remove(replicaId.getPartitionId());
+              partitionNameToReplicaId.remove(replicaId.getPartitionId().toPathString());
+            });
+            logger.info("Successfully remove failed disks and replicas from memory when handling disk failure");
+          } catch (Exception e) {
+            success = false;
+            storeMainMetrics.handleDiskFailureErrorCount.inc();
+          } finally {
+            // 5. exist maintenance mode
+            if (inMaintenanceMode) {
+              if (primaryClusterParticipant.exitMaintenanceMode()) {
+                logger.info("Successfully exit maintenance mode");
+              } else {
+                success = false;
+              }
+            }
+            lock.unlock();
+            lock.close();
+            break;
+          }
+        } else {
+          // sleep for a while and try to acquire lock again
+          logger.info("Fail to acquire lock when handling disk failure, backoff some time and retry");
+          storeMainMetrics.handleDiskFailureRetryLockCount.inc();
+          try {
+            Thread.sleep(storeConfig.storeDiskFailureHandlerRetryLockBackoffTimeInSeconds * 1000);
+          } catch (Exception e) {
+          }
+        }
+      }
+      if (success) {
+        storeMainMetrics.handleDiskFailureSuccessCount.inc();
+        storeMainMetrics.handleDiskFailureDuration.update(System.currentTimeMillis() - startTime);
+      }
     }
   }
 }
