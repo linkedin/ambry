@@ -443,6 +443,11 @@ public class RestUtils {
      * The version for the NamedBlob record in MySQL DB
      */
     public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
+
+    /**
+     * If the check access is already called for the given request.
+     */
+    public static final String ACCESS_CHECKED = KEY_PREFIX + "access-checked";
   }
 
   /**

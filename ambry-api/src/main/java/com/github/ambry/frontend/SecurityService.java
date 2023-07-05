@@ -18,9 +18,9 @@ import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceException;
 import java.io.Closeable;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 
 
 /**
@@ -77,6 +77,15 @@ public interface SecurityService extends Closeable {
    */
   void processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
       Callback<Void> callback);
+
+  /**
+   * Check access for the given {@link RestRequest}. When the access is denied, it will throw a {@link RestServiceException}
+   * with {@link com.github.ambry.rest.RestServiceErrorCode#AccessDenied}.
+   * @param restRequest
+   * @throws RestServiceException
+   */
+  default void checkAccess(RestRequest restRequest) throws RestServiceException {
+  }
 
   /**
    * Similar to {@link #preProcessRequest(RestRequest, Callback)} but returns a {@link CompletableFuture} instead of requiring
