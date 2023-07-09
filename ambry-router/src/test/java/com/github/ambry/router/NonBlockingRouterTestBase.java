@@ -196,9 +196,6 @@ public class NonBlockingRouterTestBase {
     properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
     properties.setProperty("router.not.found.cache.ttl.in.ms", String.valueOf(NOT_FOUND_CACHE_TTL_MS));
     properties.setProperty("router.get.eligible.replicas.by.state.enabled", "true");
-    properties.setProperty("router.repair.with.replicate.blob.enabled", "true");
-    properties.setProperty("router.repair.with.replicate.blob.on.delete.enabled", "true");
-
     return properties;
   }
 
@@ -222,7 +219,7 @@ public class NonBlockingRouterTestBase {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
-    router = new NonBlockingRouter(routerConfig, routerMetrics,
+    router = new NonBlockingRouter(routerConfig, verifiableProperties, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);

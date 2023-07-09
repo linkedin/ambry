@@ -13,6 +13,7 @@
  */
 package com.github.ambry.router;
 
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.DataNodeId;
@@ -26,6 +27,7 @@ import com.github.ambry.commons.ReadableStreamChannelInputStream;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.config.KMSConfig;
+import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
@@ -37,12 +39,16 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SocketNetworkClient;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.repair.MysqlRepairRequestsDb;
+import com.github.ambry.repair.MysqlRepairRequestsDbFactory;
+import com.github.ambry.repair.RepairRequestRecord;
 import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -50,6 +56,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -73,8 +84,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
+import javax.sql.DataSource;
 import org.json.JSONObject;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -97,6 +110,8 @@ import static org.mockito.Mockito.*;
 public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterTest.class);
 
+  protected static MysqlRepairRequestsDb repairDb = null;
+
   /**
    * Initialize parameters common to all tests.
    * @param testEncryption {@code true} to test with encryption enabled. {@code false} otherwise
@@ -107,6 +122,11 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   public NonBlockingRouterTest(boolean testEncryption, int metadataContentVersion, boolean includeCloudDc)
       throws Exception {
     super(testEncryption, metadataContentVersion, includeCloudDc);
+  }
+
+  @BeforeClass
+  public static void setup() throws Exception {
+    repairDb = createRepairRequestsConnection("DC3");
   }
 
   @Parameterized.Parameters
@@ -127,6 +147,41 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     Properties properties =
         super.getNonBlockingRouterProperties(routerDataCenter, PUT_REQUEST_PARALLELISM, DELETE_REQUEST_PARALLELISM);
     properties.setProperty("router.operation.controller", "com.github.ambry.router.QuotaAwareOperationController");
+
+    return properties;
+  }
+
+  /**
+   * Constructs and returns a VerifiableProperties instance with the defaults required for instantiating
+   * @param enableODR enable On demand replication
+   * @param enableOfflineRepair enable the offline repair
+   * @return the created VerifiableProperties instance.
+   */
+  protected Properties getNonBlockingRouterPropertiesForRepairRequests(String routerDataCenter, boolean enableODR,
+      boolean enableOfflineRepair) {
+    Properties properties =
+        super.getNonBlockingRouterProperties(routerDataCenter, PUT_REQUEST_PARALLELISM, DELETE_REQUEST_PARALLELISM);
+    properties.setProperty("router.operation.controller", "com.github.ambry.router.QuotaAwareOperationController");
+
+    if (enableODR) {
+      // enable replicate blob on TtlUpdate
+      properties.setProperty("router.repair.with.replicate.blob.enabled", "true");
+      // enable replicate blob on Delete
+      properties.setProperty("router.repair.with.replicate.blob.on.delete.enabled", "true");
+    }
+    if (enableOfflineRepair) {
+      // set up the RepairRequestsDbFactory
+      properties.setProperty("router.repair.requests.db.factory",
+          "com.github.ambry.repair.MysqlRepairRequestsDbFactory");
+      String dbInfo = "["
+          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"},"
+          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC2\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"},"
+          + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC3\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"}"
+          + "]";
+      properties.setProperty("mysql.repair.requests.db.info", dbInfo);
+      // enable offline repair for delete
+      properties.setProperty("router.delete.offline.repair.enabled", "true");
+    }
 
     return properties;
   }
@@ -2453,7 +2508,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+          new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2504,7 +2560,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+          new LoggingNotificationSystem());
       setOperationParams();
       String compositeBlobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2556,7 +2613,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       maxPutChunkSize = PUT_CONTENT_SIZE / 4;
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+          new LoggingNotificationSystem());
       setOperationParams();
       String compositeBlobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2604,7 +2662,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+          new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2657,7 +2716,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+          new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2710,7 +2770,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+          new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2756,7 +2817,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     try {
       String updateServiceId = "update-service";
       MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+          new LoggingNotificationSystem());
       setOperationParams();
       String blobId =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2783,15 +2845,19 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
-   * Test Deletion first hits 503. Then run ReplicateBlob and Retry. It is successful.
+   * Deletion first hits 503. Then it's either fixed by ODR or by offline repair.
+   * @param enableODR enable On demand replication
+   * @param enableOfflineRepair enable the offline repair
+   * @return a pair of the blob id and source replica which returns the success status.
    * @throws Exception
    */
-  @Test
-  public void testBlobDelete503AndThenRetrySuccess() throws Exception {
+  public Pair<BlobId, DataNodeId> blobDelete503AndThenFixedByODROrOffline(boolean enableODR,
+      boolean enableOfflineRepair) throws Exception {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -2812,7 +2878,19 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         server.setServerErrors(serverErrors);
       }
     }
-    router.deleteBlob(blobId, serviceID).get();
+    try {
+      router.deleteBlob(blobId, serviceID).get();
+      if (!enableODR && !enableOfflineRepair) {
+        fail("Should fail with un-available if ODR and offline repair are disabled.");
+      }
+    } catch (Exception e) {
+      if (!enableODR && !enableOfflineRepair) {
+        RouterException r = (RouterException) e.getCause();
+        Assert.assertEquals(RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+      } else {
+        fail("Should be successful when ODR or offline repair is enabled.");
+      }
+    }
 
     // simulate Replica_Unavailable for all local replicas. Then verify delete from the remote replica
     for (MockServer server : layout.getMockServers()) {
@@ -2825,7 +2903,11 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       fail("Blob must be deleted");
     } catch (Exception e) {
       RouterException r = (RouterException) e.getCause();
-      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+      if (!enableODR) {
+        Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+      } else {
+        Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.BlobDeleted, r.getErrorCode());
+      }
     } finally {
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
       router.getNotFoundCache().invalidateAll();
@@ -2833,6 +2915,56 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         router.close();
       }
     }
+
+    return new Pair<>(RouterUtils.getBlobIdFromString(blobId, mockClusterMap), sourceDataNode);
+  }
+
+  /**
+   * Deletion hits 503 and fail.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503AndThenNothing() throws Exception {
+    blobDelete503AndThenFixedByODROrOffline(false, false);
+  }
+
+  /**
+   * Deletion hits 503 and then run ODR and retry successfully.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503AndThenODRSuccess() throws Exception {
+    blobDelete503AndThenFixedByODROrOffline(true, false);
+  }
+
+  /**
+   * Deletion hits 503 and then trigger offline repair. Delete returns success status.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503AndThenOfflineRepair() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    Pair<BlobId, DataNodeId> result = blobDelete503AndThenFixedByODROrOffline(false, true);
+    BlobId blobId = result.getFirst();
+    DataNodeId sourceDataNode = result.getSecond();
+    long operationTime = SystemTime.getInstance().milliseconds();
+    RepairRequestRecord expectedRecord =
+        new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, -1);
+    verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
+    cleanRepairRequestsDb(repairDb);
+  }
+
+  /**
+   * Deletion hits 503 and ODR fixes the error. So offline repair is not triggered even it's enabled.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503AndThenODRAndOfflineRepair() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    Pair<BlobId, DataNodeId> result = blobDelete503AndThenFixedByODROrOffline(true, true);
+    BlobId blobId = result.getFirst();
+    verifyRepairRequestRecordInDb(repairDb, blobId, null);
   }
 
   /**
@@ -2846,7 +2978,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String compositeBlobId =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -2892,15 +3025,17 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
-   * Test Deletion first hits 503. The following ReplicateBlob failed.
+   * Deletion first hits 503. The following ReplicateBlob fails.
+   * @param enableOfflineRepair if true, we inject the repair request to the db and return success status. if not, fail.
+   * @return a pair of the blob id and source replica which returns the success status.
    * @throws Exception
    */
-  @Test
-  public void testBlobDelete503ReplicateBlobFailure() throws Exception {
+  public Pair<BlobId, DataNodeId> blobDelete503ReplicateBlobFailure(boolean enableOfflineRepair) throws Exception {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, enableOfflineRepair), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -2929,10 +3064,16 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // Delete should fail with Unavailable. The error status should come from the deletion, not from the ReplicateBlob.
     try {
       router.deleteBlob(blobId, serviceID).get();
-      fail("Deletion should fail");
+      if (!enableOfflineRepair) {
+        fail("Deletion should fail when offline repair is disabled.");
+      }
     } catch (Exception e) {
-      RouterException r = (RouterException) e.getCause();
-      Assert.assertEquals(RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+      if (!enableOfflineRepair) {
+        RouterException r = (RouterException) e.getCause();
+        Assert.assertEquals(RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+      } else {
+        fail("Should be successful when offline repair is enabled.");
+      }
     } finally {
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
       router.getNotFoundCache().invalidateAll();
@@ -2940,6 +3081,35 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         router.close();
       }
     }
+    return new Pair<>(RouterUtils.getBlobIdFromString(blobId, mockClusterMap), sourceDataNode);
+  }
+
+  /**
+   * Test Deletion first hits 503. The following ReplicateBlob fails.
+   * RepairRequest offline repair is disabled, the Delete request will fail.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503ReplicateBlobFailure() throws Exception {
+    blobDelete503ReplicateBlobFailure(false);
+  }
+
+  /**
+   * Test Deletion first hits 503. The following ReplicateBlob failed.
+   * RepairRequest offline repair is enabled, the Delete request will succeed.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503ReplicateBlobFailureThenEnableOfflineRepair() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    Pair<BlobId, DataNodeId> result = blobDelete503ReplicateBlobFailure(true);
+    BlobId blobId = result.getFirst();
+    DataNodeId sourceDataNode = result.getSecond();
+    long operationTime = SystemTime.getInstance().milliseconds();
+    RepairRequestRecord expectedRecord =
+        new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, -1);
+    verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
   }
 
   /**
@@ -2954,7 +3124,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String compositeBlobId =
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
@@ -3001,15 +3172,21 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
-   * Test Deletion first hits Not_FOUND. Then run ReplicateBlob and Retry. It is successful.
+   * Test Deletion first hits Not_FOUND. Then run ODR or offline repair. It is successful.
+   * @param enableODR enable On demand replication
+   * @param enableOfflineRepair enable the offline repair
+   * @return a pair of the blob id and source replica which returns the success status.
    * @throws Exception
    */
-  @Test
-  public void testBlobDelete404AndThenRetrySuccess() throws Exception {
+  public Pair<BlobId, DataNodeId> blobDelete404AndThenFixedByODROrOfflineRepair(boolean enableODR,
+      boolean enableOfflineRepair) throws Exception {
+    // test the case either ODR or offline repair is enabled.
+    assertTrue(enableODR || enableOfflineRepair);
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -3032,6 +3209,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     }
     router.deleteBlob(blobId, serviceID).get();
 
+    if (enableOfflineRepair) {
+      return new Pair<>(RouterUtils.getBlobIdFromString(blobId, mockClusterMap), sourceDataNode);
+    }
+
     // simulate Replica_Unavailable on the single sourceDataNode. Then verify delete from other local replicas.
     for (MockServer server : layout.getMockServers()) {
       if (server.getHostName().equals(sourceDataNode.getHostname()) && server.getHostPort()
@@ -3052,18 +3233,50 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         router.close();
       }
     }
+    return new Pair<>(RouterUtils.getBlobIdFromString(blobId, mockClusterMap), sourceDataNode);
+  }
+
+  /**
+   * Test Deletion first hits Not_FOUND. Then run ODR and Deletion is successful.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete404AndODRSuccess() throws Exception {
+    blobDelete404AndThenFixedByODROrOfflineRepair(true, false);
+  }
+
+  /**
+   * Test Deletion first hits Not_FOUND. Then trigger offline repair and Deletion is successful.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete404AndOfflineRepairSuccess() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    Pair<BlobId, DataNodeId> result = blobDelete404AndThenFixedByODROrOfflineRepair(false, true);
+    BlobId blobId = result.getFirst();
+    DataNodeId sourceDataNode = result.getSecond();
+    long operationTime = SystemTime.getInstance().milliseconds();
+    RepairRequestRecord expectedRecord =
+        new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, -1);
+    verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
+    cleanRepairRequestsDb(repairDb);
   }
 
   /**
    * Test Deletion first hits 503. The following ReplicateBlob is successful but retry fails.
+   * Test the cases that enable offline repair is enabled or disabled.
+   * @param enableOfflineRepair enable the offline repair
+   * @return a pair of the blob id and source replica which returns the success status.
    * @throws Exception
    */
-  @Test
-  public void testBlobDelete503ReplicateBlobSuccessRetryFailure() throws Exception {
+  public Pair<BlobId, DataNodeId> blobDelete503ReplicateBlobSuccessRetryFailure(boolean enableOfflineRepair)
+      throws Exception {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, enableOfflineRepair), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -3090,10 +3303,16 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     // ReplicateBlob is successful on the other two local replicas but retry fail with unavailable.
     try {
       router.deleteBlob(blobId, serviceID).get();
-      fail("Deletion should fail");
+      if (!enableOfflineRepair) {
+        fail("Deletion should fail if offline repair is disabled. ");
+      }
     } catch (Exception e) {
-      RouterException r = (RouterException) e.getCause();
-      Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+      if (!enableOfflineRepair) {
+        RouterException r = (RouterException) e.getCause();
+        Assert.assertEquals("BlobDeleted error is expected", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+      } else {
+        fail("Deletion should succeed if offline repair is enabled.");
+      }
     } finally {
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
       router.getNotFoundCache().invalidateAll();
@@ -3101,18 +3320,51 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         router.close();
       }
     }
+    return new Pair<>(RouterUtils.getBlobIdFromString(blobId, mockClusterMap), sourceDataNode);
   }
 
   /**
-   * Test Deletion hits 503. But since there is no single replica is successful, won't do ReplicateBlob and retry
+   * Test Deletion first hits 503. The following ReplicateBlob is successful but retry fails.
+   * Offline repair is disabled. So deletion fails.
    * @throws Exception
    */
   @Test
-  public void testBlobDelete503NoRetrySinceNoSuccessReplica() throws Exception {
+  public void testBlobDelete503ReplicateBlobSuccessRetryFailure() throws Exception {
+    blobDelete503ReplicateBlobSuccessRetryFailure(false);
+  }
+
+  /**
+   * Test Deletion first hits 503. The following ReplicateBlob is successful but retry fails.
+   * Offline repair is enabled, so deletion is successful.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503ReplicateBlobSuccessRetryFailureThenOfflineRepair() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    Pair<BlobId, DataNodeId> result = blobDelete503ReplicateBlobSuccessRetryFailure(true);
+    BlobId blobId = result.getFirst();
+    DataNodeId sourceDataNode = result.getSecond();
+    long operationTime = SystemTime.getInstance().milliseconds();
+    RepairRequestRecord expectedRecord =
+        new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, -1);
+    verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
+  }
+
+  /**
+   * Test Deletion hits 503. But since there is no single replica is successful, won't do ODR or offline repair
+   * @param enableODR enable On demand replication
+   * @param enableOfflineRepair enable the offline repair
+   * @throws Exception
+   */
+  public void testBlobDelete503NoSuccessReplica(boolean enableODR, boolean enableOfflineRepair) throws Exception {
+    // test the case either ODR or offline repair is enabled.
+    assertTrue(enableODR || enableOfflineRepair);
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -3137,6 +3389,26 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Test Deletion hits 503. But since there is no single replica is successful, won't do ReplicateBlob and retry
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503NoODRSinceNoSuccessReplica() throws Exception {
+    testBlobDelete503NoSuccessReplica(true, false);
+  }
+
+  /**
+   * Test Deletion hits 503. But since there is no single replica is successful, won't do offline retry
+   * @throws Exception
+   */
+  @Test
+  public void testBlobDelete503NoOfflineRepairSinceNoSuccessReplica() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    testBlobDelete503NoSuccessReplica(false, true);
+    assertEquals(0, getRepairRequestsCount(repairDb));
+  }
+
+  /**
    * Test Deletion first hits Not_FOUND. Then run ReplicateBlob.
    * If the PutBlob is compacted already, ReplicateBlob may fail with ID_Deleted.
    * @throws Exception
@@ -3146,7 +3418,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = "delete-service";
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -3185,14 +3458,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   /**
    * When a composite blob put fails, background deleter will kick off and delete all the data chunks.
-   * Test On-Demand replication won't get triggered for the background deleter.
+   * Test ODR or offline repair won't get triggered for the background deleter.
    */
-  @Test
-  public void testReplicateBlobIgnoreBackgroundDeleter() throws Exception {
+  public void testRetryBlobIgnoreBackgroundDeleter(boolean enableODR, boolean enableOfflineRepair) throws Exception {
+    // test the case either ODR or offline repair is enabled.
+    assertTrue(enableODR || enableOfflineRepair);
     try {
       // Ensure there are 2 chunks.
       maxPutChunkSize = PUT_CONTENT_SIZE / 2;
-      Properties props = getNonBlockingRouterProperties("DC3");
+      Properties props = getNonBlockingRouterPropertiesForRepairRequests("DC3", enableODR, enableOfflineRepair);
       VerifiableProperties verifiableProperties = new VerifiableProperties((props));
       RouterConfig routerConfig = new RouterConfig(verifiableProperties);
       MockClusterMap mockClusterMap = new MockClusterMap();
@@ -3266,6 +3540,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       // Submit the put operation and wait for it to fail.
       try {
         router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get();
+        fail("putBlob should fail");
       } catch (ExecutionException e) {
         Assert.assertEquals(RouterErrorCode.AmbryUnavailable, ((RouterException) e.getCause()).getErrorCode());
       }
@@ -3285,6 +3560,26 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * When a composite blob put fails, background deleter will kick off and delete all the data chunks.
+   * Test ODR won't get triggered for the background deleter.
+   */
+  @Test
+  public void testODRIgnoreBackgroundDeleter() throws Exception {
+    testRetryBlobIgnoreBackgroundDeleter(true, false);
+  }
+
+  /**
+   * When a composite blob put fails, background deleter will kick off and delete all the data chunks.
+   * Test offline repair won't get triggered for the background deleter.
+   */
+  @Test
+  public void testOfflineRepairIgnoreBackgroundDeleter() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    testRetryBlobIgnoreBackgroundDeleter(false, true);
+    assertEquals(0, getRepairRequestsCount(repairDb));
+  }
+
+  /**
    * Test On-Demand Replication on deletion success case. And the service id of the delete request is null.
    * @throws Exception
    */
@@ -3294,7 +3589,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String serviceID = null;
     MockServerLayout layout = new MockServerLayout(mockClusterMap);
     String localDcName = "DC3";
-    setRouter(getNonBlockingRouterProperties(localDcName), layout, new LoggingNotificationSystem());
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+        new LoggingNotificationSystem());
     setOperationParams();
     String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -3335,6 +3631,94 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       if (router != null) {
         router.close();
       }
+    }
+  }
+
+  /*
+   * Create a db connection to the RepairRequests db and cleanup the db.
+   * @param localDc : name of the local data center.
+   */
+  static MysqlRepairRequestsDb createRepairRequestsConnection(String localDc) throws Exception {
+    Properties properties = new Properties();
+    String dbInfo = "["
+        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"},"
+        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC2\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"},"
+        + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC3\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"}"
+        + "]";
+    properties.setProperty(MysqlRepairRequestsDbConfig.DB_INFO, dbInfo);
+    properties.setProperty(MysqlRepairRequestsDbConfig.LIST_MAX_RESULTS, Integer.toString(100));
+    properties.setProperty(MysqlRepairRequestsDbConfig.LOCAL_POOL_SIZE, "5");
+
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    MetricRegistry metrics = new MetricRegistry();
+    MysqlRepairRequestsDbFactory factory = new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, localDc);
+    MysqlRepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
+
+    // cleanup the database
+    cleanRepairRequestsDb(repairRequestsDb);
+    return repairRequestsDb;
+  }
+
+  /**
+   * Cleanup the repair request db
+   * @param repairRequestsDb the repair request db
+   * @throws SQLException
+   */
+  static void cleanRepairRequestsDb(MysqlRepairRequestsDb repairRequestsDb) throws SQLException {
+    DataSource dataSource = repairRequestsDb.getDataSource();
+    try (Connection connection = dataSource.getConnection()) {
+      try (Statement statement = connection.createStatement()) {
+        statement.executeUpdate("DELETE FROM ambry_repair_requests;");
+      }
+    }
+  }
+
+  /**
+   * Get record count of the RepairRequests DB
+   * @param repairRequestsDb the repair request db
+   * @throws SQLException
+   */
+  static long getRepairRequestsCount(MysqlRepairRequestsDb repairRequestsDb) throws SQLException {
+    DataSource dataSource = repairRequestsDb.getDataSource();
+    long numberOfRows = 0;
+    String rowQuerySql = "SELECT COUNT(*) as total FROM ambry_repair_requests";
+    do {
+      try (Connection connection = dataSource.getConnection()) {
+        try (PreparedStatement statement = connection.prepareStatement(rowQuerySql)) {
+          try (ResultSet result = statement.executeQuery()) {
+            while (result.next()) {
+              numberOfRows = result.getLong("total");
+            }
+          }
+        }
+      }
+    } while (numberOfRows != 0);
+    return numberOfRows;
+  }
+
+  /**
+   * Verify the db has one expected RepairRequestRecord
+   * @param db the RepairRequests DB
+   * @param blobId the blob id
+   * @param expectedRecord expected RepairRequestRecord
+   * @throws Exception
+   */
+  static void verifyRepairRequestRecordInDb(MysqlRepairRequestsDb db, BlobId blobId, RepairRequestRecord expectedRecord)
+      throws Exception {
+    List<RepairRequestRecord> records = db.getRepairRequestsForPartition(blobId.getPartition().getId());
+    if (expectedRecord == null) {
+      assertEquals(records.size(), 0);
+    } else {
+      assertEquals(records.size(), 1);
+      RepairRequestRecord record = records.get(0);
+      assertEquals(expectedRecord.getBlobId(), record.getBlobId());
+      assertEquals(expectedRecord.getPartitionId(), record.getPartitionId());
+      assertEquals(expectedRecord.getSourceHostName(), record.getSourceHostName());
+      assertEquals(expectedRecord.getSourceHostPort(), record.getSourceHostPort());
+      assertEquals(expectedRecord.getOperationType(), record.getOperationType());
+      // cannot verify the operationTime
+      assertEquals(expectedRecord.getLifeVersion(), record.getLifeVersion());
+      assertEquals(expectedRecord.getExpirationTimeMs(), record.getExpirationTimeMs());
     }
   }
 }
