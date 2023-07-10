@@ -77,7 +77,7 @@ public class DeleteBlobHandler {
     RequestPath requestPath = getRequestPath(restRequest);
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-      accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest, metrics.deleteBlobMetricsGroup);
+      accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metrics.deleteBlobMetricsGroup);
     }
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     new CallbackChain(restRequest, restResponseChannel, callback).start();
@@ -160,6 +160,7 @@ public class DeleteBlobHandler {
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           try {
             metrics.deleteDatasetVersionRate.mark();
+            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
             deleteDatasetVersion(restRequest);
           } catch (RestServiceException e) {
             metrics.deleteDatasetVersionError.inc();

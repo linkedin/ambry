@@ -95,7 +95,7 @@ public class GetBlobHandler {
     RestRequestMetrics restRequestMetrics = metricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-      accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest, metricsGroup);
+      accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metricsGroup);
     }
     restRequest.getMetricsTracker().injectMetrics(restRequestMetrics);
     new CallbackChain(restRequest, restResponseChannel, metricsGroup, requestPath, subResource, options,
@@ -146,6 +146,7 @@ public class GetBlobHandler {
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           try {
             metrics.getDatasetVersionRate.mark();
+            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
             blobIdStr = getDatasetVersion(restRequest);
           } catch (RestServiceException e) {
             metrics.getDatasetVersionError.inc();
