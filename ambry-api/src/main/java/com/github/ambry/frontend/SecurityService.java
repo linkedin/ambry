@@ -81,10 +81,11 @@ public interface SecurityService extends Closeable {
   /**
    * Check access for the given {@link RestRequest}. When the access is denied, it will throw a {@link RestServiceException}
    * with {@link com.github.ambry.rest.RestServiceErrorCode#AccessDenied}.
-   * @param restRequest
+   * @param restRequest The {@link RestRequest} to check for permission
+   * @param context The context of permisison checking
    * @throws RestServiceException
    */
-  default void checkAccess(RestRequest restRequest) throws RestServiceException {
+  default void checkAccess(RestRequest restRequest, String context) throws RestServiceException {
   }
 
   /**
