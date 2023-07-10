@@ -232,7 +232,8 @@ public class RestServer {
     restResponseHandler = restHandlerFactory.getRestResponseHandler();
 
     publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
-        restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
+        restServerConfig.restServerPublicAccessLogResponseHeaders.split(","),
+        restServerConfig.restServerEnableStructuredLogging);
 
     NioServerFactory nioServerFactory =
         Utils.getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry,

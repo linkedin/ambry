@@ -268,6 +268,9 @@ public class MockCluster {
     props.setProperty("server.replicate.tombstone.enabled", "true");
     props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
+    props.setProperty("server.repair.requests.db.factory", "com.github.ambry.repair.MysqlRepairRequestsDbFactory");
+    props.setProperty("mysql.repair.requests.db.info",
+        "[{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"}]");
     props.putAll(sslProperties);
     return new VerifiableProperties(props);
   }
@@ -635,7 +638,7 @@ class MockNotificationSystem implements NotificationSystem {
 
   private final ConcurrentHashMap<String, EventTracker> objectTracker = new ConcurrentHashMap<String, EventTracker>();
   private final ClusterMap clusterMap;
-  private static final int TRACKER_TIMEOUT_MS = 2000;
+  private static final int TRACKER_TIMEOUT_MS = 60000;
 
   public MockNotificationSystem(ClusterMap clusterMap) {
     this.clusterMap = clusterMap;

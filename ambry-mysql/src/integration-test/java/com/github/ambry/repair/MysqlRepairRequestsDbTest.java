@@ -83,8 +83,13 @@ public class MysqlRepairRequestsDbTest {
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     int blobsPerContainer = 5;
 
-    String sourceHostName = "localhost";
-    int sourceHostPort = 6024;
+    String hostName1 = "localhost1";
+    String hostName2 = "localhost2";
+    int hostPort1 = 6024;
+    int hostPort2 = 6025;
+    // simulate the requests which will be sent on this host (thisNodeName, thisNodePort)
+    String thisNodeName = hostName1;
+    int thisNodePort = hostPort1;
 
     // Prepare RepairRequests and insert them to the DB.
     // Map<Partition ID, Map<BlobId, RepairRequestRecord>>
@@ -99,8 +104,10 @@ public class MysqlRepairRequestsDbTest {
           short lifeVersion = -1;
           long expirationTime =
               i % 2 == 0 ? Utils.Infinite_Time : System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1);
+          String hostName = random.nextInt(2) == 0 ? hostName1 : hostName2;
+          int hostPort = random.nextInt(2) == 0 ? hostPort1 : hostPort2;
           RepairRequestRecord record =
-              new RepairRequestRecord(blobId, (int) partitionId.getId(), sourceHostName, sourceHostPort, operationType,
+              new RepairRequestRecord(blobId, (int) partitionId.getId(), hostName, hostPort, operationType,
                   operationTime, lifeVersion, expirationTime);
           repairRequestsDb.putRepairRequests(record);
           records.putIfAbsent((int) partitionId.getId(), new HashMap<>());
@@ -109,15 +116,35 @@ public class MysqlRepairRequestsDbTest {
       }
     }
 
-    // get records just inserted and compare
+    // on one node with name as thisNodeName and port as thisNodePort,
+    // read the database but exclude all the records which has the source replica as this node.
+    // we should run ODR to fix the requests on the nodes except the source replica
     for (PartitionId id : partitionIds) {
-      List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequests((int) id.getId());
+      List<RepairRequestRecord> recordFromStore =
+          repairRequestsDb.getRepairRequestsExcludingHost((int) id.getId(), thisNodeName, thisNodePort);
+      Map<String, RepairRequestRecord> orgRecords = records.get((int) id.getId());
+      for (RepairRequestRecord record : recordFromStore) {
+        RepairRequestRecord org = orgRecords.get(record.getBlobId());
+        assertEquals("Record does not match expectation ", org, record);
+        assertTrue("should exclude this node",
+            !thisNodeName.equals(record.getSourceHostName()) || thisNodePort != record.getSourceHostPort());
+        orgRecords.remove(record.getBlobId());
+        repairRequestsDb.removeRepairRequests(record.getBlobId(), record.getOperationType());
+      }
+    }
+
+    // get the remaining records.
+    for (PartitionId id : partitionIds) {
+      List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequestsForPartition((int) id.getId());
       Map<String, RepairRequestRecord> orgRecords = records.get((int) id.getId());
       assertEquals("Record number doesn't match.", orgRecords.size(), recordFromStore.size());
       for (RepairRequestRecord record : recordFromStore) {
         RepairRequestRecord org = orgRecords.get(record.getBlobId());
         assertEquals("Record does not match expectation ", org, record);
+        assertEquals(thisNodeName, record.getSourceHostName());
+        assertEquals(thisNodePort, record.getSourceHostPort());
         orgRecords.remove(record.getBlobId());
+        repairRequestsDb.removeRepairRequests(record.getBlobId(), record.getOperationType());
       }
       assertTrue("Should be emptry now.", orgRecords.isEmpty());
       records.remove((int) id.getId());
@@ -126,11 +153,7 @@ public class MysqlRepairRequestsDbTest {
 
     // delete the records and check that they cannot be fetched with a get call.
     for (PartitionId id : partitionIds) {
-      List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequests((int) id.getId());
-      for (RepairRequestRecord record : recordFromStore) {
-        repairRequestsDb.removeRepairRequests(record.getBlobId(), record.getOperationType());
-      }
-      recordFromStore = repairRequestsDb.getRepairRequests((int) id.getId());
+      List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequestsForPartition((int) id.getId());
       assertTrue("No more records", recordFromStore.isEmpty());
     }
 
@@ -170,7 +193,8 @@ public class MysqlRepairRequestsDbTest {
     assertEquals("Record number is not expected", records.size(), total_result);
 
     // get records just inserted. Only get list_max_result numbers.
-    List<RepairRequestRecord> recordFromStore = repairRequestsDb.getRepairRequests((int) partitionId.getId());
+    List<RepairRequestRecord> recordFromStore =
+        repairRequestsDb.getRepairRequestsForPartition((int) partitionId.getId());
     assertEquals("Record number is not expected", recordFromStore.size(), list_max_result);
     assertTrue("only read one page", total_result > list_max_result);
   }

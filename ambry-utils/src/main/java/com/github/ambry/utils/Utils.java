@@ -43,6 +43,7 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
+import java.sql.Timestamp;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1485,5 +1486,24 @@ public class Utils {
     } catch (Exception ex) {
       // Exception is intentionally ignored.
     }
+  }
+
+  /**
+   * Compare a nullable timestamp against {@code otherTimeMs}.
+   * @param timestamp the nullable {@link Timestamp} to compare.
+   * @param otherTimeMs the time value to compare against.
+   * @return -1 if the timestamp is earlier than {@code otherTimeMs}, 0 if the times are equal, and 1 if
+   *         {@code otherTimeMs} is later than the timestamp. {@code null} is considered greater than any other time.
+   */
+  public static int compareTimestamp(Timestamp timestamp, long otherTimeMs) {
+    return Utils.compareTimes(timestampToMs(timestamp), otherTimeMs);
+  }
+
+  /**
+   * @param timestamp a {@link Timestamp}, can be null.
+   * @return the milliseconds since the epoch if {@code timestamp} is non-null, or {@link Utils#Infinite_Time} if null.
+   */
+  public static long timestampToMs(Timestamp timestamp) {
+    return timestamp == null ? Utils.Infinite_Time : timestamp.getTime();
   }
 }

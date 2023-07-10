@@ -38,7 +38,7 @@ public class NettyServerTest {
   private static final RestRequestService REST_REQUEST_SERVICE =
       new MockRestRequestService(new VerifiableProperties(new Properties()), new MockRouter());
   private static final RestRequestHandler REQUEST_HANDLER = new MockRestRequestResponseHandler(REST_REQUEST_SERVICE);
-  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{});
+  private static final PublicAccessLogger PUBLIC_ACCESS_LOGGER = new PublicAccessLogger(new String[]{}, new String[]{}, false);
   private static final RestServerState REST_SERVER_STATE = new RestServerState("/healthCheck");
   private static final ConnectionStatsHandler CONNECTION_STATS_HANDLER = new ConnectionStatsHandler(NETTY_METRICS);
   private static final SSLFactory SSL_FACTORY = RestTestUtils.getTestSSLFactory();

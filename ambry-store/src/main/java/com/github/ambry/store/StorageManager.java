@@ -202,6 +202,7 @@ public class StorageManager implements StoreManager {
         startupThread.join();
       }
       metrics.initializeCompactionThreadsTracker(this, diskToDiskManager.size());
+      metrics.initializeHostUtilizationTracker(this);
       if (clusterParticipants != null) {
         clusterParticipants.forEach(clusterParticipant -> {
           clusterParticipant.registerPartitionStateChangeListener(StateModelListenerType.StorageManagerListener,
@@ -315,6 +316,7 @@ public class StorageManager implements StoreManager {
         shutdownThread.join();
       }
       metrics.deregisterCompactionThreadsTracker();
+      metrics.deregisterHostUtilizationTracker();
       logger.info("Shutting down storage manager complete");
     } finally {
       metrics.storageManagerShutdownTimeMs.update(time.milliseconds() - startTimeMs);
@@ -397,6 +399,21 @@ public class StorageManager implements StoreManager {
       failToUpdateStores.addAll(failList);
     }
     return failToUpdateStores;
+  }
+
+  /**
+   * @return host usage percentage
+   */
+  double getHostPercentageUsedCapacity() {
+    long totalDiskCapacity = 0;
+    long totalDiskAvailableSpace = 0;
+
+    for (DiskId diskId : diskToDiskManager.keySet()) {
+      totalDiskCapacity += diskId.getRawCapacityInBytes();
+      totalDiskAvailableSpace += diskId.getAvailableSpaceInBytes();
+    }
+
+    return (double) ((totalDiskCapacity - totalDiskAvailableSpace) / totalDiskCapacity) * 100;
   }
 
   /**

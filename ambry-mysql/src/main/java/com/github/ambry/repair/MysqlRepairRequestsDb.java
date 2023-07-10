@@ -14,6 +14,8 @@
  */
 package com.github.ambry.repair;
 
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
@@ -59,14 +61,30 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    */
   // @formatter:off
   private static final String GET_QUERY = String.format(""
-      + "SELECT %s, %s, %s, %s, %s, %s, %s, %s "
+      + "SELECT %s, %s, %s, %s, %s, %s, %s "
       + "FROM %s "
       + "WHERE %s = ? "
       + "ORDER BY %s ASC "
       + "LIMIT ?",
-      BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
+      BLOB_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
       REPAIR_REQUESTS_TABLE,
       PARTITION_ID,
+      OPERATION_TIME);
+  // @formatter:on
+
+  /**
+   * Select the records for one partition but exclude the record with this source replica(hostname + hostport)
+   */
+  // @formatter:off
+  private static final String GET_QUERY_EXCLUDE_SOURCE_REPLICA = String.format(""
+          + "SELECT %s, %s, %s, %s, %s, %s, %s "
+          + "FROM %s "
+          + "WHERE %s = ? and (%s != ? or %s != ?) "
+          + "ORDER BY %s ASC "
+          + "LIMIT ?",
+      BLOB_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
+      REPAIR_REQUESTS_TABLE,
+      PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT,
       OPERATION_TIME);
   // @formatter:on
 
@@ -94,10 +112,13 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
 
   private final DataSource dataSource;
   private final MysqlRepairRequestsDbConfig config;
+  private final Metrics metrics;
 
-  public MysqlRepairRequestsDb(DataSource dataSource, MysqlRepairRequestsDbConfig config) {
+  public MysqlRepairRequestsDb(DataSource dataSource, MysqlRepairRequestsDbConfig config,
+      MetricRegistry metricsRegistry) {
     this.dataSource = dataSource;
     this.config = config;
+    this.metrics = new Metrics(metricsRegistry);
   }
 
   /**
@@ -107,11 +128,6 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    */
   @Override
   public void removeRepairRequests(String blobId, OperationType operationType) throws SQLException {
-    // private static final String DELETE_QUERY = String.format(""
-    //     + "DELETE FROM %s "
-    //     + "WHERE %s=? AND %s=?",
-    //     REPAIR_REQUESTS_TABLE,
-    //     BLOB_ID, OPERATION_TYPE);
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(DELETE_QUERY)) {
         statement.setBytes(1, Base64.decodeBase64(blobId));
@@ -119,7 +135,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
         statement.executeUpdate();
       }
     } catch (SQLException e) {
-      // LOCAL_CONSISTENCY_TODO: add metrics for all the SQLException.
+      metrics.repairDbErrorRemoveCount.inc();
       logger.error("failed to delete record from {} due to {}", dataSource, e.getMessage());
       throw e;
     }
@@ -131,11 +147,6 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    */
   @Override
   public void putRepairRequests(RepairRequestRecord record) throws SQLException {
-    // private static final String INSERT_QUERY = String.format(""
-    //    + "INSERT INTO %1$s "
-    //    + "(%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    //    REPAIR_REQUESTS_TABLE,
-    //    BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE);
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
         statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
@@ -153,28 +164,19 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
         statement.executeUpdate();
       }
     } catch (SQLException e) {
+      metrics.repairDbErrorPutCount.inc();
       logger.error("failed to insert record to {} due to {}", dataSource, e.getMessage());
       throw e;
     }
   }
 
   /**
-   * Select the records from one partition ordered by the operation time.
+   * Select the records for one partition ordered by the operation time.
    * @param partitionId partition id
    * @return the oldest {@link RepairRequestRecord}s.
    */
   @Override
-  public List<RepairRequestRecord> getRepairRequests(long partitionId) throws SQLException {
-    // private static final String GET_QUERY = String.format(""
-    //    + "SELECT %s, %s, %s, %s, %s, %s, %s, %s "
-    //    + "FROM %s "
-    //    + "WHERE %s = ? "
-    //    + "ORDER BY %s ASC "
-    //    + "LIMIT ?",
-    //    BLOB_ID, PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
-    //    REPAIR_REQUESTS_TABLE,
-    //    PARTITION_ID,
-    //    OPERATION_TIME);
+  public List<RepairRequestRecord> getRepairRequestsForPartition(long partitionId) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
         statement.setLong(1, partitionId);
@@ -183,13 +185,12 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
           List<RepairRequestRecord> result = new ArrayList<>();
           while (resultSet.next()) {
             String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
-            // resultSet.getLong(2) is the partition id.
-            String sourceHostName = resultSet.getString(3);
-            int sourceHostPort = resultSet.getInt(4);
-            OperationType operationType = OperationType.values()[resultSet.getShort(5)];
-            Timestamp operationTime = resultSet.getTimestamp(6);
-            short lifeVersion = resultSet.getShort(7);
-            Timestamp expirationTime = resultSet.getTimestamp(8);
+            String sourceHostName = resultSet.getString(2);
+            int sourceHostPort = resultSet.getInt(3);
+            OperationType operationType = OperationType.values()[resultSet.getShort(4)];
+            Timestamp operationTime = resultSet.getTimestamp(5);
+            short lifeVersion = resultSet.getShort(6);
+            Timestamp expirationTime = resultSet.getTimestamp(7);
             RepairRequestRecord record =
                 new RepairRequestRecord(blobId, partitionId, sourceHostName, sourceHostPort, operationType,
                     operationTime.getTime(), lifeVersion,
@@ -200,9 +201,60 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
         }
       }
     } catch (SQLException e) {
+      metrics.repairDbErrorGetCount.inc();
       logger.error("failed to get records from {} due to {}", dataSource, e.getMessage());
       throw e;
     }
+  }
+
+  /**
+   * Select the records from one partition but exclude the record with this source name and port.
+   * @param partitionId partition id
+   * @param sourceHostName the host name of the source replica
+   * @param sourceHostPort the host port of the source replica
+   * @return the oldest {@link RepairRequestRecord}s.
+   */
+  @Override
+  public List<RepairRequestRecord> getRepairRequestsExcludingHost(long partitionId, String sourceHostName,
+      int sourceHostPort) throws SQLException {
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement statement = connection.prepareStatement(GET_QUERY_EXCLUDE_SOURCE_REPLICA)) {
+        statement.setLong(1, partitionId);
+        statement.setString(2, sourceHostName);
+        statement.setInt(3, sourceHostPort);
+        statement.setInt(4, config.listMaxResults);
+        try (ResultSet resultSet = statement.executeQuery()) {
+          List<RepairRequestRecord> result = new ArrayList<>();
+          while (resultSet.next()) {
+            String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(1));
+            String hostName = resultSet.getString(2);
+            int hostPort = resultSet.getInt(3);
+            OperationType operationType = OperationType.values()[resultSet.getShort(4)];
+            Timestamp operationTime = resultSet.getTimestamp(5);
+            short lifeVersion = resultSet.getShort(6);
+            Timestamp expirationTime = resultSet.getTimestamp(7);
+            RepairRequestRecord record =
+                new RepairRequestRecord(blobId, partitionId, hostName, hostPort, operationType, operationTime.getTime(),
+                    lifeVersion, expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
+            result.add(record);
+          }
+          return result;
+        }
+      }
+    } catch (SQLException e) {
+      metrics.repairDbErrorGetCount.inc();
+      logger.error("failed to get records from {} due to {}", dataSource, e.getMessage());
+      throw e;
+    }
+  }
+
+  /**
+   * The max number of result sets it will return for each query
+   * @return the max number of result sets to return
+   */
+  @Override
+  public int getListMaxResults() {
+    return config.listMaxResults;
   }
 
   /**
@@ -216,5 +268,24 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   @Override
   public void close() {
 
+  }
+
+  private static class Metrics {
+    public final Counter repairDbErrorRemoveCount;
+    public final Counter repairDbErrorPutCount;
+    public final Counter repairDbErrorGetCount;
+
+    /**
+     * Constructor to create the Metrics.
+     * @param metricRegistry The {@link MetricRegistry}.
+     */
+    public Metrics(MetricRegistry metricRegistry) {
+      repairDbErrorRemoveCount =
+          metricRegistry.counter(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbErrorRemoveCount"));
+      repairDbErrorPutCount =
+          metricRegistry.counter(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbErrorPutCount"));
+      repairDbErrorGetCount =
+          metricRegistry.counter(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbErrorGetCount"));
+    }
   }
 }

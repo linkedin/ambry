@@ -17,7 +17,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
-import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.utils.Utils;
@@ -61,7 +60,7 @@ public class DatabaseTest {
     MySqlDataAccessor dataAccessor =
         new MySqlAccountStoreFactory(verifiableProperties, new MetricRegistry()).getMySqlAccountStore()
             .getMySqlDataAccessor();
-    AccountDao accountDao = new AccountDao(dataAccessor, new MySqlAccountServiceConfig(verifiableProperties));
+    AccountDao accountDao = new AccountDao(dataAccessor);
     // Use high account id to avoid conflict
     short startAccountId = 30000;
     int numAccounts = 10;

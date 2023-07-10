@@ -77,7 +77,7 @@ public class AccountDaoTest {
 
     Connection mockConnection = mock(Connection.class);
     MySqlDataAccessor dataAccessor = getDataAccessor(mockConnection, metrics);
-    accountDao = new AccountDao(dataAccessor, null);
+    accountDao = new AccountDao(dataAccessor);
 
     //Account mock statements
     String accountJson = new String(AccountCollectionSerde.serializeAccountsInJsonNoContainers(testAccount));

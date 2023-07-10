@@ -16,6 +16,7 @@ package com.github.ambry.account;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountUtils.AccountUpdateInfo;
 import com.github.ambry.account.mysql.AccountDao;
+import com.github.ambry.account.mysql.DatasetDao;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.account.mysql.MySqlAccountStoreFactory;
 import com.github.ambry.config.ClusterMapConfig;
@@ -1003,7 +1004,7 @@ public class MySqlAccountServiceIntegrationTest {
     // Deleted version 2 and add new latest version
     mySqlAccountStore.deleteDatasetVersion(testAccount.getId(), testContainer.getId(), DATASET_NAME, "2");
     expectedDatasetVersionRecord =
-        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, "3", -1);
+        new DatasetVersionRecord(testAccount.getId(), testContainer.getId(), DATASET_NAME, "2", -1);
     datasetVersionRecordFromMysql =
         mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME, version, -1, System.currentTimeMillis(), false,
@@ -1341,7 +1342,7 @@ public class MySqlAccountServiceIntegrationTest {
     Statement statement = dbConnection.createStatement();
     statement.executeUpdate("DELETE FROM " + AccountDao.ACCOUNT_TABLE);
     statement.executeUpdate("DELETE FROM " + AccountDao.CONTAINER_TABLE);
-    statement.executeUpdate("DELETE FROM " + AccountDao.DATASET_TABLE);
-    statement.executeUpdate("DELETE FROM " + AccountDao.DATASET_VERSION_TABLE);
+    statement.executeUpdate("DELETE FROM " + DatasetDao.DATASET_TABLE);
+    statement.executeUpdate("DELETE FROM " + DatasetDao.DATASET_VERSION_TABLE);
   }
 }

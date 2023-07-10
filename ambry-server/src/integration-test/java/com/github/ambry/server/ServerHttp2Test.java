@@ -143,6 +143,11 @@ public class ServerHttp2Test {
   }
 
   @Test
+  public void repairRequestTest() throws Exception {
+    ServerTestUtil.repairRequestTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);
+  }
+
+  @Test
   public void endToEndHttp2ReplicationWithMultiNodeMultiPartition() throws Exception {
     DataNodeId dataNode = http2Cluster.getClusterMap().getDataNodeIds().get(0);
     ArrayList<String> dataCenterList = new ArrayList<>(Arrays.asList("DC1", "DC2", "DC3"));
