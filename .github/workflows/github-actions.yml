@@ -29,6 +29,19 @@ jobs:
           java-version: '11'
           distribution: 'adopt'
 
+      - name: Set up MySQL
+        run: |
+          sudo systemctl start mysql.service
+          mysql -e 'CREATE DATABASE AmbryRepairRequests;' -uroot -proot
+          mysql -e 'USE AmbryRepairRequests; SOURCE ./ambry-mysql/src/main/resources/AmbryRepairRequests.ddl;' -uroot -proot
+
+      - name: Add custom MySQL user
+        # Temporary settings to use same username and password as travis ci
+        run: |
+          mysql -e 'CREATE USER 'travis'@'localhost';' -uroot -proot
+          mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
+          mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
+
       - uses: burrunan/gradle-cache-action@v1
         name: Run unit tests excluding ambry-store
         with:
