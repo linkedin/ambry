@@ -82,7 +82,7 @@ public class NonBlockingRouter implements Router {
   /**
    * Constructs a NonBlockingRouter.
    * @param routerConfig the configs for the router.
-   * @oaran vProps verifiable properties.
+   * @oaran repairRequestsDbFactory the {@link RepairRequestsDbFactory} use to create the {@link RepairRequestsDb}
    * @param routerMetrics the metrics for the router.
    * @param networkClientFactory the {@link NetworkClientFactory} used by the {@link OperationController} to create
    *                             instances of {@link NetworkClient}.
@@ -99,7 +99,7 @@ public class NonBlockingRouter implements Router {
    * @throws IOException if the OperationController could not be successfully created.
    * @throws ReflectiveOperationException if the OperationController could not be successfully created.
    */
-  public NonBlockingRouter(RouterConfig routerConfig, VerifiableProperties vProps,
+  public NonBlockingRouter(RouterConfig routerConfig, RepairRequestsDbFactory repairRequestsDbFactory,
       NonBlockingRouterMetrics routerMetrics, NetworkClientFactory networkClientFactory,
       NotificationSystem notificationSystem, ClusterMap clusterMap, KeyManagementService kms,
       CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, AccountService accountService, Time time,
@@ -140,14 +140,10 @@ public class NonBlockingRouter implements Router {
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
     routerMetrics.initializeQuotaOCMetrics(ocList);
 
-    // create the RepairRequestsDb if we enable offline request repair.
-    if (routerConfig.routerRepairRequestsDbFactory != null && vProps != null) {
+    // create the RepairRequestsDb if repairRequestsDbFactory is not null.
+    if (repairRequestsDbFactory != null) {
       try {
-        byte localDcId = clusterMap.getLocalDatacenterId();
-        String localDc = clusterMap.getDatacenterName(localDcId);
-        RepairRequestsDbFactory factory =
-            Utils.getObj(routerConfig.routerRepairRequestsDbFactory, vProps, clusterMap.getMetricRegistry(), localDc);
-        repairRequestsDb = factory.getRepairRequestsDb();
+        repairRequestsDb = repairRequestsDbFactory.getRepairRequestsDb();
         logger.info("RepairRequests: open the db data source {}.", repairRequestsDb);
       } catch (Exception e) {
         logger.error("RepairRequests: Cannot connect to the RepairRequestsDB. ", e);

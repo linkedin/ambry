@@ -35,6 +35,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
@@ -219,7 +220,12 @@ public class NonBlockingRouterTestBase {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
-    router = new NonBlockingRouter(routerConfig, verifiableProperties, routerMetrics,
+    RepairRequestsDbFactory factory = null;
+    if (routerConfig.routerRepairRequestsDbFactory != null) {
+      factory = Utils.getObj(routerConfig.routerRepairRequestsDbFactory, verifiableProperties,
+          routerMetrics.getMetricRegistry(), localDcName);
+    }
+    router = new NonBlockingRouter(routerConfig, factory, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
