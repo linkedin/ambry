@@ -234,7 +234,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     LinkedList<String> blobIds = new LinkedList<>();
     for (int i = 0; i < 2; i++) {
       setOperationParams();
-      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+      String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
       logger.debug("Put blob {}", blobId);
       blobIds.add(blobId);
     }
@@ -299,7 +299,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       List<String> blobIds = new ArrayList<>();
       for (int i = 0; i < 2; i++) {
         setOperationParams();
-        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
         ensurePutInAllServers(blobId, mockServerLayout);
         logger.debug("Put blob {}", blobId);
         blobIds.add(blobId);
@@ -416,7 +416,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       List<String> blobIds = new ArrayList<>();
       for (int i = 0; i < 4; i++) {
         setOperationParams();
-        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT).get();
+        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload).get();
         ensurePutInAllServers(blobId, mockServerLayout);
         blobIds.add(blobId);
       }

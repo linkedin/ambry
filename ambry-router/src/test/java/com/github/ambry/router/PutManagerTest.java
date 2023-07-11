@@ -1071,7 +1071,28 @@ public class PutManagerTest {
                 router.stitchBlob(requestAndResult.putBlobProperties, requestAndResult.putUserMetadata,
                     requestAndResult.chunksToStitch);
           }
-          requestAndResult.result.get(MAX_WAIT_MS, TimeUnit.MILLISECONDS);
+          BlobId blobId = new BlobId(requestAndResult.result.get(MAX_WAIT_MS, TimeUnit.MILLISECONDS), mockClusterMap);
+          if (requestAndResult.chunksToStitch != null) {
+            if (blobId.getBlobDataType() != BlobDataType.METADATA) {
+              throw new Exception(
+                  "Blob data type should always be METADATA for stitched upload but was " + blobId.getBlobDataType());
+            }
+          } else {
+            if (requestAndResult.options.isChunkUpload()) {
+              if (blobId.getBlobDataType() != BlobDataType.DATACHUNK) {
+                throw new Exception(
+                    "Blob data type should always be DATACHUNK for chunked uploads but was " + blobId.getBlobDataType());
+              }
+            } else if (requestAndResult.putContent.length <= chunkSize) {
+              if (blobId.getBlobDataType() != BlobDataType.SIMPLE) {
+                throw new Exception(
+                    "Blob data type should always be SIMPLE for simple uploads but was " + blobId.getBlobDataType());
+              }
+            } else if (blobId.getBlobDataType() != BlobDataType.METADATA) {
+              throw new Exception(
+                  "Blob data type should always be METADATA for composite uploads but was " + blobId.getBlobDataType());
+            }
+          }
         } catch (Exception e) {
           requestAndResult.result = new CompletableFuture<>();
           requestAndResult.result.completeExceptionally(e);

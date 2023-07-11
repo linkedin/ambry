@@ -189,6 +189,8 @@ public class ChunkFillTest {
 
     // Do the chunk filling.
     boolean fillingComplete = false;
+    boolean firstChunkChecked = false;
+    PutOperation.PutChunk firstPutChunk = null;
     do {
       op.fillChunks();
       // All existing chunks must have been filled if no work was done in the last call,
@@ -209,11 +211,25 @@ public class ChunkFillTest {
             fillingComplete = true;
           }
         } else {
-          // if not last chunk, then the chunk should be full and Ready.
-          Assert.assertEquals("Chunk should be ready.", PutOperation.ChunkState.Ready, putChunk.getState());
+          // if chunkIndex is 0, then the chunk should be Building.
+          if (chunkIndex == 0) {
+            if (!firstChunkChecked) {
+              Assert.assertEquals("Chunk should be Building.", PutOperation.ChunkState.AwaitingBlobTypeResolution, putChunk.getState());
+              firstPutChunk = putChunk;
+              firstChunkChecked = true;
+            }
+          } else {
+            // if not last chunk, then the chunk should be full and Ready.
+            Assert.assertEquals("Chunk should be ready.", PutOperation.ChunkState.Ready, putChunk.getState());
+          }
           Assert.assertEquals("Chunk size should be maxChunkSize", chunkSize, putChunk.buf.readableBytes());
-          chunkIndex++;
-          putChunk.clear();
+          if (chunkIndex > 0 || (firstPutChunk != null && firstPutChunk.getState() == PutOperation.ChunkState.Ready)) {
+            firstPutChunk.clear();
+            chunkIndex++;
+          }
+          if (chunkIndex > 0) {
+            putChunk.clear();
+          }
         }
       }
     } while (!fillingComplete);

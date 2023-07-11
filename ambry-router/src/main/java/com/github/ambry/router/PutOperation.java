@@ -180,6 +180,7 @@ class PutOperation {
   private final String loggingContext;
   private final CompressionService compressionService;
   private final ReservedMetadataIdMetrics reservedMetadataIdMetrics;
+  private boolean isSimpleBlob;
 
   private static final Logger logger = LoggerFactory.getLogger(PutOperation.class);
 
@@ -303,6 +304,7 @@ class PutOperation {
     this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
     this.channel = channel;
     this.options = options;
+    this.isSimpleBlob = !options.isChunkUpload(); // if it is a chunked upload, then it should not be considered as simple blob.
     this.chunksToStitch = chunksToStitch;
     this.futureResult = futureResult;
     this.callback = callback;
@@ -493,7 +495,7 @@ class PutOperation {
    */
   private synchronized void releaseDataForAllChunks() {
     for (PutChunk chunk : putChunks) {
-      if (chunk.isBuilding() || chunk.isReady() || chunk.isComplete()) {
+      if (!(chunk.isFree() || chunk.isEncrypting())) {
         logger.info("{}: Clear unfinished chunk {} {} since operation is completed", loggingContext,
             chunk.getChunkIndex(), chunk.getState());
         chunk.releaseBlobContent();
@@ -617,6 +619,12 @@ class PutOperation {
           channelReadBuf = chunkFillerChannel.getNextByteBuf(0);
         }
         if (channelReadBuf != null) {
+          if (channelReadBuf.readableBytes() > 0 && isChunkAwaitingResolution()) {
+            // If first chunk is awaiting resolution, and there are more bytes in the channel prepare it first as a data chunk.
+            // Also, this makes the blob a composite blob.
+            isSimpleBlob = false;
+            maybeResolveAwaitingChunk();
+          }
           maybeStopTrackingWaitForChannelDataTime();
           chunkToFill = getChunkToFill();
           if (chunkToFill == null) {
@@ -647,9 +655,14 @@ class PutOperation {
         }
       }
       if (chunkFillingCompletedSuccessfully) {
-        // If the blob size is less then 4MB or the last chunk size is less than 4MB, than this lastChunk will be
+        // If the blob size is less than 4MB or the last chunk size is less than 4MB, than this lastChunk will be
         // the chunk above.
-        PutChunk lastChunk = getBuildingChunk();
+        PutChunk lastChunk = getChunkInState(ChunkState.Building);
+
+        // The last chunk could be the second chunk, if the blob size is less than 8MB. We need to check if any chunk is
+        // awaiting resolution, and if so, resolve it first.
+        maybeResolveAwaitingChunk();
+
         if (lastChunk != null) {
           if (chunkCounter != 0 && lastChunk.buf.readableBytes() == 0) {
             logger.trace("{}: The last buffer(s) received from chunkFillerChannel have no data, discarding them.",
@@ -676,15 +689,40 @@ class PutOperation {
       RouterException routerException = e instanceof RouterException ? (RouterException) e
           : new RouterException("PutOperation fillChunks encountered unexpected error", e,
               RouterErrorCode.UnexpectedInternalError);
-      PutChunk lastChunk = getBuildingChunk();
+      PutChunk lastChunk = getChunkInState(ChunkState.Building);
       if (lastChunk != null) {
         // call release blob content, not clear, since clear should only be used in the main thread.
         lastChunk.releaseBlobContent();
+      }
+      PutChunk resolutionAwaitingChunk = getChunkInState(ChunkState.AwaitingBlobTypeResolution);
+      if (resolutionAwaitingChunk != null) {
+        resolutionAwaitingChunk.releaseBlobContent();
       }
       routerMetrics.chunkFillerUnexpectedErrorCount.inc();
       setOperationExceptionAndComplete(routerException);
       routerCallback.onPollReady();
     }
+  }
+
+  /**
+   * Prepare the awaiting chunks to be sent to server.
+   * Note that there can be only one awaiting chunk, and that chunk will always be the first data chunk of a blob.
+   */
+  private void maybeResolveAwaitingChunk() {
+    PutChunk resolutionAwaitingChunk = getChunkInState(ChunkState.AwaitingBlobTypeResolution);
+    if (resolutionAwaitingChunk != null) {
+      resolutionAwaitingChunk.onFillComplete(true);
+      if (resolutionAwaitingChunk.isReady()) {
+        routerCallback.onPollReady();
+      }
+    }
+  }
+
+  /**
+   * @return {@code true} if there is any chunk in ChunkState.AwaitingBlobTypeResolution, {@code false} otherwise.
+   */
+  private boolean isChunkAwaitingResolution() {
+    return getChunkInState(ChunkState.AwaitingBlobTypeResolution) != null;
   }
 
   /**
@@ -841,13 +879,14 @@ class PutOperation {
   }
 
   /**
-   * Get the PutChunk that is in Building state. Note that there can be at most one such PutChunk at any time.
-   * @return the PutChunk that is in Building state; null if no PutChunk is in Building state.
+   * Get the PutChunk that is in specified state. Note that if there are multiple chunks in the specified state, this
+   * method will return the first one encountered.
+   * @return the PutChunk that is in the specified state; null if no PutChunk is in the specified state.
    */
-  private PutChunk getBuildingChunk() {
+  private PutChunk getChunkInState(ChunkState state) {
     PutChunk chunkToReturn = null;
     for (PutChunk chunk : putChunks) {
-      if (chunk.isBuilding()) {
+      if (chunk.state == state) {
         chunkToReturn = chunk;
         break;
       }
@@ -1196,6 +1235,13 @@ class PutOperation {
     }
 
     /**
+     * @return true if the operation on the current chunk is encrypting.
+     */
+    boolean isEncrypting() {
+      return state == ChunkState.Encrypting;
+    }
+
+    /**
      * @return operation tracker used by current put chunk
      */
     OperationTracker getOperationTrackerInUse() {
@@ -1216,9 +1262,8 @@ class PutOperation {
      */
     private void prepareForSending() {
       try {
-        // Determine data type to set
-        BlobDataType blobDataType = isMetadataChunk() ? BlobDataType.METADATA : BlobDataType.DATACHUNK;
-
+        BlobDataType blobDataType =
+            isMetadataChunk() ? BlobDataType.METADATA : isSimpleBlob ? BlobDataType.SIMPLE : BlobDataType.DATACHUNK;
         partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
         // To ensure previously attempted partitions are not retried for this PUT after a failure.
         attemptedPartitionIds.add(partitionId);
@@ -1428,8 +1473,14 @@ class PutOperation {
         }
       }
       if (buf.readableBytes() == routerConfig.routerMaxPutChunkSizeBytes) {
-        onFillComplete(true);
-        updateChunkFillerWaitTimeMetrics();
+        if (chunkIndex == 0) {
+          // If first put chunk is full, but not yet prepared then mark it awaiting resolution instead of completing it.
+          // This chunk will be prepared as soon as either more bytes are read from the channel, or the chunk filling
+          // is complete. At that point we will have enough information to mark this blob as simple or composite blob.
+          state = ChunkState.AwaitingBlobTypeResolution;
+        } else {
+          onFillComplete(true);
+        }
       }
       return toWrite;
     }
@@ -2000,6 +2051,11 @@ class PutOperation {
      * The Chunk is being built. It may have some data but is not yet ready to be sent.
      */
     Building,
+    /**
+     * The Chunk is waiting for resolution of the blob type.
+     * Only the first chunk of a blob can be in this state.
+     */
+    AwaitingBlobTypeResolution,
     /**
      * The Chunk is being encrypted.
      */
