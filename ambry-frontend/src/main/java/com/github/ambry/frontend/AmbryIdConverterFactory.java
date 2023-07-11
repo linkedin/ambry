@@ -39,12 +39,15 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Future;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Factory that instantiates an {@link IdConverter} implementation for the frontend.
  */
 public class AmbryIdConverterFactory implements IdConverterFactory {
+  private static final Logger LOGGER = LoggerFactory.getLogger(AmbryIdConverterFactory.class);
   private final IdSigningService idSigningService;
   private final NamedBlobDb namedBlobDb;
   private final FrontendMetrics frontendMetrics;
@@ -155,6 +158,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
     private CompletionStage<String> convertId(String input, RestRequest restRequest, BlobInfo blobInfo)
         throws RestServiceException {
       CompletionStage<String> conversionFuture;
+      LOGGER.debug("input for convertId : " + input);
+      LOGGER.debug("restRequest for convertId : " + restRequest);
       if (RequestPath.matchesOperation(input, Operations.NAMED_BLOB)) {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(input, Collections.emptyMap());
         GetOption getOption = RestUtils.getGetOption(restRequest, GetOption.None);
