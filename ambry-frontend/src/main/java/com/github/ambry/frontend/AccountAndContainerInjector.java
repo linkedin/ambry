@@ -126,7 +126,7 @@ public class AccountAndContainerInjector {
    *                     if {@link ContainerMetrics} instantiation is not needed.
    * @throws RestServiceException
    */
-  public void injectAccountContainerAndDatasetForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
+  public void injectAccountContainerForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
       throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
 
@@ -166,6 +166,16 @@ public class AccountAndContainerInjector {
           RestServiceErrorCode.BadRequest);
     }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
+  }
+
+  /**
+   * Injects target {@link Dataset} for named blob requests.
+   * This will treat the request path as a named blob path that includes the dataset names.
+   * @param restRequest restRequest The Put {@link RestRequest}.
+   * @throws RestServiceException
+   */
+  public void injectDatasetForNamedBlob(RestRequest restRequest) throws RestServiceException {
+    NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
     setTargetDatasetAndVersionInRestRequestIfNeeded(restRequest, namedBlobPath);
   }
 

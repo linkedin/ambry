@@ -753,6 +753,11 @@ public class FrontendRestRequestServiceTest {
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord2)));
 
     doOperation(restRequest, restResponseChannel);
+    //make sure the two records has been deleted.
+    verify(namedBlobDb, times(1)).delete(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(),
+        blobNameNew1);
+    verify(namedBlobDb, times(1)).delete(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(),
+        blobNameNew);
 
     namedBlobPathUri =
         NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + DATASET_NAME
