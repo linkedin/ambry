@@ -28,13 +28,14 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
-import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
@@ -65,8 +66,8 @@ public class HeadBlobHandler {
     this.quotaManager = quotaManager;
   }
 
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
-      throws RestServiceException {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) throws RestServiceException {
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
       accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metrics.headBlobMetricsGroup);
@@ -77,7 +78,7 @@ public class HeadBlobHandler {
   private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> finalCallback;
+    private final Callback<ReadableStreamChannel> finalCallback;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -85,7 +86,7 @@ public class HeadBlobHandler {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<Void> finalCallback) {
+        Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;

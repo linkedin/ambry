@@ -86,8 +86,9 @@ public class GetBlobHandler {
     this.accountService = accountService;
   }
 
-  void handle(RequestPath requestPath, RestRequest restRequest, RestResponseChannel restResponseChannel,
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
+    RequestPath requestPath = RestUtils.getRequestPath(restRequest);
     SubResource subResource = requestPath.getSubResource();
     GetBlobOptions options = buildGetBlobOptions(restRequest.getArgs(), subResource,
         getGetOption(restRequest, frontendConfig.defaultRouterGetOption), restRequest, requestPath.getBlobSegmentIdx());
@@ -301,8 +302,7 @@ public class GetBlobHandler {
      * @return a {@link ReadableStreamChannel} that represents the response to the {@code restRequest}.
      * @throws RestServiceException if there's any error during serialization.
      */
-    private ReadableStreamChannel setChunkBlobIdsInResponseChannel(GetBlobResult result)
-        throws RestServiceException {
+    private ReadableStreamChannel setChunkBlobIdsInResponseChannel(GetBlobResult result) throws RestServiceException {
       JSONObject jsonObject = new JSONObject();
       List<StoreKey> blobChunkIds = result.getBlobChunkIds();
       if (blobChunkIds == null || blobChunkIds.isEmpty()) {

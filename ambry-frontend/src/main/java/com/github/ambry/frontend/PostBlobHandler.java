@@ -31,6 +31,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
@@ -113,7 +114,8 @@ class PostBlobHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) {
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -124,7 +126,7 @@ class PostBlobHandler {
     private final RestRequest restRequest;
     private final String uri;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> finalCallback;
+    private final Callback<ReadableStreamChannel> finalCallback;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -132,7 +134,7 @@ class PostBlobHandler {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<Void> finalCallback) {
+        Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
@@ -184,8 +186,7 @@ class PostBlobHandler {
         } else {
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo),
-              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, finalCallback);
     }
@@ -202,8 +203,7 @@ class PostBlobHandler {
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo),
-              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER,
-          finalCallback);
+              QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER, finalCallback);
     }
 
     /**
@@ -300,7 +300,8 @@ class PostBlobHandler {
      */
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
       PutBlobOptionsBuilder builder =
-          new PutBlobOptionsBuilder().chunkUpload(RestUtils.isChunkUpload(restRequest.getArgs())).restRequest(restRequest);
+          new PutBlobOptionsBuilder().chunkUpload(RestUtils.isChunkUpload(restRequest.getArgs()))
+              .restRequest(restRequest);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);
@@ -327,8 +328,9 @@ class PostBlobHandler {
         } else {
           ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
               frontendMetrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.inc();
-          throwRestServiceExceptionIfEnabled(new RestServiceException("No reserved metadata id present to set in chunked upload response",
-                RestServiceErrorCode.BadRequest), router.getRouterConfig().routerReservedMetadataEnabled);
+          throwRestServiceExceptionIfEnabled(
+              new RestServiceException("No reserved metadata id present to set in chunked upload response",
+                  RestServiceErrorCode.BadRequest), router.getRouterConfig().routerReservedMetadataEnabled);
         }
         restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
       }

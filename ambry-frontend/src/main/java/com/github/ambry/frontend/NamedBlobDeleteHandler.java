@@ -20,6 +20,7 @@ import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
 
@@ -34,6 +35,7 @@ import static com.github.ambry.rest.RestUtils.*;
  * corresponding regular blob id and then call {@link DeleteBlobHandler#handle} to handle the request.
  */
 class NamedBlobDeleteHandler {
+  private final SecurityService securityService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics metrics;
   private final DeleteBlobHandler deleteBlobHandler;
@@ -46,8 +48,9 @@ class NamedBlobDeleteHandler {
    * @param metrics The {@link FrontendMetrics} instance where metrics are recorded
    * @param deleteBlobHandler The {@link DeleteBlobHandler}.
    */
-  NamedBlobDeleteHandler(AccountAndContainerInjector accountAndContainerInjector, NamedBlobDb namedBlobDb,
-      FrontendMetrics metrics, DeleteBlobHandler deleteBlobHandler) {
+  NamedBlobDeleteHandler(SecurityService securityService, AccountAndContainerInjector accountAndContainerInjector,
+      NamedBlobDb namedBlobDb, FrontendMetrics metrics, DeleteBlobHandler deleteBlobHandler) {
+    this.securityService = securityService;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.namedBlobDb = namedBlobDb;
     this.metrics = metrics;
@@ -61,9 +64,10 @@ class NamedBlobDeleteHandler {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    * @throws RestServiceException
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
-      throws RestServiceException {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) throws RestServiceException {
     accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metrics.deleteBlobMetricsGroup);
+    securityService.checkAccess(restRequest, "NamedBlobDeleteHandler");
     RequestPath requestPath = getRequestPath(restRequest);
     // Get blob id and reconstruct RequestPath
     // this is the three-part named blob id, including account name, container name and the custom blob name.

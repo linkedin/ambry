@@ -22,6 +22,7 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
 import java.util.GregorianCalendar;
@@ -73,7 +74,8 @@ class TtlUpdateHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) {
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
@@ -83,7 +85,7 @@ class TtlUpdateHandler {
   private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> finalCallback;
+    private final Callback<ReadableStreamChannel> finalCallback;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -91,7 +93,7 @@ class TtlUpdateHandler {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<Void> finalCallback) {
+        Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;

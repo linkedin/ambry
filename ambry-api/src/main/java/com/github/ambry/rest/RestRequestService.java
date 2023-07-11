@@ -42,6 +42,8 @@ public interface RestRequestService {
    */
   void shutdown();
 
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel);
+
   /**
    * Handles a GET operation.
    * <p/>

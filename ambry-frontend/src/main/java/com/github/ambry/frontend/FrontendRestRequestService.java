@@ -32,7 +32,6 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.AsyncOperationTracker;
 import com.github.ambry.utils.SystemTime;
@@ -84,9 +83,9 @@ class FrontendRestRequestService implements RestRequestService {
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
   private NamedBlobListHandler namedBlobListHandler;
-  //private NamedBlobGetHandler namedBlobGetHandler;
-  //private NamedBlobDeleteHandler namedBlobDeleteHandler;
   private NamedBlobPutHandler namedBlobPutHandler;
+  private NamedBlobGetHandler namedBlobGetHandler;
+  private NamedBlobDeleteHandler namedBlobDeleteHandler;
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
   private TtlUpdateHandler ttlUpdateHandler;
@@ -102,6 +101,7 @@ class FrontendRestRequestService implements RestRequestService {
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
   private QuotaManager quotaManager;
+  private HttpMultiplexer multiplexer = new HttpMultiplexer();
   private boolean isUp = false;
   private final Random random = new Random();
 
@@ -169,61 +169,145 @@ class FrontendRestRequestService implements RestRequestService {
     }
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
-    getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
-    getSignedUrlHandler =
-        new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
-            frontendMetrics, clusterMap);
-
+    // regular blob
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager, accountService);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
             SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName, quotaManager);
-
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, accountService);
-    deleteDatasetHandler =
-        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector, deleteBlobHandler);
     headBlobHandler =
         new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager);
     undeleteHandler =
         new UndeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
+    getSignedUrlHandler =
+        new GetSignedUrlHandler(urlSigningService, securityService, idConverter, accountAndContainerInjector,
+            frontendMetrics, clusterMap);
 
-    namedBlobListHandler =
-        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
-    namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName, quotaManager, accountService, deleteBlobHandler);
-
+    // admin operations
+    getPeersHandler = new GetPeersHandler(clusterMap, securityService, frontendMetrics);
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
-    getDatasetsHandler = new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
-    listDatasetsHandler = new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
+
+    // named blob operations
+    namedBlobListHandler =
+        new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
+    namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
+        accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager, accountService,
+        deleteBlobHandler);
+    namedBlobGetHandler =
+        new NamedBlobGetHandler(securityService, accountAndContainerInjector, namedBlobDb, frontendMetrics,
+            getBlobHandler);
+    namedBlobDeleteHandler =
+        new NamedBlobDeleteHandler(securityService, accountAndContainerInjector, namedBlobDb, frontendMetrics,
+            deleteBlobHandler);
+
+    // dataset operations
+    deleteDatasetHandler =
+        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector,
+            deleteBlobHandler);
+    getDatasetsHandler =
+        new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    listDatasetsHandler =
+        new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
+
+    initMultiplexer();
+
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
       int oneWeekInSeconds = 60 * 60 * 24 * 7;
       int initialDelayInSeconds = random.nextInt(oneWeekInSeconds);
       namedBlobsCleanupTask =
-          namedBlobsCleanupScheduler.scheduleAtFixedRate(
-              namedBlobsCleanupRunner, initialDelayInSeconds, oneWeekInSeconds, TimeUnit.SECONDS);
-      logger.info("Named Blob Stale Data Cleanup Process has started with {} seconds initial delay", initialDelayInSeconds);
+          namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, initialDelayInSeconds,
+              oneWeekInSeconds, TimeUnit.SECONDS);
+      logger.info("Named Blob Stale Data Cleanup Process has started with {} seconds initial delay",
+          initialDelayInSeconds);
     }
 
     isUp = true;
     logger.info("FrontendRestRequestService has started");
     frontendMetrics.restRequestServiceStartupTimeInMs.update(System.currentTimeMillis() - startupBeginTime);
+  }
+
+  private void initMultiplexer() {
+    // Dataset version
+    // ???
+
+    // Named blob
+    // list blob
+    multiplexer.get(restRequest -> {
+      RequestPath requestPath = getRequestPath(restRequest);
+      return requestPath.matchesOperation(NAMED_BLOB)
+          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null;
+    }, namedBlobListHandler::handle);
+    // get blob
+    multiplexer.get(restRequest -> {
+      RequestPath requestPath = getRequestPath(restRequest);
+      return requestPath.matchesOperation(NAMED_BLOB)
+          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() != null;
+    }, namedBlobGetHandler::handle);
+    // put blob
+    multiplexer.put(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(NAMED_BLOB),
+        namedBlobPutHandler::handle);
+    // delete blob
+    multiplexer.delete(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(NAMED_BLOB),
+        namedBlobDeleteHandler::handle);
+
+    // dataset operations
+    multiplexer.get(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)
+            && RestUtils.getHeader(restRequest.getArgs(), Headers.TARGET_DATASET_NAME, false) == null,
+        listDatasetsHandler::handle);
+    multiplexer.get(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)
+            && RestUtils.getHeader(restRequest.getArgs(), Headers.TARGET_DATASET_NAME, false) != null,
+        getDatasetsHandler::handle);
+    multiplexer.post(
+        restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS_DATASETS),
+        postDatasetsHandler::handle);
+    multiplexer.delete(
+        restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(ACCOUNTS_CONTAINERS_DATASETS),
+        deleteDatasetHandler::handle);
+
+    // Admin Operations
+    // get
+    multiplexer.get(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(Operations.GET_PEERS),
+        getPeersHandler::handle);
+    multiplexer.get(
+        restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(Operations.GET_CLUSTER_MAP_SNAPSHOT),
+        getClusterMapSnapshotHandler::handle);
+
+    multiplexer.get(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(Operations.ACCOUNTS),
+        getAccountsHandler::handle);
+    multiplexer.get(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(Operations.STATS_REPORT),
+        getStatsReportHandler::handle);
+    // post
+    multiplexer.post(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(Operations.ACCOUNTS),
+        postAccountsHandler::handle);
+
+    // Regular blob
+    multiplexer.get(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(Operations.GET_SIGNED_URL),
+        getSignedUrlHandler::handle);
+    multiplexer.get(RestRequestMatcher.ALL_MATCHER, getBlobHandler::handle);
+    multiplexer.post(RestRequestMatcher.ALL_MATCHER, postBlobHandler::handle);
+    multiplexer.put(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(Operations.UPDATE_TTL),
+        ttlUpdateHandler::handle);
+    multiplexer.put(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(Operations.UNDELETE)
+        && frontendConfig.enableUndelete, undeleteHandler::handle);
+    multiplexer.delete(RestRequestMatcher.ALL_MATCHER, deleteBlobHandler::handle);
+    multiplexer.head(RestRequestMatcher.ALL_MATCHER, headBlobHandler::handle);
+    multiplexer.options(RestRequestMatcher.ALL_MATCHER, (req, resp, cb) -> this.handleOptions(req, resp));
   }
 
   @Override
@@ -261,119 +345,47 @@ class FrontendRestRequestService implements RestRequestService {
   }
 
   @Override
+  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel) {
+    handlePrechecks(restRequest, restResponseChannel);
+    Callback<Void> errorCallback = (r, e) -> submitResponse(restRequest, restResponseChannel, null, e);
+    try {
+      logger.trace("Handling {} request - {}", restRequest.getRestMethod(), restRequest.getUri());
+      checkAvailable();
+      securityService.preProcessRequest(restRequest,
+          FrontendUtils.buildCallback(getPreProcessRequestMetric(restRequest), r -> {
+            RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
+            restRequest.setArg(REQUEST_PATH, requestPath);
+            multiplexer.handle(restRequest, restResponseChannel,
+                (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+          }, restRequest.getUri(), logger, errorCallback));
+    } catch (Exception e) {
+      errorCallback.onCompletion(null, e);
+    }
+  }
+
+  @Override
   public void handleGet(final RestRequest restRequest, final RestResponseChannel restResponseChannel) {
-    ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      if (requestPath.matchesOperation(Operations.GET_PEERS)) {
-        getPeersHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.GET_CLUSTER_MAP_SNAPSHOT)) {
-        getClusterMapSnapshotHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
-        getSignedUrlHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
-        if (RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, false) == null) {
-          listDatasetsHandler.handle(restRequest, restResponseChannel,
-              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-        } else {
-          getDatasetsHandler.handle(restRequest, restResponseChannel,
-              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-        }
-      } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
-        getAccountsHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.STATS_REPORT)) {
-        getStatsReportHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
-          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
-        namedBlobListHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else {
-        getBlobHandler.handle(requestPath, restRequest, restResponseChannel, (r, e) -> {
-          submitResponse(restRequest, restResponseChannel, r, e);
-        });
-      }
-    };
-    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.getPreProcessingMetrics, routingAction);
+    //
   }
 
   @Override
   public void handlePost(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      if (requestPath.matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
-        postDatasetsHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
-        postAccountsHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else {
-        postBlobHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, null, exception));
-      }
-    };
-    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.postPreProcessingMetrics,
-        routingAction);
+    //
   }
 
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      if (requestPath.matchesOperation(Operations.UPDATE_TTL)) {
-        ttlUpdateHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          if (e instanceof RouterException
-              && ((RouterException) e).getErrorCode() == RouterErrorCode.BlobUpdateNotAllowed) {
-            restResponseChannel.setHeader(Headers.ALLOW, TTL_UPDATE_REJECTED_ALLOW_HEADER_VALUE);
-          }
-          submitResponse(restRequest, restResponseChannel, null, e);
-        });
-      } else if (requestPath.matchesOperation(Operations.UNDELETE) && frontendConfig.enableUndelete) {
-        // If the undelete is not enabled, then treat it as unrecognized operation.
-        undeleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          submitResponse(restRequest, restResponseChannel, null, e);
-        });
-      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-        namedBlobPutHandler.handle(restRequest, restResponseChannel,
-            (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
-      } else {
-        throw new RestServiceException("Unrecognized operation: " + requestPath.getOperationOrBlobId(false),
-            RestServiceErrorCode.BadRequest);
-      }
-    };
-    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.putPreProcessingMetrics, routingAction);
+    //
   }
 
   @Override
   public void handleDelete(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      if (requestPath.matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
-        deleteDatasetHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          submitResponse(restRequest, restResponseChannel, null, e);
-        });
-      } else {
-        deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          submitResponse(restRequest, restResponseChannel, null, e);
-        });
-      }
-    };
-    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.deletePreProcessingMetrics,
-        routingAction);
+    //
   }
 
   @Override
   public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    ThrowingConsumer<RequestPath> routingAction = requestPath -> {
-      RestRequestMetrics requestMetrics =
-          frontendMetrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
-      restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-
-      headBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-        submitResponse(restRequest, restResponseChannel, null, e);
-      });
-    };
-    preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.headPreProcessingMetrics,
-        routingAction);
+    //
   }
 
   @Override
@@ -412,6 +424,25 @@ class FrontendRestRequestService implements RestRequestService {
       exception = Utils.extractFutureExceptionCause(e);
     }
     submitResponse(restRequest, restResponseChannel, null, exception);
+  }
+
+  private AsyncOperationTracker.Metrics getPreProcessRequestMetric(RestRequest restRequest) {
+    switch (restRequest.getRestMethod()) {
+      case GET:
+        return frontendMetrics.getPreProcessingMetrics;
+      case DELETE:
+        return frontendMetrics.deletePreProcessingMetrics;
+      case POST:
+        return frontendMetrics.postPreProcessingMetrics;
+      case PUT:
+        return frontendMetrics.putPreProcessingMetrics;
+      case HEAD:
+        return frontendMetrics.headPreProcessingMetrics;
+      case OPTIONS:
+        return frontendMetrics.optionsPreProcessingMetrics;
+      default:
+        throw new UnsupportedOperationException();
+    }
   }
 
   /**

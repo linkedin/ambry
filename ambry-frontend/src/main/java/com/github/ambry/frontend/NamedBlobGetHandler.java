@@ -37,6 +37,7 @@ import static com.github.ambry.rest.RestUtils.*;
  * corresponding regular blob id and then call {@link GetBlobHandler#handle} to handle the request.
  */
 class NamedBlobGetHandler {
+  private final SecurityService securityService;
   private final AccountAndContainerInjector accountAndContainerInjector;
   private final FrontendMetrics metrics;
   private final GetBlobHandler getBlobHandler;
@@ -49,8 +50,9 @@ class NamedBlobGetHandler {
    * @param metrics The {@link FrontendMetrics} instance where metrics are recorded
    * @param getBlobHandler The {@link GetBlobHandler}.
    */
-  NamedBlobGetHandler(AccountAndContainerInjector accountAndContainerInjector, NamedBlobDb namedBlobDb,
-      FrontendMetrics metrics, GetBlobHandler getBlobHandler) {
+  NamedBlobGetHandler(SecurityService securityService, AccountAndContainerInjector accountAndContainerInjector,
+      NamedBlobDb namedBlobDb, FrontendMetrics metrics, GetBlobHandler getBlobHandler) {
+    this.securityService = securityService;
     this.accountAndContainerInjector = accountAndContainerInjector;
     this.namedBlobDb = namedBlobDb;
     this.metrics = metrics;
@@ -70,6 +72,7 @@ class NamedBlobGetHandler {
     accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
         getMetricsGroupForGet(metrics, requestPath.getSubResource()));
 
+    securityService.checkAccess(restRequest, "NamedBlobGetHandler");
     // Get blob id and reconstruct RequestPath
     // this is the three-part named blob id, including account name, container name and the custom blob name.
     String namedBlobId = requestPath.getOperationOrBlobId(false);
@@ -88,7 +91,7 @@ class NamedBlobGetHandler {
       restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
       restRequest.setArg(InternalKeys.FILENAME_HINT, newRequestPath.getOperationOrBlobId(true));
       try {
-        getBlobHandler.handle(newRequestPath, restRequest, restResponseChannel, callback);
+        getBlobHandler.handle(restRequest, restResponseChannel, callback);
       } catch (RestServiceException e) {
         callback.onCompletion(null, e);
       }

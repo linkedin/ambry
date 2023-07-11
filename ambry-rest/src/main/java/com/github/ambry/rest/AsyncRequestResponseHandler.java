@@ -412,31 +412,7 @@ class AsyncRequestWorker implements Runnable {
       restRequest.prepare();
       logger.trace("Processing request {} with RestMethod {}", restRequest.getUri(), restMethod);
       long restRequestProcessingStartTime = System.currentTimeMillis();
-      switch (restMethod) {
-        case GET:
-          restRequestService.handleGet(restRequest, restResponseChannel);
-          break;
-        case POST:
-          restRequestService.handlePost(restRequest, restResponseChannel);
-          break;
-        case PUT:
-          restRequestService.handlePut(restRequest, restResponseChannel);
-          break;
-        case DELETE:
-          restRequestService.handleDelete(restRequest, restResponseChannel);
-          break;
-        case HEAD:
-          restRequestService.handleHead(restRequest, restResponseChannel);
-          break;
-        case OPTIONS:
-          restRequestService.handleOptions(restRequest, restResponseChannel);
-          break;
-        default:
-          metrics.unknownRestMethodError.inc();
-          RestServiceException e = new RestServiceException("Unsupported REST method: " + restMethod,
-              RestServiceErrorCode.UnsupportedRestMethod);
-          onProcessingFailure(restRequest, restResponseChannel, e);
-      }
+      restRequestService.handle(restRequest, restResponseChannel);
       restRequestProcessingTime = System.currentTimeMillis() - restRequestProcessingStartTime;
     } finally {
       restRequest.getMetricsTracker().scalingMetricsTracker.addToRequestProcessingTime(

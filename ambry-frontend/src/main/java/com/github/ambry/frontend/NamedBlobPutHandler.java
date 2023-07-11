@@ -42,6 +42,7 @@ import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
@@ -142,7 +143,8 @@ public class NamedBlobPutHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) {
     restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
     new NamedBlobPutHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
@@ -153,8 +155,8 @@ public class NamedBlobPutHandler {
   private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> finalCallback;
-    private final Callback<Void> deleteDatasetCallback;
+    private final Callback<ReadableStreamChannel> finalCallback;
+    private final Callback<ReadableStreamChannel> deleteDatasetCallback;
     private final String uri;
 
     /**
@@ -163,7 +165,7 @@ public class NamedBlobPutHandler {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<Void> finalCallback) {
+        Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;

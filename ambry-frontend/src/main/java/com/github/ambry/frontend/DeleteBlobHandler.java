@@ -30,6 +30,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import java.util.GregorianCalendar;
 import org.slf4j.Logger;
@@ -70,8 +71,8 @@ public class DeleteBlobHandler {
     this.accountService = accountService;
   }
 
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
-      throws RestServiceException {
+  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) throws RestServiceException {
     RestRequestMetrics requestMetrics =
         metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     RequestPath requestPath = getRequestPath(restRequest);
@@ -86,7 +87,7 @@ public class DeleteBlobHandler {
   private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
-    private final Callback<Void> finalCallback;
+    private final Callback<ReadableStreamChannel> finalCallback;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -94,7 +95,7 @@ public class DeleteBlobHandler {
      * @param finalCallback the {@link Callback} to call on completion.
      */
     private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<Void> finalCallback) {
+        Callback<ReadableStreamChannel> finalCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;

@@ -139,6 +139,7 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics deletePreProcessingMetrics;
   public final AsyncOperationTracker.Metrics postPreProcessingMetrics;
   public final AsyncOperationTracker.Metrics putPreProcessingMetrics;
+  public final AsyncOperationTracker.Metrics optionsPreProcessingMetrics;
 
   public final AsyncOperationTracker.Metrics getSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics headSecurityPostProcessRequestMetrics;
@@ -467,6 +468,8 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(FrontendRestRequestService.class, "PostPreProcessing", metricRegistry);
     putPreProcessingMetrics =
         new AsyncOperationTracker.Metrics(FrontendRestRequestService.class, "PutPreProcessing", metricRegistry);
+    optionsPreProcessingMetrics =
+        new AsyncOperationTracker.Metrics(FrontendRestRequestService.class, "OptionsPreProcessing", metricRegistry);
 
     getSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(FrontendRestRequestService.class, "getSecurityPostProcessRequest",
