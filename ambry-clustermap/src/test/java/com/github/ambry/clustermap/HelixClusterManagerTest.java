@@ -989,6 +989,30 @@ public class HelixClusterManagerTest {
       instanceConfig.addTag(instanceGroupTag);
       assertFalse("Resource is in SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
+
+    // If the resource is middle of rollback from Full-auto to Semi-auto, consider the data node to be in Full auto (Add
+    // the resource in the property store /AdminConfigs/FullAutoMigration to indicate that it is in middle of migration or rollback)
+    String addr = "localhost:" + dcsToZkInfo.get(localDc).getPort();
+    HelixPropertyStore<ZNRecord> propertyStore =
+        CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName() + "/" + PROPERTYSTORE_STR, null);
+    ZNRecord zNRecord = new ZNRecord(FULL_AUTO_MIGRATION_STR);
+    zNRecord.setListField(RESOURCES_STR, Collections.singletonList(resourceName));
+    propertyStore.set(FULL_AUTO_MIGRATION_ZNODE_PATH, zNRecord, AccessOption.PERSISTENT);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
+    helixCluster.refreshIdealState();
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertTrue("Resource should considered as FULL AUTO while it is rolling back to help with local disk selection",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // Remove the resource from the list of migrating resources. Datanode should be considered as semi-auto
+    zNRecord.setListField(RESOURCES_STR, Collections.singletonList("random_resource"));
+    propertyStore.set(FULL_AUTO_MIGRATION_ZNODE_PATH, zNRecord, AccessOption.PERSISTENT);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
+    helixCluster.refreshIdealState();
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertTrue("Resource is in SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
   }
 
   /**
