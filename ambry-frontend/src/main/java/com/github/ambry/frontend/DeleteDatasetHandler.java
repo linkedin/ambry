@@ -183,8 +183,8 @@ public class DeleteDatasetHandler {
      * @param datasetName the name of the dataset.
      * @return the chained {@link Callback} which will delete each dataset version and delete dataset for final step.
      */
-    private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx, String accountName,
-        String containerName, String datasetName) {
+    private Callback<ReadableStreamChannel> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList,
+        int idx, String accountName, String containerName, String datasetName) {
       if (idx == datasetVersionRecordList.size()) {
         return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
           accountService.deleteDataset(accountName, containerName, datasetName);
@@ -194,7 +194,7 @@ public class DeleteDatasetHandler {
           finalCallback.onCompletion(null, null);
         }, uri, LOGGER, finalCallback);
       }
-      Callback<Void> nextCallBack =
+      Callback<ReadableStreamChannel> nextCallBack =
           recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName);
       DatasetVersionRecord record = datasetVersionRecordList.get(idx);
       return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {

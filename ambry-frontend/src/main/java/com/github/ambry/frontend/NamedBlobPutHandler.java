@@ -574,8 +574,8 @@ public class NamedBlobPutHandler {
             Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
         DatasetVersionRecord datasetVersionRecord =
             accountService.addDatasetVersion(accountName, containerName, datasetName, version,
-                blobProperties.getTimeToLiveInSeconds(), blobProperties.getCreationTimeInMs(),
-                datasetVersionTtlEnabled, DatasetVersionState.IN_PROGRESS);
+                blobProperties.getTimeToLiveInSeconds(), blobProperties.getCreationTimeInMs(), datasetVersionTtlEnabled,
+                DatasetVersionState.IN_PROGRESS);
         FrontendUtils.replaceRequestPathWithNewOperationOrBlobIdIfNeeded(restRequest, datasetVersionRecord, version);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
@@ -655,15 +655,15 @@ public class NamedBlobPutHandler {
      * @param containerName the name of the container.
      * @param datasetName the name of the dataset.
      */
-    private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx, String accountName,
-        String containerName, String datasetName) {
+    private Callback<ReadableStreamChannel> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList,
+        int idx, String accountName, String containerName, String datasetName) {
       if (idx == datasetVersionRecordList.size()) {
         return (r, e) -> {
           //In the last callback, set the rest method back.
           restRequest.setRestMethod(RestMethod.PUT);
         };
       }
-      Callback<Void> nextCallBack =
+      Callback<ReadableStreamChannel> nextCallBack =
           recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName);
       DatasetVersionRecord record = datasetVersionRecordList.get(idx);
       return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
