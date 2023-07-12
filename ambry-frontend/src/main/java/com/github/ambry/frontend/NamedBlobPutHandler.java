@@ -14,10 +14,7 @@
 package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
-import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
-import com.github.ambry.account.Dataset;
-import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
@@ -29,11 +26,9 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
-import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
-import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -51,7 +46,6 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -62,7 +56,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
-import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
 
@@ -156,7 +149,6 @@ public class NamedBlobPutHandler {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final Callback<ReadableStreamChannel> finalCallback;
-    private final Callback<ReadableStreamChannel> deleteDatasetCallback;
     private final String uri;
 
     /**
@@ -169,7 +161,6 @@ public class NamedBlobPutHandler {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
-      this.deleteDatasetCallback = deleteDatasetVersionIfUploadFailedCallBack(finalCallback);
       this.uri = restRequest.getUri();
     }
 
@@ -190,7 +181,6 @@ public class NamedBlobPutHandler {
     /**
      * After {@link SecurityService#processRequest} finishes, call {@link SecurityService#postProcessRequest} to perform
      * request time security checks that rely on the request being fully parsed and any additional arguments set.
-     * @param blobInfo the {@link BlobInfo} to carry to future stages.
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
     private Callback<Void> securityProcessRequestCallback() {
@@ -210,23 +200,15 @@ public class NamedBlobPutHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
         if (RestUtils.isNamedBlobStitchRequest(restRequest)) {
-          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
-            addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
-          }
           RetainingAsyncWritableChannel channel =
               new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
-          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
-            addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
-          }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
           router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
               routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
-      }, uri, LOGGER, deleteDatasetCallback);
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
@@ -239,7 +221,7 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
         idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
-      }, uri, LOGGER, deleteDatasetCallback);
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
@@ -254,7 +236,7 @@ public class NamedBlobPutHandler {
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
               getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
               routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)),
-          uri, LOGGER, deleteDatasetCallback);
+          uri, LOGGER, finalCallback);
     }
 
     /**
@@ -266,7 +248,7 @@ public class NamedBlobPutHandler {
     private Callback<String> routerStitchBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterStitchBlobMetrics,
           blobId -> idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId)), uri,
-          LOGGER, deleteDatasetCallback);
+          LOGGER, finalCallback);
     }
 
     /**
@@ -288,13 +270,10 @@ public class NamedBlobPutHandler {
                   QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
               routerTtlUpdateCallback(blobInfo, blobId));
         } else {
-          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount();
-          }
           securityService.processResponse(restRequest, restResponseChannel, blobInfo,
               securityProcessResponseCallback());
         }
-      }, uri, LOGGER, deleteDatasetCallback);
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
@@ -326,11 +305,8 @@ public class NamedBlobPutHandler {
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
         namedBlobDb.updateBlobStateToReady(record).get();
-        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-          updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount();
-        }
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
-      }, uri, LOGGER, deleteDatasetCallback);
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
@@ -350,9 +326,7 @@ public class NamedBlobPutHandler {
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
-      accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
-          frontendMetrics.putBlobMetricsGroup);
-      accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+      accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, frontendMetrics.putBlobMetricsGroup);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
@@ -379,39 +353,10 @@ public class NamedBlobPutHandler {
         restRequest.getMetricsTracker()
             .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
       }
-      Map<String, Object> userMetadataFromRequest = new HashMap<>(restRequest.getArgs());
-      Map<String, String> userTags = getDatasetUserTags(restRequest);
-      if (!userTags.isEmpty()) {
-        userTags.forEach((key, value) -> {
-          if (!userMetadataFromRequest.containsKey(key)) {
-            userMetadataFromRequest.put(key, value);
-          }
-        });
-      }
-      byte[] userMetadata = RestUtils.buildUserMetadata(userMetadataFromRequest);
+      byte[] userMetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
       frontendMetrics.blobPropsBuildForNameBlobPutTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
       LOGGER.trace("Blob properties of blob being PUT - {}", blobProperties);
       return new BlobInfo(blobProperties, userMetadata);
-    }
-
-    /**
-     * Get the user tags at dataset level.
-     * @param restRequest the {@link RestRequest} to get dataset user tags.
-     * @return the userTags set at dataset level.
-     * @throws RestServiceException
-     */
-    private Map<String, String> getDatasetUserTags(RestRequest restRequest) throws RestServiceException {
-      Map<String, String> modifiedUserTags = new HashMap<>();
-      if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
-        Map<String, String> userTags = dataset.getUserTags();
-        if (userTags != null) {
-          for (Map.Entry<String, String> entry : userTags.entrySet()) {
-            modifiedUserTags.put(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + entry.getKey(), entry.getValue());
-          }
-        }
-      }
-      return modifiedUserTags;
     }
 
     /**
@@ -547,161 +492,6 @@ public class NamedBlobPutHandler {
         properties = blobInfoFromRequest.getBlobProperties();
       }
       return properties;
-    }
-
-    /**
-     * Support add dataset version queries after before the named blob.
-     * @param blobProperties The {@link BlobProperties} of this blob.
-     * @param restRequest {@link RestRequest} representing the request.
-     * @return the {@link Dataset}
-     * @throws RestServiceException
-     */
-    private void addDatasetVersion(BlobProperties blobProperties, RestRequest restRequest) throws RestServiceException {
-      long startAddDatasetVersionTime = System.currentTimeMillis();
-      String accountName = null;
-      String containerName = null;
-      String datasetName = null;
-      String version = null;
-      try {
-        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
-        accountName = dataset.getAccountName();
-        containerName = dataset.getContainerName();
-        datasetName = dataset.getDatasetName();
-        version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
-        boolean datasetVersionTtlEnabled =
-            RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.DATASET_VERSION_TTL_ENABLED, false);
-        long expirationTimeMs =
-            Utils.addSecondsToEpochTime(blobProperties.getCreationTimeInMs(), blobProperties.getTimeToLiveInSeconds());
-        DatasetVersionRecord datasetVersionRecord =
-            accountService.addDatasetVersion(accountName, containerName, datasetName, version,
-                blobProperties.getTimeToLiveInSeconds(), blobProperties.getCreationTimeInMs(), datasetVersionTtlEnabled,
-                DatasetVersionState.IN_PROGRESS);
-        FrontendUtils.replaceRequestPathWithNewOperationOrBlobIdIfNeeded(restRequest, datasetVersionRecord, version);
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
-        long newExpirationTimeMs = datasetVersionRecord.getExpirationTimeMs();
-        // expirationTimeMs = ttl + creationTime. If dataset version inherit the retentionTimeInSeconds from dataset level
-        // the ttl should be updated.
-        if (expirationTimeMs != newExpirationTimeMs) {
-          blobProperties.setTimeToLiveInSeconds(
-              Utils.getTtlInSecsFromExpiryMs(newExpirationTimeMs, blobProperties.getCreationTimeInMs()));
-        }
-        frontendMetrics.addDatasetVersionProcessingTimeInMs.update(
-            System.currentTimeMillis() - startAddDatasetVersionTime);
-      } catch (AccountServiceException ex) {
-        LOGGER.error(
-            "Dataset version create failed for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + version);
-        throw new RestServiceException(ex.getMessage(),
-            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
-      }
-    }
-
-    /**
-     * Support delete the dataset version out of retentionCount
-     */
-    private void updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount() throws RestServiceException {
-      Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
-      String accountName = dataset.getAccountName();
-      String containerName = dataset.getContainerName();
-      String datasetName = dataset.getDatasetName();
-      String targetVersion = (String) restResponseChannel.getHeader(Headers.TARGET_DATASET_VERSION);
-      try {
-        accountService.updateDatasetVersionState(accountName, containerName, datasetName, targetVersion,
-            DatasetVersionState.READY);
-      } catch (AccountServiceException ex) {
-        LOGGER.error(
-            "Dataset version update failed for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + targetVersion);
-        throw new RestServiceException(ex.getMessage(),
-            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
-      }
-      try {
-        List<DatasetVersionRecord> datasetVersionRecordList =
-            accountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
-        if (datasetVersionRecordList.size() > 0) {
-          LOGGER.info(
-              "Number of records need to be deleted due to out of retention count: " + datasetVersionRecordList.size());
-          DatasetVersionRecord record = datasetVersionRecordList.get(0);
-          String version = record.getVersion();
-          RequestPath requestPath = getRequestPath(restRequest);
-          RequestPath newRequestPath =
-              new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                  NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
-                      + version, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-          LOGGER.trace("New request path : " + newRequestPath);
-          // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
-          restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-          restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
-          restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
-          //set the rest method to delete in order to delete data in named blob.
-          restRequest.setRestMethod(RestMethod.DELETE);
-          deleteBlobHandler.handle(restRequest, restResponseChannel,
-              recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName));
-        }
-      } catch (Exception e) {
-        frontendMetrics.deleteDatasetVersionOutOfRetentionError.inc();
-        LOGGER.error("Failed to delete dataset version out of retention count for this dataset: " + dataset, e);
-      }
-    }
-
-    /**
-     * Recursively delete the dataset version out of retention count at dataset level.
-     * @param datasetVersionRecordList the list of the {@link DatasetVersionRecord}
-     * @param idx the index of the datasetVersionRecordList
-     * @param accountName the name of the account.
-     * @param containerName the name of the container.
-     * @param datasetName the name of the dataset.
-     */
-    private Callback<ReadableStreamChannel> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList,
-        int idx, String accountName, String containerName, String datasetName) {
-      if (idx == datasetVersionRecordList.size()) {
-        return (r, e) -> {
-          //In the last callback, set the rest method back.
-          restRequest.setRestMethod(RestMethod.PUT);
-        };
-      }
-      Callback<ReadableStreamChannel> nextCallBack =
-          recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName);
-      DatasetVersionRecord record = datasetVersionRecordList.get(idx);
-      return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
-        String version = record.getVersion();
-        RequestPath requestPath = getRequestPath(restRequest);
-        RequestPath newRequestPath =
-            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
-                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-        LOGGER.trace("New request path : " + newRequestPath);
-        // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
-        restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-        restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
-        restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
-        deleteBlobHandler.handle(restRequest, restResponseChannel, nextCallBack);
-      }, uri, LOGGER, null);
-    }
-
-    /**
-     * When upload named blob failed, we take the best effort to delete the dataset version which create before uploading.
-     * @param callback the final callback which submit the response.
-     */
-    private <T> Callback<T> deleteDatasetVersionIfUploadFailedCallBack(Callback<T> callback) {
-      return (r, e) -> {
-        try {
-          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
-            String version = (String) restResponseChannel.getHeader(Headers.TARGET_DATASET_VERSION);
-            accountService.deleteDatasetVersion(dataset.getAccountName(), dataset.getContainerName(),
-                dataset.getDatasetName(), version);
-          }
-        } catch (Exception ex) {
-          LOGGER.error("Best effort to delete the dataset version when upload failed");
-        }
-        if (callback != null) {
-          callback.onCompletion(r, e);
-        }
-      };
     }
   }
 }

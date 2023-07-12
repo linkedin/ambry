@@ -80,30 +80,42 @@ class FrontendRestRequestService implements RestRequestService {
   private RestResponseHandler responseHandler;
   private IdConverter idConverter = null;
   private SecurityService securityService = null;
-  private GetPeersHandler getPeersHandler;
-  private GetSignedUrlHandler getSignedUrlHandler;
-  private NamedBlobListHandler namedBlobListHandler;
-  private NamedBlobPutHandler namedBlobPutHandler;
-  private NamedBlobGetHandler namedBlobGetHandler;
-  private NamedBlobDeleteHandler namedBlobDeleteHandler;
-  private GetBlobHandler getBlobHandler;
-  private PostBlobHandler postBlobHandler;
-  private TtlUpdateHandler ttlUpdateHandler;
-  private DeleteBlobHandler deleteBlobHandler;
-  private DeleteDatasetHandler deleteDatasetHandler;
-  private HeadBlobHandler headBlobHandler;
-  private UndeleteHandler undeleteHandler;
-  private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
-  private GetAccountsHandler getAccountsHandler;
-  private GetDatasetsHandler getDatasetsHandler;
-  private ListDatasetsHandler listDatasetsHandler;
-  private PostAccountsHandler postAccountsHandler;
-  private PostDatasetsHandler postDatasetsHandler;
-  private GetStatsReportHandler getStatsReportHandler;
   private QuotaManager quotaManager;
   private HttpMultiplexer multiplexer = new HttpMultiplexer();
   private boolean isUp = false;
   private final Random random = new Random();
+
+  // regular blob handlers
+  private GetBlobHandler getBlobHandler;
+  private PostBlobHandler postBlobHandler;
+  private TtlUpdateHandler ttlUpdateHandler;
+  private DeleteBlobHandler deleteBlobHandler;
+  private HeadBlobHandler headBlobHandler;
+  private UndeleteHandler undeleteHandler;
+  private GetSignedUrlHandler getSignedUrlHandler;
+
+  // admin handlers
+  private GetPeersHandler getPeersHandler;
+  private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
+  private GetAccountsHandler getAccountsHandler;
+  private PostAccountsHandler postAccountsHandler;
+  private GetStatsReportHandler getStatsReportHandler;
+
+  // named blob handlers
+  private NamedBlobListHandler namedBlobListHandler;
+  private NamedBlobPutHandler namedBlobPutHandler;
+  private NamedBlobGetHandler namedBlobGetHandler;
+  private NamedBlobDeleteHandler namedBlobDeleteHandler;
+
+  // dataset handlers
+  private DeleteDatasetHandler deleteDatasetHandler;
+  private GetDatasetsHandler getDatasetsHandler;
+  private ListDatasetsHandler listDatasetsHandler;
+  private PostDatasetsHandler postDatasetsHandler;
+
+  // dataset version handlers
+  private DatasetVersionGetHandler datasetVersionGetHandler;
+  private DatasetVersionDeleteHandler datasetVersionDeleteHandler;
 
   /**
    * Create a new instance of FrontendRestRequestService by supplying it with config, metrics, cluster map, a
@@ -172,7 +184,7 @@ class FrontendRestRequestService implements RestRequestService {
     // regular blob
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
-            frontendMetrics, clusterMap, quotaManager, accountService);
+            frontendMetrics, clusterMap, quotaManager);
     postBlobHandler =
         new PostBlobHandler(securityService, idConverter, idSigningService, router, accountAndContainerInjector,
             SystemTime.getInstance(), frontendConfig, frontendMetrics, clusterName, quotaManager);
@@ -181,7 +193,7 @@ class FrontendRestRequestService implements RestRequestService {
             clusterMap, quotaManager);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
-            clusterMap, quotaManager, accountService);
+            clusterMap, quotaManager);
     headBlobHandler =
         new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
             frontendMetrics, clusterMap, quotaManager);
@@ -223,6 +235,14 @@ class FrontendRestRequestService implements RestRequestService {
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
 
+    // dataset version operations
+    datasetVersionGetHandler =
+        new DatasetVersionGetHandler(securityService, accountAndContainerInjector, frontendMetrics, namedBlobGetHandler,
+            accountService);
+    datasetVersionDeleteHandler =
+        new DatasetVersionDeleteHandler(securityService, accountAndContainerInjector, frontendMetrics,
+            namedBlobDeleteHandler, accountService);
+
     initMultiplexer();
 
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
@@ -244,7 +264,16 @@ class FrontendRestRequestService implements RestRequestService {
 
   private void initMultiplexer() {
     // Dataset version
-    // ???
+    // get dataset version
+    multiplexer.get(restRequest -> {
+      RequestPath requestPath = getRequestPath(restRequest);
+      return requestPath.matchesOperation(NAMED_BLOB)
+          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null
+          && RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs());
+    }, datasetVersionGetHandler::handle);
+    // delete dataset version
+    multiplexer.delete(restRequest -> RestUtils.getRequestPath(restRequest).matchesOperation(NAMED_BLOB)
+        && RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs()), datasetVersionDeleteHandler::handle);
 
     // Named blob
     // list blob
