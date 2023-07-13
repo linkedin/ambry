@@ -38,4 +38,5 @@ ext {
     zstdVersion = "1.5.2-3"
     mockitoVersion = "2.+"
     powermockVersion = "2.+"
+    caffeineVersion = "2.9.3"
 }
