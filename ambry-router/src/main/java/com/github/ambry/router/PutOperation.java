@@ -319,12 +319,25 @@ class PutOperation {
     bytesFilledSoFar = 0;
     chunkCounter = -1;
     putChunks = new ConcurrentLinkedQueue<>();
-    reservedMetadataIdMetrics = ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(routerMetrics.getMetricRegistry());
-    metadataPutChunk = new MetadataPutChunk();
+    reservedMetadataIdMetrics =
+        ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(routerMetrics.getMetricRegistry());
     chunkFillerChannel = new ByteBufferAsyncWritableChannel(writableChannelEventListener);
     isEncryptionEnabled = passedInBlobProperties.isEncrypted();
     restRequest = options.getRestRequest();
     loggingContext = makeLoggingContext();
+    if (chunksToStitch != null && chunksToStitch.isEmpty()) {
+      // chunksToStitch is null for non stitch requests.
+      // For stitch requests, the current metadata format does not support empty chunk lists
+      setOperationExceptionAndComplete(new RouterException("Must provide at least one chunk for stitchBlob call",
+          RouterErrorCode.InvalidPutArgument));
+    }
+    MetadataPutChunk metadataPutChunk = null;
+    try {
+      metadataPutChunk = new MetadataPutChunk(chunksToStitch);
+    } catch (RouterException routerException) {
+      setOperationExceptionAndComplete(routerException);
+    }
+    this.metadataPutChunk = metadataPutChunk;
   }
 
   /**
@@ -384,11 +397,6 @@ class PutOperation {
    * @throws RouterException if validation of the chunks to stitch failed.
    */
   private void processChunksToStitch() throws RouterException {
-    if (chunksToStitch.isEmpty()) {
-      // The current metadata format does not support empty chunk lists
-      throw new RouterException("Must provide at least one chunk for stitchBlob call",
-          RouterErrorCode.InvalidPutArgument);
-    }
     long totalSize = 0;
     long intermediateChunkSize =
         routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2
@@ -1268,19 +1276,22 @@ class PutOperation {
         // To ensure previously attempted partitions are not retried for this PUT after a failure.
         attemptedPartitionIds.add(partitionId);
 
-        chunkBlobId =
-            new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-                passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
-                passedInBlobProperties.isEncrypted(), blobDataType);
+        if (shouldUseReservedMetadataId()) {
+          chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
+        } else {
+          chunkBlobId =
+              new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+                  passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
+                  passedInBlobProperties.isEncrypted(), blobDataType);
+        }
 
-        // TODO: Efficient Metadata Operations: The reserved metadata blob id needs to be passed as chunk properties.
         chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),
             passedInBlobProperties.isPrivate(), passedInBlobProperties.getTimeToLiveInSeconds(),
             passedInBlobProperties.getCreationTimeInMs(), passedInBlobProperties.getAccountId(),
             passedInBlobProperties.getContainerId(), passedInBlobProperties.isEncrypted(),
             passedInBlobProperties.getExternalAssetTag(), passedInBlobProperties.getContentEncoding(),
-            passedInBlobProperties.getFilename(), null);
+            passedInBlobProperties.getFilename(), resolveReservedMetadataId());
         operationTracker = getOperationTracker();
         correlationIdToChunkPutRequestInfo.clear();
         logger.trace("{}: Chunk {} is ready for sending out to server", loggingContext, chunkIndex);
@@ -1291,6 +1302,19 @@ class PutOperation {
         setOperationExceptionAndComplete(
             new RouterException("Prepare for sending failed", e, RouterErrorCode.UnexpectedInternalError));
       }
+    }
+
+    /**
+     * Resolve the reserved metadata id to be used for data chunks.
+     * For simple blobs or metadata chunks this will be {@code null}. For the data chunks of composite blobs, the reserved
+     * metadata id of the metadata chunk will be used.
+     * @return the blob id to use as the reserved metadata id. Can be {@code null}.
+     */
+    private String resolveReservedMetadataId() {
+      if (!routerConfig.routerReservedMetadataEnabled || isSimpleBlob || isMetadataChunk()) {
+        return null;
+      }
+      return metadataPutChunk.reservedMetadataChunkId.getID();
     }
 
     /**
@@ -1496,7 +1520,7 @@ class PutOperation {
         if (!operationTracker.hasSucceeded()) {
           failedAttempts++;
           appendSlippedPutBlobId(chunkBlobId);
-          if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts) {
+          if (failedAttempts <= routerConfig.routerMaxSlippedPutAttempts && !shouldUseReservedMetadataId()) {
             logger.trace("{}: Attempt to put chunk with id: {} failed, attempting slipped put ", loggingContext,
                 chunkBlobId);
             routerMetrics.slippedPutAttemptCount.inc();
@@ -1535,6 +1559,14 @@ class PutOperation {
         }
         state = ChunkState.Complete;
       }
+    }
+
+    /**
+     * @return {@code true} If this chunk is a metadata chunk and router reserved metadata is enabled. {@code false}
+     * otherwise.
+     */
+    boolean shouldUseReservedMetadataId() {
+      return isMetadataChunk() && routerConfig.routerReservedMetadataEnabled;
     }
 
     /**
@@ -1846,19 +1878,51 @@ class PutOperation {
     private final TreeMap<Integer, Pair<StoreKey, Long>> indexToChunkIdsAndChunkSizes;
     private int intermediateChunkSize = routerConfig.routerMaxPutChunkSizeBytes;
     private Pair<? extends StoreKey, BlobProperties> firstChunkIdAndProperties = null;
-    private final BlobId reservedMetadataChunkId;
+    private BlobId reservedMetadataChunkId = null;
 
     /**
      * Initialize the MetadataPutChunk.
+     * If {@link RouterConfig#routerReservedMetadataEnabled} is {@code true}, then this will initialize the reserved
+     * metadata chunk id. There are three cases:
+     * 1. If this is a chunked upload, then the reserved metadata chunk id is passed in the blob properties.
+     * 2. If this is a stitched blob request, then the reserved metadata is obtained from the specified chunksToStitch.
+     * 3. If this is a regular upload, then a new reserved metadata chunk id is generated. Note that this reserved metadata
+     *    id will be used only for composite blobs.
+     *
+     * @param chunksToStitch {@link List} of {@link ChunkInfo} objects to stitch for a stitchBlob request.
+     *                       Will be {@code null} for all other put requests.
+     * @throws RouterException In case of any error.
      */
-    MetadataPutChunk() {
+    MetadataPutChunk(List<ChunkInfo> chunksToStitch) throws RouterException {
       indexToChunkIdsAndChunkSizes = new TreeMap<>();
       // metadata blob is in building state.
       state = ChunkState.Building;
-      reservedMetadataChunkId =
-          ClusterMapUtils.reserveMetadataBlobId(partitionClass, Collections.emptyList(), reservedMetadataIdMetrics,
-              clusterMap, passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
-              passedInBlobProperties.isEncrypted(), routerConfig);
+      try {
+        validateReservedMetadataChunkId();
+        if (options.isChunkUpload()) {
+          setReservedMetadataChunkId(passedInBlobProperties.getReservedMetadataBlobId());
+        } else if (chunksToStitch == null) {
+          // if it's not chunked upload, and chunksToStitch is null, then it's a regular upload.
+          reservedMetadataChunkId =
+              ClusterMapUtils.reserveMetadataBlobId(partitionClass, Collections.emptyList(), reservedMetadataIdMetrics,
+                  clusterMap, passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
+                  passedInBlobProperties.isEncrypted(), routerConfig);
+        } else if (!chunksToStitch.isEmpty()) {
+          // Empty chunksToStitch list is already handled in PutOperation constructor by now.
+          setReservedMetadataChunkId(chunksToStitch.get(0).getReservedMetadataId());
+          for (ChunkInfo chunkInfo : chunksToStitch) {
+            verifyStitchedBlobReservedMetadataChunkId(chunkInfo.getReservedMetadataId());
+          }
+        }
+      } catch (RouterException routerException) {
+        if (routerConfig.routerReservedMetadataEnabled) {
+          reservedMetadataIdMetrics.metadataIdNotReservedCount.inc();
+          throw routerException;
+        }
+      }
+      if (reservedMetadataChunkId == null) {
+        reservedMetadataIdMetrics.metadataIdNotReservedCount.inc();
+      }
     }
 
     @Override
@@ -1890,6 +1954,58 @@ class PutOperation {
      */
     void addChunkId(StoreKey storeKey, long chunkSize, int chunkIndex) {
       indexToChunkIdsAndChunkSizes.put(chunkIndex, new Pair<>(storeKey, chunkSize));
+    }
+
+    /**
+     * Validate the reserved metadata chunk id is passed in correctly where it needs to be specified.
+     * @throws RouterException in case of any errors.
+     */
+    private void validateReservedMetadataChunkId() throws RouterException {
+      if (!options.isChunkUpload() && Objects.nonNull(passedInBlobProperties.getReservedMetadataBlobId())) {
+        reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.inc();
+        throw new RouterException("Only chunked uploads can have reserved metadata blob id passed in.",
+            RouterErrorCode.InvalidOrMismatchedStitchBlobReservedMetadataChunkId);
+      }
+      if (options.isChunkUpload() && passedInBlobProperties.getReservedMetadataBlobId() == null) {
+        reservedMetadataIdMetrics.noReservedMetadataForChunkedUploadCount.inc();
+        throw new RouterException("No reserved metadata passed in for chunked upload",
+            RouterErrorCode.InvalidOrMismatchedStitchBlobReservedMetadataChunkId);
+      }
+    }
+
+    /**
+     * Validate and set the specified chunkId as the reserved metadata chunk id.
+     * @param chunkId The chunk id to set.
+     * @throws RouterException In case of any issue during validation.
+     */
+    private void setReservedMetadataChunkId(String chunkId) throws RouterException {
+      try {
+        reservedMetadataChunkId = new BlobId(chunkId, clusterMap);
+      } catch (Exception exception) {
+        reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.inc();
+        throw new RouterException("Invalid metadata chunk id of chunks in the stitched operation.",
+            RouterErrorCode.InvalidOrMismatchedStitchBlobReservedMetadataChunkId);
+      }
+      if (reservedMetadataChunkId.getBlobDataType() != BlobDataType.METADATA) {
+        reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.inc();
+        throw new RouterException("The blob data type of the metadata blob should be BlobIdType.METADATA",
+            RouterErrorCode.InvalidOrMismatchedStitchBlobReservedMetadataChunkId);
+      }
+    }
+
+    /**
+     * Verify that the reserved metadata chunk id matches the specified chunk id.
+     * @param chunkId chunk id to be matched.
+     * @throws RouterException In case of a mismatch.
+     */
+    private void verifyStitchedBlobReservedMetadataChunkId(String chunkId) throws RouterException {
+      String reservedMetadataChunkIdStr = (reservedMetadataChunkId == null) ? null : reservedMetadataChunkId.getID();
+      if (!Objects.equals(reservedMetadataChunkIdStr, chunkId)) {
+        reservedMetadataChunkId = null;
+        reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.inc();
+        throw new RouterException("Mismatch in metadata chunk ids of chunks in stitched operation.",
+            RouterErrorCode.InvalidOrMismatchedStitchBlobReservedMetadataChunkId);
+      }
     }
 
     /**
@@ -1968,7 +2084,7 @@ class PutOperation {
         serialized.flip();
         buf = Unpooled.wrappedBuffer(serialized);
         onFillComplete(false);
-        checkReservedPartitionState(reservedMetadataChunkId == null ? null : reservedMetadataChunkId.getPartition());
+        checkReservedPartitionState();
       } else {
         // if there is only one chunk
         blobId = (BlobId) indexToChunkIdsAndChunkSizes.get(0).getFirst();
@@ -1999,13 +2115,14 @@ class PutOperation {
     }
 
     /**
-     * Check if the reserved partition is available to take the Metadata chunk write.
-     * @param reservedPartitionId reserved partition id for the metadata chunk.
+     * Check if the partition of the reserved metadata chunk is available to take write.
      */
-    private void checkReservedPartitionState(PartitionId reservedPartitionId) {
-      if (reservedPartitionId == null) {
+    private void checkReservedPartitionState() {
+      if (reservedMetadataChunkId == null) {
+        reservedMetadataIdMetrics.metadataIdNotReservedCount.inc();
         return;
       }
+      PartitionId reservedPartitionId = reservedMetadataChunkId.getPartition();
       if(reservedPartitionId.getPartitionState() == PartitionState.READ_ONLY) {
         reservedMetadataIdMetrics.numReservedPartitionFoundReadOnlyCount.inc();
       }
@@ -2018,6 +2135,13 @@ class PutOperation {
         reservedMetadataIdMetrics.numReservedPartitionFoundUnavailableInAllDcCount.inc();
       }
     }
+  }
+
+  /**
+   * @return the reserved metadata {@link BlobId} associated with this operation.
+   */
+  BlobId getReservedMetadataId() {
+    return (metadataPutChunk == null) ? null : metadataPutChunk.reservedMetadataChunkId;
   }
 
   /**

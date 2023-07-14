@@ -111,6 +111,7 @@ public class PutManagerTest {
   private final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>();
   private final TestNotificationSystem notificationSystem;
   private NonBlockingRouter router;
+  private RouterConfig routerConfig;
   private NonBlockingRouterMetrics metrics;
   private MockKeyManagementService kms;
   private MockCryptoService cryptoService;
@@ -190,7 +191,7 @@ public class PutManagerTest {
       mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
       // since the puts are processed one at a time, it is fair to check the last partition class set
-      checkLastRequestPartitionClasses(1, MockClusterMap.DEFAULT_PARTITION_CLASS);
+      checkLastRequestPartitionClasses(1, MockClusterMap.DEFAULT_PARTITION_CLASS, false);
     }
     Assert.assertEquals("Metrics should show no creation of metadata chunk", 0,
         metrics.metadataChunkCreationCount.getCount());
@@ -209,7 +210,7 @@ public class PutManagerTest {
       submitPutsAndAssertSuccess(true);
       // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
       // one extra call if there is a metadata blob
-      checkLastRequestPartitionClasses(i == 1 ? 1 : i + 1, MockClusterMap.DEFAULT_PARTITION_CLASS);
+      checkLastRequestPartitionClasses(i == 1 ? 1 : i + 1, MockClusterMap.DEFAULT_PARTITION_CLASS, false);
     }
     Assert.assertEquals("Metrics should show creation of metadata chunk", 1,
         metrics.metadataChunkCreationCount.getCount());
@@ -226,7 +227,7 @@ public class PutManagerTest {
       mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
       // since the puts are processed one "large" blob at a time, it is fair to check the last partition classes set
-      checkLastRequestPartitionClasses(i + 2, MockClusterMap.DEFAULT_PARTITION_CLASS);
+      checkLastRequestPartitionClasses(i + 2, MockClusterMap.DEFAULT_PARTITION_CLASS, false);
     }
     Assert.assertEquals("Metrics should show creation of metadata chunk", 1,
         metrics.metadataChunkCreationCount.getCount());
@@ -292,7 +293,7 @@ public class PutManagerTest {
       mockClusterMap.clearLastNRequestedPartitionClasses();
       submitPutsAndAssertSuccess(true);
       // since the puts are processed one at a time, it is fair to check the last partition class set
-      checkLastRequestPartitionClasses(1, MockClusterMap.DEFAULT_PARTITION_CLASS);
+      checkLastRequestPartitionClasses(1, MockClusterMap.DEFAULT_PARTITION_CLASS, true);
     };
 
     for (int i = 1; i < 10; i++) {
@@ -909,7 +910,7 @@ public class PutManagerTest {
         mockClusterMap.clearLastNRequestedPartitionClasses();
         submitPutsAndAssertSuccess(true);
         // since the puts are processed one at a time, it is fair to check the last partition class set
-        checkLastRequestPartitionClasses(sizeAndChunkCount.getValue(), containerAndPartClass.getValue());
+        checkLastRequestPartitionClasses(sizeAndChunkCount.getValue(), containerAndPartClass.getValue(), false);
       }
     }
 
@@ -921,7 +922,7 @@ public class PutManagerTest {
     mockClusterMap.clearLastNRequestedPartitionClasses();
     submitPutsAndAssertSuccess(true);
     // because of how the non-encrypted flow is, prepareForSending() may be called twice. So not checking for count
-    checkLastRequestPartitionClasses(-1, nonExistentClass);
+    checkLastRequestPartitionClasses(-1, nonExistentClass, false);
   }
 
   /**
@@ -986,7 +987,8 @@ public class PutManagerTest {
       setupEncryptionCast(vProps);
     }
     metrics = new NonBlockingRouterMetrics(mockClusterMap, null);
-    router = new NonBlockingRouter(new RouterConfig(vProps), metrics,
+    routerConfig = new RouterConfig(vProps);
+    router = new NonBlockingRouter(routerConfig, metrics,
         new MockNetworkClientFactory(vProps, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
@@ -1379,10 +1381,13 @@ public class PutManagerTest {
    * @param expectedCount the number of times the {@code expectedClass} was requested. If < 0, the check is ignored
    * @param expectedClass the partition class requested
    */
-  private void checkLastRequestPartitionClasses(int expectedCount, String expectedClass) {
+  private void checkLastRequestPartitionClasses(int expectedCount, String expectedClass,
+      boolean isStitchedOrChunkedUpload) {
     List<String> lastNRequestedPartitionClasses = mockClusterMap.getLastNRequestedPartitionClasses();
     if (expectedCount >= 0) {
-      expectedCount++; // to account for Metadata chunk's reserved partition id.
+      if (!isStitchedOrChunkedUpload) {
+        expectedCount++; // to account for Metadata chunk's reserved partition id.
+      }
       assertEquals("Last requested partition class count is not as expected", expectedCount,
           lastNRequestedPartitionClasses.size());
     }
