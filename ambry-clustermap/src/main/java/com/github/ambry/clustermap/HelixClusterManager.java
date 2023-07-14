@@ -443,6 +443,7 @@ public class HelixClusterManager implements ClusterMap {
    */
   @Override
   public boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId) {
+    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
     if (instanceNameToAmbryDataNode.get(instanceName) == null) {
       throw new IllegalArgumentException("Instance " + instanceName + " doesn't exist");
@@ -469,7 +470,12 @@ public class HelixClusterManager implements ClusterMap {
     // Make sure all the resources turned on FULL_AUTO mode
     String tag = tags.iterator().next();
     ResourceProperty property = dcToTagToResourceProperty.get(dcName).get(tag);
-    return property != null && property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO);
+    if (property != null) {
+      // Return true if either the resource is in Full-auto or we are rolling back from Full-auto to Semi-auto
+      return property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO) || ((zNRecord != null)
+          && zNRecord.getListField(RESOURCES_STR).contains(property.name));
+    }
+    return false;
   }
 
   @Override
