@@ -989,9 +989,37 @@ public class HelixClusterManagerTest {
       instanceConfig.addTag(instanceGroupTag);
       assertFalse("Resource is in SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
+  }
 
-    // If the resource is middle of rollback from Full-auto to Semi-auto, consider the data node to be in Full auto (Add
-    // the resource in the property store /AdminConfigs/FullAutoMigration to indicate that it is in middle of migration or rollback)
+  /**
+   * Test {@link ClusterMap#isDataNodeInFullAutoMode} when falling back to semi-auto.
+   * @throws Exception
+   */
+  @Test
+  public void testRollBackFromFullAuto() throws Exception {
+    // For aggregated view, it will always return false
+    assumeTrue(!useComposite && !useAggregatedView);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
+
+    List<DataNode> allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
+    String resourceName = helixCluster.getResources(localDc).get(0);
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    final String instanceGroupTag = "TAG_1000000";
+    idealState.setInstanceGroupTag(instanceGroupTag);
+    helixCluster.refreshIdealState();
+
+    // 1. Test data node in full auto
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(instanceGroupTag);
+      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // 2. Test data node rollback for a resource present in /AdminConfigs/FullAutoMigration
     String addr = "localhost:" + dcsToZkInfo.get(localDc).getPort();
     HelixPropertyStore<ZNRecord> propertyStore =
         CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName() + "/" + PROPERTYSTORE_STR, null);
@@ -1004,14 +1032,47 @@ public class HelixClusterManagerTest {
       assertTrue("Resource should considered as FULL AUTO while it is rolling back to help with local disk selection",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
+  }
 
-    // Remove the resource from the list of migrating resources. Datanode should be considered as semi-auto
+  /**
+   * Test {@link ClusterMap#isDataNodeInFullAutoMode} when falling back to semi-auto.
+   * @throws Exception
+   */
+  @Test
+  public void testRollBackFromFullAutoForDifferentResource() throws Exception {
+    // For aggregated view, it will always return false
+    assumeTrue(!useComposite && !useAggregatedView);
+    HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
+
+    List<DataNode> allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
+    String resourceName = helixCluster.getResources(localDc).get(0);
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    final String instanceGroupTag = "TAG_1000000";
+    idealState.setInstanceGroupTag(instanceGroupTag);
+    helixCluster.refreshIdealState();
+
+    // 1. Test data node in full auto
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(instanceGroupTag);
+      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // 2. Test data node rollback for a resource which is not present in /AdminConfigs/FullAutoMigration
+    String addr = "localhost:" + dcsToZkInfo.get(localDc).getPort();
+    HelixPropertyStore<ZNRecord> propertyStore =
+        CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName() + "/" + PROPERTYSTORE_STR, null);
+    ZNRecord zNRecord = new ZNRecord(FULL_AUTO_MIGRATION_STR);
     zNRecord.setListField(RESOURCES_STR, Collections.singletonList("random_resource"));
     propertyStore.set(FULL_AUTO_MIGRATION_ZNODE_PATH, zNRecord, AccessOption.PERSISTENT);
     idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
     helixCluster.refreshIdealState();
     for (DataNode dataNode : allLocalDcDataNodes) {
-      assertTrue("Resource is in SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+      assertFalse("Resource should considered as SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
   }
 
