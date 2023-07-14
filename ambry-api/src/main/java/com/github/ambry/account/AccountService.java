@@ -251,6 +251,20 @@ public interface AccountService extends Closeable {
   }
 
   /**
+   * List all dataset versions under a dataset.
+   * @param accountName The name of the parent account.
+   * @param containerName The name of the container.
+   * @param datasetName the name of the dataset.
+   * @param pageToken the start point to list the dataset versions, if it's null, will start at the beginning.
+   * @return a page of all valid dataset versions under the dataset start with page token.
+   * @throws AccountServiceException
+   */
+  default Page<String> listAllValidDatasetVersions(String accountName, String containerName, String datasetName,
+      String pageToken) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
    * Get the dataset version based on the supplied properties.
    * @param accountName The name for the parent account.
    * @param containerName The name for the container.
@@ -277,7 +291,15 @@ public interface AccountService extends Closeable {
     throw new UnsupportedOperationException("This method is not supported");
   }
 
-  default List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
+  /**
+   * Get all valid dataset versions for dataset deletion.
+   * @param accountName The name for the parent account.
+   * @param containerName The name for the container.
+   * @param datasetName The name of the dataset.
+   * @return the list record of dataset versions under a dataset.
+   * @throws AccountServiceException
+   */
+  default List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
     throw new UnsupportedOperationException("This method is not supported");
   }

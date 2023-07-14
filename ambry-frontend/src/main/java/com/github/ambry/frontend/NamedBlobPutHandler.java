@@ -350,7 +350,9 @@ public class NamedBlobPutHandler {
       long propsBuildStartTime = System.currentTimeMillis();
       accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
           frontendMetrics.putBlobMetricsGroup);
-      accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+      if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+        accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+      }
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(

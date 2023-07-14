@@ -268,6 +268,11 @@ public class RestUtils {
      * It is set to a string that differentiate STITCH vs regular upload named blob. If it set to "STITCH", it indicate that this is the a stitch upload.
      */
     public static final String UPLOAD_NAMED_BLOB_MODE = "x-ambry-upload-named-blob-mode";
+
+    /**
+     * Boolean field set to "true" to enable dataset version listing.
+     */
+    public static final String ENABLE_DATASET_VERSION_LISTING = "x-ambry-enable-dataset-version-listing";
     /**
      * This header will carry a UUID that represents a "session." For example, when performing a stitched upload, each
      * chunk upload should be a part of the same session.

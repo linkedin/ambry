@@ -83,7 +83,8 @@ public class DatasetDao {
   private final String listLatestVersionSqlForUpload;
   private final String getLatestVersionSqlForDownload;
   private final String listValidVersionForDatasetDeletionSql;
-  private final String listVersionByModifiedTimeSql;
+  private final String listVersionByModifiedTimeAndFilterByRetentionSql;
+  private final String listValidDatasetVersionsSql;
 
   // Dataset table query strings
   private final String insertDatasetSql;
@@ -144,10 +145,14 @@ public class DatasetDao {
         String.format("select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
             VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
     // list all valid versions sorted by last modified time, and skip the first N records which is not out of retentionCount.
-    listVersionByModifiedTimeSql = String.format("select %s, %s from %s "
+    listVersionByModifiedTimeAndFilterByRetentionSql = String.format("select %s, %s from %s "
             + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? and %s = ? ORDER BY %s DESC LIMIT ?, 100",
         VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
         DATASET_VERSION_STATE, LAST_MODIFIED_TIME);
+    listValidDatasetVersionsSql = String.format("select %1$s from %2$s "
+            + "where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and (%1$s >= ? or ? IS NULL) "
+            + "ORDER BY %8$s ASC LIMIT ?", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
+        DATASET_NAME, DATASET_VERSION_STATE, LAST_MODIFIED_TIME);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
@@ -557,18 +562,21 @@ public class DatasetDao {
    * @throws SQLException
    */
   public synchronized List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId,
-      short containerId, String datasetName) throws SQLException {
+      short containerId, String datasetName) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
       dataAccessor.getDatabaseConnection(false);
+      PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, false);
+      Dataset.VersionSchema versionSchema =
+          executeGetVersionSchema(getVersionSchemaStatement, accountId, containerId, datasetName);
       PreparedStatement listAllValidVersionForDatasetDeletionStatement =
           dataAccessor.getPreparedStatement(listValidVersionForDatasetDeletionSql, false);
       List<DatasetVersionRecord> datasetVersionRecords =
           executeListAllValidVersionForDatasetDeletionStatement(listAllValidVersionForDatasetDeletionStatement,
-              accountId, containerId, datasetName);
+              accountId, containerId, datasetName, versionSchema);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return datasetVersionRecords;
-    } catch (SQLException e) {
+    } catch (SQLException | AccountServiceException e) {
       dataAccessor.onException(e, Read);
       throw e;
     }
@@ -593,6 +601,37 @@ public class DatasetDao {
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return datasetNameList;
     } catch (SQLException e) {
+      dataAccessor.onException(e, Read);
+      throw e;
+    }
+  }
+
+  /**
+   * List all valid dataset versions under a dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param pageToken the pageToken if total datasets number has reached out to limit.
+   * @return a page of dataset versions.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  public synchronized Page<String> listAllValidDatasetVersions(short accountId, short containerId, String datasetName,
+      String pageToken) throws SQLException, AccountServiceException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      dataAccessor.getDatabaseConnection(false);
+      PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, false);
+      Dataset.VersionSchema versionSchema =
+          executeGetVersionSchema(getVersionSchemaStatement, accountId, containerId, datasetName);
+      PreparedStatement listAllValidDatasetVersionsStatement =
+          dataAccessor.getPreparedStatement(listValidDatasetVersionsSql, false);
+      Page<String> datasetVersionList =
+          executeListAllValidDatasetVersionsStatement(listAllValidDatasetVersionsStatement, accountId, containerId,
+              datasetName, pageToken, versionSchema);
+      dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+      return datasetVersionList;
+    } catch (SQLException | AccountServiceException e) {
       dataAccessor.onException(e, Read);
       throw e;
     }
@@ -626,10 +665,11 @@ public class DatasetDao {
       try {
         dataAccessor.getDatabaseConnection(false);
         PreparedStatement listAllValidVersionsOrderedByLastModifiedTimeStatement =
-            dataAccessor.getPreparedStatement(listVersionByModifiedTimeSql, false);
+            dataAccessor.getPreparedStatement(listVersionByModifiedTimeAndFilterByRetentionSql, false);
         List<DatasetVersionRecord> datasetVersionRecordList =
             executeListAllValidVersionsOrderedByLastModifiedTimeStatement(
-                listAllValidVersionsOrderedByLastModifiedTimeStatement, accountId, containerId, datasetName, retentionCount, versionSchema);
+                listAllValidVersionsOrderedByLastModifiedTimeStatement, accountId, containerId, datasetName,
+                retentionCount, versionSchema);
         dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
         return datasetVersionRecordList;
       } catch (SQLException e) {
@@ -862,7 +902,7 @@ public class DatasetDao {
    * @throws SQLException
    */
   private List<DatasetVersionRecord> executeListAllValidVersionForDatasetDeletionStatement(PreparedStatement statement,
-      int accountId, int containerId, String datasetName) throws SQLException {
+      int accountId, int containerId, String datasetName, Dataset.VersionSchema versionSchema) throws SQLException {
     ResultSet resultSet = null;
     List<DatasetVersionRecord> datasetVersionRecords = new ArrayList<>();
     try {
@@ -871,7 +911,8 @@ public class DatasetDao {
       statement.setString(3, datasetName);
       resultSet = statement.executeQuery();
       while (resultSet.next()) {
-        String version = resultSet.getString(VERSION);
+        long versionValue = resultSet.getLong(VERSION);
+        String version = convertVersionValueToVersion(versionValue, versionSchema);
         Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
         DatasetVersionRecord datasetVersionRecord =
             new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime));
@@ -911,6 +952,47 @@ public class DatasetDao {
           break;
         }
         entries.add(resultSet.getString(1));
+      }
+      return new Page<>(entries, nextContinuationToken);
+    } finally {
+      closeQuietly(resultSet);
+    }
+  }
+
+  /**
+   * Execute listValidDatasetVersionsSql statement.
+   * @param statement the listValidDatasetVersionsSql statement.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param pageToken the page token.
+   * @param versionSchema the dataset version schema.
+   * @return the page of the dataset versions.
+   * @throws SQLException
+   */
+  private Page<String> executeListAllValidDatasetVersionsStatement(PreparedStatement statement, int accountId,
+      int containerId, String datasetName, String pageToken, Dataset.VersionSchema versionSchema) throws SQLException {
+    ResultSet resultSet = null;
+    try {
+      statement.setInt(1, accountId);
+      statement.setInt(2, containerId);
+      statement.setString(3, datasetName);
+      statement.setInt(4, DatasetVersionState.READY.ordinal());
+      statement.setString(5, pageToken);
+      statement.setString(6, pageToken);
+      statement.setInt(7, mySqlAccountServiceConfig.listDatasetVersionsMaxResult + 1);
+      resultSet = statement.executeQuery();
+      List<String> entries = new ArrayList<>();
+      String nextContinuationToken = null;
+      int resultIndex = 0;
+      while (resultSet.next()) {
+        long versionValue = resultSet.getLong(VERSION);
+        String version = convertVersionValueToVersion(versionValue, versionSchema);
+        if (resultIndex++ == mySqlAccountServiceConfig.listDatasetVersionsMaxResult) {
+          nextContinuationToken = version;
+          break;
+        }
+        entries.add(version);
       }
       return new Page<>(entries, nextContinuationToken);
     } finally {

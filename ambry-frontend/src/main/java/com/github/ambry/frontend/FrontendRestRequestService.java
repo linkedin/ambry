@@ -49,6 +49,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.utils.Utils.*;
 
@@ -98,6 +99,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetAccountsHandler getAccountsHandler;
   private GetDatasetsHandler getDatasetsHandler;
   private ListDatasetsHandler listDatasetsHandler;
+  private ListDatasetVersionHandler listDatasetVersionHandler;
   private PostAccountsHandler postAccountsHandler;
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
@@ -206,6 +208,8 @@ class FrontendRestRequestService implements RestRequestService {
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getDatasetsHandler = new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     listDatasetsHandler = new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    listDatasetVersionHandler =
+        new ListDatasetVersionHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
@@ -289,6 +293,9 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
         namedBlobListHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (RestUtils.getBooleanHeader(restRequest.getArgs(), ENABLE_DATASET_VERSION_LISTING, false)) {
+        listDatasetVersionHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         getBlobHandler.handle(requestPath, restRequest, restResponseChannel, (r, e) -> {

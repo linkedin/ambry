@@ -246,7 +246,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    */
   public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId, short containerId,
-      String datasetName) throws SQLException {
+      String datasetName) throws SQLException, AccountServiceException {
     return datasetDao.getAllValidVersionForDatasetDeletion(accountId, containerId, datasetName);
   }
 
@@ -260,6 +260,21 @@ public class MySqlAccountStore {
    */
   public Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken) throws SQLException {
     return datasetDao.listAllValidDatasets(accountId, containerId, pageToken);
+  }
+
+  /**
+   * Get all valid dataset versions of the dataset with page token.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the dataset name.
+   * @param pageToken the start page token, if it's null, will start at beginning.
+   * @return the page of the dataset versions.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  public Page<String> listAllValidDatasetVersions(short accountId, short containerId,
+      String datasetName, String pageToken) throws SQLException, AccountServiceException {
+    return datasetDao.listAllValidDatasetVersions(accountId, containerId, datasetName, pageToken);
   }
 
   /**
