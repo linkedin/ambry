@@ -18,6 +18,8 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -28,10 +30,25 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.HelixDataAccessor;
+import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.PropertyKey;
+import org.apache.helix.lock.LockScope;
+import org.apache.helix.lock.helix.HelixLockScope;
+import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
+import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.model.InstanceConfig;
+import org.apache.helix.model.Message;
+import org.apache.helix.model.Resource;
+import org.apache.helix.model.StateModelDefinition;
+import org.apache.helix.participant.statemachine.StateModel;
+import org.apache.helix.participant.statemachine.StateModelFactory;
+import org.apache.helix.util.MessageUtil;
+import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
@@ -69,6 +86,7 @@ public class HelixParticipantTest {
   private static final String dcName = "DC0";
   private static final List<ZkInfo> zkInfoList = new ArrayList<>();
   private static final List<PropertyStoreToDataNodeConfigAdapter> adapters = new ArrayList<>();
+  private static final int distributedLockLeaseTimeout = 2000; // 2 seconds
   private static JSONObject zkJson;
   private static TestHardwareLayout testHardwareLayout;
   private static TestPartitionLayout testPartitionLayout;
@@ -96,15 +114,14 @@ public class HelixParticipantTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{
-            {ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DataNodeConfigSourceType.INSTANCE_CONFIG},
+        new Object[][]{{ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DataNodeConfigSourceType.INSTANCE_CONFIG},
             {ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, DataNodeConfigSourceType.PROPERTY_STORE},
             {ClusterMapConfig.AMBRY_STATE_MODEL_DEF, DataNodeConfigSourceType.INSTANCE_CONFIG},
-            {ClusterMapConfig.AMBRY_STATE_MODEL_DEF, DataNodeConfigSourceType.PROPERTY_STORE}
-        });
+            {ClusterMapConfig.AMBRY_STATE_MODEL_DEF, DataNodeConfigSourceType.PROPERTY_STORE}});
   }
 
-  public HelixParticipantTest(String stateModelDef, DataNodeConfigSourceType dataNodeConfigSourceType) throws Exception {
+  public HelixParticipantTest(String stateModelDef, DataNodeConfigSourceType dataNodeConfigSourceType)
+      throws Exception {
     zkInfo = zkInfoList.get(0);
     props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
@@ -114,6 +131,9 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.state.model.definition", stateModelDef);
     props.setProperty("clustermap.data.node.config.source.type", dataNodeConfigSourceType.name());
+    props.setProperty("clustermap.enable.state.model.listener", "true");
+    props.setProperty(ClusterMapConfig.DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS,
+        String.valueOf(distributedLockLeaseTimeout));
     this.stateModelDef = stateModelDef;
     this.dataNodeConfigSourceType = dataNodeConfigSourceType;
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
@@ -126,7 +146,7 @@ public class HelixParticipantTest {
     propertyStoreAdapter =
         dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE ? new PropertyStoreToDataNodeConfigAdapter(
             "localhost:" + zkInfo.getPort(), clusterMapConfig) : null;
-    if(propertyStoreAdapter != null) {
+    if (propertyStoreAdapter != null) {
       adapters.add(propertyStoreAdapter);
     }
     instanceConfigConverter = new InstanceConfigToDataNodeConfigAdapter.Converter(clusterMapConfig);
@@ -136,6 +156,7 @@ public class HelixParticipantTest {
   public void clear() {
     ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
     admin.dropCluster(clusterName);
+    admin.close();
   }
 
   @AfterClass
@@ -155,9 +176,8 @@ public class HelixParticipantTest {
     //setup HelixParticipant and dependencies
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    HelixParticipant helixParticipant =
-        new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
-            getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
+        getDefaultZkConnectStr(clusterMapConfig), true);
     ZKHelixAdmin helixAdmin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
     DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
 
@@ -290,6 +310,7 @@ public class HelixParticipantTest {
     assertTrue(partiallySealedReplicas.contains(partitionIdStr));
 
     helixAdmin.close();
+    helixParticipant.close();
   }
 
   /**
@@ -370,6 +391,7 @@ public class HelixParticipantTest {
     stoppedReplicas = helixParticipant.getStoppedReplicas();
     listIsExpectedSize(stoppedReplicas, 0, listName);
     helixAdmin.close();
+    helixParticipant.close();
   }
 
   /**
@@ -512,8 +534,10 @@ public class HelixParticipantTest {
         getDataNodeConfigInHelix(helixAdmin, instanceName));
     // create two new replicas on the same disk of local node
     int currentPartitionCount = testPartitionLayout.getPartitionCount();
-    Partition newPartition1 = new Partition(currentPartitionCount++, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, testPartitionLayout.replicaCapacityInBytes);
-    Partition newPartition2 = new Partition(currentPartitionCount, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE, testPartitionLayout.replicaCapacityInBytes);
+    Partition newPartition1 = new Partition(currentPartitionCount++, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE,
+        testPartitionLayout.replicaCapacityInBytes);
+    Partition newPartition2 = new Partition(currentPartitionCount, DEFAULT_PARTITION_CLASS, PartitionState.READ_WRITE,
+        testPartitionLayout.replicaCapacityInBytes);
     Disk disk = (Disk) existingReplica.getDiskId();
     // 2. add new partition2 (id = 10, replicaFromPartition2) to Helix
     ReplicaId replicaFromPartition2 = new Replica(newPartition2, disk, clusterMapConfig);
@@ -553,9 +577,405 @@ public class HelixParticipantTest {
     // reset props
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(false));
     helixAdmin.close();
+    participant.close();
   }
 
-  private DataNodeConfig getDataNodeConfigInHelix(HelixAdmin helixAdmin, String instanceName){
+  /**
+   * Test updateDiskCapacity method
+   * @throws Exception
+   */
+  @Test
+  public void testUpdateDiskCapacity() throws Exception {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
+    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
+        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
+    InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    // By default, there is no disk capacity
+    assertFalse(instanceConfig.getInstanceCapacityMap().containsKey(HelixParticipant.DISK_KEY));
+    try {
+      helixParticipant.updateDiskCapacity(-1);
+      fail("Should fail on negative number");
+    } catch (IllegalArgumentException e) {
+    }
+    assertTrue(helixParticipant.updateDiskCapacity(1000));
+    instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+    assertTrue(instanceConfig.getInstanceCapacityMap().containsKey(HelixParticipant.DISK_KEY));
+    assertEquals(1000, instanceConfig.getInstanceCapacityMap().get(HelixParticipant.DISK_KEY).intValue());
+    helixParticipant.close();
+  }
+
+  /**
+   * Test setting disk state in property store.
+   * @throws Exception
+   */
+  @Test
+  public void testSetDiskState() throws Exception {
+    assumeTrue(dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
+    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
+        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
+    DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
+    // by default, all disks are available
+    List<String> mountPaths = new ArrayList<>();
+    for (Map.Entry<String, DataNodeConfig.DiskConfig> entry : dataNodeConfig.getDiskConfigs().entrySet()) {
+      mountPaths.add(entry.getKey());
+      assertTrue(entry.getValue().getState() == HardwareState.AVAILABLE);
+    }
+    AmbryDataNode dataNode = mock(AmbryDataNode.class);
+    List<DiskId> disks = new ArrayList<>();
+    for (String mountPath : mountPaths) {
+      disks.add(new AmbryDisk(clusterMapConfig, dataNode, mountPath, HardwareState.UNAVAILABLE,
+          MIN_DISK_CAPACITY_IN_BYTES * 10));
+    }
+    DiskId failDisk = mock(MockDiskId.class);
+    DiskId missingMountDisk = new AmbryDisk(clusterMapConfig, dataNode, "/missingpath", HardwareState.AVAILABLE,
+        MIN_DISK_CAPACITY_IN_BYTES * 10);
+
+    // Test some failure cases
+    try {
+      helixParticipant.setDisksState(null, HardwareState.UNAVAILABLE);
+      fail("Empty list should fail");
+    } catch (Exception e) {
+    }
+    try {
+      helixParticipant.setDisksState(Collections.emptyList(), HardwareState.UNAVAILABLE);
+      fail("Empty list should fail");
+    } catch (Exception e) {
+    }
+    try {
+      helixParticipant.setDisksState(Collections.singletonList(failDisk), HardwareState.UNAVAILABLE);
+      fail("Disk is not right");
+    } catch (Exception e) {
+    }
+    try {
+      helixParticipant.setDisksState(Collections.singletonList(missingMountDisk), HardwareState.UNAVAILABLE);
+      fail("Mount path is missing");
+    } catch (Exception e) {
+    }
+
+    // Nothing is changed
+    assertTrue(helixParticipant.setDisksState(disks, HardwareState.AVAILABLE));
+    Thread.sleep(50);
+    // All the disks are changed
+    assertTrue(helixParticipant.setDisksState(disks, HardwareState.UNAVAILABLE));
+    Thread.sleep(50);
+    dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
+    for (Map.Entry<String, DataNodeConfig.DiskConfig> entry : dataNodeConfig.getDiskConfigs().entrySet()) {
+      assertTrue(entry.getValue().getState() == HardwareState.UNAVAILABLE);
+    }
+    // change it back to available
+    assertTrue(helixParticipant.setDisksState(disks, HardwareState.AVAILABLE));
+    Thread.sleep(50);
+    dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
+    for (Map.Entry<String, DataNodeConfig.DiskConfig> entry : dataNodeConfig.getDiskConfigs().entrySet()) {
+      assertTrue(entry.getValue().getState() == HardwareState.AVAILABLE);
+    }
+    helixParticipant.close();
+  }
+
+  /**
+   * Test participate method, which triggers state transition.
+   * @throws Exception
+   */
+  @Test
+  public void testStateModelParticipation() throws Exception {
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
+        getDefaultZkConnectStr(clusterMapConfig), true);
+    // participate
+    helixParticipant.participate(Collections.emptyList(), null, null);
+    HelixManager manager = helixParticipant.getHelixManager();
+    StateModelFactory<? extends StateModel> factory =
+        manager.getStateMachineEngine().getStateModelFactory(ClusterMapConfig.AMBRY_STATE_MODEL_DEF);
+    assertTrue(factory instanceof AmbryStateModelFactory);
+
+    ClusterMap cm = new StaticClusterManager(testPartitionLayout.partitionLayout, dcName, new MetricRegistry());
+    List<? extends ReplicaId> replicaIds =
+        cm.getReplicaIds(cm.getDataNodeId("localhost", clusterMapConfig.clusterMapPort));
+    String resource = "10000"; // There is only one resource
+    // send state transition messages, this is controller logic, just put it down here to make sure the pipeline
+    // of state transition works
+    sendStateTransitionMessages(manager, resource, replicaIds, "OFFLINE", "BOOTSTRAP");
+    // sleep some time so the state transition can happen
+    Thread.sleep(1000);
+    // have to get offline to refresh the cache?
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("bootstrap", metricRegistry));
+
+    sendStateTransitionMessages(manager, resource, replicaIds, "BOOTSTRAP", "STANDBY");
+    Thread.sleep(500);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("standby", metricRegistry));
+
+    sendStateTransitionMessages(manager, resource, replicaIds, "STANDBY", "LEADER");
+    Thread.sleep(500);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("leader", metricRegistry));
+
+    sendStateTransitionMessages(manager, resource, replicaIds, "LEADER", "STANDBY");
+    Thread.sleep(500);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("standby", metricRegistry));
+
+    sendStateTransitionMessages(manager, resource, replicaIds, "STANDBY", "INACTIVE");
+    Thread.sleep(500);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("inactive", metricRegistry));
+
+    sendStateTransitionMessages(manager, resource, replicaIds, "INACTIVE", "OFFLINE");
+    Thread.sleep(500);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("offline", metricRegistry));
+
+    helixParticipant.close();
+  }
+
+  /**
+   * Test reset partition state methods
+   * @throws Exception
+   */
+  @Test
+  public void testResetPartitions() throws Exception {
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
+        getDefaultZkConnectStr(clusterMapConfig), true);
+
+    // Mock a state change listener to throw an exception
+    PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
+    doThrow(new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
+        listener).onPartitionBecomeBootstrapFromOffline(anyString());
+    helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
+
+    // participate
+    helixParticipant.participate(Collections.emptyList(), null, null);
+    HelixManager manager = helixParticipant.getHelixManager();
+    ClusterMap cm = new StaticClusterManager(testPartitionLayout.partitionLayout, dcName, new MetricRegistry());
+    List<? extends ReplicaId> replicaIds =
+        cm.getReplicaIds(cm.getDataNodeId("localhost", clusterMapConfig.clusterMapPort));
+    String resource = "10000"; // There is only one resource
+    // send state transition messages, this is controller logic, just put it down here to make sure the pipeline
+    // of state transition works
+    sendStateTransitionMessages(manager, resource, replicaIds, "OFFLINE", "BOOTSTRAP");
+    // sleep some time so the state transition can happen
+    Thread.sleep(1000);
+    getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
+    // All replicas should at error state now
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("error", metricRegistry));
+
+    // reset one partition
+    assertTrue(helixParticipant.resetPartitionState("" + replicaIds.get(0).getPartitionId().getId()));
+    Thread.sleep(500);
+    assertEquals(1, getNumberOfReplicaInStateFromMetric("offline", metricRegistry));
+    assertEquals(replicaIds.size() - 1, getNumberOfReplicaInStateFromMetric("error", metricRegistry));
+
+    // reset remaining partitions
+    List<String> remainingPartitions = replicaIds.subList(1, replicaIds.size())
+        .stream()
+        .map(ReplicaId::getPartitionId)
+        .map(PartitionId::getId)
+        .map(String::valueOf)
+        .collect(Collectors.toList());
+    assertTrue(helixParticipant.resetPartitionState(remainingPartitions));
+    Thread.sleep(500);
+    assertEquals(replicaIds.size(), getNumberOfReplicaInStateFromMetric("offline", metricRegistry));
+    assertEquals(0, getNumberOfReplicaInStateFromMetric("error", metricRegistry));
+
+    helixParticipant.close();
+  }
+
+  /**
+   * Test distributed lock with same zookeeper connection
+   * @throws Exception
+   */
+  @Test
+  public void testDistributedLock() throws Exception {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
+        getDefaultZkConnectStr(clusterMapConfig), true);
+
+    // By default, helix library would use shared zookeeper connection
+    DistributedLock lock1 = helixParticipant.getDistributedLock("TestDistributedLock", "for testing");
+    DistributedLock lock2 = helixParticipant.getDistributedLock("TestDistributedLock", "for testing");
+    testTwoDistributedLocks(lock1, lock2);
+    helixParticipant.close();
+  }
+
+  /**
+   * Test distributed lock with different zookeeper connections
+   * @throws Exception
+   */
+  @Test
+  public void testDistributedLockWithDifferentConnection() throws Exception {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    String zkConnectionStr = getDefaultZkConnectStr(clusterMapConfig);
+    DistributedLock lock1 =
+        getDistributedLockWithDedicatedZkClient("Test", clusterMapConfig.clusterMapHostName + "1", "for testing",
+            zkConnectionStr);
+    // use different user id
+    DistributedLock lock2 =
+        getDistributedLockWithDedicatedZkClient("Test", clusterMapConfig.clusterMapHostName + "2", "for testing",
+            zkConnectionStr);
+    testTwoDistributedLocks(lock1, lock2);
+  }
+
+  /**
+   * Test maintenance mode
+   * @throws Exception
+   */
+  @Test
+  public void testMaintenanceMode() throws Exception {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
+        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant2 = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
+        getDefaultZkConnectStr(clusterMapConfig), true);
+
+    try {
+      helixParticipant.exitMaintenanceMode();
+      fail("Participant not in maintenance mode");
+    } catch (Exception e) {
+    }
+    assertTrue("First participant should enter maintenance mode", helixParticipant.enterMaintenanceMode("ForTesting"));
+    assertFalse("Second participant should fail at entering maintenance mode",
+        helixParticipant2.enterMaintenanceMode("ForTesting"));
+
+    assertTrue("First participant should exit maintenance mode", helixParticipant.exitMaintenanceMode());
+    assertTrue("Second participant should enter maintenance mode",
+        helixParticipant2.enterMaintenanceMode("ForTesting"));
+    assertTrue("Second participant should exit maintenance mode", helixParticipant2.exitMaintenanceMode());
+
+    helixParticipant.close();
+    helixParticipant2.close();
+  }
+
+  /**
+   * Test two distributed locks
+   * @param lock1
+   * @param lock2
+   * @throws Exception
+   */
+  private void testTwoDistributedLocks(DistributedLock lock1, DistributedLock lock2) throws Exception {
+    // first lock should succeed
+    assertTrue(lock1.tryLock());
+    // second lock should fail since the lock is acquired by first lock
+    assertFalse(lock2.tryLock());
+    lock1.unlock();
+    // second lock should succeed since the first lock released the lock
+    assertTrue(lock2.tryLock());
+    lock2.unlock();
+
+    assertTrue(lock1.tryLock());
+    assertFalse(lock2.tryLock());
+    Thread.sleep(distributedLockLeaseTimeout + 500);
+    // After lease timeout, the lock is free to acquire again even if it's not unlock
+    assertTrue(lock2.tryLock());
+
+    lock1.unlock();
+    lock2.unlock();
+    lock1.close();
+    lock2.close();
+  }
+
+  /**
+   * Return the number of replicas at the given state from the metric;
+   * @param state The state
+   * @param metricRegistry The metric registry
+   * @return
+   */
+  private int getNumberOfReplicaInStateFromMetric(String state, MetricRegistry metricRegistry) {
+    String mkey = metricRegistry.getGauges()
+        .keySet()
+        .stream()
+        .filter(key -> key.startsWith(HelixParticipant.class.getName() + "." + state))
+        .findFirst()
+        .get();
+    return ((Integer) metricRegistry.getGauges().get(mkey).getValue()).intValue();
+  }
+
+  /**
+   * This is a hacky way to create distributed lock with different zookeeper connection.
+   * @param resource The resource to lock
+   * @param userId The user id for the lock
+   * @param reason The reason to acquire the lock
+   * @param zkConnectionStr The zookeeper server
+   * @return A {@link DistributedLock}.
+   * @throws Exception
+   */
+  private DistributedLock getDistributedLockWithDedicatedZkClient(String resource, String userId, String reason,
+      String zkConnectionStr) throws Exception {
+    LockScope distributedLockScope =
+        new HelixLockScope(HelixLockScope.LockScopeProperty.RESOURCE, Arrays.asList(clusterName, resource));
+    String scopePath = distributedLockScope.getPath();
+    long leaseTimeout = clusterMapConfig.clustermapDistributedLockLeaseTimeoutInMs;
+    int priority = 0;
+    int waitingTimeout = Integer.MAX_VALUE;
+    int cleanupTimeout = 0;
+    boolean isForceful = false;
+
+    Constructor<ZKDistributedNonblockingLock> constructor = getConstructorForZkDistributedLock();
+    assertNotNull(constructor);
+    ZKDistributedNonblockingLock zkLock =
+        constructor.newInstance(scopePath, leaseTimeout, reason, userId, priority, waitingTimeout, cleanupTimeout,
+            isForceful, null,
+            new ZkBaseDataAccessor<ZNRecord>(zkConnectionStr, ZkBaseDataAccessor.ZkClientType.DEDICATED));
+
+    return new HelixParticipant.DistributedLockImpl(zkLock);
+  }
+
+  private Constructor<ZKDistributedNonblockingLock> getConstructorForZkDistributedLock() throws Exception {
+    Constructor<?>[] constructors = ZKDistributedNonblockingLock.class.getDeclaredConstructors();
+    // Use reflection API to get a private constructor so that we can create a dedicated zookeeper connection.
+    for (Constructor<?> constructor : constructors) {
+      if ((constructor.getModifiers() & Modifier.PRIVATE) == Modifier.PRIVATE && constructor.getParameterCount() == 10
+          && constructor.getParameterTypes()[0] == String.class) {
+        constructor.setAccessible(true);
+        return (Constructor<ZKDistributedNonblockingLock>) constructor;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Send state transition messages to zookeeper so the state transition can happen for the replicas
+   * @param manager {@link HelixManager} to provide connection to zookeeper
+   * @param resourceName The resource name of all the replicas.
+   * @param replicaIds The replicas to send state transition messages.
+   * @param fromState The from state
+   * @param toState The to state
+   * @throws Exception
+   */
+  private void sendStateTransitionMessages(HelixManager manager, String resourceName,
+      List<? extends ReplicaId> replicaIds, String fromState, String toState) throws Exception {
+    StateModelDefinition stateModelDef = AmbryStateModelDefinition.getDefinition();
+    assertNotNull(stateModelDef);
+    List<Message> messages = new ArrayList<>();
+    for (ReplicaId replica : replicaIds) {
+      messages.add(MessageUtil.createStateTransitionMessage(manager.getInstanceName(), manager.getSessionId(),
+          new Resource(resourceName), "" + replica.getPartitionId().getId(), manager.getInstanceName(), fromState,
+          toState, manager.getSessionId(), stateModelDef.getId()));
+    }
+    HelixDataAccessor dataAccessor = manager.getHelixDataAccessor();
+    PropertyKey.Builder keyBuilder = dataAccessor.keyBuilder();
+    List<PropertyKey> keys = new ArrayList<>();
+    for (Message message : messages) {
+      keys.add(keyBuilder.message(message.getTgtName(), message.getId()));
+    }
+    for (boolean b : dataAccessor.createChildren(keys, new ArrayList<>(messages))) {
+      assertTrue(b);
+    }
+  }
+
+  private DataNodeConfig getDataNodeConfigInHelix(HelixAdmin helixAdmin, String instanceName) {
     return dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG ? instanceConfigConverter.convert(
         helixAdmin.getInstanceConfig(clusterName, instanceName)) : propertyStoreAdapter.get(instanceName);
   }
@@ -592,7 +1012,7 @@ public class HelixParticipantTest {
       String mountPath = entry.getKey();
       DataNodeConfig.DiskConfig diskConfig = entry.getValue();
       StringBuilder replicaStrBuilder = new StringBuilder();
-      for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry: diskConfig.getReplicaConfigs().entrySet()) {
+      for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry : diskConfig.getReplicaConfigs().entrySet()) {
         DataNodeConfig.ReplicaConfig replicaConfig = replicaEntry.getValue();
         replicaStrBuilder.append(replicaEntry.getKey())
             .append(REPLICAS_STR_SEPARATOR)
