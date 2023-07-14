@@ -62,16 +62,12 @@ public class AccountDao {
 
   // Account table query strings
   private final String insertAccountsSql;
-  private final String insertAccountsSqlNew;
   private final String getAccountsSinceSql;
   private final String updateAccountsSql;
-  private final String updateAccountsSqlNew;
 
   // Container table query strings
   private final String insertContainersSql;
-  private final String insertContainersSqlNew;
   private final String updateContainersSql;
-  private final String updateContainersSqlNew;
   private final String getContainersSinceSql;
   private final String getContainersByAccountSql;
   private final String getContainerByNameSql;
@@ -88,9 +84,6 @@ public class AccountDao {
   public AccountDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
     insertAccountsSql =
-        String.format("insert into %s (%s, %s, %s, %s) values (?, ?, now(3), now(3))", ACCOUNT_TABLE, ACCOUNT_INFO,
-            VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    insertAccountsSqlNew =
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, ?, now(3), now(3))",
             ACCOUNT_TABLE, ACCOUNT_INFO, VERSION, ACCOUNT_ID, ACCOUNT_NAME, ACCOUNT_STATUS, CREATION_TIME,
             LAST_MODIFIED_TIME);
@@ -98,15 +91,9 @@ public class AccountDao {
         String.format("select %s, %s, %s from %s where %s > ?", ACCOUNT_INFO, VERSION, LAST_MODIFIED_TIME,
             ACCOUNT_TABLE, LAST_MODIFIED_TIME);
     updateAccountsSql =
-        String.format("update %s set %s = ?, %s = ?, %s = now(3) where %s = ? ", ACCOUNT_TABLE, ACCOUNT_INFO, VERSION,
-            LAST_MODIFIED_TIME, ACCOUNT_ID);
-    updateAccountsSqlNew =
         String.format("update %s set %s = ?, %s = ?, %s = ?, %s = ?, %s = now(3) where %s = ? ", ACCOUNT_TABLE,
             ACCOUNT_INFO, VERSION, ACCOUNT_NAME, ACCOUNT_STATUS, LAST_MODIFIED_TIME, ACCOUNT_ID);
     insertContainersSql =
-        String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, ?, now(3), now(3))", CONTAINER_TABLE,
-            ACCOUNT_ID, CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    insertContainersSqlNew =
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, ?, ?, now(3), now(3))",
             CONTAINER_TABLE, ACCOUNT_ID, CONTAINER_INFO, VERSION, CONTAINER_ID, CONTAINER_NAME, CONTAINER_STATUS,
             CREATION_TIME, LAST_MODIFIED_TIME);
@@ -117,9 +104,6 @@ public class AccountDao {
         String.format("select %s, %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
             LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID);
     updateContainersSql =
-        String.format("update %s set %s = ?, %s = ?, %s = now(3) where %s = ? AND %s = ? ", CONTAINER_TABLE,
-            CONTAINER_INFO, VERSION, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID);
-    updateContainersSqlNew =
         String.format("update %s set %s = ?, %s = ?, %s = ?, %s = ?, %s = now(3) where %s = ? AND %s = ? ",
             CONTAINER_TABLE, CONTAINER_INFO, VERSION, CONTAINER_NAME, CONTAINER_STATUS, LAST_MODIFIED_TIME, ACCOUNT_ID,
             CONTAINER_ID);
@@ -318,10 +302,10 @@ public class AccountDao {
       long startTimeMs = System.currentTimeMillis();
 
       AccountUpdateBatch accountUpdateBatch;
-      accountUpdateBatch = new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSqlNew, true),
-          dataAccessor.getPreparedStatement(updateAccountsSqlNew, true),
-          dataAccessor.getPreparedStatement(insertContainersSqlNew, true),
-          dataAccessor.getPreparedStatement(updateContainersSqlNew, true));
+      accountUpdateBatch = new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSql, true),
+          dataAccessor.getPreparedStatement(updateAccountsSql, true),
+          dataAccessor.getPreparedStatement(insertContainersSql, true),
+          dataAccessor.getPreparedStatement(updateContainersSql, true));
 
       // Disable auto commits
       dataAccessor.setAutoCommit(false);
