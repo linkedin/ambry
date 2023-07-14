@@ -99,6 +99,16 @@ public class StoreConfig {
   public final int storeCompactionPolicySwitchTimestampDays;
 
   /**
+   * The maximum stagger delay (in hours) for full compaction of a store after it is eligible for compaction.
+   * In other words, when a store is eligible for full compaction, the start of full compaction will be delayed by a max
+   * of this value.
+   * This config is needed to ensure that all the stores on a disk do not start full compaction at the same time.
+   */
+  @Config("store.hybrid.compaction.full.compaction.stagger.limit.in.hours")
+  @Default("0")
+  public final int storeHybridCompactionFullCompactionStaggerLimitInHours;
+
+  /**
    * How long (in days) a container must be in DELETE_IN_PROGRESS state before it's been deleted during compaction.
    */
   @Config("store.container.deletion.retention.days")
@@ -528,6 +538,9 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.deleted.message.retention.hours", 168, 0, Integer.MAX_VALUE);
     storeCompactionPolicySwitchTimestampDays =
         verifiableProperties.getIntInRange("store.compaction.policy.switch.timestamp.days", 6, 1, 14);
+    storeHybridCompactionFullCompactionStaggerLimitInHours =
+        verifiableProperties.getIntInRange("store.hybrid.compaction.full.compaction.stagger.limit.in.hours", 0, 0,
+            Integer.MAX_VALUE);
     storeContainerDeletionRetentionDays = verifiableProperties.getInt("store.container.deletion.retention.days", 14);
     storeHardDeleteOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.hard.delete.operations.bytes.per.sec", 100 * 1024, 1,
