@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -578,8 +579,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               version);
         }
       }
-    } catch (Exception e) {
-      logger.error("MySql query {} received exception", query, e);
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
   }
@@ -621,8 +622,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         }
         return new Page<>(entries, nextContinuationToken);
       }
-    } catch (Exception e) {
-      logger.error("MySql query {} received exception", query, e);
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
   }
@@ -647,8 +648,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       query = statement.toString();
       logger.debug("Putting blob name in MySql. Query {}", query);
       statement.executeUpdate();
-    } catch (Exception e) {
-      logger.error("MySql query {} received exception", query, e);
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
     return new PutResult(record);
@@ -670,8 +671,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         throw buildException("TTL Update: Blob not found", RestServiceErrorCode.NotFound, record.getAccountName(),
             record.getContainerName(), record.getBlobName());
       }
-    } catch (Exception e) {
-      logger.error("MySql query {} received exception", query, e);
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
     return new PutResult(record);
@@ -701,8 +702,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         currentDeleteTime = resultSet.getTimestamp(4);
         alreadyDeleted = (originalDeletionTime != null && currentDeleteTime.after(originalDeletionTime));
       }
-    } catch (Exception e) {
-      logger.error("MySql query {} received exception", query, e);
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
     // only need to issue an update statement if the row was not already marked as deleted.
@@ -739,8 +740,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         }
         return resultList;
       }
-    } catch (Exception e) {
-      logger.error("MySql query {} received exception", query, e);
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
   }
@@ -758,8 +759,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       query = statement.toString();
       logger.debug("Soft deleting blob in MySql. Query {}", query);
       statement.executeUpdate();
-    } catch (Exception e) {
-      logger.error("MySql query {} received exception", query, e);
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
   }
