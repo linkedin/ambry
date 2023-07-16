@@ -1352,7 +1352,11 @@ public class PutManagerTest {
    */
   private boolean exceptionsAreEqual(Exception a, Exception b) {
     if (a instanceof RouterException) {
-      return ((RouterException) a).getErrorCode().equals(((RouterException) b).getErrorCode());
+      if (b instanceof RouterException) {
+        return ((RouterException) a).getErrorCode().equals(((RouterException) b).getErrorCode());
+      } else {
+        return false;
+      }
     } else {
       return a.getClass() == b.getClass() && a.getMessage().equals(b.getMessage());
     }
