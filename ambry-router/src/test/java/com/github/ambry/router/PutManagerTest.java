@@ -53,6 +53,8 @@ import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -1337,7 +1339,10 @@ public class PutManagerTest {
       } catch (Exception e) {
         Exception exception = Utils.extractFutureExceptionCause(e);
         Assert.assertNotNull("exception should not be null", exception);
-        Assert.assertTrue("Exception received should be the expected Exception",
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        e.printStackTrace(pw);
+        Assert.assertTrue("Exception received should be the expected Exception\n" + e.getMessage() + sw.toString(),
             exceptionsAreEqual(expectedException, exception));
       }
     }

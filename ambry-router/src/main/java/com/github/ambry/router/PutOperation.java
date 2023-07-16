@@ -328,7 +328,7 @@ class PutOperation {
     loggingContext = makeLoggingContext();
     if (chunksToStitch != null && chunksToStitch.isEmpty()) {
       // chunksToStitch is null for non stitch requests.
-      // For stitch requests, the current metadata format does not support empty chunk lists
+      //      // For stitch requests, the current metadata format does not support empty chunk lists
       setOperationExceptionAndComplete(new RouterException("Must provide at least one chunk for stitchBlob call",
           RouterErrorCode.InvalidPutArgument));
     }
