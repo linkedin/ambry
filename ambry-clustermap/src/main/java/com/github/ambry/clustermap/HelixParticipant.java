@@ -348,7 +348,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     }
     for (DiskId diskId : diskIds) {
       if (!(diskId instanceof AmbryDisk)) {
-        throw new IllegalArgumentException("HelixParticipant only works with the AmbryDisk implementation of DiskId");
+        throw new IllegalArgumentException(
+            "HelixParticipant only works with the AmbryDisk implementation of DiskId: " + diskIds);
       }
     }
     synchronized (helixAdministrationLock) {
@@ -374,7 +375,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
 
       if (dataNodeConfigChanged) {
         if (!dataNodeConfigSource.set(dataNodeConfig)) {
-          logger.warn("Setting disk {} state failed DataNodeConfig update");
+          logger.error("Setting disks {} state failed DataNodeConfig update", diskIds);
           success = false;
         }
       }
