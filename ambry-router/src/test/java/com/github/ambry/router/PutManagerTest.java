@@ -53,8 +53,6 @@ import io.netty.buffer.Unpooled;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
@@ -1339,10 +1337,7 @@ public class PutManagerTest {
       } catch (Exception e) {
         Exception exception = Utils.extractFutureExceptionCause(e);
         Assert.assertNotNull("exception should not be null", exception);
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        e.printStackTrace(pw);
-        Assert.assertTrue("Exception received should be the expected Exception\n" + e.getMessage() + sw.toString(),
+        Assert.assertTrue("Exception received should be the expected Exception",
             exceptionsAreEqual(expectedException, exception));
       }
     }
@@ -1357,11 +1352,7 @@ public class PutManagerTest {
    */
   private boolean exceptionsAreEqual(Exception a, Exception b) {
     if (a instanceof RouterException) {
-      if (b instanceof RouterException) {
-        return ((RouterException) a).getErrorCode().equals(((RouterException) b).getErrorCode());
-      } else {
-        return false;
-      }
+      return ((RouterException) a).getErrorCode().equals(((RouterException) b).getErrorCode());
     } else {
       return a.getClass() == b.getClass() && a.getMessage().equals(b.getMessage());
     }
