@@ -304,7 +304,8 @@ class PutOperation {
     this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
     this.channel = channel;
     this.options = options;
-    this.isSimpleBlob = !options.isChunkUpload(); // if it is a chunked upload, then it should not be considered as simple blob.
+    this.isSimpleBlob =
+        !options.isChunkUpload(); // if it is a chunked upload, then it should not be considered as simple blob.
     this.chunksToStitch = chunksToStitch;
     this.futureResult = futureResult;
     this.callback = callback;
@@ -352,6 +353,10 @@ class PutOperation {
    * chunk for stitch requests.
    */
   void startOperation() {
+    if (operationCompleted) {
+      // The operation has already completed before start, which means there are some invalid input arguments.
+      return;
+    }
     Exception exception = null;
     try {
       if (options.isChunkUpload() && options.getMaxUploadSize() > routerConfig.routerMaxPutChunkSizeBytes) {
@@ -1553,7 +1558,7 @@ class PutOperation {
                 quotaException.toString());
           }
         }
-        if(this instanceof MetadataPutChunk && chunkException == null) {
+        if (this instanceof MetadataPutChunk && chunkException == null) {
           // if this is a metadata chunk, and it was successful then increment the count of metadata chunk creation.
           routerMetrics.metadataChunkCreationCount.inc();
         }
@@ -2123,14 +2128,14 @@ class PutOperation {
         return;
       }
       PartitionId reservedPartitionId = reservedMetadataChunkId.getPartition();
-      if(reservedPartitionId.getPartitionState() == PartitionState.READ_ONLY) {
+      if (reservedPartitionId.getPartitionState() == PartitionState.READ_ONLY) {
         reservedMetadataIdMetrics.numReservedPartitionFoundReadOnlyCount.inc();
       }
-      if(!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
+      if (!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
           true)) {
         reservedMetadataIdMetrics.numReservedPartitionFoundUnavailableInLocalDcCount.inc();
       }
-      if(!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
+      if (!clusterMap.hasEnoughEligibleReplicasAvailableForPut(reservedPartitionId, routerConfig.routerPutSuccessTarget,
           false)) {
         reservedMetadataIdMetrics.numReservedPartitionFoundUnavailableInAllDcCount.inc();
       }
