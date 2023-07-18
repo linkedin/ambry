@@ -1108,6 +1108,14 @@ public class MySqlAccountServiceIntegrationTest {
     expectedDatasetVersions = Arrays.asList("1.0.0", "2.0.0", "2.0.1");
     assertEquals("Mismatch for datasets list", expectedDatasetVersions, partialDatasetVersions.getEntries());
     assertEquals("Mismatch on next page token", "2.0.2", partialDatasetVersions.getNextPageToken());
+
+    //listing dataset version with page token provided.
+    partialDatasetVersions =
+        mySqlAccountStore.listAllValidDatasetVersions(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC, "2.0.0");
+    expectedDatasetVersions = Arrays.asList("2.0.0", "2.0.1", "2.0.2");
+    assertEquals("Mismatch for datasets list", expectedDatasetVersions, partialDatasetVersions.getEntries());
+    assertEquals("Mismatch on next page token", "2.1.0", partialDatasetVersions.getNextPageToken());
   }
 
   /**

@@ -668,7 +668,7 @@ public class CachedAccountService extends AbstractAccountService {
   }
 
   @Override
-  public synchronized Page<String> listAllValidDatasetVersions(String accountName, String containerName,
+  public Page<String> listAllValidDatasetVersions(String accountName, String containerName,
       String datasetName, String pageToken) throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);

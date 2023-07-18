@@ -150,9 +150,9 @@ public class DatasetDao {
         VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
         DATASET_VERSION_STATE, LAST_MODIFIED_TIME);
     listValidDatasetVersionsSql = String.format("select %1$s from %2$s "
-            + "where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and (%1$s >= ? or ? IS NULL) "
-            + "ORDER BY %8$s ASC LIMIT ?", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
-        DATASET_NAME, DATASET_VERSION_STATE, LAST_MODIFIED_TIME);
+            + "where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and %1$s >= ? "
+            + "ORDER BY %1$s ASC LIMIT ?", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
+        DATASET_VERSION_STATE);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
@@ -974,13 +974,13 @@ public class DatasetDao {
       int containerId, String datasetName, String pageToken, Dataset.VersionSchema versionSchema) throws SQLException {
     ResultSet resultSet = null;
     try {
+      long pageTokenValue = pageToken == null? 0 : getVersionBasedOnSchema(pageToken, versionSchema);
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, datasetName);
       statement.setInt(4, DatasetVersionState.READY.ordinal());
-      statement.setString(5, pageToken);
-      statement.setString(6, pageToken);
-      statement.setInt(7, mySqlAccountServiceConfig.listDatasetVersionsMaxResult + 1);
+      statement.setLong(5, pageTokenValue);
+      statement.setInt(6, mySqlAccountServiceConfig.listDatasetVersionsMaxResult + 1);
       resultSet = statement.executeQuery();
       List<String> entries = new ArrayList<>();
       String nextContinuationToken = null;

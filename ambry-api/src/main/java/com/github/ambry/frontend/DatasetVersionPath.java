@@ -60,6 +60,8 @@ public class DatasetVersionPath {
     String accountName = splitPath[1];
     String containerName = splitPath[2];
     String datasetName;
+    //if isListRequest == true, the path format should be /named/<account_name>/<container_name>/<dataset_name>
+    //if isListRequest == false, the path format should be /named/<account_name>/<container_name>/<dataset_name>/<version>
     if (isListRequest) {
       datasetName = String.join("/", Arrays.copyOfRange(splitPath, 3, splitPath.length));
       return new DatasetVersionPath(accountName, containerName, datasetName, null);
