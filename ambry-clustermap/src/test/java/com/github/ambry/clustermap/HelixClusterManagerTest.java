@@ -683,6 +683,7 @@ public class HelixClusterManagerTest {
     AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
 
     List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(ambryDataNode));
+    long originalDiskSpace = disks.get(0).getAvailableSpaceInBytes();
     // Initialize disk capacity to some maximum value for tests
     for (AmbryDisk disk : disks) {
       disk.increaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES * 10);
@@ -704,6 +705,17 @@ public class HelixClusterManagerTest {
     }
     assertNull("Bootstrapping replica should be fail since no disk space is available",
         helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode));
+
+    // 3. Disk healthy case: make all the disks except for one to be unavailable
+    for (AmbryDisk disk : disks) {
+      disk.increaseAvailableSpaceInBytes(originalDiskSpace - disk.getAvailableSpaceInBytes());
+      disk.setState(HardwareState.UNAVAILABLE);
+    }
+    AmbryDisk healthyDisk = disks.get(disks.size() / 2);
+    healthyDisk.setState(HardwareState.AVAILABLE);
+    ReplicaId bootstrapReplica =
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+    assertEquals(healthyDisk, bootstrapReplica.getDiskId());
 
     helixClusterManager.close();
   }

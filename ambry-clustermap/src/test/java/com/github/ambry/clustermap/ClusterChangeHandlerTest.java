@@ -71,7 +71,6 @@ public class ClusterChangeHandlerTest {
   private final String localDc;
   private final String remoteDc;
   private final boolean overrideEnabled;
-  private final boolean useAggregatedView;
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final TestHardwareLayout testHardwareLayout;
@@ -89,7 +88,6 @@ public class ClusterChangeHandlerTest {
   // set up a mock helix cluster, create separate HelixClusterManager with both Simple and Dynamic cluster change handler
   public ClusterChangeHandlerTest(boolean overrideEnabled, boolean useAggregatedView) throws Exception {
     this.overrideEnabled = overrideEnabled;
-    this.useAggregatedView = useAggregatedView;
     File tempDir = Files.createTempDirectory("ClusterChangeHandlerTest-").toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
@@ -650,7 +648,7 @@ public class ClusterChangeHandlerTest {
         partitionInManager.getReplicaIds().size());
     // verify that the replica instance in HelixClusterManager is same with bootstrap replica instance
     ReplicaId replicaInManager = helixClusterManager.getReplicaIds(
-        helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
+            helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort()))
         .stream()
         .filter(r -> r.getPartitionId().toPathString().equals(addedPartition2.toPathString()))
         .findFirst()
@@ -682,6 +680,33 @@ public class ClusterChangeHandlerTest {
     partitionId = helixClusterManager.getAllPartitionIds(null).get(0);
     assertEquals("Mismatch in disk capacity", 500L * 1024 * 1024 * 1024,
         partitionId.getReplicaIds().get(0).getDiskId().getRawCapacityInBytes());
+    helixClusterManager.close();
+  }
+
+  /**
+   * Test the case where the disk state is updated dynamically.
+   * @throws Exception
+   */
+  @Test
+  public void diskStateUpdateTest() throws Exception {
+    // create a HelixClusterManager with DynamicClusterChangeHandler
+    Properties properties = new Properties();
+    properties.putAll(props);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+    // disk capacity after initialization should equal to original value (100L * 1024 * 1024 * 1024)
+    DiskId diskFromCluster = helixClusterManager.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getDiskId();
+    Disk disk = testHardwareLayout.getHardwareLayout()
+        .findDisk(diskFromCluster.getDataNodeId().getHostname(), diskFromCluster.getDataNodeId().getPort(),
+            diskFromCluster.getMountPath());
+    assertNotNull(disk);
+    assertEquals("Mismatch in disk state", HardwareState.AVAILABLE, diskFromCluster.getState());
+    // update disk state
+    disk.onHardDown();
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+    helixCluster.upgradeWithNewHardwareLayout(hardwareLayoutPath);
+    assertEquals("Mismatch in disk state", HardwareState.UNAVAILABLE, diskFromCluster.getState());
     helixClusterManager.close();
   }
 

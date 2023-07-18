@@ -2140,7 +2140,7 @@ public class HelixBootstrapUpgradeUtil {
         }
         Map<String, String> diskInfo = new HashMap<>();
         diskInfo.put(DISK_CAPACITY_STR, Long.toString(disk.getRawCapacityInBytes()));
-        diskInfo.put(DISK_STATE, AVAILABLE_STR);
+        diskInfo.put(DISK_STATE, disk.getState().toString());
         diskInfo.put(REPLICAS_STR, replicasStrBuilder.toString());
         diskInfos.put(disk.getMountPath(), diskInfo);
       }

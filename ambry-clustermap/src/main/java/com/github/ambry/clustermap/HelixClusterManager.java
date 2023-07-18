@@ -809,6 +809,9 @@ public class HelixClusterManager implements ClusterMap {
     List<AmbryDisk> potentialDisks = new ArrayList<>();
     long maxAvailableDiskSpace = 0;
     for (AmbryDisk disk : disks) {
+      if (disk.getState() == HardwareState.UNAVAILABLE) {
+        continue;
+      }
       if (disk.getAvailableSpaceInBytes() < DEFAULT_REPLICA_CAPACITY_IN_BYTES) {
         logger.debug("Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}", disk,
             disk.getAvailableSpaceInBytes(), DEFAULT_REPLICA_CAPACITY_IN_BYTES);
@@ -1456,6 +1459,11 @@ public class HelixClusterManager implements ClusterMap {
               mountPath, instanceName, prevDiskCapacity, diskConfig.getDiskCapacityInBytes());
           disk.setDiskCapacityInBytes(diskConfig.getDiskCapacityInBytes());
           addClusterWideRawCapacity(diskConfig.getDiskCapacityInBytes() - prevDiskCapacity);
+        }
+        if (disk.getState() != diskConfig.getState()) {
+          logger.info("State of disk at {} on {} has changed, Previous was: {}, new stats is {}", mountPath,
+              instanceName, disk.getState(), diskConfig.getState());
+          disk.setState(diskConfig.getState());
         }
         for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry : diskConfig.getReplicaConfigs().entrySet()) {
           // partition name and replica name are the same.
