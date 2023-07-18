@@ -233,7 +233,7 @@ public class DatasetDao {
    * @throws SQLException
    * @throws AccountServiceException
    */
-  public synchronized void updateDatasetVersionState(int accountId, int containerId, String accountName,
+  public void updateDatasetVersionState(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, DatasetVersionState datasetVersionState)
       throws SQLException, AccountServiceException {
     long startTimeMs = System.currentTimeMillis();
@@ -268,7 +268,7 @@ public class DatasetDao {
    * @return the {@link DatasetVersionRecord}.
    * @throws SQLException
    */
-  public synchronized DatasetVersionRecord addDatasetVersions(int accountId, int containerId, String accountName,
+  public DatasetVersionRecord addDatasetVersions(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
       boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState)
       throws SQLException, AccountServiceException {
@@ -387,7 +387,7 @@ public class DatasetDao {
    * @return the {@link DatasetVersionRecord}
    * @throws SQLException
    */
-  public synchronized DatasetVersionRecord getDatasetVersions(short accountId, short containerId, String accountName,
+  public DatasetVersionRecord getDatasetVersions(short accountId, short containerId, String accountName,
       String containerName, String datasetName, String version) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -426,7 +426,7 @@ public class DatasetDao {
    * @param datasetName the name of the dataset.
    * @throws SQLException
    */
-  public synchronized void deleteDatasetVersion(int accountId, int containerId, String datasetName, String version)
+  public void deleteDatasetVersion(int accountId, int containerId, String datasetName, String version)
       throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -453,7 +453,7 @@ public class DatasetDao {
    * @param dataset the {@link Dataset}
    * @throws SQLException
    */
-  public synchronized void addDataset(int accountId, int containerId, Dataset dataset)
+  public void addDataset(int accountId, int containerId, Dataset dataset)
       throws SQLException, AccountServiceException {
     long startTimeMs = System.currentTimeMillis();
     try {
@@ -486,7 +486,7 @@ public class DatasetDao {
    * @param dataset the {@link Dataset}
    * @throws SQLException
    */
-  public synchronized void updateDataset(int accountId, int containerId, Dataset dataset)
+  public void updateDataset(int accountId, int containerId, Dataset dataset)
       throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -511,7 +511,7 @@ public class DatasetDao {
    * @param datasetName the name of the dataset.
    * @throws SQLException
    */
-  public synchronized void deleteDataset(int accountId, int containerId, String datasetName)
+  public void deleteDataset(int accountId, int containerId, String datasetName)
       throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -535,7 +535,7 @@ public class DatasetDao {
    * @return the {@link Dataset}
    * @throws SQLException
    */
-  public synchronized Dataset getDataset(int accountId, int containerId, String accountName, String containerName,
+  public Dataset getDataset(int accountId, int containerId, String accountName, String containerName,
       String datasetName) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -561,7 +561,7 @@ public class DatasetDao {
    * @return a list of dataset versions which is not expired or been deleted.
    * @throws SQLException
    */
-  public synchronized List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId,
+  public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId,
       short containerId, String datasetName) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -590,7 +590,7 @@ public class DatasetDao {
    * @return a page of dataset names.
    * @throws SQLException
    */
-  public synchronized Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken)
+  public Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken)
       throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -616,7 +616,7 @@ public class DatasetDao {
    * @throws SQLException
    * @throws AccountServiceException
    */
-  public synchronized Page<String> listAllValidDatasetVersions(short accountId, short containerId, String datasetName,
+  public Page<String> listAllValidDatasetVersions(short accountId, short containerId, String datasetName,
       String pageToken) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
@@ -646,7 +646,7 @@ public class DatasetDao {
    * @param datasetName the name of the dataset.
    * @return a list of {@link DatasetVersionRecord}
    */
-  public synchronized List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId,
+  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId,
       short containerId, String accountName, String containerName, String datasetName)
       throws SQLException, AccountServiceException {
     long startTimeMs = System.currentTimeMillis();
@@ -1009,7 +1009,7 @@ public class DatasetDao {
    * @return the latest version.
    * @throws SQLException
    */
-  private synchronized long getAutoIncrementedVersionBasedOnLatestAvailableVersion(int accountId, int containerId,
+  private long getAutoIncrementedVersionBasedOnLatestAvailableVersion(int accountId, int containerId,
       Dataset.VersionSchema versionSchema, String datasetName, String version)
       throws SQLException, AccountServiceException {
     long latestVersionValue;

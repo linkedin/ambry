@@ -136,7 +136,7 @@ public class AccountDao {
    * @return a list of {@link Account}s.
    * @throws SQLException
    */
-  public synchronized List<Account> getNewAccounts(long updatedSince) throws SQLException {
+  public List<Account> getNewAccounts(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
     ResultSet rs = null;
@@ -184,7 +184,7 @@ public class AccountDao {
    * @return a list of {@link Container}s.
    * @throws SQLException
    */
-  public synchronized List<Container> getContainers(int accountId) throws SQLException {
+  public List<Container> getContainers(int accountId) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     ResultSet rs = null;
     try {
@@ -208,7 +208,7 @@ public class AccountDao {
    * @return a list of {@link Container}s.
    * @throws SQLException
    */
-  public synchronized List<Container> getNewContainers(long updatedSince) throws SQLException {
+  public List<Container> getNewContainers(long updatedSince) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     Timestamp sinceTime = new Timestamp(updatedSince);
     ResultSet rs = null;
@@ -234,7 +234,7 @@ public class AccountDao {
    * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
    * @throws SQLException
    */
-  public synchronized Container getContainerByName(int accountId, String containerName) throws SQLException {
+  public Container getContainerByName(int accountId, String containerName) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     ResultSet rs = null;
     try {
@@ -260,7 +260,7 @@ public class AccountDao {
    * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
    * @throws SQLException
    */
-  public synchronized Container getContainerById(int accountId, int containerId) throws SQLException {
+  public Container getContainerById(int accountId, int containerId) throws SQLException {
     long startTimeMs = System.currentTimeMillis();
     ResultSet rs = null;
     try {
@@ -314,7 +314,7 @@ public class AccountDao {
    * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
-  public synchronized void updateAccounts(List<AccountUpdateInfo> accountsInfo, int batchSize,
+  public void updateAccounts(List<AccountUpdateInfo> accountsInfo, int batchSize,
       boolean disableGenerateColumn) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
