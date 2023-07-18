@@ -533,6 +533,10 @@ public class StoreConfig {
   public static final String storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName =
       "store.disk.failure.handler.retry.lock.backoff.time.in.seconds";
 
+  @Config(storeDiskCapacityReportingPercentageName)
+  public final int storeDiskCapacityReportingPercentage;
+  public static final String storeDiskCapacityReportingPercentageName = "store.disk.capacity.reporting.percentage";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -677,5 +681,7 @@ public class StoreConfig {
           + storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName + " < "
           + storeDiskFailureHandlerTaskIntervalInSeconds);
     }
+    storeDiskCapacityReportingPercentage =
+        verifiableProperties.getIntInRange(storeDiskCapacityReportingPercentageName, 95, 0, 100);
   }
 }

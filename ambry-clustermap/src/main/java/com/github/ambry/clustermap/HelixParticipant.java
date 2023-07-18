@@ -278,6 +278,41 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return updateResult;
   }
 
+  @Override
+  public boolean removeReplicasFromDataNode(List<ReplicaId> replicaIds) {
+    if (!clusterMapConfig.clustermapUpdateDatanodeInfo) {
+      return false;
+    }
+    synchronized (helixAdministrationLock) {
+      DataNodeConfig dataNodeConfig = getDataNodeConfig();
+      boolean dataNodeConfigUpdated = false;
+      boolean removalResult = true;
+      List<String> partitionNames = new ArrayList<>();
+      for (ReplicaId replicaId : replicaIds) {
+        String partitionName = replicaId.getPartitionId().toPathString();
+        partitionNames.add(partitionName);
+        boolean removedFromStopped = dataNodeConfig.getStoppedReplicas().remove(partitionName);
+        boolean removedFromSealed = dataNodeConfig.getSealedReplicas().remove(partitionName);
+        if (removedFromStopped || removedFromSealed) {
+          logger.info("Removing partition {} from stopped and sealed list", partitionName);
+          dataNodeConfigUpdated = true;
+        }
+        DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().get(replicaId.getMountPath());
+        if (diskConfig != null) {
+          dataNodeConfigUpdated = diskConfig.getReplicaConfigs().remove(partitionName) != null;
+        }
+      }
+      if (dataNodeConfigUpdated) {
+        logger.info("Updating config: {} in Helix by removing partitions {}", dataNodeConfig, partitionNames);
+        removalResult = dataNodeConfigSource.set(dataNodeConfig);
+      } else {
+        logger.warn("Partitions {} is not found on instance {}, skipping removing them from config in Helix.",
+            partitionNames, instanceName);
+      }
+      return removalResult;
+    }
+  }
+
   /**
    * @return a snapshot of registered state change listeners.
    */
