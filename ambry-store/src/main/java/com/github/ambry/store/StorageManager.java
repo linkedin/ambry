@@ -1028,7 +1028,7 @@ public class StorageManager implements StoreManager {
     }
 
     private void maybeTerminateProcess() {
-      if (((double) failedDisks.size()) / allDisks.size() >= terminatePercentage / 100.0) {
+      if (((double) failedDisks.size()) / allDisks.size() > terminatePercentage / 100.0) {
         logger.error("We have {} failed sizes, this is already more than {}% of all disks {}, terminate",
             failedDisks.size(), terminatePercentage, allDisks.size());
         if (terminateCallback == null) {
