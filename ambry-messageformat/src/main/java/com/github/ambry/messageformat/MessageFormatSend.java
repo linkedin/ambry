@@ -97,7 +97,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
     this.storeKeyFactory = storeKeyFactory;
     totalSizeToWrite = 0;
     long startTime = SystemTime.getInstance().milliseconds();
-    fetchDataFromReadSet();
+    fetchDataFromReadSet(metrics);
     metrics.calculateOffsetMessageFormatSendTime.update(SystemTime.getInstance().milliseconds() - startTime);
     sizeWritten = 0;
     currentWriteIndex = 0;
@@ -108,7 +108,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
    * Fetch data from the MessageReadSet that needs to be sent over the network based on the type of data requested as
    * indicated by the flags
    */
-  private void fetchDataFromReadSet() throws MessageFormatException {
+  private void fetchDataFromReadSet(MessageFormatMetrics metrics) throws MessageFormatException {
     // get size
     int messageCount = readSet.count();
     ArrayList<ByteBuf> dataFromReadSet = new ArrayList<>(messageCount);
@@ -119,12 +119,21 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
       logger.trace("Calculate offsets of messages for one partition, MessageFormatFlag : {} number of messages : {}",
           flag, messageCount);
       for (int i = 0; i < messageCount; i++) {
+        StoreKey storeKey = readSet.getKeyAt(i);
         if (flag == MessageFormatFlags.All || flag == MessageFormatFlags.Blob) {
           // just copy over the total size and use relative offset to be 0
           // We do not have to check any version in this case as we dont
           // have to read any data to deserialize anything.
           readSet.doPrefetch(i, 0, readSet.sizeInBytes(i));
           dataFromReadSet.add(readSet.getPrefetchedData(i));
+          // If we can successfully deserialize BlobAll, then the message content is correct
+          try {
+            ByteBuf messageData = readSet.getPrefetchedData(i).duplicate();
+            MessageFormatRecord.deserializeBlobAll(new ByteBufInputStream(messageData), storeKeyFactory);
+          } catch (Exception e) {
+            metrics.messageFormatExceptionCount.inc();
+            logger.error("Failed to deserialize the BlobAll from message format send for StoreKey {}.", storeKey, e);
+          }
 
           if (flag == MessageFormatFlags.All) {
             sendInfoList.add(i, new SendInfo(0, readSet.sizeInBytes(i)));
@@ -133,9 +142,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
           } else if (flag == MessageFormatFlags.Blob) {
             ByteBuf blobAll = readSet.getPrefetchedData(i);
             InputStream blobInputStream = new ByteBufInputStream(blobAll);
-
             MessageHeader_Format headerFormat = parseHeaderAndVerifyStoreKey(blobInputStream, i);
-
             MessageMetadata messageMetadata = null;
             if (headerFormat.hasEncryptionKeyRecord()) {
               // If encryption key exists, MessageMetadata with encryption key is needed.
@@ -218,12 +225,16 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
         }
         messageContent = compositeByteBuf;
       }
-    } catch (IOException e) {
+    } catch (Exception e) {
       for (ByteBuf data : dataFromReadSet) {
         data.release();
       }
-      logger.trace("IOError when calculating offsets");
-      throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IO_Error);
+      if (!(e instanceof MessageFormatException)) {
+        logger.trace("Error when calculating offsets", e);
+        throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IO_Error);
+      } else {
+        throw (MessageFormatException) e;
+      }
     }
   }
 
