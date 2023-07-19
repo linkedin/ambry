@@ -33,7 +33,8 @@ public class DatasetVersionPath {
   private final String datasetName;
   private final String version;
 
-  public static DatasetVersionPath parse(RequestPath requestPath, Map<String, Object> args) throws RestServiceException {
+  public static DatasetVersionPath parse(RequestPath requestPath, Map<String, Object> args)
+      throws RestServiceException {
     return parse(requestPath.getOperationOrBlobId(true), args);
   }
 
@@ -88,21 +89,28 @@ public class DatasetVersionPath {
   /**
    * @return the account name.
    */
-  public String getAccountName() {return accountName;}
+  public String getAccountName() {
+    return accountName;
+  }
 
   /**
    * @return the container name.
    */
-  public String getContainerName() {return containerName;}
+  public String getContainerName() {
+    return containerName;
+  }
 
   /**
    * @return the dataset name.
    */
-  public String getDatasetName() {return datasetName;}
+  public String getDatasetName() {
+    return datasetName;
+  }
 
   /**
    * @return the dataset version.
    */
-  public String getVersion() {return version;}
-
+  public String getVersion() {
+    return version;
+  }
 }

@@ -947,10 +947,11 @@ public class DatasetDao {
       String nextContinuationToken = null;
       int resultIndex = 0;
       while (resultSet.next()) {
-        if (resultIndex++ == mySqlAccountServiceConfig.listDatasetsMaxResult) {
+        if (resultIndex == mySqlAccountServiceConfig.listDatasetsMaxResult) {
           nextContinuationToken = resultSet.getString(1);
           break;
         }
+        resultIndex++;
         entries.add(resultSet.getString(1));
       }
       return new Page<>(entries, nextContinuationToken);
@@ -988,10 +989,11 @@ public class DatasetDao {
       while (resultSet.next()) {
         long versionValue = resultSet.getLong(VERSION);
         String version = convertVersionValueToVersion(versionValue, versionSchema);
-        if (resultIndex++ == mySqlAccountServiceConfig.listDatasetVersionsMaxResult) {
+        if (resultIndex == mySqlAccountServiceConfig.listDatasetVersionsMaxResult) {
           nextContinuationToken = version;
           break;
         }
+        resultIndex++;
         entries.add(version);
       }
       return new Page<>(entries, nextContinuationToken);

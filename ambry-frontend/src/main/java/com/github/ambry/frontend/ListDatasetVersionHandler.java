@@ -25,6 +25,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.util.GregorianCalendar;
+import java.util.function.Function;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -124,8 +125,8 @@ public class ListDatasetVersionHandler {
         LOGGER.debug("Received request for listing all datasets with arguments: {}", restRequest.getArgs());
         accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
         Page<String> datasetList = listAllValidDatasetVersions();
-        ReadableStreamChannel channel = FrontendUtils.serializeJsonToChannel(
-            datasetList.toJson(datasetVersion -> new JSONObject().put(DATASET_VERSION_KEY, datasetVersion)));
+        ReadableStreamChannel channel =
+            FrontendUtils.serializeJsonToChannel(datasetList.toJsonWithoutKey(Function.identity()));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());

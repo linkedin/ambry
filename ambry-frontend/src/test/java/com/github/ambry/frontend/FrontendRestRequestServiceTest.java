@@ -715,8 +715,8 @@ public class FrontendRestRequestServiceTest {
     restRequest = createRestRequest(RestMethod.GET, datasetUri, headers, null);
     restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    Page<String> response = Page.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody())),
-        jsonObject -> jsonObject.getString("datasetVersion"));
+    Page<String> response =
+        Page.fromJsonWithoutKey(new JSONObject(new String(restResponseChannel.getResponseBody())), Object::toString);
     List<String> expectedDatasetVersions = new ArrayList<>();
     expectedDatasetVersions.add("1");
     assertEquals("Unexpected dataset name returned", expectedDatasetVersions, response.getEntries());
@@ -1608,8 +1608,8 @@ public class FrontendRestRequestServiceTest {
     restRequest = createRestRequest(RestMethod.GET, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
     restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    Page<String> response = Page.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody())),
-        jsonObject -> jsonObject.getString("datasetName"));
+    Page<String> response =
+        Page.fromJsonWithoutKey(new JSONObject(new String(restResponseChannel.getResponseBody())), Object::toString);
     List<String> expectedDatasetNames = new ArrayList<>();
     expectedDatasetNames.add(DATASET_NAME);
     assertEquals("Unexpected dataset name returned", expectedDatasetNames, response.getEntries());
