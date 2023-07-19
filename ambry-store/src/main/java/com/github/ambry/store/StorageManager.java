@@ -940,7 +940,8 @@ public class StorageManager implements StoreManager {
           updateDiskCapacity(healthyDiskCapacity);
           // 6. Remove disks from the maps.
           cleanupDisksAndReplicas(newFailedDisks, replicasOnFailedDisks);
-          logger.info("Successfully remove failed disks and replicas from memory when handling disk failure");
+          logger.info("Successfully remove failed disks {} and replicas {} from memory when handling disk failure",
+              newFailedDisks, replicasOnFailedDisks);
           success = true;
         } catch (Exception e) {
           success = false;

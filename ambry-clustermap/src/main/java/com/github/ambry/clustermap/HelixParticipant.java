@@ -293,17 +293,22 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       List<String> partitionNames = new ArrayList<>();
       for (ReplicaId replicaId : replicaIds) {
         String partitionName = replicaId.getPartitionId().toPathString();
-        partitionNames.add(partitionName);
         boolean removedFromStopped = dataNodeConfig.getStoppedReplicas().remove(partitionName);
         boolean removedFromSealed = dataNodeConfig.getSealedReplicas().remove(partitionName);
+        boolean update = false;
         if (removedFromStopped || removedFromSealed) {
           logger.info("Removing partition {} from stopped and sealed list", partitionName);
           dataNodeConfigUpdated = true;
+          update = true;
         }
         DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().get(replicaId.getMountPath());
         if (diskConfig != null && diskConfig.getReplicaConfigs().remove(partitionName) != null) {
           logger.info("Removing partition {} from disk {}' config list", partitionName, replicaId.getMountPath());
           dataNodeConfigUpdated = true;
+          update = true;
+        }
+        if (update) {
+          partitionNames.add(partitionName);
         }
       }
       if (dataNodeConfigUpdated) {

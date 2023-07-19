@@ -698,8 +698,7 @@ public class StoreConfig {
             Integer.MAX_VALUE);
     if (storeDiskFailureHandlerRetryLockBackoffTimeInSeconds > storeDiskFailureHandlerTaskIntervalInSeconds) {
       throw new IllegalStateException("Retry lock backoff time should be shorter than task interval: "
-          + storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName + " < "
-          + storeDiskFailureHandlerTaskIntervalInSeconds);
+          + storeDiskFailureHandlerRetryLockBackoffTimeInSeconds + " < " + storeDiskFailureHandlerTaskIntervalInSeconds);
     }
     storeDiskCapacityReportingPercentage =
         verifiableProperties.getIntInRange(storeDiskCapacityReportingPercentageName, 95, 0, 100);
