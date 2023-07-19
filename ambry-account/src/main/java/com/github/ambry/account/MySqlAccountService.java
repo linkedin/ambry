@@ -420,12 +420,12 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
-  public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
+  public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
     if (config.enableNewDatabaseForMigration) {
-      return cachedAccountServiceNew.getAllValidVersion(accountName, containerName, datasetName);
+      return cachedAccountServiceNew.getAllValidVersionForDatasetDeletion(accountName, containerName, datasetName);
     }
-      return cachedAccountService.getAllValidVersion(accountName, containerName, datasetName);
+      return cachedAccountService.getAllValidVersionForDatasetDeletion(accountName, containerName, datasetName);
   }
 
   @Override
@@ -435,6 +435,15 @@ public class MySqlAccountService extends AbstractAccountService {
       return cachedAccountServiceNew.listAllValidDatasets(accountName, containerName, pageToken);
     }
     return cachedAccountService.listAllValidDatasets(accountName, containerName, pageToken);
+  }
+
+  @Override
+  public Page<String> listAllValidDatasetVersions(String accountName, String containerName, String datasetName,
+      String pageToken) throws AccountServiceException {
+    if (config.enableNewDatabaseForMigration) {
+      return cachedAccountServiceNew.listAllValidDatasetVersions(accountName, containerName, datasetName, pageToken);
+    }
+    return cachedAccountService.listAllValidDatasetVersions(accountName, containerName, datasetName, pageToken);
   }
 
   /**

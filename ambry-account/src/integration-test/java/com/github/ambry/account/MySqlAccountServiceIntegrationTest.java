@@ -1088,6 +1088,34 @@ public class MySqlAccountServiceIntegrationTest {
         mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME_WITH_SEMANTIC, version);
     assertEquals("Mismatch in dataset", expectedDatasetVersionRecord, datasetVersionRecordFromMysql);
+
+    //list all dataset versions
+    Page<String> allDatasetVersions =
+        mySqlAccountStore.listAllValidDatasetVersions(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC, null);
+    List<String> expectedDatasetVersions = Arrays.asList("1.0.0", "2.0.0", "2.0.1", "2.0.2", "2.1.0", "2.2.0");
+    assertEquals("Mismatch for dataset version list", expectedDatasetVersions, allDatasetVersions.getEntries());
+
+    //update the listDatasetVersionsMaxResult
+    mySqlConfigProps.setProperty(LIST_DATASET_VERSIONS_MAX_RESULT, "3");
+    mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
+        new MetricRegistry()).getMySqlAccountStore());
+    when(mockMySqlAccountStoreFactory.getMySqlAccountStore()).thenReturn(mySqlAccountStore);
+    mySqlAccountService = getAccountService();
+    Page<String> partialDatasetVersions =
+        mySqlAccountStore.listAllValidDatasetVersions(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC, null);
+    expectedDatasetVersions = Arrays.asList("1.0.0", "2.0.0", "2.0.1");
+    assertEquals("Mismatch for datasets list", expectedDatasetVersions, partialDatasetVersions.getEntries());
+    assertEquals("Mismatch on next page token", "2.0.2", partialDatasetVersions.getNextPageToken());
+
+    //listing dataset version with page token provided.
+    partialDatasetVersions =
+        mySqlAccountStore.listAllValidDatasetVersions(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC, "2.0.0");
+    expectedDatasetVersions = Arrays.asList("2.0.0", "2.0.1", "2.0.2");
+    assertEquals("Mismatch for datasets list", expectedDatasetVersions, partialDatasetVersions.getEntries());
+    assertEquals("Mismatch on next page token", "2.1.0", partialDatasetVersions.getNextPageToken());
   }
 
   /**
@@ -1267,6 +1295,12 @@ public class MySqlAccountServiceIntegrationTest {
         mySqlAccountStore.getAllValidVersionForDatasetDeletion(testAccount.getId(), testContainer.getId(),
             DATASET_NAME);
     assertEquals("Mismatch on number of valid dataset versions", 3, datasetVersionRecords.size());
+
+    datasetVersionRecords =
+        mySqlAccountStore.getAllValidVersionForDatasetDeletion(testAccount.getId(), testContainer.getId(),
+            DATASET_NAME_WITH_SEMANTIC);
+    assertEquals("Mismatch on number of valid dataset versions", 1, datasetVersionRecords.size());
+    assertEquals("Mismatch on valid dataset versions", "1.2.4", datasetVersionRecords.get(0).getVersion());
   }
 
   /**

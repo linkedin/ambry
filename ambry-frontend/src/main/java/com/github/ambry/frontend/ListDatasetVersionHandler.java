@@ -15,6 +15,7 @@ package com.github.ambry.frontend;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
@@ -32,22 +33,23 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.frontend.FrontendUtils.*;
 
 
-public class ListDatasetsHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(ListDatasetsHandler.class);
-  private static final String DATASET_NAME_KEY = "datasetName";
+public class ListDatasetVersionHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(ListDatasetVersionHandler.class);
+  private static final String DATASET_VERSION_KEY = "datasetVersion";
+
   private final SecurityService securityService;
-  private final AccountService accountService;
-  private final FrontendMetrics frontendMetrics;
   private final AccountAndContainerInjector accountAndContainerInjector;
+  private final FrontendMetrics frontendMetrics;
+  private final AccountService accountService;
 
   /**
-   * Constructs a handler for handling requests for listing datasets under a container.
+   * Constructs a handler for handling requests for listing dataset versions under a dataset.
    * @param securityService the {@link SecurityService} to use.
    * @param accountService the {@link AccountService} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    */
-  ListDatasetsHandler(SecurityService securityService, AccountService accountService, FrontendMetrics frontendMetrics,
+  ListDatasetVersionHandler(SecurityService securityService, AccountService accountService, FrontendMetrics frontendMetrics,
       AccountAndContainerInjector accountAndContainerInjector) {
     this.securityService = securityService;
     this.accountService = accountService;
@@ -56,7 +58,7 @@ public class ListDatasetsHandler {
   }
 
   /**
-   * Asyncrhonously listing datasets.
+   * Asynchronously listing dataset versions.
    * @param restRequest the {@link RestRequest} that contains the request parameters and body.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
@@ -65,11 +67,11 @@ public class ListDatasetsHandler {
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
     RestRequestMetrics requestMetrics =
-        frontendMetrics.getDatasetsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+        frontendMetrics.getBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     // get dataset request have their account/container name in request header, so checks can be done at early stage.
-    accountAndContainerInjector.injectAccountAndContainerForDatasetRequest(restRequest);
-    new ListDatasetsHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
+    accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, frontendMetrics.getBlobMetricsGroup);
+    new ListDatasetVersionHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
   /**
@@ -102,6 +104,11 @@ public class ListDatasetsHandler {
       securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
 
+    /**
+     * After {@link SecurityService#processRequest} finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
+     */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(frontendMetrics.getDatasetsSecurityProcessRequestMetrics,
           securityCheckResult -> securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback()),
@@ -116,7 +123,8 @@ public class ListDatasetsHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.getDatasetsSecurityPostProcessRequestMetrics, securityCheckResult -> {
         LOGGER.debug("Received request for listing all datasets with arguments: {}", restRequest.getArgs());
-        Page<String> datasetList = listAllValidDatasets();
+        accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+        Page<String> datasetList = listAllValidDatasetVersions();
         ReadableStreamChannel channel =
             FrontendUtils.serializeJsonToChannel(datasetList.toJsonWithoutKey(Function.identity()));
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
@@ -127,19 +135,22 @@ public class ListDatasetsHandler {
     }
 
     /**
-     * List all valid datasets under the specfic container.
-     * @return the page of the dataset name.
+     * List all valid dataset versions under the specific dataset.
+     * @return the page of the dataset version.
      * @throws RestServiceException
      */
-    private Page<String> listAllValidDatasets() throws RestServiceException {
+    private Page<String> listAllValidDatasetVersions() throws RestServiceException {
       String accountName = null;
       String containerName = null;
       String pageToken = null;
+      String datasetName;
       try {
-        accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
-        containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
+        Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
+        accountName = dataset.getAccountName();
+        containerName = dataset.getContainerName();
+        datasetName = dataset.getDatasetName();
         pageToken = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_PAGE_PARAM, false);
-        return accountService.listAllValidDatasets(accountName, containerName, pageToken);
+        return accountService.listAllValidDatasetVersions(accountName, containerName, datasetName, pageToken);
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " pageToken "

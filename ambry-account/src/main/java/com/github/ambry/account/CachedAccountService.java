@@ -639,7 +639,7 @@ public class CachedAccountService extends AbstractAccountService {
   }
 
   @Override
-  public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
+  public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
@@ -662,6 +662,21 @@ public class CachedAccountService extends AbstractAccountService {
       }
       return mySqlAccountStore.listAllValidDatasets(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), pageToken);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public Page<String> listAllValidDatasetVersions(String accountName, String containerName,
+      String datasetName, String pageToken) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.listAllValidDatasetVersions(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), datasetName, pageToken);
     } catch (SQLException e) {
       throw translateSQLException(e);
     }

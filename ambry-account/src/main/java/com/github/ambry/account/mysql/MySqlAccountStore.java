@@ -70,7 +70,7 @@ public class MySqlAccountStore {
    * @return a collection of {@link Account}s
    * @throws SQLException
    */
-  public Collection<Account> getNewAccounts(long updatedSince) throws SQLException {
+  public synchronized Collection<Account> getNewAccounts(long updatedSince) throws SQLException {
     return accountDao.getNewAccounts(updatedSince);
   }
 
@@ -80,7 +80,7 @@ public class MySqlAccountStore {
    * @return a collection of {@link Container}s
    * @throws SQLException
    */
-  public Collection<Container> getNewContainers(long updatedSince) throws SQLException {
+  public synchronized Collection<Container> getNewContainers(long updatedSince) throws SQLException {
     return accountDao.getNewContainers(updatedSince);
   }
 
@@ -90,7 +90,7 @@ public class MySqlAccountStore {
    * @return a collection of {@link Container}s
    * @throws SQLException
    */
-  public Collection<Container> getContainersByAccount(short accountId) throws SQLException {
+  public synchronized Collection<Container> getContainersByAccount(short accountId) throws SQLException {
     return accountDao.getContainers(accountId);
   }
 
@@ -101,7 +101,7 @@ public class MySqlAccountStore {
    * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
    * @throws SQLException
    */
-  public Container getContainerByName(int accountId, String containerName) throws SQLException {
+  public synchronized Container getContainerByName(int accountId, String containerName) throws SQLException {
     return accountDao.getContainerByName(accountId, containerName);
   }
 
@@ -112,7 +112,7 @@ public class MySqlAccountStore {
    * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
    * @throws SQLException
    */
-  public Container getContainerById(int accountId, int containerId) throws SQLException {
+  public synchronized Container getContainerById(int accountId, int containerId) throws SQLException {
     return accountDao.getContainerById(accountId, containerId);
   }
 
@@ -122,7 +122,7 @@ public class MySqlAccountStore {
    * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
-  public void updateAccounts(List<AccountUpdateInfo> accountsInfo, boolean disableGenerateColumn) throws SQLException {
+  public synchronized void updateAccounts(List<AccountUpdateInfo> accountsInfo, boolean disableGenerateColumn) throws SQLException {
     accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize, disableGenerateColumn);
   }
 
@@ -133,7 +133,7 @@ public class MySqlAccountStore {
    * @param dataset the {@link Dataset}.
    * @throws SQLException
    */
-  public void addDataset(short accountId, short containerId, Dataset dataset)
+  public synchronized void addDataset(short accountId, short containerId, Dataset dataset)
       throws SQLException, AccountServiceException {
     datasetDao.addDataset(accountId, containerId, dataset);
   }
@@ -145,7 +145,7 @@ public class MySqlAccountStore {
    * @param dataset the {@link Dataset}.
    * @throws SQLException
    */
-  public void updateDataset(short accountId, short containerId, Dataset dataset)
+  public synchronized void updateDataset(short accountId, short containerId, Dataset dataset)
       throws SQLException, AccountServiceException {
     datasetDao.updateDataset(accountId, containerId, dataset);
   }
@@ -160,7 +160,7 @@ public class MySqlAccountStore {
    * @return the {@link Dataset}
    * @throws SQLException
    */
-  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
+  public synchronized Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
       String datasetName) throws SQLException, AccountServiceException {
     return datasetDao.getDataset(accountId, containerId, accountName, containerName, datasetName);
   }
@@ -173,7 +173,7 @@ public class MySqlAccountStore {
    * @throws AccountServiceException
    * @throws SQLException
    */
-  public void deleteDataset(short accountId, short containerId, String datasetName)
+  public synchronized void deleteDataset(short accountId, short containerId, String datasetName)
       throws AccountServiceException, SQLException {
     datasetDao.deleteDataset(accountId, containerId, datasetName);
   }
@@ -193,14 +193,14 @@ public class MySqlAccountStore {
    * @return the corresponding {@link Dataset}
    * @throws SQLException
    */
-  public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName,
+  public synchronized DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
       boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState) throws SQLException, AccountServiceException {
     return datasetDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
         timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
   }
 
-  public void updateDatasetVersionState(int accountId, int containerId, String accountName, String containerName,
+  public synchronized void updateDatasetVersionState(int accountId, int containerId, String accountName, String containerName,
       String datasetName, String version, DatasetVersionState datasetVersionState)
       throws SQLException, AccountServiceException {
     datasetDao.updateDatasetVersionState(accountId, containerId, accountName, containerName, datasetName, version,
@@ -218,7 +218,7 @@ public class MySqlAccountStore {
    * @return the {@link DatasetVersionRecord}
    * @throws SQLException
    */
-  public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String accountName,
+  public synchronized DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String accountName,
       String containerName, String datasetName, String version) throws SQLException, AccountServiceException {
     return datasetDao.getDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version);
   }
@@ -232,7 +232,7 @@ public class MySqlAccountStore {
    * @throws SQLException
    * @throws AccountServiceException
    */
-  public void deleteDatasetVersion(short accountId, short containerId, String datasetName, String version)
+  public synchronized void deleteDatasetVersion(short accountId, short containerId, String datasetName, String version)
       throws SQLException, AccountServiceException {
     datasetDao.deleteDatasetVersion(accountId, containerId, datasetName, version);
   }
@@ -245,8 +245,8 @@ public class MySqlAccountStore {
    * @return a list of dataset versions which is not expired for specific dataset.
    * @throws SQLException
    */
-  public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId, short containerId,
-      String datasetName) throws SQLException {
+  public synchronized List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId, short containerId,
+      String datasetName) throws SQLException, AccountServiceException {
     return datasetDao.getAllValidVersionForDatasetDeletion(accountId, containerId, datasetName);
   }
 
@@ -258,8 +258,23 @@ public class MySqlAccountStore {
    * @return the page of the dataset names.
    * @throws SQLException
    */
-  public Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken) throws SQLException {
+  public synchronized Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken) throws SQLException {
     return datasetDao.listAllValidDatasets(accountId, containerId, pageToken);
+  }
+
+  /**
+   * Get all valid dataset versions of the dataset with page token.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the dataset name.
+   * @param pageToken the start page token, if it's null, will start at beginning.
+   * @return the page of the dataset versions.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  public synchronized Page<String> listAllValidDatasetVersions(short accountId, short containerId,
+      String datasetName, String pageToken) throws SQLException, AccountServiceException {
+    return datasetDao.listAllValidDatasetVersions(accountId, containerId, datasetName, pageToken);
   }
 
   /**
@@ -272,7 +287,7 @@ public class MySqlAccountStore {
    * @return a list of {@link DatasetVersionRecord}
    * @throws SQLException
    */
-  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId, short containerId,
+  public synchronized List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId, short containerId,
       String accountName, String containerName, String datasetName) throws SQLException, AccountServiceException {
      return datasetDao.getAllValidVersionsOutOfRetentionCount(accountId, containerId, accountName, containerName, datasetName);
   }
