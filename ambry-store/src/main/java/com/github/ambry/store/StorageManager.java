@@ -86,6 +86,7 @@ public class StorageManager implements StoreManager {
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
   private final AccountService accountService;
+  private Runnable terminateCallback = null;
 
   /**
    * Constructs a {@link StorageManager}
@@ -242,6 +243,10 @@ public class StorageManager implements StoreManager {
     return diskManager != null ? diskManager.getStore(id, skipStateCheck) : null;
   }
 
+  void setTerminateCallback(Runnable cb) {
+    terminateCallback = cb;
+  }
+
   @Override
   public ReplicaId getReplica(String partitionName) {
     return partitionNameToReplicaId.get(partitionName);
@@ -276,6 +281,14 @@ public class StorageManager implements StoreManager {
    */
   DiskManager getDiskManager(PartitionId id) {
     return partitionToDiskManager.get(id);
+  }
+
+  /**
+   * Only exposed to test
+   * @return {@link StoreMetrics}.
+   */
+  StoreMetrics getStoreMainMetrics() {
+    return storeMainMetrics;
   }
 
   /**
@@ -827,25 +840,37 @@ public class StorageManager implements StoreManager {
     }
   }
 
-  private class DiskFailureHandler implements Runnable {
-    // All the failed unavailable disks are the failed disks
-    private final List<DiskId> failedDisk = diskToDiskManager.keySet()
+  class DiskFailureHandler implements Runnable {
+    // All the failed unavailable disks are the failed disks, if the state is unavailable for disk, there shouldn't be
+    // any replicas on these disks.
+    private final List<DiskId> allDisks = new ArrayList<>(diskToDiskManager.keySet());
+    private final List<DiskId> failedDisks = diskToDiskManager.keySet()
         .stream()
         .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
         .collect(Collectors.toList());
     private final long acquireLockBackoffTime = storeConfig.storeDiskFailureHandlerRetryLockBackoffTimeInSeconds * 1000;
     private final int capacityReportingPercentage = storeConfig.storeDiskCapacityReportingPercentage;
+    private final int terminatePercentage = storeConfig.storeFailedDiskPercentageToTerminate;
+
+    List<DiskId> getAllDisks() {
+      return new ArrayList<>(allDisks);
+    }
+
+    List<DiskId> getFailedDisks() {
+      return new ArrayList<>(failedDisks);
+    }
 
     @Override
     public void run() {
-      if (!clusterMap.isDataNodeInFullAutoMode(currentNode)) {
+      if (!clusterMap.isDataNodeInFullAutoMode(currentNode) || primaryClusterParticipant == null) {
         return;
       }
       logger.info("Current Node is in FULL_AUTO, try to detect disk failure.");
+      maybeTerminateProcess();
       // First, we have to detect if there is a new disk failure
       List<DiskId> newFailedDisks = diskToDiskManager.keySet()
           .stream()
-          .filter(diskId -> !isDiskAvailable(diskId) && !failedDisk.contains(diskId))
+          .filter(diskId -> !isDiskAvailable(diskId) && !failedDisks.contains(diskId))
           .collect(Collectors.toList());
       if (newFailedDisks.isEmpty()) {
         return;
@@ -855,29 +880,42 @@ public class StorageManager implements StoreManager {
 
       // When there is a new disk failure, we need to do several things
       // 1. remove replicasOnFailedDisks from the property store
-      // 2. reset the partitions
-      // 3. update the capacity to instance config
+      // 2. update disk availability
+      // 3. reset the partitions
+      // 4. update the capacity to instance config
+      // 5. remove failed disks from the maps in the memory
+      // These steps will be done in maintenance mode so helix would take in all the input and then compute a new
+      // replica placement. If we don't do them in maintenance mode, they will not be atomic and helix might create
+      // an invalid replica placement.
+
       // When reset the partitions, we don't expect Helix sending downward state transition messages to this host, to
-      // transition those replicasOnFailedDisks from LEADER/STANDBY all the way down to DROPPED. Even if helix does send state
+      // transition those replicas from LEADER/STANDBY all the way down to DROPPED. Even if helix does send state
       // transition messages, we won't be able to do anything since the disk is not healthy. In this case, we have to
       // remove the replica from property store right away.
-      // StorageManager relies on state transition messages to add and remove replicasOnFailedDisks, if there is no state transition
+
+      // StorageManager relies on state transition messages to add and remove replicas, if there is no state transition
       // messages, then when we reset the partitions, replica list in the StorageManager would be obsolete. Fortunately
-      // all the replicasOnFailedDisks in the failed disks are already stopped, we just have to remove the disk from disk maps.
-      failedDisk.addAll(newFailedDisks);
+      // all the replicas in the failed disks are already stopped, we just have to remove the disk from disk maps.
+      failedDisks.addAll(newFailedDisks);
+      // check again to see if we want to terminate the process
+      maybeTerminateProcess();
       long healthyDiskCapacity = diskToDiskManager.keySet()
           .stream()
-          .filter(((Predicate<DiskId>) failedDisk::contains).negate())
+          .filter(((Predicate<DiskId>) failedDisks::contains).negate())
           .mapToLong(DiskId::getRawCapacityInBytes)
           .sum();
+      // Just in case we have replicas in old failed disks.
       List<ReplicaId> replicasOnFailedDisks = partitionNameToReplicaId.values()
           .stream()
-          .filter(replica -> newFailedDisks.contains(replica.getDiskId()))
+          .filter(replica -> failedDisks.contains(replica.getDiskId()))
           .collect(Collectors.toList());
       logger.info("Replicas on the failed disk: {}", replicasOnFailedDisks);
 
       long startTime = System.currentTimeMillis();
       boolean success = false;
+      // We might see multiple hosts having disk failures at the same time. We don't want them to interfere each other on
+      // entering and exiting maintenance mode, so we create a distributed lock to make sure there will be only one host
+      // dealing with disk failures at any given time.
       DistributedLock lock = primaryClusterParticipant.getDistributedLock("DISK_FAILURE", "Lock for disk failure");
       while (true) {
         if (!lock.tryLock()) {
@@ -973,7 +1011,14 @@ public class StorageManager implements StoreManager {
     }
 
     private void cleanupDisksAndReplicas(List<DiskId> newFailedDisks, List<ReplicaId> replicasOnFailedDisks) {
-      newFailedDisks.forEach(diskToDiskManager::remove);
+      newFailedDisks.forEach(diskId -> {
+        DiskManager diskManager = diskToDiskManager.remove(diskId);
+        try {
+          diskManager.shutdown();
+        } catch (Exception e) {
+          logger.error("Failed to shut down disk manager for disk: {}", diskId.getMountPath(), e);
+        }
+      });
       replicasOnFailedDisks.forEach(replicaId -> {
         partitionToDiskManager.remove(replicaId.getPartitionId());
         partitionNameToReplicaId.remove(replicaId.getPartitionId().toPathString());
@@ -984,6 +1029,18 @@ public class StorageManager implements StoreManager {
       try {
         Thread.sleep(acquireLockBackoffTime);
       } catch (Exception e) {
+      }
+    }
+
+    private void maybeTerminateProcess() {
+      if (((double) failedDisks.size()) / allDisks.size() >= terminatePercentage / 100.0) {
+        logger.error("We have {} failed sizes, this is already more than {}% of all disks {}, terminate",
+            failedDisks.size(), terminatePercentage, allDisks.size());
+        if (terminateCallback == null) {
+          System.exit(1);
+        } else {
+          terminateCallback.run();
+        }
       }
     }
   }

@@ -283,6 +283,9 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     if (!clusterMapConfig.clustermapUpdateDatanodeInfo) {
       return false;
     }
+    if (replicaIds == null) {
+      throw new IllegalArgumentException("Invalid replica list to remove");
+    }
     synchronized (helixAdministrationLock) {
       DataNodeConfig dataNodeConfig = getDataNodeConfig();
       boolean dataNodeConfigUpdated = false;
@@ -298,8 +301,9 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           dataNodeConfigUpdated = true;
         }
         DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().get(replicaId.getMountPath());
-        if (diskConfig != null) {
-          dataNodeConfigUpdated = diskConfig.getReplicaConfigs().remove(partitionName) != null;
+        if (diskConfig != null && diskConfig.getReplicaConfigs().remove(partitionName) != null) {
+          logger.info("Removing partition {} from disk {}' config list", partitionName, replicaId.getMountPath());
+          dataNodeConfigUpdated = true;
         }
       }
       if (dataNodeConfigUpdated) {
@@ -379,6 +383,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public boolean setDisksState(List<DiskId> diskIds, HardwareState state) {
     if (diskIds == null || diskIds.isEmpty()) {
+      // when calling this method, we know that some disks are bad, so empty list is not allowed.
       throw new IllegalArgumentException("List of disk is empty when set disks state");
     }
     for (DiskId diskId : diskIds) {
@@ -540,7 +545,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Expose for testing
    * @return {@link HelixManager} tha manage current state model.
    */
-  HelixManager getHelixManager() {
+  public HelixManager getHelixManager() {
     return manager;
   }
 

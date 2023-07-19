@@ -523,19 +523,39 @@ public class StoreConfig {
   public static final String storePersistRemoteTokenIntervalInSecondsName =
       "store.persist.remote.token.interval.in.seconds";
 
+  /**
+   * The interval to run disk failures in a periodical schedule.
+   */
   @Config(storeDiskFailureHandlerTaskIntervalInSecondsName)
   public final int storeDiskFailureHandlerTaskIntervalInSeconds;
   public static final String storeDiskFailureHandlerTaskIntervalInSecondsName =
       "store.disk.failure.handler.task.interval.in.seconds";
 
+  /**
+   * The backoff time in seconds to retry acquiring lock in disk failure handler.
+   */
   @Config(storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName)
   public final int storeDiskFailureHandlerRetryLockBackoffTimeInSeconds;
   public static final String storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName =
       "store.disk.failure.handler.retry.lock.backoff.time.in.seconds";
 
+  /**
+   * The percentage of real disk capacity to report to helix in disk failure handler. In Disk failure handler, we will
+   * update the disk capacity to helix. We will reserve some disk space in host so this percentage should be less than
+   * 100.
+   */
   @Config(storeDiskCapacityReportingPercentageName)
   public final int storeDiskCapacityReportingPercentage;
   public static final String storeDiskCapacityReportingPercentageName = "store.disk.capacity.reporting.percentage";
+
+  /**
+   * This value should be range from 1 to 100. It's the percentage of failed disks to all disks. If the failed disks
+   * to all disks ratio is larger than this value, then terminate the entire process. For instance, if this value is 50,
+   * and we have 10 disks on host, and they are 5 disk failed, then we would terminate the server process.
+   */
+  @Config(storeFailedDiskPercentageToTerminateName)
+  public final int storeFailedDiskPercentageToTerminate;
+  public static final String storeFailedDiskPercentageToTerminateName = "store.failed.disk.percentage.to.terminate";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
@@ -683,5 +703,8 @@ public class StoreConfig {
     }
     storeDiskCapacityReportingPercentage =
         verifiableProperties.getIntInRange(storeDiskCapacityReportingPercentageName, 95, 0, 100);
+    // by default, unless all the disks fail, we don't terminate this storage node
+    storeFailedDiskPercentageToTerminate =
+        verifiableProperties.getIntInRange(storeFailedDiskPercentageToTerminateName, 100, 0, 100);
   }
 }
