@@ -1256,6 +1256,8 @@ public class StorageManagerTest {
     String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
     String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
+    String oldBaseMountPath = TestHardwareLayout.baseMountPath;
+    TestHardwareLayout.baseMountPath = "/tmp/StorageManagerTest" + new Random().nextInt() + "/mnt";
     TestHardwareLayout testHardwareLayout =
         new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
     TestPartitionLayout testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 100, null);
@@ -1398,6 +1400,7 @@ public class StorageManagerTest {
       storageManager.setTerminateCallback(null);
       storageManager.shutdown();
     } finally {
+      TestHardwareLayout.baseMountPath = oldBaseMountPath;
       try {
         clusterMap.close();
         helixParticipant.close();

@@ -622,7 +622,7 @@ public class TestUtils {
     private static final int DEFAULT_BASE_PORT = 6666;
     private static final int DEFAULT_NUM_RACKS = 3;
 
-    private final String baseMountPath = "/tmp/TestHardwareLayout" + new Random().nextInt() + "/mnt";
+    public static String baseMountPath = "/mnt";
     private long version;
     private int diskCount;
     private long diskCapacityInBytes;

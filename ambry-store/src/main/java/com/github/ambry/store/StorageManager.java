@@ -906,9 +906,7 @@ public class StorageManager implements StoreManager {
           .sum();
       // Just in case we have replicas in old failed disks.
       List<ReplicaId> replicasOnFailedDisks = partitionNameToReplicaId.values()
-          .stream()
-          .filter(replica -> failedDisks.contains(replica.getDiskId()))
-          .collect(Collectors.toList());
+          .stream().filter(replica -> failedDisks.contains(replica.getDiskId())).collect(Collectors.toList());
       logger.info("Replicas on the failed disk: {}", replicasOnFailedDisks);
 
       long startTime = System.currentTimeMillis();
@@ -917,48 +915,44 @@ public class StorageManager implements StoreManager {
       // entering and exiting maintenance mode, so we create a distributed lock to make sure there will be only one host
       // dealing with disk failures at any given time.
       DistributedLock lock = primaryClusterParticipant.getDistributedLock("DISK_FAILURE", "Lock for disk failure");
-      while (true) {
-        if (!lock.tryLock()) {
-          // sleep for a while and try to acquire lock again
-          logger.info("Fail to acquire lock when handling disk failure, backoff some time and retry");
-          storeMainMetrics.handleDiskFailureRetryLockCount.inc();
-          backoff();
-          continue;
-        }
-        boolean inMaintenanceMode = false;
-        try {
-          // 1. enter maintenance mode
-          inMaintenanceMode = enterMaintenance();
-          // 2. remove all the replicasOnFailedDisks from the property store
-          removeReplicasFromCluster(replicasOnFailedDisks);
-          // 3: update disk availability
-          setDiskUnavailable(newFailedDisks);
-          // 4. reset partitions, we have to update disk availability before reset the partitions. This way, we know
-          // The partitions won't be re-assigned back to the same disks.
-          resetPartitions(replicasOnFailedDisks);
-          // 5. update disk capacity
-          updateDiskCapacity(healthyDiskCapacity);
-          // 6. Remove disks from the maps.
-          cleanupDisksAndReplicas(newFailedDisks, replicasOnFailedDisks);
-          logger.info("Successfully remove failed disks {} and replicas {} from memory when handling disk failure",
-              newFailedDisks, replicasOnFailedDisks);
-          success = true;
-        } catch (Exception e) {
-          success = false;
-          storeMainMetrics.handleDiskFailureErrorCount.inc();
-        } finally {
-          // 7. exist maintenance mode
-          if (inMaintenanceMode) {
-            if (primaryClusterParticipant.exitMaintenanceMode()) {
-              logger.info("Successfully exit maintenance mode");
-            } else {
-              success = false;
-            }
+      while (!lock.tryLock()) {
+        // sleep for a while and try to acquire lock again
+        logger.info("Fail to acquire lock when handling disk failure, backoff some time and retry");
+        storeMainMetrics.handleDiskFailureRetryLockCount.inc();
+        backoff();
+      }
+      boolean inMaintenanceMode = false;
+      try {
+        // 1. enter maintenance mode
+        inMaintenanceMode = enterMaintenance();
+        // 2. remove all the replicasOnFailedDisks from the property store
+        removeReplicasFromCluster(replicasOnFailedDisks);
+        // 3: update disk availability
+        setDiskUnavailable(newFailedDisks);
+        // 4. reset partitions, we have to update disk availability before reset the partitions. This way, we know
+        // The partitions won't be re-assigned back to the same disks.
+        resetPartitions(replicasOnFailedDisks);
+        // 5. update disk capacity
+        updateDiskCapacity(healthyDiskCapacity);
+        // 6. Remove disks from the maps.
+        cleanupDisksAndReplicas(newFailedDisks, replicasOnFailedDisks);
+        logger.info("Successfully remove failed disks {} and replicas {} from memory when handling disk failure",
+            newFailedDisks, replicasOnFailedDisks);
+        success = true;
+      } catch (Exception e) {
+        success = false;
+        storeMainMetrics.handleDiskFailureErrorCount.inc();
+      } finally {
+        // 7. exist maintenance mode
+        if (inMaintenanceMode) {
+          if (primaryClusterParticipant.exitMaintenanceMode()) {
+            logger.info("Successfully exit maintenance mode");
+          } else {
+            success = false;
           }
-          lock.unlock();
-          lock.close();
-          break;
         }
+        lock.unlock();
+        lock.close();
       }
       if (success) {
         storeMainMetrics.handleDiskFailureSuccessCount.inc();
