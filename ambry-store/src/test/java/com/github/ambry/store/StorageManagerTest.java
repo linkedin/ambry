@@ -1279,6 +1279,7 @@ public class StorageManagerTest {
     props.setProperty(ClusterMapConfig.DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS, "10000");
     props.setProperty(StoreConfig.storeFailedDiskPercentageToTerminateName, "90");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    storeConfig = new StoreConfig(new VerifiableProperties(props));
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "", dcName, 100,
         false, false, new HelixAdminFactory(), false, ClusterMapConfig.AMBRY_STATE_MODEL_DEF, BootstrapCluster,
         DataNodeConfigSourceType.PROPERTY_STORE, false, 1000);
