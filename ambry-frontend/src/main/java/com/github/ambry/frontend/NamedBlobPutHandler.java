@@ -179,8 +179,7 @@ public class NamedBlobPutHandler {
           .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
       try {
         // Start the callback chain by parsing blob info headers and performing request security processing.
-        BlobInfo blobInfo = getBlobInfoFromRequest();
-        securityService.processRequest(restRequest, securityProcessRequestCallback(blobInfo));
+        securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);
       }
@@ -192,10 +191,12 @@ public class NamedBlobPutHandler {
      * @param blobInfo the {@link BlobInfo} to carry to future stages.
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
-    private Callback<Void> securityProcessRequestCallback(BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putSecurityProcessRequestMetrics,
-          securityCheckResult -> securityService.postProcessRequest(restRequest,
-              securityPostProcessRequestCallback(blobInfo)), uri, LOGGER, finalCallback);
+    private Callback<Void> securityProcessRequestCallback() {
+      return buildCallback(frontendMetrics.putSecurityProcessRequestMetrics, securityCheckResult -> {
+        //make sure this has been called after processRequest(permission check) since it needs to query dataset db.
+        BlobInfo blobInfo = getBlobInfoFromRequest();
+        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobInfo));
+      }, uri, LOGGER, finalCallback);
     }
 
     /**
@@ -208,6 +209,7 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
         if (RestUtils.isNamedBlobStitchRequest(restRequest)) {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           RetainingAsyncWritableChannel channel =
@@ -215,6 +217,7 @@ public class NamedBlobPutHandler {
           restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
@@ -345,8 +348,11 @@ public class NamedBlobPutHandler {
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
-      accountAndContainerInjector.injectAccountContainerAndDatasetForNamedBlob(restRequest,
+      accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
           frontendMetrics.putBlobMetricsGroup);
+      if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+        accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+      }
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
       if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
@@ -652,9 +658,10 @@ public class NamedBlobPutHandler {
     private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx, String accountName,
         String containerName, String datasetName) {
       if (idx == datasetVersionRecordList.size()) {
-        //set the rest method back.
-        restRequest.setRestMethod(RestMethod.PUT);
-        return null;
+        return (r, e) -> {
+          //In the last callback, set the rest method back.
+          restRequest.setRestMethod(RestMethod.PUT);
+        };
       }
       Callback<Void> nextCallBack =
           recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName);

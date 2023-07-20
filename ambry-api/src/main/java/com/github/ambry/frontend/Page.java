@@ -19,6 +19,7 @@ import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -71,6 +72,16 @@ public class Page<T> {
   }
 
   /**
+   * @param entrySerializer a function that serializes an entry in the page into JSON without key info in entries.
+   * @return the {@link JSONObject} representing the page.
+   */
+  public JSONObject toJsonWithoutKey(Function<T, T> entrySerializer) {
+    JSONArray entriesArray = new JSONArray();
+    entries.forEach(entry -> entriesArray.put(entrySerializer.apply(entry)));
+    return new JSONObject().put(ENTRIES_KEY, entriesArray).putOpt(NEXT_PAGE_TOKEN_KEY, nextPageToken);
+  }
+
+  /**
    * @param jsonObject the {@link JSONObject} representing the page.
    * @param entryDeserializer a function that deserializes JSON for entries in the page.
    * @return the {@link Page} that was deserialized.
@@ -79,6 +90,19 @@ public class Page<T> {
     JSONArray entriesArray = jsonObject.optJSONArray(ENTRIES_KEY);
     List<T> entries = entriesArray == null ? Collections.emptyList()
         : Utils.listView(entriesArray::length, i -> entryDeserializer.apply(entriesArray.getJSONObject(i)));
+    String nextPageToken = jsonObject.optString(NEXT_PAGE_TOKEN_KEY, null);
+    return new Page<>(entries, nextPageToken);
+  }
+
+  /**
+   * @param jsonObject the {@link JSONObject} representing the page.
+   * @param entryDeserializer a function that deserializes JSON for entries without key info in the page.
+   * @return the {@link Page} that was deserialized.
+   */
+  public static <T> Page<T> fromJsonWithoutKey(JSONObject jsonObject, Function<Object, T> entryDeserializer) {
+    JSONArray entriesArray = jsonObject.optJSONArray(ENTRIES_KEY);
+    List<T> entries = entriesArray == null ? Collections.emptyList()
+        : Utils.listView(entriesArray::length, i -> entryDeserializer.apply(entriesArray.get(i)));
     String nextPageToken = jsonObject.optString(NEXT_PAGE_TOKEN_KEY, null);
     return new Page<>(entries, nextPageToken);
   }

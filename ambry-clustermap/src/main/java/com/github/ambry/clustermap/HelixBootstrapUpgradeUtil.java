@@ -955,7 +955,11 @@ public class HelixBootstrapUpgradeUtil {
             }
             helixAdmin.enableWagedRebalance(clusterName, new ArrayList<>(resources));
 
-            // 7. Exit maintenance mode
+            // 7. Update the list of resources migrating to full_auto in helix property store. This is used by servers
+            // in case we want to fall back to semi_auto later.
+             updateAdminConfigForFullAutoMigration(dcName, resources);
+
+            // 8. Exit maintenance mode
             helixAdmin.manuallyEnableMaintenanceMode(clusterName, false, "Complete migrating to Full auto",
                 Collections.emptyMap());
 
@@ -974,6 +978,42 @@ public class HelixBootstrapUpgradeUtil {
     }, false).start());
 
     migrationComplete.await();
+  }
+
+  /**
+   * Add admin config in Helix to keep track of list of resources migrating to Full-Auto
+   * @param dcName data center name
+   * @param resources migrating to Full Auto
+   */
+  private void updateAdminConfigForFullAutoMigration(String dcName, Set<String> resources) {
+    HelixPropertyStore<ZNRecord> helixPropertyStore = createHelixPropertyStore(dcName);
+    try {
+      // Get property store ZNode path
+      ZNRecord zNRecord = helixPropertyStore.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+      if (zNRecord == null) {
+        info("Creating {} znode record for datacenter to keep list of resources migrating to full_auto {}.",
+            FULL_AUTO_MIGRATION_ZNODE_PATH, dcName);
+        zNRecord = new ZNRecord(FULL_AUTO_MIGRATION_STR);
+      } else {
+        info("Updating {} znode record for datacenter to keep list of resources migrating to full_auto {}.",
+            FULL_AUTO_MIGRATION_ZNODE_PATH, dcName);
+      }
+
+      // Update list field in ZNode
+      List<String> migratingResourcesList = zNRecord.getListField(RESOURCES_STR) == null ? new ArrayList<>()
+          : zNRecord.getListField(RESOURCES_STR);
+      Set<String> migratingResourcesSet = new HashSet<>(migratingResourcesList);
+      migratingResourcesSet.addAll(resources);
+      zNRecord.setListField(RESOURCES_STR, new ArrayList<>(migratingResourcesSet));
+
+      // Set property store Znode path
+      if (!helixPropertyStore.set(FULL_AUTO_MIGRATION_ZNODE_PATH, zNRecord, AccessOption.PERSISTENT)) {
+        logger.error("Failed to create/update {} znode record for datacenter {}",
+            FULL_AUTO_MIGRATION_ZNODE_PATH, dcName);
+      }
+    } finally {
+      helixPropertyStore.stop();
+    }
   }
 
   /**
@@ -2100,7 +2140,7 @@ public class HelixBootstrapUpgradeUtil {
         }
         Map<String, String> diskInfo = new HashMap<>();
         diskInfo.put(DISK_CAPACITY_STR, Long.toString(disk.getRawCapacityInBytes()));
-        diskInfo.put(DISK_STATE, AVAILABLE_STR);
+        diskInfo.put(DISK_STATE, disk.getState().toString());
         diskInfo.put(REPLICAS_STR, replicasStrBuilder.toString());
         diskInfos.put(disk.getMountPath(), diskInfo);
       }

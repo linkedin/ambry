@@ -706,6 +706,22 @@ public class FrontendRestRequestServiceTest {
 
     doOperation(restRequest, restResponseChannel);
 
+    //list all dataset versions
+    String datasetUri =
+        NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + DATASET_NAME;
+    headers = new JSONObject();
+    headers.put(RestUtils.Headers.DATASET_VERSION_QUERY_ENABLED, true);
+    headers.put(ENABLE_DATASET_VERSION_LISTING, true);
+    restRequest = createRestRequest(RestMethod.GET, datasetUri, headers, null);
+    restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    Page<String> response =
+        Page.fromJsonWithoutKey(new JSONObject(new String(restResponseChannel.getResponseBody())), Object::toString);
+    List<String> expectedDatasetVersions = new ArrayList<>();
+    expectedDatasetVersions.add("1");
+    assertEquals("Unexpected dataset name returned", expectedDatasetVersions, response.getEntries());
+    assertEquals("Unexpected page token returned", "2", response.getNextPageToken());
+
     //update dataset retention Count
     Dataset datasetToUpdate = new DatasetBuilder(dataset).setRetentionCount(1).build();
     datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(datasetToUpdate);
@@ -753,6 +769,11 @@ public class FrontendRestRequestServiceTest {
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord2)));
 
     doOperation(restRequest, restResponseChannel);
+    //make sure the two records has been deleted.
+    verify(namedBlobDb, times(1)).delete(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(),
+        blobNameNew1);
+    verify(namedBlobDb, times(1)).delete(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(),
+        blobNameNew);
 
     namedBlobPathUri =
         NAMED_BLOB_PREFIX + SLASH + testAccount.getName() + SLASH + testContainer.getName() + SLASH + DATASET_NAME
@@ -1587,8 +1608,8 @@ public class FrontendRestRequestServiceTest {
     restRequest = createRestRequest(RestMethod.GET, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
     restResponseChannel = new MockRestResponseChannel();
     doOperation(restRequest, restResponseChannel);
-    Page<String> response = Page.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody())),
-        jsonObject -> jsonObject.getString("datasetName"));
+    Page<String> response =
+        Page.fromJsonWithoutKey(new JSONObject(new String(restResponseChannel.getResponseBody())), Object::toString);
     List<String> expectedDatasetNames = new ArrayList<>();
     expectedDatasetNames.add(DATASET_NAME);
     assertEquals("Unexpected dataset name returned", expectedDatasetNames, response.getEntries());

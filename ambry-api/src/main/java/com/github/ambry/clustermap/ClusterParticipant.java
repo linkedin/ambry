@@ -131,6 +131,15 @@ public interface ClusterParticipant extends AutoCloseable {
   }
 
   /**
+   * Reset given partitions to initial state. These partitions have to be in ERROR state for this reset to work.
+   * @param partitionNames A list of partition names.
+   * @return True if the reset is a success
+   */
+  default boolean resetPartitionState(List<String> partitionNames) {
+    return true;
+  }
+
+  /**
    * @return a map of registered state change listeners (if there are any) in this cluster participant.
    */
   Map<StateModelListenerType, PartitionStateChangeListener> getPartitionStateChangeListeners();
@@ -157,5 +166,41 @@ public interface ClusterParticipant extends AutoCloseable {
    */
   default DistributedLock getDistributedLock(String resource, String message) {
     return new DistributedLockLocalImpl();
+  }
+
+  /**
+   * Enter maintenance mode.
+   * @param reason The reason to enter maintenance mode.
+   * @return True if cluster enters maintenance mode successfully.
+   */
+  default boolean enterMaintenanceMode(String reason) {
+    return true;
+  }
+
+  /**
+   * Exit maintenance mode.
+   * @return True if cluster exits maintenance mode successfully.
+   */
+  default boolean exitMaintenanceMode() {
+    return true;
+  }
+
+  /**
+   * Update disk capacity in InstanceConfig.
+   * @param diskCapacity The new disk capacity.
+   * @return True if the update is a success.
+   */
+  default boolean updateDiskCapacity(int diskCapacity) {
+    return true;
+  }
+
+  /**
+   * Set disk state in DataNodeConfig.
+   * @param diskId The disk to update state.
+   * @param state The state to update to.
+   * @return True if update is a success.
+   */
+  default boolean setDisksState(List<DiskId> diskId, HardwareState state) {
+    return true;
   }
 }

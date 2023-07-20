@@ -28,8 +28,11 @@ import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.repair.RepairRequestRecord;
+import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,6 +40,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.store.MessageInfo.*;
 
 
 /**
@@ -81,6 +86,8 @@ class DeleteOperation {
   private ReplicateBlobCallback replicateBlobCallback;
   private final String originatingDcName;
 
+  private final RepairRequestsDb repairRequestsDb;
+
   /**
    * Instantiates a {@link DeleteOperation}.
    * @param routerConfig The {@link RouterConfig} that contains router-level configurations.
@@ -118,6 +125,7 @@ class DeleteOperation {
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
     this.nonBlockingRouter = nonBlockingRouter;
     this.replicateBlobCallback = null;
+    this.repairRequestsDb = nonBlockingRouter.getRepairRequestsDb();
   }
 
   /**
@@ -372,10 +380,32 @@ class DeleteOperation {
     // 4. and error code precedence is over AmbryUnavailable. We don't do replication if there BlobExpired or TooManyRequests.
     // 5. It's not a delete request from the BackgroundDeleter. We don't do on-demand replication for background deleter.
     RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
+    // @formatter:off
     return (routerConfig.routerRepairWithReplicateBlobOnDeleteEnabled && operationTracker.hasNotFound()
         && operationTracker.getSuccessCount() > 0
         && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable)
         && (serviceId == null || !serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX)));
+    // @formatter:on
+  }
+
+  /**
+   * Check if we want to save the partially failed request to the secondary storage and fix it offline.
+   * @return true if choose to fix it offline.
+   */
+  private boolean shouldRunOfflineRepair() {
+    // the conditions to offline repair the Delete request.
+    // 1. the feature is enabled and the repair request db is not null
+    // 2. and at least one replica returned successful status.
+    // 3. and error code precedence is over AmbryUnavailable. We don't do offline repair if BlobExpired or TooManyRequests.
+    // 4. It's not a delete request from the BackgroundDeleter. We don't do offline repair for background deleter.
+    RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
+    // @formatter:off
+    return (repairRequestsDb != null
+        && routerConfig.routerDeleteOfflineRepairEnabled
+        && operationTracker.getSuccessCount() > 0
+        && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable)
+        && (serviceId == null || !serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX)));
+    // @formatter:on
   }
 
   /**
@@ -403,6 +433,27 @@ class DeleteOperation {
           setOperationException(
               new RouterException("DeleteOperation failed possibly because some replicas are unavailable",
                   RouterErrorCode.AmbryUnavailable));
+        }
+
+        // check if we want to record the partially failed request and repair in the background.
+        if (shouldRunOfflineRepair()) {
+          RepairRequestRecord record = null;
+          try {
+            List<ReplicaId> successfulReplica = operationTracker.getSuccessReplica();
+            DataNodeId sourceDataNode = successfulReplica.get(0).getDataNodeId();
+            record =
+                new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
+                    sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, deletionTimeMs,
+                    LIFE_VERSION_FROM_FRONTEND, Utils.Infinite_Time);
+            repairRequestsDb.putRepairRequests(record);
+
+            // treat the delete command as a success
+            operationException.set(null);
+            logger.info("RepairRequest : inject repair request {} to the database {}", record, repairRequestsDb);
+          } catch (Exception e) {
+            // LOCAL_CONSISTENCY_TODO: metrics
+            logger.error("RepairRequest : failed to write the {} to the database {}", record, repairRequestsDb);
+          }
         }
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {

@@ -73,6 +73,15 @@ class Disk implements DiskId {
         : HardwareState.UNAVAILABLE;
   }
 
+  @Override
+  public void setState(HardwareState newState) {
+    if (newState == HardwareState.AVAILABLE) {
+      diskStatePolicy.onHardUp();
+    } else {
+      diskStatePolicy.onHardDown();
+    }
+  }
+
   boolean isDown() {
     return diskStatePolicy.isDown();
   }
@@ -193,6 +202,10 @@ class Disk implements DiskId {
 
   void onDiskError() {
     diskStatePolicy.onError();
+  }
+
+  void onHardDown() {
+    diskStatePolicy.onHardDown();
   }
 
   void onDiskOk() {

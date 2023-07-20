@@ -63,7 +63,7 @@ public class StaticClusterAgentsFactory implements ClusterAgentsFactory {
    * Instantiate an instance of this factory.
    * @param partitionLayout the {@link PartitionLayout} to use.
    */
-  StaticClusterAgentsFactory(ClusterMapConfig clusterMapConfig, PartitionLayout partitionLayout) {
+  public StaticClusterAgentsFactory(ClusterMapConfig clusterMapConfig, PartitionLayout partitionLayout) {
     this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig, "ClusterMapConfig cannot be null");
     this.partitionLayout = Objects.requireNonNull(partitionLayout, "PartitionLayout cannot be null");
     this.metricRegistry = new MetricRegistry();

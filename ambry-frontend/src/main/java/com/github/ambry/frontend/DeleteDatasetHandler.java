@@ -143,7 +143,7 @@ public class DeleteDatasetHandler {
         containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
         datasetName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, true);
         List<DatasetVersionRecord> datasetVersionRecordList =
-            accountService.getAllValidVersion(accountName, containerName, datasetName);
+            accountService.getAllValidVersionForDatasetDeletion(accountName, containerName, datasetName);
         if (datasetVersionRecordList.size() > 0) {
           DatasetVersionRecord record = datasetVersionRecordList.get(0);
           String version = record.getVersion();

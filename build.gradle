@@ -142,7 +142,10 @@ subprojects {
         systemProperty 'io.netty.allocator.maxCachedBufferCapacity', '0'
 
         // make sure Powermockito would be happy
-        jvmArgs '--add-exports=java.xml/jdk.xml.internal=ALL-UNNAMED'
+        if (JavaVersion.current().java9Compatible) {
+            jvmArgs '--add-exports=java.xml/jdk.xml.internal=ALL-UNNAMED'
+        }
+
     }
 
     task intTest(type: Test) {
@@ -252,7 +255,7 @@ project(':ambry-commons') {
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_linux_x86_64"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_osx_aarch_64"
         compile "org.apache.helix:helix-core:$helixVersion"
-        compile "com.github.ben-manes.caffeine:caffeine:3.1.1"
+        compile "com.github.ben-manes.caffeine:caffeine:$caffeineVersion"
         testCompile project(':ambry-test-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
     }

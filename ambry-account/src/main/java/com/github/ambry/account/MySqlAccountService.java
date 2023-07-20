@@ -267,15 +267,21 @@ public class MySqlAccountService extends AbstractAccountService {
   }
 
   @Override
-  public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
+  public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
-    return cachedAccountService.getAllValidVersion(accountName, containerName, datasetName);
+    return cachedAccountService.getAllValidVersionForDatasetDeletion(accountName, containerName, datasetName);
   }
 
   @Override
   public Page<String> listAllValidDatasets(String accountName, String containerName, String pageToken)
       throws AccountServiceException {
     return cachedAccountService.listAllValidDatasets(accountName, containerName, pageToken);
+  }
+
+  @Override
+  public Page<String> listAllValidDatasetVersions(String accountName, String containerName, String datasetName,
+      String pageToken) throws AccountServiceException {
+    return cachedAccountService.listAllValidDatasetVersions(accountName, containerName, datasetName, pageToken);
   }
 
   /**

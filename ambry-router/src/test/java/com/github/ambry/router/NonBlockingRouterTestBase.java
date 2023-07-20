@@ -35,6 +35,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
@@ -115,6 +116,7 @@ public class NonBlockingRouterTestBase {
   protected DeleteManager deleteManager;
   protected final NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
   protected String localDcName;
+  protected final PutBlobOptions putOptionsForChunkedUpload;
 
   /**
    * Initialize parameters common to all tests. This constructor is exposed for use by {@link CloudRouterTest}.
@@ -138,6 +140,7 @@ public class NonBlockingRouterTestBase {
     cryptoService = new GCMCryptoService(new CryptoServiceConfig(vProps));
     cryptoJobHandler = new CryptoJobHandler(CryptoJobHandlerTest.DEFAULT_THREAD_COUNT);
     accountService = new InMemAccountService(false, true);
+    putOptionsForChunkedUpload = new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(maxPutChunkSize).build();
   }
 
   @Before
@@ -196,9 +199,6 @@ public class NonBlockingRouterTestBase {
     properties.setProperty("router.metadata.content.version", String.valueOf(metadataContentVersion));
     properties.setProperty("router.not.found.cache.ttl.in.ms", String.valueOf(NOT_FOUND_CACHE_TTL_MS));
     properties.setProperty("router.get.eligible.replicas.by.state.enabled", "true");
-    properties.setProperty("router.repair.with.replicate.blob.enabled", "true");
-    properties.setProperty("router.repair.with.replicate.blob.on.delete.enabled", "true");
-
     return properties;
   }
 
@@ -222,7 +222,12 @@ public class NonBlockingRouterTestBase {
     VerifiableProperties verifiableProperties = new VerifiableProperties((props));
     routerConfig = new RouterConfig(verifiableProperties);
     routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
-    router = new NonBlockingRouter(routerConfig, routerMetrics,
+    RepairRequestsDbFactory factory = null;
+    if (routerConfig.routerRepairRequestsDbFactory != null) {
+      factory = Utils.getObj(routerConfig.routerRepairRequestsDbFactory, verifiableProperties,
+          routerMetrics.getMetricRegistry(), localDcName);
+    }
+    router = new NonBlockingRouter(routerConfig, factory, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
             CHECKOUT_TIMEOUT_MS, serverLayout, mockTime), notificationSystem, mockClusterMap, kms, cryptoService,
         cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);

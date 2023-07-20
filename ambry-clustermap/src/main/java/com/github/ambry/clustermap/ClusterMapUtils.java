@@ -57,6 +57,7 @@ public class ClusterMapUtils {
   public static final String PARTITION_OVERRIDE_STR = "PartitionOverride";
   public static final String REPLICA_ADDITION_STR = "ReplicaAddition";
   public static final String PARTITION_DISABLED_STR = "PartitionDisabled";
+  public static final String FULL_AUTO_MIGRATION_STR = "FullAutoMigration";
   public static final String PROPERTYSTORE_STR = "PROPERTYSTORE";
   // Following two ZNode paths are the path to ZNode that stores some admin configs. Partition override config is used
   // to administratively override partition from frontend's point of view. Replica addition config is used to specify
@@ -67,6 +68,7 @@ public class ClusterMapUtils {
   public static final String PARTITION_OVERRIDE_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + PARTITION_OVERRIDE_STR;
   public static final String REPLICA_ADDITION_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + REPLICA_ADDITION_STR;
   public static final String PARTITION_DISABLED_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + PARTITION_DISABLED_STR + "/";
+  public static final String FULL_AUTO_MIGRATION_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + FULL_AUTO_MIGRATION_STR;
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
   static final String PARTITION_STATE = "state";
@@ -83,6 +85,7 @@ public class ClusterMapUtils {
   static final String PARTIALLY_SEALED_STR = "PARTIALLY_SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";
   static final String DISABLED_REPLICAS_STR = "DISABLED";
+  static final String RESOURCES_STR = "RESOURCES";
   static final String AVAILABLE_STR = "AVAILABLE";
   static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String READ_ONLY_STR = "RO";
