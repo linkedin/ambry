@@ -37,6 +37,7 @@ import com.github.ambry.clustermap.MockDiskId;
 import com.github.ambry.clustermap.MockHelixManagerFactory;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
@@ -1256,11 +1257,10 @@ public class StorageManagerTest {
     String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
     String oldBaseMountPath = TestHardwareLayout.baseMountPath;
     TestHardwareLayout.baseMountPath = tempDirPath + "/mnt";
-    long oldReplicaCapcityInBytes = TestPartitionLayout.defaultReplicaCapacityInBytes;
-    TestPartitionLayout.defaultReplicaCapacityInBytes = 1024;
     TestHardwareLayout testHardwareLayout =
-        new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
-    TestPartitionLayout testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 100, null);
+        new TestHardwareLayout(clusterName, 3, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
+    TestPartitionLayout testPartitionLayout =
+        new TestPartitionLayout(testHardwareLayout, 6, PartitionState.READ_WRITE, 1024 * 1024 * 1024, 3, null, 0);
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
@@ -1312,7 +1312,6 @@ public class StorageManagerTest {
         if (!file.exists()) {
           assertTrue(file.mkdirs());
           file.deleteOnExit();
-          System.out.println("Creating " + file.getAbsolutePath());
         }
       }
       StorageManager storageManager =
@@ -1405,7 +1404,6 @@ public class StorageManagerTest {
      */
     } finally {
       TestHardwareLayout.baseMountPath = oldBaseMountPath;
-      TestPartitionLayout.defaultReplicaCapacityInBytes = oldReplicaCapcityInBytes;
       try {
         Utils.deleteFileOrDirectory(new File(tempDirPath));
         clusterMap.close();

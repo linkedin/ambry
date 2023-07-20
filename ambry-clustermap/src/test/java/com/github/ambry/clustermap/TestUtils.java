@@ -950,10 +950,10 @@ public class TestUtils {
   }
 
   public static class TestPartitionLayout {
-    public static long defaultReplicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
     protected static final long defaultVersion = 2468;
     protected static final int defaultPartitionCount = 10;
     protected static final PartitionState defaultPartitionState = PartitionState.READ_WRITE;
+    protected static final long defaultReplicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
     protected static final int defaultReplicaCount = 3; // Per Partition
 
     protected int partitionCount;
