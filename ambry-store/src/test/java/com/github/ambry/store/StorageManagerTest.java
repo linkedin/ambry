@@ -1257,11 +1257,13 @@ public class StorageManagerTest {
     String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
     String oldBaseMountPath = TestHardwareLayout.baseMountPath;
+    long oldMinCapacity = MIN_REPLICA_CAPACITY_IN_BYTES;
+    MIN_REPLICA_CAPACITY_IN_BYTES = 1024;
     TestHardwareLayout.baseMountPath = tempDirPath + "/mnt";
     TestHardwareLayout testHardwareLayout =
-        new TestHardwareLayout(clusterName, 3, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
+        new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
     TestPartitionLayout testPartitionLayout =
-        new TestPartitionLayout(testHardwareLayout, 6, PartitionState.READ_WRITE, 1024 * 1024 * 1024, 3, null, 0);
+        new TestPartitionLayout(testHardwareLayout, 100, PartitionState.READ_WRITE, 1024, 3, null, 0);
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
     Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
@@ -1403,6 +1405,7 @@ public class StorageManagerTest {
       storageManager.shutdown();
     } finally {
       TestHardwareLayout.baseMountPath = oldBaseMountPath;
+      MIN_REPLICA_CAPACITY_IN_BYTES = oldMinCapacity;
       try {
         Utils.deleteFileOrDirectory(new File(tempDirPath));
         clusterMap.close();
