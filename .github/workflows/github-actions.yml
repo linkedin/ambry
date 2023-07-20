@@ -78,9 +78,6 @@ jobs:
           arguments: --scan :ambry-store:test --tests com.github.ambry.store.StorageManagerTest.testDiskFailureHandler codeCoverageReport
           gradle-version: wrapper
 
-      - name: print out space
-        run: df -h
-
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
 
