@@ -22,9 +22,13 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.DataNodeConfigSourceType;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.HardwareState;
+import com.github.ambry.clustermap.HelixAdminFactory;
+import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil;
+import com.github.ambry.clustermap.HelixFactory;
 import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -74,6 +78,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
+import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOperation.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.store.BlobStoreTest.*;
@@ -1258,7 +1263,6 @@ public class StorageManagerTest {
     Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
     Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
 
-    /*
     Properties props = new Properties();
     props.setProperty("clustermap.host.name", "localhost");
     DataNodeId dataNodeId = testHardwareLayout.getRandomDataNodeFromDc(dcName);
@@ -1288,6 +1292,7 @@ public class StorageManagerTest {
     helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
     helixParticipant.participate(Collections.emptyList(), null, null);
 
+    /*
     HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
     HelixClusterManager clusterMap =
         new HelixClusterManager(clusterMapConfig, instanceName, new HelixFactory(), metricRegistry);
