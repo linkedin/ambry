@@ -1256,6 +1256,7 @@ public class StorageManagerTest {
     String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
     String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
+    cleanupOldTestDirectories();
     String testDirectory = "/tmp/StorageManagerTest" + new Random().nextInt();
     String oldBaseMountPath = TestHardwareLayout.baseMountPath;
     TestHardwareLayout.baseMountPath = testDirectory + "/mnt";
@@ -1474,6 +1475,17 @@ public class StorageManagerTest {
       assertNull(storageManager.getDiskManager(replicaId.getPartitionId()));
     }
     assertEquals(numDisksInMemory - 1, storageManager.getDiskToDiskManager().size());
+  }
+
+  private void cleanupOldTestDirectories() throws Exception {
+    File tempDir = new File("/tmp");
+    File[] files = tempDir.listFiles((fileDir, name) -> name.startsWith("StorageManagerTest"));
+    if (files == null || files.length == 0) {
+      return;
+    }
+    for (File file : files) {
+      Utils.deleteFileOrDirectory(file);
+    }
   }
 
   /**
