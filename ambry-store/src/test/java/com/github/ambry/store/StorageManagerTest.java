@@ -70,8 +70,10 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
+import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONObject;
 import org.junit.After;
@@ -1251,7 +1253,6 @@ public class StorageManagerTest {
     String clusterName = "StorageManagerTestCluster";
     String dcName = "DC0";
     zkInfoList.add(new ZkInfo(tempDirPath, dcName, (byte) 0, 2199, true));
-    System.out.println(tempDirPath);
     String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
     String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
@@ -1320,7 +1321,6 @@ public class StorageManagerTest {
               Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
               new InMemAccountService(false, false));
       storageManager.start();
-    /*
       // starting the storage manager won't start Disk failure handler right away, since there is a 10 minutes
       // delay to run the handler in a scheduler
       StorageManager.DiskFailureHandler handler = storageManager.new DiskFailureHandler();
@@ -1401,7 +1401,6 @@ public class StorageManagerTest {
 
       storageManager.setTerminateCallback(null);
       storageManager.shutdown();
-     */
     } finally {
       TestHardwareLayout.baseMountPath = oldBaseMountPath;
       try {
