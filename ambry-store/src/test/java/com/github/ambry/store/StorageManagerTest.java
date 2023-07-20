@@ -1247,6 +1247,7 @@ public class StorageManagerTest {
    */
   @Test
   public void testDiskFailureHandler() throws Exception {
+    cleanupOldTestDirectories();
     String tempDirPath = getTempDir("StorageManagerTest-");
     List<ZkInfo> zkInfoList = new ArrayList<>();
     String clusterName = "StorageManagerTestCluster";
@@ -1256,7 +1257,6 @@ public class StorageManagerTest {
     String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
     String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
     String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
-    cleanupOldTestDirectories();
     String testDirectory = "/tmp/StorageManagerTest" + new Random().nextInt();
     String oldBaseMountPath = TestHardwareLayout.baseMountPath;
     TestHardwareLayout.baseMountPath = testDirectory + "/mnt";
