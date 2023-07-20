@@ -1304,7 +1304,6 @@ public class StorageManagerTest {
       for (ReplicaId replica : replicas) {
         diskToReplicas.computeIfAbsent(replica.getDiskId(), disk -> new ArrayList<>()).add(replica);
       }
-    /*
       // Create all mount paths
       for (DiskId diskId : diskToReplicas.keySet()) {
         File file = new File(diskId.getMountPath());
@@ -1313,6 +1312,7 @@ public class StorageManagerTest {
           file.deleteOnExit();
         }
       }
+    /*
       StorageManager storageManager =
           new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
               new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
