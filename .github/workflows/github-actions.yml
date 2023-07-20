@@ -72,7 +72,7 @@ jobs:
         name: Run unit tests for ambry-store
         with:
           job-id: jdk11
-          arguments: -i --scan :ambry-store:test --tests com.github.ambry.store.StorageManagerTest.testDiskFailureHandler codeCoverageReport
+          arguments: --scan :ambry-store:test codeCoverageReport
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov

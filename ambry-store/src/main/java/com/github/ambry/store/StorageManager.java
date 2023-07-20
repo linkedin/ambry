@@ -940,7 +940,6 @@ public class StorageManager implements StoreManager {
             newFailedDisks, replicasOnFailedDisks);
         success = true;
       } catch (Exception e) {
-        success = false;
         storeMainMetrics.handleDiskFailureErrorCount.inc();
       } finally {
         // 7. exist maintenance mode
