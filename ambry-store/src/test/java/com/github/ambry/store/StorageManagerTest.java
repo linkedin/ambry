@@ -1310,16 +1310,16 @@ public class StorageManagerTest {
         if (!file.exists()) {
           assertTrue(file.mkdirs());
           file.deleteOnExit();
+          System.out.println("Creating " + file.getAbsolutePath());
         }
       }
-      assertEquals("", tempDirPath);
-    /*
       StorageManager storageManager =
           new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
               new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
               Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
               new InMemAccountService(false, false));
       storageManager.start();
+    /*
       // starting the storage manager won't start Disk failure handler right away, since there is a 10 minutes
       // delay to run the handler in a scheduler
       StorageManager.DiskFailureHandler handler = storageManager.new DiskFailureHandler();
