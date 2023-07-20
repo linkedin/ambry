@@ -278,6 +278,50 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return updateResult;
   }
 
+  @Override
+  public boolean removeReplicasFromDataNode(List<ReplicaId> replicaIds) {
+    if (!clusterMapConfig.clustermapUpdateDatanodeInfo) {
+      return false;
+    }
+    if (replicaIds == null) {
+      throw new IllegalArgumentException("Invalid replica list to remove");
+    }
+    synchronized (helixAdministrationLock) {
+      DataNodeConfig dataNodeConfig = getDataNodeConfig();
+      boolean dataNodeConfigUpdated = false;
+      boolean removalResult = true;
+      List<String> partitionNames = new ArrayList<>();
+      for (ReplicaId replicaId : replicaIds) {
+        String partitionName = replicaId.getPartitionId().toPathString();
+        boolean removedFromStopped = dataNodeConfig.getStoppedReplicas().remove(partitionName);
+        boolean removedFromSealed = dataNodeConfig.getSealedReplicas().remove(partitionName);
+        boolean update = false;
+        if (removedFromStopped || removedFromSealed) {
+          logger.info("Removing partition {} from stopped and sealed list", partitionName);
+          dataNodeConfigUpdated = true;
+          update = true;
+        }
+        DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().get(replicaId.getMountPath());
+        if (diskConfig != null && diskConfig.getReplicaConfigs().remove(partitionName) != null) {
+          logger.info("Removing partition {} from disk {}' config list", partitionName, replicaId.getMountPath());
+          dataNodeConfigUpdated = true;
+          update = true;
+        }
+        if (update) {
+          partitionNames.add(partitionName);
+        }
+      }
+      if (dataNodeConfigUpdated) {
+        logger.info("Updating config: {} in Helix by removing partitions {}", dataNodeConfig, partitionNames);
+        removalResult = dataNodeConfigSource.set(dataNodeConfig);
+      } else {
+        logger.warn("Partitions {} is not found on instance {}, skipping removing them from config in Helix.",
+            partitionNames, instanceName);
+      }
+      return removalResult;
+    }
+  }
+
   /**
    * @return a snapshot of registered state change listeners.
    */
@@ -344,6 +388,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   @Override
   public boolean setDisksState(List<DiskId> diskIds, HardwareState state) {
     if (diskIds == null || diskIds.isEmpty()) {
+      // when calling this method, we know that some disks are bad, so empty list is not allowed.
       throw new IllegalArgumentException("List of disk is empty when set disks state");
     }
     for (DiskId diskId : diskIds) {
@@ -505,7 +550,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * Expose for testing
    * @return {@link HelixManager} tha manage current state model.
    */
-  HelixManager getHelixManager() {
+  public HelixManager getHelixManager() {
     return manager;
   }
 

@@ -102,7 +102,7 @@ public class ClusterMapUtils {
   static final long DEFAULT_XID = Long.MIN_VALUE;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
-  static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
+  public static long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
   // TODO: Temporary defaults to be used when adding replicas in helix FULL_AUTO mode. These replica configs will need

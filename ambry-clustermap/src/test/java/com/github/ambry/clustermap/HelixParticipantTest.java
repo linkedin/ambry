@@ -32,22 +32,16 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.HelixDataAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
-import org.apache.helix.PropertyKey;
 import org.apache.helix.lock.LockScope;
 import org.apache.helix.lock.helix.HelixLockScope;
 import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZkBaseDataAccessor;
 import org.apache.helix.model.InstanceConfig;
-import org.apache.helix.model.Message;
-import org.apache.helix.model.Resource;
-import org.apache.helix.model.StateModelDefinition;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.apache.helix.participant.statemachine.StateModelFactory;
-import org.apache.helix.util.MessageUtil;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -508,7 +502,7 @@ public class HelixParticipantTest {
     participant.markDisablePartitionComplete();
     // create InstanceConfig for local node. Also, put existing replica into sealed list
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    ZKHelixAdmin helixAdmin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
+    HelixAdmin helixAdmin = participant.getHelixAdmin();
     DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
 
     DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().values().iterator().next();
@@ -576,8 +570,82 @@ public class HelixParticipantTest {
     verifyReplicaInfoInDataNodeConfig(dataNodeConfig, existingReplica, true);
     // reset props
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(false));
-    helixAdmin.close();
     participant.close();
+  }
+
+  @Test
+  public void testRemoveReplicasFromDataNode() throws Exception {
+    assumeTrue(dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE);
+
+    props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    HelixParticipant participant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
+        getDefaultZkConnectStr(clusterMapConfig), true);
+    participant.markDisablePartitionComplete();
+    // create InstanceConfig for local node. Also, put existing replica into sealed list
+    String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
+    HelixAdmin helixAdmin = participant.getHelixAdmin();
+    DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
+
+    ClusterMap cm = new StaticClusterManager(testPartitionLayout.partitionLayout, dcName, new MetricRegistry());
+    List<? extends ReplicaId> replicaIds =
+        cm.getReplicaIds(cm.getDataNodeId("localhost", clusterMapConfig.clusterMapPort));
+    DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().values().iterator().next();
+    List<ReplicaId> replicaIdsOnDisk = replicaIds.stream()
+        .filter(replicaId -> diskConfig.getReplicaConfigs().containsKey(replicaId.getPartitionId().toPathString()))
+        .collect(Collectors.toList());
+    List<ReplicaId> otherReplicas = new ArrayList<>(replicaIds);
+    otherReplicas.removeAll(replicaIdsOnDisk);
+    // The case to remove empty list
+    try {
+      participant.removeReplicasFromDataNode(null);
+      fail("Null list should fail");
+    } catch (Exception e) {
+    }
+    assertTrue("Remove an empty list of replicas should succeed",
+        participant.removeReplicasFromDataNode(Collections.emptyList()));
+
+    // The case to remove all the replicas in one disk
+    assertTrue(participant.removeReplicasFromDataNode(replicaIdsOnDisk));
+    Thread.sleep(50);
+    replicaIdsOnDisk.forEach(
+        replicaId -> verifyReplicaInfoInDataNodeConfig(getDataNodeConfigInHelix(helixAdmin, instanceName), replicaId,
+            false));
+    otherReplicas.forEach(
+        replicaId -> verifyReplicaInfoInDataNodeConfig(getDataNodeConfigInHelix(helixAdmin, instanceName), replicaId,
+            true));
+
+    // The case to remove the replicas again
+    assertTrue(participant.removeReplicasFromDataNode(replicaIdsOnDisk));
+    Thread.sleep(50);
+    replicaIdsOnDisk.forEach(
+        replicaId -> verifyReplicaInfoInDataNodeConfig(getDataNodeConfigInHelix(helixAdmin, instanceName), replicaId,
+            false));
+    otherReplicas.forEach(
+        replicaId -> verifyReplicaInfoInDataNodeConfig(getDataNodeConfigInHelix(helixAdmin, instanceName), replicaId,
+            true));
+
+    // Add replicas on another disk to the list
+    DataNodeConfig.DiskConfig anotherDiskConfig =
+        dataNodeConfig.getDiskConfigs().values().stream().filter(dc -> !dc.equals(diskConfig)).findFirst().get();
+    replicaIdsOnDisk.addAll(replicaIds.stream()
+        .filter(
+            replicaId -> anotherDiskConfig.getReplicaConfigs().containsKey(replicaId.getPartitionId().toPathString()))
+        .collect(Collectors.toList()));
+    otherReplicas.removeAll(replicaIdsOnDisk);
+
+    // The case to remove some replicas that are already removed and some new replicas
+    assertTrue(participant.removeReplicasFromDataNode(replicaIdsOnDisk));
+    Thread.sleep(50);
+    replicaIdsOnDisk.forEach(
+        replicaId -> verifyReplicaInfoInDataNodeConfig(getDataNodeConfigInHelix(helixAdmin, instanceName), replicaId,
+            false));
+    otherReplicas.forEach(
+        replicaId -> verifyReplicaInfoInDataNodeConfig(getDataNodeConfigInHelix(helixAdmin, instanceName), replicaId,
+            true));
+
+    participant.close();
+    props.setProperty("clustermap.update.datanode.info", Boolean.toString(false));
   }
 
   /**
@@ -887,22 +955,6 @@ public class HelixParticipantTest {
   }
 
   /**
-   * Return the number of replicas at the given state from the metric;
-   * @param state The state
-   * @param metricRegistry The metric registry
-   * @return
-   */
-  private int getNumberOfReplicaInStateFromMetric(String state, MetricRegistry metricRegistry) {
-    String mkey = metricRegistry.getGauges()
-        .keySet()
-        .stream()
-        .filter(key -> key.startsWith(HelixParticipant.class.getName() + "." + state))
-        .findFirst()
-        .get();
-    return ((Integer) metricRegistry.getGauges().get(mkey).getValue()).intValue();
-  }
-
-  /**
    * This is a hacky way to create distributed lock with different zookeeper connection.
    * @param resource The resource to lock
    * @param userId The user id for the lock
@@ -943,36 +995,6 @@ public class HelixParticipantTest {
       }
     }
     return null;
-  }
-
-  /**
-   * Send state transition messages to zookeeper so the state transition can happen for the replicas
-   * @param manager {@link HelixManager} to provide connection to zookeeper
-   * @param resourceName The resource name of all the replicas.
-   * @param replicaIds The replicas to send state transition messages.
-   * @param fromState The from state
-   * @param toState The to state
-   * @throws Exception
-   */
-  private void sendStateTransitionMessages(HelixManager manager, String resourceName,
-      List<? extends ReplicaId> replicaIds, String fromState, String toState) throws Exception {
-    StateModelDefinition stateModelDef = AmbryStateModelDefinition.getDefinition();
-    assertNotNull(stateModelDef);
-    List<Message> messages = new ArrayList<>();
-    for (ReplicaId replica : replicaIds) {
-      messages.add(MessageUtil.createStateTransitionMessage(manager.getInstanceName(), manager.getSessionId(),
-          new Resource(resourceName), "" + replica.getPartitionId().getId(), manager.getInstanceName(), fromState,
-          toState, manager.getSessionId(), stateModelDef.getId()));
-    }
-    HelixDataAccessor dataAccessor = manager.getHelixDataAccessor();
-    PropertyKey.Builder keyBuilder = dataAccessor.keyBuilder();
-    List<PropertyKey> keys = new ArrayList<>();
-    for (Message message : messages) {
-      keys.add(keyBuilder.message(message.getTgtName(), message.getId()));
-    }
-    for (boolean b : dataAccessor.createChildren(keys, new ArrayList<>(messages))) {
-      assertTrue(b);
-    }
   }
 
   private DataNodeConfig getDataNodeConfigInHelix(HelixAdmin helixAdmin, String instanceName) {

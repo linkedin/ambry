@@ -93,6 +93,11 @@ public class StoreMetrics {
   public final Counter duplicateKeysInBatch;
   public final Counter storeIoErrorTriggeredShutdownCount;
   public final Counter blobStoreRecoverCompactionPolicySwitchInfoErrorCount;
+  public final Counter handleDiskFailureCount;
+  public final Counter handleDiskFailureSuccessCount;
+  public final Counter handleDiskFailureErrorCount;
+  public final Histogram handleDiskFailureDuration;
+  public final Counter handleDiskFailureRetryLockCount;
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
@@ -243,6 +248,15 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsIndexScannerErrorCount"));
     blobStoreRecoverCompactionPolicySwitchInfoErrorCount = registry.counter(
         MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreRecoverCompactionPolicySwitchInfoErrorCount"));
+    handleDiskFailureCount = registry.counter(MetricRegistry.name(StorageManager.class, "HandleDiskFailureCount"));
+    handleDiskFailureSuccessCount =
+        registry.counter(MetricRegistry.name(StorageManager.class, "HandleDiskFailureSuccessCount"));
+    handleDiskFailureDuration =
+        registry.histogram(MetricRegistry.name(StorageManager.class, "HandleDiskFailureDuration"));
+    handleDiskFailureErrorCount =
+        registry.counter(MetricRegistry.name(StorageManager.class, "HandleDiskFailureErrorCount"));
+    handleDiskFailureRetryLockCount =
+        registry.counter(MetricRegistry.name(StorageManager.class, "HandleDiskFailureRetryLockCount"));
     blobStoreStatsQueueProcessorErrorCount =
         registry.counter(MetricRegistry.name(BlobStoreStats.class, name + "BlobStoreStatsQueueProcessorErrorCount"));
     statsOnDemandScanTotalTimeMs =

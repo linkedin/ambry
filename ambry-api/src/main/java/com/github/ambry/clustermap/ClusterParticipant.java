@@ -114,6 +114,10 @@ public interface ClusterParticipant extends AutoCloseable {
    */
   boolean updateDataNodeInfoInCluster(ReplicaId replicaId, boolean shouldExist);
 
+  default boolean removeReplicasFromDataNode(List<ReplicaId> replicaIds) {
+    return true;
+  }
+
   /**
    * Set initial local partitions that the cluster participant hosts.
    * @param localPartitions a collection of initial local partitions.

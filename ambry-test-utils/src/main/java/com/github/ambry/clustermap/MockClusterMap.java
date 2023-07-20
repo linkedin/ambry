@@ -76,6 +76,7 @@ public class MockClusterMap implements ClusterMap {
   private ClusterManagerQueryHelper mockClusterManagerQueryHelper = Mockito.mock(ClusterManagerQueryHelper.class);
 
   private RuntimeException exceptionOnSnapshot = null;
+  private volatile boolean shouldDataNodeBeInFullAuto = false;
 
   /**
    * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 default partitions/replicas
@@ -509,6 +510,15 @@ public class MockClusterMap implements ClusterMap {
       metricRegistry = new MetricRegistry();
     }
     return metricRegistry;
+  }
+
+  @Override
+  public boolean isDataNodeInFullAutoMode(DataNodeId dn) {
+    return shouldDataNodeBeInFullAuto;
+  }
+
+  public void shouldDataNodeBeInFullAuto(boolean b) {
+    this.shouldDataNodeBeInFullAuto = b;
   }
 
   /**
