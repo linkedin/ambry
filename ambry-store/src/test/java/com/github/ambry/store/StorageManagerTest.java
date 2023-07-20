@@ -28,6 +28,7 @@ import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.HelixAdminFactory;
 import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil;
+import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.HelixFactory;
 import com.github.ambry.clustermap.HelixParticipant;
 import com.github.ambry.clustermap.MockClusterMap;
@@ -1292,7 +1293,6 @@ public class StorageManagerTest {
     helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
     helixParticipant.participate(Collections.emptyList(), null, null);
 
-    /*
     HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
     HelixClusterManager clusterMap =
         new HelixClusterManager(clusterMapConfig, instanceName, new HelixFactory(), metricRegistry);
@@ -1304,6 +1304,7 @@ public class StorageManagerTest {
       for (ReplicaId replica : replicas) {
         diskToReplicas.computeIfAbsent(replica.getDiskId(), disk -> new ArrayList<>()).add(replica);
       }
+    /*
       // Create all mount paths
       for (DiskId diskId : diskToReplicas.keySet()) {
         File file = new File(diskId.getMountPath());
@@ -1398,6 +1399,7 @@ public class StorageManagerTest {
 
       storageManager.setTerminateCallback(null);
       storageManager.shutdown();
+     */
     } finally {
       TestHardwareLayout.baseMountPath = oldBaseMountPath;
       try {
@@ -1412,7 +1414,6 @@ public class StorageManagerTest {
         System.out.println("Fail to clean up all the components:" + e.getMessage());
       }
     }
-     */
   }
 
   // helpers
