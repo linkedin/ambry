@@ -46,7 +46,7 @@ public class MockHelixAccountServiceFactory extends HelixAccountServiceFactory {
   public MockHelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       Notifier<String> notifier, String updaterThreadPrefix, Router router) {
     super(new HelixPropertyStoreConfig(verifiableProperties), new HelixAccountServiceConfig(verifiableProperties),
-        new AccountServiceMetrics(metricRegistry, false), notifier);
+        new AccountServiceMetrics(metricRegistry), notifier);
     HelixAccountServiceConfig config = new HelixAccountServiceConfig(verifiableProperties);
     this.updaterThreadPrefix = updaterThreadPrefix;
     this.router = router;

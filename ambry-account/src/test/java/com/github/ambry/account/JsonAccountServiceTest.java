@@ -69,7 +69,7 @@ public class JsonAccountServiceTest {
 
     accountJsonFilePath = configPath.resolve("accounts.json");
 
-    accountService = new JsonAccountService(accountJsonFilePath, new AccountServiceMetrics(new MetricRegistry(), false), null,
+    accountService = new JsonAccountService(accountJsonFilePath, new AccountServiceMetrics(new MetricRegistry()), null,
         accountConfig);
     accountService.init();
   }

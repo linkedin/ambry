@@ -62,20 +62,17 @@ public class AccountDao {
 
   // Account table query strings
   private final String insertAccountsSql;
-  private final String insertAccountsSqlNew;
   private final String getAccountsSinceSql;
   private final String updateAccountsSql;
-  private final String updateAccountsSqlNew;
 
   // Container table query strings
   private final String insertContainersSql;
-  private final String insertContainersSqlNew;
   private final String updateContainersSql;
-  private final String updateContainersSqlNew;
   private final String getContainersSinceSql;
   private final String getContainersByAccountSql;
   private final String getContainerByNameSql;
   private final String getContainerByIdSql;
+
 
   /**
    * Types of MySql statements.
@@ -87,9 +84,6 @@ public class AccountDao {
   public AccountDao(MySqlDataAccessor dataAccessor) {
     this.dataAccessor = dataAccessor;
     insertAccountsSql =
-        String.format("insert into %s (%s, %s, %s, %s) values (?, ?, now(3), now(3))", ACCOUNT_TABLE, ACCOUNT_INFO,
-            VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    insertAccountsSqlNew =
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, ?, now(3), now(3))",
             ACCOUNT_TABLE, ACCOUNT_INFO, VERSION, ACCOUNT_ID, ACCOUNT_NAME, ACCOUNT_STATUS, CREATION_TIME,
             LAST_MODIFIED_TIME);
@@ -97,15 +91,9 @@ public class AccountDao {
         String.format("select %s, %s, %s from %s where %s > ?", ACCOUNT_INFO, VERSION, LAST_MODIFIED_TIME,
             ACCOUNT_TABLE, LAST_MODIFIED_TIME);
     updateAccountsSql =
-        String.format("update %s set %s = ?, %s = ?, %s = now(3) where %s = ? ", ACCOUNT_TABLE, ACCOUNT_INFO, VERSION,
-            LAST_MODIFIED_TIME, ACCOUNT_ID);
-    updateAccountsSqlNew =
         String.format("update %s set %s = ?, %s = ?, %s = ?, %s = ?, %s = now(3) where %s = ? ", ACCOUNT_TABLE,
             ACCOUNT_INFO, VERSION, ACCOUNT_NAME, ACCOUNT_STATUS, LAST_MODIFIED_TIME, ACCOUNT_ID);
     insertContainersSql =
-        String.format("insert into %s (%s, %s, %s, %s, %s) values (?, ?, ?, now(3), now(3))", CONTAINER_TABLE,
-            ACCOUNT_ID, CONTAINER_INFO, VERSION, CREATION_TIME, LAST_MODIFIED_TIME);
-    insertContainersSqlNew =
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, ?, ?, now(3), now(3))",
             CONTAINER_TABLE, ACCOUNT_ID, CONTAINER_INFO, VERSION, CONTAINER_ID, CONTAINER_NAME, CONTAINER_STATUS,
             CREATION_TIME, LAST_MODIFIED_TIME);
@@ -116,9 +104,6 @@ public class AccountDao {
         String.format("select %s, %s, %s, %s from %s where %s = ?", ACCOUNT_ID, CONTAINER_INFO, VERSION,
             LAST_MODIFIED_TIME, CONTAINER_TABLE, ACCOUNT_ID);
     updateContainersSql =
-        String.format("update %s set %s = ?, %s = ?, %s = now(3) where %s = ? AND %s = ? ", CONTAINER_TABLE,
-            CONTAINER_INFO, VERSION, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID);
-    updateContainersSqlNew =
         String.format("update %s set %s = ?, %s = ?, %s = ?, %s = ?, %s = now(3) where %s = ? AND %s = ? ",
             CONTAINER_TABLE, CONTAINER_INFO, VERSION, CONTAINER_NAME, CONTAINER_STATUS, LAST_MODIFIED_TIME, ACCOUNT_ID,
             CONTAINER_ID);
@@ -279,7 +264,6 @@ public class AccountDao {
     }
   }
 
-
   /**
    * Convert a query result set to a list of containers.
    * @param resultSet the result set.
@@ -311,28 +295,17 @@ public class AccountDao {
    * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
    * @param accountsInfo information of updated Accounts
    * @param batchSize number of statements to be executed in one batch
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
-  public void updateAccounts(List<AccountUpdateInfo> accountsInfo, int batchSize,
-      boolean disableGenerateColumn) throws SQLException {
+  public synchronized void updateAccounts(List<AccountUpdateInfo> accountsInfo, int batchSize) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
 
       AccountUpdateBatch accountUpdateBatch;
-      if (disableGenerateColumn) {
-        accountUpdateBatch =
-            new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSqlNew, true),
-                dataAccessor.getPreparedStatement(updateAccountsSqlNew, true),
-                dataAccessor.getPreparedStatement(insertContainersSqlNew, true),
-                dataAccessor.getPreparedStatement(updateContainersSqlNew, true));
-      } else {
-        accountUpdateBatch =
-            new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSql, true),
-                dataAccessor.getPreparedStatement(updateAccountsSql, true),
-                dataAccessor.getPreparedStatement(insertContainersSql, true),
-                dataAccessor.getPreparedStatement(updateContainersSql, true));
-      }
+      accountUpdateBatch = new AccountUpdateBatch(dataAccessor.getPreparedStatement(insertAccountsSql, true),
+          dataAccessor.getPreparedStatement(updateAccountsSql, true),
+          dataAccessor.getPreparedStatement(insertContainersSql, true),
+          dataAccessor.getPreparedStatement(updateContainersSql, true));
 
       // Disable auto commits
       dataAccessor.setAutoCommit(false);
@@ -363,17 +336,17 @@ public class AccountDao {
 
         // Add account to insert/update batch if it was either added or modified.
         if (isAccountAdded) {
-          accountUpdateBatch.addAccount(account, disableGenerateColumn);
+          accountUpdateBatch.addAccount(account);
         } else if (isAccountUpdated) {
-          accountUpdateBatch.updateAccount(account, disableGenerateColumn);
+          accountUpdateBatch.updateAccount(account);
         }
         // Add new containers for batch inserts
         for (Container container : addedContainers) {
-          accountUpdateBatch.addContainer(account.getId(), container, disableGenerateColumn);
+          accountUpdateBatch.addContainer(account.getId(), container);
         }
         // Add updated containers for batch updates
         for (Container container : updatedContainers) {
-          accountUpdateBatch.updateContainer(account.getId(), container, disableGenerateColumn);
+          accountUpdateBatch.updateContainer(account.getId(), container);
         }
 
         batchCount += accountUpdateCount;
@@ -402,11 +375,9 @@ public class AccountDao {
    * @param statement {@link PreparedStatement} for mysql queries
    * @param account {@link Account} being added to mysql
    * @param statementType {@link StatementType} of mysql query such as insert or update.
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
-  private void bindAccount(PreparedStatement statement, Account account, StatementType statementType,
-      boolean disableGenerateColumn)
+  private void bindAccount(PreparedStatement statement, Account account, StatementType statementType)
       throws SQLException {
     String accountInJson;
     try {
@@ -418,22 +389,16 @@ public class AccountDao {
       case Insert:
         statement.setString(1, accountInJson);
         statement.setInt(2, account.getSnapshotVersion());
-        if (disableGenerateColumn) {
-          statement.setInt(3, account.getId());
-          statement.setString(4, account.getName());
-          statement.setString(5, account.getStatus().toString());
-        }
+        statement.setInt(3, account.getId());
+        statement.setString(4, account.getName());
+        statement.setString(5, account.getStatus().toString());
         break;
       case Update:
         statement.setString(1, accountInJson);
         statement.setInt(2, (account.getSnapshotVersion() + 1));
-        if (disableGenerateColumn) {
-          statement.setString(3, account.getName());
-          statement.setString(4, account.getStatus().toString());
-          statement.setInt(5, account.getId());
-        } else {
-          statement.setInt(3, account.getId());
-        }
+        statement.setString(3, account.getName());
+        statement.setString(4, account.getStatus().toString());
+        statement.setInt(5, account.getId());
         break;
     }
   }
@@ -444,11 +409,10 @@ public class AccountDao {
    * @param accountId Id of {@link Account} whose {@link Container} is being added to mysql
    * @param container {@link Container} being added to mysql
    * @param statementType {@link StatementType} of mysql query such as insert or update.
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
    * @throws SQLException
    */
   private void bindContainer(PreparedStatement statement, int accountId, Container container,
-      StatementType statementType, boolean disableGenerateColumn) throws SQLException {
+      StatementType statementType) throws SQLException {
     String containerInJson;
     try {
       containerInJson = objectMapper.writeValueAsString(container);
@@ -460,24 +424,17 @@ public class AccountDao {
         statement.setInt(1, accountId);
         statement.setString(2, containerInJson);
         statement.setInt(3, container.getSnapshotVersion());
-        if (disableGenerateColumn) {
-          statement.setInt(4, container.getId());
-          statement.setString(5, container.getName());
-          statement.setString(6, container.getStatus().toString());
-        }
+        statement.setInt(4, container.getId());
+        statement.setString(5, container.getName());
+        statement.setString(6, container.getStatus().toString());
         break;
       case Update:
         statement.setString(1, containerInJson);
         statement.setInt(2, (container.getSnapshotVersion() + 1));
-        if (disableGenerateColumn) {
-          statement.setString(3, container.getName());
-          statement.setString(4, container.getStatus().toString());
-          statement.setInt(5, accountId);
-          statement.setInt(6, container.getId());
-        } else {
-          statement.setInt(3, accountId);
-          statement.setInt(4, container.getId());
-        }
+        statement.setString(3, container.getName());
+        statement.setString(4, container.getStatus().toString());
+        statement.setInt(5, accountId);
+        statement.setInt(6, container.getId());
     }
   }
 
@@ -529,11 +486,10 @@ public class AccountDao {
     /**
      * Adds {@link Account} to its insert {@link PreparedStatement}'s batch.
      * @param account {@link Account} to be inserted.
-     * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
      * @throws SQLException
      */
-    public void addAccount(Account account, boolean disableGenerateColumn) throws SQLException {
-      bindAccount(insertAccountStatement, account, StatementType.Insert, disableGenerateColumn);
+    public void addAccount(Account account) throws SQLException {
+      bindAccount(insertAccountStatement, account, StatementType.Insert);
       insertAccountStatement.addBatch();
       ++insertAccountCount;
     }
@@ -541,11 +497,10 @@ public class AccountDao {
     /**
      * Adds {@link Account} to its update {@link PreparedStatement}'s batch.
      * @param account {@link Account} to be updated.
-     * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
      * @throws SQLException
      */
-    public void updateAccount(Account account, boolean disableGenerateColumn) throws SQLException {
-      bindAccount(updateAccountStatement, account, StatementType.Update, disableGenerateColumn);
+    public void updateAccount(Account account) throws SQLException {
+      bindAccount(updateAccountStatement, account, StatementType.Update);
       updateAccountStatement.addBatch();
       ++updateAccountCount;
     }
@@ -554,11 +509,10 @@ public class AccountDao {
      * Adds {@link Container} to its insert {@link PreparedStatement}'s batch.
      * @param accountId account id of the Container.
      * @param container {@link Container} to be inserted.
-     * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
      * @throws SQLException
      */
-    public void addContainer(int accountId, Container container, boolean disableGenerateColumn) throws SQLException {
-      bindContainer(insertContainerStatement, accountId, container, StatementType.Insert, disableGenerateColumn);
+    public void addContainer(int accountId, Container container) throws SQLException {
+      bindContainer(insertContainerStatement, accountId, container, StatementType.Insert);
       insertContainerStatement.addBatch();
       ++insertContainerCount;
     }
@@ -567,11 +521,10 @@ public class AccountDao {
      * Adds {@link Container} to its update {@link PreparedStatement}'s batch.
      * @param accountId account id of the Container.
      * @param container {@link Container} to be updated.
-     * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
      * @throws SQLException
      */
-    public void updateContainer(int accountId, Container container, boolean disableGenerateColumn) throws SQLException {
-      bindContainer(updateContainerStatement, accountId, container, StatementType.Update, disableGenerateColumn);
+    public void updateContainer(int accountId, Container container) throws SQLException {
+      bindContainer(updateContainerStatement, accountId, container, StatementType.Update);
       updateContainerStatement.addBatch();
       ++updateContainerCount;
     }

@@ -33,15 +33,9 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String WRITE_CACHE_AFTER_UPDATE = MYSQL_ACCOUNT_SERVICE_PREFIX + "write.cache.after.update";
   public static final String MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "max.major.version.for.semantic.schema.dataset";
-  public static final String ENABLE_NEW_DATABASE_FOR_MIGRATION =
-      MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.new.database.for.migration";
-  public static final String IGNORE_NEW_DATABASE_UPLOAD_ERROR =
-      MYSQL_ACCOUNT_SERVICE_PREFIX + "ignore.new.database.upload.error";
-  public static final String ENABLE_GET_FROM_NEW_DB_ONLY = MYSQL_ACCOUNT_SERVICE_PREFIX + "enable.get.from.new.db.only";
   public static final String LIST_DATASETS_MAX_RESULT = MYSQL_ACCOUNT_SERVICE_PREFIX + "list.datasets.max.results";
   public static final String LIST_DATASET_VERSIONS_MAX_RESULT =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "list.dataset.versions.max.result";
-
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -153,27 +147,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public final int maxMajorVersionForSemanticSchemaDataset;
 
   /**
-   * If true, enable upload to new database for migration.
-   */
-  @Config(ENABLE_NEW_DATABASE_FOR_MIGRATION)
-  @Default("false")
-  public final boolean enableNewDatabaseForMigration;
-
-  /**
-   * If true, ignore the error when uploading data to new database.
-   */
-  @Config(IGNORE_NEW_DATABASE_UPLOAD_ERROR)
-  @Default("true")
-  public final boolean ignoreNewDatabaseUploadError;
-
-  /**
-   * If true, enable get from new database only.
-   */
-  @Config(ENABLE_GET_FROM_NEW_DB_ONLY)
-  @Default("false")
-  public final boolean enableGetFromNewDbOnly;
-
-  /**
    * Max number of dataset names for a list datasets call.
    */
   @Config(LIST_DATASETS_MAX_RESULT)
@@ -195,13 +168,9 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
     updaterShutDownTimeoutMinutes =
         verifiableProperties.getIntInRange(UPDATER_SHUT_DOWN_TIMEOUT_MINUTES, 2, 1, Integer.MAX_VALUE);
     backupDir = verifiableProperties.getString(BACKUP_DIRECTORY_KEY, "");
-    updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
-    enableNewDatabaseForMigration = verifiableProperties.getBoolean(ENABLE_NEW_DATABASE_FOR_MIGRATION, false);
-    ignoreNewDatabaseUploadError = verifiableProperties.getBoolean(IGNORE_NEW_DATABASE_UPLOAD_ERROR, true);
-    enableGetFromNewDbOnly = verifiableProperties.getBoolean(ENABLE_GET_FROM_NEW_DB_ONLY, false);
-    dbInfoNew = enableNewDatabaseForMigration ? verifiableProperties.getString(DB_INFO_NEW)
-        : verifiableProperties.getString(DB_INFO_NEW, "");
+    dbInfoNew = verifiableProperties.getString(DB_INFO_NEW);
     backupDirNew = verifiableProperties.getString(BACKUP_DIRECTORY_KEY_NEW, "");
+    updateDisabled = verifiableProperties.getBoolean(UPDATE_DISABLED, false);
     maxBackupFileCount = verifiableProperties.getIntInRange(MAX_BACKUP_FILE_COUNT, 10, 1, Integer.MAX_VALUE);
     dbExecuteBatchSize = verifiableProperties.getIntInRange(DB_EXECUTE_BATCH_SIZE, 50, 1, Integer.MAX_VALUE);
     zkClientConnectString = verifiableProperties.getString(ZK_CLIENT_CONNECT_STRING_KEY, null);
