@@ -309,7 +309,7 @@ public class HelixBootstrapUpgradeTool {
           listOpt.add(maxInstancesInOneResourceForFullAutoOpt);
           ToolUtils.ensureOrExit(listOpt, options, parser);
           HelixBootstrapUpgradeUtil.validate(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterNamePrefix,
-              dcs, stateModelDef, dataNodeConfigSourceType, maxInstancesInOneResourceForFullAuto.intValue());
+              dcs, stateModelDef, dataNodeConfigSourceType, maxInstancesInOneResourceForFullAuto);
           break;
         case ListSealedPartition:
           HelixBootstrapUpgradeUtil.listSealedPartition(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
@@ -321,9 +321,11 @@ public class HelixBootstrapUpgradeTool {
           break;
         case MigrateToFullAuto:
           listOpt.add(wagedConfigFilePathOpt);
+          listOpt.add(maxInstancesInOneResourceForFullAutoOpt);
           ToolUtils.ensureOrExit(listOpt, options, parser);
-          HelixBootstrapUpgradeUtil.migrateToFullAuto(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath,
-              clusterNamePrefix, dcs, resources, options.has(dryRun), wagedConfigFilePath);
+          HelixBootstrapUpgradeUtil.migrateToFullAuto(partitionLayoutPath, zkLayoutPath, clusterNamePrefix, dcs,
+              resources, options.has(dryRun), wagedConfigFilePath, hardwareLayoutPath,
+              maxInstancesInOneResourceForFullAuto);
           break;
         case ResetPartition:
         case EnablePartition:
