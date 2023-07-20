@@ -1256,6 +1256,8 @@ public class StorageManagerTest {
     String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
     String oldBaseMountPath = TestHardwareLayout.baseMountPath;
     TestHardwareLayout.baseMountPath = tempDirPath + "/mnt";
+    long oldReplicaCapcityInBytes = TestPartitionLayout.defaultReplicaCapacityInBytes;
+    TestPartitionLayout.defaultReplicaCapacityInBytes = 1024;
     TestHardwareLayout testHardwareLayout =
         new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
     TestPartitionLayout testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 100, null);
@@ -1403,6 +1405,7 @@ public class StorageManagerTest {
      */
     } finally {
       TestHardwareLayout.baseMountPath = oldBaseMountPath;
+      TestPartitionLayout.defaultReplicaCapacityInBytes = oldReplicaCapcityInBytes;
       try {
         Utils.deleteFileOrDirectory(new File(tempDirPath));
         clusterMap.close();
