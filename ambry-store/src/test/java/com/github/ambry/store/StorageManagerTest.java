@@ -1345,7 +1345,7 @@ public class StorageManagerTest {
       assertTrue(clusterMap.isDataNodeInFullAutoMode(localNode));
       // Set every replicas to error state
       sendStateTransitionMessages(helixParticipant.getHelixManager(), "10000", replicas, "OFFLINE", "BOOTSTRAP");
-      Thread.sleep(1000);
+      Thread.sleep(2000);
 
       long failureCountBefore = storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount();
       // The case where there is no failed disk, running handler doesn't change anything.

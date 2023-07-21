@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -84,6 +85,7 @@ public class StorageManager implements StoreManager {
   private final ClusterParticipant primaryClusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
+  private final Set<ReplicaId> replicaIdsOnFailedDisks = new ConcurrentSkipListSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
   private final AccountService accountService;
   private Runnable terminateCallback = null;
@@ -800,10 +802,17 @@ public class StorageManager implements StoreManager {
       // 5. remove store and delete all files associated with given replica in Storage Manager
       try {
         if (!removeBlobStore(replica.getPartitionId())) {
-          logger.error("Removing blob store {} returns false, but this is DROPPED state, so ignore", partitionName);
+          throw new StateTransitionException("Failed to remove store " + partitionName + " from storage manager",
+              ReplicaOperationFailure);
         }
-      } catch (IOException | StoreException e) {
-        logger.error("Failed to delete directory for store {}, but this is DROPPED state, so ignore", partitionName, e);
+      } catch (StateTransitionException | IOException | StoreException e) {
+        if (replicaIdsOnFailedDisks.contains(replica)) {
+          logger.error("Failed to remove blob store for {}, but this is a a failed disk {} so ignore", partitionName,
+              replica.getDiskId().getMountPath());
+        } else {
+          throw new StateTransitionException("Failed to delete directory for store " + partitionName,
+              ReplicaOperationFailure);
+        }
       }
       partitionNameToReplicaId.remove(partitionName);
       logger.info("Partition {} is successfully dropped on current node", partitionName);
@@ -931,6 +940,7 @@ public class StorageManager implements StoreManager {
         updateDiskCapacity(healthyDiskCapacity);
         logger.info("Successfully remove failed disks {} and replicas {} from memory when handling disk failure",
             newFailedDisks, replicasOnFailedDisks);
+        replicaIdsOnFailedDisks.addAll(replicasOnFailedDisks);
         success = true;
       } catch (Exception e) {
         storeMainMetrics.handleDiskFailureErrorCount.inc();
