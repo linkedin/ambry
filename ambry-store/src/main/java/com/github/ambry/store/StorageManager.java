@@ -84,7 +84,6 @@ public class StorageManager implements StoreManager {
   private final ClusterParticipant primaryClusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
-  private final Set<ReplicaId> replicaIdsOnFailedDisks = ConcurrentHashMap.newKeySet();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
   private final AccountService accountService;
   private Runnable terminateCallback = null;
@@ -242,6 +241,15 @@ public class StorageManager implements StoreManager {
   public Store getStore(PartitionId id, boolean skipStateCheck) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null ? diskManager.getStore(id, skipStateCheck) : null;
+  }
+
+  /**
+   * True is the replica is on a failed disk
+   * @param replicaId
+   * @return
+   */
+  boolean isReplicaOnFailedDisk(ReplicaId replicaId) {
+    return !isDiskAvailable(replicaId.getDiskId());
   }
 
   void setTerminateCallback(Runnable cb) {
@@ -755,7 +763,7 @@ public class StorageManager implements StoreManager {
       // INACTIVE -> OFFLINE -> DROPPED steps). If so, go through decommission steps to make sure peer replicas are
       // caught up with local replica and we update DataNodeConfig in Helix.
       if (store.recoverFromDecommission() || (clusterMap.isDataNodeInFullAutoMode(replica.getDataNodeId())
-          && store.getPreviousState() == ReplicaState.OFFLINE && !replicaIdsOnFailedDisks.contains(replica))) {
+          && store.getPreviousState() == ReplicaState.OFFLINE && !isReplicaOnFailedDisk(replica))) {
         try {
           resumeDecommission(partitionName);
         } catch (Exception e) {
@@ -804,7 +812,7 @@ public class StorageManager implements StoreManager {
               ReplicaOperationFailure);
         }
       } catch (StateTransitionException | IOException | StoreException e) {
-        if (replicaIdsOnFailedDisks.contains(replica)) {
+        if (isReplicaOnFailedDisk(replica)) {
           logger.error("Failed to remove blob store for {}, but this is a a failed disk {} so ignore", partitionName,
               replica.getDiskId().getMountPath());
         } else {
@@ -936,7 +944,6 @@ public class StorageManager implements StoreManager {
         resetPartitions(replicasOnFailedDisks);
         // 4. update disk capacity
         updateDiskCapacity(healthyDiskCapacity);
-        replicaIdsOnFailedDisks.addAll(replicasOnFailedDisks);
         success = true;
       } catch (Exception e) {
         storeMainMetrics.handleDiskFailureErrorCount.inc();
