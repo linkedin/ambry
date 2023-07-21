@@ -755,7 +755,7 @@ public class StorageManager implements StoreManager {
       // INACTIVE -> OFFLINE -> DROPPED steps). If so, go through decommission steps to make sure peer replicas are
       // caught up with local replica and we update DataNodeConfig in Helix.
       if (store.recoverFromDecommission() || (clusterMap.isDataNodeInFullAutoMode(replica.getDataNodeId())
-          && store.getPreviousState() == ReplicaState.OFFLINE)) {
+          && store.getPreviousState() == ReplicaState.OFFLINE && !replicaIdsOnFailedDisks.contains(replica))) {
         try {
           resumeDecommission(partitionName);
         } catch (Exception e) {
