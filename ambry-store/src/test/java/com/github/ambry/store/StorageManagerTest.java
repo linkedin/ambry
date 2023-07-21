@@ -1345,7 +1345,7 @@ public class StorageManagerTest {
       assertTrue(clusterMap.isDataNodeInFullAutoMode(localNode));
       // Set every replicas to error state
       sendStateTransitionMessages(helixParticipant.getHelixManager(), "10000", replicas, "OFFLINE", "BOOTSTRAP");
-      Thread.sleep(2000);
+      Thread.sleep(1000);
 
       long failureCountBefore = storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount();
       // The case where there is no failed disk, running handler doesn't change anything.
@@ -1479,6 +1479,9 @@ public class StorageManagerTest {
       assertNotNull(storageManager.getDiskManager(replicaId.getPartitionId()));
     }
     // Now send the message from offline to dropped
+    // Remove one replica's directory to simulate disk error, this should not be an issue for disk failure handling
+    ReplicaId replicaToIOError = replicasOnFailedDisk.get(0);
+    Utils.deleteFileOrDirectory(new File(replicaToIOError.getReplicaPath()));
     sendStateTransitionMessages(helixManager, "10000", replicasOnFailedDisk, "OFFLINE", "DROPPED");
     Thread.sleep(1000);
     // replicas should be removed from helix clustermap

@@ -47,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -85,7 +84,7 @@ public class StorageManager implements StoreManager {
   private final ClusterParticipant primaryClusterParticipant;
   private final ReplicaSyncUpManager replicaSyncUpManager;
   private final Set<String> unexpectedDirs = new HashSet<>();
-  private final Set<ReplicaId> replicaIdsOnFailedDisks = new ConcurrentSkipListSet<>();
+  private final Set<ReplicaId> replicaIdsOnFailedDisks = ConcurrentHashMap.newKeySet();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
   private final AccountService accountService;
   private Runnable terminateCallback = null;
@@ -391,7 +390,7 @@ public class StorageManager implements StoreManager {
 
   @Override
   public boolean removeBlobStore(PartitionId id) throws IOException, StoreException {
-    DiskManager diskManager = partitionToDiskManager.get(id);
+    DiskManager diskManager = partitionToDiskManager.remove(id);
     if (diskManager == null) {
       logger.info("Store {} is not found in storage manager", id);
       return false;
@@ -400,7 +399,6 @@ public class StorageManager implements StoreManager {
       logger.error("Fail to remove store {} from disk manager", id);
       return false;
     }
-    partitionToDiskManager.remove(id);
     logger.info("Store {} is successfully removed from storage manager", id);
     return true;
   }
@@ -938,8 +936,6 @@ public class StorageManager implements StoreManager {
         resetPartitions(replicasOnFailedDisks);
         // 4. update disk capacity
         updateDiskCapacity(healthyDiskCapacity);
-        logger.info("Successfully remove failed disks {} and replicas {} from memory when handling disk failure",
-            newFailedDisks, replicasOnFailedDisks);
         replicaIdsOnFailedDisks.addAll(replicasOnFailedDisks);
         success = true;
       } catch (Exception e) {

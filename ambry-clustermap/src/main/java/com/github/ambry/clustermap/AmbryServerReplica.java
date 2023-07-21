@@ -114,4 +114,24 @@ class AmbryServerReplica extends AmbryReplica {
   public void markDiskUp() {
     disk.onDiskOk();
   }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    AmbryServerReplica replica = (AmbryServerReplica) o;
+    // Replicas are the same partition and in the same disk
+    return this.disk == replica.disk && replica.getPartitionId().equals(replica.getPartitionId());
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(this.disk.getDataNode().getHostname(), this.disk.getDataNode().getPort(),
+        this.disk.getMountPath(), this.getPartitionId());
+  }
 }

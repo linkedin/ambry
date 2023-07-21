@@ -454,14 +454,13 @@ public class DiskManager {
       } else if (!compactionManager.removeBlobStore(store)) {
         logger.error("Fail to remove store {} from compaction manager.", id);
       } else {
-        store.deleteStoreFiles();
-        // Since all the files are either deleted or returned to reserve pool, increase available space in the disk
-        disk.increaseAvailableSpaceInBytes(partitionToReplicaMap.get(id).getCapacityInBytes());
-        logger.info("Store {} is successfully removed from disk manager", id);
         stores.remove(id);
         stoppedReplicas.remove(id.toPathString());
-        partitionToReplicaMap.remove(id);
+        ReplicaId replicaId = partitionToReplicaMap.remove(id);
         logger.info("Store {} is successfully removed from disk manager", id);
+        store.deleteStoreFiles();
+        // Since all the files are either deleted or returned to reserve pool, increase available space in the disk
+        disk.increaseAvailableSpaceInBytes(replicaId.getCapacityInBytes());
         succeed = true;
       }
     } finally {
