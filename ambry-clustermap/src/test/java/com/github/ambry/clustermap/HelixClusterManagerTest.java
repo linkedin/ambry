@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright 2017 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -1028,7 +1028,7 @@ public class HelixClusterManagerTest {
       InstanceConfig instanceConfig =
           helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
       instanceConfig.addTag(instanceGroupTag);
-      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode, true));
     }
 
     // 2. Test data node rollback for a resource present in /AdminConfigs/FullAutoMigration
@@ -1042,7 +1042,9 @@ public class HelixClusterManagerTest {
     helixCluster.refreshIdealState();
     for (DataNode dataNode : allLocalDcDataNodes) {
       assertTrue("Resource should considered as FULL AUTO while it is rolling back to help with local disk selection",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode, true));
+      assertFalse("Resource should considered NOT IN FULL AUTO when not checking the property store",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode, false));
     }
   }
 
@@ -1084,7 +1086,10 @@ public class HelixClusterManagerTest {
     idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
     helixCluster.refreshIdealState();
     for (DataNode dataNode : allLocalDcDataNodes) {
-      assertFalse("Resource should considered as SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+      assertFalse("Resource should considered as SEMI AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode, true));
+      assertFalse("Resource should considered as SEMI AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode, false));
     }
   }
 

@@ -407,7 +407,7 @@ public class HelixClusterManager implements ClusterMap {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
     try {
       ReplicaId bootstrapReplica =
-          isDataNodeInFullAutoMode(dataNodeId) ? getBootstrapReplicaInFullAuto(partitionIdStr, dataNodeId)
+          isDataNodeInFullAutoMode(dataNodeId, true) ? getBootstrapReplicaInFullAuto(partitionIdStr, dataNodeId)
               : getBootstrapReplicaInSemiAuto(partitionIdStr, dataNodeId);
       // For now this method is only called by server which new replica will be added to. So if datanode equals to current
       // node, we temporarily add this into a map (because we don't know whether store addition in storage manager
@@ -443,7 +443,19 @@ public class HelixClusterManager implements ClusterMap {
    */
   @Override
   public boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId) {
-    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+    return isDataNodeInFullAutoMode(dataNodeId, false);
+  }
+
+  /**
+   * Return if the data node is in full auto mode. If the {@code shouldCheckPropertyStore} is true,
+   * this mode would also check if the data node is going through FULL_AUTO migration from property
+   * store.
+   * @param dataNodeId The {@link DataNodeId} to check.
+   * @param shouldCheckPropertyStore True to check property store if this data node id is in full auto
+   *                                 migration and return true if that's the case.
+   * @return
+   */
+  boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId, boolean shouldCheckPropertyStore) {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
     if (instanceNameToAmbryDataNode.get(instanceName) == null) {
       throw new IllegalArgumentException("Instance " + instanceName + " doesn't exist");
@@ -470,12 +482,19 @@ public class HelixClusterManager implements ClusterMap {
     // Make sure all the resources turned on FULL_AUTO mode
     String tag = tags.iterator().next();
     ResourceProperty property = dcToTagToResourceProperty.get(dcName).get(tag);
-    if (property != null) {
-      // Return true if either the resource is in Full-auto or we are rolling back from Full-auto to Semi-auto
-      return property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO) || ((zNRecord != null)
-          && zNRecord.getListField(RESOURCES_STR).contains(property.name));
+    if (property == null) {
+      return false;
     }
-    return false;
+    // Return true if either the resource is in Full-auto or we are rolling back from Full-auto to Semi-auto
+    if (property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
+      return true;
+    }
+    // If we are here, then ResourceProperty shows RebalanceMode as NOT FULL_AUTO.
+    if (!shouldCheckPropertyStore) {
+      return false;
+    }
+    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+    return zNRecord != null && zNRecord.getListField(RESOURCES_STR).contains(property.name);
   }
 
   @Override
