@@ -449,9 +449,10 @@ class DeleteOperation {
 
             // treat the delete command as a success
             operationException.set(null);
+            routerMetrics.offlineRepairOnDeleteCount.inc();
             logger.info("RepairRequest : inject repair request {} to the database {}", record, repairRequestsDb);
           } catch (Exception e) {
-            // LOCAL_CONSISTENCY_TODO: metrics
+            routerMetrics.offlineRepairOnDeleteErrorCount.inc();
             logger.error("RepairRequest : failed to write the {} to the database {}", record, repairRequestsDb);
           }
         }

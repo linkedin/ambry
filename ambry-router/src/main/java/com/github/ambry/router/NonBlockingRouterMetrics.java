@@ -128,6 +128,8 @@ public class NonBlockingRouterMetrics {
   public final Counter undeleteBlobErrorCount;
   public final Counter updateBlobTtlErrorCount;
   public final Counter replicateBlobErrorCount;
+  public final Counter offlineRepairOnDeleteCount;
+  public final Counter offlineRepairOnDeleteErrorCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
 
@@ -468,6 +470,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationFailureWithUnsetExceptionCount"));
     missingDataChunkErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "MissingDataChunkErrorCount"));
+    offlineRepairOnDeleteCount =
+        metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnDeleteCount"));
+    offlineRepairOnDeleteErrorCount =
+        metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnDeleteErrorCount"));
 
     // Performance metrics for operation managers.
     putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));

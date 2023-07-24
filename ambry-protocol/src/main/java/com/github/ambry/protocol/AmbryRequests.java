@@ -1144,8 +1144,6 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     }
-
-    // LOCAL_CONSISTENCY_TODO: add metrics for the two type of repairs.
     completeReplicateRequest(request, replicateBlobRequest, errorCode, startProcessTime);
   }
 
@@ -1819,6 +1817,13 @@ public class AmbryRequests implements RequestAPI {
     public void visit(ReplicateBlobRequest replicateBlobRequest) {
       metrics.replicateBlobRequestQueueTimeInMs.update(requestQueueTime);
       metrics.replicateBlobRequestRate.mark();
+      if (replicateBlobRequest.getVersionId() == ReplicateBlobRequest.VERSION_2) {
+        if (replicateBlobRequest.getOperationType() == RequestOrResponseType.TtlUpdateRequest) {
+          metrics.replicateBlobRequestOnTtlUpdateRate.mark();
+        } else {
+          metrics.replicateBlobRequestOnDeleteRate.mark();
+        }
+      }
       metrics.replicateBlobProcessingTimeInMs.update(requestProcessingTime);
       responseQueueTimeHistogram = metrics.replicateBlobResponseQueueTimeInMs;
       responseSendTimeHistogram = metrics.replicateBlobSendTimeInMs;
