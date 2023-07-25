@@ -1346,6 +1346,11 @@ public class ReplicaThread implements Runnable {
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName, remoteColoGetRequestForStandby);
   }
 
+  /**
+   * Advances local token to make progress on replication
+   * @param remoteReplicaInfo Remote replica info object
+   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   */
   protected void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
     remoteReplicaInfo.resetReplicationRetryCount();
     remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);

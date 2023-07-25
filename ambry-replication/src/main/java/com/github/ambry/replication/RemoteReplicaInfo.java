@@ -110,16 +110,28 @@ public class RemoteReplicaInfo {
     this.MAX_REPLICATION_RETRY_COUNT = replicationConfig.maxReplicationRetryCount;
   }
 
+  /**
+   * Increments replicationRetryCount by 1
+   * @return replicationRetryCount
+   */
   public long incReplicationRetryCount() {
     this.replicationRetryCount += 1;
     return this.replicationRetryCount;
   }
 
+  /**
+   * Resets replicationRetryCount to 0
+   * @return replicationRetryCount
+   */
   public long resetReplicationRetryCount() {
     this.replicationRetryCount = 0;
     return this.replicationRetryCount;
   }
 
+  /**
+   * Checks if replicationRetryCount has exceeded the max number of retries allowed
+   * @return True if replicationRetryCount has exceeded the max retries, false otherwise
+   */
   public boolean isReplicationRetryCountMaxed() {
     return this.replicationRetryCount >= MAX_REPLICATION_RETRY_COUNT;
   }
