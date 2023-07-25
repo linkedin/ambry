@@ -261,9 +261,10 @@ public class ReplicationManager extends ReplicationEngine {
       // to determine the token flush interval
       FindToken findToken =
           this.tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
-      RemoteReplicaInfo remoteReplicaInfo = new RemoteReplicaInfo(remoteReplica, replicaId, store, findToken,
-          TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
-          SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+      RemoteReplicaInfo remoteReplicaInfo =
+          new RemoteReplicaInfo(this.replicationConfig, remoteReplica, replicaId, store, findToken,
+              TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
+              SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
 
       replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerPartitionLagInMetric);
       remoteReplicaInfos.add(remoteReplicaInfo);

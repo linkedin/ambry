@@ -40,7 +40,6 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -263,7 +262,8 @@ public class VcrReplicationManager extends ReplicationEngine {
         FindTokenFactory findTokenFactory =
             tokenHelper.getFindTokenFactoryFromReplicaType(peerReplica.getReplicaType());
         RemoteReplicaInfo remoteReplicaInfo =
-            new RemoteReplicaInfo(peerReplica, cloudReplica, store, findTokenFactory.getNewFindToken(),
+            new RemoteReplicaInfo(this.replicationConfig, peerReplica, cloudReplica, store,
+                findTokenFactory.getNewFindToken(),
                 storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
                 SystemTime.getInstance(), peerReplica.getDataNodeId().getPortToConnectTo());
         replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric);

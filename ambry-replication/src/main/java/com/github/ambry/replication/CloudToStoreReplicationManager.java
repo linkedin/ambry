@@ -18,12 +18,12 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -181,7 +181,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     FindTokenFactory findTokenFactory =
         tokenHelper.getFindTokenFactoryFromReplicaType(peerCloudReplica.getReplicaType());
     RemoteReplicaInfo remoteReplicaInfo =
-        new RemoteReplicaInfo(peerCloudReplica, localReplica, store, findTokenFactory.getNewFindToken(),
+        new RemoteReplicaInfo(this.replicationConfig, peerCloudReplica, localReplica, store,
+            findTokenFactory.getNewFindToken(),
             storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
             SystemTime.getInstance(), peerCloudReplica.getDataNodeId().getPortToConnectTo());
     replicationMetrics.addMetricsForRemoteReplicaInfo(remoteReplicaInfo, trackPerDatacenterLagInMetric);

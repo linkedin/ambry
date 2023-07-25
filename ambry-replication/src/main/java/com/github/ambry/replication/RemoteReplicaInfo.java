@@ -15,6 +15,7 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
@@ -69,7 +70,7 @@ public class RemoteReplicaInfo {
   private ReplicaThread replicaThread;
   private long replicationRetryCount;
   // Configurable
-  public static final long MAX_REPLICATION_RETRY_COUNT = 0;
+  public final int MAX_REPLICATION_RETRY_COUNT;
 
   // Metadata response information received for this replica in the most recent replication cycle.
   // This is used during leader based replication to store the missing store messages, remote token info and local lag
@@ -90,6 +91,23 @@ public class RemoteReplicaInfo {
     // ExchangeMetadataResponse is initially empty. It will be populated by replica threads during replication cycles.
     this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
     this.replicationRetryCount = 0;
+    this.MAX_REPLICATION_RETRY_COUNT = 0;
+  }
+
+  public RemoteReplicaInfo(ReplicationConfig replicationConfig, ReplicaId replicaId, ReplicaId localReplicaId,
+      Store localStore, FindToken token, long tokenPersistIntervalInMs, Time time, Port port) {
+    this.replicaId = replicaId;
+    this.localReplicaId = localReplicaId;
+    this.totalBytesReadFromLocalStore = 0;
+    this.localStore = localStore;
+    this.time = time;
+    this.port = port;
+    this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
+    initializeTokens(token);
+    // ExchangeMetadataResponse is initially empty. It will be populated by replica threads during replication cycles.
+    this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
+    this.replicationRetryCount = 0;
+    this.MAX_REPLICATION_RETRY_COUNT = replicationConfig.maxReplicationRetryCount;
   }
 
   public long incReplicationRetryCount() {
