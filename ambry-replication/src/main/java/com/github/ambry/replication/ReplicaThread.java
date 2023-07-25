@@ -1312,7 +1312,7 @@ public class ReplicaThread implements Runnable {
               } else {
                 // If we have a few retries left, then increment the retry count and retry replication
                 long retryCount = remoteReplicaInfo.incReplicationRetryCount();
-                logger.trace(
+                logger.error(
                     "Retrying replication as there are invalid messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
                     threadName, retryCount, remoteReplicaInfo.getToken(),
                     remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
