@@ -67,6 +67,9 @@ public class RemoteReplicaInfo {
   private long localLagFromRemoteStore = -1;
   private long reEnableReplicationTime = 0;
   private ReplicaThread replicaThread;
+  private long replicationRetryCount;
+  // Configurable
+  public static final long MAX_REPLICATION_RETRY_COUNT = 5;
 
   // Metadata response information received for this replica in the most recent replication cycle.
   // This is used during leader based replication to store the missing store messages, remote token info and local lag
@@ -86,6 +89,21 @@ public class RemoteReplicaInfo {
     initializeTokens(token);
     // ExchangeMetadataResponse is initially empty. It will be populated by replica threads during replication cycles.
     this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
+    this.replicationRetryCount = 0;
+  }
+
+  public long incReplicationRetryCount() {
+    this.replicationRetryCount += 1;
+    return this.replicationRetryCount;
+  }
+
+  public long resetReplicationRetryCount() {
+    this.replicationRetryCount = 0;
+    return this.replicationRetryCount;
+  }
+
+  public boolean isReplicationRetryCountMaxed() {
+    return this.replicationRetryCount >= MAX_REPLICATION_RETRY_COUNT;
   }
 
   public ReplicaId getReplicaId() {

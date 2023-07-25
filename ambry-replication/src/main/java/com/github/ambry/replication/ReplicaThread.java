@@ -1305,10 +1305,14 @@ public class ReplicaThread implements Runnable {
                     messageInfoList);
               }
 
-              remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
-              remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-              // reset stored metadata response for this replica
-              remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
+              if (!validMessageDetectionInputStream.hasInvalidMessages()
+                  || remoteReplicaInfo.isReplicationRetryCountMaxed()) {
+                // If there are no invalid messages, or we have maxed out the retries, then advance token
+                advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
+              } else {
+                // If we have a few retries left, then increment the retry count and retry replication
+                remoteReplicaInfo.incReplicationRetryCount();
+              }
 
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
                   remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
@@ -1340,6 +1344,17 @@ public class ReplicaThread implements Runnable {
     long batchStoreWriteTime = time.milliseconds() - startTime;
     replicationMetrics.updateBatchStoreWriteTime(batchStoreWriteTime, totalBytesFixed, totalBlobsFixed,
         replicatingFromRemoteColo, replicatingOverSsl, datacenterName, remoteColoGetRequestForStandby);
+  }
+
+  protected void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    remoteReplicaInfo.resetReplicationRetryCount();
+    remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
+    remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
+    // reset stored metadata response for this replica
+    remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
+    logger.trace("Thread name: {}, updating token {} and lag {} for partition {} for Remote replica {}", threadName,
+        remoteReplicaInfo.getToken(), remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
+        remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
   }
 
   /**
@@ -1564,12 +1579,7 @@ public class ReplicaThread implements Runnable {
         // 3. If metadata response for this replica is now empty, i.e. all the missing keys are received and blob
         // updates for them have been completed, move the remote token forward and update local lag from remote for this replica.
         if (exchangeMetadataResponse.isEmpty()) {
-          remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
-          remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-          logger.trace("Thread name: {}, updating token {} and lag {} for partition {} for Remote replica {}",
-              threadName, exchangeMetadataResponse.remoteToken, exchangeMetadataResponse.localLagFromRemoteInBytes,
-              remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
-          remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
+          advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
         }
       }
     } catch (StoreException e) {
