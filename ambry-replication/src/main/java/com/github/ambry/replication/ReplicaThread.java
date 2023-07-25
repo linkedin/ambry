@@ -1311,7 +1311,12 @@ public class ReplicaThread implements Runnable {
                 advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
               } else {
                 // If we have a few retries left, then increment the retry count and retry replication
-                remoteReplicaInfo.incReplicationRetryCount();
+                long retryCount = remoteReplicaInfo.incReplicationRetryCount();
+                logger.trace(
+                    "Retrying replication as there are invalid messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
+                    threadName, retryCount, remoteReplicaInfo.getToken(),
+                    remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
+                    remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
               }
 
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
