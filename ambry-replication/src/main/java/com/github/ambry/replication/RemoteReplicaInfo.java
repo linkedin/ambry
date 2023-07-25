@@ -70,7 +70,7 @@ public class RemoteReplicaInfo {
   private ReplicaThread replicaThread;
   private long replicationRetryCount;
   // Configurable
-  public final int MAX_REPLICATION_RETRY_COUNT;
+  protected final int MAX_REPLICATION_RETRY_COUNT;
 
   // Metadata response information received for this replica in the most recent replication cycle.
   // This is used during leader based replication to store the missing store messages, remote token info and local lag
