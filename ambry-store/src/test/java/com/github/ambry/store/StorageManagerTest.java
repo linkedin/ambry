@@ -73,7 +73,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
-import org.apache.helix.HelixManager;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONObject;
@@ -1296,7 +1295,6 @@ public class StorageManagerTest {
     PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
     doThrow(new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
         listener).onPartitionBecomeBootstrapFromOffline(anyString());
-    //doReturn(null).when(listener).onPartitionBecomeDroppedFromOffline(anyString());
     helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
     helixParticipant.participate(Collections.emptyList(), null, null);
 
@@ -1364,14 +1362,15 @@ public class StorageManagerTest {
       assertEquals(failureCountBefore, storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount());
 
       // The case where all replicas on this disk are down
+      long successCount = storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount();
       storageManager.getStore(replicasOnFailedDisk.get(replicasOnFailedDisk.size() - 1).getPartitionId(), false)
           .shutdown();
-      verifyDiskFailureSuccess(storageManager, handler, helixParticipant, clusterMap, clusterName, localNode,
-          diskToReplicas, diskToFail);
+      verifyDiskFailureSuccess(storageManager, handler, helixAdmin, clusterMap, clusterName, localNode, diskToReplicas,
+          diskToFail);
 
       // The case to run this again, since there is no new failed disk, running the handler again won't change anything.
       failureCountBefore = storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount();
-      long successCount = storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount();
+      successCount = storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount();
       handler.run();
       assertEquals(failureCountBefore, storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount());
       assertEquals(successCount, storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount());
@@ -1384,8 +1383,8 @@ public class StorageManagerTest {
       for (ReplicaId replica : replicasOnFailedDisk) {
         storageManager.getStore(replica.getPartitionId(), false).shutdown();
       }
-      verifyDiskFailureSuccess(storageManager, handler, helixParticipant, clusterMap, clusterName, localNode,
-          diskToReplicas, diskToFail);
+      verifyDiskFailureSuccess(storageManager, handler, helixAdmin, clusterMap, clusterName, localNode, diskToReplicas,
+          diskToFail);
 
       // The case that all the disks are down.
       AtomicBoolean invoked = new AtomicBoolean();
@@ -1427,8 +1426,8 @@ public class StorageManagerTest {
    * Verify the state after handling a disk failure.
    * @param storageManager The {@link StorageManager}.
    * @param handler The {@link com.github.ambry.store.StorageManager.DiskFailureHandler}.
-   * @param helixParticipant The {@link HelixParticipant}.
-   * @param clusterMap The {@link ClusterMap}
+   * @param helixAdmin The {@link HelixAdmin}.
+   * @param clusterMap The {@link ClusterMap}.
    * @param clusterName The cluster name
    * @param localNode The local node
    * @param diskToReplicas The map from disk id to a list of replicas
@@ -1436,23 +1435,15 @@ public class StorageManagerTest {
    * @throws Exception
    */
   private void verifyDiskFailureSuccess(StorageManager storageManager, StorageManager.DiskFailureHandler handler,
-      HelixParticipant helixParticipant, ClusterMap clusterMap, String clusterName, DataNodeId localNode,
+      HelixAdmin helixAdmin, ClusterMap clusterMap, String clusterName, DataNodeId localNode,
       Map<DiskId, List<ReplicaId>> diskToReplicas, DiskId diskToFail) throws Exception {
-    HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
-    HelixManager helixManager = helixParticipant.getHelixManager();
-
     long failureCountBefore = storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount();
     long successCountBefore = storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount();
+    List<? extends ReplicaId> allReplicaIds = clusterMap.getReplicaIds(localNode);
+    int numDisksInMemory = storageManager.getDiskToDiskManager().size();
     String instanceName = ClusterMapUtils.getInstanceName(localNode.getHostname(), localNode.getPort());
     int failedDisksBefore = handler.getFailedDisks().size();
     int offlineReplicasBefore = getNumberOfReplicaInStateFromMetric("offline", metricRegistry);
-    List<? extends ReplicaId> allReplicaIds = clusterMap.getReplicaIds(localNode);
-    List<ReplicaId> replicasOnFailedDisk = diskToReplicas.get(diskToFail);
-    for (ReplicaId replicaId : replicasOnFailedDisk) {
-      assertNotNull(storageManager.getStore(replicaId.getPartitionId(), true));
-      assertNotNull(storageManager.getReplica(replicaId.getPartitionId().toPathString()));
-      assertNotNull(storageManager.getDiskManager(replicaId.getPartitionId()));
-    }
 
     handler.run();
     Thread.sleep(500); // wait for clustermap to sync with zookeepe
@@ -1461,6 +1452,13 @@ public class StorageManagerTest {
 
     assertEquals("1 more disk failed", failedDisksBefore + 1, handler.getFailedDisks().size());
     assertFalse("Cluster should not in maintenance mode", helixAdmin.isInMaintenanceMode(clusterName));
+    // replicas should be removed from helix clustermap
+    List<? extends ReplicaId> healthyReplicaIds = clusterMap.getReplicaIds(localNode);
+    Set<? extends ReplicaId> removedReplicas = new HashSet<>(allReplicaIds);
+    removedReplicas.removeAll(healthyReplicaIds);
+    List<ReplicaId> replicasOnFailedDisk = diskToReplicas.get(diskToFail);
+    assertEquals("Replicas should be removed from helix clustermap", new HashSet<>(replicasOnFailedDisk),
+        removedReplicas);
     assertEquals("Disk should be unavailable now", HardwareState.UNAVAILABLE, diskToFail.getState());
     assertEquals("Replicas should be reset to offline", replicasOnFailedDisk.size() + offlineReplicasBefore,
         getNumberOfReplicaInStateFromMetric("offline", metricRegistry));
@@ -1474,26 +1472,11 @@ public class StorageManagerTest {
             .get(HelixParticipant.DISK_KEY)
             .intValue());
     for (ReplicaId replicaId : replicasOnFailedDisk) {
-      assertNotNull(storageManager.getStore(replicaId.getPartitionId(), true));
-      assertNotNull(storageManager.getReplica(replicaId.getPartitionId().toPathString()));
-      assertNotNull(storageManager.getDiskManager(replicaId.getPartitionId()));
-    }
-    // Now send the message from offline to dropped
-    // Remove one replica's directory to simulate disk error, this should not be an issue for disk failure handling
-    ReplicaId replicaToIOError = replicasOnFailedDisk.get(0);
-    Utils.deleteFileOrDirectory(new File(replicaToIOError.getReplicaPath()));
-    sendStateTransitionMessages(helixManager, "10000", replicasOnFailedDisk, "OFFLINE", "DROPPED");
-    Thread.sleep(1000);
-    // replicas should be removed from helix clustermap
-    List<? extends ReplicaId> healthyReplicaIds = clusterMap.getReplicaIds(localNode);
-    Set<? extends ReplicaId> removedReplicas = new HashSet<>(allReplicaIds);
-    removedReplicas.removeAll(healthyReplicaIds);
-    assertEquals("Replicas should be removed from helix clustermap", new HashSet<>(replicasOnFailedDisk),
-        removedReplicas);
-    for (ReplicaId replicaId : replicasOnFailedDisk) {
-      assertNull(storageManager.getStore(replicaId.getPartitionId(), true));
+      assertNull(storageManager.getStore(replicaId.getPartitionId(), false));
       assertNull(storageManager.getReplica(replicaId.getPartitionId().toPathString()));
+      assertNull(storageManager.getDiskManager(replicaId.getPartitionId()));
     }
+    assertEquals(numDisksInMemory - 1, storageManager.getDiskToDiskManager().size());
   }
 
   /**

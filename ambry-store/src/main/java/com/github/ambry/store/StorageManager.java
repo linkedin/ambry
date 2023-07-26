@@ -736,6 +736,9 @@ public class StorageManager implements StoreManager {
         // During decommission, imagine an edge case where the node crashed immediately after removing replica from
         // InstanceConfig. So next time when this node is restarted, old replica is no longer present in Helix cluster
         // map. We still need to clean up file/directory on disk that is associated with removed replica.
+
+        // There is another case where the replica would be null, which is when the disk failed, we removed all the
+        // replicas on the disk. We can try to remove the diretory, but it won't find any.
         try {
           maybeDeleteResidualDirectory(partitionName);
         } catch (IOException e) {
@@ -893,9 +896,12 @@ public class StorageManager implements StoreManager {
       storeMainMetrics.handleDiskFailureCount.inc();
 
       // When there is a new disk failure, we need to do several things
-      // 1. update disk availability
-      // 2. reset the partitions
-      // 3. update the capacity to instance config
+      // 1. remove replicasOnFailedDisks from the property store
+      // 2. remove replicas from replication manager and stats manager
+      // 3. update disk availability
+      // 4. reset the partitions
+      // 5. update the capacity to instance config
+      // 6. remove failed disks from the maps in the memory
       // These steps will be done in maintenance mode so helix would take in all the input and then compute a new
       // replica placement. If we don't do them in maintenance mode, they will not be atomic and helix might create
       // an invalid replica placement.
@@ -938,19 +944,24 @@ public class StorageManager implements StoreManager {
       try {
         // 1. enter maintenance mode
         inMaintenanceMode = enterMaintenance();
-        // 2: update disk availability
+        // 2. remove all the replicasOnFailedDisks from the property store
+        removeReplicasFromCluster(replicasOnFailedDisks);
+        // 3: remove all the replicas from replication and state manger
+        removeReplicasFromReplicationAndStatsManager(replicasOnFailedDisks);
+        // 4: update disk availability
         setDiskUnavailable(newFailedDisks);
-        maybeDisableReplicas(replicasOnFailedDisks);
-        // 3. reset partitions, we have to update disk availability before reset the partitions. This way, we know
+        // 5. reset partitions, we have to update disk availability before reset the partitions. This way, we know
         // The partitions won't be re-assigned back to the same disks.
         resetPartitions(replicasOnFailedDisks);
-        // 4. update disk capacity
+        // 6. update disk capacity
         updateDiskCapacity(healthyDiskCapacity);
+        // 7. Remove disks from the maps.
+        cleanupDisksAndReplicas(newFailedDisks, replicasOnFailedDisks);
         success = true;
       } catch (Exception e) {
         storeMainMetrics.handleDiskFailureErrorCount.inc();
       } finally {
-        // 5. exist maintenance mode
+        // 8. exist maintenance mode
         if (inMaintenanceMode) {
           if (primaryClusterParticipant.exitMaintenanceMode()) {
             logger.info("Successfully exit maintenance mode");
@@ -975,18 +986,38 @@ public class StorageManager implements StoreManager {
       return true;
     }
 
+    private void removeReplicasFromCluster(List<ReplicaId> replicaIds) {
+      if (!primaryClusterParticipant.removeReplicasFromDataNode(replicaIds)) {
+        throw new IllegalStateException(
+            "Failed to remote replicas " + replicaIds + " from cluster when handling disk failure");
+      }
+      logger.info("Partitions are successfully removed from DataNodeConfig of current node when handling disk failure");
+    }
+
+    private void removeReplicasFromReplicationAndStatsManager(List<ReplicaId> replicaIds) {
+      Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
+          primaryClusterParticipant == null ? new HashMap<>()
+              : primaryClusterParticipant.getPartitionStateChangeListeners();
+      PartitionStateChangeListener replicationManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.ReplicationManagerListener);
+      PartitionStateChangeListener statsManagerListener =
+          partitionStateChangeListeners.get(StateModelListenerType.StatsManagerListener);
+      for (ReplicaId replicaId : replicaIds) {
+        if (replicationManagerListener != null) {
+          replicationManagerListener.onPartitionBecomeDroppedFromOffline(replicaId.getPartitionId().toPathString());
+        }
+        if (statsManagerListener != null) {
+          statsManagerListener.onPartitionBecomeDroppedFromOffline(replicaId.getPartitionId().toPathString());
+        }
+      }
+    }
+
     private void setDiskUnavailable(List<DiskId> diskIds) {
       diskIds.forEach(diskId -> diskId.setState(HardwareState.UNAVAILABLE));
       if (!primaryClusterParticipant.setDisksState(diskIds, HardwareState.UNAVAILABLE)) {
         throw new IllegalStateException("Failed to update disk availability");
       }
       logger.info("Successfully update disk availability when handling disk failure");
-    }
-
-    private void maybeDisableReplicas(List<ReplicaId> replicasOnFailedDisks) {
-      for (ReplicaId replicaId : replicasOnFailedDisks) {
-        primaryClusterParticipant.setReplicaDisabledState(replicaId, true);
-      }
     }
 
     private void resetPartitions(List<ReplicaId> replicasOnFailedDisks) {
@@ -1008,6 +1039,21 @@ public class StorageManager implements StoreManager {
         throw new IllegalStateException("Failed to update disk capacity");
       }
       logger.info("Successfully update disk capacity to {} when handling disk failure", actualCapacityInGB);
+    }
+
+    private void cleanupDisksAndReplicas(List<DiskId> newFailedDisks, List<ReplicaId> replicasOnFailedDisks) {
+      newFailedDisks.forEach(diskId -> {
+        DiskManager diskManager = diskToDiskManager.remove(diskId);
+        try {
+          diskManager.shutdown();
+        } catch (Exception e) {
+          logger.error("Failed to shut down disk manager for disk: {}", diskId.getMountPath(), e);
+        }
+      });
+      replicasOnFailedDisks.forEach(replicaId -> {
+        partitionToDiskManager.remove(replicaId.getPartitionId());
+        partitionNameToReplicaId.remove(replicaId.getPartitionId().toPathString());
+      });
     }
 
     private void backoff() {
