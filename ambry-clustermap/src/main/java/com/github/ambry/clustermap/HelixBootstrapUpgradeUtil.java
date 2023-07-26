@@ -1148,26 +1148,29 @@ public class HelixBootstrapUpgradeUtil {
       instances.addAll(idealState.getInstanceSet(partition));
     }
 
-    // 2. Get weights of partitions residing on these instances from property store
+    // 2. Get weights of partitions residing on these instances from property store and update them in resource config
+    // if they are different from default values
     for (String instanceName : instances) {
       DataNodeConfig dataNodeConfig =
           getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreToDataNodeConfigAdapter, null);
       // Get Disk configs on the node
       Map<String, DataNodeConfig.DiskConfig> diskConfigs = dataNodeConfig.getDiskConfigs();
       for (DataNodeConfig.DiskConfig diskConfig : diskConfigs.values()) {
-        Map<String, DataNodeConfig.ReplicaConfig> replicaConfigs = diskConfig.getReplicaConfigs();
         // Get replica configs for each replica on the disk
-        for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaConfigEntry : replicaConfigs.entrySet()) {
+        for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaConfigEntry : diskConfig.getReplicaConfigs()
+            .entrySet()) {
           String partitionName = replicaConfigEntry.getKey();
-          long capacityInGB = replicaConfigEntry.getValue().getReplicaCapacityInBytes() / 1024 / 1024 / 1024;
-          partitionCapacityMap.put(partitionName, new HashMap<>());
-          partitionCapacityMap.get(partitionName)
-              .put(DISK_KEY, Math.toIntExact(capacityInGB) + PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB);
+          int capacityInGB =
+              Math.toIntExact(replicaConfigEntry.getValue().getReplicaCapacityInBytes() / 1024 / 1024 / 1024);
+          if (capacityInGB != clusterConfigFields.partitionDiskWeightInGB) {
+            partitionCapacityMap.put(partitionName, Collections.singletonMap(DISK_KEY,
+                Math.toIntExact(capacityInGB) + PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB));
+          }
         }
       }
     }
-    partitionCapacityMap.put(DEFAULT_PARTITION_KEY, new HashMap<>());
-    partitionCapacityMap.get(DEFAULT_PARTITION_KEY).put(DISK_KEY, clusterConfigFields.partitionDiskWeightInGB);
+    partitionCapacityMap.put(DEFAULT_PARTITION_KEY, Collections.singletonMap(DISK_KEY,
+        clusterConfigFields.partitionDiskWeightInGB + PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB));
 
     // 3. Update resource configs in helix
     resourceConfig.setPartitionCapacityMap(partitionCapacityMap);
