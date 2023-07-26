@@ -1260,13 +1260,6 @@ public class ReplicaThread implements Runnable {
               MessageSievingInputStream validMessageDetectionInputStream =
                   new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList,
                       Collections.singletonList(transformer), metricRegistry);
-              if (validMessageDetectionInputStream.hasInvalidMessages()) {
-                replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
-                logger.error("Out of {} messages, {} invalid messages were found in message stream from {}",
-                    messageInfoList.size(),
-                    messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size(),
-                    remoteReplicaInfo.getReplicaId());
-              }
               messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
               applyPut(validMessageDetectionInputStream, remoteReplicaInfo);
 
@@ -1305,15 +1298,22 @@ public class ReplicaThread implements Runnable {
                     messageInfoList);
               }
 
-              if (validMessageDetectionInputStream.hasInvalidMessages()
-                  && !remoteReplicaInfo.isReplicationRetryCountMaxed()) {
-                // If we have a few retries left, then increment the retry count and retry replication
-                long retryCount = remoteReplicaInfo.incReplicationRetryCount();
-                logger.error(
-                    "Retrying replication as there are {} invalid messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
-                    validMessageDetectionInputStream.getNumInvalidMessages(), threadName, retryCount,
-                    remoteReplicaInfo.getToken(), remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
-                    remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
+              if (validMessageDetectionInputStream.hasInvalidMessages()) {
+                replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
+                // This prints invalid + discarded messages
+                logger.error("Out of {} messages, {} invalid messages were found in message stream from {}",
+                    messageInfoList.size(),
+                    messageInfoList.size() - validMessageDetectionInputStream.getValidMessageInfoList().size(),
+                    remoteReplicaInfo.getReplicaId());
+                if (!remoteReplicaInfo.isReplicationRetryCountMaxed()) {
+                  // If we have a few retries left, then increment the retry count and retry replication
+                  long retryCount = remoteReplicaInfo.incReplicationRetryCount();
+                  logger.error(
+                      "Retrying replication as there are {} corrupted messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
+                      validMessageDetectionInputStream.getNumInvalidMessages(), threadName, retryCount,
+                      remoteReplicaInfo.getToken(), remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
+                      remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
+                }
               } else {
                 // If there are no invalid messages, or we have maxed out the retries, then advance token
                 advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
