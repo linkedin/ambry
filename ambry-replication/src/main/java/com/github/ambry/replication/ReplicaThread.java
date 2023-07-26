@@ -1310,7 +1310,7 @@ public class ReplicaThread implements Runnable {
                 // If we have a few retries left, then increment the retry count and retry replication
                 long retryCount = remoteReplicaInfo.incReplicationRetryCount();
                 logger.error(
-                    "Retrying replication as there are {} invalid messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
+                    "Retrying replication as there are {} corrupted messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
                     validMessageDetectionInputStream.getNumInvalidMessages(), threadName, retryCount,
                     remoteReplicaInfo.getToken(), remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
                     remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
