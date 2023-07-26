@@ -1305,11 +1305,8 @@ public class ReplicaThread implements Runnable {
                     messageInfoList);
               }
 
-              if (!validMessageDetectionInputStream.hasInvalidMessages()
-                  || remoteReplicaInfo.isReplicationRetryCountMaxed()) {
-                // If there are no invalid messages, or we have maxed out the retries, then advance token
-                advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
-              } else {
+              if (validMessageDetectionInputStream.hasInvalidMessages()
+                  && !remoteReplicaInfo.isReplicationRetryCountMaxed()) {
                 // If we have a few retries left, then increment the retry count and retry replication
                 long retryCount = remoteReplicaInfo.incReplicationRetryCount();
                 logger.error(
@@ -1317,6 +1314,9 @@ public class ReplicaThread implements Runnable {
                     validMessageDetectionInputStream.getNumInvalidMessages(), threadName, retryCount,
                     remoteReplicaInfo.getToken(), remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
                     remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
+              } else {
+                // If there are no invalid messages, or we have maxed out the retries, then advance token
+                advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
               }
 
               logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
