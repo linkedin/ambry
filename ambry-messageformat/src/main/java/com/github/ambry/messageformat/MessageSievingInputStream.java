@@ -42,7 +42,6 @@ public class MessageSievingInputStream extends InputStream {
   private int sievedStreamSize;
   private static final Logger logger = LoggerFactory.getLogger(MessageSievingInputStream.class);
   private final InputStream sievedStream;
-  private boolean hasInvalidMessages;
   private int numInvalidMessages;
   private boolean hasDeprecatedMessages;
   private final List<MessageInfo> sievedMessageInfoList;
@@ -80,7 +79,6 @@ public class MessageSievingInputStream extends InputStream {
     messageSievingExpiredMessagesDiscardedCount = metricRegistry.counter(
         MetricRegistry.name(MessageSievingInputStream.class, "MessageSievingExpiredMessagesDiscardedCount"));
     sievedStreamSize = 0;
-    hasInvalidMessages = false;
     numInvalidMessages = 0;
     hasDeprecatedMessages = false;
     sievedMessageInfoList = new ArrayList<>();
@@ -125,7 +123,7 @@ public class MessageSievingInputStream extends InputStream {
     if (bytesRead != totalMessageListSize) {
       logger.error("Failed to read intended size from stream. Expected {}, actual {}", totalMessageListSize, bytesRead);
     }
-    if (hasInvalidMessages) {
+    if (hasInvalidMessages()) {
       logger.error("There are invalidated messages in this stream");
     }
     if (hasDeprecatedMessages) {
@@ -227,7 +225,7 @@ public class MessageSievingInputStream extends InputStream {
    * @return
    */
   public boolean hasInvalidMessages() {
-    return hasInvalidMessages;
+    return numInvalidMessages > 0;
   }
 
   /**
@@ -280,7 +278,6 @@ public class MessageSievingInputStream extends InputStream {
           logger.error(
               "Error validating/transforming the message at {} with messageInfo {} and hence skipping the message",
               msgOffset, inMsg.getMessageInfo(), output.getException());
-          hasInvalidMessages = true;
           numInvalidMessages += 1;
           messageSievingCorruptMessagesDiscardedCount.inc();
         } else {
