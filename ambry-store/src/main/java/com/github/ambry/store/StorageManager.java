@@ -756,31 +756,32 @@ public class StorageManager implements StoreManager {
       // the store could be started if it failed on decommission last time. Helix may directly reset it to OFFLINE
       // without stopping it)
       BlobStore store = (BlobStore) getStore(replica.getPartitionId(), true);
-
-      // 1. Check if the store is recovering from decommission or directly transitioning from OFFLINE to DROPPED in
-      // full-auto (i.e. if this replica has been reassigned to a different host when it is down, Helix may directly
-      // transition the replica from OFFLINE -> DROPPED without going through OFFLINE -> BOOTSTRAP -> STANDBY ->
-      // INACTIVE -> OFFLINE -> DROPPED steps). If so, go through decommission steps to make sure peer replicas are
-      // caught up with local replica and we update DataNodeConfig in Helix.
-      if (store.recoverFromDecommission() || (clusterMap.isDataNodeInFullAutoMode(replica.getDataNodeId())
-          && store.getPreviousState() == ReplicaState.OFFLINE && !isReplicaOnFailedDisk(replica))) {
-        try {
-          resumeDecommission(partitionName);
-        } catch (Exception e) {
-          logger.error("Exception occurs when resuming decommission on replica {} with error msg: {}", replica,
-              e.getMessage());
-          metrics.resumeDecommissionErrorCount.inc();
-          throw new StateTransitionException(
-              "Exception occurred when resuming decommission on replica " + partitionName, ReplicaOperationFailure);
+      if (store == null && isReplicaOnFailedDisk(replica)) {
+        logger.info("Replica is in a failed disk, blob store not started. skip");
+      } else {
+        // 1. Check if the store is recovering from decommission or directly transitioning from OFFLINE to DROPPED in
+        // full-auto (i.e. if this replica has been reassigned to a different host when it is down, Helix may directly
+        // transition the replica from OFFLINE -> DROPPED without going through OFFLINE -> BOOTSTRAP -> STANDBY ->
+        // INACTIVE -> OFFLINE -> DROPPED steps). If so, go through decommission steps to make sure peer replicas are
+        // caught up with local replica and we update DataNodeConfig in Helix.
+        if (store.recoverFromDecommission() || (clusterMap.isDataNodeInFullAutoMode(replica.getDataNodeId())
+            && store.getPreviousState() == ReplicaState.OFFLINE && !isReplicaOnFailedDisk(replica))) {
+          try {
+            resumeDecommission(partitionName);
+          } catch (Exception e) {
+            logger.error("Exception occurs when resuming decommission on replica {} with error msg: {}", replica,
+                e.getMessage());
+            metrics.resumeDecommissionErrorCount.inc();
+            throw new StateTransitionException(
+                "Exception occurred when resuming decommission on replica " + partitionName, ReplicaOperationFailure);
+          }
         }
+        // 2. Shut down the store
+        if (!shutdownBlobStore(replica.getPartitionId())) {
+          throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
+        }
+        logger.info("Store {} is successfully shut down during Offline-To-Dropped transition", partitionName);
       }
-
-      // 2. Shut down the store
-      if (!shutdownBlobStore(replica.getPartitionId())) {
-        throw new StateTransitionException("Failed to shutdown store " + partitionName, ReplicaOperationFailure);
-      }
-      logger.info("Store {} is successfully shut down during Offline-To-Dropped transition", partitionName);
-
       // 3. Remove replica from data node configs
       if (primaryClusterParticipant != null) {
         try {
@@ -939,6 +940,7 @@ public class StorageManager implements StoreManager {
         inMaintenanceMode = enterMaintenance();
         // 2: update disk availability
         setDiskUnavailable(newFailedDisks);
+        maybeDisableReplicas(replicasOnFailedDisks);
         // 3. reset partitions, we have to update disk availability before reset the partitions. This way, we know
         // The partitions won't be re-assigned back to the same disks.
         resetPartitions(replicasOnFailedDisks);
@@ -979,6 +981,12 @@ public class StorageManager implements StoreManager {
         throw new IllegalStateException("Failed to update disk availability");
       }
       logger.info("Successfully update disk availability when handling disk failure");
+    }
+
+    private void maybeDisableReplicas(List<ReplicaId> replicasOnFailedDisks) {
+      for (ReplicaId replicaId : replicasOnFailedDisks) {
+        primaryClusterParticipant.setReplicaDisabledState(replicaId, true);
+      }
     }
 
     private void resetPartitions(List<ReplicaId> replicasOnFailedDisks) {
