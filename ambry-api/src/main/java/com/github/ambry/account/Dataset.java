@@ -205,7 +205,8 @@ public class Dataset {
         && Objects.equals(containerName, dataset.containerName)
         && Objects.equals(datasetName, dataset.datasetName)
         && versionSchema == dataset.versionSchema
-        && Objects.equals(retentionPolicy, dataset.retentionPolicy)
+        //do not compare retentionPolicy as we will add default value in db.
+        //&& Objects.equals(retentionPolicy, dataset.retentionPolicy)
         && Objects.equals(retentionCount, dataset.retentionCount)
         && Objects.equals(retentionTimeInSeconds, dataset.retentionTimeInSeconds)
         && Objects.equals(userTags, dataset.userTags);
