@@ -634,7 +634,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       newReplicaInfoAdded = true;
     }
     if (newReplicaInfoAdded) {
-      logger.info("Updating config: {} in Helix by adding partition {}", dataNodeConfig, partitionName);
+      logger.info("Updating config in Helix by adding partition {}", partitionName);
       additionResult = dataNodeConfigSource.set(dataNodeConfig);
     }
     return additionResult;
@@ -671,7 +671,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       dataNodeConfigUpdated = diskConfig.getReplicaConfigs().remove(partitionName) != null;
     }
     if (dataNodeConfigUpdated) {
-      logger.info("Updating config: {} in Helix by removing partition {}", dataNodeConfig, partitionName);
+      logger.info("Updating config in Helix by removing partition {}", partitionName);
       removalResult = dataNodeConfigSource.set(dataNodeConfig);
     } else {
       logger.warn("Partition {} is not found on instance {}, skipping removing it from config in Helix.", partitionName,
