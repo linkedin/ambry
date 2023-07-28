@@ -218,9 +218,11 @@ public class StorageManager implements StoreManager {
       diskToDiskManager.values().forEach(diskManager -> unexpectedDirs.addAll(diskManager.getUnexpectedDirs()));
 
       // Add the background task to update the disk capacity
-      DiskFailureHandler diskFailureHandler = new DiskFailureHandler();
-      scheduler.scheduleAtFixedRate(diskFailureHandler, storeConfig.storeDiskFailureHandlerTaskIntervalInSeconds,
-          storeConfig.storeDiskFailureHandlerTaskIntervalInSeconds, TimeUnit.SECONDS);
+      if (storeConfig.storeDiskFailureHandlerEnabled) {
+        DiskFailureHandler diskFailureHandler = new DiskFailureHandler();
+        scheduler.scheduleAtFixedRate(diskFailureHandler, storeConfig.storeDiskFailureHandlerTaskIntervalInSeconds,
+            storeConfig.storeDiskFailureHandlerTaskIntervalInSeconds, TimeUnit.SECONDS);
+      }
       logger.info("Starting storage manager complete");
     } finally {
       metrics.storageManagerStartTimeMs.update(time.milliseconds() - startTimeMs);
