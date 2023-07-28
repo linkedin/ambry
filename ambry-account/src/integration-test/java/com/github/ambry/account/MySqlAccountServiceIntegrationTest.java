@@ -810,7 +810,7 @@ public class MySqlAccountServiceIntegrationTest {
    * @throws Exception
    */
   @Test
-  public void TestEspressoBackupRetentionPolicy() throws Exception {
+  public void testEspressoBackupRetentionPolicy() throws Exception {
     Account testAccount = makeTestAccountWithContainer();
     Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
     Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
@@ -833,13 +833,18 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME, String.valueOf(date1.getTime()), -1, System.currentTimeMillis(), false,
         DatasetVersionState.READY);
+    List<DatasetVersionRecord> datasetVersionRecordListOutOfRetention =
+        mySqlAccountStore.getAllValidVersionsOutOfRetentionCount(testAccount.getId(), testContainer.getId(),
+            testAccount.getName(), testContainer.getName(), DATASET_NAME);
+    assertEquals("Mismatch on size of the datasetVersionRecordListOutOfRetention", 0,
+        datasetVersionRecordListOutOfRetention.size());
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME, String.valueOf(date2.getTime()), -1, System.currentTimeMillis(), false,
         DatasetVersionState.READY);
     mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME, String.valueOf(date3.getTime()), -1, System.currentTimeMillis(), false,
         DatasetVersionState.READY);
-    List<DatasetVersionRecord> datasetVersionRecordListOutOfRetention =
+    datasetVersionRecordListOutOfRetention =
         mySqlAccountStore.getAllValidVersionsOutOfRetentionCount(testAccount.getId(), testContainer.getId(),
             testAccount.getName(), testContainer.getName(), DATASET_NAME);
     assertEquals("Mismatch on size of the datasetVersionRecordListOutOfRetention", 0,
@@ -905,7 +910,8 @@ public class MySqlAccountServiceIntegrationTest {
     Dataset datasetFromMysql =
         mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME_BASIC);
-    assertEquals("Mistmatch in dataset read from db", dataset, datasetFromMysql);
+    //do not check retentionPolicy as the default will be written into db.
+    verifyDatasetProperties(dataset, datasetFromMysql);
 
     Map<String, String> userTags = new HashMap<>();
     userTags.put("userTag", "tagValue");
@@ -923,7 +929,7 @@ public class MySqlAccountServiceIntegrationTest {
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME);
 
-    assertEquals("Mismatch in dataset read from db", dataset, datasetFromMysql);
+    verifyDatasetProperties(dataset, datasetFromMysql);
     assertEquals("Mismatch in retentionPolicy", DEFAULT_RETENTION_POLICY, datasetFromMysql.getRetentionPolicy());
 
     // Add dataset again, should fail due to already exist.
@@ -1032,7 +1038,7 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME);
-    assertEquals("Mismatch on new added dataset", dataset, datasetFromMysql);
+    verifyDatasetProperties(dataset, datasetFromMysql);
   }
 
   /**
@@ -1450,6 +1456,22 @@ public class MySqlAccountServiceIntegrationTest {
    */
   private Container makeNewContainer(String name, short parentAccountId, ContainerStatus status) {
     return new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, name, status, DESCRIPTION, parentAccountId).build();
+  }
+
+  /**
+   * Verify the dataset properties.
+   * @param expected expected dataset.
+   * @param actual actual dataset.
+   */
+  private void verifyDatasetProperties(Dataset expected, Dataset actual) {
+    assertEquals("Mismatch on AccountName of the dataset", expected.getAccountName(), actual.getAccountName());
+    assertEquals("Mismatch on ContainerName of the dataset", expected.getContainerName(), actual.getContainerName());
+    assertEquals("Mismatch on DatasetName of the dataset", expected.getDatasetName(), actual.getDatasetName());
+    assertEquals("Mismatch on VersionSchema of the dataset", expected.getVersionSchema(), actual.getVersionSchema());
+    assertEquals("Mismatch on RetentionCount of the dataset", expected.getRetentionCount(), actual.getRetentionCount());
+    assertEquals("Mismatch on RetentionTimeInSeconds of the dataset", expected.getRetentionTimeInSeconds(), actual.getRetentionTimeInSeconds());
+    assertEquals("Mismatch on UserTags of the dataset", expected.getUserTags(), actual.getUserTags());
+
   }
 
   /**

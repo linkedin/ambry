@@ -15,14 +15,13 @@ package com.github.ambry.account;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.TreeMap;
-import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,12 +29,18 @@ import org.slf4j.LoggerFactory;
 public class EspressoBackUpRetentionPolicy implements DatasetRetentionPolicy {
   public static final String RETENTION_POLICY = "EspressoBackUpRetentionPolicy";
   private static final Logger logger = LoggerFactory.getLogger(EspressoBackUpRetentionPolicy.class);
-  private final List<DatasetVersionRecord> allValidDatasetVersions;
+  private final List<DatasetVersionRecord> allValidDatasetVersionsOrderedByVersion;
   private final int retentionCount;
 
-  public EspressoBackUpRetentionPolicy(List<DatasetVersionRecord> allValidDatasetVersions, int retentionCount,
-      Dataset.VersionSchema versionSchema) {
-    this.allValidDatasetVersions = allValidDatasetVersions;
+  /**
+   * Constructor of the {@link EspressoBackUpRetentionPolicy}
+   * @param allValidDatasetVersionsOrderedByVersion a list of all valid versions ordered by version.
+   * @param retentionCount the {@link Dataset} level retention count.
+   * @param versionSchema the {@link Dataset} level version schema.
+   */
+  public EspressoBackUpRetentionPolicy(List<DatasetVersionRecord> allValidDatasetVersionsOrderedByVersion,
+      int retentionCount, Dataset.VersionSchema versionSchema) {
+    this.allValidDatasetVersionsOrderedByVersion = allValidDatasetVersionsOrderedByVersion;
     this.retentionCount = retentionCount;
     if (!Dataset.VersionSchema.TIMESTAMP.equals(versionSchema)) {
       throw new IllegalArgumentException(
@@ -46,42 +51,40 @@ public class EspressoBackUpRetentionPolicy implements DatasetRetentionPolicy {
   @Override
   public List<DatasetVersionRecord> getDatasetVersionOutOfRetention() {
     long startTimeMs = System.currentTimeMillis();
-    Map<String, TreeSet<DatasetVersionRecord>> dateGroups = new TreeMap<>();
     List<DatasetVersionRecord> result = new ArrayList<>();
-    if (allValidDatasetVersions.size() <= retentionCount) {
+    if (allValidDatasetVersionsOrderedByVersion.size() <= retentionCount) {
       return result;
     }
+    Map<String, List<DatasetVersionRecord>> dateGroups = new TreeMap<>();
     GregorianCalendar calendar = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
     //Parse the timestamp and group by date
-    for (DatasetVersionRecord datasetVersionRecord : allValidDatasetVersions) {
+    for (DatasetVersionRecord datasetVersionRecord : allValidDatasetVersionsOrderedByVersion) {
       long timestampInMillis = Long.parseLong(datasetVersionRecord.getVersion());
       calendar.setTimeInMillis(timestampInMillis);
       Date date = calendar.getTime();
       SimpleDateFormat dateOnlyFormat = new SimpleDateFormat("yyyy-MM-dd");
       String day = dateOnlyFormat.format(date);
-      dateGroups.computeIfAbsent(day,
-              k -> new TreeSet<>(Comparator.comparingLong(record -> Long.parseLong(record.getVersion()))))
-          .add(datasetVersionRecord);
+      dateGroups.computeIfAbsent(day, k -> new ArrayList<>()).add(datasetVersionRecord);
     }
-    //Sorted all the record by the following rules
-    // 1. When a date has more than 1 record, delete the record in the date first.
-    //    This is try to keep at least one version per day which is not out of retention count.
-    // 2. If first condition met, delete the smaller timestamp based version.
-    List<DatasetVersionRecord> allVersionsSortedByRetentionRule = new ArrayList<>();
-    for (TreeSet<DatasetVersionRecord> datasetVersionPerDate : dateGroups.values()) {
-      if (datasetVersionPerDate.size() > 1) {
-        allVersionsSortedByRetentionRule.addAll(
-            new ArrayList<>(datasetVersionPerDate).subList(0, datasetVersionPerDate.size() - 1));
+    int count = allValidDatasetVersionsOrderedByVersion.size() - retentionCount;
+    for (List<DatasetVersionRecord> versionsPerDate : dateGroups.values()) {
+      while (versionsPerDate.size() > 1 && count > 0) {
+        result.add(versionsPerDate.get(0));
+        versionsPerDate.remove(0);
+        count--;
+      }
+      if (count == 0) {
+        break;
       }
     }
-    for (TreeSet<DatasetVersionRecord> records : dateGroups.values()) {
-      if (!records.isEmpty()) {
-        allVersionsSortedByRetentionRule.add(new ArrayList<>(records).get(records.size() - 1));
-      }
+    //we only have 1 version for each date after above for loop
+    while (!dateGroups.isEmpty() && count > 0) {
+      Iterator<String> iterator = dateGroups.keySet().iterator();
+      List<DatasetVersionRecord> versionsPerDate = dateGroups.get(iterator.next());
+      result.add(versionsPerDate.get(0));
+      iterator.remove();
+      count--;
     }
-    //Apply the retention policy by returning the first N - retentionCount record for deletion. N is the total record size.
-    result.addAll(allVersionsSortedByRetentionRule.subList(0,
-        Math.min(allVersionsSortedByRetentionRule.size() - retentionCount, allVersionsSortedByRetentionRule.size())));
     logger.trace("getDatasetVersionOutOfRetention took {}ms", System.currentTimeMillis() - startTimeMs);
     return result;
   }
