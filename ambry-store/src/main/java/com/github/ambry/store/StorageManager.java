@@ -898,10 +898,10 @@ public class StorageManager implements StoreManager {
       storeMainMetrics.handleDiskFailureCount.inc();
 
       // When there is a new disk failure, we need to do several things
-      // 1. remove replicasOnFailedDisks from the property store
-      // 2. remove replicas from replication manager and stats manager
-      // 3. update disk availability
-      // 4. reset the partitions
+      // 1. update disk availability
+      // 2. reset the partitions
+      // 3. remove replicasOnFailedDisks from the property store
+      // 4. remove replicas from replication manager and stats manager
       // 5. update the capacity to instance config
       // 6. remove failed disks from the maps in the memory
       // These steps will be done in maintenance mode so helix would take in all the input and then compute a new
@@ -946,15 +946,15 @@ public class StorageManager implements StoreManager {
       try {
         // 1. enter maintenance mode
         inMaintenanceMode = enterMaintenance();
-        // 2. remove all the replicasOnFailedDisks from the property store
-        removeReplicasFromCluster(replicasOnFailedDisks);
-        // 3: remove all the replicas from replication and state manger
-        removeReplicasFromReplicationAndStatsManager(replicasOnFailedDisks);
-        // 4: update disk availability
+        // 2: update disk availability
         setDiskUnavailable(newFailedDisks);
-        // 5. reset partitions, we have to update disk availability before reset the partitions. This way, we know
+        // 3. reset partitions, we have to update disk availability before reset the partitions. This way, we know
         // The partitions won't be re-assigned back to the same disks.
         resetPartitions(replicasOnFailedDisks);
+        // 4. remove all the replicasOnFailedDisks from the property store
+        removeReplicasFromCluster(replicasOnFailedDisks);
+        // 5: remove all the replicas from replication and state manger
+        removeReplicasFromReplicationAndStatsManager(replicasOnFailedDisks);
         // 6. update disk capacity
         updateDiskCapacity(healthyDiskCapacity);
         // 7. Remove disks from the maps.
