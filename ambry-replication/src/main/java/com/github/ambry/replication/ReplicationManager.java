@@ -262,7 +262,7 @@ public class ReplicationManager extends ReplicationEngine {
       FindToken findToken =
           this.tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
       RemoteReplicaInfo remoteReplicaInfo =
-          new RemoteReplicaInfo(this.replicationConfig, remoteReplica, replicaId, store, findToken,
+          new RemoteReplicaInfo(remoteReplica, replicaId, store, findToken,
               TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
               SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
 

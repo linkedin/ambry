@@ -70,7 +70,7 @@ public class RemoteReplicaInfo {
   private ReplicaThread replicaThread;
   private long replicationRetryCount;
   // Configurable
-  protected final int MAX_REPLICATION_RETRY_COUNT;
+  protected final int maxReplicationRetryCount;
 
   // Metadata response information received for this replica in the most recent replication cycle.
   // This is used during leader based replication to store the missing store messages, remote token info and local lag
@@ -80,6 +80,11 @@ public class RemoteReplicaInfo {
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
+    this(replicaId, localReplicaId, localStore, token, tokenPersistIntervalInMs, time, port, 0);
+  }
+
+  private RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
+      long tokenPersistIntervalInMs, Time time, Port port, int maxReplicationRetryCount) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
     this.totalBytesReadFromLocalStore = 0;
@@ -91,23 +96,13 @@ public class RemoteReplicaInfo {
     // ExchangeMetadataResponse is initially empty. It will be populated by replica threads during replication cycles.
     this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
     this.replicationRetryCount = 0;
-    this.MAX_REPLICATION_RETRY_COUNT = 0;
+    this.maxReplicationRetryCount = maxReplicationRetryCount;
   }
 
   public RemoteReplicaInfo(ReplicationConfig replicationConfig, ReplicaId replicaId, ReplicaId localReplicaId,
       Store localStore, FindToken token, long tokenPersistIntervalInMs, Time time, Port port) {
-    this.replicaId = replicaId;
-    this.localReplicaId = localReplicaId;
-    this.totalBytesReadFromLocalStore = 0;
-    this.localStore = localStore;
-    this.time = time;
-    this.port = port;
-    this.tokenPersistIntervalInMs = tokenPersistIntervalInMs;
-    initializeTokens(token);
-    // ExchangeMetadataResponse is initially empty. It will be populated by replica threads during replication cycles.
-    this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
-    this.replicationRetryCount = 0;
-    this.MAX_REPLICATION_RETRY_COUNT = replicationConfig.maxReplicationRetryCount;
+    this(replicaId, localReplicaId, localStore, token, tokenPersistIntervalInMs, time, port,
+        replicationConfig.maxReplicationRetryCount);
   }
 
   /**
@@ -123,9 +118,8 @@ public class RemoteReplicaInfo {
    * Resets replicationRetryCount to 0
    * @return replicationRetryCount
    */
-  public long resetReplicationRetryCount() {
+  public void resetReplicationRetryCount() {
     this.replicationRetryCount = 0;
-    return this.replicationRetryCount;
   }
 
   /**
@@ -133,7 +127,7 @@ public class RemoteReplicaInfo {
    * @return True if replicationRetryCount has exceeded the max retries, false otherwise
    */
   public boolean isReplicationRetryCountMaxed() {
-    return this.replicationRetryCount >= MAX_REPLICATION_RETRY_COUNT;
+    return this.replicationRetryCount >= maxReplicationRetryCount;
   }
 
   public ReplicaId getReplicaId() {

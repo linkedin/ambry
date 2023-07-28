@@ -778,8 +778,8 @@ public abstract class ReplicationEngine implements ReplicationAPI {
             FindToken findToken =
                 tokenHelper.getFindTokenFactoryFromReplicaType(remoteReplica.getReplicaType()).getNewFindToken();
             RemoteReplicaInfo remoteReplicaInfo =
-                new RemoteReplicaInfo(replicationConfig, remoteReplica, partitionInfo.getLocalReplicaId(),
-                    partitionInfo.getStore(), findToken,
+                new RemoteReplicaInfo(remoteReplica, partitionInfo.getLocalReplicaId(), partitionInfo.getStore(),
+                    findToken,
                     TimeUnit.SECONDS.toMillis(storeConfig.storeDataFlushIntervalSeconds) * Replication_Delay_Multiplier,
                     SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
             logger.info("Adding remote replica {} on {} to partition info.", remoteReplica.getReplicaPath(),
