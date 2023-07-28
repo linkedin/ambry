@@ -71,6 +71,7 @@ import org.slf4j.LoggerFactory;
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.DataNodeConfigSourceType.*;
 import static com.github.ambry.utils.Utils.*;
+import static org.apache.helix.model.ResourceConfig.*;
 
 
 /**
@@ -170,6 +171,7 @@ public class HelixBootstrapUpgradeUtil {
   static final String FAULT_ZONE_TYPE = "rack";
   // Allow a host to be filled upto 95%
   static final int INSTANCE_MAX_CAPACITY_PERCENTAGE = 95;
+  static final int PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB = 2;
 
   public enum HelixAdminOperation {
     BootstrapCluster,
@@ -905,6 +907,12 @@ public class HelixBootstrapUpgradeUtil {
             }
           }
 
+          // 3. Set resource configs
+          for (String resource : resources) {
+            setResourceConfig(dcName, resource, configAccessor, propertyStoreAdapter, helixAdmin,
+                wagedHelixConfig.clusterConfigFields);
+          }
+
           if (!dryRun) {
             info("[{}] Migrating resources {} in cluster {} from semi-auto to full-auto", dcName.toUpperCase(),
                 resources, clusterName);
@@ -1037,7 +1045,8 @@ public class HelixBootstrapUpgradeUtil {
     // 5. Set default weight for each partition. Helix will do partition assignment based on partition weight and host
     // capacity.
     Map<String, Integer> defaultPartitionWeightMap = new HashMap<>();
-    defaultPartitionWeightMap.put(DISK_KEY, clusterConfigFields.partitionDiskWeightInGB);
+    defaultPartitionWeightMap.put(DISK_KEY,
+        clusterConfigFields.partitionDiskWeightInGB + PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB);
     clusterConfig.setDefaultPartitionWeightMap(defaultPartitionWeightMap);
 
     // 6. Set instance capacity keys
@@ -1094,7 +1103,10 @@ public class HelixBootstrapUpgradeUtil {
     // 3. Set instance capacity
     Map<String, Integer> capacityMap = new HashMap<>();
     long capacity = nodeConfigFromHelix.getDiskConfigs()
-        .values().stream().mapToLong(DataNodeConfig.DiskConfig::getDiskCapacityInBytes).sum();
+        .values()
+        .stream()
+        .mapToLong(DataNodeConfig.DiskConfig::getDiskCapacityInBytes)
+        .sum();
     long capacityInGB = capacity / 1024 / 1024 / 1024;
     int actualCapacityInGB = (int) ((double) INSTANCE_MAX_CAPACITY_PERCENTAGE / 100 * capacityInGB);
     capacityMap.put(DISK_KEY, actualCapacityInGB);
@@ -1104,6 +1116,67 @@ public class HelixBootstrapUpgradeUtil {
     configAccessor.updateInstanceConfig(clusterName, instanceName, instanceConfig);
     info("Updated instance config fields for Instance {}. Tags: {}, Domain: {}, Capacity map {}", instanceName,
         instanceConfig.getTags(), instanceConfig.getDomainAsString(), instanceConfig.getInstanceCapacityMap());
+  }
+
+  /**
+   * Set resource configs for waged rebalancer
+   * @param dcName data center
+   * @param resourceName resource
+   * @param configAccessor the {@link ConfigAccessor} to access configuration in Helix.
+   * @param propertyStoreToDataNodeConfigAdapter {@link PropertyStoreToDataNodeConfigAdapter} to access property store data.
+   * @param helixAdmin {@link HelixAdmin}
+   * @param clusterConfigFields inputted cluster configuration
+   */
+  private void setResourceConfig(String dcName, String resourceName, ConfigAccessor configAccessor,
+      PropertyStoreToDataNodeConfigAdapter propertyStoreToDataNodeConfigAdapter, HelixAdmin helixAdmin,
+      ClusterConfigFields clusterConfigFields) throws IOException {
+
+    ResourceConfig resourceConfig = configAccessor.getResourceConfig(clusterName, resourceName);
+    if (resourceConfig == null) {
+      ResourceConfig.Builder resourceBuilder = new ResourceConfig.Builder(resourceName);
+      resourceConfig = resourceBuilder.build();
+    }
+
+    // Get weights for Partitions of the resource from property store
+    Map<String, Map<String, Integer>> partitionCapacityMap = new HashMap<>();
+
+    // 1. Get list of instances hosting partitions of this resource
+    IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resourceName);
+    Set<String> partitions = idealState.getPartitionSet();
+    Set<String> instances = new HashSet<>();
+    for (String partition : partitions) {
+      instances.addAll(idealState.getInstanceSet(partition));
+    }
+
+    // 2. Get weights of partitions residing on these instances from property store and update them in resource config
+    // if they are different from default values
+    for (String instanceName : instances) {
+      DataNodeConfig dataNodeConfig =
+          getDataNodeConfigFromHelix(dcName, instanceName, propertyStoreToDataNodeConfigAdapter, null);
+      // Get Disk configs on the node
+      Map<String, DataNodeConfig.DiskConfig> diskConfigs = dataNodeConfig.getDiskConfigs();
+      for (DataNodeConfig.DiskConfig diskConfig : diskConfigs.values()) {
+        // Get replica configs for each replica on the disk
+        for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaConfigEntry : diskConfig.getReplicaConfigs()
+            .entrySet()) {
+          String partitionName = replicaConfigEntry.getKey();
+          int capacityInGB =
+              Math.toIntExact(replicaConfigEntry.getValue().getReplicaCapacityInBytes() / 1024 / 1024 / 1024);
+          if (capacityInGB != clusterConfigFields.partitionDiskWeightInGB) {
+            partitionCapacityMap.put(partitionName, Collections.singletonMap(DISK_KEY,
+                Math.toIntExact(capacityInGB) + PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB));
+          }
+        }
+      }
+    }
+    partitionCapacityMap.put(DEFAULT_PARTITION_KEY, Collections.singletonMap(DISK_KEY,
+        clusterConfigFields.partitionDiskWeightInGB + PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB));
+
+    // 3. Update resource configs in helix
+    resourceConfig.setPartitionCapacityMap(partitionCapacityMap);
+    configAccessor.setResourceConfig(clusterName, resourceName, resourceConfig);
+    info("Updated resource config/partition weights for resource {}. Partition weights: {}", resourceName,
+        resourceConfig.getPartitionCapacityMap());
   }
 
   /**
