@@ -53,6 +53,7 @@ import org.apache.helix.manager.zk.ZKHelixAdmin;
 import org.apache.helix.manager.zk.ZKUtil;
 import org.apache.helix.manager.zk.ZNRecordSerializer;
 import org.apache.helix.model.ClusterConfig;
+import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LeaderStandbySMD;
@@ -742,11 +743,11 @@ public class HelixBootstrapUpgradeUtil {
               info("[{}] New replica of partition[{}] will be added to instance {} on {}", dcName.toUpperCase(),
                   partitionStr, instance, replica.getMountPath());
               newAddedReplicasInDc.computeIfAbsent(partitionStr, key -> {
-                Map<String, String> partitionMap = new HashMap<>();
-                partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
-                partitionMap.put(REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
-                return partitionMap;
-              })
+                    Map<String, String> partitionMap = new HashMap<>();
+                    partitionMap.put(PARTITION_CLASS_STR, replica.getPartitionId().getPartitionClass());
+                    partitionMap.put(REPLICAS_CAPACITY_STR, String.valueOf(replica.getCapacityInBytes()));
+                    return partitionMap;
+                  })
                   .put(instance,
                       replica.getMountPath() + DISK_CAPACITY_DELIM_STR + replica.getDiskId().getRawCapacityInBytes());
             }
@@ -889,10 +890,7 @@ public class HelixBootstrapUpgradeUtil {
           ConfigAccessor configAccessor =
               new ConfigAccessor(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
 
-          // 1. Update cluster config
-          setClusterConfig(configAccessor, wagedHelixConfig.getClusterConfigFields());
-
-          // 2. Update instance config for all instances present in each resource
+          // 1. Update instance config for all instances present in each resource
           for (String resource : resources) {
             // a. Get list of instances sharing partitions in this resource
             IdealState idealState = resourceToIdealState.get(resource);
@@ -906,6 +904,9 @@ public class HelixBootstrapUpgradeUtil {
               setInstanceConfig(dcName, instance, resource, configAccessor, propertyStoreAdapter);
             }
           }
+
+          // 2. Update cluster config
+          setClusterConfig(configAccessor, wagedHelixConfig.getClusterConfigFields());
 
           // 3. Set resource configs
           for (String resource : resources) {
@@ -945,7 +946,7 @@ public class HelixBootstrapUpgradeUtil {
 
             // 7. Update the list of resources migrating to full_auto in helix property store. This is used by servers
             // in case we want to fall back to semi_auto later.
-             updateAdminConfigForFullAutoMigration(dcName, resources);
+            updateAdminConfigForFullAutoMigration(dcName, resources);
 
             // 8. Exit maintenance mode
             helixAdmin.manuallyEnableMaintenanceMode(clusterName, false, "Complete migrating to Full auto",
@@ -989,16 +990,16 @@ public class HelixBootstrapUpgradeUtil {
       }
 
       // Update list field in ZNode
-      List<String> migratingResourcesList = zNRecord.getListField(RESOURCES_STR) == null ? new ArrayList<>()
-          : zNRecord.getListField(RESOURCES_STR);
+      List<String> migratingResourcesList =
+          zNRecord.getListField(RESOURCES_STR) == null ? new ArrayList<>() : zNRecord.getListField(RESOURCES_STR);
       Set<String> migratingResourcesSet = new HashSet<>(migratingResourcesList);
       migratingResourcesSet.addAll(resources);
       zNRecord.setListField(RESOURCES_STR, new ArrayList<>(migratingResourcesSet));
 
       // Set property store Znode path
       if (!helixPropertyStore.set(FULL_AUTO_MIGRATION_ZNODE_PATH, zNRecord, AccessOption.PERSISTENT)) {
-        logger.error("Failed to create/update {} znode record for datacenter {}",
-            FULL_AUTO_MIGRATION_ZNODE_PATH, dcName);
+        logger.error("Failed to create/update {} znode record for datacenter {}", FULL_AUTO_MIGRATION_ZNODE_PATH,
+            dcName);
       }
     } finally {
       helixPropertyStore.stop();
@@ -1020,6 +1021,20 @@ public class HelixBootstrapUpgradeUtil {
    * @param clusterConfigFields disk capacity of each partition.
    */
   private void setClusterConfig(ConfigAccessor configAccessor, ClusterConfigFields clusterConfigFields) {
+    // We will enable TOPOLOGY AWARE in cluster config, we need to make sure all the instances have "DOMAIN" fields
+    HelixConfigScope scope =
+        new HelixConfigScope(HelixConfigScope.ConfigScopeProperty.PARTICIPANT, Collections.singletonList(clusterName),
+            null);
+    // This will list all the participant names
+    List<String> instanceNames = configAccessor.getKeys(scope);
+    ensureOrThrow(instanceNames.size() > 0, "There should be some instances in cluster " + clusterName);
+    for (String instanceName : instanceNames) {
+      InstanceConfig instanceConfig = configAccessor.getInstanceConfig(clusterName, instanceName);
+      String domain = instanceConfig.getDomainAsString();
+      ensureOrThrow(domain != null && !domain.isEmpty(),
+          "Domain should be set for instance " + instanceName + " before enable TOPOLOGY AWARE in cluster config");
+    }
+
     ClusterConfig clusterConfig = configAccessor.getClusterConfig(clusterName);
 
     // 1. Set topology awareness. For example, if fault_zone_type is rack, helix avoids placing replicas on the hosts
@@ -1060,6 +1075,11 @@ public class HelixBootstrapUpgradeUtil {
     globalRebalancePreferenceKeyIntegerMap.put(ClusterConfig.GlobalRebalancePreferenceKey.LESS_MOVEMENT,
         clusterConfigFields.lessMovement);
     clusterConfig.setGlobalRebalancePreference(globalRebalancePreferenceKeyIntegerMap);
+
+    // 8. Set error or recover partition threshold for load balance. If the cluster has more error replicas than this
+    // threshold, helix would stop load balance.
+    clusterConfig.setErrorOrRecoveryPartitionThresholdForLoadBalance(
+        clusterConfigFields.errorOrRecoverPartitionThresholdForLoadBalance);
 
     // Update cluster config in Helix/ZK
     configAccessor.setClusterConfig(clusterName, clusterConfig);
@@ -2306,6 +2326,7 @@ public class HelixBootstrapUpgradeUtil {
     private int partitionDiskWeightInGB;
     private int maxPartitionInTransition;
     private int delayRebalanceTimeInMs;
+    private int errorOrRecoverPartitionThresholdForLoadBalance;
 
     /**
      * @return evenness of cluster
@@ -2340,6 +2361,13 @@ public class HelixBootstrapUpgradeUtil {
      */
     public int getDelayRebalanceTimeInMs() {
       return delayRebalanceTimeInMs;
+    }
+
+    /**
+     * @return error or recover partition threshold for load balance.
+     */
+    public int getErrorOrRecoverPartitionThresholdForLoadBalance() {
+      return errorOrRecoverPartitionThresholdForLoadBalance;
     }
   }
 
@@ -2846,9 +2874,9 @@ public class HelixBootstrapUpgradeUtil {
    * Log the summary of this run.
    */
   private void logSummary() {
-    if (instancesUpdated.get() + instancesAdded.get() + instancesDropped.get() + resourcesUpdated.get() + resourcesAdded
-        .get() + resourcesDropped.get() + partitionsDisabled.get() + partitionsEnabled.get() + partitionsReset.get()
-        > 0) {
+    if (instancesUpdated.get() + instancesAdded.get() + instancesDropped.get() + resourcesUpdated.get()
+        + resourcesAdded.get() + resourcesDropped.get() + partitionsDisabled.get() + partitionsEnabled.get()
+        + partitionsReset.get() > 0) {
       if (!dryRun) {
         info("========Cluster in Helix was updated, summary:========");
       } else {
