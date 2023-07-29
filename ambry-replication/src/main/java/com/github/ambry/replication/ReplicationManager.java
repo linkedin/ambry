@@ -43,7 +43,6 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -237,9 +236,6 @@ public class ReplicationManager extends ReplicationEngine {
       if (replicationConfig.replicationTrackPerPartitionLagFromRemote) {
         replicationMetrics.removeLagMetricForPartition(replicaId.getPartitionId());
       }
-      // We are removing this replica from replica thread, we don't need to keep "disabled" information in replica thread
-      // anymore. So passing true to enable would remove any "disabled" information.
-      controlReplicationForPartitions(Collections.singleton(replicaId.getPartitionId()), Collections.emptyList(), true);
       logger.info("{} is successfully removed from replication manager", replicaId.getPartitionId());
     } finally {
       rwLock.writeLock().unlock();

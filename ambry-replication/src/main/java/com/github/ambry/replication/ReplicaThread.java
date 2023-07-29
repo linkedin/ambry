@@ -293,6 +293,9 @@ public class ReplicaThread implements Runnable {
         logger.error("ReplicaThread: {}, RemoteReplicaInfos Set is not created for DataNode {}, RemoteReplicaInfo: {}.",
             threadName, dataNodeId, remoteReplicaInfo);
       }
+      // We are removing this replica from replica thread, we don't need to keep "disabled" information in replica thread
+      // anymore. So passing true to enable would remove any "disabled" information.
+      controlReplicationForPartitions(Collections.singleton(remoteReplicaInfo.getReplicaId().getPartitionId()), true);
     } finally {
       lock.unlock();
     }
