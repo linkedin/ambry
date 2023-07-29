@@ -898,8 +898,8 @@ public class StorageManager implements StoreManager {
       storeMainMetrics.handleDiskFailureCount.inc();
 
       // When there is a new disk failure, we need to do several things
-      // 1. update disk availability
-      // 2. reset the partitions
+      // 1. reset the partitions
+      // 2. update disk availability
       // 3. remove replicasOnFailedDisks from the property store
       // 4. remove replicas from replication manager and stats manager
       // 5. update the capacity to instance config
@@ -946,11 +946,11 @@ public class StorageManager implements StoreManager {
       try {
         // 1. enter maintenance mode
         inMaintenanceMode = enterMaintenance();
-        // 2: update disk availability
-        setDiskUnavailable(newFailedDisks);
-        // 3. reset partitions, we have to update disk availability before reset the partitions. This way, we know
-        // The partitions won't be re-assigned back to the same disks.
+        // 2. reset partitions, we do reset first, because it's the only step might fail with a non-transient error.
+        // If it fails, we want to skip all the following steps.
         resetPartitions(replicasOnFailedDisks);
+        // 3: update disk availability
+        setDiskUnavailable(newFailedDisks);
         // 4. remove all the replicasOnFailedDisks from the property store
         removeReplicasFromCluster(replicasOnFailedDisks);
         // 5: remove all the replicas from replication and state manger
