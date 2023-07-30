@@ -39,6 +39,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
@@ -1114,6 +1115,59 @@ public class ReplicationTestHelper {
               null, remoteHost);
       replicasToReplicate = replicasAndThread.getFirst();
       replicaThread = replicasAndThread.getSecond();
+    }
+
+    protected ReplicationTestSetup() {
+    }
+  }
+
+  public class RetryReplicationTestSetup extends ReplicationTestSetup {
+
+    /**
+     * ReplicationTestSetup Ctor
+     *
+     * @param batchSize the number of messages to be returned in each iteration of replication
+     * @throws Exception
+     */
+    RetryReplicationTestSetup(int batchSize, int maxRetryReplicationCount) throws Exception {
+      MockClusterMap clusterMap = new MockClusterMap();
+      // to make sure we select hosts with the SPECIAL_PARTITION_CLASS, pick hosts from the replicas of that partition
+      PartitionId specialPartitionId =
+          clusterMap.getWritablePartitionIds(MockClusterMap.SPECIAL_PARTITION_CLASS).get(0);
+      // these hosts have replicas of the "special" partition and all the other partitions.
+      localHost =
+          new MockHost(specialPartitionId.getReplicaIds().get(0).getDataNodeId(), clusterMap, maxRetryReplicationCount);
+      remoteHost = new MockHost(specialPartitionId.getReplicaIds().get(1).getDataNodeId(), clusterMap);
+      StoreKeyConverter storeKeyConverter = getStoreKeyConverter();
+      partitionIds = clusterMap.getWritablePartitionIds(null);
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
+      oldKey = new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      newKey = new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      localConversionMap.put(oldKey, newKey);
+      remoteConversionMap.put(newKey, oldKey);
+      ((MockStoreKeyConverterFactory.MockStoreKeyConverter) storeKeyConverter).setConversionMap(localConversionMap);
+      Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+          getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter,
+              new ErrorThrowingTransformer(), null, null, remoteHost);
+      replicasToReplicate = replicasAndThread.getFirst();
+      replicaThread = replicasAndThread.getSecond();
+    }
+  }
+
+  public class ErrorThrowingTransformer implements Transformer {
+
+    @Override
+    public TransformationOutput transform(Message message) {
+      return new TransformationOutput(new MessageFormatException("CRC error", MessageFormatErrorCodes.Data_Corrupt));
+    }
+
+    @Override
+    public void warmup(List<MessageInfo> messageInfos, boolean includeAll) throws Exception {
+
     }
   }
 

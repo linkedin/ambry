@@ -45,10 +45,16 @@ public class MockHost {
   final List<Integer> replicaCountPerRequestTracker = new ArrayList<>();
   final Map<PartitionId, List<MessageInfo>> infosByPartition = new HashMap<>();
   final Map<PartitionId, List<ByteBuffer>> buffersByPartition = new HashMap<>();
+  final int maxRetryReplicationCount;
 
   public MockHost(DataNodeId dataNodeId, ClusterMap clusterMap) {
+    this(dataNodeId, clusterMap, 0);
+  }
+
+  public MockHost(DataNodeId dataNodeId, ClusterMap clusterMap, int maxRetryReplicationCount) {
     this.dataNodeId = dataNodeId;
     this.clusterMap = clusterMap;
+    this.maxRetryReplicationCount = maxRetryReplicationCount;
   }
 
   /**
@@ -105,7 +111,8 @@ public class MockHost {
           store.start();
           RemoteReplicaInfo remoteReplicaInfo =
               new RemoteReplicaInfo(peerReplicaId, replicaId, store, new MockFindToken(0, 0), Long.MAX_VALUE,
-                  SystemTime.getInstance(), new Port(peerReplicaId.getDataNodeId().getPort(), PortType.PLAINTEXT));
+                  SystemTime.getInstance(), new Port(peerReplicaId.getDataNodeId().getPort(), PortType.PLAINTEXT),
+                  maxRetryReplicationCount);
           remoteReplicaInfos.add(remoteReplicaInfo);
         }
       }

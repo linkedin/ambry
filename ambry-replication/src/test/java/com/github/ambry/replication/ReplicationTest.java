@@ -105,6 +105,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.*;
 
 
@@ -2032,6 +2033,18 @@ public class ReplicationTest extends ReplicationTestHelper {
     assumeFalse(shouldUseNetworkClient);
     ReplicationTestSetup testSetup = new ReplicationTestSetup(10);
     Pair<String, String> testCaseAndExpectResult = new Pair<>("NP ND OP", "NP");
+    createMixedMessagesOnRemoteHost(testSetup, testCaseAndExpectResult.getFirst());
+    replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
+  }
+
+  /**
+   * Test the case where remote host has a sequence of New_Put, New_Delete, Old_Put messages and local host is initially empty.
+   * Verify that local host only has New_Put after replication.
+   */
+  @Test
+  public void retryReplicationOnCRCError() throws Exception {
+    RetryReplicationTestSetup testSetup = new RetryReplicationTestSetup(1, 5);
+    Pair<String, String> testCaseAndExpectResult = new Pair<>("NP", "");
     createMixedMessagesOnRemoteHost(testSetup, testCaseAndExpectResult.getFirst());
     replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
   }

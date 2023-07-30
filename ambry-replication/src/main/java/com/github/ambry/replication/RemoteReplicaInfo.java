@@ -83,7 +83,13 @@ public class RemoteReplicaInfo {
     this(replicaId, localReplicaId, localStore, token, tokenPersistIntervalInMs, time, port, 0);
   }
 
-  private RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
+  public RemoteReplicaInfo(ReplicationConfig replicationConfig, ReplicaId replicaId, ReplicaId localReplicaId,
+      Store localStore, FindToken token, long tokenPersistIntervalInMs, Time time, Port port) {
+    this(replicaId, localReplicaId, localStore, token, tokenPersistIntervalInMs, time, port,
+        replicationConfig.maxReplicationRetryCount);
+  }
+  
+  public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port, int maxReplicationRetryCount) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
@@ -97,12 +103,6 @@ public class RemoteReplicaInfo {
     this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
     this.replicationRetryCount = 0;
     this.maxReplicationRetryCount = maxReplicationRetryCount;
-  }
-
-  public RemoteReplicaInfo(ReplicationConfig replicationConfig, ReplicaId replicaId, ReplicaId localReplicaId,
-      Store localStore, FindToken token, long tokenPersistIntervalInMs, Time time, Port port) {
-    this(replicaId, localReplicaId, localStore, token, tokenPersistIntervalInMs, time, port,
-        replicationConfig.maxReplicationRetryCount);
   }
 
   /**
