@@ -8,6 +8,7 @@
     "lessMovement": 2,
     "partitionDiskWeightInGB": 100,
     "maxPartitionInTransition": 50,
-    "delayRebalanceTimeInMs": 1200000
+    "delayRebalanceTimeInMs": 1200000,
+    "errorOrRecoverPartitionThresholdForLoadBalance": 100
   }
 }

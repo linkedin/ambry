@@ -890,8 +890,8 @@ public class HelixBootstrapUpgradeUtil {
           ConfigAccessor configAccessor =
               new ConfigAccessor(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
 
-          // 1. Update instance config for all instances present in each resource
-          for (String resource : resources) {
+          // 1. Update instance config for all instances
+          for (String resource : helixResources) {
             // a. Get list of instances sharing partitions in this resource
             IdealState idealState = resourceToIdealState.get(resource);
             Set<String> partitions = idealState.getPartitionSet();
@@ -1016,19 +1016,27 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   /**
-   * Sets up cluster to use waged rebalancer
-   * @param configAccessor the {@link ConfigAccessor} to access configuration in Helix.
-   * @param clusterConfigFields disk capacity of each partition.
+   * List and return all the instances in the participants.
+   * @param configAccessor
+   * @return
    */
-  private void setClusterConfig(ConfigAccessor configAccessor, ClusterConfigFields clusterConfigFields) {
-    // We will enable TOPOLOGY AWARE in cluster config, we need to make sure all the instances have "DOMAIN" fields
+  private List<String> listAllInstances(ConfigAccessor configAccessor) {
     HelixConfigScope scope =
         new HelixConfigScope(HelixConfigScope.ConfigScopeProperty.PARTICIPANT, Collections.singletonList(clusterName),
             null);
     // This will list all the participant names
     List<String> instanceNames = configAccessor.getKeys(scope);
     ensureOrThrow(instanceNames.size() > 0, "There should be some instances in cluster " + clusterName);
-    for (String instanceName : instanceNames) {
+    return instanceNames;
+  }
+
+  /**
+   * Sets up cluster to use waged rebalancer
+   * @param configAccessor the {@link ConfigAccessor} to access configuration in Helix.
+   * @param clusterConfigFields disk capacity of each partition.
+   */
+  private void setClusterConfig(ConfigAccessor configAccessor, ClusterConfigFields clusterConfigFields) {
+    for (String instanceName : listAllInstances(configAccessor)) {
       InstanceConfig instanceConfig = configAccessor.getInstanceConfig(clusterName, instanceName);
       String domain = instanceConfig.getDomainAsString();
       ensureOrThrow(domain != null && !domain.isEmpty(),
