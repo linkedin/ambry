@@ -524,6 +524,13 @@ public class StoreConfig {
       "store.persist.remote.token.interval.in.seconds";
 
   /**
+   * True to enable disk failure handler
+   */
+  @Config(storeDiskFailureHandlerEnabledName)
+  public final boolean storeDiskFailureHandlerEnabled;
+  public static final String storeDiskFailureHandlerEnabledName = "store.disk.failure.handler.enabled";
+
+  /**
    * The interval to run disk failures in a periodical schedule.
    */
   @Config(storeDiskFailureHandlerTaskIntervalInSecondsName)
@@ -690,6 +697,7 @@ public class StoreConfig {
     storeDeletedMessageRetentionMinutes =
         (deletedMessageRetentionMinutes == -1) ? storeDeletedMessageRetentionHours * 60
             : deletedMessageRetentionMinutes;
+    storeDiskFailureHandlerEnabled = verifiableProperties.getBoolean(storeDiskFailureHandlerEnabledName, false);
     storeDiskFailureHandlerTaskIntervalInSeconds =
         verifiableProperties.getIntInRange(storeDiskFailureHandlerTaskIntervalInSecondsName, 10 * 60, 1,
             Integer.MAX_VALUE);
