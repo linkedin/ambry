@@ -1315,6 +1315,16 @@ public class ReplicaThread implements Runnable {
                     remoteReplicaInfo.getToken(), remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
                     remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
               } else {
+                if (validMessageDetectionInputStream.hasInvalidMessages()) {
+                  replicationMetrics.replicationNumBlobsSkipped.update(
+                      validMessageDetectionInputStream.getNumInvalidMessages());
+                  logger.error(
+                      "Skipped replicating {} corrupted messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
+                      validMessageDetectionInputStream.getNumInvalidMessages(), threadName,
+                      remoteReplicaInfo.getReplicationRetryCount(), remoteReplicaInfo.getToken(),
+                      remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
+                      remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
+                }
                 // If there are no invalid messages, or we have maxed out the retries, then advance token
                 advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
               }
