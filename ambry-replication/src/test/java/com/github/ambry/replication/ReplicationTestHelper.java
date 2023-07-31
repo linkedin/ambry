@@ -1134,18 +1134,19 @@ public class ReplicationTestHelper {
       // Create a mock cluster of 2 nodes, 1 mount per node and 1 store/partition per node otherwise the default mockClustermap
       // just creates far too many nodes and partitions which are not needed and just get in the way of testing
       MockClusterMap clusterMap = new MockClusterMap(false, true, 2, 1, 1, true, false, null);
-      // to make sure we select hosts with the SPECIAL_PARTITION_CLASS, pick hosts from the replicas of that partition
       PartitionId specialPartitionId =
           clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
-      // these hosts have replicas of the "special" partition and all the other partitions.
       localHost =
           new MockHost(specialPartitionId.getReplicaIds().get(0).getDataNodeId(), clusterMap, maxRetryReplicationCount);
       remoteHost = new MockHost(specialPartitionId.getReplicaIds().get(1).getDataNodeId(), clusterMap);
+      // just use a no-op converter, otherwise its just a distraction
       StoreKeyConverter storeKeyConverter = new StoreKeyConverterImplNoOp();
       partitionIds = clusterMap.getWritablePartitionIds(null);
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
+      // don't worry about key version, we just need two keys
+      // the way the test infra is written, i can't have two of each
       oldKey = new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
           partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
       newKey = new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
@@ -1162,6 +1163,9 @@ public class ReplicationTestHelper {
     }
   }
 
+  /**
+   * A transformer that throws errors when transforming a given set of keys
+   */
   public class ErrorThrowingTransformer implements Transformer {
 
     HashSet<String> errorKeys;

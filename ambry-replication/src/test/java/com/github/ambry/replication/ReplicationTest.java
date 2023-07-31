@@ -2038,19 +2038,24 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
-   * Test the case where remote host has a sequence of New_Put, New_Delete, Old_Put messages and local host is initially empty.
-   * Verify that local host only has New_Put after replication.
+   * Tests code that retries replication when an erroneous PUT message is encountered.
+   * The remote host is setup with two keys OP and NP. OP is erroneous PUT and NP is clean PUT.
+   * NP ends up on local host whereas OP is omitted after 2 retries.
    */
   @Test
   public void retryReplicationOnCRCError() throws Exception {
     RetryReplicationTestSetup testSetup = new RetryReplicationTestSetup(10, 2);
     RemoteReplicaInfo remoteReplicaInfo = testSetup.replicasToReplicate.get(testSetup.remoteHost.dataNodeId).get(0);
+    // remote host has two keys OP and NP. OP is erroneous and NP is clean. local host gets NP.
     Pair<String, String> testCaseAndExpectResult = new Pair<>("OP NP", "NP");
     createMixedMessagesOnRemoteHost(testSetup, testCaseAndExpectResult.getFirst());
+    // retry replication once, retryCount = 1
     replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
     assertEquals(1, remoteReplicaInfo.getReplicationRetryCount());
+    // retry replication a second time, retryCount = 2 and no more attempts left
     replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
     assertEquals(2, remoteReplicaInfo.getReplicationRetryCount());
+    // advance token, reset retryCount
     replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
     assertEquals(0, remoteReplicaInfo.getReplicationRetryCount());
   }
