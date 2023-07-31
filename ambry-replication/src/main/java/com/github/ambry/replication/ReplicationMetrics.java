@@ -67,7 +67,7 @@ public class ReplicationMetrics {
   public final Counter sslReplicationErrors;
   public final Counter replicationTokenResetCount;
   public final Counter replicationInvalidMessageStreamErrorCount;
-  public final Histogram replicationNumBlobsSkipped;
+  public final Histogram replicationNumBlobsSkippedAfterRetry;
   public final Map<String, Timer> interColoReplicationLatency = new HashMap<String, Timer>();
   public final Timer intraColoReplicationLatency;
   public final Map<String, Timer> plainTextInterColoReplicationLatency = new HashMap<String, Timer>();
@@ -206,8 +206,8 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationTokenResetCount"));
     replicationInvalidMessageStreamErrorCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationInvalidMessageStreamErrorCount"));
-    replicationNumBlobsSkipped =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "ReplicationNumBlobsSkipped"));
+    replicationNumBlobsSkippedAfterRetry =
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "replicationNumBlobsSkippedAfterRetry"));
     intraColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationLatency"));
     plainTextIntraColoReplicationLatency =
