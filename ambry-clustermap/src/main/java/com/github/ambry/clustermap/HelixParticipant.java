@@ -312,7 +312,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         }
       }
       if (dataNodeConfigUpdated) {
-        logger.info("Updating config: {} in Helix by removing partitions {}", dataNodeConfig, partitionNames);
+        logger.info("Updating config in Helix by removing partitions {}", partitionNames);
         removalResult = dataNodeConfigSource.set(dataNodeConfig);
       } else {
         logger.warn("Partitions {} is not found on instance {}, skipping removing them from config in Helix.",
