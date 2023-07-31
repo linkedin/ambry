@@ -36,6 +36,7 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   public static final String LIST_DATASETS_MAX_RESULT = MYSQL_ACCOUNT_SERVICE_PREFIX + "list.datasets.max.results";
   public static final String LIST_DATASET_VERSIONS_MAX_RESULT =
       MYSQL_ACCOUNT_SERVICE_PREFIX + "list.dataset.versions.max.result";
+  public static final String DATASET_RETENTION_POLICY = MYSQL_ACCOUNT_SERVICE_PREFIX + "dataset.retention.policy";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -160,6 +161,10 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
   @Default("100")
   public final int listDatasetVersionsMaxResult;
 
+  @Config(DATASET_RETENTION_POLICY)
+  @Default("")
+  public final String datasetRetentionPolicy;
+
   public MySqlAccountServiceConfig(VerifiableProperties verifiableProperties) {
     super(verifiableProperties);
     dbInfo = verifiableProperties.getString(DB_INFO);
@@ -179,5 +184,6 @@ public class MySqlAccountServiceConfig extends AccountServiceConfig {
         verifiableProperties.getIntInRange(MAX_MAJOR_VERSION_FOR_SEMANTIC_SCHEMA_DATASET, 999, 1, Integer.MAX_VALUE);
     listDatasetsMaxResult = verifiableProperties.getIntInRange(LIST_DATASETS_MAX_RESULT, 100, 1, Integer.MAX_VALUE);
     listDatasetVersionsMaxResult = verifiableProperties.getIntInRange(LIST_DATASET_VERSIONS_MAX_RESULT, 100, 1, Integer.MAX_VALUE);
+    datasetRetentionPolicy = verifiableProperties.getString(DATASET_RETENTION_POLICY, "");
   }
 }

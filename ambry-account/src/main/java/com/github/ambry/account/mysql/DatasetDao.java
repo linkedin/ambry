@@ -17,7 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.account.AccountServiceErrorCode;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Dataset;
-import com.github.ambry.account.EspressoBackUpRetentionPolicy;
+import com.github.ambry.account.DatasetRetentionPolicy;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
@@ -705,11 +705,13 @@ public class DatasetDao {
                   versionSchema);
           dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
           return datasetVersionRecordList;
-
-        case EspressoBackUpRetentionPolicy.RETENTION_POLICY:
-          datasetVersionRecordList = new EspressoBackUpRetentionPolicy(
-              listValidDatasetVersionsByListStatement(accountId, containerId, datasetName, versionSchema),
-              retentionCount, versionSchema).getDatasetVersionOutOfRetention();
+        case ESPRESSO_BACKUP_RETENTION_POLICY:
+          List<DatasetVersionRecord> allValidDatasetVersionsOrderedByVersion =
+              listValidDatasetVersionsByListStatement(accountId, containerId, datasetName, versionSchema);
+          DatasetRetentionPolicy espressoBackUpRetentionPolicy =
+              Utils.getObj(mySqlAccountServiceConfig.datasetRetentionPolicy, allValidDatasetVersionsOrderedByVersion,
+                  retentionCount, versionSchema);
+          datasetVersionRecordList = espressoBackUpRetentionPolicy.getDatasetVersionOutOfRetention();
           dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
           return datasetVersionRecordList;
         default:
@@ -718,6 +720,9 @@ public class DatasetDao {
     } catch (SQLException | AccountServiceException e) {
       dataAccessor.onException(e, Read);
       throw e;
+    } catch (ReflectiveOperationException e) {
+      dataAccessor.onException(e, Read);
+      throw new IllegalStateException("Unable to construct the dataset retention policy");
     }
   }
 
