@@ -39,7 +39,7 @@ import static com.github.ambry.utils.Utils.*;
  * StaticClusterManager allows components in Ambry to query the topology. This covers the {@link HardwareLayout} and the
  * {@link PartitionLayout}.
  */
-class StaticClusterManager implements ClusterMap {
+public class StaticClusterManager implements ClusterMap {
   protected final HardwareLayout hardwareLayout;
   protected final PartitionLayout partitionLayout;
   private final MetricRegistry metricRegistry;
@@ -55,7 +55,8 @@ class StaticClusterManager implements ClusterMap {
    */
   private static final int NUM_CHOICES = 2;
 
-  StaticClusterManager(PartitionLayout partitionLayout, String localDatacenterName, MetricRegistry metricRegistry) {
+  public StaticClusterManager(PartitionLayout partitionLayout, String localDatacenterName,
+      MetricRegistry metricRegistry) {
     if (logger.isTraceEnabled()) {
       logger.trace("StaticClusterManager {}", partitionLayout);
     }

@@ -254,7 +254,7 @@ public class MockCluster {
     props.setProperty("port", Integer.toString(dataNodeId.getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.enable.hard.delete", Boolean.toString(enableHardDeletes));
-    props.setProperty("store.deleted.message.retention.hours", "1");
+    props.setProperty("store.deleted.message.retention.minutes", "60");
     props.setProperty("store.validate.authorization", "true");
     props.setProperty("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 10));
     props.setProperty("replication.token.flush.interval.seconds", "5");
@@ -268,6 +268,9 @@ public class MockCluster {
     props.setProperty("server.replicate.tombstone.enabled", "true");
     props.setProperty("replication.intra.replica.thread.throttle.sleep.duration.ms", "100");
     props.setProperty("replication.inter.replica.thread.throttle.sleep.duration.ms", "100");
+    props.setProperty("server.repair.requests.db.factory", "com.github.ambry.repair.MysqlRepairRequestsDbFactory");
+    props.setProperty("mysql.repair.requests.db.info",
+        "[{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"}]");
     props.putAll(sslProperties);
     return new VerifiableProperties(props);
   }
@@ -417,6 +420,7 @@ class EventTracker {
   private final Helper creationHelper;
   private final Helper deletionHelper;
   private final Helper undeleteHelper;
+  private final Helper replicateHelper;
   private final ConcurrentMap<UpdateType, Helper> updateHelpers = new ConcurrentHashMap<>();
 
   /**
@@ -425,7 +429,15 @@ class EventTracker {
   private class Helper {
     private final ConcurrentHashMap<String, Boolean> hosts = new ConcurrentHashMap<>();
     private final AtomicInteger notificationsReceived = new AtomicInteger(0);
-    private CountDownLatch latch = new CountDownLatch(numberOfReplicas);
+    private CountDownLatch latch = null;
+
+    /**
+     * Helper constructor
+     * @param latchCount: initial count down number
+     */
+    Helper(int latchCount) {
+      latch = new CountDownLatch(latchCount);
+    }
 
     /**
      * Tracks the event that arrived on {@code host}:{@code port}.
@@ -482,9 +494,11 @@ class EventTracker {
    */
   EventTracker(int expectedNumberOfReplicas) {
     numberOfReplicas = expectedNumberOfReplicas;
-    creationHelper = new Helper();
-    deletionHelper = new Helper();
-    undeleteHelper = new Helper();
+    creationHelper = new Helper(numberOfReplicas);
+    deletionHelper = new Helper(numberOfReplicas);
+    undeleteHelper = new Helper(numberOfReplicas);
+    // On-demand-replication, we usually only need one replica to replicate the Blob.
+    replicateHelper = new Helper(1);
   }
 
   /**
@@ -515,13 +529,22 @@ class EventTracker {
   }
 
   /**
+   * Tracks the On-Demand-Replication that arrived on {@code host}:{@code port}.
+   * @param host the host that received the undelete
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
+  void trackReplicate(String host, int port) {
+    replicateHelper.track(host, port);
+  }
+
+  /**
    * Tracks the update event of type {@code updateType} that arrived on {@code host}:{@code port}.
    * @param host the host that received the update
    * @param port the port of the host that describes the instance along with {@code host}.
    * @param updateType the {@link UpdateType} received
    */
   void trackUpdate(String host, int port, UpdateType updateType) {
-    updateHelpers.computeIfAbsent(updateType, type -> new Helper()).track(host, port);
+    updateHelpers.computeIfAbsent(updateType, type -> new Helper(numberOfReplicas)).track(host, port);
   }
 
   /**
@@ -552,6 +575,15 @@ class EventTracker {
   }
 
   /**
+   * Waits for blob on-demand-replication on one single replica
+   * @return {@code true} if ODR is received on one replica
+   * @throws InterruptedException
+   */
+  boolean awaitBlobReplicates() throws InterruptedException {
+    return replicateHelper.await(WAIT_SECONDS, TimeUnit.SECONDS);
+  }
+
+  /**
    * Waits for blob updates of type {@code updateType} on all replicas
    * @param updateType the type of update to wait for
    * @return {@code true} if updates of type {@code updateType} were received in all replicas within the
@@ -559,7 +591,8 @@ class EventTracker {
    * @throws InterruptedException
    */
   boolean awaitBlobUpdates(UpdateType updateType) throws InterruptedException {
-    return updateHelpers.computeIfAbsent(updateType, type -> new Helper()).await(WAIT_SECONDS, TimeUnit.SECONDS);
+    return updateHelpers.computeIfAbsent(updateType, type -> new Helper(numberOfReplicas))
+        .await(WAIT_SECONDS, TimeUnit.SECONDS);
   }
 
   /**
@@ -593,7 +626,7 @@ class EventTracker {
    * @param updateType the {@link UpdateType} to nullify the notification for
    */
   void decrementUpdated(String host, int port, UpdateType updateType) {
-    updateHelpers.computeIfAbsent(updateType, type -> new Helper()).decrementCount(host, port);
+    updateHelpers.computeIfAbsent(updateType, type -> new Helper(numberOfReplicas)).decrementCount(host, port);
   }
 }
 
@@ -605,7 +638,7 @@ class MockNotificationSystem implements NotificationSystem {
 
   private final ConcurrentHashMap<String, EventTracker> objectTracker = new ConcurrentHashMap<String, EventTracker>();
   private final ClusterMap clusterMap;
-  private static final int TRACKER_TIMEOUT_MS = 2000;
+  private static final int TRACKER_TIMEOUT_MS = 60000;
 
   public MockNotificationSystem(ClusterMap clusterMap) {
     this.clusterMap = clusterMap;
@@ -634,6 +667,12 @@ class MockNotificationSystem implements NotificationSystem {
   }
 
   @Override
+  public void onBlobReplicated(String blobId, String serviceId, Account account, Container container,
+      DataNodeId sourceHost) {
+    // ignore
+  }
+
+  @Override
   public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId,
       BlobReplicaSourceType sourceType) {
     objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
@@ -658,6 +697,11 @@ class MockNotificationSystem implements NotificationSystem {
   public void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
     objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
         .trackUndelete(sourceHost, port);
+  }
+
+  @Override
+  public void onBlobReplicaReplicated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+    objectTracker.computeIfAbsent(blobId, k -> new EventTracker(1)).trackReplicate(sourceHost, port);
   }
 
   @Override
@@ -724,6 +768,23 @@ class MockNotificationSystem implements NotificationSystem {
       waitForTracker(blobId);
       if (!objectTracker.get(blobId).awaitBlobUndeletes()) {
         Assert.fail("Failed awaiting for " + blobId + " undeletes");
+      }
+    } catch (InterruptedException e) {
+      // ignore
+    }
+  }
+
+  /**
+   * Waits for blob on-demand-replication happens on one single replica for {@code blobId}
+   * For ODR, we usually only replicate to one single replica
+   * @param blobId the ID of the blob
+   */
+  void awaitBlobReplicates(String blobId) {
+    try {
+      waitForTracker(blobId);
+      EventTracker et = objectTracker.get(blobId);
+      if (!et.awaitBlobReplicates()) {
+        Assert.fail("Failed awaiting for " + blobId + " on-demand-replication");
       }
     } catch (InterruptedException e) {
       // ignore

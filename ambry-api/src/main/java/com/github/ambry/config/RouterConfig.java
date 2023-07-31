@@ -135,6 +135,12 @@ public class RouterConfig {
   public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED =
       "router.repair.with.replicate.blob.on.delete.enabled";
   public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED = "router.repair.with.replicate.blob.enabled";
+  // offline repair partially failed ttl update
+  public static final String ROUTER_TTLUPDATE_OFFLINE_REPAIR_ENABLED = "router.ttlupdate.offline.repair.enabled";
+  // offline repair partially failed delete request
+  public static final String ROUTER_DELETE_OFFLINE_REPAIR_ENABLED = "router.delete.offline.repair.enabled";
+  // offline repair db factory
+  public static final String ROUTER_REPAIR_REQUESTS_DB_FACTORY = "router.repair.requests.db.factory";
   public static final String ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND =
       "router.operation.tracker.check.all.originating.replicas.for.not.found";
   public static final String RESERVED_METADATA_ENABLED = "router.reserved.metadata.enabled";
@@ -688,6 +694,26 @@ public class RouterConfig {
   public final boolean routerRepairWithReplicateBlobOnDeleteEnabled;
 
   /**
+   * If this config is set to {@code true}, when ttlupdate is partially failed,
+   * the operation will save it to the secondary storage and fix it in the background.
+   */
+  @Config(ROUTER_TTLUPDATE_OFFLINE_REPAIR_ENABLED)
+  public final boolean routerTtlUpdateOfflineRepairEnabled;
+
+  /**
+   * If this config is set to {@code true}, when delete is partially failed,
+   * the operation will save it to the secondary storage and fix it in the background.
+   */
+  @Config(ROUTER_DELETE_OFFLINE_REPAIR_ENABLED)
+  public final boolean routerDeleteOfflineRepairEnabled;
+
+  /**
+   * Specify the RepairRequestsDBFactory we use for the background repair.
+   */
+  @Config(ROUTER_REPAIR_REQUESTS_DB_FACTORY)
+  public final String routerRepairRequestsDbFactory;
+
+  /**
    * The maximum duration in seconds to retry. If the get blob operation takes more than this duration, we would not retry.
    */
   @Config(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC)
@@ -872,6 +898,10 @@ public class RouterConfig {
         verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_TTLUPDATE_ENABLED, false);
     routerRepairWithReplicateBlobOnDeleteEnabled =
         verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED, false);
+    routerRepairRequestsDbFactory = verifiableProperties.getString(ROUTER_REPAIR_REQUESTS_DB_FACTORY, null);
+    routerTtlUpdateOfflineRepairEnabled =
+        verifiableProperties.getBoolean(ROUTER_TTLUPDATE_OFFLINE_REPAIR_ENABLED, false);
+    routerDeleteOfflineRepairEnabled = verifiableProperties.getBoolean(ROUTER_DELETE_OFFLINE_REPAIR_ENABLED, false);
     routerGetBlobRetryLimitInSec = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, 0, 0,
         ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX);
     routerGetBlobRetryLimitCount = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT, 0, 0,

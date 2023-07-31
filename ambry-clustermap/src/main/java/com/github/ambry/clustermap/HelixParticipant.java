@@ -32,6 +32,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.AccessOption;
@@ -59,6 +60,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  * An implementation of {@link ClusterParticipant} that registers as a participant to a Helix cluster.
  */
 public class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
+  public static final String DISK_KEY = "DISK";
   protected final HelixParticipantMetrics participantMetrics;
   private final String clusterName;
   private final String zkConnectStr;
@@ -72,6 +74,8 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private final HelixAdmin helixAdmin;
   private final MetricRegistry metricRegistry;
   private volatile boolean disablePartitionsComplete = false;
+  private volatile boolean inMaintenanceMode = false;
+  private volatile String maintenanceModeReason = null;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
@@ -274,6 +278,50 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     return updateResult;
   }
 
+  @Override
+  public boolean removeReplicasFromDataNode(List<ReplicaId> replicaIds) {
+    if (!clusterMapConfig.clustermapUpdateDatanodeInfo) {
+      return false;
+    }
+    if (replicaIds == null) {
+      throw new IllegalArgumentException("Invalid replica list to remove");
+    }
+    synchronized (helixAdministrationLock) {
+      DataNodeConfig dataNodeConfig = getDataNodeConfig();
+      boolean dataNodeConfigUpdated = false;
+      boolean removalResult = true;
+      List<String> partitionNames = new ArrayList<>();
+      for (ReplicaId replicaId : replicaIds) {
+        String partitionName = replicaId.getPartitionId().toPathString();
+        boolean removedFromStopped = dataNodeConfig.getStoppedReplicas().remove(partitionName);
+        boolean removedFromSealed = dataNodeConfig.getSealedReplicas().remove(partitionName);
+        boolean update = false;
+        if (removedFromStopped || removedFromSealed) {
+          logger.info("Removing partition {} from stopped and sealed list", partitionName);
+          dataNodeConfigUpdated = true;
+          update = true;
+        }
+        DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().get(replicaId.getMountPath());
+        if (diskConfig != null && diskConfig.getReplicaConfigs().remove(partitionName) != null) {
+          logger.info("Removing partition {} from disk {}' config list", partitionName, replicaId.getMountPath());
+          dataNodeConfigUpdated = true;
+          update = true;
+        }
+        if (update) {
+          partitionNames.add(partitionName);
+        }
+      }
+      if (dataNodeConfigUpdated) {
+        logger.info("Updating config: {} in Helix by removing partitions {}", dataNodeConfig, partitionNames);
+        removalResult = dataNodeConfigSource.set(dataNodeConfig);
+      } else {
+        logger.warn("Partitions {} is not found on instance {}, skipping removing them from config in Helix.",
+            partitionNames, instanceName);
+      }
+      return removalResult;
+    }
+  }
+
   /**
    * @return a snapshot of registered state change listeners.
    */
@@ -296,12 +344,88 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     boolean result = true;
     try {
       String resourceName = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+      if (resourceName == null) {
+        logger.error("Can't find resource for partition {} when resetting partition state", partitionName);
+        return false;
+      }
       helixAdmin.resetPartition(clusterName, instanceName, resourceName, Collections.singletonList(partitionName));
     } catch (Exception e) {
       logger.error("Exception occurred when resetting partition " + partitionName, e);
       result = false;
     }
     return result;
+  }
+
+  @Override
+  public boolean resetPartitionState(List<String> partitionNames) {
+    boolean result = true;
+    List<String> succeededPartitions = new ArrayList<>();
+    try {
+      Map<String, List<String>> resourceNameToPartitionNames = new HashMap<>();
+      for (String partitionName : partitionNames) {
+        String resourceName = getResourceNameOfPartition(helixAdmin, clusterName, partitionName);
+        if (resourceName == null) {
+          logger.error("Can't find resource for partition {} when resetting the list of partition states",
+              partitionName);
+          return false;
+        }
+        resourceNameToPartitionNames.computeIfAbsent(resourceName, k -> new ArrayList()).add(partitionName);
+      }
+      for (Map.Entry<String, List<String>> entry : resourceNameToPartitionNames.entrySet()) {
+        String resourceName = entry.getKey();
+        List<String> partitions = entry.getValue();
+        helixAdmin.resetPartition(clusterName, instanceName, resourceName, partitions);
+        succeededPartitions.addAll(partitions);
+      }
+    } catch (Exception e) {
+      logger.error("Exception occurred when resetting partition {}, succeeded partitions are {}", partitionNames,
+          succeededPartitions, e);
+      result = false;
+    }
+    return result;
+  }
+
+  @Override
+  public boolean setDisksState(List<DiskId> diskIds, HardwareState state) {
+    if (diskIds == null || diskIds.isEmpty()) {
+      // when calling this method, we know that some disks are bad, so empty list is not allowed.
+      throw new IllegalArgumentException("List of disk is empty when set disks state");
+    }
+    for (DiskId diskId : diskIds) {
+      if (!(diskId instanceof AmbryDisk)) {
+        throw new IllegalArgumentException(
+            "HelixParticipant only works with the AmbryDisk implementation of DiskId: " + diskIds);
+      }
+    }
+    synchronized (helixAdministrationLock) {
+      // update availability in DataNodeConfig.
+      DataNodeConfig dataNodeConfig = getDataNodeConfig();
+      boolean success = true;
+      boolean dataNodeConfigChanged = false;
+      for (DiskId diskId : diskIds) {
+        DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().get(diskId.getMountPath());
+        if (diskConfig == null) {
+          throw new IllegalArgumentException(
+              "Disk " + diskId.getMountPath() + " can't be found in the failed DataNodeConfig");
+        }
+        if (diskConfig.getState() != state) {
+          logger.info("Setting disk {} state from {} to {}", diskId.getMountPath(), diskConfig.getState(), state);
+          dataNodeConfigChanged = true;
+          DataNodeConfig.DiskConfig newDiskConfig =
+              new DataNodeConfig.DiskConfig(state, diskConfig.getDiskCapacityInBytes());
+          newDiskConfig.getReplicaConfigs().putAll(diskConfig.getReplicaConfigs());
+          dataNodeConfig.getDiskConfigs().put(diskId.getMountPath(), newDiskConfig);
+        }
+      }
+
+      if (dataNodeConfigChanged) {
+        if (!dataNodeConfigSource.set(dataNodeConfig)) {
+          logger.error("Setting disks {} state failed DataNodeConfig update", diskIds);
+          success = false;
+        }
+      }
+      return success;
+    }
   }
 
   @Override
@@ -313,9 +437,79 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   public DistributedLock getDistributedLock(String resource, String message) {
     LockScope distributedLockScope =
         new HelixLockScope(HelixLockScope.LockScopeProperty.RESOURCE, Arrays.asList(clusterName, resource));
+    String userId = clusterMapConfig.clusterMapHostName + new Random().nextInt();
     ZKDistributedNonblockingLock lock = new ZKDistributedNonblockingLock(distributedLockScope, zkConnectStr,
-        clusterMapConfig.clustermapDistributedLockLeaseTimeoutInMs, message, clusterMapConfig.clusterMapHostName);
+        clusterMapConfig.clustermapDistributedLockLeaseTimeoutInMs, message, userId);
     return new DistributedLockImpl(lock);
+  }
+
+  @Override
+  public boolean enterMaintenanceMode(String reason) {
+    if (reason == null || reason.isEmpty()) {
+      throw new IllegalArgumentException("Reason to enter maintenance mode is missing");
+    }
+    boolean enterMaintenanceMode = false;
+    synchronized (helixAdministrationLock) {
+      if (inMaintenanceMode) {
+        throw new IllegalStateException("Cluster already in maintenance mode: " + maintenanceModeReason);
+      }
+      try {
+        // First check if cluster is already in maintenance mode.
+        if (helixAdmin.isInMaintenanceMode(clusterName)) {
+          logger.error("Cluster already in maintenance mode, probably due to other reason");
+          return false;
+        }
+        helixAdmin.manuallyEnableMaintenanceMode(clusterName, true, reason, null);
+        inMaintenanceMode = true;
+        maintenanceModeReason = reason;
+        logger.info("Cluster {} enters maintenance mode because {}", clusterName, reason);
+        enterMaintenanceMode = true;
+      } catch (Exception e) {
+        logger.error("Exception occurred when entering maintenance mode", e);
+      }
+    }
+    return enterMaintenanceMode;
+  }
+
+  @Override
+  public boolean exitMaintenanceMode() {
+    boolean exitMaintenanceMode = false;
+    synchronized (helixAdministrationLock) {
+      if (!inMaintenanceMode) {
+        throw new IllegalStateException("Cluster is not in maintenance mode");
+      }
+      try {
+        helixAdmin.manuallyEnableMaintenanceMode(clusterName, false, maintenanceModeReason, null);
+        inMaintenanceMode = false;
+        logger.info("Cluster {} exits maintenance mode: {}", clusterName, maintenanceModeReason);
+        maintenanceModeReason = null;
+        exitMaintenanceMode = true;
+      } catch (Exception e) {
+        logger.error("Exception occurred when entering maintenance mode", e);
+      }
+    }
+    return exitMaintenanceMode;
+  }
+
+  @Override
+  public boolean updateDiskCapacity(int diskCapacity) {
+    if (diskCapacity < 0) {
+      throw new IllegalArgumentException("Disk capacity has to be positive");
+    }
+    boolean success = false;
+    synchronized (helixAdministrationLock) {
+      try {
+        InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+        Map<String, Integer> capacityMap = new HashMap<>(instanceConfig.getInstanceCapacityMap());
+        capacityMap.put(DISK_KEY, diskCapacity);
+        instanceConfig.setInstanceCapacityMap(capacityMap);
+        helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+        success = true;
+      } catch (Exception e) {
+        logger.error("Failed to update disk capacity: {}", diskCapacity, e);
+      }
+    }
+    return success;
   }
 
   /**
@@ -350,6 +544,14 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    */
   public HelixAdmin getHelixAdmin() {
     return helixAdmin;
+  }
+
+  /**
+   * Expose for testing
+   * @return {@link HelixManager} tha manage current state model.
+   */
+  public HelixManager getHelixManager() {
+    return manager;
   }
 
   /**
@@ -432,7 +634,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       newReplicaInfoAdded = true;
     }
     if (newReplicaInfoAdded) {
-      logger.info("Updating config: {} in Helix by adding partition {}", dataNodeConfig, partitionName);
+      logger.info("Updating config in Helix by adding partition {}", partitionName);
       additionResult = dataNodeConfigSource.set(dataNodeConfig);
     }
     return additionResult;
@@ -469,7 +671,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       dataNodeConfigUpdated = diskConfig.getReplicaConfigs().remove(partitionName) != null;
     }
     if (dataNodeConfigUpdated) {
-      logger.info("Updating config: {} in Helix by removing partition {}", dataNodeConfig, partitionName);
+      logger.info("Updating config in Helix by removing partition {}", partitionName);
       removalResult = dataNodeConfigSource.set(dataNodeConfig);
     } else {
       logger.warn("Partition {} is not found on instance {}, skipping removing it from config in Helix.", partitionName,
@@ -572,6 +774,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       localPartitionAndState.put(partitionName, ReplicaState.ERROR);
       throw e;
     }
+    logger.info("Before setting partition {} to bootstrap", partitionName);
     localPartitionAndState.put(partitionName, ReplicaState.BOOTSTRAP);
   }
 

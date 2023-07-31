@@ -16,6 +16,8 @@ package com.github.ambry.account;
 import com.github.ambry.account.mysql.MySqlAccountStore;
 import com.github.ambry.commons.Notifier;
 import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.frontend.Page;
+import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
@@ -63,14 +65,13 @@ public class CachedAccountService extends AbstractAccountService {
   private volatile MySqlAccountStore mySqlAccountStore;
   private boolean needRefresh = false;
   private long lastSyncTime = -1;
-  private boolean disableGenerateColumn;
 
   /**
    * The service used for mysql migration which includes all common logic.
    */
   public CachedAccountService(MySqlAccountStore mySqlAccountStore, Supplier<MySqlAccountStore> supplier,
       AccountServiceMetrics accountServiceMetrics, MySqlAccountServiceConfig config, Notifier<String> notifier,
-      String backupDir, ScheduledExecutorService scheduler, boolean disableGenerateColumn) throws IOException {
+      String backupDir, ScheduledExecutorService scheduler) throws IOException {
     super(config, Objects.requireNonNull(accountServiceMetrics, "accountServiceMetrics cannot be null"), notifier);
     this.mySqlAccountStore = mySqlAccountStore;
     this.accountServiceMetrics = accountServiceMetrics;
@@ -87,7 +88,6 @@ public class CachedAccountService extends AbstractAccountService {
     this.backupFileManager = new BackupFileManager(accountServiceMetrics, backupDir, config.maxBackupFileCount);
     this.scheduler = scheduler;
     this.supplier = supplier;
-    this.disableGenerateColumn = disableGenerateColumn;
     accountServiceMetrics.trackTimeSinceLastSync(this::getTimeInSecondsSinceLastSync);
     accountServiceMetrics.trackContainerCount(this::getContainerCount);
     // Initialize cache from backup file on disk
@@ -561,7 +561,8 @@ public class CachedAccountService extends AbstractAccountService {
 
   @Override
   public DatasetVersionRecord addDatasetVersion(String accountName, String containerName, String datasetName,
-      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled) throws AccountServiceException {
+      String version, long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled,
+      DatasetVersionState datasetVersionState) throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
       if (mySqlAccountStore == null) {
@@ -569,7 +570,22 @@ public class CachedAccountService extends AbstractAccountService {
       }
       return mySqlAccountStore.addDatasetVersion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version, timeToLiveInSeconds,
-          creationTimeInMs, datasetVersionTtlEnabled);
+          creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public void updateDatasetVersionState(String accountName, String containerName, String datasetName,
+      String version, DatasetVersionState datasetVersionState) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      mySqlAccountStore.updateDatasetVersionState(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName, version, datasetVersionState);
     } catch (SQLException e) {
       throw translateSQLException(e);
     }
@@ -606,15 +622,59 @@ public class CachedAccountService extends AbstractAccountService {
   }
 
   @Override
-  public List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName, String datasetName)
+  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(String accountName,
+      String containerName, String datasetName) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.getAllValidVersionsOutOfRetentionCount(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), accountName, containerName, datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(String accountName, String containerName, String datasetName)
       throws AccountServiceException {
     try {
       Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
       if (mySqlAccountStore == null) {
         mySqlAccountStore = this.supplier.get();
       }
-      return mySqlAccountStore.getAllValidVersion(accountAndContainerIdPair.getFirst(),
+      return mySqlAccountStore.getAllValidVersionForDatasetDeletion(accountAndContainerIdPair.getFirst(),
           accountAndContainerIdPair.getSecond(), datasetName);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public Page<String> listAllValidDatasets(String accountName, String containerName, String pageToken) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.listAllValidDatasets(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), pageToken);
+    } catch (SQLException e) {
+      throw translateSQLException(e);
+    }
+  }
+
+  @Override
+  public Page<String> listAllValidDatasetVersions(String accountName, String containerName,
+      String datasetName, String pageToken) throws AccountServiceException {
+    try {
+      Pair<Short, Short> accountAndContainerIdPair = getAccountAndContainerIdFromName(accountName, containerName);
+      if (mySqlAccountStore == null) {
+        mySqlAccountStore = this.supplier.get();
+      }
+      return mySqlAccountStore.listAllValidDatasetVersions(accountAndContainerIdPair.getFirst(),
+          accountAndContainerIdPair.getSecond(), datasetName, pageToken);
     } catch (SQLException e) {
       throw translateSQLException(e);
     }
@@ -692,7 +752,7 @@ public class CachedAccountService extends AbstractAccountService {
     }
 
     // Write changes to MySql db.
-    mySqlAccountStore.updateAccounts(accountsUpdateInfo, disableGenerateColumn);
+    mySqlAccountStore.updateAccounts(accountsUpdateInfo);
 
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     logger.trace("Completed updating accounts={} in MySql DB, took time={} ms", accounts, timeForUpdate);
@@ -716,7 +776,7 @@ public class CachedAccountService extends AbstractAccountService {
             addedOrUpdatedContainers.getSecond());
 
     // Write changes to MySql db.
-    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo), disableGenerateColumn);
+    mySqlAccountStore.updateAccounts(Collections.singletonList(accountUpdateInfo));
 
     long timeForUpdate = System.currentTimeMillis() - startTimeMs;
     logger.trace("Completed updating containers={} for accountId={} in MySqlDB in time={} ms", containers,

@@ -34,6 +34,12 @@ public interface DiskId extends Resource {
   HardwareState getState();
 
   /**
+   * Set the state for the disk id;
+   * @param state The desired state
+   */
+  void setState(HardwareState state);
+
+  /**
    * Gets the raw capacity in bytes for this DiskId.
    *
    * @return the raw capacity in bytes

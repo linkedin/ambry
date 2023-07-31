@@ -413,7 +413,12 @@ class InMemoryStore implements Store {
 
   @Override
   public MessageInfo findKey(StoreKey key) throws StoreException {
-    return getMergedMessageInfo(key, messageInfos);
+    MessageInfo info = getMergedMessageInfo(key, messageInfos);
+    if (info == null) {
+      throw new StoreException("Key " + key + " not found in store. Cannot check if it is deleted",
+          StoreErrorCodes.ID_Not_Found);
+    }
+    return info;
   }
 
   @Override

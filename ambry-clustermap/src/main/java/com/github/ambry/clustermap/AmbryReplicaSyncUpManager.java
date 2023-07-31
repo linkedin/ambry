@@ -318,6 +318,10 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       }
       catchupTarget = clusterMapConfig.clustermapReplicaCatchupTarget == 0 ? localDcPeerReplicaAndLag.size()
           : clusterMapConfig.clustermapReplicaCatchupTarget;
+      logger.info(
+          "LocalReplicaLagInfo: Partition {}, current state {}, LocalDcPeers {}, RemoteDcPeers: {}, catchupTarget: {}",
+          localReplica.getPartitionId().toPathString(), currentState, localDcPeerReplicaAndLag.keySet(),
+          remoteDcPeerReplicaAndLag.keySet(), catchupTarget);
     }
 
     /**
@@ -329,6 +333,7 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
       if (peerReplica.getDataNodeId().getDatacenterName().equals(localDcName)) {
         localDcPeerReplicaAndLag.put(peerReplica, lagInBytes);
         if (lagInBytes <= acceptableThreshold) {
+          logger.trace("LocalReplicaLagInfo: local peer {} caught up with {}", peerReplica, replicaOnCurrentNode);
           localDcCaughtUpReplicas.add(peerReplica);
         } else {
           localDcCaughtUpReplicas.remove(peerReplica);

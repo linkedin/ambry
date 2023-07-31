@@ -282,12 +282,16 @@ public class GetManagerTest {
     int curBlobSize = blobSize;
     for (int i = 0; i < NUM_STITCHED_CHUNKS; i++) {
       //Give each chunk a different size
-      int curChunkSize = Math.min(curBlobSize, chunkSize + i * 5);
+      int curChunkSize = Math.min(curBlobSize, chunkSize - i * 5);
+      if (i == NUM_STITCHED_CHUNKS - 1) {
+        curChunkSize = curBlobSize;
+      }
       setOperationParams(curChunkSize, options);
       byteBuffer.put(putContent);
       curBlobSize -= curChunkSize;
       stitchBlobsIds.add(
-          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build()).get());
+          router.putBlob(putBlobProperties, putUserMetadata, putChannel,
+              new PutBlobOptionsBuilder().chunkUpload(true).maxUploadSize(CHUNK_SIZE).build()).get());
       chunkInfos.add(new ChunkInfo(stitchBlobsIds.get(i), curChunkSize, -1L, null));
     }
     setOperationParams(blobSize, null);

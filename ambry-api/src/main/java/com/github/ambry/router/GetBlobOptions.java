@@ -49,8 +49,8 @@ public class GetBlobOptions {
    *                       relevant for metadata blobs)
    * @param restRequest the {@link RestRequest} that triggered this get operation.
    */
-  GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range, boolean resolveRangeOnEmptyBlob,
-      boolean rawMode, int blobSegmentIdx, RestRequest restRequest) {
+  public GetBlobOptions(OperationType operationType, GetOption getOption, ByteRange range,
+      boolean resolveRangeOnEmptyBlob, boolean rawMode, int blobSegmentIdx, RestRequest restRequest) {
     if (operationType == null || getOption == null) {
       throw new IllegalArgumentException("operationType and getOption must be defined");
     }

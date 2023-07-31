@@ -76,9 +76,7 @@ public interface NotificationSystem extends Closeable {
    * @param container The {@link Container} for the blob
    * @param sourceHost The source {@link DataNodeId} to replicate the blob from
    */
-  default void onBlobReplicated(String blobId, String serviceId, Account account, Container container,
-      DataNodeId sourceHost) {
-  }
+  void onBlobReplicated(String blobId, String serviceId, Account account, Container container, DataNodeId sourceHost);
 
   /**
    * Notifies the underlying system when a blob is replicated to a node
@@ -119,4 +117,13 @@ public interface NotificationSystem extends Closeable {
    */
   default void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
   }
+
+  /**
+   * Notifies the underlying system when a On-Demand-Replication is replicated to a node.
+   * @param sourceHost The source host from where the notification is being invoked
+   * @param port The port of the source host from where the notification is being invoked.
+   * @param blobId The id of the blob whose On-Demand-Replication has been executed
+   * @param sourceType The source that on-demand-replicated the blob replica
+   */
+  void onBlobReplicaReplicated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
 }

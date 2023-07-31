@@ -105,7 +105,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       ScheduledExecutorService longLiveTaskScheduler, ScheduledExecutorService shortLiveTaskScheduler,
       DiskIOScheduler diskIOScheduler, StoreMetrics metrics) {
     this(storeId, index, config.storeStatsBucketCount, TimeUnit.MINUTES.toMillis(config.storeStatsBucketSpanInMinutes),
-        TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours),
+        TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes),
         TimeUnit.MINUTES.toMillis(config.storeStatsRecentEntryProcessingIntervalInMinutes),
         config.storeStatsWaitTimeoutInSecs, config.storeEnableBucketForLogSegmentReports,
         config.storeCompactionPurgeDeleteTombstone, time, longLiveTaskScheduler, shortLiveTaskScheduler,

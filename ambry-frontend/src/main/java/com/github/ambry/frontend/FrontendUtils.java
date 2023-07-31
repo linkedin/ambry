@@ -13,6 +13,8 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Dataset;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -36,6 +38,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;

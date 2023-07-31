@@ -157,6 +157,13 @@ class DataNode implements DataNodeId {
    */
   @Override
   public Port getPortToConnectTo() {
+    if (clusterMapConfig.clusterMapEnableHttp2Replication) {
+      if (ports.containsKey(PortType.HTTP2)) {
+        return ports.get(PortType.HTTP2);
+      } else {
+        throw new IllegalStateException("No HTTP2 Port exists for the data node " + hostname + ":" + portNum);
+      }
+    }
     if (sslEnabledDataCenters.contains(datacenter.getName())) {
       if (ports.containsKey(PortType.SSL)) {
         return ports.get(PortType.SSL);

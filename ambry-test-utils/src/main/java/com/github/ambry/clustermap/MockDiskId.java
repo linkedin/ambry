@@ -41,6 +41,11 @@ public class MockDiskId implements DiskId {
   }
 
   @Override
+  public void setState(HardwareState state) {
+    this.state = state;
+  }
+
+  @Override
   public long getRawCapacityInBytes() {
     return availableSpaceInBytes;
   }

@@ -221,7 +221,7 @@ public class MySqlAccountsDBTool {
     logger.info("Fetched account metadata from zk path={}, took time={} ms", fullZKAccountMetadataPath,
         zkFetchTimeMs - startTimeMs);
 
-    AccountInfoMap accountInfoMap = new AccountInfoMap(new AccountServiceMetrics(new MetricRegistry(), false), accountMap);
+    AccountInfoMap accountInfoMap = new AccountInfoMap(new AccountServiceMetrics(new MetricRegistry()), accountMap);
 
     // Populate Account and Container tables in batches
     List<AccountUpdateInfo> accountUpdateInfos = new ArrayList<>();
@@ -229,7 +229,7 @@ public class MySqlAccountsDBTool {
       accountUpdateInfos.add(
           new AccountUpdateInfo(account, true, false, new ArrayList<>(account.getAllContainers()), new ArrayList<>()));
     }
-    mySqlAccountStore.updateAccounts(accountUpdateInfos, false);
+    mySqlAccountStore.updateAccounts(accountUpdateInfos);
 
     logger.info("Initialized account metadata in DB from ZK path {}, took time={} ms", fullZKAccountMetadataPath,
         System.currentTimeMillis() - zkFetchTimeMs);

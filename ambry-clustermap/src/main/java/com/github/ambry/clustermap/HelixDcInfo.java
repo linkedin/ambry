@@ -51,13 +51,13 @@ class HelixDcInfo extends DcInfo {
 
   @Override
   public void close() {
+    routingTableProvider.shutdown();
     try {
       if (helixManager.isConnected()) {
         helixManager.disconnect();
       }
     } finally {
       dataNodeConfigSource.close();
-      routingTableProvider.shutdown();
     }
   }
 }

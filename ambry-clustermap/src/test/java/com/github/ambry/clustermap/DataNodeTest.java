@@ -249,6 +249,36 @@ public class DataNodeTest {
     }
   }
 
+  /**
+   * Test on get http2 port.
+   * @throws Exception
+   */
+  @Test
+  public void testGetHttp2Port() throws Exception {
+    ClusterMapConfig clusterMapConfig;
+    Properties props = new Properties();
+    props.setProperty("clustermap.ssl.enabled.datacenters", "datacenter1,datacenter2,datacenter3");
+    props.setProperty("clustermap.cluster.name", "test");
+    props.setProperty("clustermap.datacenter.name", "dc1");
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.enable.http2.replication", "true");
+    clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+    JSONObject jsonObject =
+        TestUtils.getJsonDataNode(TestUtils.getLocalHost(), 6666, 7666, 8666, HardwareState.AVAILABLE, getDisks());
+
+    DataNode dataNode = new TestDataNode("datacenter2", jsonObject, clusterMapConfig);
+    assertEquals("The datacenter of the data node is in the ssl enabled datacenter list. SSL port should be returned",
+        PortType.HTTP2, dataNode.getPortToConnectTo().getPortType());
+
+    jsonObject.remove("http2port");
+    dataNode = new TestDataNode("datacenter1", jsonObject, clusterMapConfig);
+    try {
+      dataNode.getPortToConnectTo();
+      fail("Should have thrown Exception because there is no http2Port.");
+    } catch (IllegalStateException e) {
+    }
+  }
+
   void ensure(DataNode dataNode, HardwareState state) {
     assertEquals(dataNode.getState(), state);
     for (DiskId disk : dataNode.getDisks()) {

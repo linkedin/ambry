@@ -18,14 +18,10 @@ import com.codahale.metrics.MetricRegistry;
 
 public class AccountServiceMetricsWrapper {
   private final AccountServiceMetrics accountServiceMetrics;
-  private final AccountServiceMetrics accountServiceMetricsNew;
 
   public AccountServiceMetricsWrapper(MetricRegistry metricRegistry) {
-    this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry, false);
-    this.accountServiceMetricsNew = new AccountServiceMetrics(metricRegistry, true);
+    this.accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
   }
 
   public AccountServiceMetrics getAccountServiceMetrics() {return this.accountServiceMetrics;}
-
-  public AccountServiceMetrics getAccountServiceMetricsNew() {return this.accountServiceMetricsNew;}
 }

@@ -127,7 +127,8 @@ class AmbryDisk implements DiskId, Resource {
    * Set the hard state of this disk dynamically.
    * @param newState the updated {@link HardwareState}
    */
-  void setState(HardwareState newState) {
+  @Override
+  public void setState(HardwareState newState) {
     if (newState == HardwareState.AVAILABLE) {
       resourceStatePolicy.onHardUp();
     } else {

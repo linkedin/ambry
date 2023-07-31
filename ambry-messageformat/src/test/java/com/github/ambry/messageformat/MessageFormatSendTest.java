@@ -39,6 +39,7 @@ import java.util.Random;
 import java.util.zip.CRC32;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -84,12 +85,12 @@ public class MessageFormatSendTest {
 
   class MockMessageReadSet implements MessageReadSet {
 
-    ArrayList<ByteBuffer> buffers;
-    ArrayList<StoreKey> keys;
+    List<ByteBuffer> buffers;
+    List<StoreKey> keys;
     private long prefetchRelativeOffset;
     private long preFetchSize;
 
-    public MockMessageReadSet(ArrayList<ByteBuffer> buffers, ArrayList<StoreKey> keys) {
+    public MockMessageReadSet(List<ByteBuffer> buffers, List<StoreKey> keys) {
       this.buffers = buffers;
       this.keys = keys;
     }
@@ -150,20 +151,20 @@ public class MessageFormatSendTest {
     if (blobFormatVersion >= MessageFormatRecord.Blob_Version_V2) {
       ByteBuffer encryptionKey = ByteBuffer.wrap(TestUtils.getRandomBytes(256));
       MessageFormatRecord.headerVersionToUse = MessageFormatRecord.Message_Header_Version_V1;
-      doSendWriteSingleMessageTest(null, null);
-      doSendWriteSingleMessageTest(encryptionKey.duplicate(), null);
+      doSendWriteSingleMessageTest(null, null, false);
+      doSendWriteSingleMessageTest(encryptionKey.duplicate(), null, false);
 
       MessageFormatRecord.headerVersionToUse = MessageFormatRecord.Message_Header_Version_V2;
-      doSendWriteSingleMessageTest(null, null);
-      doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0));
-      doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate());
+      doSendWriteSingleMessageTest(null, null, false);
+      doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0), false);
+      doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate(), false);
 
       MessageFormatRecord.headerVersionToUse = MessageFormatRecord.Message_Header_Version_V3;
-      doSendWriteSingleMessageTest(null, null);
-      doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0));
-      doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate());
+      doSendWriteSingleMessageTest(null, null, false);
+      doSendWriteSingleMessageTest(ByteBuffer.allocate(0), ByteBuffer.allocate(0), false);
+      doSendWriteSingleMessageTest(encryptionKey.duplicate(), encryptionKey.duplicate(), false);
     } else {
-      doSendWriteSingleMessageTest(null, null);
+      doSendWriteSingleMessageTest(null, null, false);
     }
   }
 
@@ -171,9 +172,10 @@ public class MessageFormatSendTest {
    * Helper method for testing single message sends.
    * @param encryptionKey the encryption key to include in the message while writing it.
    * @param expectedEncryptionKey the key expected when reading the sent message.
+   * @param verifyCrcError True to change blob content so the crc would be mismatch
    */
-  private void doSendWriteSingleMessageTest(ByteBuffer encryptionKey, ByteBuffer expectedEncryptionKey)
-      throws Exception {
+  private void doSendWriteSingleMessageTest(ByteBuffer encryptionKey, ByteBuffer expectedEncryptionKey,
+      boolean verifyCrcError) throws Exception {
     String serviceId = "serviceId";
     String ownerId = "owner";
     String contentType = "bin";
@@ -205,14 +207,23 @@ public class MessageFormatSendTest {
     ByteBuffer buf1 = ByteBuffer.allocate((int) putStream.getSize());
 
     putStream.read(buf1.array());
-    ArrayList<ByteBuffer> listbuf = new ArrayList<ByteBuffer>();
-    listbuf.add(buf1);
-    ArrayList<StoreKey> storeKeys = new ArrayList<StoreKey>();
-    storeKeys.add(storeKey);
+    if (verifyCrcError) {
+      // The last 8 bytes are the crc for the blob format, let's change some bytes before, and if the MessageFormatSend
+      // would be able to catch that.
+      byte[] blobAll = buf1.array();
+      // this is the last byte of the blob format content
+      byte b = blobAll[blobAll.length - MessageFormatRecord.Crc_Size - 1];
+      b = b == 0xff ? (byte) 0x00 : (byte) 0xff;
+      blobAll[blobAll.length - MessageFormatRecord.Crc_Size - 1] = b;
+    }
+
+    List<ByteBuffer> listbuf = Arrays.asList(buf1);
+    List<StoreKey> storeKeys = Arrays.asList(storeKey);
     MockMessageReadSet readSet = new MockMessageReadSet(listbuf, storeKeys);
 
-    MetricRegistry registry = new MetricRegistry();
-    MessageFormatMetrics metrics = new MessageFormatMetrics(registry);
+    MessageFormatMetrics metrics = new MessageFormatMetrics(new MetricRegistry());
+    long exceptionCountBefore = metrics.messageFormatExceptionCount.getCount();
+    long exceptionCountAfter = exceptionCountBefore;
     // get all
     MessageFormatSend send = new MessageFormatSend(readSet, MessageFormatFlags.All, metrics, new MockIdFactory());
     Assert.assertEquals(send.sizeInBytes(), putStream.getSize());
@@ -225,13 +236,19 @@ public class MessageFormatSendTest {
     }
     Assert.assertArrayEquals(buf1.array(), bufresult.array());
     Assert.assertTrue(readSet.isPrefetchInfoCorrect(0, readSet.sizeInBytes(0)));
+    if (verifyCrcError) {
+      exceptionCountAfter = metrics.messageFormatExceptionCount.getCount();
+      Assert.assertEquals(exceptionCountBefore + 1, exceptionCountAfter);
+      exceptionCountBefore = exceptionCountAfter;
+    }
 
     // get blob
     send = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics, new MockIdFactory());
-    long blobRecordSize =
-        (blobFormatVersion == MessageFormatRecord.Blob_Version_V3) ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blob.length) :
-            ((blobFormatVersion == MessageFormatRecord.Blob_Version_V2) ? MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blob.length)
-        : MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blob.length));
+    long blobRecordSize = (blobFormatVersion == MessageFormatRecord.Blob_Version_V3)
+        ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blob.length)
+        : ((blobFormatVersion == MessageFormatRecord.Blob_Version_V2)
+            ? MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blob.length)
+            : MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blob.length));
     Assert.assertEquals(send.sizeInBytes(), blobRecordSize);
     bufresult.clear();
     channel = Channels.newChannel(new ByteBufferOutputStream(bufresult));
@@ -239,7 +256,8 @@ public class MessageFormatSendTest {
       send.writeTo(channel);
     }
 
-    for (int i = 0; i < blob.length; i++) {
+    int toIndex = verifyCrcError ? blob.length - 1 : blob.length;
+    for (int i = 0; i < toIndex; i++) {
       Assert.assertEquals(blob[i],
           bufresult.array()[i + (int) blobRecordSize - MessageFormatRecord.Crc_Size - blob.length]);
     }
@@ -250,6 +268,10 @@ public class MessageFormatSendTest {
       Assert.assertEquals(expectedEncryptionKey, send.getMessageMetadataList().get(0).getEncryptionKey());
     }
     Assert.assertTrue(readSet.isPrefetchInfoCorrect(0, readSet.sizeInBytes(0)));
+    if (verifyCrcError) {
+      exceptionCountAfter = metrics.messageFormatExceptionCount.getCount();
+      Assert.assertEquals(exceptionCountBefore + 1, exceptionCountAfter);
+    }
 
     // get user metadata
     send = new MessageFormatSend(readSet, MessageFormatFlags.BlobUserMetadata, metrics, new MockIdFactory());
@@ -462,10 +484,10 @@ public class MessageFormatSendTest {
     send = new MessageFormatSend(readSet, MessageFormatFlags.Blob, metrics, new MockIdFactory());
     int blobRecordSizes[] = new int[5];
     for (int i = 0; i < 5; i++) {
-      blobRecordSizes[i] = (int) (putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName())
-          ? (blobFormatVersion == MessageFormatRecord.Blob_Version_V3 ?
-            MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blob[i].length) :
-            MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blob[i].length))
+      blobRecordSizes[i] = (int) (putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName()) ? (
+          blobFormatVersion == MessageFormatRecord.Blob_Version_V3
+              ? MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(blob[i].length)
+              : MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blob[i].length))
           : MessageFormatRecord.Blob_Format_V1.getBlobRecordSize(blob[i].length));
     }
     Assert.assertEquals(send.sizeInBytes(), (long) Arrays.stream(blobRecordSizes).sum());
@@ -479,9 +501,8 @@ public class MessageFormatSendTest {
     for (int i = 0; i < 5; i++) {
       DeserializedBlob deserializedBlob = MessageFormatRecord.deserializeAndGetBlobWithVersion(
           new ByteArrayInputStream(bufresult.array(), startOffset, blobRecordSizes[i]));
-      Assert.assertEquals(
-          putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName()) ?
-              blobFormatVersion : MessageFormatRecord.Blob_Version_V1, deserializedBlob.getVersion());
+      Assert.assertEquals(putFormats[i].equals(PutMessageFormatInputStream.class.getSimpleName()) ? blobFormatVersion
+          : MessageFormatRecord.Blob_Version_V1, deserializedBlob.getVersion());
       Assert.assertEquals(BlobType.DataBlob, deserializedBlob.getBlobData().getBlobType());
       Assert.assertEquals(blob[i].length, deserializedBlob.getBlobData().getSize());
       byte[] readBlob = new byte[blob[i].length];
@@ -660,6 +681,16 @@ public class MessageFormatSendTest {
     } catch (MessageFormatException e) {
       Assert.assertTrue(e.getErrorCode() == MessageFormatErrorCodes.Store_Key_Id_MisMatch);
     }
+  }
+
+  /**
+   * Test when the blob content is modified, will the MessageFormatSend able to catch this error in metric.
+   * @throws Exception
+   */
+  @Test
+  public void testCrcErrorInMessageFormatRecord() throws Exception {
+    Assume.assumeTrue(blobFormatVersion >= MessageFormatRecord.Blob_Version_V2);
+    doSendWriteSingleMessageTest(null, null, true);
   }
 
   /**

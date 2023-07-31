@@ -123,19 +123,28 @@ public class ServerHttp2Test {
   }
 
   @Test
-  public void replicateBlobCaseTest() {
+  public void replicatePutBlobV1Format() {
     // ReplicateBlob has two modes: write-repair-mode and non-write-repair mode.
     // Refer to handleReplicateBlobRequest.localStoreHasTheKey
     boolean writeRepair = false;
-    ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, routerProps, testEncryption,
-        notificationSystem, writeRepair);
+    ServerTestUtil.replicateBlobCaseTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem,
+        writeRepair);
   }
 
   @Test
-  public void replicateDeleteRecordTest() {
+  public void replicateTombstoneV1Format() {
     // test ReplicateBlob delete tombstone record
-    ServerTestUtil.replicateDeleteRecordTest(http2Cluster, clientSSLConfig1, routerProps, testEncryption,
-        notificationSystem);
+    ServerTestUtil.replicateDeleteTomeStoneTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);
+  }
+
+  @Test
+  public void replicateBlobV2MultipleCases() {
+    ServerTestUtil.replicateBlobV2CaseTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);
+  }
+
+  @Test
+  public void repairRequestTest() throws Exception {
+    ServerTestUtil.repairRequestTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);
   }
 
   @Test

@@ -29,6 +29,7 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -39,6 +40,7 @@ import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.GregorianCalendar;
+import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -47,6 +49,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.Operations.*;
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.utils.Utils.*;
 
@@ -95,11 +98,14 @@ class FrontendRestRequestService implements RestRequestService {
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
   private GetAccountsHandler getAccountsHandler;
   private GetDatasetsHandler getDatasetsHandler;
+  private ListDatasetsHandler listDatasetsHandler;
+  private ListDatasetVersionHandler listDatasetVersionHandler;
   private PostAccountsHandler postAccountsHandler;
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
+  private final Random random = new Random();
 
   /**
    * Create a new instance of FrontendRestRequestService by supplying it with config, metrics, cluster map, a
@@ -201,6 +207,9 @@ class FrontendRestRequestService implements RestRequestService {
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getDatasetsHandler = new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    listDatasetsHandler = new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    listDatasetVersionHandler =
+        new ListDatasetVersionHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
@@ -208,9 +217,12 @@ class FrontendRestRequestService implements RestRequestService {
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
+      int oneWeekInSeconds = 60 * 60 * 24 * 7;
+      int initialDelayInSeconds = random.nextInt(oneWeekInSeconds);
       namedBlobsCleanupTask =
-          namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, 60 * 10, 60 * 10, TimeUnit.SECONDS);
-      logger.info("Named Blob Stale Data Cleanup Process has started");
+          namedBlobsCleanupScheduler.scheduleAtFixedRate(
+              namedBlobsCleanupRunner, initialDelayInSeconds, oneWeekInSeconds, TimeUnit.SECONDS);
+      logger.info("Named Blob Stale Data Cleanup Process has started with {} seconds initial delay", initialDelayInSeconds);
     }
 
     isUp = true;
@@ -265,8 +277,13 @@ class FrontendRestRequestService implements RestRequestService {
         getSignedUrlHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(ACCOUNTS_CONTAINERS_DATASETS)) {
-        getDatasetsHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        if (RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_DATASET_NAME, false) == null) {
+          listDatasetsHandler.handle(restRequest, restResponseChannel,
+              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        } else {
+          getDatasetsHandler.handle(restRequest, restResponseChannel,
+              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        }
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         getAccountsHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
@@ -276,6 +293,10 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
         namedBlobListHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (RestUtils.getBooleanHeader(restRequest.getArgs(), ENABLE_DATASET_VERSION_LISTING, false)
+          && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getVersion() == null){
+        listDatasetVersionHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         getBlobHandler.handle(requestPath, restRequest, restResponseChannel, (r, e) -> {

@@ -18,6 +18,7 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -81,7 +82,52 @@ public class InputStreamReadableStreamChannelTest {
   }
 
   /**
-   * Verfies behavior of {@link InputStreamReadableStreamChannel#close()}.
+   * Test InputStreamReadableStreamChannel with ByteBufferAsyncWritableChannel, since ByteBufferAsyncWritableChannel doesn't
+   * make a copy of the byte buffer offered by InputStreamReadableStreamChannel.
+   * @throws Exception
+   */
+  @Test
+  public void commonCasesTestWithByteBufferAsyncWritableChannel() throws Exception {
+    int bufSize = InputStreamReadableStreamChannel.BUFFER_SIZE;
+    int randSizeLessThanBuffer = TestUtils.RANDOM.nextInt(bufSize - 2) + 2;
+    int randMultiplier = TestUtils.RANDOM.nextInt(10);
+    int[] testStreamSizes =
+        {1, randSizeLessThanBuffer, bufSize, bufSize + 1, bufSize * randMultiplier, bufSize * randMultiplier + 1};
+    for (int size : testStreamSizes) {
+      byte[] src = TestUtils.getRandomBytes(size);
+
+      InputStream stream = new ByteBufferInputStream(ByteBuffer.wrap(src));
+      InputStreamReadableStreamChannel channel =
+          new InputStreamReadableStreamChannel(stream, src.length, EXECUTOR_SERVICE);
+      assertTrue("Channel should be open", channel.isOpen());
+      ByteBufferAsyncWritableChannel writableChannel = new ByteBufferAsyncWritableChannel();
+      ReadIntoCallback callback = new ReadIntoCallback();
+      channel.readInto(writableChannel, callback);
+
+      // we have to read those bytes out with ByteBufferAsyncWritableChannel
+      int curRead = 0;
+      byte[] target = new byte[src.length];
+      do {
+        ByteBuf chunk = writableChannel.getNextByteBuf();
+        int remaining = chunk.readableBytes();
+        chunk.readBytes(target, curRead, remaining);
+        curRead += remaining;
+        writableChannel.resolveOldestChunk(null);
+      } while (curRead < src.length);
+
+      callback.awaitCallback();
+      if (callback.exception != null) {
+        throw callback.exception;
+      }
+      assertEquals("Total bytes written does not match (callback)", src.length, callback.bytesRead);
+      assertArrayEquals("Data does not match", src, target);
+      channel.close();
+      writableChannel.close();
+    }
+  }
+
+  /**
+   * Verifies behavior of {@link InputStreamReadableStreamChannel#close()}.
    * @throws IOException
    */
   @Test

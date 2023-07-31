@@ -255,7 +255,8 @@ public class LZ4CompressionTest {
       Assert.assertEquals(testMessageSize, decompressedSize);
       Assert.assertEquals(testMessageSize, decompressedBufferDirect.position() - bufferLeftPadSize);
       Assert.assertEquals(0, compressedBufferHeap.remaining());
-      decompressedBufferDirect.position(bufferLeftPadSize).get(decompressedMessage);
+      decompressedBufferDirect.position(bufferLeftPadSize);
+      decompressedBufferDirect.get(decompressedMessage);
       Assert.assertEquals(testMessage, new String(decompressedMessage, StandardCharsets.UTF_8));
 
       // Decompress Direct to Heap.
@@ -265,7 +266,8 @@ public class LZ4CompressionTest {
       Assert.assertEquals(testMessageSize, decompressedSize);
       Assert.assertEquals(testMessageSize, decompressedBufferHeap.position() - bufferLeftPadSize);
       Assert.assertEquals(0, compressedBufferDirect.remaining());
-      Assert.assertEquals(testMessage, new String(decompressedBufferHeap.array(), bufferLeftPadSize, testMessageSize, StandardCharsets.UTF_8));
+      Assert.assertEquals(testMessage,
+          new String(decompressedBufferHeap.array(), bufferLeftPadSize, testMessageSize, StandardCharsets.UTF_8));
     }
 
     // Decompress Direct to Direct.
@@ -275,7 +277,8 @@ public class LZ4CompressionTest {
     Assert.assertEquals(testMessageSize, decompressedSize);
     Assert.assertEquals(testMessageSize, decompressedBufferDirect.position() - bufferLeftPadSize);
     Assert.assertEquals(0, compressedBufferDirect.remaining());
-    decompressedBufferDirect.position(bufferLeftPadSize).get(decompressedMessage);
+    decompressedBufferDirect.position(bufferLeftPadSize);
+    decompressedBufferDirect.get(decompressedMessage);
     Assert.assertEquals(testMessage, new String(decompressedMessage, StandardCharsets.UTF_8));
   }
 }

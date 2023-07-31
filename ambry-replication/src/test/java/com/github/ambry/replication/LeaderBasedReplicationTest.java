@@ -24,15 +24,16 @@ import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaState;
+import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -73,9 +74,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
   /**
    * Constructor to set the configs
    */
-  public LeaderBasedReplicationTest(short requestVersion, short responseVersion, boolean shouldUseNetworkClient)
-      throws IOException {
-    super(requestVersion, responseVersion, shouldUseNetworkClient);
+  public LeaderBasedReplicationTest(short requestVersion, short responseVersion) throws IOException {
+    super(requestVersion, responseVersion);
     setUp();
   }
 
@@ -89,9 +89,8 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
   public static List<Object[]> data() {
     //@formatter:off
     return Arrays.asList(new Object[][]{
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, false},
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, false},
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, true},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5},
+        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6},
     });
     //@formatter:on
   }
@@ -229,10 +228,11 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteNodeInLocalDC, remoteHostInLocalDC);
     hosts.put(remoteNodeInRemoteDC, remoteHostInRemoteDC);
-    ConnectionPool mockConnectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
+    MockNetworkClientFactory mockNetworkClientFactory = new MockNetworkClientFactory(hosts, clusterMap, batchSize,
+        new MockFindTokenHelper(new BlobIdFactory(clusterMap), replicationConfig));
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant,
-            mockConnectionPool);
+            mockNetworkClientFactory);
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
 
@@ -426,11 +426,12 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     hosts.put(remoteNodeInRemoteDC, remoteHostInRemoteDC);
     int batchSize = 5;
 
-    ConnectionPool mockConnectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
+    MockNetworkClientFactory mockNetworkClientFactory = new MockNetworkClientFactory(hosts, clusterMap, batchSize,
+        new MockFindTokenHelper(new BlobIdFactory(clusterMap), replicationConfig));
 
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant,
-            mockConnectionPool);
+            mockNetworkClientFactory);
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
 
@@ -513,7 +514,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       if (leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())) {
         assertEquals("remote token mismatch for leader replicas",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize - 1);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize);
       } else {
         assertEquals("remote token should not move forward for standby replicas until missing keys are fetched",
             ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), 0);
@@ -526,7 +527,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // verify that remote token will be moved for all intra-colo replicas with token index = batchSize-1
     for (RemoteReplicaInfo replicaInfo : remoteReplicaInfosForLocalDC) {
       assertEquals("mismatch in remote token set for intra colo replicas",
-          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize - 1);
+          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize);
     }
 
     // process missing keys for cross colo replicas from previous metadata exchange
@@ -538,7 +539,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // as missing keys must now be obtained via intra-dc replication
     for (RemoteReplicaInfo replicaInfo : remoteReplicaInfosForRemoteDC) {
       assertEquals("mismatch in remote token set for inter colo replicas",
-          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize - 1);
+          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize);
     }
 
     // If we have a local standby replica with leader partition on remote node, change its state to leader
@@ -557,10 +558,10 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
       if (leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())
           || (remoteReplicaInfo.getLocalReplicaId().equals(localStandbyReplicaWithLeaderPartitionOnRemoteNode))) {
         assertEquals("remote token mismatch for leader replicas",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize * 2 - 2);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize * 2);
       } else {
         assertEquals("remote token should not move forward for standby replicas until missing keys are fetched",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize - 1);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize);
       }
     }
 
@@ -570,7 +571,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // verify that remote token is moved forward for all intra-colo replicas.
     for (RemoteReplicaInfo replicaInfo : remoteReplicaInfosForLocalDC) {
       assertEquals("mismatch in remote token set for intra colo replicas",
-          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize * 2 - 2);
+          ((MockFindToken) replicaInfo.getToken()).getIndex(), batchSize * 2);
     }
 
     // process missing keys for cross colo replicas from previous metadata exchange
@@ -582,7 +583,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // via intra-dc replication.
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       assertEquals("mismatch in remote token set for intra colo replicas",
-          ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize * 2 - 2);
+          ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize * 2);
     }
 
     storageManager.shutdown();
@@ -603,11 +604,12 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     int numOfMessagesOnRemoteNodeInLocalDC = 3;
     int numOfMessagesOnRemoteNodeInRemoteDC = 10;
 
-    ConnectionPool mockConnectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
+    MockNetworkClientFactory mockNetworkClientFactory = new MockNetworkClientFactory(hosts, clusterMap, batchSize,
+        new MockFindTokenHelper(new BlobIdFactory(clusterMap), replicationConfig));
 
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant,
-            mockConnectionPool);
+            mockNetworkClientFactory);
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
 
@@ -708,7 +710,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       if (leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())) {
         assertEquals("remote token mismatch for leader replicas",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize - 1);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize);
       } else {
         assertEquals("remote token should not move forward for standby replicas until missing keys are fetched",
             ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), 0);
@@ -721,7 +723,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // verify that remote token will be moved for all replicas as it is intra-dc replication
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForLocalDC) {
       assertEquals("mismatch in remote token set for intra colo replicas",
-          ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), numOfMessagesOnRemoteNodeInLocalDC - 1);
+          ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), numOfMessagesOnRemoteNodeInLocalDC);
     }
 
     // process missing messages if any from previous metadata exchange for cross colo replicas as they must now be obtained
@@ -774,7 +776,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfosForRemoteDC) {
       if (!leaderReplicasOnLocalAndRemoteNodes.contains(remoteReplicaInfo.getReplicaId())) {
         assertEquals("mismatch in remote token set for standby cross colo replicas",
-            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize - 1);
+            ((MockFindToken) remoteReplicaInfo.getToken()).getIndex(), batchSize);
         assertFalse("missing store messages should be empty for standby replicas now",
             crossColoReplicaThread.containsMissingKeysFromPreviousMetadataExchange(remoteReplicaInfo));
       }
@@ -802,11 +804,14 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     hosts.put(remoteNodeInLocalDC, remoteHostInLocalDC);
     hosts.put(remoteNodeInRemoteDC, remoteHostInRemoteDC);
     int batchSize = 5;
-    ConnectionPool mockConnectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
+    StoreKeyFactory storeKeyFactory = new BlobIdFactory(clusterMap);
+    FindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
+    MockNetworkClientFactory mockNetworkClientFactory =
+        new MockNetworkClientFactory(hosts, clusterMap, batchSize, findTokenHelper);
 
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant,
-            mockConnectionPool);
+            mockNetworkClientFactory);
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
 
@@ -907,6 +912,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     // in the connection to 6
     // There are 6 records in the remote host. 5 put records + 1 ttl update record. We will receive 5 messages in the
     // metadata exchange as ttl update will be merged with its put record and sent as single record.
+    ((MockNetworkClient) crossColoReplicaThread.getNetworkClient()).setBatchSize(numOfMessages + 1);
     crossColoReplicaThread.replicate();
     List<ReplicaThread.ExchangeMetadataResponse> responseForRemoteNodeInRemoteDC =
         crossColoReplicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteNodeInRemoteDC);
@@ -924,7 +930,7 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     crossColoReplicaThread.getLeaderReplicaList(remoteReplicaInfosForRemoteDC, responseForRemoteNodeInRemoteDC,
         leaderReplicas, exchangeMetadataResponseListForLeaderReplicas);
 
-    // verify that only leader replicas in remoteHost2 are chosen for fetching missing messages.
+    // verify that only leader replicas in remoteHost2 are chosen for fetching missing messages
     Set<ReplicaId> remoteReplicasToFetchInReplicaThread =
         leaderReplicas.stream().map(RemoteReplicaInfo::getReplicaId).collect(Collectors.toSet());
     assertThat("mismatch in leader remote replicas to fetch missing keys",
@@ -947,17 +953,11 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
 
     // Use blocking channel to make sure we fetch less than batch size messages.
     // Fetch only first 4 messages from remote host in local datacenter
+    ((MockNetworkClient) intraColoReplicaThread.getNetworkClient()).setBatchSize(
+        numOfMessagesToBeFetchedFromRemoteHost1);
+    intraColoReplicaThread.replicate();
     List<ReplicaThread.ExchangeMetadataResponse> responseForRemoteNodeInLocalDC =
-        intraColoReplicaThread.exchangeMetadata(
-            new MockConnectionPool.MockConnection(remoteHostInLocalDC, numOfMessagesToBeFetchedFromRemoteHost1),
-            remoteReplicaInfosForLocalDC);
-    assertEquals("Response should contain a response for each replica", remoteReplicaInfosForLocalDC.size(),
-        responseForRemoteNodeInLocalDC.size());
-
-    // fetch missing keys from remoteHost1
-    intraColoReplicaThread.fixMissingStoreKeys(
-        new MockConnectionPool.MockConnection(remoteHostInLocalDC, numOfMessagesToBeFetchedFromRemoteHost1),
-        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC, false);
+        intraColoReplicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHostInLocalDC.dataNodeId);
 
     // verify that remote token has moved forward for all partitions since it is intra-dc replication.
     for (int i = 0; i < responseForRemoteNodeInLocalDC.size(); i++) {
@@ -979,16 +979,11 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     }
 
     //Fetch remaining one message (b4) from remote host in local datacenter
-    responseForRemoteNodeInLocalDC = intraColoReplicaThread.exchangeMetadata(
-        new MockConnectionPool.MockConnection(remoteHostInLocalDC, numOfMessagesToBeFetchedFromRemoteHost1),
-        remoteReplicaInfosForLocalDC);
+    intraColoReplicaThread.replicate();
+    responseForRemoteNodeInLocalDC =
+        intraColoReplicaThread.getExchangeMetadataResponsesInEachCycle().get(remoteHostInLocalDC.dataNodeId);
     assertEquals("Response should contain a response for each replica", remoteReplicaInfosForLocalDC.size(),
         responseForRemoteNodeInLocalDC.size());
-
-    // fetch missing keys from remoteHost1
-    intraColoReplicaThread.fixMissingStoreKeys(
-        new MockConnectionPool.MockConnection(remoteHostInLocalDC, numOfMessagesToBeFetchedFromRemoteHost1),
-        remoteReplicaInfosForLocalDC, responseForRemoteNodeInLocalDC, false);
 
     // verify remote token for intra-dc replicas
     for (int i = 0; i < responseForRemoteNodeInLocalDC.size(); i++) {
@@ -1030,10 +1025,12 @@ public class LeaderBasedReplicationTest extends ReplicationTestHelper {
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteNodeInLocalDC, remoteHostInLocalDC);
     hosts.put(remoteNodeInRemoteDC, remoteHostInRemoteDC);
-    ConnectionPool mockConnectionPool = new MockConnectionPool(hosts, clusterMap, batchSize);
+    MockNetworkClientFactory mockNetworkClientFactory = new MockNetworkClientFactory(hosts, clusterMap, batchSize,
+        new MockFindTokenHelper(new BlobIdFactory(clusterMap), replicationConfig));
+
     Pair<StorageManager, ReplicationManager> managers =
         createStorageManagerAndReplicationManager(clusterMap, clusterMapConfig, mockHelixParticipant,
-            mockConnectionPool);
+            mockNetworkClientFactory);
     StorageManager storageManager = managers.getFirst();
     MockReplicationManager replicationManager = (MockReplicationManager) managers.getSecond();
 

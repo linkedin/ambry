@@ -88,7 +88,7 @@ public class MockRestRequest implements RestRequest {
   // header fields
   public static String CONTENT_LENGTH_HEADER_KEY = "Content-Length";
 
-  private final RestMethod restMethod;
+  private RestMethod restMethod;
   private final URI uri;
   private final Map<String, Object> args = new HashMap<String, Object>();
   private final ReentrantLock contentLock = new ReentrantLock();
@@ -146,6 +146,11 @@ public class MockRestRequest implements RestRequest {
   public RestMethod getRestMethod() {
     onEventComplete(Event.GetRestMethod);
     return restMethod;
+  }
+
+  @Override
+  public void setRestMethod(RestMethod restMethod) {
+    this.restMethod = restMethod;
   }
 
   @Override

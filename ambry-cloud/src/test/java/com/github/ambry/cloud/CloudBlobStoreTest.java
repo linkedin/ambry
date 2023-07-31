@@ -35,10 +35,11 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.FindToken;
-import com.github.ambry.replication.MockConnectionPool;
 import com.github.ambry.replication.MockFindToken;
 import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.MockHost;
+import com.github.ambry.replication.MockNetworkClient;
+import com.github.ambry.replication.MockNetworkClientFactory;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationMetrics;
@@ -834,7 +835,6 @@ public class CloudBlobStoreTest {
     Transformer transformer = new BlobIdTransformer(storeKeyFactory, storeKeyConverter);
     Map<DataNodeId, MockHost> hosts = new HashMap<>();
     hosts.put(remoteHost.dataNodeId, remoteHost);
-    MockConnectionPool connectionPool = new MockConnectionPool(hosts, clusterMap, 4);
 
     // Generate BlobIds for following PUT.
     short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
@@ -858,6 +858,9 @@ public class CloudBlobStoreTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(props));
     CloudDataNode cloudDataNode = new CloudDataNode(cloudConfig, clusterMapConfig);
+    MockFindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
+    MockNetworkClient mockNetworkClient =
+        (MockNetworkClient) new MockNetworkClientFactory(hosts, clusterMap, 4, findTokenHelper).getNetworkClient();
 
     LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
         new LatchBasedInMemoryCloudDestination(blobIdList, clusterMap);
@@ -870,10 +873,10 @@ public class CloudBlobStoreTest {
     // Create ReplicaThread and add RemoteReplicaInfo to it.
     ReplicationMetrics replicationMetrics = new ReplicationMetrics(new MetricRegistry(), Collections.emptyList());
     ReplicaThread replicaThread =
-        new ReplicaThread("threadtest", new MockFindTokenHelper(storeKeyFactory, replicationConfig), clusterMap,
-            new AtomicInteger(0), cloudDataNode, connectionPool, null, replicationConfig, replicationMetrics, null,
-            storeKeyConverter, transformer, clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(),
-            new ResponseHandler(clusterMap), new MockTime(), null, null, null);
+        new ReplicaThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), cloudDataNode,
+            mockNetworkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+            clusterMap.getMetricRegistry(), false, cloudDataNode.getDatacenterName(), new ResponseHandler(clusterMap),
+            new MockTime(), null, null, null);
 
     for (ReplicaId replica : partitionId.getReplicaIds()) {
       if (replica.getDataNodeId() == remoteHost.dataNodeId) {

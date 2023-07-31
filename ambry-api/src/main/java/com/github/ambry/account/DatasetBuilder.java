@@ -17,6 +17,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
 import static com.github.ambry.account.Dataset.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -32,6 +33,7 @@ public class DatasetBuilder {
   // necessary for insert, not update.
   private Dataset.VersionSchema versionSchema;
   //optional
+  private String retentionPolicy = DEFAULT_RETENTION_POLICY;
   private Integer retentionCount = null;
   private Long retentionTimeInSeconds = null;
   private Map<String, String> userTags = null;
@@ -56,6 +58,7 @@ public class DatasetBuilder {
     containerName = origin.getContainerName();
     datasetName = origin.getDatasetName();
     versionSchema = origin.getVersionSchema();
+    retentionPolicy = origin.getRetentionPolicy();
     retentionCount = origin.getRetentionCount();
     retentionTimeInSeconds = origin.getRetentionTimeInSeconds();
     userTags = origin.getUserTags();
@@ -118,6 +121,17 @@ public class DatasetBuilder {
   }
 
   /**
+   * Set the retention policy
+   * @param retentionPolicy the retention policy, default is counter based.
+   * @return the retention policy.
+   */
+  @JsonProperty(JSON_RETENTION_POLICY)
+  public DatasetBuilder setRetentionPolicy(String retentionPolicy) {
+    this.retentionPolicy = retentionPolicy;
+    return this;
+  }
+
+  /**
    * Set the retention count of the {@link Dataset} to build.
    * @param retentionCount the retention count to set.
    * @return the builder.
@@ -156,6 +170,7 @@ public class DatasetBuilder {
    * @return a {@link Dataset} object.
    */
   public Dataset build() {
-    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionCount, retentionTimeInSeconds, userTags);
+    return new Dataset(accountName, containerName, datasetName, versionSchema, retentionPolicy, retentionCount,
+        retentionTimeInSeconds, userTags);
   }
 }
