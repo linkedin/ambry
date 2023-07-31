@@ -53,6 +53,7 @@ import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyConverterImplNoOp;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
@@ -1130,29 +1131,28 @@ public class ReplicationTestHelper {
      * @throws Exception
      */
     RetryReplicationTestSetup(int batchSize, int maxRetryReplicationCount) throws Exception {
-      MockClusterMap clusterMap = new MockClusterMap();
+      // Create a mock cluster of 2 nodes, 1 mount per node and 1 store/partition per node otherwise the default mockClustermap
+      // just creates far too many nodes and partitions which are not needed and just get in the way of testing
+      MockClusterMap clusterMap = new MockClusterMap(false, true, 2, 1, 1, true, false, null);
       // to make sure we select hosts with the SPECIAL_PARTITION_CLASS, pick hosts from the replicas of that partition
       PartitionId specialPartitionId =
-          clusterMap.getWritablePartitionIds(MockClusterMap.SPECIAL_PARTITION_CLASS).get(0);
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
       // these hosts have replicas of the "special" partition and all the other partitions.
       localHost =
           new MockHost(specialPartitionId.getReplicaIds().get(0).getDataNodeId(), clusterMap, maxRetryReplicationCount);
       remoteHost = new MockHost(specialPartitionId.getReplicaIds().get(1).getDataNodeId(), clusterMap);
-      StoreKeyConverter storeKeyConverter = getStoreKeyConverter();
+      StoreKeyConverter storeKeyConverter = new StoreKeyConverterImplNoOp();
       partitionIds = clusterMap.getWritablePartitionIds(null);
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
-      oldKey = new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
-          partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
       newKey = new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
           partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
-      localConversionMap.put(oldKey, newKey);
-      remoteConversionMap.put(newKey, oldKey);
-      ((MockStoreKeyConverterFactory.MockStoreKeyConverter) storeKeyConverter).setConversionMap(localConversionMap);
+      Transformer transformer = new ErrorThrowingTransformer();
+
       Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
-          getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter,
-              new ErrorThrowingTransformer(), null, null, remoteHost);
+          getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null,
+              null, remoteHost);
       replicasToReplicate = replicasAndThread.getFirst();
       replicaThread = replicasAndThread.getSecond();
     }

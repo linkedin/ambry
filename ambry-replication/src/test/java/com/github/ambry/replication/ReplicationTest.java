@@ -130,13 +130,13 @@ public class ReplicationTest extends ReplicationTestHelper {
    * viz {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V1}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_5}}
    * & {{@code ReplicaMetadataRequest#Replica_Metadata_Request_Version_V2}, {@code ReplicaMetadataResponse#REPLICA_METADATA_RESPONSE_VERSION_V_6}}
    * @return an array with both pairs of compatible request and response.
+  {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, false},
+  {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, false},
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
     //@formatter:off
     return Arrays.asList(new Object[][]{
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V1, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_5, false},
-        {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, false},
         {ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2, ReplicaMetadataResponse.REPLICA_METADATA_RESPONSE_VERSION_V_6, true}
     });
     //@formatter:on
@@ -2043,10 +2043,16 @@ public class ReplicationTest extends ReplicationTestHelper {
    */
   @Test
   public void retryReplicationOnCRCError() throws Exception {
-    RetryReplicationTestSetup testSetup = new RetryReplicationTestSetup(1, 5);
+    RetryReplicationTestSetup testSetup = new RetryReplicationTestSetup(10, 2);
+    RemoteReplicaInfo remoteReplicaInfo = testSetup.replicasToReplicate.get(testSetup.remoteHost.dataNodeId).get(0);
     Pair<String, String> testCaseAndExpectResult = new Pair<>("NP", "");
     createMixedMessagesOnRemoteHost(testSetup, testCaseAndExpectResult.getFirst());
     replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
+    assertEquals(1, remoteReplicaInfo.getReplicationRetryCount());
+    replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
+    assertEquals(2, remoteReplicaInfo.getReplicationRetryCount());
+    replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
+    assertEquals(0, remoteReplicaInfo.getReplicationRetryCount());
   }
 
   /**

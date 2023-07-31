@@ -68,7 +68,7 @@ public class RemoteReplicaInfo {
   private long localLagFromRemoteStore = -1;
   private long reEnableReplicationTime = 0;
   private ReplicaThread replicaThread;
-  private long replicationRetryCount;
+  private int replicationRetryCount;
   // Configurable
   protected final int maxReplicationRetryCount;
 
@@ -88,7 +88,7 @@ public class RemoteReplicaInfo {
     this(replicaId, localReplicaId, localStore, token, tokenPersistIntervalInMs, time, port,
         replicationConfig.maxReplicationRetryCount);
   }
-  
+
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port, int maxReplicationRetryCount) {
     this.replicaId = replicaId;
@@ -109,8 +109,12 @@ public class RemoteReplicaInfo {
    * Increments replicationRetryCount by 1
    * @return replicationRetryCount
    */
-  public long incReplicationRetryCount() {
+  public int incReplicationRetryCount() {
     this.replicationRetryCount += 1;
+    return this.replicationRetryCount;
+  }
+
+  public int getReplicationRetryCount() {
     return this.replicationRetryCount;
   }
 
