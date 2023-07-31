@@ -207,7 +207,7 @@ public class ReplicationMetrics {
     replicationInvalidMessageStreamErrorCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "ReplicationInvalidMessageStreamErrorCount"));
     replicationNumBlobsSkippedAfterRetry =
-        registry.histogram(MetricRegistry.name(ReplicaThread.class, "replicationNumBlobsSkippedAfterRetry"));
+        registry.histogram(MetricRegistry.name(ReplicaThread.class, "ReplicationNumBlobsSkippedAfterRetry"));
     intraColoReplicationLatency =
         registry.timer(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationLatency"));
     plainTextIntraColoReplicationLatency =
