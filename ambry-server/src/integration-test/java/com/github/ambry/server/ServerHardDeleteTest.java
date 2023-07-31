@@ -24,6 +24,7 @@ import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobPropertiesSerDe;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -94,7 +95,7 @@ public class ServerHardDeleteTest {
     props.setProperty("port", Integer.toString(mockClusterMap.getDataNodes().get(0).getPort()));
     props.setProperty("store.data.flush.interval.seconds", "1");
     props.setProperty("store.enable.hard.delete", "true");
-    props.setProperty("store.deleted.message.retention.hours", "168");
+    props.setProperty("store.deleted.message.retention.hours", "10080");
     props.setProperty("server.handle.undelete.request.enabled", "true");
     props.setProperty("clustermap.cluster.name", "test");
     props.setProperty("clustermap.datacenter.name", "DC1");
@@ -319,6 +320,10 @@ public class ServerHardDeleteTest {
     // There are 6 * (4 + 4 + 1). 6 stands for the times for putBlob, 4 stands for 4 extra blobProperty Bytes for each field,
     // plus 1 byte for compression flag.
     int expectedTokenValueT1 = 198732 + 14 + 54;
+    if (BlobPropertiesSerDe.CURRENT_VERSION > BlobPropertiesSerDe.VERSION_4) {
+      // Add (6 * Integer.BYTES) because for properties of a put blob, there is a new field for size of reserved metadata id.
+      expectedTokenValueT1 += 6 * Integer.BYTES;
+    }
     ensureCleanupTokenCatchesUp(chosenPartition.getReplicaIds().get(0).getReplicaPath(), mockClusterMap,
         expectedTokenValueT1);
 
@@ -356,6 +361,10 @@ public class ServerHardDeleteTest {
     time.sleep(TimeUnit.DAYS.toMillis(1));
     // For each future change to this offset, add to this variable and write an explanation of why the number changed.
     int expectedTokenValueT2 = 298416 + 98 + 28 + 81;
+    if (BlobPropertiesSerDe.CURRENT_VERSION > BlobPropertiesSerDe.VERSION_4) {
+      // Add (9 * Integer.BYTES) because for properties of a put blob, there is a new field for size of reserved metadata id.
+      expectedTokenValueT2 += 9 * Integer.BYTES;
+    }
     // old value: 298400. Increased by 16 (4 * 4) to 298416 because the format for delete record went from 2 to 3 which
     // adds 4 bytes (two shorts) extra. The last record is a delete record so its extra 4 bytes are not added
     //

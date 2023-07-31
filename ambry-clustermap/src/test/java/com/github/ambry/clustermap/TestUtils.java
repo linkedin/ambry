@@ -29,6 +29,13 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.helix.HelixDataAccessor;
+import org.apache.helix.HelixManager;
+import org.apache.helix.PropertyKey;
+import org.apache.helix.model.Message;
+import org.apache.helix.model.Resource;
+import org.apache.helix.model.StateModelDefinition;
+import org.apache.helix.util.MessageUtil;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -615,6 +622,7 @@ public class TestUtils {
     private static final int DEFAULT_BASE_PORT = 6666;
     private static final int DEFAULT_NUM_RACKS = 3;
 
+    public static String baseMountPath = "/mnt";
     private long version;
     private int diskCount;
     private long diskCapacityInBytes;
@@ -632,7 +640,7 @@ public class TestUtils {
     ClusterMapConfig clusterMapConfig;
 
     protected JSONArray getDisks() throws JSONException {
-      return getJsonArrayDisks(diskCount, "/mnt", HardwareState.AVAILABLE, diskCapacityInBytes);
+      return getJsonArrayDisks(diskCount, baseMountPath, HardwareState.AVAILABLE, diskCapacityInBytes);
     }
 
     protected JSONArray getDataNodes(int basePort, int sslPort, int http2Port, JSONArray disks) throws JSONException {
@@ -1298,6 +1306,52 @@ public class TestUtils {
     props.setProperty("clustermap.datacenter.name", "");
     props.setProperty("clustermap.resolve.hostnames", "false");
     return new ClusterMapConfig(new VerifiableProperties(props));
+  }
+
+  /**
+   * Send state transition messages to zookeeper so the state transition can happen for the replicas
+   * @param manager {@link HelixManager} to provide connection to zookeeper
+   * @param resourceName The resource name of all the replicas.
+   * @param replicaIds The replicas to send state transition messages.
+   * @param fromState The from state
+   * @param toState The to state
+   * @throws Exception
+   */
+  public static void sendStateTransitionMessages(HelixManager manager, String resourceName,
+      List<? extends ReplicaId> replicaIds, String fromState, String toState) throws Exception {
+    StateModelDefinition stateModelDef = AmbryStateModelDefinition.getDefinition();
+    assertNotNull(stateModelDef);
+    List<org.apache.helix.model.Message> messages = new ArrayList<>();
+    for (ReplicaId replica : replicaIds) {
+      messages.add(MessageUtil.createStateTransitionMessage(manager.getInstanceName(), manager.getSessionId(),
+          new Resource(resourceName), "" + replica.getPartitionId().getId(), manager.getInstanceName(), fromState,
+          toState, manager.getSessionId(), stateModelDef.getId()));
+    }
+    HelixDataAccessor dataAccessor = manager.getHelixDataAccessor();
+    PropertyKey.Builder keyBuilder = dataAccessor.keyBuilder();
+    List<PropertyKey> keys = new ArrayList<>();
+    for (Message message : messages) {
+      keys.add(keyBuilder.message(message.getTgtName(), message.getId()));
+    }
+    for (boolean b : dataAccessor.createChildren(keys, new ArrayList<>(messages))) {
+      assertTrue(b);
+    }
+  }
+
+  /**
+   * Return the number of replicas at the given state from the metric;
+   * @param state The state
+   * @param metricRegistry The metric registry
+   * @return
+   */
+  public static int getNumberOfReplicaInStateFromMetric(String state, MetricRegistry metricRegistry) {
+    String mkey = metricRegistry.getGauges()
+        .keySet()
+        .stream()
+        .filter(key -> key.startsWith(HelixParticipant.class.getName() + "." + state))
+        .findFirst()
+        .get();
+    return ((Integer) metricRegistry.getGauges().get(mkey).getValue()).intValue();
   }
 }
 

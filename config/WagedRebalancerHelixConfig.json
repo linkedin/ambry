@@ -1,0 +1,13 @@
+{
+  "idealStateConfigFields": {
+    "numReplicas": 3,
+    "minActiveReplicas": 2
+  },
+  "clusterConfigFields": {
+    "evenness": 3,
+    "lessMovement": 2,
+    "partitionDiskWeightInGB": 100,
+    "maxPartitionInTransition": 50,
+    "delayRebalanceTimeInMs": 1200000
+  }
+}

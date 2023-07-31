@@ -28,7 +28,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenFactory;
 import com.github.ambry.replication.RemoteReplicaInfo;
@@ -82,11 +82,11 @@ public class VcrReplicationManager extends ReplicationEngine {
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
-      CloudDestination cloudDestination, ScheduledExecutorService scheduler, ConnectionPool connectionPool,
+      CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
       VcrMetrics vcrMetrics, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName) throws ReplicationException, IllegalStateException {
+      String transformerClassName) throws IllegalStateException, ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler,
-        vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(), connectionPool,
+        vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(), networkClientFactory,
         vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
         storeManager, null, true);
     this.cloudConfig = cloudConfig;

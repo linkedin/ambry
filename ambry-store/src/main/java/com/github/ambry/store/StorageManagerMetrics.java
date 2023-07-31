@@ -114,6 +114,23 @@ public class StorageManagerMetrics {
   }
 
   /**
+   * Initializes gauge that track the percentage used capacity of the host
+   * @param storageManager the {@link StorageManager} instance to use to obtain values.
+   */
+  void initializeHostUtilizationTracker(final StorageManager storageManager) {
+    Gauge<Double> percentageUsedCapacity = storageManager::getHostPercentageUsedCapacity;
+    registry.gauge(MetricRegistry.name(StorageManager.class, "HostUsedCapacityPercentage"),
+        () -> percentageUsedCapacity);
+  }
+
+  /**
+   * Deregister the Metrics related to the host utilization.
+   */
+  void deregisterHostUtilizationTracker() {
+    registry.remove(MetricRegistry.name(StorageManager.class, "HostPercentageUsedCapacity"));
+  }
+
+  /**
    * Initializes gauges that track the compaction thread counts.
    * @param storageManager the {@link StorageManager} instance to use to obtain values.
    * @param diskCount the number of disks that the {@link StorageManager} handles.

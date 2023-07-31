@@ -56,6 +56,7 @@ public class MySqlAccountServiceTest {
 
   public MySqlAccountServiceTest() throws Exception {
     mySqlConfigProps.setProperty(DB_INFO, "");
+    mySqlConfigProps.setProperty(DB_INFO_NEW, "");
     mySqlConfigProps.setProperty(UPDATER_POLLING_INTERVAL_SECONDS, "0");
     mySqlConfigProps.setProperty(UPDATE_DISABLED, "false");
     mockMySqlAccountStoreFactory = mock(MySqlAccountStoreFactory.class);
@@ -80,6 +81,7 @@ public class MySqlAccountServiceTest {
   public void testInitCacheFromDisk() throws IOException, SQLException {
     Path accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     mySqlConfigProps.setProperty(BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
+    mySqlConfigProps.setProperty(BACKUP_DIRECTORY_KEY_NEW, accountBackupDir.toString());
 
     // write test account to backup file
     long lastModifiedTime = 100;
@@ -149,7 +151,7 @@ public class MySqlAccountServiceTest {
     verify(mockMySqlAccountStore, atLeastOnce()).updateAccounts(argThat(accountsInfo -> {
       Account account = accountsInfo.get(0).getAccount();
       return account.equals(finalTestAccount);
-    }), eq(false));
+    }));
     List<Account> accounts = new ArrayList<>(mySqlAccountService.getAllAccounts());
     assertEquals("Mismatch in number of accounts", 1, accounts.size());
     assertEquals("Mismatch in account retrieved by ID", testAccount,
@@ -166,7 +168,7 @@ public class MySqlAccountServiceTest {
       return accountUpdateInfo.getAccount().equals(finalTestAccount0) && !accountUpdateInfo.isAdded()
           && accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers().isEmpty()
           && accountUpdateInfo.getUpdatedContainers().isEmpty();
-    }), eq(false));
+    }));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
@@ -182,7 +184,7 @@ public class MySqlAccountServiceTest {
       return accountUpdateInfo.getAccount().equals(finalTestAccount1) && !accountUpdateInfo.isAdded()
           && !accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers()
           .equals(Collections.singletonList(testContainer2)) && accountUpdateInfo.getUpdatedContainers().isEmpty();
-    }), eq(false));
+    }));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
 
@@ -198,7 +200,7 @@ public class MySqlAccountServiceTest {
       return accountUpdateInfo.getAccount().equals(finalTestAccount2) && !accountUpdateInfo.isAdded()
           && !accountUpdateInfo.isUpdated() && accountUpdateInfo.getAddedContainers().isEmpty()
           && accountUpdateInfo.getUpdatedContainers().equals(Collections.singletonList(finalTestContainer));
-    }), eq(false));
+    }));
     assertEquals("Mismatch in account retrieved by ID", testAccount,
         mySqlAccountService.getAccountById(testAccount.getId()));
     assertTrue("Sync time not updated",

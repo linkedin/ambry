@@ -40,7 +40,7 @@ public class CompactAllPolicyTest {
   public CompactAllPolicyTest() throws InterruptedException {
     Pair<MockBlobStore, StoreConfig> initState = CompactionPolicyTest.initializeBlobStore(properties, time, -1, -1, -1);
     config = initState.getSecond();
-    messageRetentionTimeInMs = TimeUnit.HOURS.toMillis(config.storeDeletedMessageRetentionHours);
+    messageRetentionTimeInMs = TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes);
     blobStore = initState.getFirst();
     compactionPolicy = new CompactAllPolicy(config, time);
   }

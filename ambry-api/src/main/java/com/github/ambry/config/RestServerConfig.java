@@ -19,6 +19,7 @@ package com.github.ambry.config;
 public class RestServerConfig {
   public static final String CONFIG_PREFIX = "rest.server.";
   public static final String ENABLE_ADDED_CHANNEL_HANDLERS = CONFIG_PREFIX + "enable.added.channel.handlers";
+  public static final String ENABLE_STRUCTURED_LOGGING = CONFIG_PREFIX + "enable.structured.logging";
 
   /**
    * The RestRequestServiceFactory that needs to be used by the RestServer
@@ -87,6 +88,13 @@ public class RestServerConfig {
   public final String restServerPublicAccessLogResponseHeaders;
 
   /**
+   * Whether to use Log4j 2 structured logging or not (true means we use it).
+   */
+  @Config(ENABLE_STRUCTURED_LOGGING)
+  @Default("false")
+  public final boolean restServerEnableStructuredLogging;
+
+  /**
    * Health check URI for load balancers (VIPs)
    */
   @Config("rest.server.health.check.uri")
@@ -120,6 +128,7 @@ public class RestServerConfig {
             "Host,Referer,User-Agent,Content-Length,x-ambry-content-type,x-ambry-owner-id,x-ambry-ttl,x-ambry-private,x-ambry-service-id,X-Forwarded-For");
     restServerPublicAccessLogResponseHeaders =
         verifiableProperties.getString("rest.server.public.access.log.response.headers", "Location,x-ambry-blob-size");
+    restServerEnableStructuredLogging = verifiableProperties.getBoolean(ENABLE_STRUCTURED_LOGGING, false);
     restServerHealthCheckUri = verifiableProperties.getString("rest.server.health.check.uri", "/healthCheck");
     restServerEnableAddedChannelHandlers = verifiableProperties.getBoolean(ENABLE_ADDED_CHANNEL_HANDLERS, false);
   }

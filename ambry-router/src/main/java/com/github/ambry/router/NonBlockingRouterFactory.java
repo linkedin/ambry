@@ -29,6 +29,7 @@ import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.http2.Http2ClientMetrics;
 import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -59,6 +60,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
   private final CryptoService cryptoService;
   private final CryptoJobHandler cryptoJobHandler;
   private final String defaultPartitionClass;
+  private final VerifiableProperties verifiableProperties;
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterFactory.class);
 
   /**
@@ -89,6 +91,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
     this.clusterMap = clusterMap;
     this.notificationSystem = notificationSystem;
     this.accountService = accountService;
+    this.verifiableProperties = verifiableProperties;
     MetricRegistry registry = clusterMap.getMetricRegistry();
     routerMetrics = new NonBlockingRouterMetrics(clusterMap, routerConfig);
     networkConfig = new NetworkConfig(verifiableProperties);
@@ -123,15 +126,26 @@ public class NonBlockingRouterFactory implements RouterFactory {
   @Override
   public Router getRouter() {
     try {
-      AmbryCache blobMetadataCache = new AmbryCache(routerConfig.routerBlobMetadataCacheId,
-          routerConfig.routerBlobMetadataCacheEnabled,
-          routerConfig.routerMaxNumMetadataCacheEntries,
-          routerMetrics.getMetricRegistry());
-      logger.info("[{}] Smallest blob to qualify for metadata caching = {} bytes",
-          blobMetadataCache.getCacheId(),
+      AmbryCache blobMetadataCache =
+          new AmbryCache(routerConfig.routerBlobMetadataCacheId, routerConfig.routerBlobMetadataCacheEnabled,
+              routerConfig.routerMaxNumMetadataCacheEntries, routerMetrics.getMetricRegistry());
+      logger.info("[{}] Smallest blob to qualify for metadata caching = {} bytes", blobMetadataCache.getCacheId(),
           routerConfig.routerSmallestBlobForMetadataCache);
-      return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
-          kms, cryptoService, cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache);
+      // Create the RepairRequestsDbFactory
+      RepairRequestsDbFactory repairRequestsDbFactory = null;
+      if (routerConfig.routerRepairRequestsDbFactory != null) {
+        try {
+          String localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
+          repairRequestsDbFactory = Utils.getObj(routerConfig.routerRepairRequestsDbFactory, verifiableProperties,
+              clusterMap.getMetricRegistry(), localDc);
+          logger.info("Created RepairRequestsDbFactory {} ", repairRequestsDbFactory);
+        } catch (Exception e) {
+          logger.error("Failed to create RepairRequestsDbFactory", e);
+        }
+      }
+      return new NonBlockingRouter(routerConfig, repairRequestsDbFactory, routerMetrics, networkClientFactory,
+          notificationSystem, clusterMap, kms, cryptoService, cryptoJobHandler, accountService, time,
+          defaultPartitionClass, blobMetadataCache);
     } catch (IOException | ReflectiveOperationException e) {
       throw new IllegalStateException("Error instantiating NonBlocking Router ", e);
     }

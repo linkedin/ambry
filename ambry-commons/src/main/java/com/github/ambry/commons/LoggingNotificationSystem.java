@@ -100,5 +100,10 @@ public class LoggingNotificationSystem implements NotificationSystem {
   public void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
     logger.debug("onBlobReplicaUndeleted {}, {}, {}, {}", sourceHost, port, blobId, sourceType);
   }
+
+  @Override
+  public void onBlobReplicaReplicated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+    logger.debug("onBlobReplicaReplicated {}, {}, {}, {}", sourceHost, port, blobId, sourceType);
+  }
 }
 

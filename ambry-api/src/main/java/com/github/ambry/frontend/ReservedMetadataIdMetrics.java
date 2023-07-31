@@ -33,6 +33,10 @@ public class ReservedMetadataIdMetrics {
   public final Counter noReservedMetadataFoundForChunkedUploadResponseCount;
   public final Counter noReservedMetadataForChunkedUploadCount;
   public final Counter mismatchedReservedMetadataForChunkedUploadCount;
+  public final Counter metadataIdNotReservedCount;
+  public final Counter stitchedBlobMetadataIdDeserErrorCount;
+  public final Counter stitchedBlobMetadataIdMismatchCount;
+  public final Counter reservedMetadataPassedInForNonChunkedUploadCount;
 
   /**
    * Constructor for {@link ReservedMetadataIdMetrics}.
@@ -57,6 +61,14 @@ public class ReservedMetadataIdMetrics {
         MetricRegistry.name(ReservedMetadataIdMetrics.class, "NoReservedMetadataForChunkedUploadCount"));
     mismatchedReservedMetadataForChunkedUploadCount = metricRegistry.counter(
         MetricRegistry.name(ReservedMetadataIdMetrics.class, "MismatchedReservedMetadataForChunkedUploadCount"));
+    metadataIdNotReservedCount = metricRegistry.counter(
+        MetricRegistry.name(ReservedMetadataIdMetrics.class, "MetadataIdNotReservedCount"));
+    stitchedBlobMetadataIdDeserErrorCount = metricRegistry.counter(
+        MetricRegistry.name(ReservedMetadataIdMetrics.class, "StitchedBlobMetadataIdDeserErrorCount"));
+    stitchedBlobMetadataIdMismatchCount = metricRegistry.counter(
+        MetricRegistry.name(ReservedMetadataIdMetrics.class, "StitchedBlobMetadataIdMismatchCount"));
+    reservedMetadataPassedInForNonChunkedUploadCount = metricRegistry.counter(
+        MetricRegistry.name(ReservedMetadataIdMetrics.class, "ReservedMetadataPassedInForNonChunkedUploadCount"));
   }
 
   /**

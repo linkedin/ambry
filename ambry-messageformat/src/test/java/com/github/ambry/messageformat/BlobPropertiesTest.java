@@ -58,7 +58,7 @@ public class BlobPropertiesTest {
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(new Object[][]{{BlobPropertiesSerDe.VERSION_1}, {BlobPropertiesSerDe.VERSION_2},
-        {BlobPropertiesSerDe.VERSION_3}, {BlobPropertiesSerDe.VERSION_4}});
+        {BlobPropertiesSerDe.VERSION_3}, {BlobPropertiesSerDe.VERSION_4}, {BlobPropertiesSerDe.VERSION_5}});
   }
 
   public BlobPropertiesTest(short version) {
@@ -72,8 +72,8 @@ public class BlobPropertiesTest {
     String ownerId = "OwnerId";
     String contentType = "ContentType";
     String externalAssetTag = "some-external-asset-tag";
-    String contentEncoding = version == BlobPropertiesSerDe.VERSION_4 ? "gzip" : null;
-    String filename = version == BlobPropertiesSerDe.VERSION_4 ? "filename" : null;
+    String contentEncoding = version >= BlobPropertiesSerDe.VERSION_4 ? "gzip" : null;
+    String filename = version >= BlobPropertiesSerDe.VERSION_4 ? "filename" : null;
     int timeToLiveInSeconds = 144;
     short accountId = Utils.getRandomShort(TestUtils.RANDOM);
     short containerId = Utils.getRandomShort(TestUtils.RANDOM);
@@ -198,7 +198,7 @@ public class BlobPropertiesTest {
     blobProperties = BlobPropertiesSerDe.getBlobPropertiesFromStream(
         new DataInputStream(new ByteBufferInputStream(serializedBuffer)));
     verifyBlobProperties(blobProperties, blobSize, serviceId, "", "", false, timeToLiveInSeconds + 1, accountIdToExpect,
-        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, null);
+        containerIdToExpect, encryptFlagToExpect, null, contentEncodingToExpect, filenameToExpect, version > VERSION_4 ? blobId : null);
   }
 
   /**
@@ -264,6 +264,8 @@ public class BlobPropertiesTest {
         outputBuffer.flip();
         break;
       case BlobPropertiesSerDe.VERSION_4:
+      case BlobPropertiesSerDe.VERSION_5:
+        BlobPropertiesSerDe.CURRENT_VERSION = version;
         outputBuffer = ByteBuffer.allocate(BlobPropertiesSerDe.getBlobPropertiesSerDeSize(blobProperties));
         BlobPropertiesSerDe.serializeBlobProperties(outputBuffer, blobProperties);
         outputBuffer.flip();

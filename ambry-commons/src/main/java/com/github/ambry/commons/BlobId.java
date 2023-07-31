@@ -194,7 +194,7 @@ public class BlobId extends StoreKey {
   }
 
   /**
-   * Internal private method to construct a BlobId by taking arguments for the required fields.
+   * Construct a BlobId by taking arguments for the required fields.
    * Not all the fields in the constructor may be used in constructing it. The current active version determines what
    * fields will be used.
    * @param version the version in which this blob should be created.
@@ -207,7 +207,7 @@ public class BlobId extends StoreKey {
    * @param blobDataType The blob data type.
    * @param uuidStr The uuid that is to be used to construct this id.
    */
-  BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId, PartitionId partitionId,
+  public BlobId(short version, BlobIdType type, byte datacenterId, short accountId, short containerId, PartitionId partitionId,
       boolean isEncrypted, BlobDataType blobDataType, String uuidStr) {
     if (partitionId == null) {
       throw new IllegalArgumentException("partitionId cannot be null");

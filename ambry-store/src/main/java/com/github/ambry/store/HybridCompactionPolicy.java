@@ -148,12 +148,23 @@ public class HybridCompactionPolicy implements CompactionPolicy {
         logger.trace("Return StatsBasedCompactionPolicy this round for store : {}, dataDir : {}", storeId, dataDir);
       }
       if (compactionPolicySwitchInfo.getLastCompactAllTime() + TimeUnit.DAYS.toMillis(
-          storeConfig.storeCompactionPolicySwitchTimestampDays) <= System.currentTimeMillis()) {
+          storeConfig.storeCompactionPolicySwitchTimestampDays) + staggerDelay() <= System.currentTimeMillis()) {
         logger.trace("Set next round is compactAllPolicy to true");
         compactionPolicySwitchInfo.setNextRoundIsCompactAllPolicy(true);
       }
       return new StatsBasedCompactionPolicy(storeConfig, time);
     }
+  }
+
+  /**
+   * Calculate a random delay in milliseconds. This delay will be used to stagger the start of {@link CompactAllPolicy}
+   * for various replicas on the same disk, after the replica becomes eligible for full compaction.
+   * The upper bound of this delay is StoreConfig#storeHybridCompactionFullCompactionStaggerLimitInHours.
+   * @return the delay time before the start of {@link CompactAllPolicy}
+   */
+  private long staggerDelay() {
+    return storeConfig.storeHybridCompactionFullCompactionStaggerLimitInHours > 0 ? TimeUnit.HOURS.toMillis(
+        random.nextInt(storeConfig.storeHybridCompactionFullCompactionStaggerLimitInHours)) : 0;
   }
 
   /**

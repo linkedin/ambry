@@ -15,12 +15,13 @@ package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.compression.Compression;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.ReservedMetadataIdMetrics;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkReceive;
 import com.github.ambry.network.RequestInfo;
@@ -76,17 +77,7 @@ public class PutOperationTest {
   private NettyByteBufLeakHelper nettyByteBufLeakHelper = new NettyByteBufLeakHelper();
 
   public PutOperationTest() throws Exception {
-    Properties properties = new Properties();
-    properties.setProperty("router.hostname", "localhost");
-    properties.setProperty("router.datacenter.name", "DC1");
-    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
-    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
-    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
-    properties.setProperty("router.compression.enabled", "true");
-    properties.setProperty("router.compression.minimal.ratio", "1.0");
-    properties.setProperty("router.compression.minimal.content.size", "1");
-    VerifiableProperties vProps = new VerifiableProperties(properties);
-    routerConfig = new RouterConfig(vProps);
+    routerConfig = createRouterConfig(false);
     time = new MockTime();
     compressionService = new CompressionService(routerConfig.getCompressionConfig(), routerMetrics.compressionMetrics);
   }
@@ -535,6 +526,242 @@ public class PutOperationTest {
     // Ensure that the operation does not provide the background deleter with any data chunks to delete.
     Assert.assertEquals("List of chunks to delete should be empty", 0,
         op.getSuccessfullyPutChunkIdsIfCompositeDirectUpload().size());
+  }
+
+  @Test
+  public void testReserveMetadataBlobId() throws Exception {
+    RouterConfig[] routerConfigs = new RouterConfig[] { createRouterConfig(true), routerConfig};
+    int metadataIdNotReservedBaseCount = 0;
+    int stitchedBlobMetadataIdDeserErrorBaseCount = 0;
+    int stitchedBlobMetadataIdMismatchBaseCount = 0;
+    int reservedMetadataPassedInForNonChunkedUploadBaseCount = 0;
+    int noReservedMetadataForChunkedUploadBaseCount = 0;
+
+    for (RouterConfig routerConfig : routerConfigs) {
+      BlobProperties blobProperties =
+          new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null);
+      byte[] userMetadata = new byte[10];
+      FutureResult<String> future = new FutureResult<>();
+      MockNetworkClient mockNetworkClient = new MockNetworkClient();
+      BlobId reservedMetadataId =
+          new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 0, (short) 1, (short) 1, new MockPartitionId(),
+              false, BlobId.BlobDataType.METADATA);
+      BlobProperties blobPropertiesWithId =
+          new BlobProperties(-1, "serviceId", "memberId", "contentType", false, Utils.Infinite_Time, Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), false, null, null, null,
+              reservedMetadataId.getID());
+      BlobId altReservedMetadataId =
+          new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 0, (short) 1, (short) 1, new MockPartitionId(),
+              true, BlobId.BlobDataType.METADATA);
+      ReservedMetadataIdMetrics reservedMetadataIdMetrics = ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(routerMetrics.getMetricRegistry());
+
+      // if stitched blob and chunks don't have reserved metadata chunk, then metadata chunk id should not be reserved.
+      List<ChunkInfo> chunksToStitch =
+          RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
+              LongStream.of(10, 10, 11));
+      PutOperation op =
+          PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
+              new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
+              MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertNull(op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 1, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 1,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+
+      // if stitched blob and chunks have reserved metadata chunk, then the metadata chunk id should be reserved.
+      chunksToStitch =
+          RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
+              LongStream.of(10, 10, 11), reservedMetadataId.getID());
+      op = PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
+          new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
+          MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertEquals(reservedMetadataId, op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 1, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 1,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+
+      // if stitched blob and chunks have reserved metadata chunk, but the reserved chunk has mismatch, then the metadata
+      // chunk id should not be reserved.
+      chunksToStitch =
+          RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
+              LongStream.of(10, 10, 11), reservedMetadataId.getID());
+      ChunkInfo chunkInfo = new ChunkInfo(chunksToStitch.get(1).getBlobId(), chunksToStitch.get(1).getChunkSizeInBytes(),
+          chunksToStitch.get(1).getExpirationTimeInMs(), altReservedMetadataId.getID());
+      chunksToStitch.set(1, chunkInfo);
+      op = PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
+          new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
+          MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertNull(op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 2, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 1,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount + 1,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+
+      chunksToStitch =
+          RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
+              LongStream.of(10, 10, 11), reservedMetadataId.getID());
+      chunkInfo = new ChunkInfo(chunksToStitch.get(1).getBlobId(), chunksToStitch.get(1).getChunkSizeInBytes(),
+          chunksToStitch.get(1).getExpirationTimeInMs(), null);
+      chunksToStitch.set(1, chunkInfo);
+      op = PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
+          new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
+          MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertNull(op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 3, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 1,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+
+      chunksToStitch =
+          RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
+              LongStream.of(10, 10, 11), reservedMetadataId.getID());
+      chunkInfo = new ChunkInfo(chunksToStitch.get(0).getBlobId(), chunksToStitch.get(0).getChunkSizeInBytes(),
+          chunksToStitch.get(0).getExpirationTimeInMs(), null);
+      chunksToStitch.set(0, chunkInfo);
+      op = PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
+          new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
+          MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertNull(op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 4, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+
+      // if regular non-chunked blob and blob properties doesn't have reserved metadata id, then a metadata id should be reserved.
+      int numChunks = routerConfig.routerMaxInMemPutChunks + 1;
+      byte[] content = new byte[chunkSize * numChunks];
+      ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+      op = PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+          new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
+          null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+          blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertNotNull(op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 4, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+
+      // if regular non-chunked blob and blob properties have reserved metadata id, then a metadata id should not be reserved.
+      channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+      op = PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+          new InMemAccountService(true, false), userMetadata, channel, PutBlobOptions.DEFAULT, new FutureResult<>(),
+          null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+          blobPropertiesWithId, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertNull(op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 5, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount + 1,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+
+      // if stitched upload and blob properties has invalid reserved metadata chunk then metadata id should be null.
+      List<ChunkInfo> invalidChunksToStitch =
+          RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
+              LongStream.of(10, 10, 11), "test");
+      op = PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, invalidChunksToStitch, future, null,
+          new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
+          MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertNull(op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 6, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 3,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount + 1,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+
+      // if chunked upload and blob properties doesn't have reserved metadata id, then a metadata id should not be reserved.
+      content = new byte[chunkSize];
+      channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+      op = PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+          new InMemAccountService(true, false), userMetadata, channel, new PutBlobOptionsBuilder().chunkUpload(true).build(), new FutureResult<>(),
+          null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+          blobProperties, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertNull(op.getReservedMetadataId());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 7, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 3,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount + 1,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+      Assert.assertEquals(noReservedMetadataForChunkedUploadBaseCount + 1,
+          reservedMetadataIdMetrics.noReservedMetadataForChunkedUploadCount.getCount());
+
+      // if chunked upload and blob properties have reserved metadata id, then a metadata id should be reserved.
+      channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(content));
+      op = PutOperation.forUpload(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(),
+          new InMemAccountService(true, false), userMetadata, channel, new PutBlobOptionsBuilder().chunkUpload(true).build(), new FutureResult<>(),
+          null, new RouterCallback(new MockNetworkClient(), new ArrayList<>()), null, null, null, null, time,
+          blobPropertiesWithId, MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
+      Assert.assertEquals(blobPropertiesWithId.getReservedMetadataBlobId(), op.getReservedMetadataId().getID());
+      Assert.assertEquals(
+          metadataIdNotReservedBaseCount + 7, reservedMetadataIdMetrics.metadataIdNotReservedCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdDeserErrorBaseCount + 3,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdDeserErrorCount.getCount());
+      Assert.assertEquals(stitchedBlobMetadataIdMismatchBaseCount + 2,
+          reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
+      Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount + 1,
+          reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+      Assert.assertEquals(noReservedMetadataForChunkedUploadBaseCount + 1,
+          reservedMetadataIdMetrics.noReservedMetadataForChunkedUploadCount.getCount());
+
+      metadataIdNotReservedBaseCount += 7;
+      stitchedBlobMetadataIdMismatchBaseCount += 2;
+      stitchedBlobMetadataIdDeserErrorBaseCount += 3;
+      reservedMetadataPassedInForNonChunkedUploadBaseCount += 1;
+      noReservedMetadataForChunkedUploadBaseCount += 1;
+    }
+  }
+
+  /**
+   * Create {@link RouterConfig} with the specified isReservedMetadataEnabled.
+   * @param isReservedMetadataEnabled {@code true} if reserved metadata is enabled. {@code false} otherwise.
+   * @return RouterConfig object.
+   */
+  private RouterConfig createRouterConfig(boolean isReservedMetadataEnabled) {
+    Properties properties = new Properties();
+    properties.setProperty("router.hostname", "localhost");
+    properties.setProperty("router.datacenter.name", "DC1");
+    properties.setProperty("router.max.put.chunk.size.bytes", Integer.toString(chunkSize));
+    properties.setProperty("router.put.request.parallelism", Integer.toString(requestParallelism));
+    properties.setProperty("router.put.success.target", Integer.toString(successTarget));
+    properties.setProperty("router.compression.enabled", "true");
+    properties.setProperty("router.compression.minimal.ratio", "1.0");
+    properties.setProperty("router.compression.minimal.content.size", "1");
+    properties.setProperty("router.reserved.metadata.enabled", Boolean.toString(isReservedMetadataEnabled));
+    VerifiableProperties vProps = new VerifiableProperties(properties);
+    return new RouterConfig(vProps);
   }
 
   /**

@@ -22,6 +22,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.network.NetworkClient;
@@ -29,6 +30,8 @@ import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.repair.RepairRequestsDb;
+import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -51,7 +54,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Streaming, non-blocking router implementation for Ambry.
  */
-class NonBlockingRouter implements Router {
+public class NonBlockingRouter implements Router {
   static final int SHUTDOWN_WAIT_MS = 10 * Time.MsPerSec;
   static final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouter.class);
@@ -74,9 +77,12 @@ class NonBlockingRouter implements Router {
 
   public final AtomicInteger currentOperationsCount = new AtomicInteger(0);
 
+  private RepairRequestsDb repairRequestsDb = null;
+
   /**
    * Constructs a NonBlockingRouter.
    * @param routerConfig the configs for the router.
+   * @oaran repairRequestsDbFactory the {@link RepairRequestsDbFactory} use to create the {@link RepairRequestsDb}
    * @param routerMetrics the metrics for the router.
    * @param networkClientFactory the {@link NetworkClientFactory} used by the {@link OperationController} to create
    *                             instances of {@link NetworkClient}.
@@ -93,11 +99,11 @@ class NonBlockingRouter implements Router {
    * @throws IOException if the OperationController could not be successfully created.
    * @throws ReflectiveOperationException if the OperationController could not be successfully created.
    */
-  NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-      NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
-      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
-      AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
-      throws IOException, ReflectiveOperationException {
+  public NonBlockingRouter(RouterConfig routerConfig, RepairRequestsDbFactory repairRequestsDbFactory,
+      NonBlockingRouterMetrics routerMetrics, NetworkClientFactory networkClientFactory,
+      NotificationSystem notificationSystem, ClusterMap clusterMap, KeyManagementService kms,
+      CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, AccountService accountService, Time time,
+      String defaultPartitionClass, AmbryCache blobMetadataCache) throws IOException, ReflectiveOperationException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     ResponseHandler responseHandler = new ResponseHandler(clusterMap);
@@ -133,6 +139,44 @@ class NonBlockingRouter implements Router {
         .build();
     routerMetrics.initializeNotFoundCacheMetrics(notFoundCache);
     routerMetrics.initializeQuotaOCMetrics(ocList);
+
+    // create the RepairRequestsDb if repairRequestsDbFactory is not null.
+    if (repairRequestsDbFactory != null) {
+      try {
+        repairRequestsDb = repairRequestsDbFactory.getRepairRequestsDb();
+        logger.info("RepairRequests: open the db data source {}.", repairRequestsDb);
+      } catch (Exception e) {
+        logger.error("RepairRequests: Cannot connect to the RepairRequestsDB. ", e);
+      }
+    }
+  }
+
+  /**
+   * Constructs a NonBlockingRouter.
+   * @param routerConfig the configs for the router.
+   * @param routerMetrics the metrics for the router.
+   * @param networkClientFactory the {@link NetworkClientFactory} used by the {@link OperationController} to create
+   *                             instances of {@link NetworkClient}.
+   * @param notificationSystem the notification system to use to notify about blob creations and deletions.
+   * @param clusterMap the cluster map for the cluster.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param accountService the {@link AccountService} to use.
+   * @param time the time instance.
+   * @param defaultPartitionClass the default partition class to choose partitions from (if none is found in the
+   *                              container config). Can be {@code null} if no affinity is required for the puts for
+   *                              which the container contains no partition class hints.
+   * @throws IOException if the OperationController could not be successfully created.
+   * @throws ReflectiveOperationException if the OperationController could not be successfully created.
+   */
+  public NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
+      KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler,
+      AccountService accountService, Time time, String defaultPartitionClass, AmbryCache blobMetadataCache)
+      throws IOException, ReflectiveOperationException {
+    this(routerConfig, null, routerMetrics, networkClientFactory, notificationSystem, clusterMap, kms, cryptoService,
+        cryptoJobHandler, accountService, time, defaultPartitionClass, blobMetadataCache);
   }
 
   /**
@@ -148,6 +192,14 @@ class NonBlockingRouter implements Router {
    */
   public AmbryCache getBlobMetadataCache() {
     return blobMetadataCache;
+  }
+
+  /**
+   * Returns the {@link RepairRequestsDb}
+   * @return Returns the repair requests db.
+   */
+  public RepairRequestsDb getRepairRequestsDb() {
+    return repairRequestsDb;
   }
 
   /**
@@ -710,7 +762,7 @@ class NonBlockingRouter implements Router {
    * Return the count of the number of operations submitted to the router that are not yet completed.
    * @return number of operations being handled at the time of this call.
    */
-  int getOperationsCount() {
+  public int getOperationsCount() {
     return currentOperationsCount.get();
   }
 

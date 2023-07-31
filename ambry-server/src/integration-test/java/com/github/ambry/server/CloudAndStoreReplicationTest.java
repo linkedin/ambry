@@ -31,6 +31,7 @@ import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobPropertiesSerDe;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.ConnectedChannel;
@@ -305,9 +306,18 @@ public class CloudAndStoreReplicationTest {
     for (PartitionResponseInfo partitionResponseInfo : getResponse.getPartitionResponseInfoList()) {
       assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
           partitionResponseInfo.getErrorCode());
-      //old value is 272. Adding 9 Bytes due to the two fields added 4 + 4 Blob Property BYTE, +1 for compression.
+      int cloudStoreSizeDifference;
+      if (BlobPropertiesSerDe.CURRENT_VERSION <= BlobPropertiesSerDe.VERSION_4) {
+        // old value is 272. Adding 9 Bytes due to the two fields added 4 + 4 Blob Property BYTE, +1 for compression.
+        // the reason we have to add this, is because these fields are present in the storage logs, but not present in cloud metadata.
+        cloudStoreSizeDifference = 9;
+      } else {
+        // old value is 272. Adding 13 Bytes due to the two fields added 4 + 4 Blob Property BYTE, 4 bytes for reserved metadata +1 for compression.
+        // the reason we have to add this, is because these fields are present in the storage logs, but not present in cloud metadata.
+        cloudStoreSizeDifference = 13;
+      }
       for (MessageInfo messageInfo : partitionResponseInfo.getMessageInfoList()) {
-        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + 281, messageInfo.getSize());
+        assertEquals(blobIdToSizeMap.get(messageInfo.getStoreKey()) + 272 + cloudStoreSizeDifference, messageInfo.getSize());
       }
     }
   }

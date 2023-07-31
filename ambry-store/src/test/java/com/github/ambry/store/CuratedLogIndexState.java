@@ -206,7 +206,7 @@ class CuratedLogIndexState {
     // not used but set anyway since this is a package private variable.
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
     // set the delete retention day
-    properties.put("store.deleted.message.retention.hours", Integer.toString(CuratedLogIndexState.deleteRetentionHour));
+    properties.put("store.deleted.message.retention.minutes", Integer.toString(CuratedLogIndexState.deleteRetentionHour * 60));
     properties.put("store.rebuild.token.based.on.reset.key", Boolean.toString(enableResetKey));
     properties.put("store.auto.close.last.log.segment.enabled", Boolean.toString(enableAutoCloseLastLogSegment));
     if (addUndeletes) {

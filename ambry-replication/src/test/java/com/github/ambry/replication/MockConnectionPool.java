@@ -16,7 +16,6 @@ package com.github.ambry.replication;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
@@ -33,6 +32,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.Response;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.AbstractByteBufHolder;
@@ -163,7 +163,7 @@ public class MockConnectionPool implements ConnectionPool {
     }
 
     private final MockHost host;
-    private final int maxSizeToReturn;
+    private volatile int maxSizeToReturn;
 
     private List<ByteBuffer> buffersToReturn;
     private Map<PartitionId, List<MessageInfo>> infosToReturn;
@@ -256,24 +256,25 @@ public class MockConnectionPool implements ConnectionPool {
         List<ReplicaMetadataResponseInfo> responseInfoList = new ArrayList<>();
         for (ReplicaMetadataRequestInfo requestInfo : metadataRequest.getReplicaMetadataRequestInfoList()) {
           List<MessageInfo> messageInfosToReturn = new ArrayList<>();
-          List<MessageInfo> allMessageInfos = host.infosByPartition.get(requestInfo.getPartitionId());
+          List<MessageInfo> allMessageInfos =
+              host.infosByPartition.getOrDefault(requestInfo.getPartitionId(), new ArrayList<>());
           int startIndex = ((MockFindToken) (requestInfo.getToken())).getIndex();
           int endIndex = Math.min(allMessageInfos.size(), startIndex + maxSizeToReturn);
-          int indexRequested = 0;
           Set<StoreKey> processedKeys = new HashSet<>();
           for (int i = startIndex; i < endIndex; i++) {
             StoreKey key = allMessageInfos.get(i).getStoreKey();
             if (processedKeys.add(key)) {
               messageInfosToReturn.add(getMergedMessageInfo(key, allMessageInfos));
             }
-            indexRequested = i;
           }
-          long bytesRead =
-              allMessageInfos.subList(0, indexRequested + 1).stream().mapToLong(MessageInfo::getSize).sum();
+          long bytesRead = allMessageInfos.size() > 0 ? allMessageInfos.subList(0, endIndex)
+              .stream()
+              .mapToLong(MessageInfo::getSize)
+              .sum() : 0;
           long total = allMessageInfos.stream().mapToLong(MessageInfo::getSize).sum();
           ReplicaMetadataResponseInfo replicaMetadataResponseInfo =
               new ReplicaMetadataResponseInfo(requestInfo.getPartitionId(), requestInfo.getReplicaType(),
-                  new MockFindToken(indexRequested, bytesRead), messageInfosToReturn, total - bytesRead,
+                  new MockFindToken(endIndex, bytesRead), messageInfosToReturn, total - bytesRead,
                   ReplicaMetadataResponse.getCompatibleResponseVersion(metadataRequest.getVersionId()));
           responseInfoList.add(replicaMetadataResponseInfo);
         }
@@ -322,6 +323,10 @@ public class MockConnectionPool implements ConnectionPool {
     @Override
     public int getRemotePort() {
       return host.dataNodeId.getPort();
+    }
+
+    public void setMaxSizeToReturn(int maxSizeToReturn) {
+      this.maxSizeToReturn = maxSizeToReturn;
     }
   }
 }

@@ -48,7 +48,7 @@ public class HelixAccountServiceFactory implements AccountServiceFactory {
    */
   public HelixAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     this(new HelixPropertyStoreConfig(verifiableProperties), new HelixAccountServiceConfig(verifiableProperties),
-        new AccountServiceMetrics(metricRegistry, false),
+        new AccountServiceMetrics(metricRegistry),
         new HelixNotifier(new HelixAccountServiceConfig(verifiableProperties).zkClientConnectString,
             new HelixPropertyStoreConfig(verifiableProperties)));
   }

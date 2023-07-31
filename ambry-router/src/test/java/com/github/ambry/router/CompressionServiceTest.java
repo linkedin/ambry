@@ -196,7 +196,8 @@ public class CompressionServiceTest {
     LZ4Compression lz4 = new LZ4Compression();
     ByteBuffer compressedByteBuffer = ByteBuffer.allocate(lz4.getCompressBufferSize(sourceBuffer.length));
     lz4.compress(ByteBuffer.wrap(sourceBuffer), compressedByteBuffer);
-    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedByteBuffer.flip());
+    compressedByteBuffer.flip();
+    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedByteBuffer);
 
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());
     CompressionService service = new CompressionService(config, metrics);
@@ -204,8 +205,9 @@ public class CompressionServiceTest {
     // Test: decompress() throws exception.
     // Create a test CompressionService and replace the compressor with a mock.
     LZ4Compression mockCompression = Mockito.mock(LZ4Compression.class, Mockito.CALLS_REAL_METHODS);
-    Mockito.doThrow(new RuntimeException("Decompress failed.")).when(mockCompression).decompress(
-        Mockito.any(ByteBuffer.class), Mockito.any(ByteBuffer.class));
+    Mockito.doThrow(new RuntimeException("Decompress failed."))
+        .when(mockCompression)
+        .decompress(Mockito.any(ByteBuffer.class), Mockito.any(ByteBuffer.class));
     service.allCompressions.add(mockCompression);
     Exception ex = TestUtils.getException(() -> service.decompress(compressedBuffer, compressedBuffer.readableBytes(), false));
     Assert.assertTrue(ex instanceof CompressionException);
@@ -221,7 +223,8 @@ public class CompressionServiceTest {
     LZ4Compression lz4 = new LZ4Compression();
     ByteBuffer compressedByteBuffer = ByteBuffer.allocate(lz4.getCompressBufferSize(sourceBuffer.length));
     lz4.compress(ByteBuffer.wrap(sourceBuffer), compressedByteBuffer);
-    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedByteBuffer.flip());
+    compressedByteBuffer.flip();
+    ByteBuf compressedBuffer = Unpooled.wrappedBuffer(compressedByteBuffer);
 
     // Decompressed full chunk.
     CompressionMetrics metrics = new CompressionMetrics(new MetricRegistry());

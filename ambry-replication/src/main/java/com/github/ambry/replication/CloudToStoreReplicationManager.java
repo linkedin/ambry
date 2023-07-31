@@ -18,16 +18,16 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
-import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
@@ -85,7 +85,6 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @param clusterMap {@link ClusterMap} object to get the ambry datanode cluster map.
    * @param scheduler {@link ScheduledExecutorService} object for scheduling token persistence.
    * @param currentNode {@link DataNodeId} representing the current node.
-   * @param connectionPool {@link ConnectionPool} object representing the connection pool to talk to replicas.
    * @param metricRegistry {@link MetricRegistry} object.
    * @param requestNotification {@link NotificationSystem} object to notify on events.
    * @param storeKeyConverterFactory {@link StoreKeyConverterFactory} object.
@@ -96,12 +95,12 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    */
   public CloudToStoreReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
-      ScheduledExecutorService scheduler, DataNodeId currentNode, ConnectionPool connectionPool,
+      ScheduledExecutorService scheduler, DataNodeId currentNode, NetworkClientFactory networkClientFactory,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
-        Collections.emptyList(), connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory,
+        Collections.emptyList(), networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null, false);
     this.clusterMapConfig = clusterMapConfig;
     this.vcrClusterSpectator = vcrClusterSpectator;
