@@ -103,6 +103,7 @@ import static com.github.ambry.clustermap.MockClusterMap.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.*;
 
@@ -2120,6 +2121,31 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Tests code that retries replication when an erroneous PUT message is encountered.
+   * The remote host is setup with two keys OP and NP. OP is erroneous PUT and NP is clean PUT.
+   * NP ends up on local host whereas OP is omitted after 2 retries.
+   */
+  @Test
+  public void retryReplicationOnCRCError() throws Exception {
+    RetryReplicationTestSetup testSetup = new RetryReplicationTestSetup(10, 2);
+    RemoteReplicaInfo remoteReplicaInfo = testSetup.replicasToReplicate.get(testSetup.remoteHost.dataNodeId).get(0);
+    // remote host has two keys OP and NP. OP is erroneous and NP is clean. local host gets NP.
+    Pair<String, String> testCaseAndExpectResult = new Pair<>("OP NP OP", "NP");
+    createMixedMessagesOnRemoteHost(testSetup, testCaseAndExpectResult.getFirst());
+    // retry replication once, retryCount = 1
+    replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
+    assertEquals(1, remoteReplicaInfo.getReplicationRetryCount());
+    // retry replication a second time, retryCount = 2 and no more attempts left
+    replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
+    assertEquals(2, remoteReplicaInfo.getReplicationRetryCount());
+    // advance token, reset retryCount
+    replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
+    assertEquals(0, remoteReplicaInfo.getReplicationRetryCount());
+  }
+
+  /**
+   * Tests {@link ReplicaThread#exchangeMetadata(ConnectedChannel, List)} and
+   * {@link ReplicaThread#fixMissingStoreKeys(ConnectedChannel, List, List, boolean)} for valid puts, deletes, expired keys and
    * Tests {@link ReplicaThread#replicate()} for valid puts, deletes, expired keys and
    * corrupt blobs.
    * @throws Exception

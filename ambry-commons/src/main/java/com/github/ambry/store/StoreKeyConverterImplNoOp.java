@@ -22,7 +22,7 @@ import java.util.Map;
 /**
  * No-op StoreKeyConverter. StoreKeys get paired with themselves
  */
-class StoreKeyConverterImplNoOp implements StoreKeyConverter {
+public class StoreKeyConverterImplNoOp implements StoreKeyConverter {
 
   @Override
   public Map<StoreKey, StoreKey> convert(Collection<? extends StoreKey> input) throws Exception {
