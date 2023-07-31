@@ -2047,7 +2047,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     RetryReplicationTestSetup testSetup = new RetryReplicationTestSetup(10, 2);
     RemoteReplicaInfo remoteReplicaInfo = testSetup.replicasToReplicate.get(testSetup.remoteHost.dataNodeId).get(0);
     // remote host has two keys OP and NP. OP is erroneous and NP is clean. local host gets NP.
-    Pair<String, String> testCaseAndExpectResult = new Pair<>("OP NP", "NP");
+    Pair<String, String> testCaseAndExpectResult = new Pair<>("OP NP OP", "NP");
     createMixedMessagesOnRemoteHost(testSetup, testCaseAndExpectResult.getFirst());
     // retry replication once, retryCount = 1
     replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());

@@ -1125,10 +1125,10 @@ public class ReplicationTestHelper {
   public class RetryReplicationTestSetup extends ReplicationTestSetup {
 
     /**
-     * ReplicationTestSetup Ctor
+     * RetryReplicationTestSetup Ctor
      *
      * @param batchSize the number of messages to be returned in each iteration of replication
-     * @throws Exception
+     * @param maxRetryReplicationCount Maximum attempts to retry replication for an erroneous stream of messages
      */
     RetryReplicationTestSetup(int batchSize, int maxRetryReplicationCount) throws Exception {
       // Create a mock cluster of 2 nodes, 1 mount per node and 1 store/partition per node otherwise the default mockClustermap
