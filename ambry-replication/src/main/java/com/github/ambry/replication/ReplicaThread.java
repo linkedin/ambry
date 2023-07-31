@@ -1293,7 +1293,7 @@ public class ReplicaThread implements Runnable {
                   replicationMetrics.replicationNumBlobsSkippedAfterRetry.update(
                       validMessageDetectionInputStream.getNumInvalidMessages());
                   logger.error(
-                      "Skipped replicating {} corrupted messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
+                      "Unable to replicate {} corrupted messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
                       validMessageDetectionInputStream.getNumInvalidMessages(), threadName,
                       remoteReplicaInfo.getReplicationRetryCount(), remoteReplicaInfo.getToken(),
                       remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
