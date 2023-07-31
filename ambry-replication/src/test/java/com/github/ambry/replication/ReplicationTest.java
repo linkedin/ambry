@@ -2045,7 +2045,7 @@ public class ReplicationTest extends ReplicationTestHelper {
   public void retryReplicationOnCRCError() throws Exception {
     RetryReplicationTestSetup testSetup = new RetryReplicationTestSetup(10, 2);
     RemoteReplicaInfo remoteReplicaInfo = testSetup.replicasToReplicate.get(testSetup.remoteHost.dataNodeId).get(0);
-    Pair<String, String> testCaseAndExpectResult = new Pair<>("NP", "");
+    Pair<String, String> testCaseAndExpectResult = new Pair<>("OP NP", "NP");
     createMixedMessagesOnRemoteHost(testSetup, testCaseAndExpectResult.getFirst());
     replicateAndVerify(testSetup, testCaseAndExpectResult.getSecond());
     assertEquals(1, remoteReplicaInfo.getReplicationRetryCount());

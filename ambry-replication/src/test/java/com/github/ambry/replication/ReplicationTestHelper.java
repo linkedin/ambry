@@ -1146,9 +1146,13 @@ public class ReplicationTestHelper {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);
       short containerId = Utils.getRandomShort(TestUtils.RANDOM);
       boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
+      oldKey = new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
       newKey = new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
           partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
-      Transformer transformer = new ErrorThrowingTransformer();
+      HashSet<String> errorKeys = new HashSet<>();
+      errorKeys.add(oldKey.getID());
+      Transformer transformer = new ErrorThrowingTransformer(errorKeys);
 
       Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
           getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null,
@@ -1160,9 +1164,19 @@ public class ReplicationTestHelper {
 
   public class ErrorThrowingTransformer implements Transformer {
 
+    HashSet<String> errorKeys;
+
+    public ErrorThrowingTransformer(HashSet<String> errorKeys) {
+      this.errorKeys = errorKeys;
+    }
+
     @Override
     public TransformationOutput transform(Message message) {
-      return new TransformationOutput(new MessageFormatException("CRC error", MessageFormatErrorCodes.Data_Corrupt));
+      String blobIdStr = message.getMessageInfo().getStoreKey().getID();
+      if (errorKeys.contains(blobIdStr)) {
+        return new TransformationOutput(new MessageFormatException("CRC error", MessageFormatErrorCodes.Data_Corrupt));
+      }
+      return new TransformationOutput(message);
     }
 
     @Override
