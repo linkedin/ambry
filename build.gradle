@@ -134,7 +134,7 @@ subprojects {
             // Whether tests that initially fail and then pass on retry should fail the task.
             failOnPassedAfterRetry = false
         }
-        maxHeapSize = "3g"
+        maxHeapSize = "6g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
         systemProperty 'io.netty.allocator.tinyCacheSize', '0'
         systemProperty 'io.netty.allocator.smallCacheSize', '0'
@@ -170,7 +170,7 @@ subprojects {
             // Whether tests that initially fail and then pass on retry should fail the task.
             failOnPassedAfterRetry = false
         }
-        maxHeapSize = "3g"
+        maxHeapSize = "6g"
         systemProperty 'io.netty.leakDetection.level', 'paranoid'
     }
 
