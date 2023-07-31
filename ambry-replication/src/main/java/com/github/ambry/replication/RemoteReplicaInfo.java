@@ -110,12 +110,12 @@ public class RemoteReplicaInfo {
    * @return replicationRetryCount
    */
   public int incReplicationRetryCount() {
-    this.replicationRetryCount += 1;
-    return this.replicationRetryCount;
+    replicationRetryCount += 1;
+    return replicationRetryCount;
   }
 
   public int getReplicationRetryCount() {
-    return this.replicationRetryCount;
+    return replicationRetryCount;
   }
 
   /**
@@ -123,7 +123,7 @@ public class RemoteReplicaInfo {
    * @return replicationRetryCount
    */
   public void resetReplicationRetryCount() {
-    this.replicationRetryCount = 0;
+    replicationRetryCount = 0;
   }
 
   /**
@@ -131,7 +131,7 @@ public class RemoteReplicaInfo {
    * @return True if replicationRetryCount has exceeded the max retries, false otherwise
    */
   public boolean isReplicationRetryCountMaxed() {
-    return this.replicationRetryCount >= maxReplicationRetryCount;
+    return replicationRetryCount >= maxReplicationRetryCount;
   }
 
   public ReplicaId getReplicaId() {
