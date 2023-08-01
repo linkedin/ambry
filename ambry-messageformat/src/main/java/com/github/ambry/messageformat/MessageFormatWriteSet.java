@@ -62,4 +62,12 @@ public class MessageFormatWriteSet implements MessageWriteSet {
   public List<MessageInfo> getMessageSetInfo() {
     return streamInfo;
   }
+
+  /**
+   * Returns input stream
+   * @return InputStream
+   */
+  public InputStream getStreamToWrite() {
+    return streamToWrite;
+  }
 }
