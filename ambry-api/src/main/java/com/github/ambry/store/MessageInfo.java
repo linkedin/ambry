@@ -18,6 +18,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import com.github.ambry.utils.Utils;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 
@@ -180,6 +182,45 @@ public class MessageInfo {
     this.containerId = containerId;
     this.operationTimeMs = operationTimeMs;
     this.lifeVersion = lifeVersion;
+  }
+
+  public static final String ACCOUNT_ID = "accountId";
+  public static final String CONTAINER_ID = "containerId";
+  public static final String CRC = "crc";
+  public static final String EXPIRATION_TIME = "expirationTimeInMs";
+  public static final String LIFE_VERSION = "lifeVersion";
+  public static final String OPERATION_TIME = "operationTimeMs";
+  public static final String SIZE = "size";
+  public static final String DELETE_TIME = "deleteTimeMs";
+  public static final String UPDATE_TTL_TIME = "updateTTLTimeMs";
+  public static final String UNDELETE_TIME = "undeleteTimeMs";
+
+  /**
+   * @return a {@link HashMap} of metadata key-value pairs.
+   */
+  public Map<String, String> toMap() {
+    // if we are here, then we are just putting the blob in cloud
+    HashMap<String, String> hashMap = new HashMap<>();
+    hashMap.put(ACCOUNT_ID, String.valueOf(accountId));
+    hashMap.put(CONTAINER_ID, String.valueOf(containerId));
+    hashMap.put(CRC, String.valueOf(crc));
+    hashMap.put(EXPIRATION_TIME, String.valueOf(expirationTimeInMs));
+    hashMap.put(LIFE_VERSION, String.valueOf(lifeVersion));
+    hashMap.put(OPERATION_TIME, String.valueOf(operationTimeMs));
+    hashMap.put(SIZE, String.valueOf(size));
+    return hashMap;
+  }
+
+  /**
+   * @return a {@link MessageInfo} of metadata
+   */
+  public static MessageInfo fromMap(StoreKey storeKey, Map<String, String> map) {
+    // TODO : Check crc = null
+    // Having booleans for delete, undelete, ttl-update is bad bad bad idea ! But here we are !
+    return new MessageInfo(storeKey, Long.parseLong(map.get(SIZE)), map.containsKey(DELETE_TIME),
+        map.containsKey(UPDATE_TTL_TIME), map.containsKey(UNDELETE_TIME), Long.parseLong(map.get(EXPIRATION_TIME)),
+        Long.parseLong(map.get(CRC)), Short.parseShort(map.get(ACCOUNT_ID)), Short.parseShort(map.get(CONTAINER_ID)),
+        Long.parseLong(map.get(OPERATION_TIME)), Short.parseShort(map.get(LIFE_VERSION)));
   }
 
   public StoreKey getStoreKey() {
