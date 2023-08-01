@@ -43,6 +43,10 @@ public interface AzureStorageClient {
    */
   BlobServiceAsyncClient getStorageClient();
 
+  default BlobServiceClient getStorageSyncClient() {
+    return null;
+  }
+
   /**
    * Creates a new block blob, or updates the content of an existing block blob asynchronously.
    * @param blobId {@link BlobId} of the blob to upload.

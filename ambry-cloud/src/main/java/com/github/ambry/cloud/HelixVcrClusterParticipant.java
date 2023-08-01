@@ -53,9 +53,6 @@ import org.apache.helix.task.TaskStateModelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.clustermap.ClusterMapUtils.*;
-import static com.github.ambry.config.CloudConfig.*;
-
 
 /**
  * Helix Based VCR Cluster.
@@ -189,9 +186,7 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
         cloudConfig.vcrClusterZkConnectString);
     VcrStateModelFactory stateModelFactory = Utils.getObj(cloudConfig.vcrHelixStateModelFactoryClass, this);
     manager.getStateMachineEngine().registerStateModelFactory(stateModelFactory.getStateModelName(), stateModelFactory);
-    if (cloudConfig.cloudContainerCompactionEnabled) {
-      registerContainerDeletionSyncTask(manager.getStateMachineEngine());
-    }
+    registerContainerDeletionSyncTask(manager.getStateMachineEngine());
     manager.connect();
     helixAdmin = manager.getClusterManagmentTool();
 
@@ -211,10 +206,12 @@ public class HelixVcrClusterParticipant implements VcrClusterParticipant {
   }
 
   /**
-   * Register {@link DeprecatedContainerCloudSyncTask}s to sync deleted container information from account service to VCR.
+   * Register {@link DeprecatedContainerCloudSyncTask}s to sync deleted container information from account service to
+   * VCR.
+   *
    * @param engine the {@link StateMachineEngine} to register the task state model.
    */
-  private void registerContainerDeletionSyncTask(StateMachineEngine engine) {
+  protected void registerContainerDeletionSyncTask(StateMachineEngine engine) {
     if (cloudConfig.cloudContainerCompactionEnabled) {
       Map<String, TaskFactory> taskFactoryMap = new HashMap<>();
       taskFactoryMap.put(DeprecatedContainerCloudSyncTask.COMMAND, new TaskFactory() {

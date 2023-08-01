@@ -571,7 +571,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   /**
    * To co-ordinate replication between leader and standby replicas of a partition during leader based replication.
    */
-  class LeaderBasedReplicationAdmin {
+  public class LeaderBasedReplicationAdmin {
 
     //Maintains the list of leader partitions on local node and their corresponding peer leaders in remote data centers
     private final Map<String, Set<ReplicaId>> leaderPartitionToPeerLeaderReplicas = new HashMap<>();

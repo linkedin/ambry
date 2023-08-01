@@ -56,6 +56,7 @@ import com.github.ambry.rest.NioServerFactory;
 import com.github.ambry.rest.ServerSecurityService;
 import com.github.ambry.rest.ServerSecurityServiceFactory;
 import com.github.ambry.rest.StorageServerNettyFactory;
+import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
@@ -83,6 +84,7 @@ public class VcrServer {
   private NetworkServer networkServer = null;
   private ScheduledExecutorService scheduler = null;
   private VcrReplicationManager vcrReplicationManager = null;
+  private StoreManager cloudStorageManager = null;
   private static final Logger logger = LoggerFactory.getLogger(VcrServer.class);
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
@@ -165,22 +167,10 @@ public class VcrServer {
       // verify the configs
       properties.verify();
 
-      // initialize cloud destination
-      if (cloudDestinationFactory == null) {
-        cloudDestinationFactory =
-            Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap);
-      }
-      cloudDestination = cloudDestinationFactory.getCloudDestination();
-
       // TODO Make sure that config.updaterPollingIntervalMs value is large (~one day) for VCR.
       AccountServiceFactory accountServiceFactory =
           Utils.getObj(serverConfig.serverAccountServiceFactory, properties, registry);
       AccountService accountService = accountServiceFactory.getAccountService();
-
-      vcrClusterParticipant =
-          ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass, cloudConfig,
-              clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
-              registry)).getVcrClusterParticipant();
 
       scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
@@ -206,12 +196,35 @@ public class VcrServer {
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
-      CloudStorageManager cloudStorageManager =
-          new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
-      vcrReplicationManager =
-          new VcrReplicationManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig, cloudStorageManager,
-              storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler, networkClientFactory,
-              vcrMetrics, notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer);
+
+      logger.info("Azure backup version = {}", cloudConfig.azureBackupVersion);
+      if (cloudConfig.azureBackupVersion.equals(CloudConfig.AZURE_BACKUP_VERSION_1)) {
+        // Backup 1.0
+        if (cloudDestinationFactory == null) {
+          cloudDestinationFactory =
+              Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap);
+        }
+        cloudDestination = cloudDestinationFactory.getCloudDestination();
+        vcrClusterParticipant =
+            ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass, cloudConfig,
+                clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
+                registry)).getVcrClusterParticipant();
+        cloudStorageManager = new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
+        vcrReplicationManager = new VcrReplicationManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
+            cloudStorageManager, storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler,
+            networkClientFactory, vcrMetrics, notificationSystem, storeKeyConverterFactory,
+            serverConfig.serverMessageTransformer);
+      } else if (cloudConfig.azureBackupVersion.equals(CloudConfig.AZURE_BACKUP_VERSION_2)) {
+        // Backup 2.0
+        vcrClusterParticipant = new AzureStorageHelixParticipant(properties, registry, clusterMap, accountService);
+        cloudStorageManager = new AzureStorageManager(properties, registry, clusterMap);
+        vcrReplicationManager =
+            new AzureStorageReplicationManager(properties, registry, clusterMap, cloudStorageManager, storeKeyFactory,
+                vcrClusterParticipant, scheduler, networkClientFactory, notificationSystem, storeKeyConverterFactory);
+      } else {
+        // Invalid backup version
+        throw new RuntimeException(String.format("Invalid azure backup version %s", cloudConfig.azureBackupVersion));
+      }
       vcrReplicationManager.start();
 
       DataNodeId currentNode = vcrClusterParticipant.getCurrentDataNodeId();

@@ -1664,7 +1664,7 @@ public class ReplicaThread implements Runnable {
     return exchangeMetadataResponsesInEachCycle;
   }
 
-  static class ExchangeMetadataResponse {
+  protected static class ExchangeMetadataResponse {
     // Set of messages from remote replica missing in the local store.
     final Set<MessageInfo> missingStoreMessages;
     // Set of messages whose blobs are now present in local store  but their properties (ttl_update, delete, undelete)
