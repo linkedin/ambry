@@ -155,34 +155,42 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * It will pull out any stale record (limit to be config.queryStaleDataMaxResults [Default 1000] records at most)
    * meeting below conditions:
    * 1. created more than config.staleDataRetentionDays [Default 5] days ago, and
-   * 2. it's NOT a VLR (Valid Latest Record) for any named blob.
+   * 2. its blob_id does NOT show in any VLR (Valid Latest Record) of any named blob.
    * VLR of a named blob is the record whose blob_state=1 (READY), and has the max version for the named blob.
    *
-   * To pull out the rows that meet the 2nd condition above, we are using left join and then pull out the rows where
-   * right side table's keys are all NULL
+   * We construct the SQL query in a below steps:
+   * STEP 1: We first pull out the max version per valid record.
+   * STEP 2: Then we pull out the distinct blob_ids for those max versions.
+   * STEP 3: At last we exclude the record with blob_ids in step 2,
+   * and only pull records which are not deleted/expired yet.
+   * We order result by blob_id (which is indexed) to have deterministic results within the limit
    */
   // @formatter:off
   private static final String GET_STALE_QUERY = String.format(""
-          + "SELECT t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, %s "
-          + "FROM %s t1 "
-          + "LEFT JOIN "
-          + "(SELECT account_id, container_id, blob_name, max(version) as version "
+          + "SELECT %s, %s, %s, %s, %s, %s "
           + "FROM %s "
-          + "WHERE blob_state=1 "
-          + "      GROUP BY account_id, container_id, blob_name) t2 "
-          + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE t1.%s<? and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL "
-          + "LIMIT ?",
+          + "WHERE blob_id not in "
+          + "   (SELECT distinct(blob_id) "
+          + "    FROM %s "
+          + "    WHERE version in  (SELECT max(version) as version "
+          + "      FROM %s "
+          + "      WHERE blob_state = 1 and version != 0 "
+          + "      GROUP BY account_id, container_id, blob_name))"
+          + " AND %s<? AND (%s IS NULL OR %s>%s) ORDER BY blob_id LIMIT ?",
       ACCOUNT_ID,
       CONTAINER_ID,
       BLOB_NAME,
       BLOB_ID,
       VERSION,
-      DELETED_TS,
       CURRENT_TIME,
       NAMED_BLOBS_V2,
       NAMED_BLOBS_V2,
-      VERSION);
+      NAMED_BLOBS_V2,
+      VERSION,
+      DELETED_TS,
+      DELETED_TS,
+      CURRENT_TIME
+      );
   // @formatter:on
 
   private final AccountService accountService;
@@ -731,12 +739,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           String blobName = resultSet.getString(3);
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
           long version = resultSet.getLong(5);
-          Timestamp deletionTime = resultSet.getTimestamp(6);
-          Timestamp currentTime = resultSet.getTimestamp(7);
-          if (compareTimestamp(deletionTime, currentTime.getTime()) > 0) {
-            StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime);
-            resultList.add(result);
-          }
+          Timestamp currentTime = resultSet.getTimestamp(6);
+          StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime);
+          resultList.add(result);
         }
         return resultList;
       }
@@ -780,7 +785,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * @param timestamp the nullable {@link Timestamp} to compare.
    * @param otherTimeMs the time value to compare against.
    * @return -1 if the timestamp is earlier than {@code otherTimeMs}, 0 if the times are equal, and 1 if
-   *         {@code otherTimeMs} is later than the timestamp. {@code null} is considered greater than any other time.
+   *         the timestamp is later than {@code otherTimeMs}. {@code null} is considered greater than any other time.
    */
   private static int compareTimestamp(Timestamp timestamp, long otherTimeMs) {
     return Utils.compareTimes(timestampToMs(timestamp), otherTimeMs);
