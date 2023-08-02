@@ -155,10 +155,10 @@ public class DatasetDao {
             + "where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and %1$s >= ? "
             + "ORDER BY %1$s ASC LIMIT ?", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
         DATASET_VERSION_STATE);
-    listValidDatasetVersionsByListSql = String.format("select %1$s, %8$s from %2$s "
+    listValidDatasetVersionsByListSql = String.format("select %1$s, %3$s, %8$s from %2$s "
             + "where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? "
             + "ORDER BY %1$s ASC", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
-        DATASET_VERSION_STATE, DELETE_TS);
+        DATASET_VERSION_STATE, CREATION_TIME);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
@@ -705,13 +705,13 @@ public class DatasetDao {
                   versionSchema);
           dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
           return datasetVersionRecordList;
-        case ESPRESSO_BACKUP_RETENTION_POLICY:
+        case TIMESTAMP_BASED_BACKUP_RETENTION_POLICY:
           List<DatasetVersionRecord> allValidDatasetVersionsOrderedByVersion =
               listValidDatasetVersionsByListStatement(accountId, containerId, datasetName, versionSchema);
-          DatasetRetentionPolicy espressoBackUpRetentionPolicy =
+          DatasetRetentionPolicy timestampBasedBackUpRetentionPolicy =
               Utils.getObj(mySqlAccountServiceConfig.datasetRetentionPolicy, allValidDatasetVersionsOrderedByVersion,
                   retentionCount, versionSchema);
-          datasetVersionRecordList = espressoBackUpRetentionPolicy.getDatasetVersionOutOfRetention();
+          datasetVersionRecordList = timestampBasedBackUpRetentionPolicy.getDatasetVersionOutOfRetention();
           dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
           return datasetVersionRecordList;
         default:
@@ -1091,8 +1091,10 @@ public class DatasetDao {
       while (resultSet.next()) {
         long versionValue = resultSet.getLong(VERSION);
         long expirationTimeMs = timestampToMs(resultSet.getTimestamp(DELETE_TS));
+        long creationTimeMs = timestampToMs(resultSet.getTimestamp(CREATION_TIME));
         String version = convertVersionValueToVersion(versionValue, versionSchema);
-        entries.add(new DatasetVersionRecord(accountId, containerId, datasetName, version, expirationTimeMs));
+        entries.add(
+            new DatasetVersionRecord(accountId, containerId, datasetName, version, expirationTimeMs, creationTimeMs));
       }
       return entries;
     } finally {

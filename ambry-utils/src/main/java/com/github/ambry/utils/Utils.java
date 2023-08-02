@@ -104,7 +104,7 @@ public class Utils {
    * Default retention policy for dataset.
    */
   public static final String DEFAULT_RETENTION_POLICY = "DefaultCounterBasedPolicy";
-  public static final String ESPRESSO_BACKUP_RETENTION_POLICY = "EspressoBackUpRetentionPolicy";
+  public static final String TIMESTAMP_BASED_BACKUP_RETENTION_POLICY = "TimestampBasedBackUpRetentionPolicy";
   private static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
   private static final String CLIENT_BROKEN_PIPE_EXCEPTION_MSG = "Broken pipe";
   // This is found in Netty's SslHandler, which does not expose the exception message as a constant. Be careful, since
