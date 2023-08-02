@@ -33,7 +33,7 @@ public class DatasetBuilder {
   // necessary for insert, not update.
   private Dataset.VersionSchema versionSchema;
   //optional
-  private String retentionPolicy = DEFAULT_RETENTION_POLICY;
+  private String retentionPolicy = null;
   private Integer retentionCount = null;
   private Long retentionTimeInSeconds = null;
   private Map<String, String> userTags = null;

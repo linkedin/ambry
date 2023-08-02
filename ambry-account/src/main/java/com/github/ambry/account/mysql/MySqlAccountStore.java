@@ -52,7 +52,7 @@ public class MySqlAccountStore {
       MySqlAccountServiceConfig config) throws SQLException {
     mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
     accountDao = new AccountDao(mySqlDataAccessor);
-    datasetDao = new DatasetDao(mySqlDataAccessor, config);
+    datasetDao = new DatasetDao(mySqlDataAccessor, config, metrics);
     this.config = config;
   }
 

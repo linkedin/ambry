@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS Datasets (
     containerId INT NOT NULL,
     datasetName VARCHAR(235) NOT NULL,
     versionSchema INT NOT NULL,
-    retentionPolicy VARCHAR(50) DEFAULT NULL,
+    retentionPolicy VARCHAR(100) DEFAULT NULL,
     retentionCount INT DEFAULT NULL,
     retentionTimeInSeconds BIGINT DEFAULT NULL,
     userTags JSON DEFAULT NULL,

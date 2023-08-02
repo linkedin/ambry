@@ -26,6 +26,7 @@ public class DatasetVersionRecord {
   private final String datasetName;
   private final String version;
   private final long expirationTimeMs;
+  private final Long creationTimeMs;
 
   /**
    * Constructor that takes individual arguments.
@@ -35,12 +36,28 @@ public class DatasetVersionRecord {
    * @param version the version of the dataset.
    * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
    */
-  public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version, long expirationTimeMs) {
+  public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version,
+      long expirationTimeMs) {
+    this(accountId, containerId, datasetName, version, expirationTimeMs, null);
+  }
+
+  /**
+   * Constructor for retention policy support.
+   * @param accountId the id of the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @param expirationTimeMs the expiration time in milliseconds since epoch, or -1 if the blob should be permanent.
+   * @param creationTimeMs the creation time in milliseconds since epoch for dataset version.
+   */
+  public DatasetVersionRecord(int accountId, int containerId, String datasetName, String version, long expirationTimeMs,
+      Long creationTimeMs) {
     this.accountId = accountId;
     this.containerId = containerId;
     this.datasetName = datasetName;
     this.version = version;
     this.expirationTimeMs = expirationTimeMs;
+    this.creationTimeMs = creationTimeMs;
   }
 
   /**
@@ -78,6 +95,13 @@ public class DatasetVersionRecord {
     return expirationTimeMs;
   }
 
+  /**
+   * @return the creation time of the dataset version.
+   */
+  public long getCreationTimeMs() {
+    return creationTimeMs;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -88,7 +112,8 @@ public class DatasetVersionRecord {
     }
     DatasetVersionRecord record = (DatasetVersionRecord) o;
     return accountId == record.accountId && containerId == record.containerId && Objects.equals(datasetName,
-        record.datasetName) && Objects.equals(version, record.version) && expirationTimeMs == record.expirationTimeMs;
+        record.datasetName) && Objects.equals(version, record.version) && expirationTimeMs == record.expirationTimeMs
+        && Objects.equals(creationTimeMs, record.creationTimeMs);
   }
 
   @Override
@@ -99,7 +124,7 @@ public class DatasetVersionRecord {
   @Override
   public String toString() {
     return "DatasetVersionRecord[accountId=" + accountId + ",containerId=" + containerId + ",datasetName=" + datasetName
-        + ",version=" + version + ",expirationTimeMs=" + expirationTimeMs + "]";
+        + ",version=" + version + ",expirationTimeMs=" + expirationTimeMs + ",creationTimeMs=" + creationTimeMs + "]";
   }
 }
 

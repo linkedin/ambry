@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -820,7 +821,8 @@ public class MySqlAccountServiceIntegrationTest {
     Dataset datasetFromMysql =
         mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
             testContainer.getName(), DATASET_NAME_BASIC);
-    assertEquals("Mistmatch in dataset read from db", dataset, datasetFromMysql);
+    //do not check retentionPolicy as the default will be written into db.
+    verifyDatasetProperties(dataset, datasetFromMysql);
 
     Map<String, String> userTags = new HashMap<>();
     userTags.put("userTag", "tagValue");
@@ -838,7 +840,7 @@ public class MySqlAccountServiceIntegrationTest {
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME);
 
-    assertEquals("Mismatch in dataset read from db", dataset, datasetFromMysql);
+    verifyDatasetProperties(dataset, datasetFromMysql);
     assertEquals("Mismatch in retentionPolicy", DEFAULT_RETENTION_POLICY, datasetFromMysql.getRetentionPolicy());
 
     // Add dataset again, should fail due to already exist.
@@ -947,7 +949,7 @@ public class MySqlAccountServiceIntegrationTest {
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME);
-    assertEquals("Mismatch on new added dataset", dataset, datasetFromMysql);
+    verifyDatasetProperties(dataset, datasetFromMysql);
   }
 
   /**
@@ -1365,6 +1367,22 @@ public class MySqlAccountServiceIntegrationTest {
    */
   private Container makeNewContainer(String name, short parentAccountId, ContainerStatus status) {
     return new ContainerBuilder(Container.UNKNOWN_CONTAINER_ID, name, status, DESCRIPTION, parentAccountId).build();
+  }
+
+  /**
+   * Verify the dataset properties.
+   * @param expected expected dataset.
+   * @param actual actual dataset.
+   */
+  private void verifyDatasetProperties(Dataset expected, Dataset actual) {
+    assertEquals("Mismatch on AccountName of the dataset", expected.getAccountName(), actual.getAccountName());
+    assertEquals("Mismatch on ContainerName of the dataset", expected.getContainerName(), actual.getContainerName());
+    assertEquals("Mismatch on DatasetName of the dataset", expected.getDatasetName(), actual.getDatasetName());
+    assertEquals("Mismatch on VersionSchema of the dataset", expected.getVersionSchema(), actual.getVersionSchema());
+    assertEquals("Mismatch on RetentionCount of the dataset", expected.getRetentionCount(), actual.getRetentionCount());
+    assertEquals("Mismatch on RetentionTimeInSeconds of the dataset", expected.getRetentionTimeInSeconds(), actual.getRetentionTimeInSeconds());
+    assertEquals("Mismatch on UserTags of the dataset", expected.getUserTags(), actual.getUserTags());
+
   }
 
   /**
