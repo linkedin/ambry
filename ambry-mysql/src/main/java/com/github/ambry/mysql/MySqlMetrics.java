@@ -41,6 +41,7 @@ public class MySqlMetrics {
   public static final String DELETE_FAILURE_COUNT = "DeleteFailureCount";
   public static final String CONNECTION_SUCCESS_COUNT = "ConnectionSuccessCount";
   public static final String CONNECTION_FAILURE_COUNT = "ConnectionFailureCount";
+  public static final String CONSTRUCT_RETENTION_POLICY_FAILURE_COUNT = "ConstructRetentionPolicyFailureCount";
 
   public final Histogram writeTimeMs;
   public final Counter writeSuccessCount;
@@ -65,6 +66,8 @@ public class MySqlMetrics {
   public final Counter connectionSuccessCount;
   public final Counter connectionFailureCount;
 
+  public final Counter constructRetentionPolicyFailureCount;
+
   public MySqlMetrics(Class<?> clazz, MetricRegistry metricRegistry) {
     writeTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, WRITE_TIME_MSEC));
     readTimeMs = metricRegistry.histogram(MetricRegistry.name(clazz, READ_TIME_MSEC));
@@ -83,5 +86,7 @@ public class MySqlMetrics {
     deleteFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, DELETE_FAILURE_COUNT));
     connectionSuccessCount = metricRegistry.counter(MetricRegistry.name(clazz, CONNECTION_SUCCESS_COUNT));
     connectionFailureCount = metricRegistry.counter(MetricRegistry.name(clazz, CONNECTION_FAILURE_COUNT));
+    constructRetentionPolicyFailureCount =
+        metricRegistry.counter(MetricRegistry.name(clazz, CONSTRUCT_RETENTION_POLICY_FAILURE_COUNT));
   }
 }

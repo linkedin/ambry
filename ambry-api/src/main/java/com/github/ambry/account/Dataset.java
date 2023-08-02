@@ -57,6 +57,7 @@ public class Dataset {
    * or hyphen).
    */
   private static final Pattern AMBRY_VALID_DATASET_NAME_PATTERN = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}");
+  private static final int AMBRY_DATASET_RETENTION_POLICY_MAX_LENGTH = 100;
 
   static final String ACCOUNT_NAME_KEY = "accountName";
   static final String CONTAINER_NAME_KEY = "containerName";
@@ -99,7 +100,7 @@ public class Dataset {
    */
   public Dataset(String accountName, String containerName, String datasetName, VersionSchema versionSchema,
       String retentionPolicy, Integer retentionCount, Long retentionTimeInSeconds, Map<String, String> userTags) {
-    checkPreconditions(accountName, containerName, datasetName);
+    checkPreconditions(accountName, containerName, datasetName, retentionPolicy);
     this.accountName = accountName;
     this.containerName = containerName;
     this.datasetName = datasetName;
@@ -173,8 +174,9 @@ public class Dataset {
    * @param accountName The name of the account. Cannot be null.
    * @param containerName The name of the container. Cannot be null.
    * @param datasetName The name of the dataset. Cannot be null.
+   * @param retentionPolicy The retention policy of the dataset, can be null.
    */
-  private void checkPreconditions(String accountName, String containerName, String datasetName) {
+  private void checkPreconditions(String accountName, String containerName, String datasetName, String retentionPolicy) {
     if (accountName == null || containerName == null || datasetName == null) {
       throw new IllegalStateException(
           "At lease one of required fields accountName=" + accountName + " or containerName=" + containerName
@@ -189,6 +191,10 @@ public class Dataset {
       throw new IllegalArgumentException("Invalid name for an Ambry dataset: " + datasetName
           + ". Valid names should only include alphanumeric characters, periods, underscores, and hyphens. The exact regex you must match is: "
           + AMBRY_VALID_DATASET_NAME_PATTERN);
+    }
+    if (retentionPolicy != null && retentionPolicy.length() > AMBRY_DATASET_RETENTION_POLICY_MAX_LENGTH) {
+      throw new IllegalArgumentException(
+          "retention policy maximum length can not be larger than " + AMBRY_DATASET_RETENTION_POLICY_MAX_LENGTH);
     }
   }
 

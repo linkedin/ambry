@@ -21,6 +21,7 @@ import com.github.ambry.account.DatasetRetentionPolicy;
 import com.github.ambry.config.MySqlAccountServiceConfig;
 import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
+import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.PreparedStatement;
@@ -42,6 +43,7 @@ public class DatasetDao {
   private final MySqlDataAccessor dataAccessor;
   private final MySqlAccountServiceConfig mySqlAccountServiceConfig;
   private final ObjectMapper objectMapper = new ObjectMapper();
+  private final MySqlMetrics metrics;
   private static final long MAX_TIMESTAMP_MONOTONIC_VERSION_VALUE = Long.MAX_VALUE;
   private static final long MAX_SEMANTIC_MAJOR_MINOR_PATH_VERSION_VALUE = 999L;
   private static final String LATEST = "LATEST";
@@ -97,9 +99,11 @@ public class DatasetDao {
   private final String deleteDatasetByIdSql;
   private final String listValidDatasetsSql;
 
-  public DatasetDao(MySqlDataAccessor dataAccessor, MySqlAccountServiceConfig mySqlAccountServiceConfig) {
+  public DatasetDao(MySqlDataAccessor dataAccessor, MySqlAccountServiceConfig mySqlAccountServiceConfig,
+      MySqlMetrics metrics) {
     this.dataAccessor = dataAccessor;
     this.mySqlAccountServiceConfig = mySqlAccountServiceConfig;
+    this.metrics = metrics;
     insertDatasetSql =
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?, ?)",
             DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY,
@@ -719,6 +723,7 @@ public class DatasetDao {
       throw e;
     } catch (ReflectiveOperationException e) {
       dataAccessor.onException(e, Read);
+      metrics.constructRetentionPolicyFailureCount.inc();
       throw new IllegalStateException("Unable to construct the dataset retention policy");
     }
   }
