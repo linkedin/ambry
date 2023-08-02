@@ -19,7 +19,13 @@ import java.util.List;
 public interface DatasetRetentionPolicy {
   /**
    * List all the dataset version out of retention count.
-   * @return list of dataset versions.
+   * @param allValidDatasetVersionsOrderedByVersion all the valid dataset version record ordered by version.
+   * @param retentionCount the retention count.
+   * @param versionSchema the version schema of the dataset,
+   *                      could be used to check which version schema is allowed for this retention policy.
+   * @return @return list of dataset versions out of retention.
    */
-  List<DatasetVersionRecord> getDatasetVersionOutOfRetention();
+  List<DatasetVersionRecord> getDatasetVersionOutOfRetention(
+      List<DatasetVersionRecord> allValidDatasetVersionsOrderedByVersion, Integer retentionCount,
+      Dataset.VersionSchema versionSchema);
 }

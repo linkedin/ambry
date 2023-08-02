@@ -698,24 +698,21 @@ public class DatasetDao {
         dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
         return datasetVersionRecordList;
       }
-      switch (retentionPolicy) {
-        case DEFAULT_RETENTION_POLICY:
-          datasetVersionRecordList =
-              getDatasetVersionOutOfRetentionByDefault(accountId, containerId, datasetName, retentionCount,
-                  versionSchema);
-          dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
-          return datasetVersionRecordList;
-        case TIMESTAMP_BASED_BACKUP_RETENTION_POLICY:
-          List<DatasetVersionRecord> allValidDatasetVersionsOrderedByVersion =
-              listValidDatasetVersionsByListStatement(accountId, containerId, datasetName, versionSchema);
-          DatasetRetentionPolicy timestampBasedBackUpRetentionPolicy =
-              Utils.getObj(mySqlAccountServiceConfig.datasetRetentionPolicy, allValidDatasetVersionsOrderedByVersion,
-                  retentionCount, versionSchema);
-          datasetVersionRecordList = timestampBasedBackUpRetentionPolicy.getDatasetVersionOutOfRetention();
-          dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
-          return datasetVersionRecordList;
-        default:
-          throw new IllegalArgumentException("Unsupported retentionPolicy: " + retentionPolicy);
+      if (DEFAULT_RETENTION_POLICY.equals(retentionPolicy)) {
+        datasetVersionRecordList =
+            getDatasetVersionOutOfRetentionByDefault(accountId, containerId, datasetName, retentionCount,
+                versionSchema);
+        dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+        return datasetVersionRecordList;
+      } else {
+        List<DatasetVersionRecord> allValidDatasetVersionsOrderedByVersion =
+            listValidDatasetVersionsByListStatement(accountId, containerId, datasetName, versionSchema);
+        DatasetRetentionPolicy customizedRetentionPolicy = Utils.getObj(retentionPolicy);
+        datasetVersionRecordList =
+            customizedRetentionPolicy.getDatasetVersionOutOfRetention(allValidDatasetVersionsOrderedByVersion,
+                retentionCount, versionSchema);
+        dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
+        return datasetVersionRecordList;
       }
     } catch (SQLException | AccountServiceException e) {
       dataAccessor.onException(e, Read);
