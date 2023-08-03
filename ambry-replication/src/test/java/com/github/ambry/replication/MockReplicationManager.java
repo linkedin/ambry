@@ -106,6 +106,7 @@ public class MockReplicationManager extends ReplicationManager {
         dataNodeId, factory, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory, transformerClassName,
         clusterParticipant, null, findTokenHelper, time);
     reset();
+    controlReplicationReturnVal = true;
   }
 
   @Override
