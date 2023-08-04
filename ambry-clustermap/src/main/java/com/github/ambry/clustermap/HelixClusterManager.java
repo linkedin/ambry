@@ -790,6 +790,7 @@ public class HelixClusterManager implements ClusterMap {
       logger.error("No Disk is available to host bootstrap replica. Cannot create the replica.");
       return null;
     }
+    long replicaCapacity = 0;
     try {
       AmbryPartition mappedPartition =
           new AmbryPartition(Long.parseLong(partitionIdStr), clusterMapConfig.clusterMapDefaultPartitionClass,
@@ -799,9 +800,15 @@ public class HelixClusterManager implements ClusterMap {
       if (currentPartition == null) {
         logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
         currentPartition = mappedPartition;
+        replicaCapacity = DEFAULT_REPLICA_CAPACITY_IN_BYTES;
+      } else {
+        replicaCapacity = currentPartition.getReplicaIds().get(0).getCapacityInBytes();
       }
+      // Update disk usage
+      // TODO: Add a metric for this
+      disk.decreaseAvailableSpaceInBytes(replicaCapacity);
       AmbryServerReplica replica =
-          new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, DEFAULT_REPLICA_CAPACITY_IN_BYTES,
+          new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, replicaCapacity,
               ReplicaSealStatus.NOT_SEALED);
       logger.info("Created bootstrap replica {} for Partition {}", replica, partitionIdStr);
       return replica;
@@ -810,7 +817,7 @@ public class HelixClusterManager implements ClusterMap {
           dataNodeId, e);
       // We have decreased the available space on the disk since we thought that it will be used to host replica. Since
       // bootstrapping replica failed, increase the available disk space back.
-      disk.increaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES);
+      disk.increaseAvailableSpaceInBytes(replicaCapacity);
       return null;
     }
   }
@@ -850,10 +857,6 @@ public class HelixClusterManager implements ClusterMap {
 
     // Select first available disk with maximum available capacity.
     AmbryDisk disk = potentialDisks.get(0);
-
-    // Update disk usage
-    // TODO: Add a metric for this
-    disk.decreaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES);
 
     return disk;
   }
