@@ -135,6 +135,9 @@ public class DiskManager {
     this.replicaStatusDelegates = replicaStatusDelegates;
     this.stoppedReplicas = stoppedReplicas;
     expectedDirs.add(reserveFileDir.getAbsolutePath());
+    // Create an array list to add all the stores and pass it to compaction manager so that we have a fixed order
+    // of blob stores to compact, even between restarts.
+    List<BlobStore> storesToCompact = new ArrayList<>();
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
         DiskMetrics diskMetrics = new DiskMetrics(storeMainMetrics.getRegistry(), disk.getMountPath(),
@@ -144,13 +147,14 @@ public class DiskManager {
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
                 time, accountService, diskMetrics);
         stores.put(replica.getPartitionId(), store);
+        storesToCompact.add(store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
         expectedDirs.add(replica.getReplicaPath());
         // All these replicas are already present on this disk. Update the space used on this disk.
         disk.decreaseAvailableSpaceInBytes(store.getReplicaId().getCapacityInBytes());
       }
     }
-    compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, stores.values(), metrics, time);
+    compactionManager = new CompactionManager(disk.getMountPath(), storeConfig, storesToCompact, metrics, time);
   }
 
   /**
