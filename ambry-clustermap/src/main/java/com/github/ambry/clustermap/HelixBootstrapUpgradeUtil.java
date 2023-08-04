@@ -1173,7 +1173,10 @@ public class HelixBootstrapUpgradeUtil {
         clusterConfigFields.partitionDiskWeightInGB + PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB));
 
     // 3. Update resource configs in helix
+    final long GB = 1024 * 1024 * 1024;
     resourceConfig.setPartitionCapacityMap(partitionCapacityMap);
+    resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR,
+        String.valueOf(GB * clusterConfigFields.partitionDiskWeightInGB));
     configAccessor.setResourceConfig(clusterName, resourceName, resourceConfig);
     info("Updated resource config/partition weights for resource {}. Partition weights: {}", resourceName,
         resourceConfig.getPartitionCapacityMap());
