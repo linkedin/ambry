@@ -797,6 +797,7 @@ public class HelixClusterManager implements ClusterMap {
       logger.error("No Disk is available to host bootstrap replica. Cannot create the replica.");
       return null;
     }
+    boolean decreasedDiskSpace = false;
     try {
       AmbryPartition mappedPartition =
           new AmbryPartition(Long.parseLong(partitionIdStr), clusterMapConfig.clusterMapDefaultPartitionClass,
@@ -813,6 +814,7 @@ public class HelixClusterManager implements ClusterMap {
         replicaCapacity = currentPartition.getReplicaIds().get(0).getCapacityInBytes();
       }
       disk.decreaseAvailableSpaceInBytes(replicaCapacity);
+      decreasedDiskSpace = true;
       AmbryServerReplica replica =
           new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, replicaCapacity,
               ReplicaSealStatus.NOT_SEALED);
@@ -823,7 +825,9 @@ public class HelixClusterManager implements ClusterMap {
           dataNodeId, e);
       // We have decreased the available space on the disk since we thought that it will be used to host replica. Since
       // bootstrapping replica failed, increase the available disk space back.
-      disk.increaseAvailableSpaceInBytes(replicaCapacity);
+      if (decreasedDiskSpace) {
+        disk.increaseAvailableSpaceInBytes(replicaCapacity);
+      }
       return null;
     }
   }
@@ -856,15 +860,16 @@ public class HelixClusterManager implements ClusterMap {
       logger.info("Fetching resource config for {} to create bootstrap replica for partition {}", resourceName,
           partitionIdStr);
       ResourceConfig resourceConfig = configAccessor.getResourceConfig(clusterName, resourceName);
-      resourceConfigs.putIfAbsent(resourceName, resourceConfig);
+      if (resourceConfig != null) {
+        resourceConfigs.putIfAbsent(resourceName, resourceConfig);
+      }
     }
     ResourceConfig resourceConfig = resourceConfigs.get(resourceName);
-    String defaultReplicaCapacityStr = resourceConfig.getSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR);
-    if (defaultReplicaCapacityStr == null) {
+    if (resourceConfig == null || resourceConfig.getSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR) == null) {
       throw new IllegalArgumentException("Missing default replica capacity from resource " + resourceName
           + " when creating bootstrap replica for partition " + partitionIdStr);
     }
-    return Long.parseLong(defaultReplicaCapacityStr);
+    return Long.parseLong(resourceConfig.getSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR));
   }
 
   /**
