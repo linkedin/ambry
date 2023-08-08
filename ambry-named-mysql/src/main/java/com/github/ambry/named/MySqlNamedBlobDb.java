@@ -118,6 +118,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "(SELECT account_id, container_id, blob_name, max(version) as version "
           + "FROM named_blobs_v2 "
           + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+          + "  AND (deleted_ts IS NULL OR deleted_ts>CURRENT_TIMESTAMP(6)) "
           + "        GROUP BY account_id, container_id, blob_name) t2 "
           + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
           + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH);
@@ -607,26 +608,19 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       try (ResultSet resultSet = statement.executeQuery()) {
         String nextContinuationToken = null;
         List<NamedBlobRecord> entries = new ArrayList<>();
-        long currentTime = this.time.milliseconds();
         int resultIndex = 0;
         while (resultSet.next()) {
+          String blobName = resultSet.getString(1);
           if (resultIndex++ == config.listMaxResults) {
-            nextContinuationToken = resultSet.getString(1);
+            nextContinuationToken = blobName;
             break;
           }
-          String blobName = resultSet.getString(1);
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(2));
           long version = resultSet.getLong(3);
           Timestamp deletionTime = resultSet.getTimestamp(4);
 
-          if (compareTimestamp(deletionTime, currentTime) <= 0) {
-            logger.trace(
-                "LIST: Blob is not available due to it is deleted or expired, ignoring in list response; account='{}', container='{}', name='{}'",
-                accountName, containerName, blobName);
-          } else {
-            entries.add(new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime),
-                version));
-          }
+          entries.add(new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime),
+              version));
         }
         return new Page<>(entries, nextContinuationToken);
       }
