@@ -350,7 +350,12 @@ class SimpleOperationTracker implements OperationTracker {
         generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck,
             routerOperation));
     if (totalReplicaCount < getSuccessTarget()) {
-      throw notEnoughReplicasException.get();
+      if (possibleRunOfflineRepair(totalReplicaCount)) {
+        logger.info("RepairRequest: Not enough quorum for delete but give it a try since offline repair is enabled {}",
+            blobId);
+      } else {
+        throw notEnoughReplicasException.get();
+      }
     }
 
     originatingDcTotalReplicaCount = (int) allReplicas.stream()
@@ -367,6 +372,15 @@ class SimpleOperationTracker implements OperationTracker {
         "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}, originatingDC = {}",
         routerOperation, replicaSuccessTarget, replicaParallelism, originatingDcNotFoundFailureThreshold, replicaPool,
         originatingDcName);
+  }
+
+  /**
+   * @param eligibleReplicaCount eligible replicas to send Delete Requests.
+   * @return true if it's possible to run offline repair for the Delete
+   */
+  public boolean possibleRunOfflineRepair(int eligibleReplicaCount) {
+    return (eligibleReplicaCount >= 1 && routerOperation == RouterOperation.DeleteOperation
+        && routerConfig.routerDeleteOfflineRepairEnabled && routerConfig.routerRepairRequestsDbFactory != null);
   }
 
   /**
@@ -567,7 +581,13 @@ class SimpleOperationTracker implements OperationTracker {
       }
       // if there is no possible way to use the remaining replicas to meet the success target,
       // deem the operation a failure.
-      return replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget;
+      // For Delete, even there is not enough quorum, if offline repair is enabled, continue to run it.
+      if (possibleRunOfflineRepair(replicaInPoolOrFlightCount + replicaSuccessCount)) {
+        logger.trace("RepairRequest: continue to run as long as we have replicas {}", blobId);
+        return replicaInPoolOrFlightCount <= 0;
+      } else {
+        return replicaInPoolOrFlightCount + replicaSuccessCount < replicaSuccessTarget;
+      }
     }
   }
 
