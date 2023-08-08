@@ -13,6 +13,7 @@
  */
 package com.github.ambry.messageformat;
 
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 
@@ -22,9 +23,12 @@ import com.codahale.metrics.MetricRegistry;
  */
 public class MessageFormatMetrics {
   public final Histogram calculateOffsetMessageFormatSendTime;
+  public final Counter messageFormatExceptionCount;
 
   public MessageFormatMetrics(MetricRegistry registry) {
     calculateOffsetMessageFormatSendTime =
         registry.histogram(MetricRegistry.name(MessageFormatSend.class, "CalculateOffsetMessageFormatSendTime"));
+    messageFormatExceptionCount =
+        registry.counter(MetricRegistry.name(MessageFormatSend.class, "MessageFormatExceptionCount"));
   }
 }

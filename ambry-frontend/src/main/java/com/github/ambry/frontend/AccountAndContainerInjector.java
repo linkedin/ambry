@@ -126,7 +126,7 @@ public class AccountAndContainerInjector {
    *                     if {@link ContainerMetrics} instantiation is not needed.
    * @throws RestServiceException
    */
-  public void injectAccountContainerAndDatasetForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
+  public void injectAccountContainerForNamedBlob(RestRequest restRequest, RestRequestMetricsGroup metricsGroup)
       throws RestServiceException {
     accountAndContainerSanityCheck(restRequest);
 
@@ -166,7 +166,16 @@ public class AccountAndContainerInjector {
           RestServiceErrorCode.BadRequest);
     }
     setTargetAccountAndContainerInRestRequest(restRequest, targetAccount, targetContainer, metricsGroup);
-    setTargetDatasetAndVersionInRestRequestIfNeeded(restRequest, namedBlobPath);
+  }
+
+  /**
+   * Injects target {@link Dataset} for named blob requests.
+   * This will treat the request path as a named blob path that includes the dataset names.
+   * @param restRequest restRequest The Put {@link RestRequest}.
+   * @throws RestServiceException
+   */
+  public void injectDatasetForNamedBlob(RestRequest restRequest) throws RestServiceException {
+    setTargetDatasetAndVersionInRestRequestIfNeeded(restRequest);
   }
 
   /**
@@ -414,30 +423,27 @@ public class AccountAndContainerInjector {
   /**
    * Set target {@link Dataset} objects and its version in the {@link RestRequest}.
    * @param restRequest The {@link RestRequest} to set.
-   * @param namedBlobPath the {@link NamedBlobPath} to get account, container and dataset name.
    * @throws RestServiceException
    */
-  private void setTargetDatasetAndVersionInRestRequestIfNeeded(RestRequest restRequest, NamedBlobPath namedBlobPath)
+  private void setTargetDatasetAndVersionInRestRequestIfNeeded(RestRequest restRequest)
       throws RestServiceException {
     if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-      String accountName = namedBlobPath.getAccountName();
-      String containerName = namedBlobPath.getContainerName();
-      String blobName = namedBlobPath.getBlobName();
-      Objects.requireNonNull(blobName, "blobName should not be null");
-      blobName = blobName.startsWith(PATH_SEPARATOR_STRING) ? blobName.substring(1) : blobName;
-      String[] splitName = blobName.split(PATH_SEPARATOR_STRING, 2);
-      int expectedSegments = 2;
-      if (splitName.length != expectedSegments) {
-        throw new RestServiceException(
-            "Blob name must have format 'datasetName/version'.  Received blobName: " + blobName,
-            RestServiceErrorCode.BadRequest);
+      DatasetVersionPath datasetVersionPath =
+          DatasetVersionPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+      String accountName = datasetVersionPath.getAccountName();
+      String containerName = datasetVersionPath.getContainerName();
+      String datasetName = datasetVersionPath.getDatasetName();
+      // listing dataset versions do not need to provide version.
+      String version = null;
+      if (datasetVersionPath.getVersion() != null) {
+        version = datasetVersionPath.getVersion();
       }
-      String datasetName = splitName[0];
-      String version = splitName[1];
       try {
         Dataset dataset = accountService.getDataset(accountName, containerName, datasetName);
         restRequest.setArg(InternalKeys.TARGET_DATASET, dataset);
-        restRequest.setArg(InternalKeys.TARGET_DATASET_VERSION, version);
+        if (version != null) {
+          restRequest.setArg(InternalKeys.TARGET_DATASET_VERSION, version);
+        }
       } catch (AccountServiceException e) {
         frontendMetrics.unrecognizedDatasetNameCount.inc();
         logger.error(

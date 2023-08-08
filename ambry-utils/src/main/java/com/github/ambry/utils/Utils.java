@@ -43,6 +43,7 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
+import java.sql.Timestamp;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -99,6 +100,10 @@ public class Utils {
    * The separator used to construct account-container pair in stats report.
    */
   public static final String ACCOUNT_CONTAINER_SEPARATOR = "___";
+  /**
+   * Default retention policy for dataset.
+   */
+  public static final String DEFAULT_RETENTION_POLICY = "DefaultCounterBasedPolicy";
   private static final String CLIENT_RESET_EXCEPTION_MSG = "Connection reset by peer";
   private static final String CLIENT_BROKEN_PIPE_EXCEPTION_MSG = "Broken pipe";
   // This is found in Netty's SslHandler, which does not expose the exception message as a constant. Be careful, since
@@ -1481,5 +1486,24 @@ public class Utils {
     } catch (Exception ex) {
       // Exception is intentionally ignored.
     }
+  }
+
+  /**
+   * Compare a nullable timestamp against {@code otherTimeMs}.
+   * @param timestamp the nullable {@link Timestamp} to compare.
+   * @param otherTimeMs the time value to compare against.
+   * @return -1 if the timestamp is earlier than {@code otherTimeMs}, 0 if the times are equal, and 1 if
+   *         {@code otherTimeMs} is later than the timestamp. {@code null} is considered greater than any other time.
+   */
+  public static int compareTimestamp(Timestamp timestamp, long otherTimeMs) {
+    return Utils.compareTimes(timestampToMs(timestamp), otherTimeMs);
+  }
+
+  /**
+   * @param timestamp a {@link Timestamp}, can be null.
+   * @return the milliseconds since the epoch if {@code timestamp} is non-null, or {@link Utils#Infinite_Time} if null.
+   */
+  public static long timestampToMs(Timestamp timestamp) {
+    return timestamp == null ? Utils.Infinite_Time : timestamp.getTime();
   }
 }

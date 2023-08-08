@@ -40,7 +40,7 @@ public final class JsonAccountServiceFactory implements AccountServiceFactory {
    */
   public JsonAccountServiceFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry) {
     jsonAccountConfig = new JsonAccountConfig(verifiableProperties);
-    accountServiceMetrics = new AccountServiceMetrics(metricRegistry, false);
+    accountServiceMetrics = new AccountServiceMetrics(metricRegistry);
 
     accountFile = Paths.get(jsonAccountConfig.jsonAccountFilePath);
   }

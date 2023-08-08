@@ -407,7 +407,7 @@ public class HelixClusterManager implements ClusterMap {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
     try {
       ReplicaId bootstrapReplica =
-          isDataNodeInFullAutoMode(dataNodeId) ? getBootstrapReplicaInFullAuto(partitionIdStr, dataNodeId)
+          isDataNodeInFullAutoMode(dataNodeId, true) ? getBootstrapReplicaInFullAuto(partitionIdStr, dataNodeId)
               : getBootstrapReplicaInSemiAuto(partitionIdStr, dataNodeId);
       // For now this method is only called by server which new replica will be added to. So if datanode equals to current
       // node, we temporarily add this into a map (because we don't know whether store addition in storage manager
@@ -443,6 +443,19 @@ public class HelixClusterManager implements ClusterMap {
    */
   @Override
   public boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId) {
+    return isDataNodeInFullAutoMode(dataNodeId, false);
+  }
+
+  /**
+   * Return if the data node is in full auto mode. If the {@code shouldCheckPropertyStore} is true,
+   * this mode would also check if the data node is going through FULL_AUTO migration from property
+   * store.
+   * @param dataNodeId The {@link DataNodeId} to check.
+   * @param shouldCheckPropertyStore True to check property store if this data node id is in full auto
+   *                                 migration and return true if that's the case.
+   * @return
+   */
+  boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId, boolean shouldCheckPropertyStore) {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
     if (instanceNameToAmbryDataNode.get(instanceName) == null) {
       throw new IllegalArgumentException("Instance " + instanceName + " doesn't exist");
@@ -469,7 +482,19 @@ public class HelixClusterManager implements ClusterMap {
     // Make sure all the resources turned on FULL_AUTO mode
     String tag = tags.iterator().next();
     ResourceProperty property = dcToTagToResourceProperty.get(dcName).get(tag);
-    return property != null && property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO);
+    if (property == null) {
+      return false;
+    }
+    // Return true if either the resource is in Full-auto or we are rolling back from Full-auto to Semi-auto
+    if (property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
+      return true;
+    }
+    // If we are here, then ResourceProperty shows RebalanceMode as NOT FULL_AUTO.
+    if (!shouldCheckPropertyStore) {
+      return false;
+    }
+    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+    return zNRecord != null && zNRecord.getListField(RESOURCES_STR).contains(property.name);
   }
 
   @Override
@@ -765,6 +790,7 @@ public class HelixClusterManager implements ClusterMap {
       logger.error("No Disk is available to host bootstrap replica. Cannot create the replica.");
       return null;
     }
+    long replicaCapacity = 0;
     try {
       AmbryPartition mappedPartition =
           new AmbryPartition(Long.parseLong(partitionIdStr), clusterMapConfig.clusterMapDefaultPartitionClass,
@@ -774,9 +800,15 @@ public class HelixClusterManager implements ClusterMap {
       if (currentPartition == null) {
         logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
         currentPartition = mappedPartition;
+        replicaCapacity = DEFAULT_REPLICA_CAPACITY_IN_BYTES;
+      } else {
+        replicaCapacity = currentPartition.getReplicaIds().get(0).getCapacityInBytes();
       }
+      // Update disk usage
+      // TODO: Add a metric for this
+      disk.decreaseAvailableSpaceInBytes(replicaCapacity);
       AmbryServerReplica replica =
-          new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, DEFAULT_REPLICA_CAPACITY_IN_BYTES,
+          new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, replicaCapacity,
               ReplicaSealStatus.NOT_SEALED);
       logger.info("Created bootstrap replica {} for Partition {}", replica, partitionIdStr);
       return replica;
@@ -785,7 +817,7 @@ public class HelixClusterManager implements ClusterMap {
           dataNodeId, e);
       // We have decreased the available space on the disk since we thought that it will be used to host replica. Since
       // bootstrapping replica failed, increase the available disk space back.
-      disk.increaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES);
+      disk.increaseAvailableSpaceInBytes(replicaCapacity);
       return null;
     }
   }
@@ -803,6 +835,9 @@ public class HelixClusterManager implements ClusterMap {
     List<AmbryDisk> potentialDisks = new ArrayList<>();
     long maxAvailableDiskSpace = 0;
     for (AmbryDisk disk : disks) {
+      if (disk.getState() == HardwareState.UNAVAILABLE) {
+        continue;
+      }
       if (disk.getAvailableSpaceInBytes() < DEFAULT_REPLICA_CAPACITY_IN_BYTES) {
         logger.debug("Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}", disk,
             disk.getAvailableSpaceInBytes(), DEFAULT_REPLICA_CAPACITY_IN_BYTES);
@@ -822,10 +857,6 @@ public class HelixClusterManager implements ClusterMap {
 
     // Select first available disk with maximum available capacity.
     AmbryDisk disk = potentialDisks.get(0);
-
-    // Update disk usage
-    // TODO: Add a metric for this
-    disk.decreaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES);
 
     return disk;
   }
@@ -1450,6 +1481,11 @@ public class HelixClusterManager implements ClusterMap {
               mountPath, instanceName, prevDiskCapacity, diskConfig.getDiskCapacityInBytes());
           disk.setDiskCapacityInBytes(diskConfig.getDiskCapacityInBytes());
           addClusterWideRawCapacity(diskConfig.getDiskCapacityInBytes() - prevDiskCapacity);
+        }
+        if (disk.getState() != diskConfig.getState()) {
+          logger.info("State of disk at {} on {} has changed, Previous was: {}, new stats is {}", mountPath,
+              instanceName, disk.getState(), diskConfig.getState());
+          disk.setState(diskConfig.getState());
         }
         for (Map.Entry<String, DataNodeConfig.ReplicaConfig> replicaEntry : diskConfig.getReplicaConfigs().entrySet()) {
           // partition name and replica name are the same.

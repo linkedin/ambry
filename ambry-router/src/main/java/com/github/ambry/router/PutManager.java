@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapUtils;
 import com.github.ambry.commons.ByteBufferAsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
@@ -187,15 +188,9 @@ class PutManager {
    * @return the partition class as required by the properties
    */
   private String getPartitionClass(BlobProperties blobProperties) {
-    String partitionClass = defaultPartitionClass;
     Account account = accountService.getAccountById(blobProperties.getAccountId());
-    if (account != null) {
-      Container container = account.getContainerById(blobProperties.getContainerId());
-      if (container != null && !Utils.isNullOrEmpty(container.getReplicationPolicy())) {
-        partitionClass = container.getReplicationPolicy();
-      }
-    }
-    return partitionClass;
+    return ClusterMapUtils.getPartitionClass(account,
+        account == null ? null : account.getContainerById(blobProperties.getContainerId()), defaultPartitionClass);
   }
 
   /**

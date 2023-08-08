@@ -15,6 +15,7 @@
 package com.github.ambry.account;
 
 import com.github.ambry.frontend.Page;
+import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
@@ -23,16 +24,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 
 /**
@@ -133,7 +133,7 @@ public class InMemAccountService implements AccountService {
   @Override
   public synchronized DatasetVersionRecord addDatasetVersion(String accountName, String containerName,
       String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
-      boolean datasetVersionTtlEnabled) throws AccountServiceException {
+      boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState) throws AccountServiceException {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
     short containerId = account.getContainerByName(containerName).getId();
@@ -142,6 +142,17 @@ public class InMemAccountService implements AccountService {
     long updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
     if (datasetVersionTtlEnabled) {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
+    }
+    if ("LATEST".equals(version)) {
+      List<Map.Entry<Pair<String, String>, DatasetVersionRecord>> datasetToDatasetVersionList =
+          new ArrayList<>(idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).entrySet());
+      datasetToDatasetVersionList.sort(
+          (entry1, entry2) -> entry2.getValue().getVersion().compareTo(entry1.getValue().getVersion()));
+      if (datasetToDatasetVersionList.size() == 0) {
+        version = "1";
+      } else {
+        version = String.valueOf(Integer.parseInt(datasetToDatasetVersionList.get(0).getValue().getVersion()) + 1);
+      }
     }
     DatasetVersionRecord datasetVersionRecord =
         new DatasetVersionRecord(accountId, containerId, datasetName, version, updatedExpirationTimeMs);
@@ -255,6 +266,24 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
+  public synchronized Page<String> listAllValidDatasetVersions(String accountName, String containerName,
+      String datasetName, String pageToken) {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    List<DatasetVersionRecord> datasetRecords =
+        new ArrayList<>(idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).values());
+    List<String> versionList =
+        datasetRecords.stream().map(DatasetVersionRecord::getVersion).collect(Collectors.toList());
+    Collections.sort(versionList);
+    int index = 0;
+    if (pageToken != null) {
+      index = Collections.binarySearch(versionList, pageToken);
+    }
+    return new Page<>(versionList.subList(index, index + PAGE_SIZE), versionList.get(index + PAGE_SIZE));
+  }
+
+  @Override
   public synchronized void deleteDataset(String accountName, String containerName, String datasetName) {
     Account account = nameToAccountMap.get(accountName);
     short accountId = account.getId();
@@ -273,7 +302,7 @@ public class InMemAccountService implements AccountService {
   }
 
   @Override
-  public synchronized List<DatasetVersionRecord> getAllValidVersion(String accountName, String containerName,
+  public synchronized List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(String accountName, String containerName,
       String datasetName) {
     List<DatasetVersionRecord> datasetVersionRecords = new ArrayList<>();
     Account account = nameToAccountMap.get(accountName);
@@ -292,6 +321,12 @@ public class InMemAccountService implements AccountService {
       }
     }
     return datasetVersionRecords;
+  }
+
+  @Override
+  public synchronized void updateDatasetVersionState (String accountName, String containerName, String datasetName,
+      String version, DatasetVersionState datasetVersionState) {
+    //no-op
   }
 
   @Override

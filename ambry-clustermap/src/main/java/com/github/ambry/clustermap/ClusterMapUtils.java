@@ -57,6 +57,7 @@ public class ClusterMapUtils {
   public static final String PARTITION_OVERRIDE_STR = "PartitionOverride";
   public static final String REPLICA_ADDITION_STR = "ReplicaAddition";
   public static final String PARTITION_DISABLED_STR = "PartitionDisabled";
+  public static final String FULL_AUTO_MIGRATION_STR = "FullAutoMigration";
   public static final String PROPERTYSTORE_STR = "PROPERTYSTORE";
   // Following two ZNode paths are the path to ZNode that stores some admin configs. Partition override config is used
   // to administratively override partition from frontend's point of view. Replica addition config is used to specify
@@ -67,6 +68,7 @@ public class ClusterMapUtils {
   public static final String PARTITION_OVERRIDE_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + PARTITION_OVERRIDE_STR;
   public static final String REPLICA_ADDITION_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + REPLICA_ADDITION_STR;
   public static final String PARTITION_DISABLED_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + PARTITION_DISABLED_STR + "/";
+  public static final String FULL_AUTO_MIGRATION_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + FULL_AUTO_MIGRATION_STR;
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
   static final String PARTITION_STATE = "state";
@@ -83,6 +85,7 @@ public class ClusterMapUtils {
   static final String PARTIALLY_SEALED_STR = "PARTIALLY_SEALED";
   static final String STOPPED_REPLICAS_STR = "STOPPED";
   static final String DISABLED_REPLICAS_STR = "DISABLED";
+  static final String RESOURCES_STR = "RESOURCES";
   static final String AVAILABLE_STR = "AVAILABLE";
   static final String UNAVAILABLE_STR = "UNAVAILABLE";
   static final String READ_ONLY_STR = "RO";
@@ -99,7 +102,7 @@ public class ClusterMapUtils {
   static final long DEFAULT_XID = Long.MIN_VALUE;
   static final int MIN_PORT = 1025;
   static final int MAX_PORT = 65535;
-  static final long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
+  public static long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
   // TODO: Temporary defaults to be used when adding replicas in helix FULL_AUTO mode. These replica configs will need
@@ -249,7 +252,7 @@ public class ClusterMapUtils {
       return null;
     }
     if (!partitionClass.equals(selected.getPartitionClass())) {
-      logger.warn(
+      logger.debug(
           "While reserving metadata chunk id, no partitions for partitionClass='{}' found, partitionClass='{}' used"
               + " instead for metadata chunk.", partitionClass, selected.getPartitionClass());
       reservedMetadataIdMetrics.numUnexpectedReservedPartitionClassCount.inc();

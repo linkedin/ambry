@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -154,34 +155,42 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * It will pull out any stale record (limit to be config.queryStaleDataMaxResults [Default 1000] records at most)
    * meeting below conditions:
    * 1. created more than config.staleDataRetentionDays [Default 5] days ago, and
-   * 2. it's NOT a VLR (Valid Latest Record) for any named blob.
+   * 2. its blob_id does NOT show in any VLR (Valid Latest Record) of any named blob.
    * VLR of a named blob is the record whose blob_state=1 (READY), and has the max version for the named blob.
    *
-   * To pull out the rows that meet the 2nd condition above, we are using left join and then pull out the rows where
-   * right side table's keys are all NULL
+   * We construct the SQL query in a below steps:
+   * STEP 1: We first pull out the max version per valid record.
+   * STEP 2: Then we pull out the distinct blob_ids for those max versions.
+   * STEP 3: At last we exclude the record with blob_ids in step 2,
+   * and only pull records which are not deleted/expired yet.
+   * We order result by blob_id (which is indexed) to have deterministic results within the limit
    */
   // @formatter:off
   private static final String GET_STALE_QUERY = String.format(""
-          + "SELECT t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, t1.%s, %s "
-          + "FROM %s t1 "
-          + "LEFT JOIN "
-          + "(SELECT account_id, container_id, blob_name, max(version) as version "
+          + "SELECT %s, %s, %s, %s, %s, %s "
           + "FROM %s "
-          + "WHERE blob_state=1 "
-          + "      GROUP BY account_id, container_id, blob_name) t2 "
-          + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE t1.%s<? and t2.account_id IS NULL and t2.container_id IS NULL and t2.blob_name IS NULL and t2.version IS NULL "
-          + "LIMIT ?",
+          + "WHERE blob_id not in "
+          + "   (SELECT distinct(blob_id) "
+          + "    FROM %s "
+          + "    WHERE version in  (SELECT max(version) as version "
+          + "      FROM %s "
+          + "      WHERE blob_state = 1 and version != 0 "
+          + "      GROUP BY account_id, container_id, blob_name))"
+          + " AND %s<? AND (%s IS NULL OR %s>%s) ORDER BY blob_id LIMIT ?",
       ACCOUNT_ID,
       CONTAINER_ID,
       BLOB_NAME,
       BLOB_ID,
       VERSION,
-      DELETED_TS,
       CURRENT_TIME,
       NAMED_BLOBS_V2,
       NAMED_BLOBS_V2,
-      VERSION);
+      NAMED_BLOBS_V2,
+      VERSION,
+      DELETED_TS,
+      DELETED_TS,
+      CURRENT_TIME
+      );
   // @formatter:on
 
   private final AccountService accountService;
@@ -336,6 +345,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
                   accountId, containerId, record.getBlobName(), e);
             }
             if (recordCurrent != null && !isUpsert) {
+              logger.error(
+                  "PUT conflict: Named blob {} already exist, the existing blob id is {}, the new blob id is {}",
+                  record.getBlobName(), recordCurrent.getBlobId(), record.getBlobId());
               throw buildException("PUT: Blob still alive", RestServiceErrorCode.Conflict, record.getAccountName(),
                   record.getContainerName(), record.getBlobName());
             }
@@ -551,10 +563,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   private NamedBlobRecord run_get_v2(String accountName, String containerName, String blobName, GetOption option, short accountId,
       short containerId, Connection connection) throws Exception {
+    String query = "";
     try (PreparedStatement statement = connection.prepareStatement(GET_QUERY_V2)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, blobName);
+      query = statement.toString();
+      logger.debug("Getting blob name from MySql. Query {}", query);
       try (ResultSet resultSet = statement.executeQuery()) {
         if (!resultSet.next()) {
           throw buildException("GET: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
@@ -572,17 +587,23 @@ class MySqlNamedBlobDb implements NamedBlobDb {
               version);
         }
       }
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      throw e;
     }
   }
 
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection) throws Exception {
+    String query = "";
     try (PreparedStatement statement = connection.prepareStatement(LIST_QUERY_V2)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, blobNamePrefix + "%");
       statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
       statement.setInt(5, config.listMaxResults + 1);
+      query = statement.toString();
+      logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
       try (ResultSet resultSet = statement.executeQuery()) {
         String nextContinuationToken = null;
         List<NamedBlobRecord> entries = new ArrayList<>();
@@ -599,20 +620,25 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           Timestamp deletionTime = resultSet.getTimestamp(4);
 
           if (compareTimestamp(deletionTime, currentTime) <= 0) {
-            logger.trace("LIST: Blob is not available due to it is deleted or expired, ignoring in list response; account='{}', container='{}', name='{}'",
+            logger.trace(
+                "LIST: Blob is not available due to it is deleted or expired, ignoring in list response; account='{}', container='{}', name='{}'",
                 accountName, containerName, blobName);
           } else {
-            entries.add(
-                new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime), version));
+            entries.add(new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime),
+                version));
           }
         }
         return new Page<>(entries, nextContinuationToken);
       }
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      throw e;
     }
   }
 
-  private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId, Connection connection)
-      throws Exception {
+  private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId,
+      Connection connection) throws Exception {
+    String query = "";
     try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
@@ -627,24 +653,35 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       record.setVersion(newVersion);
       statement.setLong(6, newVersion);
       statement.setInt(7, state.ordinal());
+      query = statement.toString();
+      logger.debug("Putting blob name in MySql. Query {}", query);
       statement.executeUpdate();
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      throw e;
     }
     return new PutResult(record);
   }
 
   private PutResult apply_ttl_update(NamedBlobRecord record, short accountId, short containerId, Connection connection)
       throws Exception{
+    String query = "";
     try (PreparedStatement statement = connection.prepareStatement(TTL_UPDATE_QUERY)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, record.getBlobName());
       statement.setLong(4, record.getVersion());
+      query = statement.toString();
+      logger.debug("Updating TTL in MySql. Query {}", query);
       int rowCount = statement.executeUpdate();
       if (rowCount == 0) {
         metricsRecoder.namedTtlupdateErrorCount.inc();
         throw buildException("TTL Update: Blob not found", RestServiceErrorCode.NotFound, record.getAccountName(),
-            record.getContainerName(),record.getBlobName());
+            record.getContainerName(), record.getBlobName());
       }
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      throw e;
     }
     return new PutResult(record);
   }
@@ -655,10 +692,13 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     long version;
     Timestamp currentDeleteTime;
     boolean alreadyDeleted;
+    String query = "";
     try (PreparedStatement statement = connection.prepareStatement(SELECT_FOR_SOFT_DELETE_QUERY_V2)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       statement.setString(3, blobName);
+      query = statement.toString();
+      logger.debug("Deleting blob name in MySql. Query {}", query);
       try (ResultSet resultSet = statement.executeQuery()) {
         if (!resultSet.next()) {
           throw buildException("DELETE: Blob not found", RestServiceErrorCode.NotFound, accountName, containerName,
@@ -670,6 +710,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         currentDeleteTime = resultSet.getTimestamp(4);
         alreadyDeleted = (originalDeletionTime != null && currentDeleteTime.after(originalDeletionTime));
       }
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      throw e;
     }
     // only need to issue an update statement if the row was not already marked as deleted.
     if (!alreadyDeleted) {
@@ -679,12 +722,15 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private List<StaleNamedBlob> runPullStaleBlobs(final Connection connection) throws Exception {
+    String query = "";
     try (PreparedStatement statement = connection.prepareStatement(GET_STALE_QUERY)) {
       Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
       calendar.add(Calendar.DATE, -config.staleDataRetentionDays);
       long previousTimeInMillis = calendar.getTimeInMillis();
       statement.setLong(1, previousTimeInMillis * VERSION_BASE);
       statement.setInt(2, config.queryStaleDataMaxResults);
+      query = statement.toString();
+      logger.debug("Pulling stale blobs from MySql. Query {}", query);
       try (ResultSet resultSet = statement.executeQuery()) {
         List<StaleNamedBlob> resultList = new ArrayList<>();
         while (resultSet.next()) {
@@ -693,20 +739,21 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           String blobName = resultSet.getString(3);
           String blobId = Base64.encodeBase64URLSafeString(resultSet.getBytes(4));
           long version = resultSet.getLong(5);
-          Timestamp deletionTime = resultSet.getTimestamp(6);
-          Timestamp currentTime = resultSet.getTimestamp(7);
-          if (compareTimestamp(deletionTime, currentTime.getTime()) > 0) {
-            StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime);
-            resultList.add(result);
-          }
+          Timestamp currentTime = resultSet.getTimestamp(6);
+          StaleNamedBlob result = new StaleNamedBlob(accountId, containerId, blobName, blobId, version, currentTime);
+          resultList.add(result);
         }
         return resultList;
       }
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      throw e;
     }
   }
 
   private void applySoftDelete(short accountId, short containerId, String blobName, long version, Timestamp deleteTs,
       Connection connection) throws Exception {
+    String query = "";
     try (PreparedStatement statement = connection.prepareStatement(SOFT_DELETE_QUERY_V2)) {
       // use the current time
       statement.setTimestamp(1, deleteTs);
@@ -714,7 +761,12 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       statement.setInt(3, containerId);
       statement.setString(4, blobName);
       statement.setLong(5, version);
+      query = statement.toString();
+      logger.debug("Soft deleting blob in MySql. Query {}", query);
       statement.executeUpdate();
+    } catch (SQLException e) {
+      logger.error("Failed to execute query {}, {}", query, e.getMessage());
+      throw e;
     }
   }
 
@@ -733,7 +785,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * @param timestamp the nullable {@link Timestamp} to compare.
    * @param otherTimeMs the time value to compare against.
    * @return -1 if the timestamp is earlier than {@code otherTimeMs}, 0 if the times are equal, and 1 if
-   *         {@code otherTimeMs} is later than the timestamp. {@code null} is considered greater than any other time.
+   *         the timestamp is later than {@code otherTimeMs}. {@code null} is considered greater than any other time.
    */
   private static int compareTimestamp(Timestamp timestamp, long otherTimeMs) {
     return Utils.compareTimes(timestampToMs(timestamp), otherTimeMs);

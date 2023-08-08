@@ -248,6 +248,7 @@ public class MySqlNamedBlobDbIntegrationTest {
 
     int staleCount = 10;
     int needCleanupCount = 0;
+    List<NamedBlobRecord> staleRecords = new ArrayList<>();
     List<NamedBlobRecord> records = new ArrayList<>();
 
     // Create stale named blob records
@@ -264,18 +265,22 @@ public class MySqlNamedBlobDbIntegrationTest {
       namedBlobDb.put(record, blob_state, true).get();
 
       time.setCurrentMilliseconds(staleCutoffTimePlusOneMillisecond);
-      namedBlobDb.put(record, NamedBlobState.READY, true).get();
+      String blobId2 = getBlobId(account, container);
+      NamedBlobRecord record2 =
+          new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId2, expirationTime);
+      namedBlobDb.put(record2, NamedBlobState.READY, true).get();
 
       if (expirationTime == Utils.Infinite_Time) {
         needCleanupCount += 1;
       }
-      records.add(record);
+      staleRecords.add(record);
+      records.add(record2);
     }
 
     Thread.sleep(100);
 
     // Confirm the pullStaleBlobs indeed pulled out the stale blob cases
-    Set<String> staleInputSet = records.stream().filter((r) -> r.getExpirationTimeMs() == Utils.Infinite_Time).map((r) ->
+    Set<String> staleInputSet = staleRecords.stream().filter((r) -> r.getExpirationTimeMs() == Utils.Infinite_Time).map((r) ->
         String.join("|", r.getBlobName(), r.getBlobId())
     ).collect(Collectors.toSet());
 

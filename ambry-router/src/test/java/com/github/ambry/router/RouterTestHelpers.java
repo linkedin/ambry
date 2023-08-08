@@ -331,6 +331,23 @@ class RouterTestHelpers {
   }
 
   /**
+   * Build chunk list from the specified params.
+   *
+   * @param clusterMap the {@link ClusterMap} for generating blob IDs.
+   * @param blobDataType the {@link BlobId.BlobDataType} field to set for the chunk blob IDs.
+   * @param ttl the TTL for the chunks.
+   * @param chunkSizeStream a stream of chunk sizes to use for the chunks in the list.
+   * @param reservedMetadataIdStr the reserved metadata id of the chunks.
+   * @return a list of {@link ChunkInfo} objects for a stitch call.
+   */
+  static List<ChunkInfo> buildChunkList(ClusterMap clusterMap, BlobId.BlobDataType blobDataType, long ttl,
+      LongStream chunkSizeStream, String reservedMetadataIdStr) {
+    return chunkSizeStream.mapToObj(
+        chunkSize -> new ChunkInfo(getRandomBlobId(clusterMap, blobDataType), chunkSize, ttl,
+            reservedMetadataIdStr)).collect(Collectors.toList());
+  }
+
+  /**
    *
    * @param clusterMap the {@link ClusterMap} for generating blob IDs.
    * @param blobDataType the {@link BlobId.BlobDataType}.

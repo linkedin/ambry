@@ -24,6 +24,7 @@ import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlDataAccessor;
 import com.github.ambry.mysql.MySqlMetrics;
 import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.protocol.DatasetVersionState;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
@@ -35,6 +36,7 @@ import java.util.List;
 public class MySqlAccountStore {
 
   private final AccountDao accountDao;
+  private final DatasetDao datasetDao;
   private final MySqlDataAccessor mySqlDataAccessor;
   private final MySqlAccountServiceConfig config;
 
@@ -49,7 +51,8 @@ public class MySqlAccountStore {
   public MySqlAccountStore(List<MySqlUtils.DbEndpoint> dbEndpoints, String localDatacenter, MySqlMetrics metrics,
       MySqlAccountServiceConfig config) throws SQLException {
     mySqlDataAccessor = new MySqlDataAccessor(dbEndpoints, localDatacenter, metrics);
-    accountDao = new AccountDao(mySqlDataAccessor, config);
+    accountDao = new AccountDao(mySqlDataAccessor);
+    datasetDao = new DatasetDao(mySqlDataAccessor, config, metrics);
     this.config = config;
   }
 
@@ -62,13 +65,64 @@ public class MySqlAccountStore {
   }
 
   /**
-   * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
-   * @param accountsInfo information of updated Accounts
-   * @param disableGenerateColumn disable generated column for multi-primary database since it does not supported.
+   * Gets all {@link Account}s that have been created or modified since the specified time.
+   * @param updatedSince the last modified time used to filter.
+   * @return a collection of {@link Account}s
    * @throws SQLException
    */
-  public void updateAccounts(List<AccountUpdateInfo> accountsInfo, boolean disableGenerateColumn) throws SQLException {
-    accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize, disableGenerateColumn);
+  public synchronized Collection<Account> getNewAccounts(long updatedSince) throws SQLException {
+    return accountDao.getNewAccounts(updatedSince);
+  }
+
+  /**
+   * Gets all {@link Container}s that have been created or modified since the specified time.
+   * @param updatedSince the last modified time used to filter.
+   * @return a collection of {@link Container}s
+   * @throws SQLException
+   */
+  public synchronized Collection<Container> getNewContainers(long updatedSince) throws SQLException {
+    return accountDao.getNewContainers(updatedSince);
+  }
+
+  /**
+   * Gets all {@link Container}s of a given account
+   * @param accountId ID of the account
+   * @return a collection of {@link Container}s
+   * @throws SQLException
+   */
+  public synchronized Collection<Container> getContainersByAccount(short accountId) throws SQLException {
+    return accountDao.getContainers(accountId);
+  }
+
+  /**
+   * Gets container by its name and parent account Id.
+   * @param accountId the id for the parent account.
+   * @param containerName name of the container.
+   * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
+   * @throws SQLException
+   */
+  public synchronized Container getContainerByName(int accountId, String containerName) throws SQLException {
+    return accountDao.getContainerByName(accountId, containerName);
+  }
+
+  /**
+   * Gets container by its Id and parent account Id.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
+   * @throws SQLException
+   */
+  public synchronized Container getContainerById(int accountId, int containerId) throws SQLException {
+    return accountDao.getContainerById(accountId, containerId);
+  }
+
+  /**
+   * Adds/Updates accounts and their containers to the database in batches atomically using transaction.
+   * @param accountsInfo information of updated Accounts
+   * @throws SQLException
+   */
+  public synchronized void updateAccounts(List<AccountUpdateInfo> accountsInfo) throws SQLException {
+    accountDao.updateAccounts(accountsInfo, config.dbExecuteBatchSize);
   }
 
   /**
@@ -78,9 +132,9 @@ public class MySqlAccountStore {
    * @param dataset the {@link Dataset}.
    * @throws SQLException
    */
-  public void addDataset(short accountId, short containerId, Dataset dataset)
+  public synchronized void addDataset(short accountId, short containerId, Dataset dataset)
       throws SQLException, AccountServiceException {
-    accountDao.addDataset(accountId, containerId, dataset);
+    datasetDao.addDataset(accountId, containerId, dataset);
   }
 
   /**
@@ -90,9 +144,9 @@ public class MySqlAccountStore {
    * @param dataset the {@link Dataset}.
    * @throws SQLException
    */
-  public void updateDataset(short accountId, short containerId, Dataset dataset)
+  public synchronized void updateDataset(short accountId, short containerId, Dataset dataset)
       throws SQLException, AccountServiceException {
-    accountDao.updateDataset(accountId, containerId, dataset);
+    datasetDao.updateDataset(accountId, containerId, dataset);
   }
 
   /**
@@ -105,9 +159,9 @@ public class MySqlAccountStore {
    * @return the {@link Dataset}
    * @throws SQLException
    */
-  public Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
+  public synchronized Dataset getDataset(short accountId, short containerId, String accountName, String containerName,
       String datasetName) throws SQLException, AccountServiceException {
-    return accountDao.getDataset(accountId, containerId, accountName, containerName, datasetName);
+    return datasetDao.getDataset(accountId, containerId, accountName, containerName, datasetName);
   }
 
   /**
@@ -118,61 +172,9 @@ public class MySqlAccountStore {
    * @throws AccountServiceException
    * @throws SQLException
    */
-  public void deleteDataset(short accountId, short containerId, String datasetName)
+  public synchronized void deleteDataset(short accountId, short containerId, String datasetName)
       throws AccountServiceException, SQLException {
-    accountDao.deleteDataset(accountId, containerId, datasetName);
-  }
-
-  /**
-   * Gets all {@link Account}s that have been created or modified since the specified time.
-   * @param updatedSince the last modified time used to filter.
-   * @return a collection of {@link Account}s
-   * @throws SQLException
-   */
-  public Collection<Account> getNewAccounts(long updatedSince) throws SQLException {
-    return accountDao.getNewAccounts(updatedSince);
-  }
-
-  /**
-   * Gets all {@link Container}s that have been created or modified since the specified time.
-   * @param updatedSince the last modified time used to filter.
-   * @return a collection of {@link Container}s
-   * @throws SQLException
-   */
-  public Collection<Container> getNewContainers(long updatedSince) throws SQLException {
-    return accountDao.getNewContainers(updatedSince);
-  }
-
-  /**
-   * Gets all {@link Container}s of a given account
-   * @param accountId ID of the account
-   * @return a collection of {@link Container}s
-   * @throws SQLException
-   */
-  public Collection<Container> getContainersByAccount(short accountId) throws SQLException {
-    return accountDao.getContainers(accountId);
-  }
-
-  /**
-   * Gets container by its name and parent account Id.
-   * @param accountId the id for the parent account.
-   * @param containerName name of the container.
-   * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
-   * @throws SQLException
-   */
-  public Container getContainerByName(int accountId, String containerName) throws SQLException {
-    return accountDao.getContainerByName(accountId, containerName);
-  }
-
-  /**
-   * Gets container by its Id and parent account Id.
-   * @param accountId the id for the parent account.
-   * @param containerId the id of the container.
-   * @return {@link Container} if found in mysql db or {@code null} if it doesn't exist.
-   * @throws SQLException
-   */
-  public Container getContainerById(int accountId, int containerId) throws SQLException {
-    return accountDao.getContainerById(accountId, containerId);
+    datasetDao.deleteDataset(accountId, containerId, datasetName);
   }
 
   /**
@@ -186,14 +188,22 @@ public class MySqlAccountStore {
    * @param timeToLiveInSeconds The dataset version level ttl.
    * @param creationTimeInMs the creation time of the dataset.
    * @param datasetVersionTtlEnabled set to true if dataset version ttl want to override the dataset level default ttl.
+   * @param datasetVersionState the {@link DatasetVersionState}
    * @return the corresponding {@link Dataset}
    * @throws SQLException
    */
-  public DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName,
+  public synchronized DatasetVersionRecord addDatasetVersion(int accountId, int containerId, String accountName,
       String containerName, String datasetName, String version, long timeToLiveInSeconds, long creationTimeInMs,
-      boolean datasetVersionTtlEnabled) throws SQLException, AccountServiceException {
-    return accountDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
-        timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled);
+      boolean datasetVersionTtlEnabled, DatasetVersionState datasetVersionState) throws SQLException, AccountServiceException {
+    return datasetDao.addDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version,
+        timeToLiveInSeconds, creationTimeInMs, datasetVersionTtlEnabled, datasetVersionState);
+  }
+
+  public synchronized void updateDatasetVersionState(int accountId, int containerId, String accountName, String containerName,
+      String datasetName, String version, DatasetVersionState datasetVersionState)
+      throws SQLException, AccountServiceException {
+    datasetDao.updateDatasetVersionState(accountId, containerId, accountName, containerName, datasetName, version,
+        datasetVersionState);
   }
 
   /**
@@ -207,9 +217,9 @@ public class MySqlAccountStore {
    * @return the {@link DatasetVersionRecord}
    * @throws SQLException
    */
-  public DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String accountName,
+  public synchronized DatasetVersionRecord getDatasetVersion(short accountId, short containerId, String accountName,
       String containerName, String datasetName, String version) throws SQLException, AccountServiceException {
-    return accountDao.getDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version);
+    return datasetDao.getDatasetVersions(accountId, containerId, accountName, containerName, datasetName, version);
   }
 
   /**
@@ -221,9 +231,9 @@ public class MySqlAccountStore {
    * @throws SQLException
    * @throws AccountServiceException
    */
-  public void deleteDatasetVersion(short accountId, short containerId, String datasetName, String version)
+  public synchronized void deleteDatasetVersion(short accountId, short containerId, String datasetName, String version)
       throws SQLException, AccountServiceException {
-    accountDao.deleteDatasetVersion(accountId, containerId, datasetName, version);
+    datasetDao.deleteDatasetVersion(accountId, containerId, datasetName, version);
   }
 
   /**
@@ -234,9 +244,9 @@ public class MySqlAccountStore {
    * @return a list of dataset versions which is not expired for specific dataset.
    * @throws SQLException
    */
-  public List<DatasetVersionRecord> getAllValidVersion(short accountId, short containerId, String datasetName)
-      throws SQLException {
-    return accountDao.getAllValidVersion(accountId, containerId, datasetName);
+  public synchronized List<DatasetVersionRecord> getAllValidVersionForDatasetDeletion(short accountId, short containerId,
+      String datasetName) throws SQLException, AccountServiceException {
+    return datasetDao.getAllValidVersionForDatasetDeletion(accountId, containerId, datasetName);
   }
 
   /**
@@ -247,8 +257,23 @@ public class MySqlAccountStore {
    * @return the page of the dataset names.
    * @throws SQLException
    */
-  public Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken) throws SQLException {
-    return accountDao.listAllValidDatasets(accountId, containerId, pageToken);
+  public synchronized Page<String> listAllValidDatasets(short accountId, short containerId, String pageToken) throws SQLException {
+    return datasetDao.listAllValidDatasets(accountId, containerId, pageToken);
+  }
+
+  /**
+   * Get all valid dataset versions of the dataset with page token.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the dataset name.
+   * @param pageToken the start page token, if it's null, will start at beginning.
+   * @return the page of the dataset versions.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  public synchronized Page<String> listAllValidDatasetVersions(short accountId, short containerId,
+      String datasetName, String pageToken) throws SQLException, AccountServiceException {
+    return datasetDao.listAllValidDatasetVersions(accountId, containerId, datasetName, pageToken);
   }
 
   /**
@@ -261,9 +286,9 @@ public class MySqlAccountStore {
    * @return a list of {@link DatasetVersionRecord}
    * @throws SQLException
    */
-  public List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId, short containerId,
+  public synchronized List<DatasetVersionRecord> getAllValidVersionsOutOfRetentionCount(short accountId, short containerId,
       String accountName, String containerName, String datasetName) throws SQLException, AccountServiceException {
-     return accountDao.getAllValidVersionsOutOfRetentionCount(accountId, containerId, accountName, containerName, datasetName);
+     return datasetDao.getAllValidVersionsOutOfRetentionCount(accountId, containerId, accountName, containerName, datasetName);
   }
 
   /**

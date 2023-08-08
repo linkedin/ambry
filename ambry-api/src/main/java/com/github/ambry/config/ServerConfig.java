@@ -112,6 +112,12 @@ public class ServerConfig {
   @Default("com.github.ambry.server.AmbryServerSecurityServiceFactory")
   public final String serverSecurityServiceFactory;
 
+  /**
+   * The serverRepairRequestsDbFactory that stores and retrieves partially failed customer requests.
+   */
+  @Config("server.repair.requests.db.factory")
+  public final String serverRepairRequestsDbFactory;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
@@ -136,5 +142,6 @@ public class ServerConfig {
         verifiableProperties.getLong("server.participants.consistency.checker.period.sec", 0);
     serverSecurityServiceFactory = verifiableProperties.getString("server.security.service.factory",
         "com.github.ambry.server.AmbryServerSecurityServiceFactory");
+    serverRepairRequestsDbFactory = verifiableProperties.getString("server.repair.requests.db.factory", null);
   }
 }

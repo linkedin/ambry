@@ -44,6 +44,12 @@ public interface RestRequest extends ReadableStreamChannel {
   RestMethod getRestMethod();
 
   /**
+   * Set the generic {@link RestMethod} that this request desires.
+   * @param restMethod the {@link RestMethod}
+   */
+  void setRestMethod(RestMethod restMethod);
+
+  /**
    * Return the path (the parts of the URI after the domain excluding query parameters).
    * @return path String that represents part of the uri excluding domain and query parameters.
    */

@@ -36,11 +36,10 @@ public class InputStreamReadableStreamChannel implements ReadableStreamChannel {
   private final AtomicBoolean readIntoCalled = new AtomicBoolean(false);
   private final InputStream inputStream;
   private final long size;
+  private final long bufferSize;
   private final ExecutorService executorService;
-  private final byte[] buffer;
 
   private ReadIntoCallbackWrapper callbackWrapper = null;
-  private ByteBuffer bufferToWrite;
 
   /**
    * Constructs a {@link ReadableStreamChannel} whose read operations return data from the provided {@code inputStream}.
@@ -71,7 +70,7 @@ public class InputStreamReadableStreamChannel implements ReadableStreamChannel {
     if (size >= 0 && size < BUFFER_SIZE) {
       sizeToAllocate = (int) size;
     }
-    buffer = new byte[sizeToAllocate];
+    bufferSize = sizeToAllocate;
   }
 
   @Override
@@ -131,9 +130,10 @@ public class InputStreamReadableStreamChannel implements ReadableStreamChannel {
       @Override
       public void run() {
         try {
-          final int read = fillBuffer();
+          byte[] buffer = new byte[(int) bufferSize];
+          final int read = fillBuffer(buffer);
           if (read > 0) {
-            bufferToWrite = ByteBuffer.wrap(buffer);
+            ByteBuffer bufferToWrite = ByteBuffer.wrap(buffer);
             bufferToWrite.limit(read);
             writableChannel.write(bufferToWrite, new Callback<Long>() {
               @Override
@@ -159,10 +159,11 @@ public class InputStreamReadableStreamChannel implements ReadableStreamChannel {
 
   /**
    * Fills the buffer from the {@link InputStream}. Waits untils the buffer is full or the {@link InputStream} is empty.
+   * @param buffer the buffer to fill bytes to.
    * @return the number of bytes read from the {@link InputStream}.
    * @throws IOException if there were any problems reading the {@link InputStream}.
    */
-  private int fillBuffer() throws IOException {
+  private int fillBuffer(byte[] buffer) throws IOException {
     int totalRead = 0;
     int currentRead;
     do {

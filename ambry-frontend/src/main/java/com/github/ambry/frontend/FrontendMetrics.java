@@ -257,6 +257,7 @@ public class FrontendMetrics {
   public final Counter addDatasetVersionError;
   public final Counter getDatasetVersionError;
   public final Counter deleteDatasetVersionError;
+  public final Counter deleteDatasetVersionOutOfRetentionError;
   public final Meter addDatasetVersionRate;
   public final Meter getDatasetVersionRate;
   public final Meter deleteDatasetVersionRate;
@@ -661,6 +662,8 @@ public class FrontendMetrics {
         metricRegistry.counter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionError"));
     deleteDatasetVersionError =
         metricRegistry.counter(MetricRegistry.name(GetBlobHandler.class, "DeleteDatasetVersionError"));
+    deleteDatasetVersionOutOfRetentionError = metricRegistry.counter(
+        MetricRegistry.name(NamedBlobPutHandler.class, "DeleteDatasetVersionOutOfRetentionError"));
     addDatasetVersionRate =
         metricRegistry.meter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionRate"));
     getDatasetVersionRate = metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionRate"));

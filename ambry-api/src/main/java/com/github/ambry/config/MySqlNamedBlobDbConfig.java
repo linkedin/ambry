@@ -15,6 +15,9 @@
 
 package com.github.ambry.config;
 
+import com.github.ambry.named.TransactionIsolationLevel;
+
+
 public class MySqlNamedBlobDbConfig {
   private static final String PREFIX = "mysql.named.blob.";
   public static final String DB_INFO = PREFIX + "db.info";
@@ -25,6 +28,7 @@ public class MySqlNamedBlobDbConfig {
   public static final String  LIST_MAX_RESULTS = PREFIX + "list.max.results";
   public static final String  QUERY_STALE_DATA_MAX_RESULTS = PREFIX + "query.stale.data.max.results";
   public static final String  STALE_DATA_RETENTION_DAYS = PREFIX + "stale.data.retention.days";
+  public static final String TRANSACTION_ISOLATION_LEVEL = PREFIX + "transaction.isolation.level";
 
   /**
    * Serialized json array containing the information about all mysql end points.
@@ -65,7 +69,7 @@ public class MySqlNamedBlobDbConfig {
    * The maximum number of days for a stale blob to say uncleaned.
    */
   @Config(STALE_DATA_RETENTION_DAYS)
-  @Default("5")
+  @Default("20")
   public final int staleDataRetentionDays;
 
   /**
@@ -81,14 +85,24 @@ public class MySqlNamedBlobDbConfig {
   @Default("false")
   public final boolean dbRelyOnNewTable;
 
+  /**
+   * Transaction isolation level to be set on DB Connection. When nothing is set, default MySQL DB transaction level
+   * (REPEATABLE_READ) will take effect.
+   */
+  @Config(TRANSACTION_ISOLATION_LEVEL)
+  public final TransactionIsolationLevel transactionIsolationLevel;
+
   public MySqlNamedBlobDbConfig(VerifiableProperties verifiableProperties) {
     this.dbInfo = verifiableProperties.getString(DB_INFO);
     this.localPoolSize = verifiableProperties.getIntInRange(LOCAL_POOL_SIZE, 5, 1, Integer.MAX_VALUE);
     this.remotePoolSize = verifiableProperties.getIntInRange(REMOTE_POOL_SIZE, 1, 1, Integer.MAX_VALUE);
     this.listMaxResults = verifiableProperties.getIntInRange(LIST_MAX_RESULTS, 100, 1, Integer.MAX_VALUE);
     this.queryStaleDataMaxResults = verifiableProperties.getIntInRange(QUERY_STALE_DATA_MAX_RESULTS, 1000, 1, Integer.MAX_VALUE);
-    this.staleDataRetentionDays = verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 5, 1, Integer.MAX_VALUE);
+    this.staleDataRetentionDays = verifiableProperties.getIntInRange(STALE_DATA_RETENTION_DAYS, 20, 1, Integer.MAX_VALUE);
     this.dbTransition = verifiableProperties.getBoolean(DB_TRANSITION, false);
     this.dbRelyOnNewTable = verifiableProperties.getBoolean(DB_RELY_ON_NEW_TABLE, false);
+    this.transactionIsolationLevel =
+        verifiableProperties.getEnum(TRANSACTION_ISOLATION_LEVEL, TransactionIsolationLevel.class,
+            TransactionIsolationLevel.TRANSACTION_NONE);
   }
 }

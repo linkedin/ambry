@@ -19,6 +19,8 @@ import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +58,8 @@ public class NamedBlobsCleanupRunner implements Runnable {
       namedBlobDb.cleanupStaleData(staleResultList);
       logger.info("Named Blobs Cleanup Runner is completed for {} stale cases (there are {} failed cases)",
           staleResultList.size(), failedResults.size());
+      Set<String> cleanedBlobIds = staleResultList.stream().map(StaleNamedBlob::getBlobId).collect(Collectors.toSet());
+      logger.info("The cleaned blobIds are: {}", cleanedBlobIds);
     } catch (Throwable t) {
       logger.error("Exception occurs when running Named Blobs Cleanup Runner", t);
     }

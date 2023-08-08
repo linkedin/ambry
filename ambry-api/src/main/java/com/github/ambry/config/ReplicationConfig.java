@@ -30,6 +30,11 @@ public class ReplicationConfig {
   public static final String REPLICATION_STANDBY_WAIT_TIMEOUT_TO_TRIGGER_CROSS_COLO_FETCH_SECONDS =
       "replication.standby.wait.timeout.to.trigger.cross.colo.fetch.seconds";
 
+  public static final String MAX_REPLICATION_RETRY_COUNT = "max.replication.retry.count";
+  public static final int DEFAULT_MAX_REPLICATION_RETRY_COUNT = 0;
+  @Config(MAX_REPLICATION_RETRY_COUNT)
+  public final int maxReplicationRetryCount;
+
   /**
    * The factory class the replication uses to creates its tokens
    */
@@ -308,6 +313,8 @@ public class ReplicationConfig {
 
   public ReplicationConfig(VerifiableProperties verifiableProperties) {
 
+    maxReplicationRetryCount =
+        verifiableProperties.getInt(MAX_REPLICATION_RETRY_COUNT, DEFAULT_MAX_REPLICATION_RETRY_COUNT);
     maxBackupCheckerReportFd =
         verifiableProperties.getInt(MAX_BACKUP_CHECKER_REPORT_FD, DEFAULT_MAX_BACKUP_CHECKER_REPORT_FD);
     backupCheckerReportDir =

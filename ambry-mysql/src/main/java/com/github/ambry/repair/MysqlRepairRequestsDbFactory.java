@@ -66,7 +66,7 @@ public class MysqlRepairRequestsDbFactory implements RepairRequestsDbFactory {
 
   @Override
   public MysqlRepairRequestsDb getRepairRequestsDb() {
-    return new MysqlRepairRequestsDb(dataSource, config);
+    return new MysqlRepairRequestsDb(dataSource, config, metrics);
   }
 
   /**

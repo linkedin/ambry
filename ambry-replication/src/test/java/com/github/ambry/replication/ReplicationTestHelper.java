@@ -39,6 +39,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
@@ -52,6 +53,7 @@ import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyConverterImplNoOp;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.TransformationOutput;
 import com.github.ambry.store.Transformer;
@@ -1105,6 +1107,76 @@ public class ReplicationTestHelper {
       replicasToReplicate = replicasAndThread.getFirst();
       replicaThread = replicasAndThread.getSecond();
       ((MockNetworkClient) replicaThread.getNetworkClient()).setConversionMap(remoteConversionMap);
+    }
+
+    protected ReplicationTestSetup() {
+    }
+  }
+
+  public class RetryReplicationTestSetup extends ReplicationTestSetup {
+
+    /**
+     * RetryReplicationTestSetup Ctor
+     *
+     * @param batchSize the number of messages to be returned in each iteration of replication
+     * @param maxRetryReplicationCount Maximum attempts to retry replication for an erroneous stream of messages
+     */
+    RetryReplicationTestSetup(int batchSize, int maxRetryReplicationCount) throws Exception {
+      // Create a mock cluster of 2 nodes, 1 mount per node and 1 store/partition per node otherwise the default mockClustermap
+      // just creates far too many nodes and partitions which are not needed and just get in the way of testing
+      MockClusterMap clusterMap = new MockClusterMap(false, true, 2, 1, 1, true, false, null);
+      PartitionId specialPartitionId =
+          clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+      localHost =
+          new MockHost(specialPartitionId.getReplicaIds().get(0).getDataNodeId(), clusterMap, maxRetryReplicationCount);
+      remoteHost = new MockHost(specialPartitionId.getReplicaIds().get(1).getDataNodeId(), clusterMap);
+      // just use a no-op converter, otherwise its just a distraction
+      StoreKeyConverter storeKeyConverter = new StoreKeyConverterImplNoOp();
+      partitionIds = clusterMap.getWritablePartitionIds(null);
+      short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+      short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+      boolean toEncrypt = TestUtils.RANDOM.nextBoolean();
+      // don't worry about key version, we just need two keys
+      // the way the test infra is written, i can't have two of each
+      oldKey = new BlobId(VERSION_2, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      newKey = new BlobId(VERSION_5, BlobId.BlobIdType.NATIVE, ClusterMap.UNKNOWN_DATACENTER_ID, accountId, containerId,
+          partitionIds.get(0), toEncrypt, BlobId.BlobDataType.DATACHUNK);
+      HashSet<String> errorKeys = new HashSet<>();
+      errorKeys.add(oldKey.getID());
+      Transformer transformer = new ErrorThrowingTransformer(errorKeys);
+
+      Pair<Map<DataNodeId, List<RemoteReplicaInfo>>, ReplicaThread> replicasAndThread =
+          getRemoteReplicasAndReplicaThread(batchSize, clusterMap, localHost, storeKeyConverter, transformer, null,
+              null, remoteHost);
+      replicasToReplicate = replicasAndThread.getFirst();
+      replicaThread = replicasAndThread.getSecond();
+    }
+  }
+
+  /**
+   * A transformer that throws errors when transforming a given set of keys
+   */
+  public class ErrorThrowingTransformer implements Transformer {
+
+    HashSet<String> errorKeys;
+
+    public ErrorThrowingTransformer(HashSet<String> errorKeys) {
+      this.errorKeys = errorKeys;
+    }
+
+    @Override
+    public TransformationOutput transform(Message message) {
+      String blobIdStr = message.getMessageInfo().getStoreKey().getID();
+      if (errorKeys.contains(blobIdStr)) {
+        return new TransformationOutput(new MessageFormatException("CRC error", MessageFormatErrorCodes.Data_Corrupt));
+      }
+      return new TransformationOutput(message);
+    }
+
+    @Override
+    public void warmup(List<MessageInfo> messageInfos, boolean includeAll) throws Exception {
+
     }
   }
 

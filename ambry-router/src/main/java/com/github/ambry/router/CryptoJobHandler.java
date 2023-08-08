@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
  * {@link #submitJob(CryptoJob)}. On close, all pending jobs will be processed(either successfully or exception is set)
  * and any new jobs submitted after close will be ignored.
  */
-class CryptoJobHandler implements Closeable {
+public class CryptoJobHandler implements Closeable {
   private final AtomicBoolean enabled = new AtomicBoolean(false);
   private static final GeneralSecurityException CLOSED_EXCEPTION =
       new GeneralSecurityException("CryptoJobHandler closed");
@@ -41,7 +41,7 @@ class CryptoJobHandler implements Closeable {
   /**
    * Instantiates {@link CryptoJobHandler}
    */
-  CryptoJobHandler(int threadCount) {
+  public CryptoJobHandler(int threadCount) {
     enabled.set(true);
     scheduler = Executors.newFixedThreadPool(threadCount);
   }

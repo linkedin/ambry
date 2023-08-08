@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.PerformanceConfig;
@@ -466,6 +467,12 @@ public class NettyMessageProcessorTest {
     }
 
     @Override
+    public void onBlobReplicated(String blobId, String serviceId, Account account, Container container,
+        DataNodeId sourceHost) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void onBlobReplicaCreated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
       throw new IllegalStateException("Not implemented");
     }
@@ -483,6 +490,11 @@ public class NettyMessageProcessorTest {
 
     @Override
     public void onBlobReplicaUndeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void onBlobReplicaReplicated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
       throw new IllegalStateException("Not implemented");
     }
 

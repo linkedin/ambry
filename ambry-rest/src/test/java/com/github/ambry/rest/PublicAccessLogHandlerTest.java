@@ -71,7 +71,7 @@ public class PublicAccessLogHandlerTest {
    * Sets up the mock public access logger that {@link PublicAccessLogHandler} can use.
    */
   public PublicAccessLogHandlerTest() {
-    publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","));
+    publicAccessLogger = new MockPublicAccessLogger(REQUEST_HEADERS.split(","), RESPONSE_HEADERS.split(","), false);
   }
 
   /**

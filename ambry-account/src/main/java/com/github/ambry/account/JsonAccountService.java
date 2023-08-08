@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  * the JSON file has changed will probably always be needed to ensure no changes are missed even if a WatchService
  * would be added.
  */
-final class JsonAccountService extends AbstractAccountService {
+public final class JsonAccountService extends AbstractAccountService {
 
   private static final Logger logger = LoggerFactory.getLogger(JsonAccountService.class);
 
@@ -65,8 +65,8 @@ final class JsonAccountService extends AbstractAccountService {
    * @param scheduler Scheduler used to periodically check the local account JSON for changes. When {@code null}
    *                  accounts file will only be loaded once during startup.
    */
-  JsonAccountService(Path accountFile, AccountServiceMetrics accountServiceMetrics, ScheduledExecutorService scheduler,
-      JsonAccountConfig accountConfig) {
+  public JsonAccountService(Path accountFile, AccountServiceMetrics accountServiceMetrics,
+      ScheduledExecutorService scheduler, JsonAccountConfig accountConfig) {
     super(accountConfig, accountServiceMetrics, null);
 
     this.accountFile = Objects.requireNonNull(accountFile, "helixStore cannot be null");
@@ -84,7 +84,7 @@ final class JsonAccountService extends AbstractAccountService {
    * Initializes this instance. Does all work which requires handing out references to this instance itself which can't
    * be done during normal instance construction without letting a reference to an incomplete constructed instance escape.
    */
-  void init() {
+  public void init() {
     if (!initialized.getAndSet(true)) {
       if (scheduler != null) {
         Runnable updater = () -> {

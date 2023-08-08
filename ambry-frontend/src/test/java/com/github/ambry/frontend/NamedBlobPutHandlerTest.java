@@ -115,9 +115,9 @@ public class NamedBlobPutHandlerTest {
       ACCOUNT_SERVICE.addDataset(new DatasetBuilder(REF_ACCOUNT.getName(), REF_CONTAINER_WITH_TTL_REQUIRED.getName(),
           DATASET_NAME).setRetentionTimeInSeconds(-1).build());
       ACCOUNT_SERVICE.addDatasetVersion(REF_ACCOUNT.getName(), REF_CONTAINER.getName(), DATASET_NAME, VERSION, -1,
-          System.currentTimeMillis(), false);
+          System.currentTimeMillis(), false, null);
       ACCOUNT_SERVICE.addDatasetVersion(REF_ACCOUNT.getName(), REF_CONTAINER_WITH_TTL_REQUIRED.getName(), DATASET_NAME,
-          VERSION, -1, System.currentTimeMillis(), false);
+          VERSION, -1, System.currentTimeMillis(), false, null);
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }

@@ -34,6 +34,7 @@ public class NamedBlobPath {
 
   static final String PREFIX_PARAM = "prefix";
   static final String PAGE_PARAM = "page";
+  static final int MAX_BLOB_NAME_LENGTH = 191;
 
   /**
    * Parse the input path if it's a named blob request.
@@ -63,6 +64,11 @@ public class NamedBlobPath {
       return new NamedBlobPath(accountName, containerName, null, blobNamePrefix, pageToken);
     } else {
       String blobName = splitPath[3];
+      if (blobName.length() > MAX_BLOB_NAME_LENGTH) {
+        throw new RestServiceException(
+            String.format("Blob name maximum length should be less than %s", MAX_BLOB_NAME_LENGTH),
+            RestServiceErrorCode.BadRequest);
+      }
       return new NamedBlobPath(accountName, containerName, blobName, null, null);
     }
   }

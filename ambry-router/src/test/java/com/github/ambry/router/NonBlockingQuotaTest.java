@@ -241,7 +241,7 @@ public class NonBlockingQuotaTest extends NonBlockingRouterTestBase {
       int stitchedBlobCount = 2;
       for (int i = 0; i < stitchedBlobCount; i++) {
         setOperationParams();
-        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, PutBlobOptions.DEFAULT, null,
+        String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putOptionsForChunkedUpload, null,
             quotaChargeCallback).get();
         assertEquals(expectedChargeCallbackCount += PUT_CONTENT_SIZE, listenerCalledCount.get());
         logger.info("Put blob {}", blobId);

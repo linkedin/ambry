@@ -99,6 +99,16 @@ public class StoreConfig {
   public final int storeCompactionPolicySwitchTimestampDays;
 
   /**
+   * The maximum stagger delay (in hours) for full compaction of a store after it is eligible for compaction.
+   * In other words, when a store is eligible for full compaction, the start of full compaction will be delayed by a max
+   * of this value.
+   * This config is needed to ensure that all the stores on a disk do not start full compaction at the same time.
+   */
+  @Config("store.hybrid.compaction.full.compaction.stagger.limit.in.hours")
+  @Default("0")
+  public final int storeHybridCompactionFullCompactionStaggerLimitInHours;
+
+  /**
    * How long (in days) a container must be in DELETE_IN_PROGRESS state before it's been deleted during compaction.
    */
   @Config("store.container.deletion.retention.days")
@@ -513,6 +523,47 @@ public class StoreConfig {
   public static final String storePersistRemoteTokenIntervalInSecondsName =
       "store.persist.remote.token.interval.in.seconds";
 
+  /**
+   * True to enable disk failure handler
+   */
+  @Config(storeDiskFailureHandlerEnabledName)
+  public final boolean storeDiskFailureHandlerEnabled;
+  public static final String storeDiskFailureHandlerEnabledName = "store.disk.failure.handler.enabled";
+
+  /**
+   * The interval to run disk failures in a periodical schedule.
+   */
+  @Config(storeDiskFailureHandlerTaskIntervalInSecondsName)
+  public final int storeDiskFailureHandlerTaskIntervalInSeconds;
+  public static final String storeDiskFailureHandlerTaskIntervalInSecondsName =
+      "store.disk.failure.handler.task.interval.in.seconds";
+
+  /**
+   * The backoff time in seconds to retry acquiring lock in disk failure handler.
+   */
+  @Config(storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName)
+  public final int storeDiskFailureHandlerRetryLockBackoffTimeInSeconds;
+  public static final String storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName =
+      "store.disk.failure.handler.retry.lock.backoff.time.in.seconds";
+
+  /**
+   * The percentage of real disk capacity to report to helix in disk failure handler. In Disk failure handler, we will
+   * update the disk capacity to helix. We will reserve some disk space in host so this percentage should be less than
+   * 100.
+   */
+  @Config(storeDiskCapacityReportingPercentageName)
+  public final int storeDiskCapacityReportingPercentage;
+  public static final String storeDiskCapacityReportingPercentageName = "store.disk.capacity.reporting.percentage";
+
+  /**
+   * This value should be range from 1 to 100. It's the percentage of failed disks to all disks. If the failed disks
+   * to all disks ratio is larger than this value, then terminate the entire process. For instance, if this value is 50,
+   * and we have 10 disks on host, and they are 5 disk failed, then we would terminate the server process.
+   */
+  @Config(storeFailedDiskPercentageToTerminateName)
+  public final int storeFailedDiskPercentageToTerminate;
+  public static final String storeFailedDiskPercentageToTerminateName = "store.failed.disk.percentage.to.terminate";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -528,6 +579,9 @@ public class StoreConfig {
         verifiableProperties.getIntInRange("store.deleted.message.retention.hours", 168, 0, Integer.MAX_VALUE);
     storeCompactionPolicySwitchTimestampDays =
         verifiableProperties.getIntInRange("store.compaction.policy.switch.timestamp.days", 6, 1, 14);
+    storeHybridCompactionFullCompactionStaggerLimitInHours =
+        verifiableProperties.getIntInRange("store.hybrid.compaction.full.compaction.stagger.limit.in.hours", 0, 0,
+            Integer.MAX_VALUE);
     storeContainerDeletionRetentionDays = verifiableProperties.getInt("store.container.deletion.retention.days", 14);
     storeHardDeleteOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.hard.delete.operations.bytes.per.sec", 100 * 1024, 1,
@@ -643,5 +697,21 @@ public class StoreConfig {
     storeDeletedMessageRetentionMinutes =
         (deletedMessageRetentionMinutes == -1) ? storeDeletedMessageRetentionHours * 60
             : deletedMessageRetentionMinutes;
+    storeDiskFailureHandlerEnabled = verifiableProperties.getBoolean(storeDiskFailureHandlerEnabledName, false);
+    storeDiskFailureHandlerTaskIntervalInSeconds =
+        verifiableProperties.getIntInRange(storeDiskFailureHandlerTaskIntervalInSecondsName, 10 * 60, 1,
+            Integer.MAX_VALUE);
+    storeDiskFailureHandlerRetryLockBackoffTimeInSeconds =
+        verifiableProperties.getIntInRange(storeDiskFailureHandlerRetryLockBackoffTimeInSecondsName, 30, 0,
+            Integer.MAX_VALUE);
+    if (storeDiskFailureHandlerRetryLockBackoffTimeInSeconds > storeDiskFailureHandlerTaskIntervalInSeconds) {
+      throw new IllegalStateException("Retry lock backoff time should be shorter than task interval: "
+          + storeDiskFailureHandlerRetryLockBackoffTimeInSeconds + " < " + storeDiskFailureHandlerTaskIntervalInSeconds);
+    }
+    storeDiskCapacityReportingPercentage =
+        verifiableProperties.getIntInRange(storeDiskCapacityReportingPercentageName, 95, 0, 100);
+    // by default, unless all the disks fail, we don't terminate this storage node
+    storeFailedDiskPercentageToTerminate =
+        verifiableProperties.getIntInRange(storeFailedDiskPercentageToTerminateName, 100, 0, 100);
   }
 }

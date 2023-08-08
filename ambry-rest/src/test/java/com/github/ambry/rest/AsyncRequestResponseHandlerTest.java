@@ -868,6 +868,11 @@ class BadRestRequest implements RestRequest {
   }
 
   @Override
+  public void setRestMethod(RestMethod restMethod) {
+    throw new IllegalStateException("Not implemented");
+  }
+
+  @Override
   public String getPath() {
     return null;
   }

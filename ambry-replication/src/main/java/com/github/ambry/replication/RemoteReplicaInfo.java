@@ -15,6 +15,7 @@ package com.github.ambry.replication;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
@@ -67,6 +68,9 @@ public class RemoteReplicaInfo {
   private long localLagFromRemoteStore = -1;
   private long reEnableReplicationTime = 0;
   private ReplicaThread replicaThread;
+  private int replicationRetryCount;
+  // Configurable
+  protected final int maxReplicationRetryCount;
 
   // Metadata response information received for this replica in the most recent replication cycle.
   // This is used during leader based replication to store the missing store messages, remote token info and local lag
@@ -76,6 +80,17 @@ public class RemoteReplicaInfo {
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
       long tokenPersistIntervalInMs, Time time, Port port) {
+    this(replicaId, localReplicaId, localStore, token, tokenPersistIntervalInMs, time, port, 0);
+  }
+
+  public RemoteReplicaInfo(ReplicationConfig replicationConfig, ReplicaId replicaId, ReplicaId localReplicaId,
+      Store localStore, FindToken token, long tokenPersistIntervalInMs, Time time, Port port) {
+    this(replicaId, localReplicaId, localStore, token, tokenPersistIntervalInMs, time, port,
+        replicationConfig.maxReplicationRetryCount);
+  }
+
+  public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
+      long tokenPersistIntervalInMs, Time time, Port port, int maxReplicationRetryCount) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
     this.totalBytesReadFromLocalStore = 0;
@@ -86,6 +101,37 @@ public class RemoteReplicaInfo {
     initializeTokens(token);
     // ExchangeMetadataResponse is initially empty. It will be populated by replica threads during replication cycles.
     this.exchangeMetadataResponse = new ReplicaThread.ExchangeMetadataResponse(ServerErrorCode.No_Error);
+    this.replicationRetryCount = 0;
+    this.maxReplicationRetryCount = maxReplicationRetryCount;
+  }
+
+  /**
+   * Increments replicationRetryCount by 1
+   * @return replicationRetryCount
+   */
+  public int incReplicationRetryCount() {
+    replicationRetryCount += 1;
+    return replicationRetryCount;
+  }
+
+  public int getReplicationRetryCount() {
+    return replicationRetryCount;
+  }
+
+  /**
+   * Resets replicationRetryCount to 0
+   * @return replicationRetryCount
+   */
+  public void resetReplicationRetryCount() {
+    replicationRetryCount = 0;
+  }
+
+  /**
+   * Checks if replicationRetryCount has exceeded the max number of retries allowed
+   * @return True if replicationRetryCount has exceeded the max retries, false otherwise
+   */
+  public boolean isReplicationRetryCountMaxed() {
+    return replicationRetryCount >= maxReplicationRetryCount;
   }
 
   public ReplicaId getReplicaId() {
