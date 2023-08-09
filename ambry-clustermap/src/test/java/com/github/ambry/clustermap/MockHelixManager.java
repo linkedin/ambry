@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
@@ -55,11 +56,14 @@ import org.apache.helix.controller.pipeline.Pipeline;
 import org.apache.helix.healthcheck.ParticipantHealthReportCollector;
 import org.apache.helix.model.HelixConfigScope;
 import org.apache.helix.model.LiveInstance;
+import org.apache.helix.model.ResourceConfig;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.spectator.RoutingTableProvider;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
+
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -82,6 +86,8 @@ class MockHelixManager implements HelixManager {
   private HelixPropertyStore<ZNRecord> helixPropertyStore;
   private boolean isAggregatedViewCluster;
   private final List<MockHelixAdmin> helixAdminList;
+  private final ConfigAccessor configAccessor;
+  private final Map<String, ResourceConfig> resourceConfigs = new ConcurrentHashMap<>();
 
   /**
    * Instantiate a MockHelixManager.
@@ -140,6 +146,18 @@ class MockHelixManager implements HelixManager {
       }
     }
     this.isAggregatedViewCluster = isAggregatedViewCluster;
+
+    configAccessor = mock(ConfigAccessor.class);
+    doAnswer(invocation -> {
+      String resourceName = invocation.getArgument(1);
+      return resourceConfigs.get(resourceName);
+    }).when(configAccessor).getResourceConfig(anyString(), anyString());
+    doAnswer(invocation -> {
+      String resourceName = invocation.getArgument(1);
+      ResourceConfig resourceConfig = invocation.getArgument(2);
+      resourceConfigs.put(resourceName, resourceConfig);
+      return null;
+    }).when(configAccessor).setResourceConfig(anyString(), anyString(), any(ResourceConfig.class));
   }
 
   @Override
@@ -432,7 +450,7 @@ class MockHelixManager implements HelixManager {
 
   @Override
   public ConfigAccessor getConfigAccessor() {
-    throw new IllegalStateException("Not implemented");
+    return configAccessor;
   }
 
   @Override

@@ -43,6 +43,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
+import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.model.IdealState;
@@ -638,16 +639,40 @@ public class HelixClusterManagerTest {
     }
 
     // Set ZNRecord is NULL in Helix PropertyStore
-    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
-        new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
+    MockHelixManagerFactory helixFactory = new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView);
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixFactory, metricRegistry);
 
+    // Case 1. We are creating a bootstrap replica for an exiting partition
     PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
+    long expectedCapacity = partitionOfNewReplica.getReplicaIds().get(0).getCapacityInBytes();
     AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
-    // 1. Verify bootstrap replica should be successful
-    assertNotNull("New replica should be created successfully",
-        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode));
+    ReplicaId bootstrapReplica =
+        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+    assertNotNull("New replica should be created successfully", bootstrapReplica);
+    assertEquals("Bootstrap replica of existing partition should has peers' capacity", expectedCapacity,
+        bootstrapReplica.getCapacityInBytes());
     assertEquals("There should be exactly one entry in bootstrap replica map", 1,
         helixClusterManager.getBootstrapReplicaMap().size());
+
+    // Case 2. We are creating a bootstrap replica for a new partition
+    String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1000);
+    // Case 2.1 there is no resource config
+    assertNull("Missing resource config", helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode));
+    // Case 2.1 resource config created
+    ResourceConfig resourceConfig = new ResourceConfig.Builder(resourceName).build();
+    resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR, String.valueOf(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES));
+    ConfigAccessor configAccessor =
+        helixFactory.getZKHelixManager(clusterMapConfig.clusterMapClusterName, selfInstanceName, InstanceType.SPECTATOR,
+            parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(localDc)
+                .getZkConnectStrs()
+                .get(0)).getConfigAccessor();
+    configAccessor.setResourceConfig(clusterMapConfig.clusterMapClusterName, resourceName, resourceConfig);
+    newPartitionId = String.valueOf(idealState.getNumPartitions() + 1001);
+    bootstrapReplica = helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode);
+    assertNotNull(bootstrapReplica);
+    assertEquals(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES, bootstrapReplica.getCapacityInBytes());
+
     helixClusterManager.close();
   }
 
