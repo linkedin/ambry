@@ -658,8 +658,10 @@ public class NamedBlobPutHandler {
     private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx, String accountName,
         String containerName, String datasetName) {
       if (idx == datasetVersionRecordList.size()) {
+        LOGGER.debug("Complete recursive callback for " + idx + " number of dataset version");
         return (r, e) -> {
           //In the last callback, set the rest method back.
+          LOGGER.debug("Change rest method back to PUT");
           restRequest.setRestMethod(RestMethod.PUT);
         };
       }
@@ -673,13 +675,13 @@ public class NamedBlobPutHandler {
             new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
                 NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
                 requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-        LOGGER.trace("New request path : " + newRequestPath);
+        LOGGER.debug("New request path in recursive call : " + newRequestPath);
         // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
         restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
         restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
         restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
         deleteBlobHandler.handle(restRequest, restResponseChannel, nextCallBack);
-      }, uri, LOGGER, null);
+      }, uri, LOGGER, (r, e) -> LOGGER.error("Delete dataset" + restRequest.getUri() + " failed with exception" + e));
     }
 
     /**
