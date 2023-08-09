@@ -117,6 +117,7 @@ public class DeleteBlobHandler {
       return buildCallback(metrics.deleteBlobSecurityProcessRequestMetrics, result -> {
         String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
+        LOGGER.debug("Blob Id to convert: " + blobIdStr);
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
@@ -133,6 +134,7 @@ public class DeleteBlobHandler {
           accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
               metrics.deleteBlobMetricsGroup);
         }
+        LOGGER.debug("Converted Blob Id: " + blobId);
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -146,6 +148,7 @@ public class DeleteBlobHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.deleteBlobSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, false);
+        LOGGER.debug("Start deleting the blob for blobId " + blobId);
         router.deleteBlob(blobId.getID(), serviceId, routerCallback(),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
@@ -179,6 +182,7 @@ public class DeleteBlobHandler {
         }
         //do not process response when the delete request is coming caused by putting dataset version request.
         if (restRequest.getRestMethod() != RestMethod.PUT) {
+          LOGGER.debug("Process response for request " + restRequest.getUri());
           securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
         } else {
           securityProcessResponseCallback().onCompletion(null, null);
@@ -198,8 +202,10 @@ public class DeleteBlobHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#processResponse}.
      */
     private Callback<Void> securityProcessResponseCallback() {
-      return buildCallback(metrics.deleteBlobSecurityProcessResponseMetrics,
-          securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
+      return buildCallback(metrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
+        LOGGER.debug("Final call back been called successfully");
+        finalCallback.onCompletion(null, null);
+      }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
@@ -220,12 +226,15 @@ public class DeleteBlobHandler {
         datasetName = dataset.getDatasetName();
         version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
         accountService.deleteDatasetVersion(accountName, containerName, datasetName, version);
+        LOGGER.debug(
+            "Successfully deleteDataset version for accountName: " + accountName + " containerName: " + containerName
+                + " datasetName: " + datasetName + " version: " + version);
         metrics.deleteDatasetVersionProcessingTimeInMs.update(
             System.currentTimeMillis() - startDeleteDatasetVersionTime);
         // If version is null, use the latest version + 1 from DatasetVersionRecord to construct named blob path.
       } catch (AccountServiceException ex) {
         LOGGER.error(
-            "Failed to get dataset version for accountName: " + accountName + " containerName: " + containerName
+            "Failed to delete dataset version for accountName: " + accountName + " containerName: " + containerName
                 + " datasetName: " + datasetName + " version: " + version);
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
