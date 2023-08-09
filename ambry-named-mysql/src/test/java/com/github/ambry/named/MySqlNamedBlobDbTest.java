@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.Page;
 import com.github.ambry.mysql.MySqlUtils;
 import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -72,6 +73,7 @@ public class MySqlNamedBlobDbTest {
   private final Container container;
   private PartitionId partitionId;
   private static String id;
+  private final int listMaxResults = 5;
 
   public MySqlNamedBlobDbTest() throws IOException {
     Properties properties = new Properties();
@@ -84,6 +86,7 @@ public class MySqlNamedBlobDbTest {
           .put("password", "password"));
     }
     properties.setProperty(MySqlNamedBlobDbConfig.DB_INFO, dbInfo.toString());
+    properties.setProperty(MySqlNamedBlobDbConfig.LIST_MAX_RESULTS, String.valueOf(listMaxResults));
     namedBlobDb = new MySqlNamedBlobDb(accountService, new MySqlNamedBlobDbConfig(new VerifiableProperties(properties)),
         dataSourceFactory, localDatacenter, new MetricRegistry());
     account = accountService.createAndAddRandomAccount();
@@ -162,6 +165,50 @@ public class MySqlNamedBlobDbTest {
 
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());
+  }
+
+  @Test
+  public void testListNamedBlobs() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+    calendar.add(Calendar.DATE, 10);
+
+    dataSourceFactory.setLocalDatacenter(foundDatacenter);
+    dataSourceFactory.triggerDataResultSet(datacenters);
+
+    final String blobNamePrefix = "blobNameForList";
+
+    // Create expired items
+    final long expiredTimeMs = calendar.getTimeInMillis() - 1;
+    final Set<String> expiredNames = new HashSet<>(Arrays.asList("name1", "name2", "name3", "name4", "name5"));
+    expiredNames.forEach(i ->
+        {
+        final NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), blobNamePrefix + i, getBlobId(account, container), expiredTimeMs);
+          try {
+            namedBlobDb.put(record, NamedBlobState.READY, true).get();
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        }
+    );
+
+    // Create valid items
+    final long validimeMs = calendar.getTimeInMillis() + 8000;
+    final Set<String> validNames = new HashSet<>(Arrays.asList("name6", "name7", "name8", "name9", "name10"));
+    validNames.forEach(i ->
+        {
+          final NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), blobNamePrefix + i, getBlobId(account, container), validimeMs);
+          try {
+            namedBlobDb.put(record, NamedBlobState.READY, true).get();
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        }
+    );
+
+    // List named blob should only put out valid ones without empty entries.
+    Page<NamedBlobRecord> page =  namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null).get();
+    assertEquals("List named blob entries size should match", validNames.size(), page.getEntries().size());
+    assertNull("Next page token should be null", page.getNextPageToken());
   }
 
   /**
