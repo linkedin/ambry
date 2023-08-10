@@ -36,7 +36,9 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
@@ -231,6 +233,55 @@ public class MySqlNamedBlobDbIntegrationTest {
     namedBlobDb.put(record).get();
     assertEquals("Record should have been replaced", record,
         namedBlobDb.get(account.getName(), container.getName(), blobName).get());
+  }
+
+  /**
+   * Test behavior with list named blob
+   */
+  @Test
+  public void testListNamedBlobs() throws Exception {
+    Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+
+    time.setCurrentMilliseconds(calendar.getTimeInMillis());
+    Account account = accountService.getAllAccounts().iterator().next();
+    Container container = account.getAllContainers().iterator().next();
+
+    final String blobNamePrefix = "blobNameForList";
+
+    // Create expired records
+    final long expiredTimeMs = calendar.getTimeInMillis() - TimeUnit.HOURS.toMillis(1);
+    final Set<String> expiredNames = new HashSet<>(Arrays.asList("name1", "name2", "name3", "name4", "name5"));
+    expiredNames.forEach(i ->
+        {
+          final NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), blobNamePrefix + i, getBlobId(account, container), expiredTimeMs);
+          try {
+            namedBlobDb.put(record, NamedBlobState.READY, true).get();
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        }
+    );
+
+    // Create valid records
+    final long validimeMs = calendar.getTimeInMillis() + TimeUnit.HOURS.toMillis(1);
+    final Set<String> validNames = new HashSet<>(Arrays.asList("name6", "name7", "name8", "name9", "name10"));
+    final Set<NamedBlobRecord> validRecords = new HashSet<>();
+    validNames.forEach(i ->
+        {
+          final NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), blobNamePrefix + i, getBlobId(account, container), validimeMs);
+          validRecords.add(record);
+          try {
+            namedBlobDb.put(record, NamedBlobState.READY, true).get();
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+        }
+    );
+
+    // List named blob should only put out valid ones without empty entries.
+    Page<NamedBlobRecord> page =  namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null).get();
+    assertEquals("List named blob entries should match the valid records", validRecords, new HashSet<>(page.getEntries()));
+    assertNull("Next page token should be null", page.getNextPageToken());
   }
 
   /**

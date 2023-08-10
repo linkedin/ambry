@@ -84,7 +84,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String VERSION = "version";
   private static final String DELETED_TS = "deleted_ts";
   // query building blocks
-  private static final String CURRENT_TIME = "CURRENT_TIMESTAMP(6)";
+  private static final String CURRENT_TIME = "UTC_TIMESTAMP(6)";
   private static final String STATE_MATCH = String.format("%s = %s", BLOB_STATE, NamedBlobState.READY.ordinal());
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
   private static final String PK_MATCH_VERSION = String.format("(%s, %s, %s, %s) = (?, ?, ?, ?)", ACCOUNT_ID,
@@ -118,10 +118,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "(SELECT account_id, container_id, blob_name, max(version) as version "
           + "FROM named_blobs_v2 "
           + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
-          + "  AND (deleted_ts IS NULL OR deleted_ts>CURRENT_TIMESTAMP(6)) "
+          + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
           + "        GROUP BY account_id, container_id, blob_name) t2 "
           + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH);
+          + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
   // @formatter:on
 
   /**
