@@ -72,7 +72,6 @@ public class MySqlNamedBlobDbTest {
   private final Container container;
   private PartitionId partitionId;
   private static String id;
-  private final int listMaxResults = 5;
 
   public MySqlNamedBlobDbTest() throws IOException {
     Properties properties = new Properties();
