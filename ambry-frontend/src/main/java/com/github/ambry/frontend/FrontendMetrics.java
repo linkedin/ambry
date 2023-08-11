@@ -144,6 +144,8 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics headSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics deleteSecurityPostProcessRequestMetrics;
 
+  public final AsyncOperationTracker.Metrics deleteDatasetOutOfRetentionRequestMetrics;
+
   // Rates
   // AmbrySecurityService
   public final Meter securityServicePreProcessRequestRate;
@@ -437,6 +439,9 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(DeleteDatasetHandler.class, "SecurityProcessRequest", metricRegistry);
     deleteDatasetsSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(DeleteDatasetHandler.class, "SecurityPostProcessRequest", metricRegistry);
+
+    deleteDatasetOutOfRetentionRequestMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "RetentionRequest", metricRegistry);
 
     getStatsReportSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetStatsReportHandler.class, "SecurityProcessRequest", metricRegistry);

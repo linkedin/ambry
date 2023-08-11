@@ -32,6 +32,7 @@ import com.github.ambry.named.NamedBlobRecord;
 import com.github.ambry.protocol.DatasetVersionState;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.NoOpResponseChannel;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -155,6 +156,7 @@ public class NamedBlobPutHandler {
     private final RestResponseChannel restResponseChannel;
     private final Callback<Void> finalCallback;
     private final Callback<Void> deleteDatasetCallback;
+    private final Callback<Void> setRestMethodBackToPutCallback;
     private final String uri;
 
     /**
@@ -168,6 +170,7 @@ public class NamedBlobPutHandler {
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
       this.deleteDatasetCallback = deleteDatasetVersionIfUploadFailedCallBack(finalCallback);
+      this.setRestMethodBackToPutCallback = setRestMethodBackToPutCallback(finalCallback);
       this.uri = restRequest.getUri();
     }
 
@@ -287,10 +290,13 @@ public class NamedBlobPutHandler {
               routerTtlUpdateCallback(blobInfo, blobId));
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount();
+            //We have to make sure the restMethod been set back to PUT before we process response.
+            updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
+                deleteDatasetVersionOutOfRetentionCallback(blobInfo));
+          } else {
+            securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+                securityProcessResponseCallback());
           }
-          securityService.processResponse(restRequest, restResponseChannel, blobInfo,
-              securityProcessResponseCallback());
         }
       }, uri, LOGGER, deleteDatasetCallback);
     }
@@ -325,10 +331,25 @@ public class NamedBlobPutHandler {
             namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
         namedBlobDb.updateBlobStateToReady(record).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-          updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount();
+          //We have to make sure the restMethod been set back to PUT before we process response.
+          updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(
+              deleteDatasetVersionOutOfRetentionCallback(blobInfo));
+        } else {
+          securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+              securityProcessResponseCallback());
         }
-        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, LOGGER, deleteDatasetCallback);
+    }
+
+    /**
+     * After updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount, call {@link SecurityService#processResponse}.
+     * @param blobInfo the {@link BlobInfo} to use for security checks.
+     * @return a {@link Callback} to be used with updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount.
+     */
+    private Callback<Void> deleteDatasetVersionOutOfRetentionCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.deleteDatasetOutOfRetentionRequestMetrics,
+          deleteResult -> securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+              securityProcessResponseCallback()), restRequest.getUri(), LOGGER, setRestMethodBackToPutCallback);
     }
 
     /**
@@ -602,7 +623,7 @@ public class NamedBlobPutHandler {
     /**
      * Support delete the dataset version out of retentionCount
      */
-    private void updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount() throws RestServiceException {
+    private void updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(Callback<Void> callback) throws RestServiceException {
       Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
       String accountName = dataset.getAccountName();
       String containerName = dataset.getContainerName();
@@ -638,12 +659,16 @@ public class NamedBlobPutHandler {
           restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
           //set the rest method to delete in order to delete data in named blob.
           restRequest.setRestMethod(RestMethod.DELETE);
-          deleteBlobHandler.handle(restRequest, restResponseChannel,
-              recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName));
+          //for delete out of retention request, we don't want to set anything to response channel.
+          deleteBlobHandler.handle(restRequest, new NoOpResponseChannel(),
+              recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName, callback));
+        } else {
+          callback.onCompletion(null, null);
         }
       } catch (Exception e) {
         frontendMetrics.deleteDatasetVersionOutOfRetentionError.inc();
         LOGGER.error("Failed to delete dataset version out of retention count for this dataset: " + dataset, e);
+        callback.onCompletion(null, e);
       }
     }
 
@@ -656,17 +681,20 @@ public class NamedBlobPutHandler {
      * @param datasetName the name of the dataset.
      */
     private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx, String accountName,
-        String containerName, String datasetName) {
+        String containerName, String datasetName, Callback<Void> callBackAfterResetMethodSetBackToPut) {
       if (idx == datasetVersionRecordList.size()) {
         LOGGER.debug("Complete recursive callback for " + idx + " number of dataset version");
         return (r, e) -> {
           //In the last callback, set the rest method back.
           LOGGER.debug("Change rest method back to PUT");
           restRequest.setRestMethod(RestMethod.PUT);
+          //make sure to process response after the rest method been set to PUT.
+          callBackAfterResetMethodSetBackToPut.onCompletion(null, e);
         };
       }
       Callback<Void> nextCallBack =
-          recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName);
+          recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName,
+              callBackAfterResetMethodSetBackToPut);
       DatasetVersionRecord record = datasetVersionRecordList.get(idx);
       return buildCallback(frontendMetrics.deleteBlobSecurityProcessResponseMetrics, securityCheckResult -> {
         String version = record.getVersion();
@@ -700,6 +728,20 @@ public class NamedBlobPutHandler {
         } catch (Exception ex) {
           LOGGER.error("Best effort to delete the dataset version when upload failed");
         }
+        if (callback != null) {
+          callback.onCompletion(r, e);
+        }
+      };
+    }
+
+    /**
+     * If updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount failed, this method is to help set the rest method
+     * back to PUT.
+     * @param callback callback the final callback which submit the response.
+     */
+    private <T> Callback<T> setRestMethodBackToPutCallback(Callback<T> callback) {
+      return (r, e) -> {
+        restRequest.setRestMethod(RestMethod.PUT);
         if (callback != null) {
           callback.onCompletion(r, e);
         }
