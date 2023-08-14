@@ -1517,6 +1517,88 @@ public class OperationTrackerTest {
   }
 
   @Test
+  public void deprioritizeBootstrapReplicasTest() {
+    assumeTrue(replicasStateEnabled && operationTrackerType.equals(SIMPLE_OP_TRACKER));
+    initialize();
+    Properties props = new Properties();
+    props.setProperty(RouterConfig.ROUTER_GET_SUCCESS_TARGET, "1");
+    props.setProperty(RouterConfig.ROUTER_GET_REQUEST_PARALLELISM, "3");
+    props.setProperty(RouterConfig.ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS, "true");
+    originatingDcName = localDcName;
+
+    // Case 1, set first replica to bootstrap
+    // First replica is the local replica
+    ReplicaId firstLocalReplica = mockPartition.replicaIds.get(0);
+    assertEquals(localDcName, firstLocalReplica.getDataNodeId().getDatacenterName());
+    mockPartition.setReplicaState(firstLocalReplica, ReplicaState.BOOTSTRAP);
+    ReplicaId secondLocalReplica = mockPartition.replicaIds.get(4);
+    ReplicaId thirdLocalReplica = mockPartition.replicaIds.get(8);
+
+    SimpleOperationTracker ot =
+        (SimpleOperationTracker) getOperationTracker(props, true, 3, RouterOperation.GetBlobOperation, true, true,
+            false);
+    assertEquals("Mismatch in replica count in the pool", 12, ot.getReplicaPoolSize());
+
+    Iterator<ReplicaId> iterator = ot.getReplicaIterator();
+    List<ReplicaId> orderedReplicas = new ArrayList<>();
+    while (iterator.hasNext()) {
+      orderedReplicas.add(iterator.next());
+    }
+    assertTrue(orderedReplicas.subList(0, 2).contains(secondLocalReplica));
+    assertTrue(orderedReplicas.subList(0, 2).contains(thirdLocalReplica));
+    assertEquals(firstLocalReplica, orderedReplicas.get(2));
+
+    // Case 2, set second replica to bootstrap
+    // Put it back to STANDBY
+    mockPartition.setReplicaState(firstLocalReplica, ReplicaState.STANDBY);
+    mockPartition.setReplicaState(secondLocalReplica, ReplicaState.BOOTSTRAP);
+
+    ot = (SimpleOperationTracker) getOperationTracker(props, true, 3, RouterOperation.GetBlobOperation, true, true,
+        false);
+    assertEquals("Mismatch in replica count in the pool", 12, ot.getReplicaPoolSize());
+
+    iterator = ot.getReplicaIterator();
+    orderedReplicas = new ArrayList<>();
+    while (iterator.hasNext()) {
+      orderedReplicas.add(iterator.next());
+    }
+    assertTrue(orderedReplicas.subList(0, 2).contains(firstLocalReplica));
+    assertTrue(orderedReplicas.subList(0, 2).contains(thirdLocalReplica));
+    assertEquals(secondLocalReplica, orderedReplicas.get(2));
+
+    // Case 3, first 2 replicas are bootstrap
+    mockPartition.setReplicaState(firstLocalReplica, ReplicaState.BOOTSTRAP);
+    mockPartition.setReplicaState(secondLocalReplica, ReplicaState.BOOTSTRAP);
+    ot = (SimpleOperationTracker) getOperationTracker(props, true, 3, RouterOperation.GetBlobOperation, true, true,
+        false);
+    assertEquals("Mismatch in replica count in the pool", 12, ot.getReplicaPoolSize());
+
+    iterator = ot.getReplicaIterator();
+    orderedReplicas = new ArrayList<>();
+    while (iterator.hasNext()) {
+      orderedReplicas.add(iterator.next());
+    }
+    assertEquals(thirdLocalReplica, orderedReplicas.get(0));
+    assertTrue(orderedReplicas.subList(1, 3).contains(firstLocalReplica));
+    assertTrue(orderedReplicas.subList(1, 3).contains(secondLocalReplica));
+
+    // Case 4. first one is offline, second one is bootstrap, third one is standby
+    mockPartition.setReplicaState(firstLocalReplica, ReplicaState.OFFLINE);
+    mockPartition.setReplicaState(secondLocalReplica, ReplicaState.BOOTSTRAP);
+    ot = (SimpleOperationTracker) getOperationTracker(props, true, 3, RouterOperation.GetBlobOperation, true, true,
+        false);
+    assertEquals("Mismatch in replica count in the pool", 12, ot.getReplicaPoolSize());
+
+    iterator = ot.getReplicaIterator();
+    orderedReplicas = new ArrayList<>();
+    while (iterator.hasNext()) {
+      orderedReplicas.add(iterator.next());
+    }
+    assertEquals(thirdLocalReplica, orderedReplicas.get(0));
+    assertEquals(secondLocalReplica, orderedReplicas.get(1));
+  }
+
+  @Test
   @Ignore
   public void failedDueToOfflineReplicaTest() {
     failedDueToOfflineReplicaTest(RouterOperation.TtlUpdateOperation);
@@ -1587,21 +1669,21 @@ public class OperationTrackerTest {
                       .mapToInt(l -> l.size())
                       .sum());
               assertEquals(bootStrapCount + standByCount + leaderCount, ot.getReplicasByState(null,
-                  EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER))
+                      EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER))
                   .values()
                   .stream()
                   .mapToInt(l -> l.size())
                   .sum());
               assertEquals(bootStrapCount + standByCount + leaderCount + inactiveCount, ot.getReplicasByState(null,
-                  EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE))
+                      EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER, ReplicaState.INACTIVE))
                   .values()
                   .stream()
                   .mapToInt(l -> l.size())
                   .sum());
               assertEquals(bootStrapCount + standByCount + leaderCount + inactiveCount + offlineCount,
                   ot.getReplicasByState(null,
-                      EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER,
-                          ReplicaState.INACTIVE, ReplicaState.OFFLINE))
+                          EnumSet.of(ReplicaState.BOOTSTRAP, ReplicaState.STANDBY, ReplicaState.LEADER,
+                              ReplicaState.INACTIVE, ReplicaState.OFFLINE))
                       .values()
                       .stream()
                       .mapToInt(l -> l.size())
@@ -1832,6 +1914,24 @@ public class OperationTrackerTest {
    */
   private OperationTracker getOperationTracker(Properties props, boolean crossColoEnabled, int parallelism,
       RouterOperation routerOperation, boolean includeDownReplicas, boolean terminateOnNotFoundEnabled) {
+    return getOperationTracker(props, crossColoEnabled, parallelism, routerOperation, includeDownReplicas,
+        terminateOnNotFoundEnabled, true);
+  }
+
+  /**
+   * Returns the right {@link OperationTracker} based on {@link #operationTrackerType}.
+   * @param props {@link Properties} for {@link RouterConfig}.
+   * @param crossColoEnabled {@code true} if cross colo needs to be enabled. {@code false} otherwise.
+   * @param parallelism the number of parallel requests that can be in flight.
+   * @param routerOperation the {@link RouterOperation} associate with this request.
+   * @param includeDownReplicas whether to include down replicas in operation tracker.
+   * @param terminateOnNotFoundEnabled whether to terminate the operation if we received not found responses.
+   * @param shouldShuffle whether to shuffle replicas
+   * @return the right {@link OperationTracker} based on {@link #operationTrackerType}.
+   */
+  private OperationTracker getOperationTracker(Properties props, boolean crossColoEnabled, int parallelism,
+      RouterOperation routerOperation, boolean includeDownReplicas, boolean terminateOnNotFoundEnabled,
+      boolean shouldShuffle) {
     props.setProperty(RouterConfig.ROUTER_HOSTNAME, "localhost");
     props.setProperty(RouterConfig.ROUTER_DATACENTER_NAME, localDcName);
     props.setProperty(RouterConfig.ROUTER_GET_CROSS_DC_ENABLED, Boolean.toString(crossColoEnabled));

@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -295,6 +296,7 @@ class SimpleOperationTracker implements OperationTracker {
     // which can be done by setting includeNonOriginatingDcReplicas False.
     List<ReplicaId> examinedReplicas = new ArrayList<>();
     originatingDcName = originatingDcName == null ? reassignedOriginDc : originatingDcName;
+    int numLocalAndLiveReplicas = 0;
     for (ReplicaId replicaId : replicas) {
       examinedReplicas.add(replicaId);
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
@@ -303,6 +305,7 @@ class SimpleOperationTracker implements OperationTracker {
 
       if (!replicaId.isDown()) {
         if (isLocalDcReplica) {
+          numLocalAndLiveReplicas++;
           addToBeginningOfPool(replicaId);
         } else if (crossColoEnabled && isOriginatingDcReplica) {
           addToEndOfPool(replicaId);
@@ -342,6 +345,8 @@ class SimpleOperationTracker implements OperationTracker {
         remoteOfflineReplicas.forEach(this::addToEndOfPool);
       }
     }
+
+    maybeDeprioritizeLocalBootstrapReplicas(numLocalAndLiveReplicas);
     totalReplicaCount = replicaPool.size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
@@ -554,6 +559,39 @@ class SimpleOperationTracker implements OperationTracker {
     return map;
   }
 
+  /**
+   * Deprioritize bootstrap replicas in local dc if all conditions are satisfied.
+   * @param numLocalAndLiveReplicas The number of live replicas in local dc.
+   */
+  void maybeDeprioritizeLocalBootstrapReplicas(int numLocalAndLiveReplicas) {
+    // we know local and live replicas are going to be put in frontend of the pool
+    if (isGetOperation() && numLocalAndLiveReplicas > 1
+        && routerConfig.routerGetOperationDeprioritizeBootstrapReplicas) {
+      List<ReplicaId> localAndLiveReplicas = new ArrayList<>();
+      localAndLiveReplicas.addAll(replicaPool.subList(0, numLocalAndLiveReplicas));
+      // Sort local and live replicas based on the replica state, bootstrap replicas
+      // are going to be pushed back
+      localAndLiveReplicas.sort((r1, r2) -> {
+        ReplicaState rs1 = getReplicaState(r1);
+        ReplicaState rs2 = getReplicaState(r2);
+        if (rs1 == ReplicaState.BOOTSTRAP && rs2 == ReplicaState.BOOTSTRAP) {
+          return 0;
+        } else if (rs1 == ReplicaState.BOOTSTRAP || rs2 == ReplicaState.BOOTSTRAP) {
+          // if rs1 is bootstrap, which means rs2 is not, then r2 should be smaller than r1
+          // so it can be prioritized.
+          return rs1 == ReplicaState.BOOTSTRAP ? 1 : -1;
+        } else {
+          return 0;
+        }
+      });
+      ListIterator<ReplicaId> iter = replicaPool.listIterator();
+      for (ReplicaId replicaId : localAndLiveReplicas) {
+        iter.next();
+        iter.set(replicaId);
+      }
+    }
+  }
+
   public boolean hasFailed() {
     if (routerOperation == RouterOperation.PutOperation && routerConfig.routerPutUseDynamicSuccessTarget) {
       return totalReplicaCount - failedCount < Math.max(totalReplicaCount - 1,
@@ -683,5 +721,27 @@ class SimpleOperationTracker implements OperationTracker {
       errMsg.append(replicaId.getDataNodeId()).append(":").append(replicaId.isDown()).append(" ");
     }
     return errMsg.toString();
+  }
+
+  /**
+   * @return True when router operation is a get operation
+   */
+  private boolean isGetOperation() {
+    return routerOperation == RouterOperation.GetBlobOperation
+        || routerOperation == RouterOperation.GetBlobInfoOperation;
+  }
+
+  /**
+   * Return the replica state for given replica id.
+   * @param replicaId The replica id
+   * @return Replica state for replica id.
+   */
+  private ReplicaState getReplicaState(ReplicaId replicaId) {
+    for (Map.Entry<ReplicaState, List<ReplicaId>> entry : allDcReplicasByState.entrySet()) {
+      if (entry.getValue().contains(replicaId)) {
+        return entry.getKey();
+      }
+    }
+    throw new IllegalStateException("ReplicaId " + replicaId + " can't find state in " + allDcReplicasByState);
   }
 }
