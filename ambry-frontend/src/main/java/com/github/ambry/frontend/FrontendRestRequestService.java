@@ -157,7 +157,6 @@ class FrontendRestRequestService implements RestRequestService {
   public void setupResponseHandler(RestResponseHandler responseHandler) {
     this.responseHandler = responseHandler;
   }
-
   @Override
   public void start() throws InstantiationException {
     if (responseHandler == null) {

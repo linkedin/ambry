@@ -671,6 +671,7 @@ public class FrontendRestRequestServiceTest {
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
     doOperation(restRequest, restResponseChannel);
+    assertEquals("Mismatch on response status", ResponseStatus.Created, restResponseChannel.getStatus());
 
     //add second dataset version
     String version1 = "LATEST";
