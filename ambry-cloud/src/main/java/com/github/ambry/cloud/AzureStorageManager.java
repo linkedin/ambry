@@ -144,7 +144,9 @@ public class AzureStorageManager implements StoreManager {
 
     if (blobContainerClient == null) {
       // TODO : metric
-      logger.error("Blob container for partition {} is null", partitionId.getId());
+      String errMsg = String.format("Blob container for partition %s is null", partitionId.getId());
+      logger.error(errMsg);
+      throw new RuntimeException(errMsg);
     }
 
     storage = new AzureStorage(properties, metricRegistry, clusterMap, blobContainerClient);
