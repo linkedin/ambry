@@ -84,6 +84,49 @@ public class AzureStorageManager implements StoreManager {
   }
 
   /**
+   * Returns blob container in Azure for an Ambry partition
+   * @param partitionId Ambry partition
+   * @return blobContainerClient
+   */
+  protected BlobContainerClient getBlobStore(PartitionId partitionId) {
+    BlobContainerClient blobContainerClient;
+    try {
+      blobContainerClient = azureStorageClient.getBlobContainerClient(String.valueOf(partitionId.getId()));
+    } catch (BlobStorageException blobStorageException) {
+      if (blobStorageException.getErrorCode().equals(BlobErrorCode.CONTAINER_NOT_FOUND)) {
+        logger.error("Blob container for partition {} not found due to {}", partitionId.getId(),
+            blobStorageException.getServiceMessage());
+        return null;
+      }
+      logger.error("Failed to get blob container for partition {} due to {}", partitionId.getId(),
+          blobStorageException.getServiceMessage());
+      throw blobStorageException;
+    }
+    return blobContainerClient;
+  }
+
+  /**
+   * Creates blob container in Azure for an Ambry partition
+   * @param partitionId Ambry partition
+   * @return blobContainerClient
+   */
+  protected BlobContainerClient createBlobStore(PartitionId partitionId) {
+    BlobContainerClient blobContainerClient;
+    try {
+      blobContainerClient = azureStorageClient.createBlobContainer(String.valueOf(partitionId.getId()));
+    } catch (BlobStorageException blobStorageException) {
+      if (blobStorageException.getErrorCode().equals(BlobErrorCode.CONTAINER_ALREADY_EXISTS)) {
+        logger.info("Blob container for partition {} already exists", partitionId.getId());
+        return getBlobStore(partitionId);
+      }
+      logger.error("Failed to create blob container for partition {} due to {}", partitionId.getId(),
+          blobStorageException.getServiceMessage());
+      throw blobStorageException;
+    }
+    return blobContainerClient;
+  }
+
+  /**
    * Creates an object that stores blobs in Azure blob storage
    * @param partitionId Partition ID
    * @return {@link AzureStorage}
@@ -93,18 +136,17 @@ public class AzureStorageManager implements StoreManager {
     if (storage != null) {
       return storage;
     }
-    BlobContainerClient blobContainerClient;
-    try {
-      // Get blob container object
-      blobContainerClient = azureStorageClient.getBlobContainerClient(String.valueOf(partitionId.getId()));
-    } catch (BlobStorageException blobStorageException) {
-      if (!blobStorageException.getErrorCode().equals(BlobErrorCode.CONTAINER_NOT_FOUND)) {
-        throw blobStorageException;
-      }
-      // Create blob container object
-      blobContainerClient = azureStorageClient.createBlobContainer(String.valueOf(partitionId.getId()));
-      logger.info("Created azure storage container for {}", partitionId.getId());
+
+    BlobContainerClient blobContainerClient = getBlobStore(partitionId);
+    if (blobContainerClient == null) {
+      blobContainerClient = createBlobStore(partitionId);
     }
+
+    if (blobContainerClient == null) {
+      // TODO : metric
+      logger.error("Blob container for partition {} is null", partitionId.getId());
+    }
+
     storage = new AzureStorage(properties, metricRegistry, clusterMap, blobContainerClient);
     partitionToAzureStorage.put(partitionId, storage);
     return storage;
