@@ -17,6 +17,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,6 +52,7 @@ public class StorageManagerMetrics {
   public final Counter compactionManagerTerminateErrorCount;
   public final Counter compactionErrorCount;
   public final Counter compactionExecutorErrorCount;
+  public final Timer blobStoreCompactionTimeInMs;
 
   private final Counter compactionCount;
   private final AtomicLong compactionsInProgress = new AtomicLong(0);
@@ -98,6 +100,8 @@ public class StorageManagerMetrics {
     compactionErrorCount = registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionErrorCount"));
     compactionExecutorErrorCount =
         registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionExecutorErrorCount"));
+    blobStoreCompactionTimeInMs =
+        registry.timer(MetricRegistry.name(CompactionManager.class, "BlobStoreCompactionTimeInMs"));
 
     Gauge<Long> compactionsInProgressGauge = compactionsInProgress::longValue;
     registry.register(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),

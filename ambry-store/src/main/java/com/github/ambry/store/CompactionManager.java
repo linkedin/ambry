@@ -13,6 +13,7 @@
  */
 package com.github.ambry.store;
 
+import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -256,6 +257,7 @@ class CompactionManager {
           if (store.isStarted()) {
             logger.trace("{} is started and eligible for resume check", store);
             metrics.markCompactionStart(false);
+            Timer.Context context = metrics.blobStoreCompactionTimeInMs.time();
             try {
               store.maybeResumeCompaction(bundleReadBuffer);
             } catch (Exception e) {
@@ -264,6 +266,7 @@ class CompactionManager {
               storesToSkip.add(store);
             } finally {
               metrics.markCompactionStop();
+              logger.info("Compaction of store {} took {} ms", store, context.stop());
             }
           }
         }
@@ -280,6 +283,7 @@ class CompactionManager {
               BlobStore store = storesToCheck.poll();
               logger.trace("{} being checked for compaction", store);
               boolean compactionStarted = false;
+              Timer.Context context = metrics.blobStoreCompactionTimeInMs.time();
               try {
                 if (store.isStarted() && !storesToSkip.contains(store) && !storesDisabledCompaction.contains(store)) {
                   logger.info("{} is started and is being checked for compaction eligibility", store);
@@ -304,6 +308,7 @@ class CompactionManager {
               } finally {
                 if (compactionStarted) {
                   metrics.markCompactionStop();
+                  logger.info("Compaction of store {} took {} ms", store, context.stop());
                 }
               }
             }
