@@ -180,13 +180,9 @@ public class DeleteBlobHandler {
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
         }
-        //do not process response when the delete request is coming caused by putting dataset version request.
-        if (restRequest.getRestMethod() != RestMethod.PUT) {
-          LOGGER.debug("Process response for request " + restRequest.getUri());
-          securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
-        } else {
-          securityProcessResponseCallback().onCompletion(null, null);
-        }
+        LOGGER.trace(
+            "Process response for request " + restRequest.getUri() + " restMethod " + restRequest.getRestMethod());
+        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
       }, restRequest.getUri(), LOGGER, (r, e) -> {
         // Even we failed in router operations, we already used some of the resources in router,
         // so let's record the charges for this request.
