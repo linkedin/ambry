@@ -1526,8 +1526,9 @@ public class HelixClusterManager implements ClusterMap {
         partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
 
         // Ideal state has changed, we need to check if the data node is now on FULL AUTO or not.
+        // This call might come from frontend node, make sure we don't register any FULL AUTO metrics in frontend.
         DataNodeId currentDataNodeId = instanceNameToAmbryDataNode.get(selfInstanceName);
-        if (!currentDataNodeId.getDatacenterName().equals(dcName)
+        if (currentDataNodeId == null || !currentDataNodeId.getDatacenterName().equals(dcName)
             || localDataNodeInFullAuto.get() == isDataNodeInFullAutoMode(currentDataNodeId)) {
           return;
         }
