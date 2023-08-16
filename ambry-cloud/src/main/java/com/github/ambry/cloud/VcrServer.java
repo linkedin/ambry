@@ -197,8 +197,8 @@ public class VcrServer {
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
 
-      logger.info("Azure backup version = {}", cloudConfig.azureBackupVersion);
-      if (cloudConfig.azureBackupVersion.equals(CloudConfig.AZURE_BACKUP_VERSION_1)) {
+      logger.info("Azure backup version = {}", cloudConfig.ambryBackupVersion);
+      if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
         // Backup 1.0
         if (cloudDestinationFactory == null) {
           cloudDestinationFactory =
@@ -214,7 +214,7 @@ public class VcrServer {
             cloudStorageManager, storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler,
             networkClientFactory, vcrMetrics, notificationSystem, storeKeyConverterFactory,
             serverConfig.serverMessageTransformer);
-      } else if (cloudConfig.azureBackupVersion.equals(CloudConfig.AZURE_BACKUP_VERSION_2)) {
+      } else if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
         // Backup 2.0
         vcrClusterParticipant = new AzureStoreHelixParticipant(properties, registry, clusterMap, accountService);
         cloudStorageManager = new AzureStoreManager(properties, registry, clusterMap);
@@ -223,7 +223,7 @@ public class VcrServer {
                 vcrClusterParticipant, scheduler, networkClientFactory, notificationSystem, storeKeyConverterFactory);
       } else {
         // Invalid backup version
-        throw new RuntimeException(String.format("Invalid azure backup version %s", cloudConfig.azureBackupVersion));
+        throw new RuntimeException(String.format("Invalid azure backup version %s", cloudConfig.ambryBackupVersion));
       }
       vcrReplicationManager.start();
 

@@ -117,12 +117,12 @@ public class CloudConfig {
   /**
    * Azure backup version
    */
-  public static final String AZURE_BACKUP_VERSION = "azure.backup.version";
-  public static final String AZURE_BACKUP_VERSION_1 = "1.0";
-  public static final String AZURE_BACKUP_VERSION_2 = "2.0";
-  public static final String DEFAULT_AZURE_BACKUP_VERSION = AZURE_BACKUP_VERSION_1;
-  @Config(AZURE_BACKUP_VERSION)
-  public final String azureBackupVersion;
+  public static final String AMBRY_BACKUP_VERSION = "azure.backup.version";
+  public static final String AMBRY_BACKUP_VERSION_1 = "1.0";
+  public static final String AMBRY_BACKUP_VERSION_2 = "2.0";
+  public static final String DEFAULT_AMBRY_BACKUP_VERSION = AMBRY_BACKUP_VERSION_1;
+  @Config(AMBRY_BACKUP_VERSION)
+  public final String ambryBackupVersion;
 
   /**
    * True for VCR node, false for live serving node.
@@ -439,7 +439,7 @@ public class CloudConfig {
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
-    azureBackupVersion = verifiableProperties.getString(AZURE_BACKUP_VERSION, DEFAULT_AZURE_BACKUP_VERSION);
+    ambryBackupVersion = verifiableProperties.getString(AMBRY_BACKUP_VERSION, DEFAULT_AMBRY_BACKUP_VERSION);
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
     cloudDestinationFactoryClass =
         verifiableProperties.getString(CLOUD_DESTINATION_FACTORY_CLASS, DEFAULT_CLOUD_DESTINATION_FACTORY_CLASS);
