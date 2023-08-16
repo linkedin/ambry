@@ -81,7 +81,7 @@ public class AzureStoreManager implements StoreManager {
   protected void testAzureStorageConnectivity() {
     PagedIterable<BlobContainerItem> blobContainerItemPagedIterable = azureStorageClient.listBlobContainers();
     for (BlobContainerItem blobContainerItem : blobContainerItemPagedIterable) {
-      logger.info("blobContainer = {}", blobContainerItem.getName());
+      logger.info("Azure blob storage container = {}", blobContainerItem.getName());
       break;
     }
   }
@@ -97,12 +97,12 @@ public class AzureStoreManager implements StoreManager {
       blobContainerClient = azureStorageClient.getBlobContainerClient(String.valueOf(partitionId.getId()));
     } catch (BlobStorageException blobStorageException) {
       if (blobStorageException.getErrorCode().equals(BlobErrorCode.CONTAINER_NOT_FOUND)) {
-        logger.error("Blob container for partition {} not found due to {}", partitionId.getId(),
+        logger.error("Azure blob storage container for partition {} not found due to {}", partitionId.getId(),
             blobStorageException.getServiceMessage());
         return null;
       }
       vcrMetrics.azureStoreContainerGetError.inc();
-      logger.error("Failed to get blob container for partition {} due to {}", partitionId.getId(),
+      logger.error("Failed to get Azure blob storage container for partition {} due to {}", partitionId.getId(),
           blobStorageException.getServiceMessage());
       throw blobStorageException;
     }
@@ -120,11 +120,11 @@ public class AzureStoreManager implements StoreManager {
       blobContainerClient = azureStorageClient.createBlobContainer(String.valueOf(partitionId.getId()));
     } catch (BlobStorageException blobStorageException) {
       if (blobStorageException.getErrorCode().equals(BlobErrorCode.CONTAINER_ALREADY_EXISTS)) {
-        logger.info("Blob container for partition {} already exists", partitionId.getId());
+        logger.info("Azure blob storage container for partition {} already exists", partitionId.getId());
         return getBlobStore(partitionId);
       }
       vcrMetrics.azureStoreContainerGetError.inc();
-      logger.error("Failed to create blob container for partition {} due to {}", partitionId.getId(),
+      logger.error("Failed to create Azure blob storage container for partition {} due to {}", partitionId.getId(),
           blobStorageException.getServiceMessage());
       throw blobStorageException;
     }
@@ -151,7 +151,7 @@ public class AzureStoreManager implements StoreManager {
     // If it is still null, throw the error and emit a metric
     if (blobContainerClient == null) {
       vcrMetrics.azureStoreContainerGetError.inc();
-      String errMsg = String.format("Blob container for partition %s is null", partitionId.getId());
+      String errMsg = String.format("Azure blob storage container for partition %s is null", partitionId.getId());
       logger.error(errMsg);
       throw new RuntimeException(errMsg);
     }
