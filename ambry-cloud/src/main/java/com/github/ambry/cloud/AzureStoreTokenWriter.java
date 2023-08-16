@@ -35,8 +35,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Implements methods to persist {@link com.github.ambry.replication.RemoteReplicaInfo.ReplicaTokenInfo} to Azure
  */
-public class AzureStorageTokenWriter extends ReplicaTokenPersistor {
-  private static final Logger logger = LoggerFactory.getLogger(AzureStorageTokenWriter.class);
+public class AzureStoreTokenWriter extends ReplicaTokenPersistor {
+  private static final Logger logger = LoggerFactory.getLogger(AzureStoreTokenWriter.class);
 
   /**
    * Constructor
@@ -46,7 +46,8 @@ public class AzureStorageTokenWriter extends ReplicaTokenPersistor {
    * @param clusterMap
    * @param findTokenHelper
    */
-  public AzureStorageTokenWriter(Map<String, Set<PartitionInfo>> partitionGroupedByMountPath, VerifiableProperties properties, ReplicationMetrics replicationMetrics, ClusterMap clusterMap,
+  public AzureStoreTokenWriter(Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
+      VerifiableProperties properties, ReplicationMetrics replicationMetrics, ClusterMap clusterMap,
       FindTokenHelper findTokenHelper) {
     super(partitionGroupedByMountPath, replicationMetrics, clusterMap, findTokenHelper);
     CloudConfig cloudConfig = new CloudConfig(properties);

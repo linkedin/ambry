@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Implements methods to write {@link com.github.ambry.clustermap.AmbryPartition} in Azure blob storage.
  */
-public class AzureStorage implements Store {
+public class AzureStore implements Store {
 
   private final ClusterMap clusterMap;
   private final AzureMetrics azureMetrics;
@@ -51,9 +51,9 @@ public class AzureStorage implements Store {
   private final AzureCloudConfig azureCloudConfig;
   private final Object vcrMetrics;
   private final BlobContainerClient blobContainerClient;
-  private static final Logger logger = LoggerFactory.getLogger(AzureStorage.class);
+  private static final Logger logger = LoggerFactory.getLogger(AzureStore.class);
 
-  public AzureStorage(VerifiableProperties properties, MetricRegistry metricRegistry, ClusterMap clusterMap,
+  public AzureStore(VerifiableProperties properties, MetricRegistry metricRegistry, ClusterMap clusterMap,
       BlobContainerClient blobContainerClient) {
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.cloudConfig = new CloudConfig(properties);

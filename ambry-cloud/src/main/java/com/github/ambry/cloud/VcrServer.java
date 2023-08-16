@@ -216,10 +216,10 @@ public class VcrServer {
             serverConfig.serverMessageTransformer);
       } else if (cloudConfig.azureBackupVersion.equals(CloudConfig.AZURE_BACKUP_VERSION_2)) {
         // Backup 2.0
-        vcrClusterParticipant = new AzureStorageHelixParticipant(properties, registry, clusterMap, accountService);
-        cloudStorageManager = new AzureStorageManager(properties, registry, clusterMap);
+        vcrClusterParticipant = new AzureStoreHelixParticipant(properties, registry, clusterMap, accountService);
+        cloudStorageManager = new AzureStoreManager(properties, registry, clusterMap);
         vcrReplicationManager =
-            new AzureStorageReplicationManager(properties, registry, clusterMap, cloudStorageManager, storeKeyFactory,
+            new AzureStoreReplicationManager(properties, registry, clusterMap, cloudStorageManager, storeKeyFactory,
                 vcrClusterParticipant, scheduler, networkClientFactory, notificationSystem, storeKeyConverterFactory);
       } else {
         // Invalid backup version

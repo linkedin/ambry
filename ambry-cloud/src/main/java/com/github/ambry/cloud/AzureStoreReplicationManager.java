@@ -49,7 +49,7 @@ import java.util.function.Predicate;
 /**
  * Manages replication from servers to VCR
  */
-public class AzureStorageReplicationManager extends VcrReplicationManager {
+public class AzureStoreReplicationManager extends VcrReplicationManager {
 
   /**
    * Constructor
@@ -66,13 +66,17 @@ public class AzureStorageReplicationManager extends VcrReplicationManager {
    * @throws ReplicationException
    * @throws IllegalStateException
    */
-  public AzureStorageReplicationManager(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
+  public AzureStoreReplicationManager(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
       StoreManager storeManager, StoreKeyFactory storeKeyFactory, VcrClusterParticipant vcrClusterParticipant,
-      ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
+      ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
       throws ReplicationException, IllegalStateException {
-    super(new CloudConfig(properties), new ReplicationConfig(properties), new ClusterMapConfig(properties), new StoreConfig(properties), storeManager, storeKeyFactory, clusterMap, vcrClusterParticipant, scheduler,
-        networkClientFactory, new VcrMetrics(registry), requestNotification, storeKeyConverterFactory, new ServerConfig(properties).serverMessageTransformer);
-    this.persistor = new AzureStorageTokenWriter(mountPathToPartitionInfos, properties, replicationMetrics, clusterMap, tokenHelper);
+    super(new CloudConfig(properties), new ReplicationConfig(properties), new ClusterMapConfig(properties),
+        new StoreConfig(properties), storeManager, storeKeyFactory, clusterMap, vcrClusterParticipant, scheduler,
+        networkClientFactory, new VcrMetrics(registry), requestNotification, storeKeyConverterFactory,
+        new ServerConfig(properties).serverMessageTransformer);
+    this.persistor =
+        new AzureStoreTokenWriter(mountPathToPartitionInfos, properties, replicationMetrics, clusterMap, tokenHelper);
   }
 
   @Override
@@ -81,13 +85,13 @@ public class AzureStorageReplicationManager extends VcrReplicationManager {
   }
 
   /**
-   * Returns {@link AzureStorageReplicationThread}
+   * Returns {@link AzureStoreReplicationThread}
    */
   protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate, ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    return new AzureStorageReplicationThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+    return new AzureStoreReplicationThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
         networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
         metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin, this.persistor);

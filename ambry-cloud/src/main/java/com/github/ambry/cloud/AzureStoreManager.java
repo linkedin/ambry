@@ -40,11 +40,11 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Storage manager that tracks {@link AzureStorage} objects.
+ * Storage manager that tracks {@link AzureStore} objects.
  */
-public class AzureStorageManager implements StoreManager {
-  private static final Logger logger = LoggerFactory.getLogger(CloudStorageManager.class);
-  protected final ConcurrentHashMap<PartitionId, AzureStorage> partitionToAzureStorage;
+public class AzureStoreManager implements StoreManager {
+  private static final Logger logger = LoggerFactory.getLogger(AzureStoreManager.class);
+  protected final ConcurrentHashMap<PartitionId, AzureStore> partitionToAzureStorage;
   protected final MetricRegistry metricRegistry;
   protected final CloudConfig cloudConfig;
   protected final AzureCloudConfig azureCloudConfig;
@@ -59,7 +59,7 @@ public class AzureStorageManager implements StoreManager {
    * @param metricRegistry Metrics
    * @param clusterMap Cluster-map
    */
-  public AzureStorageManager(VerifiableProperties properties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
+  public AzureStoreManager(VerifiableProperties properties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
     this.partitionToAzureStorage = new ConcurrentHashMap<>();
     this.metricRegistry = metricRegistry;
     this.azureMetrics = new AzureMetrics(metricRegistry);
@@ -67,9 +67,10 @@ public class AzureStorageManager implements StoreManager {
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.properties = properties;
     this.clusterMap = clusterMap;
-    this.azureStorageClient = new ConnectionStringBasedStorageClient(cloudConfig, azureCloudConfig, azureMetrics).getStorageSyncClient();
+    this.azureStorageClient =
+        new ConnectionStringBasedStorageClient(cloudConfig, azureCloudConfig, azureMetrics).getStorageSyncClient();
     testAzureStorageConnectivity();
-    logger.info("Created AzureStorageManager");
+    logger.info("Created AzureStoreManager");
   }
 
   /**
@@ -129,10 +130,10 @@ public class AzureStorageManager implements StoreManager {
   /**
    * Creates an object that stores blobs in Azure blob storage
    * @param partitionId Partition ID
-   * @return {@link AzureStorage}
+   * @return {@link AzureStore}
    */
-  protected AzureStorage createOrGetBlobStore(PartitionId partitionId) {
-    AzureStorage storage = partitionToAzureStorage.get(partitionId);
+  protected AzureStore createOrGetBlobStore(PartitionId partitionId) {
+    AzureStore storage = partitionToAzureStorage.get(partitionId);
     if (storage != null) {
       return storage;
     }
@@ -149,16 +150,16 @@ public class AzureStorageManager implements StoreManager {
       throw new RuntimeException(errMsg);
     }
 
-    storage = new AzureStorage(properties, metricRegistry, clusterMap, blobContainerClient);
+    storage = new AzureStore(properties, metricRegistry, clusterMap, blobContainerClient);
     partitionToAzureStorage.put(partitionId, storage);
     return storage;
   }
 
   /**
-   * Creates a {@link AzureStorage} object for a replica if absent.
-   * Else, returns the existing {@link AzureStorage} for the replica.
+   * Creates a {@link AzureStore} object for a replica if absent.
+   * Else, returns the existing {@link AzureStore} for the replica.
    * @param replica the {@link ReplicaId} of the {@link Store} which would be added.
-   * @return True if created {@link AzureStorage} object, false otherwise.
+   * @return True if created {@link AzureStore} object, false otherwise.
    */
   @Override
   public boolean addBlobStore(ReplicaId replica) {
@@ -166,9 +167,9 @@ public class AzureStorageManager implements StoreManager {
   }
 
   /**
-   * Removes {@link AzureStorage} for a replica if it exists
+   * Removes {@link AzureStore} for a replica if it exists
    * @param id the {@link PartitionId} associated with store
-   * @return True if removed {@link AzureStorage} object, false otherwise.
+   * @return True if removed {@link AzureStore} object, false otherwise.
    */
   @Override
   public boolean removeBlobStore(PartitionId id) {
@@ -176,10 +177,10 @@ public class AzureStorageManager implements StoreManager {
   }
 
   /**
-   * Creates a {@link AzureStorage} object for a replica if absent.
-   * Else, returns the existing {@link AzureStorage} for the replica.
+   * Creates a {@link AzureStore} object for a replica if absent.
+   * Else, returns the existing {@link AzureStore} for the replica.
    * @param id the {@link PartitionId} to find the store for.
-   * @return The {@link AzureStorage} for the given partition
+   * @return The {@link AzureStore} for the given partition
    */
   @Override
   public Store getStore(PartitionId id) {

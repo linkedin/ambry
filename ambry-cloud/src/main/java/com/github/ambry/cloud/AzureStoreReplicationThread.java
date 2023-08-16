@@ -41,18 +41,21 @@ import java.util.function.Predicate;
 /**
  * Replicates from server to VCR
  */
-public class AzureStorageReplicationThread extends ReplicaThread {
+public class AzureStoreReplicationThread extends ReplicaThread {
 
-  private final AzureStorageTokenWriter tokenWriter;
+  private final AzureStoreTokenWriter tokenWriter;
 
-  public AzureStorageReplicationThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
-      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate, ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, ReplicaTokenPersistor tokenWriter) {
+  public AzureStoreReplicationThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
+      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, ReplicaTokenPersistor tokenWriter) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-    this.tokenWriter = (AzureStorageTokenWriter) tokenWriter;
+    this.tokenWriter = (AzureStoreTokenWriter) tokenWriter;
   }
 
   /**
