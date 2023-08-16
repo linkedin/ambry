@@ -949,9 +949,14 @@ public class HelixClusterManagerTest {
     // Should have only one Resource when bootup
     List<String> resourceNames = helixCluster.getResources(localDc);
     assertEquals("Should only have one resource when bootup", 1, resourceNames.size());
+    String resourceName = resourceNames.get(0);
+    String totalInstanceMetricName =
+        MetricRegistry.name(HelixClusterManager.class, "Resource_" + resourceName + "_TotalInstanceCount");
+    // Make sure that we don't have any FULL AUTO related metrics
+    MetricRegistry registry = helixClusterManager.getMetricRegistry();
+    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
 
     // Update the IdealState to CUSTOMIZED mode, this would keep all local data node as they were.
-    String resourceName = resourceNames.get(0);
     IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
     // Update idealState here would impact the IdealState in the helixCluster since they reference to the same object
     idealState.setRebalanceMode(IdealState.RebalanceMode.CUSTOMIZED);
@@ -961,14 +966,9 @@ public class HelixClusterManagerTest {
       assertFalse("Customized mode, local node should not on FULL_AUTO",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
+    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
 
-    // Now update resource to FULL_AUTO
-    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-    helixCluster.refreshIdealState();
-    for (DataNode dataNode : allLocalDcDataNodes) {
-      assertFalse("IdealState is on FULL_AUTO, but there is no tag for resource",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
-    }
+
     // Now update resource to have a tag
     final String instanceGroupTag = "TAG_1000000";
     idealState.setInstanceGroupTag(instanceGroupTag);
@@ -977,6 +977,7 @@ public class HelixClusterManagerTest {
       assertFalse("IdealState is on FULL_AUTO with tag, but instances don't have tags",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
+    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
 
     // Now update data node to have the same tag
     for (DataNode dataNode : allLocalDcDataNodes) {
@@ -984,8 +985,18 @@ public class HelixClusterManagerTest {
       InstanceConfig instanceConfig =
           helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
       instanceConfig.addTag(instanceGroupTag);
-      assertTrue("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+      assertFalse("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
+    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
+
+    // Now update resource to FULL_AUTO
+    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    helixCluster.refreshIdealState();
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertTrue("IdealState is on FULL_AUTO, but there is no tag for resource",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+    assertTrue(registry.getGauges().keySet().contains(totalInstanceMetricName));
 
     // Now update data node to have another tag
     for (DataNode dataNode : allLocalDcDataNodes) {
@@ -1018,6 +1029,7 @@ public class HelixClusterManagerTest {
     // Now update data node to has the same tag but switch resource back to semi auto
     idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
     helixCluster.refreshIdealState();
+    assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
     for (DataNode dataNode : allLocalDcDataNodes) {
       String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
       InstanceConfig instanceConfig =

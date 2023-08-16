@@ -164,7 +164,7 @@ public class HelixBootstrapUpgradeUtil {
   private static final String ALL = "all";
 
   // Waged auto rebalancer default configs
-  static final String DISK_KEY = "DISK";
+  static final String DISK_KEY = ClusterMapUtils.DISK_KEY;
   static final String RACK_KEY = "rack";
   static final String HOST_KEY = "host";
   static final String TOPOLOGY = "/" + RACK_KEY + "/" + HOST_KEY;

@@ -19,7 +19,9 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.HelixClusterManager.HelixClusterManagerQueryHelper;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 
 /**
@@ -30,8 +32,9 @@ class HelixClusterManagerMetrics {
   private final MetricRegistry registry;
 
   public final Counter liveInstanceChangeTriggerCount;
-  public final Counter instanceConfigChangeTriggerCount;
+  public final Counter dataNodeConfigChangeTriggerCount;
   public final Counter idealStateChangeTriggerCount;
+  public final Counter instanceConfigChangeTriggerCount;
   public final Counter routingTableChangeTriggerCount;
   public final Counter getPartitionIdFromStreamMismatchCount;
   public final Counter getWritablePartitionIdsMismatchCount;
@@ -61,10 +64,12 @@ class HelixClusterManagerMetrics {
     this.registry = registry;
     liveInstanceChangeTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "liveInstanceChangeTriggerCount"));
-    instanceConfigChangeTriggerCount =
-        registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceConfigChangeTriggerCount"));
+    dataNodeConfigChangeTriggerCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "dataNodeConfigChangeTriggerCount"));
     idealStateChangeTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "idealStateChangeTriggerCount"));
+    instanceConfigChangeTriggerCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceConfigChangeTriggerCount"));
     routingTableChangeTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "routingTableChangeTriggerCount"));
     getPartitionIdFromStreamMismatchCount =
@@ -86,25 +91,24 @@ class HelixClusterManagerMetrics {
     ignoredUpdatesCount = registry.counter(MetricRegistry.name(HelixClusterManager.class, "ignoredUpdatesCount"));
     instanceConfigChangeErrorCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceConfigChangeErrorCount"));
-    routingTableQueryTime =
-        registry.timer(MetricRegistry.name(HelixClusterManager.class, "routingTableQueryTime"));
+    routingTableQueryTime = registry.timer(MetricRegistry.name(HelixClusterManager.class, "routingTableQueryTime"));
     instanceDeleteTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceDeleteTriggerCount"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated, final long instantiationExceptionCount) {
     helixClusterManagerInstantiationFailed = () -> instantiated ? 0L : 1L;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "instantiationFailed"),
-        helixClusterManagerInstantiationFailed);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "instantiationFailed"),
+        () -> helixClusterManagerInstantiationFailed);
 
     helixClusterManagerRemoteInstantiationFailed = () -> instantiationExceptionCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "instantiationExceptionCount"),
-        helixClusterManagerRemoteInstantiationFailed);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "instantiationExceptionCount"),
+        () -> helixClusterManagerRemoteInstantiationFailed);
   }
 
   void initializeXidMetric(final AtomicLong currentXid) {
     helixClusterManagerCurrentXid = currentXid::get;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "currentXid"), helixClusterManagerCurrentXid);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "currentXid"), () -> helixClusterManagerCurrentXid);
   }
 
   /**
@@ -112,7 +116,7 @@ class HelixClusterManagerMetrics {
    */
   void initializeDatacenterMetrics() {
     Gauge<Long> datacenterCount = clusterMapCallback::getDatacenterCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "datacenterCount"), datacenterCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "datacenterCount"), () -> datacenterCount);
   }
 
   /**
@@ -120,15 +124,15 @@ class HelixClusterManagerMetrics {
    */
   void initializeDataNodeMetrics() {
     Gauge<Long> dataNodeCount = clusterMapCallback::getDatanodeCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "dataNodeCount"), dataNodeCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "dataNodeCount"), () -> dataNodeCount);
 
     Gauge<Long> dataNodeDownCount = clusterMapCallback::getDownDatanodesCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "dataNodeDownCount"), dataNodeDownCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "dataNodeDownCount"), () -> dataNodeDownCount);
 
     for (final AmbryDataNode datanode : clusterMapCallback.getDatanodes()) {
       final String metricName = datanode.getHostname() + "-" + datanode.getPort() + "-DataNodeResourceState";
       Gauge<Long> dataNodeState = () -> datanode.getState() == HardwareState.AVAILABLE ? 1L : 0L;
-      registry.register(MetricRegistry.name(HelixClusterManager.class, metricName), dataNodeState);
+      registry.gauge(MetricRegistry.name(HelixClusterManager.class, metricName), () -> dataNodeState);
     }
   }
 
@@ -137,10 +141,10 @@ class HelixClusterManagerMetrics {
    */
   void initializeDiskMetrics() {
     Gauge<Long> diskCount = clusterMapCallback::getDiskCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "diskCount"), diskCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "diskCount"), () -> diskCount);
 
     Gauge<Long> diskDownCount = clusterMapCallback::getDownDisksCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "diskDownCount"), diskDownCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "diskDownCount"), () -> diskDownCount);
   }
 
   /**
@@ -148,18 +152,18 @@ class HelixClusterManagerMetrics {
    */
   void initializePartitionMetrics() {
     Gauge<Long> partitionCount = clusterMapCallback::getPartitionCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "partitionCount"), partitionCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "partitionCount"), () -> partitionCount);
 
     Gauge<Long> partitionReadWriteCount = clusterMapCallback::getPartitionReadWriteCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "partitionReadWriteCount"),
-        partitionReadWriteCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "partitionReadWriteCount"),
+        () -> partitionReadWriteCount);
 
     Gauge<Long> partitionSealedCount = clusterMapCallback::getPartitionSealedCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "partitionSealedCount"), partitionSealedCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "partitionSealedCount"), () -> partitionSealedCount);
 
     Gauge<Long> partitionPartiallySealedCount = clusterMapCallback::getPartitionPartiallySealedCount;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "partitionPartiallySealedCount"),
-        partitionPartiallySealedCount);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "partitionPartiallySealedCount"),
+        () -> partitionPartiallySealedCount);
 
     Gauge<Long> isMajorityReplicasDownForAnyPartition = () -> {
       for (PartitionId partition : clusterMapCallback.getPartitions()) {
@@ -177,8 +181,8 @@ class HelixClusterManagerMetrics {
       }
       return 0L;
     };
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "isMajorityReplicasDownForAnyPartition"),
-        isMajorityReplicasDownForAnyPartition);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "isMajorityReplicasDownForAnyPartition"),
+        () -> isMajorityReplicasDownForAnyPartition);
   }
 
   /**
@@ -186,13 +190,60 @@ class HelixClusterManagerMetrics {
    */
   void initializeCapacityMetrics() {
     Gauge<Long> rawTotalCapacityInBytes = clusterMapCallback::getRawCapacity;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "rawTotalCapacityBytes"), rawTotalCapacityInBytes);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "rawTotalCapacityBytes"),
+        () -> rawTotalCapacityInBytes);
+
     Gauge<Long> allocatedRawCapacityInBytes = clusterMapCallback::getAllocatedRawCapacity;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "allocatedRawCapacityBytes"),
-        allocatedRawCapacityInBytes);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "allocatedRawCapacityBytes"),
+        () -> allocatedRawCapacityInBytes);
 
     Gauge<Long> allocatedUsableCapacityInBytes = clusterMapCallback::getAllocatedUsableCapacity;
-    registry.register(MetricRegistry.name(HelixClusterManager.class, "allocatedUsableCapacityBytes"),
-        allocatedUsableCapacityInBytes);
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "allocatedUsableCapacityBytes"),
+        () -> allocatedUsableCapacityInBytes);
+  }
+
+  /**
+   * Register FULL AUTO related metrics.
+   * @param resources The resources this host belongs to.
+   * @param helixClusterManager The {@link HelixClusterManager}.
+   */
+  void registerMetricsForFullAuto(List<String> resources, HelixClusterManager helixClusterManager) {
+    // register resource metrics
+    for (String resource : resources) {
+      Gauge<Integer> totalInstanceCount = () -> helixClusterManager.getTotalInstanceCount(resource);
+      registry.gauge(MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_TotalInstanceCount"),
+          () -> totalInstanceCount);
+
+      Gauge<Integer> liveInstanceCount = () -> helixClusterManager.getLiveInstanceCount(resource);
+      registry.gauge(MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_LiveInstanceCount"),
+          () -> liveInstanceCount);
+
+      Gauge<Long> resourceTotalRegisteredHostDiskCapacity =
+          () -> helixClusterManager.getResourceTotalRegisteredHostDiskCapacity(resource);
+      registry.gauge(
+          MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_TotalRegisteredHostDiskCapacity"),
+          () -> resourceTotalRegisteredHostDiskCapacity);
+    }
+    // register host metrics
+    Gauge<Integer> registeredHostDiskCapacity = helixClusterManager::getRegisteredHostDiskCapacity;
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "RegisteredHostDiskCapacity"),
+        () -> registeredHostDiskCapacity);
+    Gauge<Integer> hostReplicaCount = helixClusterManager::getHostReplicaCount;
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "HostReplicaCount"), () -> hostReplicaCount);
+  }
+
+  /**
+   * Deregister FULL AUTO related metrics.
+   */
+  void deregisterMetricsForSemiAuto() {
+    Map<String, Gauge> allGauges = registry.getGauges();
+    List<String> resourceMetricNames =
+        allGauges.keySet().stream().filter(name -> name.contains("Resource_")).collect(Collectors.toList());
+    for (String metricName : resourceMetricNames) {
+      registry.remove(metricName);
+    }
+
+    registry.remove(MetricRegistry.name(HelixClusterManager.class, "RegisteredHostDiskCapacity"));
+    registry.remove(MetricRegistry.name(HelixClusterManager.class, "HostReplicaCount"));
   }
 }

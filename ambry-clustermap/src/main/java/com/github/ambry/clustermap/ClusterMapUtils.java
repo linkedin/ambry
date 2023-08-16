@@ -69,6 +69,7 @@ public class ClusterMapUtils {
   public static final String REPLICA_ADDITION_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + REPLICA_ADDITION_STR;
   public static final String PARTITION_DISABLED_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + PARTITION_DISABLED_STR + "/";
   public static final String FULL_AUTO_MIGRATION_ZNODE_PATH = ADMIN_CONFIG_ZNODE_PATH + FULL_AUTO_MIGRATION_STR;
+  static final String DISK_KEY = "DISK";
   static final String DISK_CAPACITY_STR = "capacityInBytes";
   static final String DISK_STATE = "diskState";
   static final String PARTITION_STATE = "state";

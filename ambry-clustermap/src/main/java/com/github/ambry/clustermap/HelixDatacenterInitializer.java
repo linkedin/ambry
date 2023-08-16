@@ -160,6 +160,11 @@ class HelixDatacenterInitializer {
         helixFactory.getDataNodeConfigSource(clusterMapConfig, zkConnectStr, dataNodeConfigSourceMetrics);
     dataNodeConfigSource.addDataNodeConfigChangeListener(clusterChangeHandler);
     logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
+    if (localManager == manager) {
+      // Local datacenter
+      manager.addInstanceConfigChangeListener(clusterChangeHandler);
+      logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
+    }
     manager.addIdealStateChangeListener(clusterChangeHandler);
     logger.info("Registered ideal state change listeners for Helix manager at {}", zkConnectStr);
     // Now register listeners to get notified on live instance change in every datacenter.
