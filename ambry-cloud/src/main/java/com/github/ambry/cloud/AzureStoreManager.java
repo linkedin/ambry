@@ -44,7 +44,7 @@ import org.slf4j.LoggerFactory;
  */
 public class AzureStoreManager implements StoreManager {
   private static final Logger logger = LoggerFactory.getLogger(AzureStoreManager.class);
-  protected final ConcurrentHashMap<PartitionId, AzureStore> partitionToAzureStorage;
+  protected final ConcurrentHashMap<PartitionId, AzureStore> partitionToAzureStore;
   protected final MetricRegistry metricRegistry;
   protected final CloudConfig cloudConfig;
   protected final AzureCloudConfig azureCloudConfig;
@@ -60,7 +60,7 @@ public class AzureStoreManager implements StoreManager {
    * @param clusterMap Cluster-map
    */
   public AzureStoreManager(VerifiableProperties properties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
-    this.partitionToAzureStorage = new ConcurrentHashMap<>();
+    this.partitionToAzureStore = new ConcurrentHashMap<>();
     this.metricRegistry = metricRegistry;
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.cloudConfig = new CloudConfig(properties);
@@ -133,9 +133,9 @@ public class AzureStoreManager implements StoreManager {
    * @return {@link AzureStore}
    */
   protected AzureStore createOrGetBlobStore(PartitionId partitionId) {
-    AzureStore storage = partitionToAzureStorage.get(partitionId);
-    if (storage != null) {
-      return storage;
+    AzureStore azureStore = partitionToAzureStore.get(partitionId);
+    if (azureStore != null) {
+      return azureStore;
     }
 
     BlobContainerClient blobContainerClient = getBlobStore(partitionId);
@@ -150,9 +150,9 @@ public class AzureStoreManager implements StoreManager {
       throw new RuntimeException(errMsg);
     }
 
-    storage = new AzureStore(properties, metricRegistry, clusterMap, blobContainerClient);
-    partitionToAzureStorage.put(partitionId, storage);
-    return storage;
+    azureStore = new AzureStore(properties, metricRegistry, clusterMap, blobContainerClient);
+    partitionToAzureStore.put(partitionId, azureStore);
+    return azureStore;
   }
 
   /**
@@ -173,7 +173,7 @@ public class AzureStoreManager implements StoreManager {
    */
   @Override
   public boolean removeBlobStore(PartitionId id) {
-    return partitionToAzureStorage.remove(id, partitionToAzureStorage.get(id));
+    return partitionToAzureStore.remove(id, partitionToAzureStore.get(id));
   }
 
   /**
