@@ -86,6 +86,7 @@ public class StorageManager implements StoreManager {
   private final Set<String> unexpectedDirs = new HashSet<>();
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
   private final AccountService accountService;
+  private DiskFailureHandler diskFailureHandler;
   private Runnable terminateCallback = null;
 
   /**
@@ -219,9 +220,10 @@ public class StorageManager implements StoreManager {
 
       // Add the background task to update the disk capacity
       if (storeConfig.storeDiskFailureHandlerEnabled) {
-        DiskFailureHandler diskFailureHandler = new DiskFailureHandler();
+        diskFailureHandler = new DiskFailureHandler();
         scheduler.scheduleAtFixedRate(diskFailureHandler, storeConfig.storeDiskFailureHandlerTaskIntervalInSeconds,
             storeConfig.storeDiskFailureHandlerTaskIntervalInSeconds, TimeUnit.SECONDS);
+        metrics.initializeFailedDiskCount(this);
       }
       logger.info("Starting storage manager complete");
     } finally {
@@ -445,7 +447,7 @@ public class StorageManager implements StoreManager {
       totalDiskAvailableSpace += diskId.getAvailableSpaceInBytes();
     }
 
-    return (double) ((totalDiskCapacity - totalDiskAvailableSpace) / totalDiskCapacity) * 100;
+    return (double) (totalDiskCapacity - totalDiskAvailableSpace) / totalDiskCapacity * 100;
   }
 
   /**
@@ -459,6 +461,13 @@ public class StorageManager implements StoreManager {
       }
     }
     return count;
+  }
+
+  /**
+   * @return The number of failed disks
+   */
+  int getFailedDiskCount() {
+    return diskFailureHandler != null ? diskFailureHandler.getFailedDisksCount() : 0;
   }
 
   /**
@@ -877,6 +886,10 @@ public class StorageManager implements StoreManager {
 
     List<DiskId> getFailedDisks() {
       return new ArrayList<>(failedDisks);
+    }
+
+    int getFailedDisksCount() {
+      return failedDisks.size();
     }
 
     @Override

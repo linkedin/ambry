@@ -46,6 +46,7 @@ import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.api.listeners.IdealStateChangeListener;
+import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.RoutingTableChangeListener;
 import org.apache.helix.model.IdealState;
@@ -94,7 +95,6 @@ public class HelixClusterManager implements ClusterMap {
   // Routing table snapshot reference used in aggregated cluster view.
   private final AtomicReference<RoutingTableSnapshot> globalRoutingTableSnapshotRef = new AtomicReference<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
-  private final Map<String, ConcurrentHashMap<String, Set<String>>> dcToInstanceNameToTags = new ConcurrentHashMap<>();
   private final Map<String, ConcurrentHashMap<String, ResourceProperty>> dcToTagToResourceProperty =
       new ConcurrentHashMap<>();
   private final AtomicLong errorCount = new AtomicLong(0);
@@ -116,9 +116,15 @@ public class HelixClusterManager implements ClusterMap {
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private HelixAggregatedViewClusterInfo helixAggregatedViewClusterInfo = null;
 
-  // In FULL_AUTO mode, the resource configs. We probably only need to fetch one resource config, which this
-  // data node belongs to (This data node has to be a server node).
+  // The map from resource name to resource config, This is only used in FULL AUTO. This map is not going to be updated
+  // if the ResourceConfig is updated, but we are only using default replica capacity from the ResourceConfig. So if you
+  // update the default replica capacity in ResourceConfig, you have to restart the process for this map to get updated.
+  // And this map doesn't store any resources from other datacenter.
+  //
+  // We probably only need to fetch one resource config, which this data node belongs to (This data node has to be a server node).
   private final ConcurrentHashMap<String, ResourceConfig> resourceConfigs = new ConcurrentHashMap<>();
+
+  private final ConcurrentHashMap<String, Set<String>> instanceNameToTags = new ConcurrentHashMap<>();
 
   /**
    * Instantiate a HelixClusterManager.
@@ -1146,7 +1152,7 @@ public class HelixClusterManager implements ClusterMap {
    */
   class HelixClusterChangeHandler
       implements DataNodeConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
-                 RoutingTableChangeListener {
+                 RoutingTableChangeListener, InstanceConfigChangeListener {
     // Data center for which the callback events correspond to.
     private final String dcName;
     // Helix cluster name which keeps track of Ambry topology information.
@@ -1200,6 +1206,11 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public void onLiveInstanceChange(List<LiveInstance> liveInstances, NotificationContext changeContext) {
       handleLiveInstanceChange(liveInstances);
+    }
+
+    @Override
+    public void onInstanceConfigChange(List<InstanceConfig> instanceConfigs, NotificationContext context) {
+      handleInstanceConfigChange(instanceConfigs);
     }
 
     /**
@@ -1364,6 +1375,10 @@ public class HelixClusterManager implements ClusterMap {
       }
 
       helixClusterManagerMetrics.routingTableChangeTriggerCount.inc();
+    }
+
+    public void handleInstanceConfigChange(List<InstanceConfig> instanceConfigs) {
+
     }
 
     /**
