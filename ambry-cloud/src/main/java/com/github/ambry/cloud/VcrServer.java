@@ -197,7 +197,7 @@ public class VcrServer {
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
 
-      logger.info("Azure backup version = {}", cloudConfig.ambryBackupVersion);
+      logger.info("Ambry backup version = {}", cloudConfig.ambryBackupVersion);
       if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
         // Backup 1.0
         if (cloudDestinationFactory == null) {
