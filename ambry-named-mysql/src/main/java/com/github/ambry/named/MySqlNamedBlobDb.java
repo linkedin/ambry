@@ -360,6 +360,31 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
+  public CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state) {
+    return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
+        (accountId, containerId, connection) -> {
+          long startTime = this.time.milliseconds();
+          // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
+          logger.trace("NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}'", accountId, containerId,
+              record.getBlobName());
+          //for ttl update, get the blob id first before insert a new record.
+          NamedBlobRecord recordCurrent;
+          try {
+            recordCurrent =
+                run_get_v2(record.getAccountName(), record.getContainerName(), record.getBlobName(), GetOption.None,
+                    accountId, containerId, connection);
+          } catch (RestServiceException e) {
+            throw buildException("Failed to do ttl update due to not able to found existing record", e.getErrorCode(),
+                record.getAccountName(), record.getContainerName(), record.getBlobName());
+          }
+          record.setBlobId(recordCurrent.getBlobId());
+          PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
+          metricsRecoder.namedBlobPutTimeInMs.update(this.time.milliseconds() - startTime);
+          return putResult;
+        }, null);
+  }
+
+  @Override
   public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {

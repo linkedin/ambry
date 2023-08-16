@@ -31,7 +31,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -159,8 +158,8 @@ public class AccountAndContainerInjector {
           "Named blob APIs disabled for this container. account=" + accountName + ", container=" + containerName,
           RestServiceErrorCode.BadRequest);
     }
-    if (targetContainer.getNamedBlobMode() == Container.NamedBlobMode.NO_UPDATE &&
-        RestUtils.isUpsertForNamedBlob(restRequest.getArgs())) {
+    if (targetContainer.getNamedBlobMode() == Container.NamedBlobMode.NO_UPDATE && RestUtils.isUpsertForNamedBlob(
+        restRequest.getArgs())) {
       throw new RestServiceException(
           "Named blob APIs Upsert disabled for this container. account=" + accountName + ", container=" + containerName,
           RestServiceErrorCode.BadRequest);

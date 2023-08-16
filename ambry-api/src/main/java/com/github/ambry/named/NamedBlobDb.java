@@ -85,6 +85,8 @@ public interface NamedBlobDb extends Closeable {
     return put(record, NamedBlobState.READY, false);
   }
 
+  CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state);
+
   /**
    * Update a {@link NamedBlobRecord}'s state to READY in the database.
    * @param record the {@link NamedBlobRecord}

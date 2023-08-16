@@ -29,6 +29,7 @@ import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -162,6 +163,25 @@ public class MySqlNamedBlobDbTest {
 
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());
+  }
+
+  /**
+   * Test update ttl for named blob.
+   * @throws Exception
+   */
+  @Test
+  public void testUpdateTtlForNamedBlob() throws Exception {
+    dataSourceFactory.setLocalDatacenter(foundDatacenter);
+    dataSourceFactory.triggerDataResultSet(datacenters);
+    long expirationTimeMs = System.currentTimeMillis() + 3600;
+    NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), "blobName", id, expirationTimeMs);
+    namedBlobDb.put(record, NamedBlobState.READY, true).get();
+    assertEquals("Mismatch on expiration time", expirationTimeMs , record.getExpirationTimeMs());
+    PutResult putResult = namedBlobDb.ttlUpdate(record, NamedBlobState.IN_PROGRESS).get();
+    record.setVersion(putResult.getInsertedRecord().getVersion());
+    namedBlobDb.updateBlobStateToReady(record).get();
+    record = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
+    assertEquals("Mismatch on expiration time", Utils.Infinite_Time , record.getExpirationTimeMs());
   }
 
   /**

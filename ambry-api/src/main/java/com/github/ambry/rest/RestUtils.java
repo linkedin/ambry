@@ -175,6 +175,8 @@ public class RestUtils {
      * for put or get dataset request; long; version of dataset.
      */
     public final static String TARGET_DATASET_VERSION = "x-ambry-target-dataset-version";
+
+    public final static String DATASET_EXPIRATION_TIME = "x-ambry-dataset-expiration-time";
     /**
      * The page token parameter for a list dataset call.
      */
@@ -448,6 +450,11 @@ public class RestUtils {
      * The version for the NamedBlob record in MySQL DB
      */
     public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
+
+    /**
+     * The blob id for the NamedBlob record in MySQL DB.
+     */
+    public static final String NAMED_BLOB_MAPPED_ID = KEY_PREFIX + "named-blob-mapped-id";
   }
 
   /**

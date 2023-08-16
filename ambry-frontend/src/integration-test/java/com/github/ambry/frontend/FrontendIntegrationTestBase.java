@@ -289,6 +289,7 @@ public class FrontendIntegrationTestBase {
     String fakeBlobId = buildUriForNamedBlob(accountName, containerName, blobName);
     // check GET, HEAD, DELETE
     doVariousGetAndVerify(fakeBlobId, headers, false, content, 100, accountName, containerName, null, container);
+    updateBlobTtlAndVerify(fakeBlobId, headers, false, accountName, containerName, null, container);
     deleteBlobAndVerify(fakeBlobId);
 
     // check GET after DELETE
