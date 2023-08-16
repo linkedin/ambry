@@ -899,9 +899,11 @@ public class RouterConfig {
     routerRepairWithReplicateBlobOnDeleteEnabled =
         verifiableProperties.getBoolean(ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED, false);
     routerRepairRequestsDbFactory = verifiableProperties.getString(ROUTER_REPAIR_REQUESTS_DB_FACTORY, null);
-    routerTtlUpdateOfflineRepairEnabled =
-        verifiableProperties.getBoolean(ROUTER_TTLUPDATE_OFFLINE_REPAIR_ENABLED, false);
-    routerDeleteOfflineRepairEnabled = verifiableProperties.getBoolean(ROUTER_DELETE_OFFLINE_REPAIR_ENABLED, false);
+    routerTtlUpdateOfflineRepairEnabled = routerRepairRequestsDbFactory == null ? false
+        : verifiableProperties.getBoolean(ROUTER_TTLUPDATE_OFFLINE_REPAIR_ENABLED, false);
+    routerDeleteOfflineRepairEnabled = routerRepairRequestsDbFactory == null ? false
+        : verifiableProperties.getBoolean(ROUTER_DELETE_OFFLINE_REPAIR_ENABLED, false);
+
     routerGetBlobRetryLimitInSec = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC, 0, 0,
         ROUTER_GET_BLOB_RETRY_LIMIT_IN_SEC_MAX);
     routerGetBlobRetryLimitCount = verifiableProperties.getIntInRange(ROUTER_GET_BLOB_RETRY_LIMIT_COUNT, 0, 0,

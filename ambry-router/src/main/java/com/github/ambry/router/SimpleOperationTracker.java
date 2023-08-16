@@ -98,6 +98,8 @@ class SimpleOperationTracker implements OperationTracker {
   private final int originatingDcTotalReplicaCount;
   private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
   private final BlobId blobId;
+  // is that possible to run the offline repair?
+  private boolean possibleRunOfflineRepair;
 
   /**
    * Constructor for an {@code SimpleOperationTracker}. In constructor, there is a config allowing operation tracker to
@@ -349,8 +351,9 @@ class SimpleOperationTracker implements OperationTracker {
     Supplier<IllegalArgumentException> notEnoughReplicasException = () -> new IllegalArgumentException(
         generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck,
             routerOperation));
+    possibleRunOfflineRepair = possibleRunOfflineRepair(totalReplicaCount);
     if (totalReplicaCount < getSuccessTarget()) {
-      if (possibleRunOfflineRepair(totalReplicaCount)) {
+      if (possibleRunOfflineRepair) {
         logger.info("RepairRequest: Not enough quorum for delete but give it a try since offline repair is enabled {}",
             blobId);
       } else {
@@ -379,8 +382,9 @@ class SimpleOperationTracker implements OperationTracker {
    * @return true if it's possible to run offline repair for the Delete
    */
   public boolean possibleRunOfflineRepair(int eligibleReplicaCount) {
+    // LOCAL_CONSISTENCY_TODO: after enabled TtlUpdate offline repair in TtlUpdateOperation, add the condition here.
     return (eligibleReplicaCount >= 1 && routerOperation == RouterOperation.DeleteOperation
-        && routerConfig.routerDeleteOfflineRepairEnabled && routerConfig.routerRepairRequestsDbFactory != null);
+        && routerConfig.routerDeleteOfflineRepairEnabled);
   }
 
   /**
@@ -582,7 +586,7 @@ class SimpleOperationTracker implements OperationTracker {
       // if there is no possible way to use the remaining replicas to meet the success target,
       // deem the operation a failure.
       // For Delete, even there is not enough quorum, if offline repair is enabled, continue to run it.
-      if (possibleRunOfflineRepair(replicaInPoolOrFlightCount + replicaSuccessCount)) {
+      if (possibleRunOfflineRepair) {
         logger.trace("RepairRequest: continue to run as long as we have replicas {}", blobId);
         return replicaInPoolOrFlightCount <= 0;
       } else {
