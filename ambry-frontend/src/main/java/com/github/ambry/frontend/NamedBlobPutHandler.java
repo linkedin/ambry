@@ -640,27 +640,12 @@ public class NamedBlobPutHandler {
         List<DatasetVersionRecord> datasetVersionRecordList =
             accountService.getAllValidVersionsOutOfRetentionCount(accountName, containerName, datasetName);
         if (datasetVersionRecordList.size() > 0) {
+          WrappedRestRequest wrappedRestRequest = new WrappedRestRequest(restRequest);
           LOGGER.info(
               "Number of records need to be deleted due to out of retention count: " + datasetVersionRecordList.size()
                   + " for accountName: " + accountName + " containerName: " + containerName + " datasetName: "
                   + datasetName);
-          DatasetVersionRecord record = datasetVersionRecordList.get(0);
-          String version = record.getVersion();
-          RequestPath requestPath = getRequestPath(restRequest);
-          RequestPath newRequestPath =
-              new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                  NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
-                      + version, requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-          LOGGER.debug("New request path : " + newRequestPath);
-          // Replace RequestPath in the WrappedRestRequest for delete and call DeleteBlobHandler.handle.
-          WrappedRestRequest wrappedRestRequest = new WrappedRestRequest(restRequest);
-          wrappedRestRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-          wrappedRestRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
-          wrappedRestRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
-          //for delete out of retention request, we don't want to set anything to response channel.
-          deleteBlobHandler.handle(wrappedRestRequest, new NoOpResponseChannel(),
-              recursiveCallback(datasetVersionRecordList, 1, accountName, containerName, datasetName, callback,
-                  wrappedRestRequest));
+          recursiveDeleteDatasetVersions(wrappedRestRequest, datasetVersionRecordList, 0, callback);
         } else {
           callback.onCompletion(null, null);
         }
@@ -676,55 +661,49 @@ public class NamedBlobPutHandler {
      * Recursively delete the dataset version out of retention count at dataset level.
      * @param datasetVersionRecordList the list of the {@link DatasetVersionRecord}
      * @param idx the index of the datasetVersionRecordList
-     * @param accountName the name of the account.
-     * @param containerName the name of the container.
-     * @param datasetName the name of the dataset.
-     * @param wrappedRestRequest the {@link WrappedRestRequest} which always return DELETE for getRestMethod.
+     * @param restRequest the {@link RestRequest}
+     * @param processResponseCallback the call back to process response.
      */
-    private Callback<Void> recursiveCallback(List<DatasetVersionRecord> datasetVersionRecordList, int idx,
-        String accountName, String containerName, String datasetName, Callback<Void> processResponseCallback,
-        WrappedRestRequest wrappedRestRequest) {
+    private void recursiveDeleteDatasetVersions(RestRequest restRequest,
+        List<DatasetVersionRecord> datasetVersionRecordList, int idx, Callback<Void> processResponseCallback)
+        throws Exception {
       if (idx == datasetVersionRecordList.size()) {
-        return (r, e) -> {
-          LOGGER.debug("Complete recursive callback for " + idx + " number of dataset version");
-          //make sure to process response delete is done.
-          processResponseCallback.onCompletion(null, null);
-        };
+        LOGGER.debug("Complete recursive callback for " + idx + " number of dataset version");
+        processResponseCallback.onCompletion(null, null);
+        return;
       }
-      Callback<Void> nextCallBack =
-          recursiveCallback(datasetVersionRecordList, idx + 1, accountName, containerName, datasetName,
-              processResponseCallback, wrappedRestRequest);
+      Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
+      String accountName = dataset.getAccountName();
+      String containerName = dataset.getContainerName();
+      String datasetName = dataset.getDatasetName();
       DatasetVersionRecord record = datasetVersionRecordList.get(idx);
-      return (r, e) -> {
-        String version = record.getVersion();
-        RequestPath requestPath = getRequestPath(wrappedRestRequest);
+      String version = record.getVersion();
+      RequestPath requestPath = getRequestPath(restRequest);
+      RequestPath newRequestPath =
+          new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
+              NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
+              requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
+      LOGGER.debug("New request path : " + newRequestPath);
+      // Replace RequestPath in the WrappedRestRequest for delete and call DeleteBlobHandler.handle.
+      restRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
+      restRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
+      restRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
+      //for delete out of retention request, we don't want to set anything to response channel.
+      deleteBlobHandler.handle(restRequest, new NoOpResponseChannel(), (r, e) -> {
         if (e != null) {
           frontendMetrics.deleteDatasetVersionOutOfRetentionError.inc();
           LOGGER.error(
-              "Failed to delete dataset version due to " + getRequestPath(wrappedRestRequest) + " failed with exception"
-                  + e);
+              "Failed to delete dataset version due to " + getRequestPath(restRequest) + " failed with exception" + e);
         }
-        RequestPath newRequestPath =
-            new RequestPath(requestPath.getPrefix(), requestPath.getClusterName(), requestPath.getPathAfterPrefixes(),
-                NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH + version,
-                requestPath.getSubResource(), requestPath.getBlobSegmentIdx());
-        LOGGER.debug("New request path in recursive call : " + newRequestPath);
-        // Replace RequestPath in the RestRequest and call DeleteBlobHandler.handle.
-        wrappedRestRequest.setArg(InternalKeys.REQUEST_PATH, newRequestPath);
-        wrappedRestRequest.setArg(InternalKeys.TARGET_ACCOUNT_KEY, null);
-        wrappedRestRequest.setArg(InternalKeys.TARGET_CONTAINER_KEY, null);
         try {
-          deleteBlobHandler.handle(wrappedRestRequest, restResponseChannel, nextCallBack);
-        } catch (Exception ex) {
-          //This is due to it failed with injectAccountContainerForNamedBlob and didn't handle by final callback in deleteBlobHandler.handle.
-          //Normally if it failed, next version will fail too since we have same prefix for named blob path. /named/account/container.
-          //so we will stop directly and call process response.
+          recursiveDeleteDatasetVersions(restRequest, datasetVersionRecordList, idx + 1, processResponseCallback);
+        } catch (Exception exc) {
           frontendMetrics.deleteDatasetVersionOutOfRetentionError.inc();
           LOGGER.error(
-              "Failed to delete dataset version" + getRequestPath(wrappedRestRequest) + " failed with exception" + ex);
+              "Failed to delete dataset version" + getRequestPath(restRequest) + " failed with exception" + exc);
           processResponseCallback.onCompletion(null, null);
         }
-      };
+      });
     }
 
     /**
