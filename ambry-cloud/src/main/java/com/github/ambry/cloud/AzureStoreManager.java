@@ -49,6 +49,7 @@ public class AzureStoreManager implements StoreManager {
   protected final CloudConfig cloudConfig;
   protected final AzureCloudConfig azureCloudConfig;
   protected final AzureMetrics azureMetrics;
+  protected final VcrMetrics vcrMetrics;
   protected final BlobServiceClient azureStorageClient;
   protected final VerifiableProperties properties;
   protected final ClusterMap clusterMap;
@@ -63,6 +64,7 @@ public class AzureStoreManager implements StoreManager {
     this.partitionToAzureStore = new ConcurrentHashMap<>();
     this.metricRegistry = metricRegistry;
     this.azureMetrics = new AzureMetrics(metricRegistry);
+    this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.cloudConfig = new CloudConfig(properties);
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.properties = properties;
@@ -99,6 +101,7 @@ public class AzureStoreManager implements StoreManager {
             blobStorageException.getServiceMessage());
         return null;
       }
+      vcrMetrics.azureStoreContainerGetError.inc();
       logger.error("Failed to get blob container for partition {} due to {}", partitionId.getId(),
           blobStorageException.getServiceMessage());
       throw blobStorageException;
@@ -120,6 +123,7 @@ public class AzureStoreManager implements StoreManager {
         logger.info("Blob container for partition {} already exists", partitionId.getId());
         return getBlobStore(partitionId);
       }
+      vcrMetrics.azureStoreContainerGetError.inc();
       logger.error("Failed to create blob container for partition {} due to {}", partitionId.getId(),
           blobStorageException.getServiceMessage());
       throw blobStorageException;
@@ -138,13 +142,15 @@ public class AzureStoreManager implements StoreManager {
       return azureStore;
     }
 
+    // Get or create container
     BlobContainerClient blobContainerClient = getBlobStore(partitionId);
     if (blobContainerClient == null) {
       blobContainerClient = createBlobStore(partitionId);
     }
 
+    // If it is still null, throw the error and emit a metric
     if (blobContainerClient == null) {
-      // TODO : metric
+      vcrMetrics.azureStoreContainerGetError.inc();
       String errMsg = String.format("Blob container for partition %s is null", partitionId.getId());
       logger.error(errMsg);
       throw new RuntimeException(errMsg);
