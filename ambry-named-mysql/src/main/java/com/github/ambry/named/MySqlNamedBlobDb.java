@@ -769,7 +769,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = this.time.milliseconds();
-          // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
           logger.trace("NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}'", accountId, containerId,
               record.getBlobName());
           //for ttl update, get the blob id first before insert a new record.

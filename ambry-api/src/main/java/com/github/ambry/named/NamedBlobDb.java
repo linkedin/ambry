@@ -38,7 +38,6 @@ public interface NamedBlobDb extends Closeable {
    */
   CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option);
 
-
   /**
    * Look up a {@link NamedBlobRecord} by name.
    * @param accountName the name of the account.

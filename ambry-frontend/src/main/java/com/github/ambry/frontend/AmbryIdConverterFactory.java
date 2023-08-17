@@ -42,8 +42,6 @@ import java.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.utils.Utils.*;
-
 
 /**
  * Factory that instantiates an {@link IdConverter} implementation for the frontend.
@@ -184,7 +182,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobId, expirationTimeMs);
         NamedBlobState state = NamedBlobState.READY;
-        if (properties.getTimeToLiveInSeconds() == Infinite_Time) {
+        if (properties.getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
           state = NamedBlobState.IN_PROGRESS;
         }
