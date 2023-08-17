@@ -127,15 +127,15 @@ public class HelixClusterManagerTest {
     return Arrays.asList(
         // @formatter:off
         new Object[][]{
-            {false, false, true, false}
-            //{false, true, true, false},
-            //{true, false, true, false},
-            //{false, false, false, false},
-            //{false, true, false, false},
-            //{true, false, false, false},
-            //{false, false, true, true},
-            //{false, true, true, true},
-            //{true, false, true, true}
+            {false, false, true, false},
+            {false, true, true, false},
+            {true, false, true, false},
+            {false, false, false, false},
+            {false, true, false, false},
+            {true, false, false, false},
+            {false, false, true, true},
+            {false, true, true, true},
+            {true, false, true, true}
         });
         // @formatter:on
   }
@@ -1405,7 +1405,7 @@ public class HelixClusterManagerTest {
       AmbryPartition partition = (AmbryPartition) clusterManager.getWritablePartitionIds(null).get(0);
       List<String> instances = helixCluster.getInstancesForPartition((partition.toPathString()));
       Counter instanceTriggerCounter =
-          ((HelixClusterManager) clusterManager).helixClusterManagerMetrics.instanceConfigChangeTriggerCount;
+          ((HelixClusterManager) clusterManager).helixClusterManagerMetrics.dataNodeConfigChangeTriggerCount;
       long countVal = instanceTriggerCounter.getCount();
       helixCluster.setReplicaState(partition, instances.get(0), ReplicaStateType.SealedState, true, false);
       assertEquals("Mismatch in instanceTriggerCounter", countVal + 1, instanceTriggerCounter.getCount());
@@ -1602,7 +1602,7 @@ public class HelixClusterManagerTest {
     // TODO Aggregated view assumes we listens to all colos. For now, disabling this test when aggregated view is enabled.
     assumeTrue(!useComposite && !useAggregatedView);
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
-    Counter instanceTriggerCounter = helixClusterManager.helixClusterManagerMetrics.instanceConfigChangeTriggerCount;
+    Counter instanceTriggerCounter = helixClusterManager.helixClusterManagerMetrics.dataNodeConfigChangeTriggerCount;
     Map<String, DcInfo> dcInfosMap = helixClusterManager.getDcInfosMap();
     Map<String, HelixManager> helixManagerMap = dcInfosMap.entrySet()
         .stream()
@@ -1663,7 +1663,8 @@ public class HelixClusterManagerTest {
     // CURRENT_STATE based helix RoutingTableProvider. The former registers for instance configs. So, we would have
     // instance config changes triggered for every DC once due to registration from Ambry plus 1 due to registration
     // from Helix RoutingTableProvider.
-    long instanceConfigChangeTriggerCount = useAggregatedView ? 1 + helixDcs.length : helixDcs.length;
+    // Since we also listen on instance config change for tags, the trigger would be increased one more time.
+    long instanceConfigChangeTriggerCount = useAggregatedView ? 2 + helixDcs.length : helixDcs.length + 1;
 
     // Bring one instance (not current instance) down in each dc in order to test the metrics more generally.
     for (String zkAddr : helixCluster.getZkAddrs()) {
@@ -1683,11 +1684,11 @@ public class HelixClusterManagerTest {
     assertEquals(helixCluster.getDownInstances().size(), getGaugeValue("dataNodeDownCount"));
     assertEquals(helixCluster.getDiskCount(), getGaugeValue("diskCount"));
     assertEquals(helixCluster.getDiskDownCount(), getGaugeValue("diskDownCount"));
+    assertEquals(helixCluster.getDiskCapacity(), getGaugeValue("rawTotalCapacityBytes"));
     assertEquals(helixCluster.getAllPartitions().size(), getGaugeValue("partitionCount"));
     assertEquals(helixCluster.getAllWritablePartitions().size(), getGaugeValue("partitionReadWriteCount"));
     assertEquals(helixCluster.getAllPartitions().size() - helixCluster.getAllWritablePartitions().size(),
         getGaugeValue("partitionSealedCount"));
-    assertEquals(helixCluster.getDiskCapacity(), getGaugeValue("rawTotalCapacityBytes"));
     assertEquals(0L, getGaugeValue("isMajorityReplicasDownForAnyPartition"));
     assertEquals(0L,
         getGaugeValue(helixCluster.getDownInstances().iterator().next().replace('_', '-') + "-DataNodeResourceState"));
