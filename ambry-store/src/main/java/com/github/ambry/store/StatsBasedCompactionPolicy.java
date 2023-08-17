@@ -17,6 +17,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -35,12 +36,15 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
   private final Time time;
   private final StoreConfig storeConfig;
   private final long messageRetentionTimeInMs;
+  // map from store id to the time when last time we run the "middle range compaction"
+  private final Map<String, Long> blobToLastMiddleRangeCompaction;
   private static final Logger logger = LoggerFactory.getLogger(StatsBasedCompactionPolicy.class);
 
   StatsBasedCompactionPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;
     this.time = time;
     this.messageRetentionTimeInMs = TimeUnit.MINUTES.toMillis(storeConfig.storeDeletedMessageRetentionMinutes);
+    this.blobToLastMiddleRangeCompaction = new HashMap<>();
   }
 
   @Override
@@ -54,14 +58,23 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
         Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =
             blobStoreStats.getValidDataSizeByLogSegment(
                 new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
-        logger.info("Valid data size for {} from BlobStoreStats {} ", dataDir, validDataSizeByLogSegment);
+        final StringBuilder sizeLog = new StringBuilder(
+            "Valid data size for " + dataDir + " from BlobStoreStats " + validDataSizeByLogSegment.getFirst()
+                + " segments: ");
+        validDataSizeByLogSegment.getSecond().forEach((logSegmentName, validDataSize) -> {
+          sizeLog.append(
+              logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB " + validDataSize / segmentCapacity
+                  + "%;");
+        });
+        logger.info(sizeLog.toString());
+
         NavigableMap<LogSegmentName, Long> potentialLogSegmentValidSizeMap = validDataSizeByLogSegment.getSecond()
             .subMap(logSegmentsNotInJournal.get(0), true,
                 logSegmentsNotInJournal.get(logSegmentsNotInJournal.size() - 1), true);
 
         CostBenefitInfo bestCandidateToCompact =
             getBestCandidateToCompact(potentialLogSegmentValidSizeMap, segmentCapacity, segmentHeaderSize,
-                blobStoreStats.getMaxBlobSize());
+                blobStoreStats.getMaxBlobSize(), blobStoreStats);
         if (bestCandidateToCompact != null) {
           details =
               new CompactionDetails(validDataSizeByLogSegment.getFirst(), bestCandidateToCompact.getSegmentsToCompact(),
@@ -85,10 +98,59 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
    * @return the {@link CostBenefitInfo} for the best candidate to compact. {@code null} if there isn't any.
    */
   private CostBenefitInfo getBestCandidateToCompact(NavigableMap<LogSegmentName, Long> validDataPerLogSegments,
-      long segmentCapacity, long segmentHeaderSize, long maxBlobSize) {
+      long segmentCapacity, long segmentHeaderSize, long maxBlobSize, BlobStoreStats blobStoreStats) {
     Map.Entry<LogSegmentName, Long> firstEntry = validDataPerLogSegments.firstEntry();
     Map.Entry<LogSegmentName, Long> lastEntry = validDataPerLogSegments.lastEntry();
     CostBenefitInfo bestCandidateToCompact = null;
+
+    // weigh more on compaction benefit
+    // try to reclaim as many log segments as possible with reasonable cost.
+    if (storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs != 0) {
+      String storeId = blobStoreStats.getStoreId();
+      // when boots up, give it a chance to try the "middle range compaction"
+      if (!blobToLastMiddleRangeCompaction.containsKey(storeId)) {
+        blobToLastMiddleRangeCompaction.put(storeId,
+            System.currentTimeMillis() - storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs);
+      }
+
+      if (System.currentTimeMillis() - blobToLastMiddleRangeCompaction.get(storeId)
+          >= storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs) {
+        // find the first log segment has valid data percentage <= the percentage threshold
+        while (firstEntry != null) {
+          if (firstEntry.getValue() / (segmentCapacity * 1.0)
+              <= storeConfig.storeMaxLogSegmentValidDataPercentageToQualifyCompaction) {
+            break;
+          }
+          firstEntry = validDataPerLogSegments.higherEntry(firstEntry.getKey());
+        }
+        if (firstEntry != null) {
+          // find the last log segment has valid data percentage <= the percentage threshold
+          while (lastEntry != null && firstEntry.getKey().compareTo(lastEntry.getKey()) < 0) {
+            if (lastEntry.getValue() / (segmentCapacity * 1.0)
+                <= storeConfig.storeMaxLogSegmentValidDataPercentageToQualifyCompaction) {
+              break;
+            }
+            lastEntry = validDataPerLogSegments.lowerEntry(lastEntry.getKey());
+          }
+          if (lastEntry != null && firstEntry.getKey().compareTo(lastEntry.getKey()) < 0) {
+            CostBenefitInfo costBenefitInfo =
+                getCostBenefitInfo(firstEntry.getKey(), lastEntry.getKey(), validDataPerLogSegments, segmentCapacity,
+                    segmentHeaderSize, maxBlobSize);
+            if (costBenefitInfo.getBenefit() > 1) {
+              logger.info("Merging middle log segments which are qualified for compaction {} ", costBenefitInfo);
+              blobToLastMiddleRangeCompaction.put(storeId, System.currentTimeMillis());
+              return costBenefitInfo;
+            }
+          }
+        }
+        logger.info("Merging middle log segments, no qualified middle range. ");
+      }
+    }
+
+    // weigh more on least IO effort
+    // try to reclaim some log segments with the least IO effort
+    firstEntry = validDataPerLogSegments.firstEntry();
+    lastEntry = validDataPerLogSegments.lastEntry();
     while (firstEntry != null) {
       Map.Entry<LogSegmentName, Long> endEntry = lastEntry;
       while (endEntry != null && firstEntry.getKey().compareTo(endEntry.getKey()) <= 0) {

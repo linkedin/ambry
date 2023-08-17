@@ -14,8 +14,10 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import java.util.List;
+import java.util.NavigableMap;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +47,7 @@ public class CompactAllPolicyFactory implements CompactionPolicyFactory {
  */
 class CompactAllPolicy implements CompactionPolicy {
 
+  final static long ERROR_MARGIN_MS = 1000 * 60 * 60;
   private final StoreConfig storeConfig;
   private final Time time;
   private final long messageRetentionTimeInMs;
@@ -58,13 +61,27 @@ class CompactAllPolicy implements CompactionPolicy {
 
   @Override
   public CompactionDetails getCompactionDetails(long totalCapacity, long usedCapacity, long segmentCapacity,
-      long segmentHeaderSize, List<LogSegmentName> logSegmentsNotInJournal, BlobStoreStats blobStoreStats, String dataDir) {
+      long segmentHeaderSize, List<LogSegmentName> logSegmentsNotInJournal, BlobStoreStats blobStoreStats,
+      String dataDir) throws StoreException {
     CompactionDetails details = null;
     logger.trace("UsedCapacity {} vs TotalCapacity {}", usedCapacity, totalCapacity);
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       if (logSegmentsNotInJournal != null) {
         details = new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentsNotInJournal, null);
         logger.info("Generating CompactionDetails {} using CompactAllPolicy", details);
+
+        Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =
+            blobStoreStats.getValidDataSizeByLogSegment(
+                new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
+        final StringBuilder sizeLog = new StringBuilder(
+            "Valid data size for " + dataDir + " from BlobStoreStats " + validDataSizeByLogSegment.getFirst()
+                + " segments: ");
+        validDataSizeByLogSegment.getSecond().forEach((logSegmentName, validDataSize) -> {
+          sizeLog.append(
+              logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB " + validDataSize / segmentCapacity
+                  + "%;");
+        });
+        logger.info(sizeLog.toString());
       }
     }
     return details;

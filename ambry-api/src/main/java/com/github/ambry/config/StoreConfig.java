@@ -233,6 +233,20 @@ public class StoreConfig {
   public final int storeMinLogSegmentCountToReclaimToTriggerCompaction;
 
   /**
+   * Only the log segment whose valid data percentage is less or equal than the specified number
+   * will be qualified for compaction.number.
+   */
+  @Config("store.max.log.segment.valid.data.percentage.to.qualify.compaction")
+  public final double storeMaxLogSegmentValidDataPercentageToQualifyCompaction;
+
+  /**
+   * the time interval to run the "middle range compaction" in the stalts based compaction.
+   * the interval is in milliseconds.
+   */
+  @Config("store.stats.based.middle.range.compaction.interval.in.ms")
+  public final long storeStatsBasedMiddleRangeCompactionIntervalInMs;
+
+  /**
    * The number of buckets for stats bucketing, a value of 0 will disable bucketing.
    */
   @Config("store.stats.bucket.count")
@@ -615,6 +629,12 @@ public class StoreConfig {
         "com.github.ambry.store.CompactAllPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
+    storeMaxLogSegmentValidDataPercentageToQualifyCompaction =
+        verifiableProperties.getDoubleInRange("store.max.log.segment.valid.data.percentage.to.qualify.compaction", 0.30,
+            0.0, 1.0);
+    storeStatsBasedMiddleRangeCompactionIntervalInMs =
+        verifiableProperties.getLongInRange("store.stats.based.middle.range.compaction.interval.in.ms", 0, 0,
+            Long.MAX_VALUE);
     storeStatsBucketCount = verifiableProperties.getIntInRange("store.stats.bucket.count", 0, 0, 10000);
     storeStatsBucketSpanInMinutes =
         verifiableProperties.getLongInRange("store.stats.bucket.span.in.minutes", 60, 1, 10000);
