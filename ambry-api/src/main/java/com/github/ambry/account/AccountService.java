@@ -213,6 +213,19 @@ public interface AccountService extends Closeable {
   }
 
   /**
+   * Update ttl for the dataset version based on supplied properties.
+   * @param accountName The name for the parent account.
+   * @param containerName The name for the container.
+   * @param datasetName The name of the dataset.
+   * @param version The version of the dataset.
+   * @throws AccountServiceException
+   */
+  default void updateDatasetVersionTtl(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    throw new UnsupportedOperationException("This method is not supported");
+  }
+
+  /**
    * Get a {@link Dataset} based on the supplied properties.
    * @param accountName The name of the parent account.
    * @param containerName The name of the container.

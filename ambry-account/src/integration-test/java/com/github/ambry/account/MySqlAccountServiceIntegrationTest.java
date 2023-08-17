@@ -1308,6 +1308,47 @@ public class MySqlAccountServiceIntegrationTest {
     assertEquals("Mismatch on valid dataset versions", "1.2.4", datasetVersionRecords.get(0).getVersion());
   }
 
+  @Test
+  public void testUpdateTtlForDatasetVersions() throws Exception {
+    Account testAccount = makeTestAccountWithContainer();
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(0);
+    Dataset dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
+        Dataset.VersionSchema.MONOTONIC).build();
+
+    // Add a dataset to db
+    mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
+
+    // Add 1st dataset version
+    String version1 = "1";
+    long creationTimeInMs = System.currentTimeMillis();
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME, version1, 3600, creationTimeInMs, false, DatasetVersionState.READY);
+
+    mySqlAccountStore.updateDatasetVersionTtl(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME, version1);
+
+    DatasetVersionRecord datasetVersionRecordFromDb =
+        mySqlAccountStore.getDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+            testContainer.getName(), DATASET_NAME, version1);
+
+    assertEquals("Mismatch on expiration time", Infinite_Time, datasetVersionRecordFromDb.getExpirationTimeMs());
+
+    // Add 2nd dataset version
+    String version2 = "2";
+    creationTimeInMs = System.currentTimeMillis();
+    mySqlAccountStore.addDatasetVersion(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+        testContainer.getName(), DATASET_NAME, version2, 3600, creationTimeInMs, false,
+        DatasetVersionState.IN_PROGRESS);
+
+    try {
+      mySqlAccountStore.updateDatasetVersionTtl(testAccount.getId(), testContainer.getId(), testAccount.getName(),
+          testContainer.getName(), DATASET_NAME, version2);
+      fail("Should fail due to the ttl update trying to update a in progress record");
+    } catch (AccountServiceException e) {
+      assertEquals("Unexpected error code", AccountServiceErrorCode.NotFound, e.getErrorCode());
+    }
+  }
+
   /**
    * Test get the version out of retention count.
    */

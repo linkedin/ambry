@@ -237,6 +237,20 @@ public class MySqlAccountStore {
   }
 
   /**
+   * Update ttl for a version of {@link Dataset}
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name of the account.
+   * @param containerName the name of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   */
+  public synchronized void updateDatasetVersionTtl(short accountId, short containerId, String accountName,
+      String containerName, String datasetName, String version) throws SQLException, AccountServiceException {
+    datasetDao.updateDatasetVersionTtl(accountId, containerId, accountName, containerName, datasetName, version);
+  }
+
+  /**
    * Get a list of dataset versions which is not expired or been deleted for specific dataset.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
