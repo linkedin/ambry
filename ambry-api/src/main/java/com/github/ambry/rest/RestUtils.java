@@ -448,6 +448,11 @@ public class RestUtils {
      * The version for the NamedBlob record in MySQL DB
      */
     public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
+
+    /**
+     * The blob id for the NamedBlob record in MySQL DB.
+     */
+    public static final String NAMED_BLOB_MAPPED_ID = KEY_PREFIX + "named-blob-mapped-id";
   }
 
   /**

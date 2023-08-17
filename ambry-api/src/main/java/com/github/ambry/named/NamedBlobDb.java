@@ -38,6 +38,7 @@ public interface NamedBlobDb extends Closeable {
    */
   CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName, GetOption option);
 
+
   /**
    * Look up a {@link NamedBlobRecord} by name.
    * @param accountName the name of the account.
@@ -49,6 +50,15 @@ public interface NamedBlobDb extends Closeable {
   default CompletableFuture<NamedBlobRecord> get(String accountName, String containerName, String blobName) {
     return get(accountName, containerName, blobName, GetOption.None);
   }
+
+  /**
+   * Support ttl update for {@link NamedBlobRecord}
+   * @param record the {@link NamedBlobRecord}
+   * @param state the {@link NamedBlobState}
+   * @return a {@link CompletableFuture} that will eventually contain either the {@link NamedBlobRecord} for the named
+   *         blob or an exception if an error occurred.
+   */
+  CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state);
 
   /**
    * List blobs that start with a provided prefix in a container. This returns paginated results. If there are

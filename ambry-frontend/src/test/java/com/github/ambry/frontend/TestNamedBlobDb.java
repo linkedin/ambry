@@ -25,6 +25,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -70,7 +71,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
     } else if (recordWithDelete.getSecond() != 0 && recordWithDelete.getSecond() < time.milliseconds()
         && !includeDeletedOptions.contains(option)) {
       future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
-    } else if (recordWithDelete.getFirst().getExpirationTimeMs() != 0
+    } else if (recordWithDelete.getFirst().getExpirationTimeMs() != Utils.Infinite_Time
         && recordWithDelete.getFirst().getExpirationTimeMs() < time.milliseconds() && !includeExpiredOptions.contains(
         option)) {
       future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
@@ -170,6 +171,26 @@ public class TestNamedBlobDb implements NamedBlobDb {
       putInternal(recordWithDelete.getFirst(), NamedBlobState.READY, time.milliseconds());
     }
     future.complete(new DeleteResult(recordWithDelete.getFirst().getBlobId(), alreadyDeleted));
+    return future;
+  }
+
+  @Override
+  public CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state) {
+    CompletableFuture<PutResult> future = new CompletableFuture<>();
+    if (exception != null) {
+      future.completeExceptionally(exception);
+      return future;
+    }
+    Pair<NamedBlobRecord, Long> recordFromDb = getInternal(record.getAccountName(), record.getContainerName(), record.getBlobName());
+    if (recordFromDb == null) {
+      future.completeExceptionally(new RestServiceException("NotFound", RestServiceErrorCode.NotFound));
+    } else if (recordFromDb.getSecond() != 0 && recordFromDb.getSecond() < time.milliseconds()) {
+      future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
+    } else {
+      record.setBlobId(recordFromDb.getFirst().getBlobId());
+      putInternal(record, NamedBlobState.IN_PROGRESS, 0L);
+      future.complete(new PutResult(record));
+    }
     return future;
   }
 
@@ -278,6 +299,6 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   @Override
   public void close() throws IOException {
-    
+
   }
 }
