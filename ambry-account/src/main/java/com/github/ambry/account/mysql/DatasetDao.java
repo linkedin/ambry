@@ -473,7 +473,7 @@ public class DatasetDao {
       String datasetName, String version) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, true);
       long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
       PreparedStatement versionTtlUpdateSchemaStatement =
           dataAccessor.getPreparedStatement(updateDatasetVersionTtlSql, true);

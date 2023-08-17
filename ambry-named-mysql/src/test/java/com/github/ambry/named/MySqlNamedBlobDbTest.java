@@ -147,7 +147,7 @@ public class MySqlNamedBlobDbTest {
   }
 
   @Test
-  public void testUpdateBlobStateToReady() throws Exception {
+  public void testUpdateBlobTtlAndStateToReady() throws Exception {
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     calendar.add(Calendar.DATE, 10);
 

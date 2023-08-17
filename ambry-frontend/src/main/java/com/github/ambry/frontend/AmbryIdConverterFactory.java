@@ -167,6 +167,16 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           // on delete requests we can soft delete the record from NamedBlobDb and get the blob ID in one step.
           conversionFuture = getNamedBlobDb().delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
+        }  else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+            .matchesOperation(Operations.UPDATE_TTL)) {
+          //If operation == UPDATE_TTL, we will get the version and blobId info from named blob first
+          //and do update ttl in routerCallBack.
+          conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+              namedBlobPath.getBlobName(), getOption).thenApply(result -> {
+            restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, result.getVersion());
+            restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_MAPPED_ID, result.getBlobId());
+            return result.getBlobId();
+          });
         } else {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);

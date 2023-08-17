@@ -41,6 +41,7 @@ import com.github.ambry.store.StoreKey;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONObject;
@@ -340,6 +341,9 @@ public class GetBlobHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
+        restResponseChannel.setHeader(RestUtils.Headers.DATASET_EXPIRATION_TIME,
+            datasetVersionRecord.getExpirationTimeMs() == -1 ? "Infinite_Time"
+                : new Date(datasetVersionRecord.getExpirationTimeMs()));
         metrics.getDatasetVersionProcessingTimeInMs.update(System.currentTimeMillis() - startGetDatasetVersionTime);
         // If version is null, use the latest version + 1 from DatasetVersionRecord to construct named blob path.
         return NAMED_BLOB_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + datasetName + SLASH
