@@ -216,10 +216,10 @@ public class VcrServer {
             serverConfig.serverMessageTransformer);
       } else if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
         // Backup 2.0
-        vcrClusterParticipant = new AzureStoreHelixParticipant(properties, registry, clusterMap, accountService);
-        cloudStorageManager = new AzureStoreManager(properties, registry, clusterMap);
+        vcrClusterParticipant = new HelixVcrClusterParticipantV2(properties, registry, clusterMap, accountService);
+        cloudStorageManager = new CloudStorageManagerV2(properties, registry, clusterMap);
         vcrReplicationManager =
-            new AzureStoreReplicationManager(properties, registry, clusterMap, cloudStorageManager, storeKeyFactory,
+            new VcrReplicationManagerV2(properties, registry, clusterMap, cloudStorageManager, storeKeyFactory,
                 vcrClusterParticipant, scheduler, networkClientFactory, notificationSystem, storeKeyConverterFactory);
       } else {
         // Invalid backup version

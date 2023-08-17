@@ -27,7 +27,7 @@ import org.apache.helix.participant.StateMachineEngine;
 /**
  * Helix participant
  */
-public class AzureStoreHelixParticipant extends HelixVcrClusterParticipant {
+public class HelixVcrClusterParticipantV2 extends HelixVcrClusterParticipant {
 
   /**
    * Constructor
@@ -36,7 +36,7 @@ public class AzureStoreHelixParticipant extends HelixVcrClusterParticipant {
    * @param clusterMap Cluster-map
    * @param accountService Account service
    */
-  public AzureStoreHelixParticipant(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
+  public HelixVcrClusterParticipantV2(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
       AccountService accountService) {
     super(new CloudConfig(properties), new ClusterMapConfig(properties), new StoreConfig(properties), clusterMap,
         accountService, null, new VcrMetrics(registry));

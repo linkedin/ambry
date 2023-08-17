@@ -49,7 +49,7 @@ import java.util.function.Predicate;
 /**
  * Manages replication from servers to VCR
  */
-public class AzureStoreReplicationManager extends VcrReplicationManager {
+public class VcrReplicationManagerV2 extends VcrReplicationManager {
 
   /**
    * Constructor
@@ -66,7 +66,7 @@ public class AzureStoreReplicationManager extends VcrReplicationManager {
    * @throws ReplicationException
    * @throws IllegalStateException
    */
-  public AzureStoreReplicationManager(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
+  public VcrReplicationManagerV2(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
       StoreManager storeManager, StoreKeyFactory storeKeyFactory, VcrClusterParticipant vcrClusterParticipant,
       ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
       NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
@@ -76,7 +76,7 @@ public class AzureStoreReplicationManager extends VcrReplicationManager {
         networkClientFactory, new VcrMetrics(registry), requestNotification, storeKeyConverterFactory,
         new ServerConfig(properties).serverMessageTransformer);
     this.persistor =
-        new AzureStoreTokenWriter(mountPathToPartitionInfos, properties, replicationMetrics, clusterMap, tokenHelper);
+        new CloudTokenPersistorV2(mountPathToPartitionInfos, properties, replicationMetrics, clusterMap, tokenHelper);
   }
 
   @Override
@@ -85,15 +85,15 @@ public class AzureStoreReplicationManager extends VcrReplicationManager {
   }
 
   /**
-   * Returns {@link AzureStoreReplicationThread}
+   * Returns {@link VcrReplicaThread}
    */
   protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate, ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    return new AzureStoreReplicationThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-        networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
-        metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+    return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin, this.persistor);
   }
 }

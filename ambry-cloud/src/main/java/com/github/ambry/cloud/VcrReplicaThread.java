@@ -41,11 +41,11 @@ import java.util.function.Predicate;
 /**
  * Replicates from server to VCR
  */
-public class AzureStoreReplicationThread extends ReplicaThread {
+public class VcrReplicaThread extends ReplicaThread {
 
-  private final AzureStoreTokenWriter tokenWriter;
+  private final CloudTokenPersistorV2 tokenWriter;
 
-  public AzureStoreReplicationThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
+  public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
@@ -55,7 +55,7 @@ public class AzureStoreReplicationThread extends ReplicaThread {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-    this.tokenWriter = (AzureStoreTokenWriter) tokenWriter;
+    this.tokenWriter = (CloudTokenPersistorV2) tokenWriter;
   }
 
   /**
