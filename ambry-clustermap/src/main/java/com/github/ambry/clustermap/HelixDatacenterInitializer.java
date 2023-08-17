@@ -125,6 +125,8 @@ class HelixDatacenterInitializer {
     // For now, the first ZK endpoint (if there are more than one endpoints) will be adopted by default for initialization.
     // Note that, Ambry currently doesn't support multiple spectators, because there should be only one source of truth.
     String zkConnectStr = dcZkInfo.getZkConnectStrs().get(0);
+    logger.info("DczkInfo {}, zk connect str: {}, clustermap datacenter: {}", dcZkInfo.getDcName(),
+        dcZkInfo.getZkConnectStrs().get(0), clusterMapConfig.clusterMapDatacenterName);
     HelixManager manager;
     if (dcZkInfo.getDcName().equals(clusterMapConfig.clusterMapDatacenterName)) {
       manager = Objects.requireNonNull(localManager, "localManager should have been set");
@@ -159,8 +161,8 @@ class HelixDatacenterInitializer {
     DataNodeConfigSource dataNodeConfigSource =
         helixFactory.getDataNodeConfigSource(clusterMapConfig, zkConnectStr, dataNodeConfigSourceMetrics);
     dataNodeConfigSource.addDataNodeConfigChangeListener(clusterChangeHandler);
-    logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);
-    if (localManager == manager) {
+    logger.info("Registered data node config change listeners for Helix manager at {}", zkConnectStr);
+    if (dcZkInfo.getDcName().equals(clusterMapConfig.clusterMapDatacenterName)) {
       // Local datacenter
       manager.addInstanceConfigChangeListener(clusterChangeHandler);
       logger.info("Registered instance config change listeners for Helix manager at {}", zkConnectStr);

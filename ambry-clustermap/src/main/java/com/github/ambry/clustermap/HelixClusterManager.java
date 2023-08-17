@@ -1279,7 +1279,7 @@ public class HelixClusterManager implements ClusterMap {
                 "Received initial notification for data node config change from helix cluster {} in datacenter {}",
                 sourceHelixClusterName, dcName);
           } else {
-            logger.info("Instance config change triggered from helix cluster {} in datacenter {}",
+            logger.info("Data node config change triggered from helix cluster {} in datacenter {}",
                 sourceHelixClusterName, dcName);
           }
           if (logger.isDebugEnabled()) {
@@ -1523,6 +1523,7 @@ public class HelixClusterManager implements ClusterMap {
           }
         }
         dcToTagToResourceProperty.put(dcName, tagToProperty);
+        dcToResourceNameToTag.put(dcName, resourceNameToTag);
         partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
 
         // Ideal state has changed, we need to check if the data node is now on FULL AUTO or not.
@@ -1584,11 +1585,11 @@ public class HelixClusterManager implements ClusterMap {
         totalAddedReplicas.addAll(addedAndRemovedReplicas.getFirst());
         totalRemovedReplicas.addAll(addedAndRemovedReplicas.getSecond());
       }
-      // if this is not initial InstanceConfig change and any replicas are added or removed, we should invoke callbacks
+      // if this is not initial data node config change and any replicas are added or removed, we should invoke callbacks
       // for different clustermap change listeners (i.e replication manager, partition selection helper)
       logger.info(
-          "In total, {} replicas are being added and {} replicas are being removed. instanceConfigInitialized: {}",
-          totalAddedReplicas.size(), totalRemovedReplicas.size(), dataNodeConfigInitialized);
+          "DC {}: In total, {} replicas are being added and {} replicas are being removed. data node initialized: {}",
+          dcName, totalAddedReplicas.size(), totalRemovedReplicas.size(), dataNodeConfigInitialized);
       if (dataNodeConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
         for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
           listener.onReplicaAddedOrRemoved(totalAddedReplicas, totalRemovedReplicas);
