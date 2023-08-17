@@ -169,18 +169,6 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           // on delete requests we can soft delete the record from NamedBlobDb and get the blob ID in one step.
           conversionFuture = getNamedBlobDb().delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
-        } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
-            .matchesOperation(Operations.UPDATE_TTL)) {
-          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), null, Infinite_Time);
-          // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
-          NamedBlobState state = NamedBlobState.IN_PROGRESS;
-          // Always enable upsert to ttl update request.
-          conversionFuture = getNamedBlobDb().ttlUpdate(record, state).thenApply(result -> {
-            restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, result.getInsertedRecord().getVersion());
-            restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_MAPPED_ID, result.getInsertedRecord().getBlobId());
-            return result.getInsertedRecord().getBlobId();
-          });
         } else {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);

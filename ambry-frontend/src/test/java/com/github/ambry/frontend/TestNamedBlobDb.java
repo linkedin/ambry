@@ -142,6 +142,12 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
+  public CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state) {
+    //TODO: implement later
+    return null;
+  }
+
+  @Override
   public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
     CompletableFuture<PutResult> future = new CompletableFuture<>();
     if (exception != null) {
@@ -171,26 +177,6 @@ public class TestNamedBlobDb implements NamedBlobDb {
       putInternal(recordWithDelete.getFirst(), NamedBlobState.READY, time.milliseconds());
     }
     future.complete(new DeleteResult(recordWithDelete.getFirst().getBlobId(), alreadyDeleted));
-    return future;
-  }
-
-  @Override
-  public CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state) {
-    CompletableFuture<PutResult> future = new CompletableFuture<>();
-    if (exception != null) {
-      future.completeExceptionally(exception);
-      return future;
-    }
-    Pair<NamedBlobRecord, Long> recordFromDb = getInternal(record.getAccountName(), record.getContainerName(), record.getBlobName());
-    if (recordFromDb == null) {
-      future.completeExceptionally(new RestServiceException("NotFound", RestServiceErrorCode.NotFound));
-    } else if (recordFromDb.getSecond() != 0 && recordFromDb.getSecond() < time.milliseconds()) {
-      future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
-    } else {
-      record.setBlobId(recordFromDb.getFirst().getBlobId());
-      putInternal(record, NamedBlobState.IN_PROGRESS, 0L);
-      future.complete(new PutResult(record));
-    }
     return future;
   }
 
