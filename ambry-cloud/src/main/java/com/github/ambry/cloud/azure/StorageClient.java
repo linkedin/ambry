@@ -68,6 +68,7 @@ import org.slf4j.LoggerFactory;
 public abstract class StorageClient implements AzureStorageClient {
   Logger logger = LoggerFactory.getLogger(StorageClient.class);
   private final AtomicReference<BlobServiceAsyncClient> storageAsyncClientRef;
+  protected final AtomicReference<BlobServiceClient> storageSyncClientRef;
   private final AtomicReference<BlobBatchAsyncClient> blobBatchAsyncClientRef;
   private final CloudConfig cloudConfig;
   protected final AzureCloudConfig azureCloudConfig;
@@ -87,6 +88,23 @@ public abstract class StorageClient implements AzureStorageClient {
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param azureMetrics {@link AzureMetrics} object.
+   */
+  public StorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics) {
+    this.storageAccountInfo = null;
+    this.azureCloudConfig = azureCloudConfig;
+    this.cloudConfig = cloudConfig;
+    this.blobLayoutStrategy = null;
+    this.azureMetrics = azureMetrics;
+    storageAsyncClientRef = null;
+    storageSyncClientRef = new AtomicReference<>(createBlobStorageSyncClient());
+    blobBatchAsyncClientRef = null;
+  }
+
+  /**
+   * Constructor for {@link StorageClient}.
+   * @param cloudConfig {@link CloudConfig} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public StorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig, AzureMetrics azureMetrics,
@@ -97,6 +115,7 @@ public abstract class StorageClient implements AzureStorageClient {
     this.blobLayoutStrategy = blobLayoutStrategy;
     this.azureMetrics = azureMetrics;
     storageAsyncClientRef = new AtomicReference<>(createBlobStorageAsyncClient());
+    storageSyncClientRef = null;
     blobBatchAsyncClientRef =
         new AtomicReference<>(new BlobBatchClientBuilder(storageAsyncClientRef.get()).buildAsyncClient());
   }
@@ -118,6 +137,7 @@ public abstract class StorageClient implements AzureStorageClient {
     this.cloudConfig = null;
     this.azureCloudConfig = azureCloudConfig;
     this.storageAsyncClientRef = new AtomicReference<>(storageAsyncClient);
+    this.storageSyncClientRef = null;
     this.blobBatchAsyncClientRef = new AtomicReference<>(blobBatchAsyncClient);
   }
 
@@ -131,6 +151,14 @@ public abstract class StorageClient implements AzureStorageClient {
    */
   public BlobServiceAsyncClient getStorageClient() {
     return storageAsyncClientRef.get();
+  }
+
+  /**
+   * Returns a sync client to Azure blob storage
+   * @return the underlying {@link BlobServiceAsyncClient}.
+   */
+  public BlobServiceClient getStorageSyncClient() {
+    return storageSyncClientRef.get();
   }
 
   /**
@@ -382,6 +410,22 @@ public abstract class StorageClient implements AzureStorageClient {
     }
   }
 
+  protected BlobServiceClient createBlobStorageSyncClient() {
+    try {
+      validateABSAuthConfigs(azureCloudConfig);
+      ProxyOptions proxyOptions = null;
+      if (cloudConfig.vcrProxyHost != null) {
+        proxyOptions = new ProxyOptions(ProxyOptions.Type.HTTP,
+            new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
+      }
+      HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
+      return buildBlobServiceSyncClient(client, new Configuration(), new RequestRetryOptions(), azureCloudConfig);
+    } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
+      logger.error("Error building ABS blob service client: {}", ex.getMessage());
+      throw new IllegalStateException(ex);
+    }
+  }
+
   /**
    * Set the references for storage and blob async clients atomically. Note this method is not thread safe and must always be
    * called within a thread safe context.
@@ -409,6 +453,20 @@ public abstract class StorageClient implements AzureStorageClient {
   protected abstract BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient,
       Configuration configuration, RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
       throws MalformedURLException, InterruptedException, ExecutionException;
+
+  /**
+   * Build {@link BlobServiceAsyncClient}.
+   * @param httpClient {@link HttpClient} object.
+   * @param configuration {@link Configuration} object.
+   * @param retryOptions {@link RequestRetryOptions} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @return {@link BlobServiceAsyncClient} object.
+   */
+  protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
+      throws MalformedURLException, InterruptedException, ExecutionException {
+    return null;
+  }
 
   /**
    * Check if the exception can be handled and return a flag indicating if it can be retried.

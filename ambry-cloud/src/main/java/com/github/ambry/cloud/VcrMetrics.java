@@ -64,8 +64,13 @@ public class VcrMetrics {
   public final Counter vcrHelixNotOnSync;
   private final MetricRegistry registry;
 
+  // Azure Storage metrics
+  public final Counter azureStoreContainerGetError;
+
   public VcrMetrics(MetricRegistry registry) {
     this.registry = registry;
+    azureStoreContainerGetError =
+        registry.counter(MetricRegistry.name(CloudBlobStoreV2.class, "AzureStoreContainerGetError"));
     blobEncryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionCount"));
     blobDecryptionCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobDecryptionCount"));
     blobEncryptionErrorCount = registry.counter(MetricRegistry.name(CloudBlobStore.class, "BlobEncryptionErrorCount"));

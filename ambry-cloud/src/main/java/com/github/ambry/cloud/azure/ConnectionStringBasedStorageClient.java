@@ -35,6 +35,17 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    * @param azureMetrics {@link AzureMetrics} object.
+   */
+  public ConnectionStringBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
+      AzureMetrics azureMetrics) {
+    super(cloudConfig, azureCloudConfig, azureMetrics);
+  }
+
+  /**
+   * Constructor for {@link ConnectionStringBasedStorageClient}.
+   * @param cloudConfig {@link CloudConfig} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param azureMetrics {@link AzureMetrics} object.
    * @param blobLayoutStrategy {@link AzureBlobLayoutStrategy} object.
    */
   public ConnectionStringBasedStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
@@ -62,12 +73,21 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
   protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
     return new BlobServiceClientBuilder().connectionString(
-        storageAccountInfo() != null ? storageAccountInfo().getStorageConnectionString()
-            : azureCloudConfig.azureStorageConnectionString)
+            storageAccountInfo() != null ? storageAccountInfo().getStorageConnectionString()
+                : azureCloudConfig.azureStorageConnectionString)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)
         .buildAsyncClient();
+  }
+
+  protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
+    return new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
+        .httpClient(httpClient)
+        .retryOptions(retryOptions)
+        .configuration(configuration)
+        .buildClient();
   }
 
   /**

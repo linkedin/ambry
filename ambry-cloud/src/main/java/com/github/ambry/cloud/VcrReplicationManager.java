@@ -66,8 +66,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudConfig cloudConfig;
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
-  private final CloudStorageCompactor cloudStorageCompactor;
-  private final CloudContainerCompactor cloudContainerCompactor;
+  private CloudStorageCompactor cloudStorageCompactor;
+  private CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
   private final boolean trackPerDatacenterLagInMetric;
   private final Lock vcrHelixUpdateLock = new ReentrantLock();
@@ -82,9 +82,9 @@ public class VcrReplicationManager extends ReplicationEngine {
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
-      CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
-      VcrMetrics vcrMetrics, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName) throws IllegalStateException, ReplicationException {
+      ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory, VcrMetrics vcrMetrics,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
+      String transformerClassName) throws ReplicationException, IllegalStateException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler,
         vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(), networkClientFactory,
         vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
@@ -92,13 +92,6 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudConfig = cloudConfig;
     this.vcrClusterParticipant = vcrClusterParticipant;
     this.vcrMetrics = vcrMetrics;
-    this.persistor =
-        new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            tokenHelper, cloudDestination);
-    this.cloudStorageCompactor =
-        cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
-            partitionToPartitionInfo.keySet(), vcrMetrics) : null;
-    this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     // We need a datacenter to replicate from, which should be specified in the cloud config.
     if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
@@ -111,6 +104,24 @@ public class VcrReplicationManager extends ReplicationEngine {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }
     vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
+  }
+
+  public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
+      ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
+      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
+      CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
+      VcrMetrics vcrMetrics, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
+      String transformerClassName) throws ReplicationException, IllegalStateException {
+    this(cloudConfig, replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory, clusterMap,
+        vcrClusterParticipant, scheduler, networkClientFactory, vcrMetrics, requestNotification,
+        storeKeyConverterFactory, transformerClassName);
+    this.persistor =
+        new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
+            tokenHelper, cloudDestination);
+    this.cloudStorageCompactor =
+        cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
+            partitionToPartitionInfo.keySet(), vcrMetrics) : null;
+    this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
   }
 
   @Override
@@ -196,6 +207,13 @@ public class VcrReplicationManager extends ReplicationEngine {
       throw new ReplicationException("Cluster participate failed.", e);
     }
 
+    scheduleTasks();
+
+    started = true;
+    startupLatch.countDown();
+  }
+
+  protected void scheduleTasks() {
     // start background persistent thread
     // start scheduler thread to persist index in the background
     scheduleTask(persistor, true, replicationConfig.replicationTokenFlushDelaySeconds,
@@ -210,11 +228,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
     // after delay to allow startup to finish.
     scheduleTask(() -> cloudContainerCompactor.compactAssignedDeprecatedContainers(
-        vcrClusterParticipant.getAssignedPartitionIds()), cloudConfig.cloudContainerCompactionEnabled,
+            vcrClusterParticipant.getAssignedPartitionIds()), cloudConfig.cloudContainerCompactionEnabled,
         cloudConfig.cloudContainerCompactionStartupDelaySecs,
         TimeUnit.HOURS.toSeconds(cloudConfig.cloudContainerCompactionIntervalHours), "cloud container compaction");
-    started = true;
-    startupLatch.countDown();
   }
 
   /**
@@ -254,6 +270,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (peerReplicas != null) {
       for (ReplicaId peerReplica : peerReplicas) {
         if (!shouldReplicateFromDc(peerReplica.getDataNodeId().getDatacenterName())) {
+          logger.error("Skipping replication from {}", peerReplica.getDataNodeId().getDatacenterName());
           continue;
         }
         // We need to ensure that a replica token gets persisted only after the corresponding data in the
@@ -286,6 +303,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         rwLock.writeLock().unlock();
       }
     } else {
+      logger.error("Null peer-replica {}", cloudReplica);
       try {
         storeManager.shutdownBlobStore(partitionId);
         storeManager.removeBlobStore(partitionId);
