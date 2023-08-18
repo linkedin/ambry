@@ -29,6 +29,7 @@ import com.github.ambry.protocol.NamedBlobState;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -158,7 +159,7 @@ public class MySqlNamedBlobDbTest {
     PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
 
     record.setVersion(putResult.getInsertedRecord().getVersion());
-    namedBlobDb.updateBlobStateToReady(record).get();
+    namedBlobDb.updateBlobTtlAndStateToReady(record).get();
 
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());

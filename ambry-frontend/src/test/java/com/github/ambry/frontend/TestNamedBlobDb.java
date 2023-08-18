@@ -25,6 +25,7 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -70,7 +71,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
     } else if (recordWithDelete.getSecond() != 0 && recordWithDelete.getSecond() < time.milliseconds()
         && !includeDeletedOptions.contains(option)) {
       future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
-    } else if (recordWithDelete.getFirst().getExpirationTimeMs() != 0
+    } else if (recordWithDelete.getFirst().getExpirationTimeMs() != Utils.Infinite_Time
         && recordWithDelete.getFirst().getExpirationTimeMs() < time.milliseconds() && !includeExpiredOptions.contains(
         option)) {
       future.completeExceptionally(new RestServiceException("Deleted", RestServiceErrorCode.Deleted));
@@ -141,7 +142,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> updateBlobTtlAndStateToReady(NamedBlobRecord record) {
     CompletableFuture<PutResult> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);
@@ -278,6 +279,5 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   @Override
   public void close() throws IOException {
-    
   }
 }

@@ -360,11 +360,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> updateBlobTtlAndStateToReady(NamedBlobRecord record) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = this.time.milliseconds();
-          logger.trace("Updating to READY for Named Blob: {}", record);
+          logger.trace("Updating ttl and status to READY for Named Blob: {}", record);
           PutResult result = apply_ttl_update(record, accountId, containerId, connection);
           metricsRecoder.namedTtlupdateTimeInMs.update(this.time.milliseconds() - startTime);
           return result;
@@ -658,7 +658,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private PutResult apply_ttl_update(NamedBlobRecord record, short accountId, short containerId, Connection connection)
-      throws Exception{
+      throws Exception {
     String query = "";
     try (PreparedStatement statement = connection.prepareStatement(TTL_UPDATE_QUERY)) {
       statement.setInt(1, accountId);

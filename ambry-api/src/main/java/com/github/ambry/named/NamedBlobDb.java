@@ -86,12 +86,12 @@ public interface NamedBlobDb extends Closeable {
   }
 
   /**
-   * Update a {@link NamedBlobRecord}'s state to READY in the database.
+   * Update a {@link NamedBlobRecord}'s state to READY and ttl to permanent in the database.
    * @param record the {@link NamedBlobRecord}
    * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
    *         occurred.
    */
-  CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record);
+  CompletableFuture<PutResult> updateBlobTtlAndStateToReady(NamedBlobRecord record);
 
   /**
    * Delete a record for a blob in the database.

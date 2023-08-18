@@ -666,7 +666,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
       when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobNameNew,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
       doOperation(restRequest, restResponseChannel);
@@ -701,7 +701,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew1)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter1, false)));
       when(namedBlobDb.get(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(), blobNameNew1,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord1));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord1)));
 
       doOperation(restRequest, restResponseChannel);
@@ -736,7 +736,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew2)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter2, false)));
       when(namedBlobDb.get(namedBlobRecord2.getAccountName(), namedBlobRecord2.getContainerName(), blobNameNew2,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord2));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord2)));
 
       doOperation(restRequest, restResponseChannel);
@@ -771,7 +771,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew3)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter3, false)));
       when(namedBlobDb.get(namedBlobRecord3.getAccountName(), namedBlobRecord3.getContainerName(), blobNameNew3,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord3));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord3)));
       doOperation(restRequest, restResponseChannel);
       assertEquals("Mismatch on response status", ResponseStatus.Created, restResponseChannel.getStatus());
@@ -819,7 +819,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew4)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter4, false)));
       when(namedBlobDb.get(namedBlobRecord4.getAccountName(), namedBlobRecord4.getContainerName(), blobNameNew4,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord4));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord4)));
       doOperation(restRequest, restResponseChannel);
       assertEquals("Mismatch on response status", ResponseStatus.Created, restResponseChannel.getStatus());
@@ -944,7 +944,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
       when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(), blobNameNew,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
       doOperation(restRequest, restResponseChannel);
@@ -980,7 +980,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew1)).thenThrow(new RuntimeException());
       when(namedBlobDb.get(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(), blobNameNew1,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord1));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord1)));
 
       doOperation(restRequest, restResponseChannel);
@@ -1015,7 +1015,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew2)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter2, false)));
       when(namedBlobDb.get(namedBlobRecord2.getAccountName(), namedBlobRecord2.getContainerName(), blobNameNew2,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord2));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord2)));
 
       doOperation(restRequest, restResponseChannel);
@@ -1050,7 +1050,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew3)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter3, false)));
       when(namedBlobDb.get(namedBlobRecord3.getAccountName(), namedBlobRecord3.getContainerName(), blobNameNew3,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord3));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord3)));
       doOperation(restRequest, restResponseChannel);
       assertEquals("Mismatch on response status", ResponseStatus.Created, restResponseChannel.getStatus());
@@ -1098,7 +1098,7 @@ public class FrontendRestRequestServiceTest {
           blobNameNew4)).thenReturn(CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter4, false)));
       when(namedBlobDb.get(namedBlobRecord4.getAccountName(), namedBlobRecord4.getContainerName(), blobNameNew4,
           GetOption.None)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord4));
-      when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+      when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
           CompletableFuture.completedFuture(new PutResult(namedBlobRecord4)));
       doOperation(restRequest, restResponseChannel);
       assertEquals("Mismatch on response status", ResponseStatus.Created, restResponseChannel.getStatus());
@@ -1354,7 +1354,7 @@ public class FrontendRestRequestServiceTest {
         CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter, false)));
     when(namedBlobDb.get(namedBlobRecord.getAccountName(), namedBlobRecord.getContainerName(),
         blobName, null)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord));
-    when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+    when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord)));
 
     // Issue put dataset version request, should not throw null point exception.
@@ -1398,7 +1398,7 @@ public class FrontendRestRequestServiceTest {
         CompletableFuture.completedFuture(new DeleteResult(blobIdFromRouter1, false)));
     when(namedBlobDb.get(namedBlobRecord1.getAccountName(), namedBlobRecord1.getContainerName(),
         blobName1, null)).thenReturn(CompletableFuture.completedFuture(namedBlobRecord1));
-    when(namedBlobDb.updateBlobStateToReady(any())).thenReturn(
+    when(namedBlobDb.updateBlobTtlAndStateToReady(any())).thenReturn(
         CompletableFuture.completedFuture(new PutResult(namedBlobRecord1)));
 
     doOperation(restRequest, restResponseChannel);

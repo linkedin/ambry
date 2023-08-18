@@ -554,7 +554,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.setCurrentMilliseconds(staleCutoffTime);
     PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, false).get();
     record.setVersion(putResult.getInsertedRecord().getVersion());
-    namedBlobDb.updateBlobStateToReady(record).get();
+    namedBlobDb.updateBlobTtlAndStateToReady(record).get();
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
@@ -586,7 +586,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
     checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()),
         RestServiceErrorCode.NotFound);
-    PutResult updateResult = namedBlobDb.updateBlobStateToReady(record).get();
+    PutResult updateResult = namedBlobDb.updateBlobTtlAndStateToReady(record).get();
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
