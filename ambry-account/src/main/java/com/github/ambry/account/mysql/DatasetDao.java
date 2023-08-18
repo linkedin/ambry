@@ -248,9 +248,8 @@ public class DatasetDao {
       throws SQLException, AccountServiceException {
     long startTimeMs = System.currentTimeMillis();
     try {
-      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, true);
       long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
-      dataAccessor.getDatabaseConnection(true);
       PreparedStatement updateDatasetVersionStateStatement =
           dataAccessor.getPreparedStatement(updateDatasetVersionStateSql, true);
       executeUpdateDatasetVersionStateStatement(updateDatasetVersionStateStatement, accountId, containerId,
@@ -287,8 +286,7 @@ public class DatasetDao {
     Dataset dataset = null;
     DatasetVersionRecord datasetVersionRecord;
     try {
-      dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
-      dataAccessor.getDatabaseConnection(true);
+      dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, true);
       if (isAutoCreatedVersionForUpload(version)) {
         datasetVersionRecord =
             retryWithLatestAutoIncrementedVersion(accountId, containerId, dataset, version, timeToLiveInSeconds,
@@ -338,7 +336,6 @@ public class DatasetDao {
       long timeToLiveInSeconds, long creationTimeInMs, boolean datasetVersionTtlEnabled, long versionNumber,
       DatasetVersionState datasetVersionState)
       throws SQLException, AccountServiceException {
-    dataAccessor.getDatabaseConnection(true);
     PreparedStatement insertDatasetVersionStatement = dataAccessor.getPreparedStatement(insertDatasetVersionSql, true);
     long newExpirationTimeMs = executeAddDatasetVersionStatement(insertDatasetVersionStatement, accountId, containerId,
         dataset.getDatasetName(), versionNumber, timeToLiveInSeconds, creationTimeInMs, dataset,
@@ -369,7 +366,7 @@ public class DatasetDao {
     while (true) {
       try {
         versionNumber =
-            getAutoIncrementedVersionBasedOnLatestAvailableVersion(accountId, containerId, dataset.getVersionSchema(),
+            getAutoIncrementedVersionBasedOnLatestAvailableVersionHelper(accountId, containerId, dataset.getVersionSchema(),
                 dataset.getDatasetName(), version);
         version = convertVersionValueToVersion(versionNumber, dataset.getVersionSchema());
         //always retry with the latest version + 1 until it has been successfully uploading without conflict or failed with exception.
@@ -402,20 +399,23 @@ public class DatasetDao {
     try {
       long startTimeMs = System.currentTimeMillis();
       //if dataset is deleted, we should not be able to get any dataset version.
-      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
-      Dataset.VersionSchema versionSchema = dataset.getVersionSchema();
-      dataAccessor.getDatabaseConnection(false);
-      PreparedStatement getDatasetVersionStatement =
-          dataAccessor.getPreparedStatement(getDatasetVersionByNameSql, false);
+      Dataset dataset;
+      Dataset.VersionSchema versionSchema;
       long versionValue;
       DatasetVersionRecord result;
       if (isAutoCreatedVersionForDownload(version)) {
+        dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, true);
+        versionSchema = dataset.getVersionSchema();
         PreparedStatement getLatestVersionStatement =
-            dataAccessor.getPreparedStatement(getLatestVersionSqlForDownload, false);
+            dataAccessor.getPreparedStatement(getLatestVersionSqlForDownload, true);
         result =
             executeGetLatestVersionStatementForDownload(getLatestVersionStatement, accountId, containerId, datasetName,
                 versionSchema);
       } else {
+        dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, false);
+        versionSchema = dataset.getVersionSchema();
+        PreparedStatement getDatasetVersionStatement =
+            dataAccessor.getPreparedStatement(getDatasetVersionByNameSql, false);
         versionValue = getVersionBasedOnSchema(version, versionSchema);
         result = executeGetDatasetVersionStatement(getDatasetVersionStatement, accountId, containerId, datasetName,
             versionValue, version);
@@ -440,10 +440,9 @@ public class DatasetDao {
       throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, false);
+      PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, true);
       Dataset.VersionSchema versionSchema =
           executeGetVersionSchema(getVersionSchemaStatement, accountId, containerId, datasetName);
-      dataAccessor.getDatabaseConnection(true);
       PreparedStatement deleteDatasetVersionStatement =
           dataAccessor.getPreparedStatement(deleteDatasetVersionByIdSql, true);
       long versionValue = getVersionBasedOnSchema(version, versionSchema);
@@ -549,11 +548,7 @@ public class DatasetDao {
       String datasetName) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      dataAccessor.getDatabaseConnection(false);
-      PreparedStatement getDatasetStatement = dataAccessor.getPreparedStatement(getDatasetByNameSql, false);
-      Dataset dataset =
-          executeGetDatasetStatement(getDatasetStatement, accountId, containerId, accountName, containerName,
-              datasetName);
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, false);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return dataset;
     } catch (SQLException | AccountServiceException e) {
@@ -575,7 +570,6 @@ public class DatasetDao {
       short containerId, String datasetName) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      dataAccessor.getDatabaseConnection(false);
       PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, false);
       Dataset.VersionSchema versionSchema =
           executeGetVersionSchema(getVersionSchemaStatement, accountId, containerId, datasetName);
@@ -630,7 +624,6 @@ public class DatasetDao {
       String pageToken) throws SQLException, AccountServiceException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      dataAccessor.getDatabaseConnection(false);
       PreparedStatement getVersionSchemaStatement = dataAccessor.getPreparedStatement(getVersionSchemaSql, false);
       Dataset.VersionSchema versionSchema =
           executeGetVersionSchema(getVersionSchemaStatement, accountId, containerId, datasetName);
@@ -660,9 +653,8 @@ public class DatasetDao {
       String datasetName, Dataset.VersionSchema versionSchema) throws SQLException {
     try {
       long startTimeMs = System.currentTimeMillis();
-      dataAccessor.getDatabaseConnection(false);
       PreparedStatement listValidDatasetVersionsByListSchemaStatement =
-          dataAccessor.getPreparedStatement(listValidDatasetVersionsByListSql, false);
+          dataAccessor.getPreparedStatement(listValidDatasetVersionsByListSql, true);
       List<DatasetVersionRecord> results =
           executeListValidDatasetVersionsByListStatement(listValidDatasetVersionsByListSchemaStatement, accountId,
               containerId, datasetName, versionSchema);
@@ -693,7 +685,7 @@ public class DatasetDao {
     List<DatasetVersionRecord> datasetVersionRecordList;
     try {
       //if dataset is deleted, we should not be able to get any dataset version.
-      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName, true);
       retentionCount = dataset.getRetentionCount();
       versionSchema = dataset.getVersionSchema();
       retentionPolicy = dataset.getRetentionPolicy();
@@ -740,9 +732,8 @@ public class DatasetDao {
    */
   private List<DatasetVersionRecord> getDatasetVersionOutOfRetentionByDefault(short accountId, short containerId,
       String datasetName, Integer retentionCount, Dataset.VersionSchema versionSchema) throws SQLException {
-    dataAccessor.getDatabaseConnection(false);
     PreparedStatement listAllValidVersionsOrderedByLastModifiedTimeStatement =
-        dataAccessor.getPreparedStatement(listVersionByModifiedTimeAndFilterByRetentionSql, false);
+        dataAccessor.getPreparedStatement(listVersionByModifiedTimeAndFilterByRetentionSql, true);
     return executeListAllValidVersionsOrderedByLastModifiedTimeStatement(
         listAllValidVersionsOrderedByLastModifiedTimeStatement, accountId, containerId, datasetName, retentionCount,
         versionSchema);
@@ -1108,20 +1099,19 @@ public class DatasetDao {
    * Get the auto incremented version based on latest version.
    * @param accountId the id for the parent account.
    * @param containerId the id of the container.
-   * @param versionSchema the {@link com.github.ambry.account.Dataset.VersionSchema} of the dataset.
+   * @param versionSchema the {@link Dataset.VersionSchema} of the dataset.
    * @param datasetName the name of the dataset.
    * @return the latest version.
    * @throws SQLException
    */
-  private long getAutoIncrementedVersionBasedOnLatestAvailableVersion(int accountId, int containerId,
+  private long getAutoIncrementedVersionBasedOnLatestAvailableVersionHelper(int accountId, int containerId,
       Dataset.VersionSchema versionSchema, String datasetName, String version)
       throws SQLException, AccountServiceException {
     long latestVersionValue;
     try {
       long startTimeMs = System.currentTimeMillis();
-      dataAccessor.getDatabaseConnection(false);
       PreparedStatement listLatestVersionStatement =
-          dataAccessor.getPreparedStatement(listLatestVersionSqlForUpload, false);
+          dataAccessor.getPreparedStatement(listLatestVersionSqlForUpload, true);
       try {
         latestVersionValue =
             executeListLatestVersionStatementForUpload(listLatestVersionStatement, accountId, containerId, datasetName);
@@ -1616,5 +1606,25 @@ public class DatasetDao {
       closeQuietly(resultSet);
     }
     return new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime));
+  }
+
+
+  /**
+   * Helper function to get the dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @param needWritable if we need writable for connection.
+   * @return the {@link Dataset}
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private Dataset getDatasetHelper(int accountId, int containerId, String accountName, String containerName,
+      String datasetName, boolean needWritable) throws SQLException, AccountServiceException {
+    PreparedStatement getDatasetStatement = dataAccessor.getPreparedStatement(getDatasetByNameSql, needWritable);
+    return executeGetDatasetStatement(getDatasetStatement, accountId, containerId, accountName, containerName,
+        datasetName);
   }
 }
