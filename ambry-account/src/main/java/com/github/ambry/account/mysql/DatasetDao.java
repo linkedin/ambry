@@ -248,9 +248,9 @@ public class DatasetDao {
       throws SQLException, AccountServiceException {
     long startTimeMs = System.currentTimeMillis();
     try {
-      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
-      long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
       dataAccessor.getDatabaseConnection(true);
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName);
+      long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
       PreparedStatement updateDatasetVersionStateStatement =
           dataAccessor.getPreparedStatement(updateDatasetVersionStateSql, true);
       executeUpdateDatasetVersionStateStatement(updateDatasetVersionStateStatement, accountId, containerId,
@@ -287,8 +287,8 @@ public class DatasetDao {
     Dataset dataset = null;
     DatasetVersionRecord datasetVersionRecord;
     try {
-      dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
       dataAccessor.getDatabaseConnection(true);
+      dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName);
       if (isAutoCreatedVersionForUpload(version)) {
         datasetVersionRecord =
             retryWithLatestAutoIncrementedVersion(accountId, containerId, dataset, version, timeToLiveInSeconds,
@@ -402,9 +402,9 @@ public class DatasetDao {
     try {
       long startTimeMs = System.currentTimeMillis();
       //if dataset is deleted, we should not be able to get any dataset version.
-      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
-      Dataset.VersionSchema versionSchema = dataset.getVersionSchema();
       dataAccessor.getDatabaseConnection(false);
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName);
+      Dataset.VersionSchema versionSchema = dataset.getVersionSchema();
       PreparedStatement getDatasetVersionStatement =
           dataAccessor.getPreparedStatement(getDatasetVersionByNameSql, false);
       long versionValue;
@@ -550,10 +550,7 @@ public class DatasetDao {
     try {
       long startTimeMs = System.currentTimeMillis();
       dataAccessor.getDatabaseConnection(false);
-      PreparedStatement getDatasetStatement = dataAccessor.getPreparedStatement(getDatasetByNameSql, false);
-      Dataset dataset =
-          executeGetDatasetStatement(getDatasetStatement, accountId, containerId, accountName, containerName,
-              datasetName);
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName);
       dataAccessor.onSuccess(Read, System.currentTimeMillis() - startTimeMs);
       return dataset;
     } catch (SQLException | AccountServiceException e) {
@@ -692,8 +689,9 @@ public class DatasetDao {
     String retentionPolicy;
     List<DatasetVersionRecord> datasetVersionRecordList;
     try {
+      dataAccessor.getDatabaseConnection(false);
       //if dataset is deleted, we should not be able to get any dataset version.
-      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
+      Dataset dataset = getDatasetHelper(accountId, containerId, accountName, containerName, datasetName);
       retentionCount = dataset.getRetentionCount();
       versionSchema = dataset.getVersionSchema();
       retentionPolicy = dataset.getRetentionPolicy();
@@ -1616,5 +1614,24 @@ public class DatasetDao {
       closeQuietly(resultSet);
     }
     return new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime));
+  }
+
+
+  /**
+   * Helper function to get the dataset.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name for the parent account.
+   * @param containerName the name for the container.
+   * @param datasetName the name of the dataset.
+   * @return the {@link Dataset}
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private Dataset getDatasetHelper(int accountId, int containerId, String accountName, String containerName,
+      String datasetName) throws SQLException, AccountServiceException {
+    PreparedStatement getDatasetStatement = dataAccessor.getPreparedStatement(getDatasetByNameSql, false);
+    return executeGetDatasetStatement(getDatasetStatement, accountId, containerId, accountName, containerName,
+        datasetName);
   }
 }
