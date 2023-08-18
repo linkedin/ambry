@@ -1372,6 +1372,27 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Tests the Delete Operation when the success target > number of replicas.
+   * If offline repair is enabled, generate the OperationTracker.
+   * If offline repair is disabled, throw exception.
+   */
+  @Test
+  public void notEnoughReplicasToMeetTargetTestOnDelete() {
+    assumeTrue(operationTrackerType.equals(SIMPLE_OP_TRACKER));
+    initialize();
+    try {
+      // offline repair is disabled
+      getOperationTrackerForDelete(true, 13, 3, RouterOperation.DeleteOperation, true, false);
+      fail("Should have failed to construct tracker because success target > replica count");
+    } catch (IllegalArgumentException e) {
+      // expected. Nothing to do.
+    }
+
+    // offline repair is enabled
+    getOperationTrackerForDelete(true, 13, 3, RouterOperation.DeleteOperation, true, true);
+  }
+
+  /**
    * Tests the case when parallelism < 1
    */
   @Test
@@ -1673,7 +1694,7 @@ public class OperationTrackerTest {
             case DeleteOperation:
               ot =
                   getOperationTrackerForDelete(true, successTarget, requestParallelism, RouterOperation.DeleteOperation,
-                      true);
+                      true, false);
               break;
             case TtlUpdateOperation:
               ot =
@@ -1918,11 +1939,16 @@ public class OperationTrackerTest {
    * @return the right {@link OperationTracker} based on {@link #operationTrackerType}.
    */
   private OperationTracker getOperationTrackerForDelete(boolean crossColoEnabled, int successTargetForDelete,
-      int parallelism, RouterOperation routerOperation, boolean includeDownReplicas) {
+      int parallelism, RouterOperation routerOperation, boolean includeDownReplicas, boolean enableOfflineRepair) {
     Properties props = new Properties();
     props.setProperty(RouterConfig.ROUTER_DELETE_SUCCESS_TARGET, Integer.toString(successTargetForDelete));
     props.setProperty(RouterConfig.ROUTER_DELETE_REQUEST_PARALLELISM, Integer.toString(parallelism));
     props.setProperty(RouterConfig.ROUTER_GET_REQUEST_PARALLELISM, Integer.toString(parallelism));
+    if (enableOfflineRepair) {
+      props.setProperty(RouterConfig.ROUTER_REPAIR_REQUESTS_DB_FACTORY,
+          "com.github.ambry.repair.MysqlRepairRequestsDbFactory");
+      props.setProperty(RouterConfig.ROUTER_DELETE_OFFLINE_REPAIR_ENABLED, "true");
+    }
     return getOperationTracker(props, crossColoEnabled, parallelism, routerOperation, includeDownReplicas, true);
   }
 
