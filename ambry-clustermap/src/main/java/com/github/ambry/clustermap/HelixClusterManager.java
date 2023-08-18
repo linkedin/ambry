@@ -918,6 +918,9 @@ public class HelixClusterManager implements ClusterMap {
     return disk;
   }
 
+  /**
+   * Callback method when this data node is becoming FULL AUTO mode.
+   */
   void dataNodeOnBecomingFullAuto() {
     List<String> tags = instanceNameToInstanceConfig.get(selfInstanceName).getTags();
     DataNodeId dataNodeId = instanceNameToAmbryDataNode.get(selfInstanceName);
@@ -927,8 +930,11 @@ public class HelixClusterManager implements ClusterMap {
     helixClusterManagerMetrics.registerMetricsForFullAuto(resources, this);
   }
 
+  /**
+   * Callback method when this data node is becoming SEMI AUTO from FULL AUTO.
+   */
   void dataNodeOnBecomingSemiAuto() {
-    helixClusterManagerMetrics.deregisterMetricsForSemiAuto();
+    helixClusterManagerMetrics.deregisterMetricsForFullAuto();
   }
 
   Set<String> getAllInstancesForResource(String resource) {
@@ -1425,13 +1431,18 @@ public class HelixClusterManager implements ClusterMap {
       helixClusterManagerMetrics.routingTableChangeTriggerCount.inc();
     }
 
+    /**
+     * Triggered whenever the instance configs for participants have changed. The list of {@link InstanceConfig} contains
+     * all the up-to-date config for instances in local datacenter.
+     * @param instanceConfigs
+     */
     public void handleInstanceConfigChange(List<InstanceConfig> instanceConfigs) {
       if (!instanceConfigInitialized) {
         logger.info("Received initial notification for InstanceConfig from helix cluster {} in dc {}", helixClusterName,
             dcName);
         instanceConfigInitialized = true;
       } else {
-        logger.info("InstanceConfig change triggered from helix cluster in dc {}", helixClusterName, dcName);
+        logger.info("InstanceConfig change triggered from helix cluster {} in dc {}", helixClusterName, dcName);
       }
       Map<String, InstanceConfig> instanceToConfig = new HashMap<>();
       Map<String, Set<String>> tagToInstances = new HashMap<>();
@@ -1530,7 +1541,7 @@ public class HelixClusterManager implements ClusterMap {
         // This call might come from frontend node, make sure we don't register any FULL AUTO metrics in frontend.
         DataNodeId currentDataNodeId = instanceNameToAmbryDataNode.get(selfInstanceName);
         if (currentDataNodeId == null || !currentDataNodeId.getDatacenterName().equals(dcName)
-            || localDataNodeInFullAuto.get() == isDataNodeInFullAutoMode(currentDataNodeId)) {
+            || isDataNodeInFullAutoMode(currentDataNodeId) == localDataNodeInFullAuto.get()) {
           return;
         }
         localDataNodeInFullAuto.set(!localDataNodeInFullAuto.get());

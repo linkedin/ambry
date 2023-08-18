@@ -235,7 +235,7 @@ class HelixClusterManagerMetrics {
   /**
    * Deregister FULL AUTO related metrics.
    */
-  void deregisterMetricsForSemiAuto() {
+  void deregisterMetricsForFullAuto() {
     Map<String, Gauge> allGauges = registry.getGauges();
     List<String> resourceMetricNames =
         allGauges.keySet().stream().filter(name -> name.contains("Resource_")).collect(Collectors.toList());
