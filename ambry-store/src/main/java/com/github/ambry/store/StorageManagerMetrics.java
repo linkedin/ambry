@@ -124,6 +124,15 @@ public class StorageManagerMetrics {
   }
 
   /**
+   * Initialized gauge that track the number of failed disks.
+   * @param storageManager The {@link StorageManager} instance.
+   */
+  void initializeFailedDiskCount(final StorageManager storageManager) {
+    Gauge<Integer> failedDiskCount = storageManager::getFailedDiskCount;
+    registry.gauge(MetricRegistry.name(StorageManager.class, "FailedDisksCount"), () -> failedDiskCount);
+  }
+
+  /**
    * Deregister the Metrics related to the host utilization.
    */
   void deregisterHostUtilizationTracker() {

@@ -135,8 +135,16 @@ class HelixAggregatedViewClusterInitializer {
       }
       Thread thread = Utils.newThread("helix-aggregated-view-init-dc-" + dcName, () -> {
         try {
-          registerIdealStateChangeListener(dcName);
+          // The order to register these three listeners can't be changed. We have to the data node config first, since
+          // it will construct instance to data node, instance to partition and replicas mapping.
+          // We also have to register ideal state change after instance, since we check if the data node is in full auto
+          // by looking at the tag from instance config and ideal state but we only call full auto change method in ideal
+          // state change listener, by that time, we have to have instance config in memory.
           registerDataNodeConfigChangeListener(dcName);
+          if (dcName.equals(localDcName)) {
+            registerInstanceConfigChangeListener(dcName);
+          }
+          registerIdealStateChangeListener(dcName);
         } catch (Exception e) {
           exception = e;
         }
@@ -239,6 +247,16 @@ class HelixAggregatedViewClusterInitializer {
         (IdealStateChangeListener) (idealState, changeContext) -> clusterChangeHandler.handleIdealStateChange(
             idealState, dcName));
     logger.info("Registered ideal state change listeners for cluster {} via Helix manager at {}",
+        clusterMapConfig.clusterMapClusterName, zkConnectStr);
+  }
+
+  private void registerInstanceConfigChangeListener(String dcName) throws Exception {
+    String zkConnectStr = dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0);
+    HelixManager manager =
+        helixFactory.getZkHelixManagerAndConnect(clusterMapConfig.clusterMapClusterName, selfInstanceName,
+            InstanceType.SPECTATOR, zkConnectStr);
+    manager.addInstanceConfigChangeListener(clusterChangeHandler);
+    logger.info("Registered instance config change listeners for cluster {} via Helix manager at {}",
         clusterMapConfig.clusterMapClusterName, zkConnectStr);
   }
 }

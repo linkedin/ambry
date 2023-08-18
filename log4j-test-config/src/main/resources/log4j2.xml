@@ -2,7 +2,7 @@
 <Configuration status="WARN">
     <Appenders>
         <Console name="consoleAppender" target="SYSTEM_OUT">
-            <PatternLayout pattern="[%d] %p %m (%c)%n"/>
+            <PatternLayout pattern="[%d][%t] %p %m (%c)%n"/>
         </Console>
         <File name="publicAccessAppender" fileName="logs/publicAccessLog.out" append="true">
             <PatternLayout>

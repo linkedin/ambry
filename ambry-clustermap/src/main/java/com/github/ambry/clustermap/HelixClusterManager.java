@@ -34,6 +34,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -46,6 +47,7 @@ import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.api.listeners.IdealStateChangeListener;
+import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.RoutingTableChangeListener;
 import org.apache.helix.model.IdealState;
@@ -94,9 +96,6 @@ public class HelixClusterManager implements ClusterMap {
   // Routing table snapshot reference used in aggregated cluster view.
   private final AtomicReference<RoutingTableSnapshot> globalRoutingTableSnapshotRef = new AtomicReference<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
-  private final Map<String, ConcurrentHashMap<String, Set<String>>> dcToInstanceNameToTags = new ConcurrentHashMap<>();
-  private final Map<String, ConcurrentHashMap<String, ResourceProperty>> dcToTagToResourceProperty =
-      new ConcurrentHashMap<>();
   private final AtomicLong errorCount = new AtomicLong(0);
   private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
   private final AtomicLong clusterWideAllocatedRawCapacityBytes = new AtomicLong(0);
@@ -116,9 +115,22 @@ public class HelixClusterManager implements ClusterMap {
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private HelixAggregatedViewClusterInfo helixAggregatedViewClusterInfo = null;
 
-  // In FULL_AUTO mode, the resource configs. We probably only need to fetch one resource config, which this
-  // data node belongs to (This data node has to be a server node).
+  // The map from resource name to resource config, This is only used in FULL AUTO. This map is not going to be updated
+  // if the ResourceConfig is updated, but we are only using default replica capacity from the ResourceConfig. So if you
+  // update the default replica capacity in ResourceConfig, you have to restart the process for this map to get updated.
+  // And this map doesn't store any resources from other datacenter.
+  //
+  // We probably only need to fetch one resource config, which this data node belongs to (This data node has to be a server node).
   private final ConcurrentHashMap<String, ResourceConfig> resourceConfigs = new ConcurrentHashMap<>();
+
+  // instance name to tag mapping and the reverse mapping from tag to instance name, these two maps
+  // only contains the instances from local datacenter
+  private final ConcurrentHashMap<String, InstanceConfig> instanceNameToInstanceConfig = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, Set<String>> tagToInstanceNames = new ConcurrentHashMap<>();
+  private final Map<String, ConcurrentHashMap<String, ResourceProperty>> dcToTagToResourceProperty =
+      new ConcurrentHashMap<>();
+  private final Map<String, ConcurrentHashMap<String, String>> dcToResourceNameToTag = new ConcurrentHashMap<>();
+  private final AtomicBoolean localDataNodeInFullAuto = new AtomicBoolean(false);
 
   /**
    * Instantiate a HelixClusterManager.
@@ -470,11 +482,7 @@ public class HelixClusterManager implements ClusterMap {
     if (!dcName.equals(clusterMapConfig.clusterMapDatacenterName)) {
       throw new IllegalArgumentException("Instance " + instanceName + " is from different datacenter");
     }
-    InstanceConfig instanceConfig = localHelixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalArgumentException("Instance config for " + instanceName + " doesn't exist");
-    }
-    List<String> tags = instanceConfig.getTags();
+    List<String> tags = instanceNameToInstanceConfig.get(instanceName).getTags();
     if (tags == null || tags.isEmpty()) {
       logger.trace("DataNode {} doesn't have any tags", instanceName);
       return false;
@@ -911,6 +919,58 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * Callback method when this data node is becoming FULL AUTO mode.
+   */
+  void dataNodeOnBecomingFullAuto() {
+    List<String> tags = instanceNameToInstanceConfig.get(selfInstanceName).getTags();
+    DataNodeId dataNodeId = instanceNameToAmbryDataNode.get(selfInstanceName);
+    List<String> resources = tags.stream()
+        .map(tag -> dcToTagToResourceProperty.get(dataNodeId.getDatacenterName()).get(tag).name)
+        .collect(Collectors.toList());
+    helixClusterManagerMetrics.registerMetricsForFullAuto(resources, this);
+  }
+
+  /**
+   * Callback method when this data node is becoming SEMI AUTO from FULL AUTO.
+   */
+  void dataNodeOnBecomingSemiAuto() {
+    helixClusterManagerMetrics.deregisterMetricsForFullAuto();
+  }
+
+  Set<String> getAllInstancesForResource(String resource) {
+    String dcName = instanceNameToAmbryDataNode.get(selfInstanceName).getDatacenterName();
+    String tag = dcToResourceNameToTag.get(dcName).get(resource);
+    return tagToInstanceNames.get(tag);
+  }
+
+  int getTotalInstanceCount(String resource) {
+    return getAllInstancesForResource(resource).size();
+  }
+
+  int getLiveInstanceCount(String resource) {
+    return (int) (getAllInstancesForResource(resource).stream()
+        .map(instanceNameToAmbryDataNode::get)
+        .filter(dn -> dn.getState() == HardwareState.AVAILABLE)
+        .count());
+  }
+
+  long getResourceTotalRegisteredHostDiskCapacity(String resource) {
+    return getAllInstancesForResource(resource).stream()
+        .map(instanceNameToInstanceConfig::get)
+        .mapToInt(instanceConfig -> instanceConfig.getInstanceCapacityMap().get(DISK_KEY))
+        .sum();
+  }
+
+  int getRegisteredHostDiskCapacity() {
+    return instanceNameToInstanceConfig.get(selfInstanceName).getInstanceCapacityMap().get(DISK_KEY);
+  }
+
+  int getHostReplicaCount() {
+    AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(selfInstanceName);
+    return ambryDataNodeToAmbryReplicas.get(dataNode).size();
+  }
+
+  /**
    * A helper class used by components of cluster to query information from the {@link HelixClusterManager}. This helps
    * avoid circular dependency between classes like {@link HelixClusterManager} and {@link AmbryPartition}.
    */
@@ -1146,7 +1206,7 @@ public class HelixClusterManager implements ClusterMap {
    */
   class HelixClusterChangeHandler
       implements DataNodeConfigChangeListener, LiveInstanceChangeListener, IdealStateChangeListener,
-                 RoutingTableChangeListener {
+                 RoutingTableChangeListener, InstanceConfigChangeListener {
     // Data center for which the callback events correspond to.
     private final String dcName;
     // Helix cluster name which keeps track of Ambry topology information.
@@ -1155,9 +1215,10 @@ public class HelixClusterManager implements ClusterMap {
     private final Consumer<Exception> onInitializationFailure;
     private final CountDownLatch routingTableInitLatch = new CountDownLatch(1);
     private final List<ClusterMapChangeListener> clusterMapChangeListeners = new ArrayList<>();
-    private volatile boolean instanceConfigInitialized = false;
+    private volatile boolean dataNodeConfigInitialized = false;
     private volatile boolean liveStateInitialized = false;
     private volatile boolean idealStateInitialized = false;
+    private volatile boolean instanceConfigInitialized = false;
     final Set<String> allInstances = ConcurrentHashMap.newKeySet();
     // Tells if this clusterChangeHandler is a listener for changes in the entire cluster via helix aggregated view
     // instead of for a particular data center.
@@ -1202,50 +1263,54 @@ public class HelixClusterManager implements ClusterMap {
       handleLiveInstanceChange(liveInstances);
     }
 
+    @Override
+    public void onInstanceConfigChange(List<InstanceConfig> instanceConfigs, NotificationContext context) {
+      handleInstanceConfigChange(instanceConfigs);
+    }
+
     /**
-     * Handle any {@link DataNodeConfig} related change in current datacenter. Several events will trigger instance config
+     * Handle any {@link DataNodeConfig} related change in current datacenter. Several events will trigger datanode config
      * change: (1) replica's seal or stop state has changed; (2) new node or new partition is added; (3) new replica is
      * added to existing node; (4) old replica is removed from existing node.
-     * (The ZNode path of instance config in Helix is [AmbryClusterName]/CONFIGS/PARTICIPANT/[hostname_port])
      * @param configs all the {@link DataNodeConfig}(s) in current data center. (Note that PreFetch is enabled by default
-     *                in Helix, which means all instance configs under "participants" ZNode will be sent to this method)
+     *                in Helix)
      * @param dcName data center name.
      * @param sourceHelixClusterName name of helix cluster from which the data node configs are obtained.
      */
     void handleDataNodeConfigChange(Iterable<DataNodeConfig> configs, String dcName, String sourceHelixClusterName) {
       try {
         synchronized (notificationLock) {
-          if (!instanceConfigInitialized) {
+          if (!dataNodeConfigInitialized) {
             logger.info(
-                "Received initial notification for instance config change from helix cluster {} in data center {}",
+                "Received initial notification for data node config change from helix cluster {} in datacenter {}",
                 sourceHelixClusterName, dcName);
           } else {
-            logger.info("Instance config change triggered from helix cluster {} in data center {}",
+            logger.info("Data node config change triggered from helix cluster {} in datacenter {}",
                 sourceHelixClusterName, dcName);
           }
           if (logger.isDebugEnabled()) {
-            logger.debug("Detailed data node config from helix cluster {} in data center {} is: {}",
+            logger.debug("Detailed data node config from helix cluster {} in datacenter {} is: {}",
                 sourceHelixClusterName, dcName, configs);
           }
           try {
             addOrUpdateInstanceInfos(configs, dcName);
           } catch (Exception e) {
-            if (!instanceConfigInitialized) {
-              logger.error("Exception occurred when initializing instances from helix cluster {} in data center {}: ",
+            if (!dataNodeConfigInitialized) {
+              logger.error("Exception occurred when initializing data nodes from helix cluster {} in datacenter {}: ",
                   sourceHelixClusterName, dcName, e);
               onInitializationFailure.accept(e);
             } else {
               logger.error(
-                  "Exception occurred at runtime when handling instance config changes from helix cluster {} in data center {}: ",
+                  "Exception occurred at runtime when handling data node config changes from helix cluster {} in datacenter {}: ",
                   sourceHelixClusterName, dcName, e);
               helixClusterManagerMetrics.instanceConfigChangeErrorCount.inc();
             }
           } finally {
-            instanceConfigInitialized = true;
+            dataNodeConfigInitialized = true;
           }
           long counter = sealedStateChangeCounter.incrementAndGet();
           logger.trace("SealedStateChangeCounter increase to {}", counter);
-          helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
+          helixClusterManagerMetrics.dataNodeConfigChangeTriggerCount.inc();
         }
       } catch (Throwable t) {
         errorCount.incrementAndGet();
@@ -1367,6 +1432,39 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     /**
+     * Triggered whenever the instance configs for participants have changed. The list of {@link InstanceConfig} contains
+     * all the up-to-date config for instances in local datacenter.
+     * @param instanceConfigs
+     */
+    public void handleInstanceConfigChange(List<InstanceConfig> instanceConfigs) {
+      if (!instanceConfigInitialized) {
+        logger.info("Received initial notification for InstanceConfig from helix cluster {} in dc {}", helixClusterName,
+            dcName);
+        instanceConfigInitialized = true;
+      } else {
+        logger.info("InstanceConfig change triggered from helix cluster {} in dc {}", helixClusterName, dcName);
+      }
+      Map<String, InstanceConfig> instanceToConfig = new HashMap<>();
+      Map<String, Set<String>> tagToInstances = new HashMap<>();
+      for (InstanceConfig instanceConfig : instanceConfigs) {
+        String instanceName = instanceConfig.getInstanceName();
+        instanceToConfig.put(instanceName, instanceConfig);
+        List<String> tags = instanceConfig.getTags();
+        if (tags != null && !tags.isEmpty()) {
+          for (String tag : tags) {
+            tagToInstances.computeIfAbsent(tag, k -> new HashSet<>()).add(instanceName);
+          }
+        }
+      }
+      // Update the class member
+      instanceNameToInstanceConfig.keySet().retainAll(instanceToConfig.keySet());
+      tagToInstanceNames.keySet().retainAll(tagToInstances.keySet());
+      instanceNameToInstanceConfig.putAll(instanceToConfig);
+      tagToInstanceNames.putAll(tagToInstances);
+      helixClusterManagerMetrics.instanceConfigChangeTriggerCount.inc();
+    }
+
+    /**
      * Sets the helix {@link RoutingTableSnapshot} for a given data center.
      * @param routingTableSnapshot snapshot of cluster mappings.
      */
@@ -1417,21 +1515,41 @@ public class HelixClusterManager implements ClusterMap {
         // Rebuild the entire partition-to-resource map in current dc
         ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
         ConcurrentHashMap<String, ResourceProperty> tagToProperty = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, String> resourceNameToTag = new ConcurrentHashMap<>();
         for (IdealState state : idealStates) {
           String resourceName = state.getResourceName();
+          String tag = state.getInstanceGroupTag();
+          if (!Strings.isEmpty(tag)) {
+            resourceNameToTag.put(resourceName, tag);
+          }
           for (String partitionName : state.getPartitionSet()) {
             String mappedResourceName =
                 partitionToResourceMap.compute(partitionName, resourceNameReplaceFunc(resourceName));
             if (mappedResourceName.equals(resourceName)) {
               ResourceProperty resourceProperty = new ResourceProperty(resourceName, state.getRebalanceMode());
-              if (!Strings.isEmpty(state.getInstanceGroupTag())) {
-                tagToProperty.put(state.getInstanceGroupTag(), resourceProperty);
+              if (!Strings.isEmpty(tag)) {
+                tagToProperty.put(tag, resourceProperty);
               }
             }
           }
         }
         dcToTagToResourceProperty.put(dcName, tagToProperty);
+        dcToResourceNameToTag.put(dcName, resourceNameToTag);
         partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
+
+        // Ideal state has changed, we need to check if the data node is now on FULL AUTO or not.
+        // This call might come from frontend node, make sure we don't register any FULL AUTO metrics in frontend.
+        DataNodeId currentDataNodeId = instanceNameToAmbryDataNode.get(selfInstanceName);
+        if (currentDataNodeId == null || !currentDataNodeId.getDatacenterName().equals(dcName)
+            || isDataNodeInFullAutoMode(currentDataNodeId) == localDataNodeInFullAuto.get()) {
+          return;
+        }
+        localDataNodeInFullAuto.set(!localDataNodeInFullAuto.get());
+        if (localDataNodeInFullAuto.get()) {
+          dataNodeOnBecomingFullAuto();
+        } else {
+          dataNodeOnBecomingSemiAuto();
+        }
       } else {
         logger.warn("Partition to resource mapping for aggregated cluster view would be built from external view");
       }
@@ -1478,12 +1596,12 @@ public class HelixClusterManager implements ClusterMap {
         totalAddedReplicas.addAll(addedAndRemovedReplicas.getFirst());
         totalRemovedReplicas.addAll(addedAndRemovedReplicas.getSecond());
       }
-      // if this is not initial InstanceConfig change and any replicas are added or removed, we should invoke callbacks
+      // if this is not initial data node config change and any replicas are added or removed, we should invoke callbacks
       // for different clustermap change listeners (i.e replication manager, partition selection helper)
       logger.info(
-          "In total, {} replicas are being added and {} replicas are being removed. instanceConfigInitialized: {}",
-          totalAddedReplicas.size(), totalRemovedReplicas.size(), instanceConfigInitialized);
-      if (instanceConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
+          "DC {}: In total, {} replicas are being added and {} replicas are being removed. data node initialized: {}",
+          dcName, totalAddedReplicas.size(), totalRemovedReplicas.size(), dataNodeConfigInitialized);
+      if (dataNodeConfigInitialized && (!totalAddedReplicas.isEmpty() || !totalRemovedReplicas.isEmpty())) {
         for (ClusterMapChangeListener listener : clusterMapChangeListeners) {
           listener.onReplicaAddedOrRemoved(totalAddedReplicas, totalRemovedReplicas);
         }
