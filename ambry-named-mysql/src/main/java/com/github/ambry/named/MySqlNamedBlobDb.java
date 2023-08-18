@@ -360,11 +360,11 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> updateBlobTtlAndStateToReady(NamedBlobRecord record) {
     return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
         (accountId, containerId, connection) -> {
           long startTime = this.time.milliseconds();
-          logger.trace("Updating to READY for Named Blob: {}", record);
+          logger.trace("Updating ttl and status to READY for Named Blob: {}", record);
           PutResult result = apply_ttl_update(record, accountId, containerId, connection);
           metricsRecoder.namedTtlupdateTimeInMs.update(this.time.milliseconds() - startTime);
           return result;
@@ -658,7 +658,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private PutResult apply_ttl_update(NamedBlobRecord record, short accountId, short containerId, Connection connection)
-      throws Exception{
+      throws Exception {
     String query = "";
     try (PreparedStatement statement = connection.prepareStatement(TTL_UPDATE_QUERY)) {
       statement.setInt(1, accountId);
@@ -762,30 +762,6 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
-  }
-
-  @Override
-  public CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state) {
-    return executeTransactionAsync(record.getAccountName(), record.getContainerName(), true,
-        (accountId, containerId, connection) -> {
-          long startTime = this.time.milliseconds();
-          logger.trace("NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}'", accountId, containerId,
-              record.getBlobName());
-          //for ttl update, get the blob id first before insert a new record.
-          NamedBlobRecord recordCurrent;
-          try {
-            recordCurrent =
-                run_get_v2(record.getAccountName(), record.getContainerName(), record.getBlobName(), GetOption.None,
-                    accountId, containerId, connection);
-          } catch (RestServiceException e) {
-            throw buildException("Failed to do ttl update due to not able to found existing record", e.getErrorCode(),
-                record.getAccountName(), record.getContainerName(), record.getBlobName());
-          }
-          record.setBlobId(recordCurrent.getBlobId());
-          PutResult putResult = run_put_v2(record, state, accountId, containerId, connection);
-          metricsRecoder.namedBlobPutTimeInMs.update(this.time.milliseconds() - startTime);
-          return putResult;
-        }, null);
   }
 
   /**

@@ -200,31 +200,6 @@ public class MySqlNamedBlobDbIntegrationTest {
   }
 
   /**
-   * Test ttl update for named blob.
-   * @throws Exception
-   */
-  @Test
-  public void testUpdateTtlForNamedBlob() throws Exception {
-    Account account = accountService.getAllAccounts().iterator().next();
-    Container container = account.getAllContainers().iterator().next();
-    String blobId = getBlobId(account, container);
-    String blobName = "blobName";
-    long expirationTime = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1);
-    NamedBlobRecord record =
-        new NamedBlobRecord(account.getName(), container.getName(), blobName, blobId, expirationTime);
-    namedBlobDb.put(record).get();
-    time.setCurrentMilliseconds(System.currentTimeMillis());
-    PutResult ttlUpdateResult = namedBlobDb.ttlUpdate(record, NamedBlobState.IN_PROGRESS).get();
-    record.setVersion(ttlUpdateResult.getInsertedRecord().getVersion());
-    time.setCurrentMilliseconds(System.currentTimeMillis());
-    namedBlobDb.updateBlobStateToReady(record).get();
-    time.setCurrentMilliseconds(System.currentTimeMillis());
-    NamedBlobRecord recordFromDb = namedBlobDb.get(account.getName(), container.getName(), blobName).get();
-    assertEquals("Mismatch on blob version", ttlUpdateResult.getInsertedRecord().getVersion(), recordFromDb.getVersion());
-    assertEquals("Mismatch on blob expiration time", Utils.Infinite_Time, recordFromDb.getExpirationTimeMs());
-  }
-
-  /**
    * Test behavior with expired blobs
    */
   @Test
@@ -579,7 +554,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.setCurrentMilliseconds(staleCutoffTime);
     PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, false).get();
     record.setVersion(putResult.getInsertedRecord().getVersion());
-    namedBlobDb.updateBlobStateToReady(record).get();
+    namedBlobDb.updateBlobTtlAndStateToReady(record).get();
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 
@@ -611,7 +586,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
     checkErrorCode(() -> namedBlobDb.get(record.getAccountName(), record.getContainerName(), record.getBlobName()),
         RestServiceErrorCode.NotFound);
-    PutResult updateResult = namedBlobDb.updateBlobStateToReady(record).get();
+    PutResult updateResult = namedBlobDb.updateBlobTtlAndStateToReady(record).get();
 
     List<StaleNamedBlob> staleNamedBlobs = namedBlobDb.pullStaleBlobs().get();
 

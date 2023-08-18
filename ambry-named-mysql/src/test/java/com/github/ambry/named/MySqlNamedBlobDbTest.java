@@ -159,29 +159,10 @@ public class MySqlNamedBlobDbTest {
     PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
 
     record.setVersion(putResult.getInsertedRecord().getVersion());
-    namedBlobDb.updateBlobStateToReady(record).get();
+    namedBlobDb.updateBlobTtlAndStateToReady(record).get();
 
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());
-  }
-
-  /**
-   * Test update ttl for named blob.
-   * @throws Exception
-   */
-  @Test
-  public void testUpdateTtlForNamedBlob() throws Exception {
-    dataSourceFactory.setLocalDatacenter(foundDatacenter);
-    dataSourceFactory.triggerDataResultSet(datacenters);
-    long expirationTimeMs = System.currentTimeMillis() + 3600;
-    NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), "blobName", id, expirationTimeMs);
-    namedBlobDb.put(record, NamedBlobState.READY, true).get();
-    assertEquals("Mismatch on expiration time", expirationTimeMs , record.getExpirationTimeMs());
-    PutResult putResult = namedBlobDb.ttlUpdate(record, NamedBlobState.IN_PROGRESS).get();
-    record.setVersion(putResult.getInsertedRecord().getVersion());
-    namedBlobDb.updateBlobStateToReady(record).get();
-    record = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
-    assertEquals("Mismatch on expiration time", Utils.Infinite_Time , record.getExpirationTimeMs());
   }
 
   /**

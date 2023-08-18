@@ -326,7 +326,7 @@ public class NamedBlobPutHandler {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
-        namedBlobDb.updateBlobStateToReady(record).get();
+        namedBlobDb.updateBlobTtlAndStateToReady(record).get();
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
           //Make sure to process response after delete finished
           updateVersionStateAndDeleteDatasetVersionOutOfRetentionCount(

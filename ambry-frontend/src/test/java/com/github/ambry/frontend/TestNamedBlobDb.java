@@ -142,13 +142,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
   }
 
   @Override
-  public CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state) {
-    //TODO: implement later
-    return null;
-  }
-
-  @Override
-  public CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record) {
+  public CompletableFuture<PutResult> updateBlobTtlAndStateToReady(NamedBlobRecord record) {
     CompletableFuture<PutResult> future = new CompletableFuture<>();
     if (exception != null) {
       future.completeExceptionally(exception);
@@ -285,6 +279,5 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   @Override
   public void close() throws IOException {
-
   }
 }

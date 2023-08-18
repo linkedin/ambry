@@ -516,7 +516,7 @@ public class NamedBlobMysqlDatabasePerf {
         System.out.println("PerformanceTestWorker " + id + " finishes writing " + numberOfPuts + " records");
 
         for (NamedBlobRecord record : allRecords) {
-          namedBlobDb.updateBlobStateToReady(record).get();
+          namedBlobDb.updateBlobTtlAndStateToReady(record).get();
         }
         System.out.println("PerformanceTestWorker " + id + " finishes updating " + numberOfPuts + " records");
 

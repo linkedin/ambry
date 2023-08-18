@@ -51,15 +51,6 @@ public interface NamedBlobDb extends Closeable {
   }
 
   /**
-   * Support ttl update for {@link NamedBlobRecord}
-   * @param record the {@link NamedBlobRecord}
-   * @param state the {@link NamedBlobState}
-   * @return a {@link CompletableFuture} that will eventually contain either the {@link NamedBlobRecord} for the named
-   *         blob or an exception if an error occurred.
-   */
-  CompletableFuture<PutResult> ttlUpdate(NamedBlobRecord record, NamedBlobState state);
-
-  /**
    * List blobs that start with a provided prefix in a container. This returns paginated results. If there are
    * additional pages to read, {@link Page#getNextPageToken()} will be non null.
    * @param accountName the name of the account.
@@ -95,12 +86,12 @@ public interface NamedBlobDb extends Closeable {
   }
 
   /**
-   * Update a {@link NamedBlobRecord}'s state to READY in the database.
+   * Update a {@link NamedBlobRecord}'s state to READY and ttl to permanent in the database.
    * @param record the {@link NamedBlobRecord}
    * @return a {@link CompletableFuture} that will eventually contain a {@link PutResult} or an exception if an error
    *         occurred.
    */
-  CompletableFuture<PutResult> updateBlobStateToReady(NamedBlobRecord record);
+  CompletableFuture<PutResult> updateBlobTtlAndStateToReady(NamedBlobRecord record);
 
   /**
    * Delete a record for a blob in the database.
