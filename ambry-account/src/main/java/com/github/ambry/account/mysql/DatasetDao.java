@@ -89,6 +89,7 @@ public class DatasetDao {
   private final String listVersionByModifiedTimeAndFilterByRetentionSql;
   private final String listValidDatasetVersionsByPageSql;
   private final String listValidDatasetVersionsByListSql;
+  private final String updateDatasetVersionTtlSql;
 
   // Dataset table query strings
   private final String insertDatasetSql;
@@ -163,6 +164,9 @@ public class DatasetDao {
             + "where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? "
             + "ORDER BY %1$s ASC", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
         DATASET_VERSION_STATE, CREATION_TIME);
+    updateDatasetVersionTtlSql = String.format(
+        "update %s set %s = NULL where %s = ? and %s = ? and %s = ? and %s = ? and (delete_ts is NULL or delete_ts > now(3)) and %s = ?",
+        DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
     getDatasetVersionByNameSql =
         String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
             DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
@@ -449,6 +453,33 @@ public class DatasetDao {
       executeDeleteDatasetVersionStatement(deleteDatasetVersionStatement, accountId, containerId, datasetName,
           versionValue);
       dataAccessor.onSuccess(Delete, System.currentTimeMillis() - startTimeMs);
+    } catch (SQLException | AccountServiceException e) {
+      dataAccessor.onException(e, Delete);
+      throw e;
+    }
+  }
+
+  /**
+   * Update ttl for dataset version.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param accountName the name of the account.
+   * @param containerName the name of the container.
+   * @param datasetName the name of the dataset.
+   * @param version the version of the dataset.
+   * @throws SQLException
+   */
+  public void updateDatasetVersionTtl(int accountId, int containerId, String accountName, String containerName,
+      String datasetName, String version) throws SQLException, AccountServiceException {
+    try {
+      long startTimeMs = System.currentTimeMillis();
+      Dataset dataset = getDataset(accountId, containerId, accountName, containerName, datasetName);
+      long versionNumber = getVersionBasedOnSchema(version, dataset.getVersionSchema());
+      PreparedStatement versionTtlUpdateSchemaStatement =
+          dataAccessor.getPreparedStatement(updateDatasetVersionTtlSql, true);
+      executeVersionTtlUpdateStatement(versionTtlUpdateSchemaStatement, accountId, containerId, datasetName,
+          versionNumber);
+      dataAccessor.onSuccess(Write, System.currentTimeMillis() - startTimeMs);
     } catch (SQLException | AccountServiceException e) {
       dataAccessor.onException(e, Delete);
       throw e;
@@ -1255,6 +1286,32 @@ public class DatasetDao {
       throw new AccountServiceException(
           "Dataset not found qualified record to delete for account: " + accountId + " container: " + containerId
               + " dataset: " + datasetName + " version: " + versionValue, AccountServiceErrorCode.NotFound);
+    }
+  }
+
+  /**
+   * Execute version ttl update statement.
+   * @param statement the updateDatasetVersionTtlSql statement.
+   * @param accountId the id for the parent account.
+   * @param containerId the id of the container.
+   * @param datasetName the name of the dataset.
+   * @param versionValue the version value of the dataset.
+   * @throws SQLException
+   * @throws AccountServiceException
+   */
+  private void executeVersionTtlUpdateStatement(PreparedStatement statement, int accountId, int containerId,
+      String datasetName, long versionValue) throws SQLException, AccountServiceException {
+    statement.setInt(1, accountId);
+    statement.setInt(2, containerId);
+    statement.setString(3, datasetName);
+    statement.setLong(4, versionValue);
+    //only update ttl against a ready status record.
+    statement.setInt(5, DatasetVersionState.READY.ordinal());
+    int count = statement.executeUpdate();
+    if (count <= 0) {
+      throw new AccountServiceException(
+          "Dataset can not be ttl updated for account: " + accountId + " container: " + containerId + " dataset: "
+              + datasetName + " version: " + versionValue, AccountServiceErrorCode.NotFound);
     }
   }
 
