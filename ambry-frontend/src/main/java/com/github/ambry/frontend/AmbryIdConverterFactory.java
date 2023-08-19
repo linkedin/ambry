@@ -174,7 +174,6 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption).thenApply(result -> {
             restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, result.getVersion());
-            restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_MAPPED_ID, result.getBlobId());
             return result.getBlobId();
           });
         } else {

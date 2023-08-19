@@ -158,32 +158,29 @@ class TtlUpdateHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
       return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-        router.updateBlobTtl(blobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(),
+        router.updateBlobTtl(blobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(blobId),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
      * After {@link Router#updateBlobTtl} finishes, call {@link SecurityService#processResponse}.
+     * @param blobId the {@link BlobId} to update
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl}.
      */
-    private Callback<Void> routerCallback() {
+    private Callback<Void> routerCallback(BlobId blobId) {
       return buildCallback(metrics.updateBlobTtlRouterMetrics, result -> {
         if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
           // Set the named blob state to be 'READY' after the Ttl update succeed
           if (!restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
-            throw new RestServiceException("Internal key " + NAMED_BLOB_VERSION
-                + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
-          }
-          if (!restRequest.getArgs().containsKey(NAMED_BLOB_MAPPED_ID)) {
-            throw new RestServiceException("Internal key " + RestUtils.InternalKeys.NAMED_BLOB_MAPPED_ID
-                + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
+            throw new RestServiceException(
+                "Internal key " + NAMED_BLOB_VERSION + " is required in Named Blob TTL update callback!",
+                RestServiceErrorCode.InternalServerError);
           }
           long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
           NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-              namedBlobPath.getBlobName(), (String) restRequest.getArgs().get(NAMED_BLOB_MAPPED_ID), Utils.Infinite_Time,
-              namedBlobVersion);
+              namedBlobPath.getBlobName(), blobId.getID(), Utils.Infinite_Time, namedBlobVersion);
           namedBlobDb.updateBlobTtlAndStateToReady(record).get();
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             updateTtlForDatasetVersion();
