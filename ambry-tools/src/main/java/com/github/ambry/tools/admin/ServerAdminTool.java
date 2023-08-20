@@ -19,11 +19,12 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.NettySslHttp2Factory;
 import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.Config;
 import com.github.ambry.config.Default;
-import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobAll;
@@ -31,13 +32,13 @@ import com.github.ambry.messageformat.BlobData;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatRecord;
-import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.SendWithCorrelationId;
-import com.github.ambry.network.SocketNetworkClient;
-import com.github.ambry.network.SocketNetworkClientFactory;
+import com.github.ambry.network.http2.Http2ClientMetrics;
+import com.github.ambry.network.http2.Http2NetworkClient;
+import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
@@ -90,14 +91,12 @@ import org.slf4j.LoggerFactory;
  * 4. Stop/Start a particular blob store via BlobStoreControl operation.
  */
 public class ServerAdminTool implements Closeable {
-  private static final int MAX_CONNECTIONS_PER_SERVER = 1;
   private static final int POLL_TIMEOUT_MS = 10;
   private static final int OPERATION_TIMEOUT_MS = 5000;
-  private static final int CONNECTION_CHECKOUT_TIMEOUT_MS = 2000;
   private static final String CLIENT_ID = "ServerAdminTool";
   private static final Logger LOGGER = LoggerFactory.getLogger(ServerAdminTool.class);
 
-  private final SocketNetworkClient networkClient;
+  private final Http2NetworkClient networkClient;
   private final AtomicInteger correlationId = new AtomicInteger(0);
   private final Time time = SystemTime.getInstance();
   private final ClusterMap clusterMap;
@@ -288,8 +287,7 @@ public class ServerAdminTool implements Closeable {
     ClusterMap clusterMap =
         ((ClusterAgentsFactory) Utils.getObj(clusterMapConfig.clusterMapClusterAgentsFactory, clusterMapConfig,
             config.hardwareLayoutFilePath, config.partitionLayoutFilePath)).getClusterMap();
-    SSLFactory sslFactory = !clusterMapConfig.clusterMapSslEnabledDatacenters.isEmpty() ? SSLFactory.getNewInstance(
-        new SSLConfig(verifiableProperties)) : null;
+    SSLFactory sslFactory = new NettySslHttp2Factory(new SSLConfig(verifiableProperties));
     ServerAdminTool serverAdminTool = new ServerAdminTool(clusterMap, sslFactory, verifiableProperties);
     File file = new File(config.dataOutputFilePath);
     if (!file.exists() && !file.createNewFile()) {
@@ -589,11 +587,10 @@ public class ServerAdminTool implements Closeable {
    */
   public ServerAdminTool(ClusterMap clusterMap, SSLFactory sslFactory, VerifiableProperties verifiableProperties)
       throws Exception {
-    NetworkMetrics metrics = new NetworkMetrics(clusterMap.getMetricRegistry());
-    NetworkConfig config = new NetworkConfig(verifiableProperties);
+    Http2ClientMetrics metrics = new Http2ClientMetrics(clusterMap.getMetricRegistry());
+    Http2ClientConfig config = new Http2ClientConfig(verifiableProperties);
     this.clusterMap = clusterMap;
-    networkClient = new SocketNetworkClientFactory(metrics, config, sslFactory, MAX_CONNECTIONS_PER_SERVER,
-        MAX_CONNECTIONS_PER_SERVER, CONNECTION_CHECKOUT_TIMEOUT_MS, time).getNetworkClient();
+    networkClient = new Http2NetworkClientFactory(metrics, config, sslFactory, time).getNetworkClient();
   }
 
   /**
