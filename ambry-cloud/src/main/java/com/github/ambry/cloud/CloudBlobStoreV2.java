@@ -102,6 +102,27 @@ public class CloudBlobStoreV2 implements Store {
   }
 
   /**
+   * Detects duplicates in list of {@link MessageInfo}
+   * @param messageInfos list of {@link MessageInfo} to check for duplicates
+   */
+  protected void checkDuplicates(List<MessageInfo> messageInfos) {
+    HashMap<String, MessageInfo> seenKeys = new HashMap<>();
+    for (MessageInfo messageInfo : messageInfos) {
+      // Check for duplicates. We cannot continue as stream could be corrupted.
+      // Server always sends one message per key that captures full state of the key including ttl-update & delete.
+      // Emit a log and metric for investigation as it indicates a flaw in (de)serialization or replication.
+      // TODO: This should be in replication layer to avoid repeated code at Store level.
+      String blobId = messageInfo.getStoreKey().getID();
+      if (seenKeys.containsKey(blobId)) {
+        throw new IllegalArgumentException(
+            String.format("Duplicate message in replication-batch, original message = %s, duplicate message = %s",
+                seenKeys.get(blobId).toString(), messageInfo));
+      }
+      seenKeys.put(blobId, messageInfo);
+    }
+  }
+
+  /**
    * Uploads Ambry blob to Azure blob storage.
    * If blob already exists, then it catches BLOB_ALREADY_EXISTS exception and proceeds to next blob.
    * It fails for any other exception.
@@ -113,6 +134,9 @@ public class CloudBlobStoreV2 implements Store {
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     MessageFormatWriteSet messageFormatWriteSet = (MessageFormatWriteSet) messageSetToWrite;
     Timer.Context storageTimer = null;
+
+    checkDuplicates(messageFormatWriteSet.getMessageSetInfo());
+
     // For-each loop must be outside try-catch. Loop must continue on BLOB_ALREADY_EXISTS exception
     for (MessageInfo messageInfo : messageFormatWriteSet.getMessageSetInfo()) {
       try {
@@ -161,13 +185,14 @@ public class CloudBlobStoreV2 implements Store {
             && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
           // This should never happen. If we invoke put(), then blob must be absent in the Store
           azureMetrics.blobUploadConflictCount.inc();
-          return;
+          continue;
         }
         azureMetrics.blobUploadErrorCount.inc();
         throw new RuntimeException(e);
       } finally {
         if (storageTimer != null) {
           storageTimer.stop();
+          storageTimer = null;
         }
       } // try-catch
     } // for-each
