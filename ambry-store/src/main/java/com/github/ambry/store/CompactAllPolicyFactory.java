@@ -73,15 +73,17 @@ class CompactAllPolicy implements CompactionPolicy {
         Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =
             blobStoreStats.getValidDataSizeByLogSegment(
                 new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
-        final StringBuilder sizeLog = new StringBuilder(
-            "Valid data size for " + dataDir + " from BlobStoreStats " + validDataSizeByLogSegment.getFirst()
-                + " segments: ");
-        validDataSizeByLogSegment.getSecond().forEach((logSegmentName, validDataSize) -> {
-          sizeLog.append(
-              logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB " + validDataSize / segmentCapacity
-                  + "%;");
-        });
-        logger.info(sizeLog.toString());
+        if (validDataSizeByLogSegment != null) {
+          final StringBuilder sizeLog = new StringBuilder(
+              "Valid data size for " + dataDir + " from BlobStoreStats " + validDataSizeByLogSegment.getFirst()
+                  + " segments: ");
+          validDataSizeByLogSegment.getSecond().forEach((logSegmentName, validDataSize) -> {
+            sizeLog.append(
+                logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB " + validDataSize / segmentCapacity
+                    + "%;");
+          });
+          logger.info(sizeLog.toString());
+        }
       }
     }
     return details;
