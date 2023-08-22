@@ -32,6 +32,7 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
@@ -42,8 +43,7 @@ import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreStats;
-import com.github.ambry.utils.ByteBufferInputStream;
-import java.nio.ByteBuffer;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -106,12 +106,15 @@ public class CloudBlobStoreV2 implements Store {
    * @param messageInfos list of {@link MessageInfo} to check for duplicates
    */
   protected void checkDuplicates(List<MessageInfo> messageInfos) {
+    if (messageInfos.size() < 2) {
+      return;
+    }
     HashMap<String, MessageInfo> seenKeys = new HashMap<>();
     for (MessageInfo messageInfo : messageInfos) {
       // Check for duplicates. We cannot continue as stream could be corrupted.
       // Server always sends one message per key that captures full state of the key including ttl-update & delete.
       // Emit a log and metric for investigation as it indicates a flaw in (de)serialization or replication.
-      // TODO: This should be in replication layer to avoid repeated code at Store level.
+      // FIXME: This check should be in replication layer to avoid multiple implementations at Store level.
       String blobId = messageInfo.getStoreKey().getID();
       if (seenKeys.containsKey(blobId)) {
         throw new IllegalArgumentException(
@@ -133,28 +136,24 @@ public class CloudBlobStoreV2 implements Store {
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     MessageFormatWriteSet messageFormatWriteSet = (MessageFormatWriteSet) messageSetToWrite;
+    // This is a list of blob-ids from remote server
+    List<MessageInfo> messageInfos = messageFormatWriteSet.getMessageSetInfo();
+    // This is a list of data-streams associated with blob-ids. i-th stream is for i-th blob-id.
+    // This allows us to pass stream to azure-sdk and let it handle read() logic.
+    List<InputStream> messageStreamList =
+        ((MessageSievingInputStream) messageFormatWriteSet.getStreamToWrite()).getValidMessageStreamList();
     Timer.Context storageTimer = null;
-
     checkDuplicates(messageFormatWriteSet.getMessageSetInfo());
-
+    MessageInfo messageInfo = null;
     // For-each loop must be outside try-catch. Loop must continue on BLOB_ALREADY_EXISTS exception
-    for (MessageInfo messageInfo : messageFormatWriteSet.getMessageSetInfo()) {
+    for (int msgNum = 0; msgNum < messageInfos.size(); msgNum++) {
       try {
-        // Read blob from input stream. It is not possible to just pass the input stream to azure-SDK.
-        // The SDK expects the stream to contain exactly the number of bytes to be read. If there are
-        // more bytes, it fails assuming the stream is corrupted. The inputStream we have here is a
-        // concatenation of many blobs and not just one blob.
-        ByteBuffer messageBuf = ByteBuffer.allocate((int) messageInfo.getSize());
-        if (messageFormatWriteSet.getStreamToWrite().read(messageBuf.array()) == -1) {
-          throw new RuntimeException(
-              String.format("Failed to read blob %s with %s bytes because end-of-stream was reached",
-                  messageInfo.getStoreKey().getID(), messageInfo.getSize()));
-        }
+        messageInfo = messageInfos.get(msgNum);
 
         // Prepare to upload blob to Azure blob storage
         // There is no parallelism, but we still need to create and pass this object to SDK.
         BlobParallelUploadOptions blobParallelUploadOptions =
-            new BlobParallelUploadOptions(new ByteBufferInputStream(messageBuf));
+            new BlobParallelUploadOptions(messageStreamList.get(msgNum));
         // To avoid overwriting, pass "*" to setIfNoneMatch(String ifNoneMatch)
         // https://learn.microsoft.com/en-us/java/api/com.azure.storage.blob.blobclient?view=azure-java-stable
         blobParallelUploadOptions.setRequestConditions(new BlobRequestConditions().setIfNoneMatch("*"));

@@ -44,6 +44,7 @@ public class MessageSievingInputStream extends InputStream {
   private final InputStream sievedStream;
   private int numInvalidMessages;
   private boolean hasDeprecatedMessages;
+  private final List<InputStream> msgStreamList;
   private final List<MessageInfo> sievedMessageInfoList;
   private final List<Transformer> transformers;
 
@@ -82,6 +83,7 @@ public class MessageSievingInputStream extends InputStream {
     numInvalidMessages = 0;
     hasDeprecatedMessages = false;
     sievedMessageInfoList = new ArrayList<>();
+    msgStreamList = new ArrayList<>();
 
     // check for empty list
     if (messageInfoList.size() == 0) {
@@ -95,7 +97,6 @@ public class MessageSievingInputStream extends InputStream {
     }
 
     int bytesRead = 0;
-    List<InputStream> msgStreamList = new ArrayList<>();
     long batchStartTime = SystemTime.getInstance().milliseconds();
     logger.trace("Starting to validate message stream ");
     for (MessageInfo msgInfo : messageInfoList) {
@@ -116,7 +117,7 @@ public class MessageSievingInputStream extends InputStream {
         // was an error during the sieving for this message.
         Message msg = new Message(msgInfo, new ByteArrayInputStream(Utils.readBytesFromStream(inStream, msgSize)));
         logger.trace("Read stream for message info {}  into memory", msgInfo);
-        validateAndTransform(msg, msgStreamList, bytesRead);
+        validateAndTransform(msg, bytesRead);
       }
       bytesRead += msgSize;
     }
@@ -248,15 +249,21 @@ public class MessageSievingInputStream extends InputStream {
   }
 
   /**
+   * @return The list of valid input-streams. Each stream is one blob.
+   */
+  public List<InputStream> getValidMessageStreamList() {
+    return msgStreamList;
+  }
+
+  /**
    * Validates and potentially transforms the given input stream consisting of message data. It does so using the list
    * of {@link Transformer}s associated with this instance.
    * message corruption and acceptable formats.
    * @param inMsg the original {@link Message} that needs to be validated and possibly transformed.
-   * @param msgStreamList the output list to which the sieved stream output are to be added to.
    * @param msgOffset the offset of the message in the stream.
    * @throws IOException if an exception was encountered reading or writing bytes to/from streams.
    */
-  private void validateAndTransform(Message inMsg, List<InputStream> msgStreamList, int msgOffset) throws IOException {
+  private void validateAndTransform(Message inMsg, int msgOffset) throws IOException {
     if (transformers == null || transformers.isEmpty()) {
       // Write the message without any transformations.
       sievedMessageInfoList.add(inMsg.getMessageInfo());
