@@ -181,7 +181,7 @@ public class CloudBlobStoreV2 implements Store {
         if (e instanceof BlobStorageException
             && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
           // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
-          logger.trace("Failed to upload blob {} to Azure blob storage because it already exists",
+          logger.debug("Failed to upload blob {} to Azure blob storage because it already exists",
               messageInfo.getStoreKey().getID());
           azureMetrics.blobUploadConflictCount.inc();
           continue;
