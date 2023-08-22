@@ -135,15 +135,15 @@ public class CloudBlobStoreV2 implements Store {
    */
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
-    MessageFormatWriteSet messageFormatWriteSet = (MessageFormatWriteSet) messageSetToWrite;
+    MessageSievingInputStream messageSievingInputStream =
+        (MessageSievingInputStream) ((MessageFormatWriteSet) messageSetToWrite).getStreamToWrite();
     // This is a list of blob-ids from remote server
-    List<MessageInfo> messageInfos = messageFormatWriteSet.getMessageSetInfo();
+    List<MessageInfo> messageInfos = messageSievingInputStream.getValidMessageInfoList();
+    checkDuplicates(messageInfos);
     // This is a list of data-streams associated with blob-ids. i-th stream is for i-th blob-id.
     // This allows us to pass stream to azure-sdk and let it handle read() logic.
-    List<InputStream> messageStreamList =
-        ((MessageSievingInputStream) messageFormatWriteSet.getStreamToWrite()).getValidMessageStreamList();
+    List<InputStream> messageStreamList = messageSievingInputStream.getValidMessageStreamList();
     Timer.Context storageTimer = null;
-    checkDuplicates(messageFormatWriteSet.getMessageSetInfo());
     MessageInfo messageInfo = null;
     // For-each loop must be outside try-catch. Loop must continue on BLOB_ALREADY_EXISTS exception
     for (int msgNum = 0; msgNum < messageInfos.size(); msgNum++) {
