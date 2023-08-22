@@ -78,9 +78,8 @@ class CompactAllPolicy implements CompactionPolicy {
               "Valid data size for " + dataDir + " from BlobStoreStats " + validDataSizeByLogSegment.getFirst()
                   + " segments: ");
           validDataSizeByLogSegment.getSecond().forEach((logSegmentName, validDataSize) -> {
-            sizeLog.append(
-                logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB " + validDataSize / segmentCapacity
-                    + "%;");
+            sizeLog.append(logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB "
+                + validDataSize * 1.0 / segmentCapacity + "%;");
           });
           logger.info(sizeLog.toString());
         }

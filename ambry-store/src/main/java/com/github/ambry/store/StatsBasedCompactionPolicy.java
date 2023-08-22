@@ -65,9 +65,8 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
               "Valid data size for " + dataDir + " from BlobStoreStats " + validDataSizeByLogSegment.getFirst()
                   + " segments: ");
           validDataSizeByLogSegment.getSecond().forEach((logSegmentName, validDataSize) -> {
-            sizeLog.append(
-                logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB " + validDataSize / segmentCapacity
-                    + "%;");
+            sizeLog.append(logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB "
+                + validDataSize * 1.0 / segmentCapacity + "%;");
           });
           logger.info(sizeLog.toString());
         }
@@ -119,10 +118,10 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
         long staggerTime =
             random.nextInt(2 * 60 * 60 * 1000) % storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs;
         blobToLastMiddleRangeCompaction.put(storeId,
-            System.currentTimeMillis() - storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs + staggerTime);
+            time.milliseconds() - storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs + staggerTime);
       }
 
-      if (System.currentTimeMillis() - blobToLastMiddleRangeCompaction.get(storeId)
+      if (time.milliseconds() - blobToLastMiddleRangeCompaction.get(storeId)
           >= storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs) {
         // find the first log segment has valid data percentage <= the percentage threshold
         while (firstEntry != null) {
@@ -147,7 +146,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
                     segmentHeaderSize, maxBlobSize, weightOnBenefit);
             if (costBenefitInfo.getBenefit() > 1) {
               logger.info("Merging middle log segments which are qualified for compaction {} ", costBenefitInfo);
-              blobToLastMiddleRangeCompaction.put(storeId, System.currentTimeMillis());
+              blobToLastMiddleRangeCompaction.put(storeId, time.milliseconds());
               return costBenefitInfo;
             }
           }
@@ -200,26 +199,33 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
     long adjustedTotalCost = 0;
     int totalSegmentsToBeCompacted = 0;
     LogSegmentName curSegmentName = firstLogSegmentName;
+    // weight more on benefits, don't let one single log segment with extreme small valid data leads to small compactions.
+    // Be default, the storeStatsBasedCompactionMinCostInPercentage is 0.06. 16G*0.06=1G
+    long minSegmentCost = storeConfig.storeStatsBasedCompactionMinCostInPercentage == 0 ? 0
+        : (long) (segmentCapacity * storeConfig.storeStatsBasedCompactionMinCostInPercentage);
     while (!curSegmentName.equals(lastLogSegmentName)) {
       totalCost += validDataSizePerLogSegment.get(curSegmentName);
-      curSegmentName = validDataSizePerLogSegment.higherKey(curSegmentName);
-      totalSegmentsToBeCompacted++;
-      // weight more on benefit, don't let one single log segment with extreme small valid data leads to small compactions.
-      // TODO: we will add a configure for the percentage if the turning turns out to be positive. 16G*0.06=1G
-      long minSegmentCost = (long) (segmentCapacity * 0.06);
       adjustedTotalCost += validDataSizePerLogSegment.get(curSegmentName) < minSegmentCost ? minSegmentCost
           : validDataSizePerLogSegment.get(curSegmentName);
+
+      curSegmentName = validDataSizePerLogSegment.higherKey(curSegmentName);
+      totalSegmentsToBeCompacted++;
     }
     // add the last log segment
     totalCost += validDataSizePerLogSegment.get(curSegmentName);
+    adjustedTotalCost += validDataSizePerLogSegment.get(curSegmentName) < minSegmentCost ? minSegmentCost
+        : validDataSizePerLogSegment.get(curSegmentName);
     totalSegmentsToBeCompacted++;
     long maxCapacityPerSegment = segmentCapacity - segmentHeaderSize - maxBlobSize;
     int benefit = totalSegmentsToBeCompacted - (int) Math.ceil(totalCost / (maxCapacityPerSegment * 1.0));
 
     if (weightOnBenefit) {
-      return new CostBenefitInfo(new ArrayList<>(
-          validDataSizePerLogSegment.subMap(firstLogSegmentName, true, lastLogSegmentName, true).keySet()),
-          adjustedTotalCost, benefit);
+      if (totalCost != adjustedTotalCost) {
+        logger.info("getCostBenefitInfo {} cost {} adjusted cost {}",
+            validDataSizePerLogSegment.subMap(firstLogSegmentName, true, lastLogSegmentName, true).keySet(), totalCost,
+            adjustedTotalCost);
+        totalCost = adjustedTotalCost;
+      }
     }
     return new CostBenefitInfo(new ArrayList<>(
         validDataSizePerLogSegment.subMap(firstLogSegmentName, true, lastLogSegmentName, true).keySet()), totalCost,
