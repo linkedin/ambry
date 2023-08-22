@@ -156,6 +156,7 @@ public class CloudBlobStoreV2 implements Store {
         // To avoid overwriting, pass "*" to setIfNoneMatch(String ifNoneMatch)
         // https://learn.microsoft.com/en-us/java/api/com.azure.storage.blob.blobclient?view=azure-java-stable
         blobParallelUploadOptions.setRequestConditions(new BlobRequestConditions().setIfNoneMatch("*"));
+        // This is ambry metadata, uninterpreted by azure
         blobParallelUploadOptions.setMetadata(messageInfoToMap(messageInfo));
         // Without content-type, get-blob floods log with warnings
         blobParallelUploadOptions.setHeaders(new BlobHttpHeaders().setContentType("application/octet-stream"));
