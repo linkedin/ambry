@@ -174,18 +174,20 @@ public class CloudBlobStoreV2 implements Store {
         azureMetrics.blobUploadSuccessRate.mark();
         // Measure ingestion rate, helps decide fleet size
         azureMetrics.backupSuccessByteRate.mark(messageInfo.getSize());
-        logger.trace("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
+        logger.debug("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
             messageInfo.getStoreKey().getID(), blockBlobItemResponse.getStatusCode(),
             blockBlobItemResponse.getValue().getETag());
       } catch (Exception e) {
-        logger.error("Failed to upload blob {} to Azure blob storage because {}", messageInfo.getStoreKey().getID(),
-            e.getMessage());
         if (e instanceof BlobStorageException
             && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
-          // This should never happen. If we invoke put(), then blob must be absent in the Store
+          // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
+          logger.trace("Failed to upload blob {} to Azure blob storage because it already exists",
+              messageInfo.getStoreKey().getID());
           azureMetrics.blobUploadConflictCount.inc();
           continue;
         }
+        logger.error("Failed to upload blob {} to Azure blob storage because {}", messageInfo.getStoreKey().getID(),
+            e.getMessage());
         azureMetrics.blobUploadErrorCount.inc();
         throw new RuntimeException(e);
       } finally {
