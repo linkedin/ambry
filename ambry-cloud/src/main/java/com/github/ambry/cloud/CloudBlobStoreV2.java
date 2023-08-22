@@ -49,6 +49,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
@@ -142,18 +143,16 @@ public class CloudBlobStoreV2 implements Store {
     checkDuplicates(messageInfos);
     // This is a list of data-streams associated with blob-ids. i-th stream is for i-th blob-id.
     // This allows us to pass stream to azure-sdk and let it handle read() logic.
-    List<InputStream> messageStreamList = messageSievingInputStream.getValidMessageStreamList();
+    ListIterator<InputStream> messageStreamListIter =
+        messageSievingInputStream.getValidMessageStreamList().listIterator();
     Timer.Context storageTimer = null;
-    MessageInfo messageInfo = null;
     // For-each loop must be outside try-catch. Loop must continue on BLOB_ALREADY_EXISTS exception
-    for (int msgNum = 0; msgNum < messageInfos.size(); msgNum++) {
+    for (MessageInfo messageInfo : messageInfos) {
       try {
-        messageInfo = messageInfos.get(msgNum);
-
         // Prepare to upload blob to Azure blob storage
         // There is no parallelism, but we still need to create and pass this object to SDK.
         BlobParallelUploadOptions blobParallelUploadOptions =
-            new BlobParallelUploadOptions(messageStreamList.get(msgNum));
+            new BlobParallelUploadOptions(messageStreamListIter.next());
         // To avoid overwriting, pass "*" to setIfNoneMatch(String ifNoneMatch)
         // https://learn.microsoft.com/en-us/java/api/com.azure.storage.blob.blobclient?view=azure-java-stable
         blobParallelUploadOptions.setRequestConditions(new BlobRequestConditions().setIfNoneMatch("*"));
