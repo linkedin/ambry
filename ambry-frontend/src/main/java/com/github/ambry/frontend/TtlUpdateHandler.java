@@ -18,8 +18,10 @@ import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.named.PutResult;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.RequestPath;
@@ -181,19 +183,24 @@ class TtlUpdateHandler {
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
           NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
-          namedBlobDb.updateBlobTtlAndStateToReady(record).thenRun(() -> {
-            try {
-              if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-                updateTtlForDatasetVersion();
-              }
-              processResponseHelper();
-            } catch (RestServiceException ex) {
-              finalCallback.onCompletion(null, ex);
-            }
-          });
+          CallbackUtils.callCallbackAfter(namedBlobDb.updateBlobTtlAndStateToReady(record),
+              updateNamedBlobTtlCallback());
         } else {
           processResponseHelper();
         }
+      }, restRequest.getUri(), LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link NamedBlobDb#updateBlobTtlAndStateToReady(NamedBlobRecord)}, call {@link #updateNamedBlobTtlCallback()}.
+     * @return a {@link Callback} to be used with {@link NamedBlobDb#updateBlobTtlAndStateToReady(NamedBlobRecord)}.
+     */
+    private Callback<PutResult> updateNamedBlobTtlCallback() {
+      return buildCallback(metrics.updateNamedBlobTtlCallbackMetrics, datasetVersion -> {
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          updateTtlForDatasetVersion();
+        }
+        processResponseHelper();
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 

@@ -600,7 +600,7 @@ public class NamedBlobPutHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
         if (datasetVersionRecord.getExpirationTimeMs() != Utils.Infinite_Time) {
-          restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
+          restResponseChannel.setHeader(RestUtils.Headers.DATASET_EXPIRATION_TIME,
               new Date(datasetVersionRecord.getExpirationTimeMs()));
         }
         long newExpirationTimeMs = datasetVersionRecord.getExpirationTimeMs();
