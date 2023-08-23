@@ -581,8 +581,8 @@ public class FrontendRestRequestServiceTest {
         CompletableFuture.completedFuture(new PutResult(namedBlobRecordAfterTtlUpdate)));
 
     doOperation(restRequest, restResponseChannel);
-    assertNotEquals("The expiration time should not be Infinite_Time", "Infinite_Time",
-        restResponseChannel.getResponseHeaders().get(DATASET_EXPIRATION_TIME));
+    assertNotEquals("The expiration time should not be Infinite_Time", null,
+        restResponseChannel.getResponseHeaders().get(EXPIRES));
 
     //Update ttl for the dataset version.
     headers = new JSONObject();
@@ -605,8 +605,7 @@ public class FrontendRestRequestServiceTest {
     //verify ttl succeed.
     //verify status.
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
-    assertEquals("Mismatch on expiration time", "Infinite_Time",
-        restResponseChannel.getResponseHeaders().get(DATASET_EXPIRATION_TIME));
+    assertNull("Mismatch on expiration time", restResponseChannel.getResponseHeaders().get(EXPIRES));
   }
 
   /**

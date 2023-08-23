@@ -385,7 +385,6 @@ class AmbrySecurityService implements SecurityService {
           new Date(System.currentTimeMillis() + cacheTtl * Time.MsPerSec));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + cacheTtl);
     } else {
-      restResponseChannel.setHeader(RestUtils.Headers.EXPIRES, restResponseChannel.getHeader(RestUtils.Headers.DATE));
       restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL, "private, no-cache, no-store, proxy-revalidate");
       restResponseChannel.setHeader(RestUtils.Headers.PRAGMA, "no-cache");
     }

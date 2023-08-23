@@ -50,6 +50,7 @@ import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -598,6 +599,10 @@ public class NamedBlobPutHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
+        if (datasetVersionRecord.getExpirationTimeMs() != Utils.Infinite_Time) {
+          restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
+              new Date(datasetVersionRecord.getExpirationTimeMs()));
+        }
         long newExpirationTimeMs = datasetVersionRecord.getExpirationTimeMs();
         // expirationTimeMs = ttl + creationTime. If dataset version inherit the retentionTimeInSeconds from dataset level
         // the ttl should be updated.

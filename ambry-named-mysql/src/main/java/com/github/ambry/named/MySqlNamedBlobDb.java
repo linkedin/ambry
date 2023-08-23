@@ -633,6 +633,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private PutResult run_put_v2(NamedBlobRecord record, NamedBlobState state, short accountId, short containerId,
       Connection connection) throws Exception {
     String query = "";
+    NamedBlobRecord updatedRecord;
     try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY_V2)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
@@ -644,7 +645,9 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         statement.setTimestamp(5, null);
       }
       final long newVersion = buildVersion();
-      record.setVersion(newVersion);
+      updatedRecord =
+          new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+              record.getBlobId(), record.getExpirationTimeMs(), newVersion);
       statement.setLong(6, newVersion);
       statement.setInt(7, state.ordinal());
       query = statement.toString();
@@ -654,7 +657,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       logger.error("Failed to execute query {}, {}", query, e.getMessage());
       throw e;
     }
-    return new PutResult(record);
+    return new PutResult(updatedRecord);
   }
 
   private PutResult apply_ttl_update(NamedBlobRecord record, short accountId, short containerId, Connection connection)
