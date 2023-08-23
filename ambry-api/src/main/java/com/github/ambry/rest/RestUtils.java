@@ -176,6 +176,10 @@ public class RestUtils {
      */
     public final static String TARGET_DATASET_VERSION = "x-ambry-target-dataset-version";
     /**
+     * The dataset version expiration time.
+     */
+    public final static String DATASET_EXPIRATION_TIME = "x-ambry-dataset-expiration-time";
+    /**
      * The page token parameter for a list dataset call.
      */
     public final static String TARGET_PAGE_PARAM = "x-ambry-target-page-param";

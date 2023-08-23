@@ -73,7 +73,9 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics updateBlobTtlRouterMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlIdConversionMetrics;
   public final AsyncOperationTracker.Metrics updateBlobTtlSecurityProcessResponseMetrics;
-
+  // NAMED BLOB TTL
+  public final AsyncOperationTracker.Metrics updateNamedBlobTtlCallbackMetrics;
+  
   public final AsyncOperationTracker.Metrics deleteBlobSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics deleteBlobSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics deleteBlobRouterMetrics;
@@ -332,6 +334,7 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(UndeleteHandler.class, "UndeleteBlob", false, metricRegistry, frontendConfig);
     putBlobMetricsGroup =
         new RestRequestMetricsGroup(NamedBlobPutHandler.class, "PutBlob", false, metricRegistry, frontendConfig);
+
     // AsyncOperationTracker.Metrics instances
     postSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(PostBlobHandler.class, "postSecurityProcessRequest", metricRegistry);
@@ -357,6 +360,9 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "idConversion", metricRegistry);
     updateBlobTtlSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "securityProcessResponse", metricRegistry);
+    //NAMED BLOB TTL UPDATE
+    updateNamedBlobTtlCallbackMetrics =
+        new AsyncOperationTracker.Metrics(TtlUpdateHandler.class, "NamedBlobTtl", metricRegistry);
 
     deleteBlobSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(DeleteBlobHandler.class, "securityProcessRequest", metricRegistry);

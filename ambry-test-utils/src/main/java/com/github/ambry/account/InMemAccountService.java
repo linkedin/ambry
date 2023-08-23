@@ -139,8 +139,11 @@ public class InMemAccountService implements AccountService {
     short containerId = account.getContainerByName(containerName).getId();
     idToDatasetVersionMap.putIfAbsent(new Pair<>(accountId, containerId), new HashMap<>());
     Dataset dataset = getDataset(accountName, containerName, datasetName);
-    long updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
-    if (datasetVersionTtlEnabled) {
+    long updatedExpirationTimeMs = Utils.Infinite_Time;
+    if (dataset.getRetentionTimeInSeconds() != null) {
+      updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
+    }
+    if (datasetVersionTtlEnabled | dataset.getRetentionTimeInSeconds() == null) {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, timeToLiveInSeconds);
     }
     if ("LATEST".equals(version)) {
@@ -299,6 +302,23 @@ public class InMemAccountService implements AccountService {
       }
     }
     nameToDatasetMap.get(new Pair<>(accountName, containerName)).remove(datasetName);
+  }
+
+  @Override
+  public synchronized void updateDatasetVersionTtl(String accountName, String containerName, String datasetName,
+      String version) throws AccountServiceException {
+    Account account = nameToAccountMap.get(accountName);
+    short accountId = account.getId();
+    short containerId = account.getContainerByName(containerName).getId();
+    DatasetVersionRecord datasetVersionRecord =
+        idToDatasetVersionMap.get(new Pair<>(accountId, containerId)).get(new Pair<>(datasetName, version));
+    if (datasetVersionRecord == null) {
+      throw new AccountServiceException("Dataset version has been deleted", AccountServiceErrorCode.Deleted);
+    }
+    DatasetVersionRecord updatedDatasetVersionRecord =
+        new DatasetVersionRecord(accountId, containerId, datasetName, version, Utils.Infinite_Time);
+    idToDatasetVersionMap.get(new Pair<>(accountId, containerId))
+        .put(new Pair<>(datasetName, version), updatedDatasetVersionRecord);
   }
 
   @Override

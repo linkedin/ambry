@@ -184,7 +184,7 @@ class FrontendRestRequestService implements RestRequestService {
 
     ttlUpdateHandler =
         new TtlUpdateHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
-            clusterMap, quotaManager);
+            clusterMap, quotaManager, namedBlobDb, accountService);
     deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, accountService);

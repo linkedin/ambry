@@ -26,8 +26,8 @@ public class NamedBlobRecord {
   private final String containerName;
   private final String blobName;
   private final long expirationTimeMs;
-  private long version;
-  private String blobId;
+  private final long version;
+  private final String blobId;
 
   /**
    * @param accountName the account name.
@@ -92,14 +92,6 @@ public class NamedBlobRecord {
    */
   public long getVersion() {
     return version;
-  }
-
-  public void setVersion(long newVersion) {
-    version = newVersion;
-  }
-
-  public void setBlobId(String blobId) {
-    this.blobId = blobId;
   }
 
   /**

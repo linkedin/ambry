@@ -147,7 +147,7 @@ public class MySqlNamedBlobDbTest {
   }
 
   @Test
-  public void testUpdateBlobStateToReady() throws Exception {
+  public void testUpdateBlobTtlAndStateToReady() throws Exception {
     Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
     calendar.add(Calendar.DATE, 10);
 
@@ -158,8 +158,10 @@ public class MySqlNamedBlobDbTest {
     final NamedBlobRecord record = new NamedBlobRecord(account.getName(), container.getName(), "blobName", id, expirationTimeMs);
     PutResult putResult = namedBlobDb.put(record, NamedBlobState.IN_PROGRESS, true).get();
 
-    record.setVersion(putResult.getInsertedRecord().getVersion());
-    namedBlobDb.updateBlobTtlAndStateToReady(record).get();
+    NamedBlobRecord updatedRecord =
+        new NamedBlobRecord(record.getAccountName(), record.getContainerName(), record.getBlobName(),
+            record.getBlobId(), record.getExpirationTimeMs(), putResult.getInsertedRecord().getVersion());
+    namedBlobDb.updateBlobTtlAndStateToReady(updatedRecord).get();
 
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(account.getName(), container.getName(), "blobName").get();
     assertEquals("Blob Id is not matched with the record", id, namedBlobRecord.getBlobId());

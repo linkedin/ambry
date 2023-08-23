@@ -13,14 +13,23 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.named.NamedBlobDb;
+import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.named.PutResult;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
@@ -29,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -44,6 +54,8 @@ class TtlUpdateHandler {
   private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
   private final QuotaManager quotaManager;
+  private final NamedBlobDb namedBlobDb;
+  private final AccountService accountService;
 
   /**
    * Constructs a handler for handling requests for updating TTLs of blobs
@@ -54,10 +66,12 @@ class TtlUpdateHandler {
    * @param metrics {@link FrontendMetrics} instance where metrics should be recorded.
    * @param clusterMap the {@link ClusterMap} in use.
    * @param quotaManager {@link QuotaManager} object.
+   * @param namedBlobDb the {@link NamedBlobDb} object.
+   * @param accountService the {@link AccountService} object.
    */
   TtlUpdateHandler(Router router, SecurityService securityService, IdConverter idConverter,
       AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics, ClusterMap clusterMap,
-      QuotaManager quotaManager) {
+      QuotaManager quotaManager, NamedBlobDb namedBlobDb, AccountService accountService) {
     this.router = router;
     this.securityService = securityService;
     this.idConverter = idConverter;
@@ -65,6 +79,8 @@ class TtlUpdateHandler {
     this.metrics = metrics;
     this.clusterMap = clusterMap;
     this.quotaManager = quotaManager;
+    this.namedBlobDb = namedBlobDb;
+    this.accountService = accountService;
   }
 
   /**
@@ -84,6 +100,7 @@ class TtlUpdateHandler {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final Callback<Void> finalCallback;
+    private String blobIdStr;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -115,7 +132,7 @@ class TtlUpdateHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+        blobIdStr = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
         idConverter.convert(restRequest, blobIdStr, idConverterCallback());
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -126,38 +143,64 @@ class TtlUpdateHandler {
      * @return a {@link Callback} to be used with {@link IdConverter#convert}.
      */
     private Callback<String> idConverterCallback() {
-      return buildCallback(metrics.updateBlobTtlIdConversionMetrics, convertedBlobId -> {
-        BlobId blobId = FrontendUtils.getBlobIdFromString(convertedBlobId, clusterMap);
-        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(blobId, restRequest,
+      return buildCallback(metrics.updateBlobTtlIdConversionMetrics, convertedBlobIdStr -> {
+        BlobId convertedBlobId = FrontendUtils.getBlobIdFromString(convertedBlobIdStr, clusterMap);
+        accountAndContainerInjector.injectTargetAccountAndContainerFromBlobId(convertedBlobId, restRequest,
             metrics.updateBlobTtlMetricsGroup);
-        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobId));
+        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(convertedBlobId));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
      * After {@link SecurityService#postProcessRequest} finishes, call {@link Router#updateBlobTtl} to update the TTL of
      * the blob in the storage layer.
-     * @param blobId the {@link BlobId} to update
+     * @param convertedBlobId the {@link BlobId} to update
      * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
      */
-    private Callback<Void> securityPostProcessRequestCallback(BlobId blobId) {
+    private Callback<Void> securityPostProcessRequestCallback(BlobId convertedBlobId) {
       return buildCallback(metrics.updateBlobTtlSecurityPostProcessRequestMetrics, result -> {
         String serviceId = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SERVICE_ID, true);
-        router.updateBlobTtl(blobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(),
+        router.updateBlobTtl(convertedBlobId.getID(), serviceId, Utils.Infinite_Time, routerCallback(convertedBlobId),
             QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false));
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
     /**
      * After {@link Router#updateBlobTtl} finishes, call {@link SecurityService#processResponse}.
+     * @param convertedBlobId the {@link BlobId} to update
      * @return a {@link Callback} to be used with {@link Router#updateBlobTtl}.
      */
-    private Callback<Void> routerCallback() {
+    private Callback<Void> routerCallback(BlobId convertedBlobId) {
       return buildCallback(metrics.updateBlobTtlRouterMetrics, result -> {
-        LOGGER.debug("Updated TTL of {}", RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
-        securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
+        if (RequestPath.matchesOperation(blobIdStr, Operations.NAMED_BLOB)) {
+          // Set the named blob state to be 'READY' after the Ttl update succeed
+          if (!restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
+            throw new RestServiceException(
+                "Internal key " + NAMED_BLOB_VERSION + " is required in Named Blob TTL update callback!",
+                RestServiceErrorCode.InternalServerError);
+          }
+          long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
+          NamedBlobPath namedBlobPath = NamedBlobPath.parse(blobIdStr, restRequest.getArgs());
+          NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
+              namedBlobPath.getBlobName(), convertedBlobId.getID(), Utils.Infinite_Time, namedBlobVersion);
+          CallbackUtils.callCallbackAfter(namedBlobDb.updateBlobTtlAndStateToReady(record),
+              updateNamedBlobTtlCallback());
+        } else {
+          processResponseHelper();
+        }
+      }, restRequest.getUri(), LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link NamedBlobDb#updateBlobTtlAndStateToReady(NamedBlobRecord)}, call {@link #updateNamedBlobTtlCallback()}.
+     * @return a {@link Callback} to be used with {@link NamedBlobDb#updateBlobTtlAndStateToReady(NamedBlobRecord)}.
+     */
+    private Callback<PutResult> updateNamedBlobTtlCallback() {
+      return buildCallback(metrics.updateNamedBlobTtlCallbackMetrics, datasetVersion -> {
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          updateTtlForDatasetVersion();
+        }
+        processResponseHelper();
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
@@ -168,6 +211,40 @@ class TtlUpdateHandler {
     private Callback<Void> securityProcessResponseCallback() {
       return buildCallback(metrics.updateBlobTtlSecurityProcessResponseMetrics,
           securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
+    }
+
+    /**
+     * Helper method to set the response channel and process response.
+     * @throws RestServiceException
+     */
+    private void processResponseHelper() throws RestServiceException {
+      LOGGER.debug("Updated TTL of {}",
+          RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true));
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
+      securityService.processResponse(restRequest, restResponseChannel, null, securityProcessResponseCallback());
+    }
+
+    /**
+     * Support ttl update for dataset version.
+     * @throws RestServiceException
+     */
+    private void updateTtlForDatasetVersion() throws RestServiceException {
+      String datasetVersionPathString = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
+      DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(datasetVersionPathString, restRequest.getArgs());
+      String accountName = datasetVersionPath.getAccountName();
+      String containerName = datasetVersionPath.getContainerName();
+      String datasetName = datasetVersionPath.getDatasetName();
+      String version = datasetVersionPath.getVersion();
+      try {
+        accountService.updateDatasetVersionTtl(accountName, containerName, datasetName, version);
+      } catch (AccountServiceException ex) {
+        LOGGER.error(
+            "Dataset version update failed for accountName: " + accountName + " containerName: " + containerName
+                + " datasetName: " + datasetName + " version: " + version);
+        throw new RestServiceException(ex.getMessage(),
+            RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
+      }
     }
   }
 }
