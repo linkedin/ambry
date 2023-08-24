@@ -56,6 +56,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -419,7 +420,17 @@ public abstract class StorageClient implements AzureStorageClient {
             new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
       }
       HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
-      return buildBlobServiceSyncClient(client, new Configuration(), new RequestRetryOptions(), azureCloudConfig);
+      /*
+       retryPolicyType – null defaults to EXPONENTIAL
+       maxTries – null defaults to 4
+       tryTimeoutInSeconds – null defaults to Integer.MAX_VALUE seconds, so set to cloudRequestTimeout
+       retryDelayInMs – null defaults to 4ms when retryPolicyType is EXPONENTIAL
+       maxRetryDelayInMs – null defaults to 120ms
+       */
+      RequestRetryOptions retryOptions =
+          new RequestRetryOptions(null, null, (int) TimeUnit.MILLISECONDS.toSeconds(cloudConfig.cloudRequestTimeout),
+              null, null, null);
+      return buildBlobServiceSyncClient(client, new Configuration(), retryOptions, azureCloudConfig);
     } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
       logger.error("Error building ABS blob service client: {}", ex.getMessage());
       throw new IllegalStateException(ex);

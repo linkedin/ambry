@@ -14,14 +14,25 @@
 
 package com.github.ambry.cloud;
 
+import com.azure.core.http.rest.Response;
+import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.models.BlobErrorCode;
+import com.azure.storage.blob.models.BlobHttpHeaders;
+import com.azure.storage.blob.models.BlobRequestConditions;
+import com.azure.storage.blob.models.BlobStorageException;
+import com.azure.storage.blob.models.BlockBlobItem;
+import com.azure.storage.blob.options.BlobParallelUploadOptions;
 import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
@@ -32,9 +43,14 @@ import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreStats;
+import java.io.InputStream;
+import java.time.Duration;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,10 +79,145 @@ public class CloudBlobStoreV2 implements Store {
     this.blobContainerClient = blobContainerClient;
   }
 
+  public static final String ACCOUNT_ID = "accountId";
+  public static final String CONTAINER_ID = "containerId";
+  public static final String CRC = "crc";
+  public static final String EXPIRATION_TIME = "expirationTimeInMs";
+  public static final String LIFE_VERSION = "lifeVersion";
+  public static final String OPERATION_TIME = "operationTimeMs";
+  public static final String SIZE = "size";
+
+  /**
+   * @return a {@link HashMap} of metadata key-value pairs.
+   */
+  public Map<String, String> messageInfoToMap(MessageInfo messageInfo) {
+    HashMap<String, String> hashMap = new HashMap<>();
+    hashMap.put(ACCOUNT_ID, String.valueOf(messageInfo.getAccountId()));
+    hashMap.put(CONTAINER_ID, String.valueOf(messageInfo.getContainerId()));
+    hashMap.put(CRC, String.valueOf(messageInfo.getCrc()));
+    hashMap.put(EXPIRATION_TIME, String.valueOf(messageInfo.getExpirationTimeInMs()));
+    hashMap.put(LIFE_VERSION, String.valueOf(messageInfo.getLifeVersion()));
+    hashMap.put(OPERATION_TIME, String.valueOf(messageInfo.getOperationTimeMs()));
+    hashMap.put(SIZE, String.valueOf(messageInfo.getSize()));
+    return hashMap;
+  }
+
+  /**
+   * Detects duplicates in list of {@link MessageInfo}
+   * @param messageInfos list of {@link MessageInfo} to check for duplicates
+   */
+  protected void checkDuplicates(List<MessageInfo> messageInfos) {
+    if (messageInfos.size() < 2) {
+      return;
+    }
+    HashMap<String, MessageInfo> seenKeys = new HashMap<>();
+    for (MessageInfo messageInfo : messageInfos) {
+      // Check for duplicates. We cannot continue as stream could be corrupted.
+      // Server always sends one message per key that captures full state of the key including ttl-update & delete.
+      // Emit a log and metric for investigation as it indicates a flaw in (de)serialization or replication.
+      // FIXME: This check should be in replication layer to avoid multiple implementations at Store level.
+      String blobId = messageInfo.getStoreKey().getID();
+      if (seenKeys.containsKey(blobId)) {
+        throw new IllegalArgumentException(
+            String.format("Duplicate message in replication-batch, original message = %s, duplicate message = %s",
+                seenKeys.get(blobId).toString(), messageInfo));
+      }
+      seenKeys.put(blobId, messageInfo);
+    }
+  }
+
+  /**
+   * Uploads Ambry blob to Azure blob storage.
+   * If blob already exists, then it catches BLOB_ALREADY_EXISTS exception and proceeds to next blob.
+   * It fails for any other exception.
+   *
+   * A blob could be a simple blob, in which case its blob-id points to one data chunk.
+   * A blob could be a composite blob, in which case its blob-id points to a metadata chunk which in turn
+   * points to several data chunks. A metadata blob is usually a few bytes long.
+   *
+   * Consider a composite blob with 64 MB of data and blob-id Tk2ZGYtNDk2Mi1hZ. Suppose its metadata blob is 100 bytes.
+   * A get-blob-info(Tk2ZGYtNDk2Mi1hZ) request to Ambry will display blob size as 64 MB, and not 100 bytes.
+   * But the blob in Azure blob storage corresponding to Tk2ZGYtNDk2Mi1hZ will be 100 bytes because it is a
+   * metadata chunk. There will be 16 data chunks in Azure storage each of 4 MB that belong to this composite blob.
+   *
+   * @param messageSetToWrite The message set to write to the store
+   *                          Only the StoreKey, OperationTime, ExpirationTime, LifeVersion should be used in this method.
+   * @throws StoreException
+   */
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
-    // TODO
-  }
+    MessageSievingInputStream messageSievingInputStream =
+        (MessageSievingInputStream) ((MessageFormatWriteSet) messageSetToWrite).getStreamToWrite();
+
+    // This is a list of blob-ids from remote server
+    List<MessageInfo> messageInfos = messageSievingInputStream.getValidMessageInfoList();
+    checkDuplicates(messageInfos);
+
+    // This is a list of data-streams associated with blob-ids. i-th stream is for i-th blob-id.
+    // This allows us to pass stream to azure-sdk and let it handle read() logic.
+    List<InputStream> messageStreamList = messageSievingInputStream.getValidMessageStreamList();
+    if (messageInfos.size() != messageStreamList.size()) {
+      azureMetrics.blobUploadErrorCount.inc();
+      String err = String.format(
+          "List of PUTs must be as long as list of blob-data streams, len(put-list) = %s, len(blob-data-stream-list) = %s",
+          messageInfos.size(), messageStreamList.size());
+      throw new IllegalArgumentException(err);
+    }
+    ListIterator<InputStream> messageStreamListIter = messageStreamList.listIterator();
+
+    Timer.Context storageTimer = null;
+    // For-each loop must be outside try-catch. Loop must continue on BLOB_ALREADY_EXISTS exception
+    for (MessageInfo messageInfo : messageInfos) {
+      try {
+        // Prepare to upload blob to Azure blob storage
+        // There is no parallelism, but we still need to create and pass this object to SDK.
+        BlobParallelUploadOptions blobParallelUploadOptions =
+            new BlobParallelUploadOptions(messageStreamListIter.next());
+        // To avoid overwriting, pass "*" to setIfNoneMatch(String ifNoneMatch)
+        // https://learn.microsoft.com/en-us/java/api/com.azure.storage.blob.blobclient?view=azure-java-stable
+        blobParallelUploadOptions.setRequestConditions(new BlobRequestConditions().setIfNoneMatch("*"));
+        // This is ambry metadata, uninterpreted by azure
+        blobParallelUploadOptions.setMetadata(messageInfoToMap(messageInfo));
+        // Without content-type, get-blob floods log with warnings
+        blobParallelUploadOptions.setHeaders(new BlobHttpHeaders().setContentType("application/octet-stream"));
+
+        ////////////////////////////////// Upload blob to Azure blob storage ////////////////////////////////////////
+        storageTimer = azureMetrics.blobUploadTime.time();
+        Response<BlockBlobItem> blockBlobItemResponse =
+            blobContainerClient.getBlobClient(messageInfo.getStoreKey().getID())
+                .uploadWithResponse(blobParallelUploadOptions, Duration.ofMillis(cloudConfig.cloudRequestTimeout),
+                    Context.NONE);
+        ////////////////////////////////// Upload blob to Azure blob storage ////////////////////////////////////////
+
+        // Metrics and log
+        // Success rate is effective, Counter is ineffective because it just monotonically increases
+        azureMetrics.blobUploadSuccessRate.mark();
+        // Measure ingestion rate, helps decide fleet size
+        azureMetrics.backupSuccessByteRate.mark(messageInfo.getSize());
+        logger.debug("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
+            messageInfo.getStoreKey().getID(), blockBlobItemResponse.getStatusCode(),
+            blockBlobItemResponse.getValue().getETag());
+      } catch (Exception e) {
+        if (e instanceof BlobStorageException
+            && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
+          // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
+          azureMetrics.blobUploadConflictCount.inc();
+          logger.debug("Failed to upload blob {} to Azure blob storage because it already exists",
+              messageInfo.getStoreKey().getID());
+          continue;
+        }
+        azureMetrics.blobUploadErrorCount.inc();
+        logger.error("Failed to upload blob {} to Azure blob storage because {}", messageInfo.getStoreKey().getID(),
+            e.getMessage());
+        throw new RuntimeException(e);
+      } finally {
+        if (storageTimer != null) {
+          storageTimer.stop();
+          storageTimer = null;
+        }
+      } // try-catch
+    } // for-each
+  } // put()
 
   @Override
   public void delete(List<MessageInfo> messageInfos) throws StoreException {
@@ -148,7 +299,8 @@ public class CloudBlobStoreV2 implements Store {
   }
 
   @Override
-  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries, String hostname, String remoteReplicaPath) throws StoreException {
+  public FindInfo findEntriesSince(FindToken token, long maxTotalSizeOfEntries, String hostname,
+      String remoteReplicaPath) throws StoreException {
     return null;
   }
 

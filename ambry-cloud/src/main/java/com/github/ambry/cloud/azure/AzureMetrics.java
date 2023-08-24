@@ -18,6 +18,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.cloud.CloudBlobStoreV2;
 
 
 public class AzureMetrics {
@@ -25,6 +26,8 @@ public class AzureMetrics {
   // Metric name constants
   public static final String BLOB_UPLOAD_REQUEST_COUNT = "BlobUploadRequestCount";
   public static final String BLOB_UPLOAD_SUCCESS_COUNT = "BlobUploadSuccessCount";
+  public static final String BLOB_UPLOAD_SUCCESS_RATE = "BlobUploadSuccessRate";
+  public static final String BLOB_UPLOAD_ERROR_COUNT = "BlobUploadErrorCount";
   public static final String BLOB_DOWNLOAD_REQUEST_COUNT = "BlobDownloadRequestCount";
   public static final String BLOB_DOWNLOAD_SUCCESS_COUNT = "BlobDownloadSuccessCount";
   public static final String BLOB_DOWNLOAD_ERROR_COUNT = "BlobDownloadErrorCount";
@@ -81,6 +84,9 @@ public class AzureMetrics {
   // Metrics
   public final Counter blobUploadRequestCount;
   public final Counter blobUploadSuccessCount;
+  public final Meter blobUploadSuccessRate;
+
+  public final Counter blobUploadErrorCount;
   public final Counter blobDownloadRequestCount;
   public final Counter blobDownloadSuccessCount;
   public final Counter blobDownloadErrorCount;
@@ -142,6 +148,8 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_REQUEST_COUNT));
     blobUploadSuccessCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SUCCESS_COUNT));
+    blobUploadSuccessRate = registry.meter(MetricRegistry.name(CloudBlobStoreV2.class, BLOB_UPLOAD_SUCCESS_RATE));
+    blobUploadErrorCount = registry.counter(MetricRegistry.name(CloudBlobStoreV2.class, BLOB_UPLOAD_ERROR_COUNT));
     blobDownloadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_REQUEST_COUNT));
     blobDownloadSuccessCount =
