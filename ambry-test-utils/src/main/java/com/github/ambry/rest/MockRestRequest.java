@@ -97,6 +97,7 @@ public class MockRestRequest implements RestRequest {
   private final List<EventListener> listeners = new ArrayList<EventListener>();
   private final RestRequestMetricsTracker restRequestMetricsTracker = new RestRequestMetricsTracker();
   private final AtomicLong bytesReceived = new AtomicLong(0);
+  private boolean throwExceptionOnGetPath = false;
 
   private MessageDigest digest = null;
   private byte[] digestBytes = null;
@@ -156,7 +157,10 @@ public class MockRestRequest implements RestRequest {
   @Override
   public String getPath() {
     onEventComplete(Event.GetPath);
-    return (uri == null) ? null: uri.getPath();
+    if (throwExceptionOnGetPath) {
+      throw new IllegalArgumentException();
+    }
+    return (uri == null) ? null : uri.getPath();
   }
 
   @Override
@@ -286,6 +290,14 @@ public class MockRestRequest implements RestRequest {
   public RestRequestMetricsTracker getMetricsTracker() {
     onEventComplete(Event.GetMetricsTracker);
     return restRequestMetricsTracker;
+  }
+
+  /**
+   * @param throwExceptionOnGetPath If {@code True}, throws {@link IllegalArgumentException} on {@link this#getPath()}
+   *                                call
+   */
+  public void throwExceptionOnGetPath(boolean throwExceptionOnGetPath) {
+    this.throwExceptionOnGetPath = throwExceptionOnGetPath;
   }
 
   /**
