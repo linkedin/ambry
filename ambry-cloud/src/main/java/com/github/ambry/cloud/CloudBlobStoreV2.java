@@ -130,6 +130,16 @@ public class CloudBlobStoreV2 implements Store {
    * Uploads Ambry blob to Azure blob storage.
    * If blob already exists, then it catches BLOB_ALREADY_EXISTS exception and proceeds to next blob.
    * It fails for any other exception.
+   *
+   * A blob could be a simple blob, in which case its blob-id points to one data chunk.
+   * A blob could be a composite blob, in which case its blob-id points to a metadata chunk which in turn
+   * points to several data chunks. A metadata blob is usually a few bytes long.
+   *
+   * Consider a composite blob with 64 MB of data and blob-id Tk2ZGYtNDk2Mi1hZ. Suppose its metadata blob is 100 bytes.
+   * A get-blob-info(Tk2ZGYtNDk2Mi1hZ) request to Ambry will display blob size as 64 MB, and not 100 bytes.
+   * But the blob in Azure blob storage corresponding to Tk2ZGYtNDk2Mi1hZ will be 100 bytes because it is a
+   * metadata chunk. There will be 16 data chunks in Azure storage each of 4 MB that belong to this composite blob.
+   *
    * @param messageSetToWrite The message set to write to the store
    *                          Only the StoreKey, OperationTime, ExpirationTime, LifeVersion should be used in this method.
    * @throws StoreException
@@ -138,13 +148,23 @@ public class CloudBlobStoreV2 implements Store {
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
     MessageSievingInputStream messageSievingInputStream =
         (MessageSievingInputStream) ((MessageFormatWriteSet) messageSetToWrite).getStreamToWrite();
+
     // This is a list of blob-ids from remote server
     List<MessageInfo> messageInfos = messageSievingInputStream.getValidMessageInfoList();
     checkDuplicates(messageInfos);
+
     // This is a list of data-streams associated with blob-ids. i-th stream is for i-th blob-id.
     // This allows us to pass stream to azure-sdk and let it handle read() logic.
-    ListIterator<InputStream> messageStreamListIter =
-        messageSievingInputStream.getValidMessageStreamList().listIterator();
+    List<InputStream> messageStreamList = messageSievingInputStream.getValidMessageStreamList();
+    if (messageInfos.size() != messageStreamList.size()) {
+      azureMetrics.blobUploadErrorCount.inc();
+      String err = String.format(
+          "List of PUTs must be as long as list of blob-data streams, len(put-list) = %s, len(blob-data-stream-list) = %s",
+          messageInfos.size(), messageStreamList.size());
+      throw new IllegalArgumentException(err);
+    }
+    ListIterator<InputStream> messageStreamListIter = messageStreamList.listIterator();
+
     Timer.Context storageTimer = null;
     // For-each loop must be outside try-catch. Loop must continue on BLOB_ALREADY_EXISTS exception
     for (MessageInfo messageInfo : messageInfos) {
@@ -181,14 +201,14 @@ public class CloudBlobStoreV2 implements Store {
         if (e instanceof BlobStorageException
             && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
           // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
+          azureMetrics.blobUploadConflictCount.inc();
           logger.debug("Failed to upload blob {} to Azure blob storage because it already exists",
               messageInfo.getStoreKey().getID());
-          azureMetrics.blobUploadConflictCount.inc();
           continue;
         }
+        azureMetrics.blobUploadErrorCount.inc();
         logger.error("Failed to upload blob {} to Azure blob storage because {}", messageInfo.getStoreKey().getID(),
             e.getMessage());
-        azureMetrics.blobUploadErrorCount.inc();
         throw new RuntimeException(e);
       } finally {
         if (storageTimer != null) {
