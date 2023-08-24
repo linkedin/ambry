@@ -59,7 +59,13 @@ public class RequestPath {
           parse(blobIdHeader, Collections.emptyMap(), prefixesToRemove, clusterName).getOperationOrBlobId(false);
       restRequest.setArg(Headers.BLOB_ID, blobIdStr);
     }
-    return parse(restRequest.getPath(), restRequest.getArgs(), prefixesToRemove, clusterName);
+    String path;
+    try {
+      path = restRequest.getPath();
+    } catch (IllegalArgumentException e) {
+      throw new RestServiceException("Invalid URI path", e, RestServiceErrorCode.BadRequest);
+    }
+    return parse(path, restRequest.getArgs(), prefixesToRemove, clusterName);
   }
 
   /**

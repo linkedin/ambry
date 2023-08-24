@@ -151,6 +151,23 @@ public class RequestPathTest {
   }
 
   /**
+   * Tests that the expected exception is thrown when URL path is invalid
+   */
+  @Test
+  public void testInvalidPath() throws UnsupportedEncodingException, URISyntaxException {
+    String requestPath = "/SOME_INVALID_PATH";
+    List<String> prefixesToRemove = new ArrayList<>();
+    RestRequest restRequest = RestUtilsTest.createRestRequest(RestMethod.GET, requestPath, null);
+    ((MockRestRequest) restRequest).throwExceptionOnGetPath(true);
+    try {
+      RequestPath.parse(restRequest, prefixesToRemove, CLUSTER_NAME);
+      fail();
+    } catch (RestServiceException e) {
+      assertEquals(RestServiceErrorCode.BadRequest, e.getErrorCode());
+    }
+  }
+
+  /**
    * Test that blob id string (with prefix and sub-resource) is specified in request header. The {@link RequestPath#parse(RestRequest, List, String)}
    * should correctly remove prefix, sub-resource and use pure blob id to update request header.
    */
