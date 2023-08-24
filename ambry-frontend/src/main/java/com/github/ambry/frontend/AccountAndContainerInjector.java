@@ -17,6 +17,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.AccountServiceException;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemoryUnknownAccountService;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobProperties;
@@ -47,12 +48,14 @@ public class AccountAndContainerInjector {
   private final AccountService accountService;
   private final FrontendMetrics frontendMetrics;
   private final FrontendConfig frontendConfig;
+  private final boolean unknownAccountContainerAllowed;
 
   public AccountAndContainerInjector(AccountService accountService, FrontendMetrics frontendMetrics,
       FrontendConfig frontendConfig) {
     this.accountService = accountService;
     this.frontendMetrics = frontendMetrics;
     this.frontendConfig = frontendConfig;
+    unknownAccountContainerAllowed = (accountService instanceof InMemoryUnknownAccountService);
   }
 
   /**

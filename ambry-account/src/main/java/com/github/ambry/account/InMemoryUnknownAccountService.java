@@ -25,7 +25,7 @@ import java.util.function.Consumer;
  * queries by account name to this account service will unconditionally return the unknown account. This
  * account service is in memory, and does not talk to any persistent storage service.
  */
-class InMemoryUnknownAccountService implements AccountService {
+public class InMemoryUnknownAccountService implements AccountService {
   static final Account UNKNOWN_ACCOUNT =
       new Account(Account.UNKNOWN_ACCOUNT_ID, Account.UNKNOWN_ACCOUNT_NAME, Account.AccountStatus.ACTIVE,
           Account.ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
