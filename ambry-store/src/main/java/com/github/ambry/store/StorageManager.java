@@ -773,13 +773,8 @@ public class StorageManager implements StoreManager {
       if (store == null && isReplicaOnFailedDisk(replica)) {
         logger.info("Replica is in a failed disk, blob store not started. skip");
       } else {
-        // 1. Check if the store is recovering from decommission or directly transitioning from OFFLINE to DROPPED in
-        // full-auto (i.e. if this replica has been reassigned to a different host when it is down, Helix may directly
-        // transition the replica from OFFLINE -> DROPPED without going through OFFLINE -> BOOTSTRAP -> STANDBY ->
-        // INACTIVE -> OFFLINE -> DROPPED steps). If so, go through decommission steps to make sure peer replicas are
-        // caught up with local replica and we update DataNodeConfig in Helix.
-        if (store.recoverFromDecommission() || (clusterMap.isDataNodeInFullAutoMode(replica.getDataNodeId())
-            && store.getPreviousState() == ReplicaState.OFFLINE && !isReplicaOnFailedDisk(replica))) {
+        //1. Check if the store should resume decommission
+        if (shouldResumeDecommission(store, replica)) {
           try {
             resumeDecommission(partitionName);
           } catch (Exception e) {
@@ -837,6 +832,25 @@ public class StorageManager implements StoreManager {
       }
       partitionNameToReplicaId.remove(partitionName);
       logger.info("Partition {} is successfully dropped on current node", partitionName);
+    }
+
+    /**
+     * Return true if the blob store should resume the decommission
+     * @param store The {@link BlobStore}
+     * @param replica The {@link ReplicaId}.
+     * @return
+     */
+    private boolean shouldResumeDecommission(BlobStore store, ReplicaId replica) {
+      // If the store is recovering from decommission, or directly transitioning from OFFLINE to DROPPED in
+      // full-auto (i.e. if this replica has been reassigned to a different host when it is down, Helix may directly
+      // transition the replica from OFFLINE -> DROPPED without going through OFFLINE -> BOOTSTRAP -> STANDBY ->
+      // INACTIVE -> OFFLINE -> DROPPED steps). If so, go through decommission steps to make sure peer replicas are
+      // caught up with local replica. We update DataNodeConfig in Helix later.
+      if (store.recoverFromDecommission()) {
+        return true;
+      }
+      return clusterMap.isDataNodeInFullAutoMode(replica.getDataNodeId()) && !isReplicaOnFailedDisk(replica)
+          && store.getPreviousState() != ReplicaState.INACTIVE;
     }
 
     /**
