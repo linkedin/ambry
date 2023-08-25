@@ -19,6 +19,7 @@ import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobHttpHeaders;
+import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.BlockBlobItem;
@@ -38,6 +39,7 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
@@ -235,17 +237,67 @@ public class CloudBlobStoreV2 implements Store {
     // TODO
   }
 
+  /**
+   * Finds keys absent in the Store from given list of keys
+   * @param storeKeys Input list of keys to check for existence
+   * @return Set of keys absent in the Store
+   */
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> storeKeys) {
-    // TODO
-    return new HashSet<>();
+    Set<StoreKey> missingKeys = new HashSet<>();
+    Timer.Context timer = azureMetrics.missingKeysQueryTime.time();
+    try {
+      for (StoreKey storeKey : storeKeys) {
+        try {
+          if (!blobContainerClient.getBlobClient(storeKey.getID()).exists()) {
+            missingKeys.add(storeKey);
+          } // if
+        } catch (Exception e) {
+          azureMetrics.findKeyErrorCount.inc();
+          logger.error("Failed to find key {} in Azure blob storage because {}", storeKey.getID(), e.getMessage());
+          throw e;
+        } // try
+      } // for
+    } finally {
+      timer.stop();
+    } // try
+    return missingKeys;
   }
 
+  public static final String DELETE_TIME_MS = "deleteTimeMs";
+  public static final String TTL_UPDATE_TIME_MS = "ttlUpdateTimeMs";
+  public static final String UNDELETE_TIME_MS = "undeleteTimeMs";
+
+  /**
+   * @return a {@link HashMap} of metadata key-value pairs.
+   */
+  public MessageInfo messageInfoFromMap(StoreKey storeKey, Map<String, String> map) {
+    return new MessageInfo(storeKey, Long.parseLong(map.get(SIZE)), map.containsKey(DELETE_TIME_MS),
+        map.containsKey(TTL_UPDATE_TIME_MS), map.containsKey(UNDELETE_TIME_MS),
+        Long.parseLong(map.get(EXPIRATION_TIME)), Long.parseLong(map.get(CRC)), Short.parseShort(map.get(ACCOUNT_ID)),
+        Short.parseShort(map.get(CONTAINER_ID)), Long.parseLong(map.get(OPERATION_TIME)),
+        Short.parseShort(map.get(LIFE_VERSION)));
+  }
+
+  /**
+   * Return {@link MessageInfo} of given key.
+   * @param storeKey Input key
+   * @return {@link MessageInfo} of input key
+   */
   @Override
   public MessageInfo findKey(StoreKey storeKey) {
-    // TODO
-    return null;
-  }
+    Timer.Context timer = azureMetrics.findKeyTime.time();;
+    try {
+      BlobProperties blobProperties = blobContainerClient.getBlobClient(storeKey.getID()).getProperties();
+      return messageInfoFromMap(storeKey, blobProperties.getMetadata());
+    } catch (Exception e) {
+      azureMetrics.findKeyErrorCount.inc();
+      logger.error("Failed to find key {} in Azure blob storage because {}", storeKey.getID(), e.getMessage());
+      throw e;
+    } finally {
+      timer.stop();
+    } // try
+  } // findKey
 
   @Override
   public boolean isStarted() {

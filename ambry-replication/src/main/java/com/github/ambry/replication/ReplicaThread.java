@@ -762,7 +762,7 @@ public class ReplicaThread implements Runnable {
               logger.info("Local store not started for remote replica: {}", remoteReplicaInfo.getReplicaId());
               exchangeMetadataResponseList.add(new ExchangeMetadataResponse(ServerErrorCode.Temporarily_Disabled));
             } else {
-              logger.error("Remote node: {} Thread name: {} Remote replica: {}", remoteNode, threadName,
+              logger.error("Remote node: {} Thread name: {} Remote replica: {} Error: {}", remoteNode, threadName,
                   remoteReplicaInfo.getReplicaId(), e);
               replicationMetrics.updateLocalStoreError(remoteReplicaInfo.getReplicaId());
               responseHandler.onEvent(remoteReplicaInfo.getReplicaId(), e);

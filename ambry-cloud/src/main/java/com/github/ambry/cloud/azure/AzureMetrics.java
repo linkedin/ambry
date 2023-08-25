@@ -80,6 +80,8 @@ public class AzureMetrics {
       "DeprecatedContainerCompactionFailureCount";
   public static final String DEPRECATED_CONTAINER_COMPACTION_SUCCESS_COUNT =
       "DeprecatedContainerCompactionSuccessCount";
+  public static final String FIND_KEY_TIME = "FindKeyTime";
+  public static final String FIND_KEY_ERROR_COUNT = "FindKeyError";
 
   // Metrics
   public final Counter blobUploadRequestCount;
@@ -115,6 +117,8 @@ public class AzureMetrics {
   public final Timer deadBlobsQueryTime;
   public final Timer deletedContainerBlobsQueryTime;
   public final Timer findSinceQueryTime;
+  public final Timer findKeyTime;
+  public final Counter findKeyErrorCount;
   public final Counter blobUpdateErrorCount;
   /* Tracks updates that recovered a missing Cosmos record */
   public final Counter blobUpdateRecoverCount;
@@ -144,6 +148,8 @@ public class AzureMetrics {
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
 
+    findKeyErrorCount = registry.counter(MetricRegistry.name(CloudBlobStoreV2.class, FIND_KEY_ERROR_COUNT));
+    findKeyTime = registry.timer(MetricRegistry.name(CloudBlobStoreV2.class, FIND_KEY_TIME));
     blobUploadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_REQUEST_COUNT));
     blobUploadSuccessCount =
