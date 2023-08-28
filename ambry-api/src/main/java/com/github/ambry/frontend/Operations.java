@@ -31,4 +31,5 @@ public class Operations {
    * First path segment for any operation on a named blob.
    */
   public static final String NAMED_BLOB = "named";
+  public static final String NAMED_MAPPING = "clientMapping";
 }

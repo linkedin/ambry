@@ -101,6 +101,7 @@ class FrontendRestRequestService implements RestRequestService {
   private PostAccountsHandler postAccountsHandler;
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
+  private ClientMappingHandler clientMappingHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
   private final Random random = new Random();
@@ -210,6 +211,7 @@ class FrontendRestRequestService implements RestRequestService {
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
+    clientMappingHandler = new ClientMappingHandler(accountAndContainerInjector, namedBlobDb, frontendMetrics, frontendConfig);
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
@@ -290,6 +292,9 @@ class FrontendRestRequestService implements RestRequestService {
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
         namedBlobListHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if(requestPath.matchesOperation(NAMED_MAPPING)){
+        clientMappingHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         getBlobHandler.handle(requestPath, restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, r, e);
@@ -336,6 +341,9 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
         namedBlobPutHandler.handle(restRequest, restResponseChannel,
             (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
+      } else if(requestPath.matchesOperation(NAMED_MAPPING)){
+        clientMappingHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         throw new RestServiceException("Unrecognized operation: " + requestPath.getOperationOrBlobId(false),
             RestServiceErrorCode.BadRequest);
@@ -351,6 +359,9 @@ class FrontendRestRequestService implements RestRequestService {
         deleteDatasetHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
+      } else if(requestPath.matchesOperation(NAMED_MAPPING)){
+        clientMappingHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
           submitResponse(restRequest, restResponseChannel, null, e);
