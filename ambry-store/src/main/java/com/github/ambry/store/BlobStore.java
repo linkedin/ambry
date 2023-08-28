@@ -668,6 +668,11 @@ public class BlobStore implements Store {
   }
 
   @Override
+  public void purge(List<MessageInfo> infosToPurge) throws StoreException {
+    // TODO Efficient_Metadata_Operations_TODO : implement purge.
+  }
+
+  @Override
   public void forceDelete(List<MessageInfo> infosToDelete) throws StoreException {
     checkStarted();
     checkDuplicates(infosToDelete);

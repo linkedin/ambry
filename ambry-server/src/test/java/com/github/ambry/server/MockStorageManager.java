@@ -186,6 +186,11 @@ class MockStorageManager extends StorageManager {
     }
 
     @Override
+    public void purge(List<MessageInfo> infos) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void forceDelete(List<MessageInfo> infos) throws StoreException {
       delete(infos);
     }

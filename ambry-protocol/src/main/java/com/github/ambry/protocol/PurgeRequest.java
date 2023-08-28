@@ -24,8 +24,9 @@ import static com.github.ambry.protocol.RequestOrResponseType.PurgeRequest;
 
 /**
  * Request to purge a blob.
- * This message is sent by the frontend when it has determined that a chunk is no longer needed (i.e, is expired or deleted
- * and past retention window). Once compaction sees a purge message, it will clean up the chunk without any other checks.
+ * This message is sent by the frontend when it has been determined that a chunk is no longer needed (i.e, is expired or
+ * deleted and past retention window or maybe an orphan chunk). Once compaction sees a purge message, it will clean up
+ * the chunk without any other checks.
  * While this message originates from frontend it can also be replicated.
  */
 public class PurgeRequest extends RequestOrResponse {

@@ -61,6 +61,16 @@ public interface Store {
   void delete(List<MessageInfo> infosToDelete) throws StoreException;
 
   /**
+   * Write a purge message for all the blob ids in the message info  list.
+   * Blobs are purged when it has been determined that a chunk is no longer needed (i.e, is expired or deleted
+   * and past retention window or maybe an orphan chunk). Once compaction sees a purge message, it will clean up the chunk
+   * without any other checks.
+   * @param infosToPurge The list of messages that need to be purged.
+   * @throws StoreException
+   */
+  void purge(List<MessageInfo> infosToPurge) throws StoreException;
+
+  /**
    * Force to write delete record for all the messages in the list when the Put record doesn't exist.
    * @param infosToDelete The list of messages that need to be deleted.
    * @throws StoreException
