@@ -28,6 +28,7 @@ public class CompactMessageRequest extends RequestOrResponse {
   private final static short CURRENT_VERSION = COMPACT_MESSAGE_REQUEST_VERSION_1;
 
   private final BlobId blobId;
+  private final long operationTimeInMs;
 
   /**
    * Helper to construct TtlUpdateRequest from a stream
@@ -48,20 +49,23 @@ public class CompactMessageRequest extends RequestOrResponse {
    * @param correlationId the correlation id for the request
    * @param clientId the id of the client generating the request
    * @param blobId the blob ID whose TTL needs to be updated
+   * @param operationTimeMs the time of the operation (in ms)
    */
-  public CompactMessageRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, CURRENT_VERSION);
+  public CompactMessageRequest(int correlationId, String clientId, BlobId blobId, long operationTimeMs) {
+    this(correlationId, clientId, blobId, operationTimeMs, CURRENT_VERSION);
   }
 
   /**
    * @param correlationId the correlation id for the request
    * @param clientId the id of the client generating the request
    * @param blobId the blob ID whose TTL needs to be updated
+   * @param operationTimeMs the time of the operation (in ms)
    * @param version the version of the TtlUpdateRequest
    */
-  CompactMessageRequest(int correlationId, String clientId, BlobId blobId, short version) {
+  CompactMessageRequest(int correlationId, String clientId, BlobId blobId, long operationTimeMs, short version) {
     super(CompactMessageRequest, version, correlationId, clientId);
     this.blobId = blobId;
+    this.operationTimeInMs = operationTimeMs;
   }
 
   @Override
@@ -96,17 +100,24 @@ public class CompactMessageRequest extends RequestOrResponse {
     return blobId.getContainerId();
   }
 
+  /**
+   * @return the time of the operation (in ms)
+   */
+  public long getOperationTimeInMs() {
+    return operationTimeInMs;
+  }
+
   @Override
   public long sizeInBytes() {
-    // header + blobId
-    return super.sizeInBytes() + blobId.sizeInBytes();
+    // header + blobId + op time ms
+    return super.sizeInBytes() + blobId.sizeInBytes() + Long.BYTES;
   }
 
   @Override
   public String toString() {
     return "CompactMessageRequest[" + "BlobID=" + blobId + ", " + "PartitionId=" + blobId.getPartition() + ", " + "ClientId="
         + clientId + ", " + "CorrelationId=" + correlationId + ", " + "AccountId=" + blobId.getAccountId() + ", "
-        + "ContainerId=" + blobId.getContainerId() + "]";
+        + "ContainerId=" + blobId.getContainerId() + "OperationTimeMs=" + operationTimeInMs + "]";
   }
 
   /**
@@ -117,7 +128,8 @@ public class CompactMessageRequest extends RequestOrResponse {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
       BlobId id = new BlobId(stream, map);
-      return new CompactMessageRequest(correlationId, clientId, id, COMPACT_MESSAGE_REQUEST_VERSION_1);
+      long operationTimeMs = stream.readLong();
+      return new CompactMessageRequest(correlationId, clientId, id, operationTimeMs, COMPACT_MESSAGE_REQUEST_VERSION_1);
     }
   }
 }

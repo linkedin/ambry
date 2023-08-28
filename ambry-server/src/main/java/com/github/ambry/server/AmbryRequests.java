@@ -494,6 +494,76 @@ public class AmbryRequests implements RequestAPI {
             metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
   }
 
+  public void handleCompactMessageRequest(NetworkRequest request) throws IOException, InterruptedException {
+    CompactMessageRequest compactMessageRequest = CompactMessageRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+    CompactMessageResponse response = null;
+    try {
+      StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(compactMessageRequest.getBlobId())).get(0);
+      ServerErrorCode error =
+          validateRequest(compactMessageRequest.getBlobId().getPartition(), RequestOrResponseType.CompactMessageRequest, false);
+      if (error != ServerErrorCode.No_Error) {
+        logger.error("Validating delete request failed with error {} for request {}", error, compactMessageRequest);
+        response = new CompactMessageResponse(compactMessageRequest.getCorrelationId(), compactMessageRequest.getClientId(), error);
+      } else {
+        BlobId convertedBlobId = (BlobId) convertedStoreKey;
+        MessageInfo info = new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
+            convertedBlobId.getContainerId(), compactMessageRequest.getOperationTimeInMs()).isDeleted(true)
+            .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+            .build();
+        Store storeToDelete = storeManager.getStore(compactMessageRequest.getBlobId().getPartition());
+        storeToDelete.delete(Collections.singletonList(info));
+        response =
+            new CompactMessageResponse(compactMessageRequest.getCorrelationId(), compactMessageRequest.getClientId(), ServerErrorCode.No_Error);
+        // TODO Handle notification
+        if (notification != null) {
+          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
+              BlobReplicaSourceType.PRIMARY);
+        }
+      }
+    } catch (StoreException e) {
+      boolean logInErrorLevel = false;
+      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+        metrics.idNotFoundError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
+        metrics.ttlExpiredError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
+        metrics.idDeletedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+        metrics.deleteAuthorizationFailure.inc();
+      } else {
+        logInErrorLevel = true;
+        metrics.unExpectedStoreDeleteError.inc();
+      }
+      if (logInErrorLevel) {
+        logger.error("Store exception on a delete with error code {} for request {}", e.getErrorCode(), deleteRequest,
+            e);
+      } else {
+        logger.trace("Store exception on a delete with error code {} for request {}", e.getErrorCode(), deleteRequest,
+            e);
+      }
+      response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
+      logger.error("Unknown exception for delete request {}", deleteRequest, e);
+      response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
+      metrics.unExpectedStoreDeleteError.inc();
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", deleteRequest, response, processingTime);
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      deleteRequest.accept(metricsUpdater);
+    }
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
+            metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
   @Override
   public void handleTtlUpdateRequest(NetworkRequest request) throws IOException, InterruptedException {
     TtlUpdateRequest updateRequest;
