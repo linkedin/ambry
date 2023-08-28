@@ -91,6 +91,11 @@ public class LoggingNotificationSystem implements NotificationSystem {
   }
 
   @Override
+  public void onBlobReplicaPurged(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+    logger.debug("onBlobReplicaPurged {}, {}, {}, {}", sourceHost, port, blobId, sourceType);
+  }
+
+  @Override
   public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
       UpdateType updateType, MessageInfo info) {
     logger.debug("onBlobReplicaUpdated {}, {}, {}, {}, {}, {}", sourceHost, port, blobId, sourceType, updateType, info);

@@ -35,6 +35,7 @@ public class PurgeRequest extends RequestOrResponse {
   private final static short CURRENT_VERSION = PURGE_MESSAGE_REQUEST_VERSION_1;
 
   private final BlobId blobId;
+  private final long purgeTimeInMs;
 
   /**
    * Helper to construct PurgeRequest from a stream
@@ -55,20 +56,23 @@ public class PurgeRequest extends RequestOrResponse {
    * @param correlationId the correlation id for the request
    * @param clientId the id of the client generating the request
    * @param blobId the blob ID whose TTL needs to be updated
+   * @param purgeTimeInMs purge time of the blob in ms
    */
-  public PurgeRequest(int correlationId, String clientId, BlobId blobId) {
-    this(correlationId, clientId, blobId, CURRENT_VERSION);
+  public PurgeRequest(int correlationId, String clientId, BlobId blobId, long purgeTimeInMs) {
+    this(correlationId, clientId, blobId, purgeTimeInMs, CURRENT_VERSION);
   }
 
   /**
    * @param correlationId the correlation id for the request
    * @param clientId the id of the client generating the request
    * @param blobId the blob ID that needs to be purged.
+   * @param purgeTimeInMs purge time of the blob in ms
    * @param version the version of the {@link PurgeRequest}.
    */
-  PurgeRequest(int correlationId, String clientId, BlobId blobId, short version) {
+  PurgeRequest(int correlationId, String clientId, BlobId blobId, long purgeTimeInMs, short version) {
     super(PurgeRequest, version, correlationId, clientId);
     this.blobId = blobId;
+    this.purgeTimeInMs = purgeTimeInMs;
   }
 
   @Override
@@ -103,6 +107,13 @@ public class PurgeRequest extends RequestOrResponse {
     return blobId.getContainerId();
   }
 
+  /**
+   * @return the purge time.
+   */
+  public long getPurgeTimeInMs() {
+    return purgeTimeInMs;
+  }
+
   @Override
   public long sizeInBytes() {
     // header + blobId
@@ -124,7 +135,8 @@ public class PurgeRequest extends RequestOrResponse {
       int correlationId = stream.readInt();
       String clientId = Utils.readIntString(stream);
       BlobId id = new BlobId(stream, map);
-      return new PurgeRequest(correlationId, clientId, id, PURGE_MESSAGE_REQUEST_VERSION_1);
+      long purgeTimeInMs = stream.readLong();
+      return new PurgeRequest(correlationId, clientId, id, purgeTimeInMs, PURGE_MESSAGE_REQUEST_VERSION_1);
     }
   }
 }

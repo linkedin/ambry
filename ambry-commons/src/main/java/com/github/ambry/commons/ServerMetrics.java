@@ -100,8 +100,11 @@ public class ServerMetrics {
   public final Histogram deleteBlobRequestQueueTimeInMs;
   public final Histogram deleteBlobProcessingTimeInMs;
   public final Histogram deleteBlobResponseQueueTimeInMs;
+  public final Histogram purgeBlobResponseQueueTimeInMs;
   public final Histogram deleteBlobSendTimeInMs;
+  public final Histogram purgeBlobSendTimeInMs;
   public final Histogram deleteBlobTotalTimeInMs;
+  public final Histogram purgeBlobTotalTimeInMs;
 
   public final Histogram undeleteBlobRequestQueueTimeInMs;
   public final Histogram undeleteBlobProcessingTimeInMs;
@@ -255,6 +258,7 @@ public class ServerMetrics {
   public final Counter unExpectedStoreGetError;
   public final Counter unExpectedStoreTtlUpdateError;
   public final Counter unExpectedStoreDeleteError;
+  public final Counter unExpectedStorePurgeError;
   public final Counter unExpectedStoreUndeleteError;
   public final Counter unExpectedAdminOperationError;
   public final Counter unExpectedStoreFindEntriesError;
@@ -263,6 +267,7 @@ public class ServerMetrics {
   public final Counter unknownFormatError;
   public final Counter idNotFoundError;
   public final Counter idDeletedError;
+  public final Counter idPurgedError;
   public final Counter idUndeletedError;
   public final Counter idNotDeletedError;
   public final Counter lifeVersionConflictError;
@@ -271,6 +276,7 @@ public class ServerMetrics {
   public final Counter temporarilyDisabledError;
   public final Counter getAuthorizationFailure;
   public final Counter deleteAuthorizationFailure;
+  public final Counter purgeAuthorizationFailure;
   public final Counter undeleteAuthorizationFailure;
   public final Counter ttlUpdateAuthorizationFailure;
   public final Counter ttlAlreadyUpdatedError;
@@ -393,8 +399,12 @@ public class ServerMetrics {
     deleteBlobProcessingTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobProcessingTime"));
     deleteBlobResponseQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobResponseQueueTime"));
+    purgeBlobResponseQueueTimeInMs =
+        registry.histogram(MetricRegistry.name(requestClass, "PurgeBlobResponseQueueTimeInMs"));
     deleteBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobSendTime"));
+    purgeBlobSendTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PurgeBlobSendTimeInMs"));
     deleteBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "DeleteBlobTotalTime"));
+    purgeBlobTotalTimeInMs = registry.histogram(MetricRegistry.name(requestClass, "PurgeBlobTotalTimeInMs"));
 
     undeleteBlobRequestQueueTimeInMs =
         registry.histogram(MetricRegistry.name(requestClass, "UndeleteBlobRequestQueueTime"));
@@ -613,6 +623,7 @@ public class ServerMetrics {
     unknownFormatError = registry.counter(MetricRegistry.name(requestClass, "UnknownFormatError"));
     idNotFoundError = registry.counter(MetricRegistry.name(requestClass, "IDNotFoundError"));
     idDeletedError = registry.counter(MetricRegistry.name(requestClass, "IDDeletedError"));
+    idPurgedError = registry.counter(MetricRegistry.name(requestClass, "IDPurgedError"));
     idUndeletedError = registry.counter(MetricRegistry.name(requestClass, "IDUndeletedError"));
     idNotDeletedError = registry.counter(MetricRegistry.name(requestClass, "IDNotDeletedError"));
     lifeVersionConflictError = registry.counter(MetricRegistry.name(requestClass, "lifeVersionConflictError"));
@@ -622,6 +633,8 @@ public class ServerMetrics {
     unExpectedStorePutError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStorePutError"));
     unExpectedStoreGetError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreGetError"));
     unExpectedStoreDeleteError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreDeleteError"));
+    unExpectedStorePurgeError =
+        registry.counter(MetricRegistry.name(requestClass, "UnExpectedStorePurgeError"));
     unExpectedStoreUndeleteError = registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreUndeleteError"));
     unExpectedAdminOperationError =
         registry.counter(MetricRegistry.name(requestClass, "UnexpectedAdminOperationError"));
@@ -631,6 +644,8 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(requestClass, "UnexpectedStoreFindEntriesError"));
     getAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "GetAuthorizationFailure"));
     deleteAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "DeleteAuthorizationFailure"));
+    purgeAuthorizationFailure =
+        registry.counter(MetricRegistry.name(requestClass, "PurgeAuthorizationFailure"));
     undeleteAuthorizationFailure = registry.counter(MetricRegistry.name(requestClass, "UndeleteAuthorizationFailure"));
     ttlUpdateAuthorizationFailure =
         registry.counter(MetricRegistry.name(requestClass, "TtlUpdateAuthorizationFailure"));

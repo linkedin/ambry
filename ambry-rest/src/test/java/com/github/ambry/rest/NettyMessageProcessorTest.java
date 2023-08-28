@@ -483,6 +483,11 @@ public class NettyMessageProcessorTest {
     }
 
     @Override
+    public void onBlobReplicaPurged(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void onBlobReplicaUpdated(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType,
         UpdateType updateType, MessageInfo info) {
       throw new IllegalStateException("Not implemented");

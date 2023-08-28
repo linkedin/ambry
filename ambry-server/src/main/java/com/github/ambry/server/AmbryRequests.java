@@ -60,6 +60,8 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.protocol.PurgeRequest;
+import com.github.ambry.protocol.PurgeResponse;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
@@ -492,6 +494,74 @@ public class AmbryRequests implements RequestAPI {
     requestResponseChannel.sendResponse(response, request,
         new ServerNetworkResponseMetrics(metrics.deleteBlobResponseQueueTimeInMs, metrics.deleteBlobSendTimeInMs,
             metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
+  }
+
+  @Override
+  public void handlePurgeRequest(NetworkRequest request) throws IOException, InterruptedException {
+    PurgeRequest purgeRequest = PurgeRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
+    long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
+    long totalTimeSpent = requestQueueTime;
+    long startTime = SystemTime.getInstance().milliseconds();
+    PurgeResponse response = null;
+    try {
+      StoreKey convertedStoreKey = getConvertedStoreKeys(Collections.singletonList(purgeRequest.getBlobId())).get(0);
+      ServerErrorCode error =
+          validateRequest(purgeRequest.getBlobId().getPartition(), RequestOrResponseType.PurgeRequest, false);
+      if (error != ServerErrorCode.No_Error) {
+        logger.error("Validating purge request failed with error {} for request {}", error, purgeRequest);
+        response = new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(), error);
+      } else {
+        BlobId convertedBlobId = (BlobId) convertedStoreKey;
+        MessageInfo info = new MessageInfo.Builder(convertedBlobId, -1, convertedBlobId.getAccountId(),
+            convertedBlobId.getContainerId(), purgeRequest.getPurgeTimeInMs()).isDeleted(true)
+            .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
+            .build();
+        Store storeToPurge = storeManager.getStore(purgeRequest.getBlobId().getPartition());
+        storeToPurge.purge(Collections.singletonList(info));
+        response =
+            new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(), ServerErrorCode.No_Error);
+        if (notification != null) {
+          notification.onBlobReplicaPurged(currentNode.getHostname(), currentNode.getPort(), convertedStoreKey.getID(),
+              BlobReplicaSourceType.PRIMARY);
+        }
+      }
+    } catch (StoreException e) {
+      boolean logInErrorLevel = false;
+      if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
+        metrics.idNotFoundError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Purged) {
+        metrics.idPurgedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
+        metrics.purgeAuthorizationFailure.inc();
+      } else {
+        logInErrorLevel = true;
+        metrics.unExpectedStorePurgeError.inc();
+      }
+      if (logInErrorLevel) {
+        logger.error("Store exception on a purge message with error code {} for request {}", e.getErrorCode(),
+            purgeRequest, e);
+      } else {
+        logger.trace("Store exception on a purge with error code {} for request {}", e.getErrorCode(), purgeRequest,
+            e);
+      }
+      response = new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(),
+          ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
+    } catch (Exception e) {
+      logger.error("Unknown exception for purge request {}", purgeRequest, e);
+      response = new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(),
+          ServerErrorCode.Unknown_Error);
+      metrics.unExpectedStorePurgeError.inc();
+    } finally {
+      long processingTime = SystemTime.getInstance().milliseconds() - startTime;
+      totalTimeSpent += processingTime;
+      publicAccessLogger.info("{} {} processingTime {}", purgeRequest, response, processingTime);
+      // Update request metrics.
+      RequestMetricsUpdater metricsUpdater = new RequestMetricsUpdater(requestQueueTime, processingTime, 0, 0, false);
+      purgeRequest.accept(metricsUpdater);
+    }
+    requestResponseChannel.sendResponse(response, request,
+        new ServerNetworkResponseMetrics(metrics.purgeBlobResponseQueueTimeInMs, metrics.purgeBlobSendTimeInMs,
+            metrics.purgeBlobTotalTimeInMs, null, null, totalTimeSpent));
   }
 
   @Override
