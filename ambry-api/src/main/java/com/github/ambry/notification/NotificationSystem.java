@@ -97,6 +97,15 @@ public interface NotificationSystem extends Closeable {
   void onBlobReplicaDeleted(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
 
   /**
+   * Notifies the underlying system when a purged state of a blob is replicated to a node
+   * @param sourceHost The source host from where the notification is being invoked
+   * @param port The port of the source host from where the notification is being invoked.
+   * @param blobId The id of the blob whose purged state has been replicated
+   * @param sourceType The source that purged the blob replica
+   */
+  void onBlobReplicaPurged(String sourceHost, int port, String blobId, BlobReplicaSourceType sourceType);
+
+  /**
    * Notifies the underlying system when a updated state of a blob is replicated to a node
    * @param sourceHost The source host from where the notification is being invoked
    * @param port The port of the source host from where the notification is being invoked.

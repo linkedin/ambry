@@ -56,6 +56,14 @@ public interface RequestAPI {
   void handleDeleteRequest(NetworkRequest request) throws IOException, InterruptedException;
 
   /**
+   * Purges the blob from the store.
+   * @param request The request that contains the partition and id of the blob that needs to be purged.
+   * @throws IOException if there are I/O errors carrying our the required operation.
+   * @throws InterruptedException if request processing is interrupted.
+   */
+  void handlePurgeRequest(NetworkRequest request) throws IOException, InterruptedException;
+
+  /**
    * Updates the TTL of a blob as required in {@code request}.
    * @param request The request that contains the partition and id of the blob that needs to be updated.
    * @throws IOException if there are I/O errors carrying our the required operation.

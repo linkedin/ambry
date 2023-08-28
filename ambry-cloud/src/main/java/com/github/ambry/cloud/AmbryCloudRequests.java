@@ -285,6 +285,11 @@ public class AmbryCloudRequests extends AmbryRequests {
   }
 
   @Override
+  public void handlePurgeRequest(NetworkRequest request) {
+    throw new UnsupportedOperationException("Purge is not supported in cloud yet.");
+  }
+
+  @Override
   public void handleTtlUpdateRequest(NetworkRequest request) throws InterruptedException {
 
     if (!(request instanceof LocalRequestResponseChannel.LocalChannelRequest)) {
