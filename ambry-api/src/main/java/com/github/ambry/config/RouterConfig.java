@@ -144,6 +144,8 @@ public class RouterConfig {
   public static final String ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND =
       "router.operation.tracker.check.all.originating.replicas.for.not.found";
   public static final String RESERVED_METADATA_ENABLED = "router.reserved.metadata.enabled";
+  public static final String ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS =
+      "router.get.operation.deprioritize.bootstrap.replicas";
 
   /**
    * Number of independent scaling units for the router.
@@ -749,6 +751,9 @@ public class RouterConfig {
   @Default("false")
   public final boolean routerReservedMetadataEnabled;
 
+  @Config(ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS)
+  public final boolean routerGetOperationDeprioritizeBootstrapReplicas;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -830,7 +835,8 @@ public class RouterConfig {
         verifiableProperties.getIntInRange(ROUTER_UNDELETE_REQUEST_PARALLELISM, 3, 1, Integer.MAX_VALUE);
     routerUndeleteSuccessTarget =
         verifiableProperties.getIntInRange(ROUTER_UNDELETE_SUCCESS_TARGET, 2, 1, Integer.MAX_VALUE);
-    routerUndeleteOperationTrackerType = verifiableProperties.getString(ROUTER_UNDELETE_OPERATION_TRACKER_TYPE, "UndeleteOperationTracker");
+    routerUndeleteOperationTrackerType =
+        verifiableProperties.getString(ROUTER_UNDELETE_OPERATION_TRACKER_TYPE, "UndeleteOperationTracker");
     routerUseGetBlobOperationForBlobInfo =
         verifiableProperties.getBoolean(ROUTER_USE_GET_BLOB_OPERATION_FOR_BLOB_INFO, false);
     List<String> customPercentiles =
@@ -913,6 +919,8 @@ public class RouterConfig {
     routerOperationTrackerCheckAllOriginatingReplicasForNotFound =
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND, true);
     routerReservedMetadataEnabled = verifiableProperties.getBoolean(RESERVED_METADATA_ENABLED, false);
+    routerGetOperationDeprioritizeBootstrapReplicas =
+        verifiableProperties.getBoolean(ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS, false);
   }
 
   /**
