@@ -13,6 +13,11 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.frontend.NamedBlobPath;
+import com.github.ambry.frontend.Operations;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +60,16 @@ public class RequestPath {
       // If blob id is specified in the rest request header and it has cluster name prefix, we remove its prefix, subResource
       // and use this id (pure blob id with no prefix or subResource) to update "x-ambry-blob-id" header. The purpose is
       // to ensure IdConverter and IdSigningService can receive a valid blob id and correctly identify it.
+      Object requestPath = restRequest.getArgs().get(InternalKeys.REQUEST_PATH);
+      if (requestPath != null && ((RequestPath) requestPath).matchesOperation(Operations.NAMED_BLOB)) {
+        try {
+          blobIdHeader = URLDecoder.decode(blobIdHeader, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+          throw new RestServiceException(
+              "Fail to decode the blobIdHeader value: " + blobIdHeader + " for signed named blob: " + e.getMessage(),
+              RestServiceErrorCode.UnsupportedEncoding);
+        }
+      }
       String blobIdStr =
           parse(blobIdHeader, Collections.emptyMap(), prefixesToRemove, clusterName).getOperationOrBlobId(false);
       restRequest.setArg(Headers.BLOB_ID, blobIdStr);
