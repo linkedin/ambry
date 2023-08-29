@@ -20,6 +20,7 @@ import java.util.List;
  * CompactionPolicy is used to determine the log segments that needs to be compacted for a given {@link BlobStore}
  */
 interface CompactionPolicy {
+  final static long ERROR_MARGIN_MS = 1000 * 60 * 60;
 
   /**
    * Get compaction details for a given {@link BlobStore} containing information about the log segments to compact.

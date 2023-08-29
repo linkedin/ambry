@@ -33,7 +33,6 @@ import org.slf4j.LoggerFactory;
  */
 class StatsBasedCompactionPolicy implements CompactionPolicy {
 
-  final static long ERROR_MARGIN_MS = 1000 * 60 * 60;
   private final Time time;
   private final StoreConfig storeConfig;
   private final long messageRetentionTimeInMs;
@@ -61,14 +60,9 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
             blobStoreStats.getValidDataSizeByLogSegment(
                 new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
         if (validDataSizeByLogSegment != null) {
-          final StringBuilder sizeLog = new StringBuilder(
-              "Valid data size for " + dataDir + " from BlobStoreStats " + validDataSizeByLogSegment.getFirst()
-                  + " segments: ");
-          validDataSizeByLogSegment.getSecond().forEach((logSegmentName, validDataSize) -> {
-            sizeLog.append(logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB "
-                + validDataSize * 1.0 / segmentCapacity + "%;");
-          });
-          logger.info(sizeLog.toString());
+          String sizeLog =
+              blobStoreStats.dumpLogSegmentSize(validDataSizeByLogSegment.getSecond(), segmentCapacity, dataDir);
+          logger.info(sizeLog);
         }
 
         NavigableMap<LogSegmentName, Long> potentialLogSegmentValidSizeMap = validDataSizeByLogSegment.getSecond()
@@ -92,6 +86,66 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
   }
 
   /**
+   * Finds middle range to compact.
+   * The first log segment and the last segment have to have less valid data then the configured threshold.
+   * @param validDataPerLogSegments the valid data size for each log segment in the form of a {@link NavigableMap}
+   * @param segmentCapacity Segment capacity of one {@link LogSegment}
+   * @param segmentHeaderSize Segment header size of a {@link LogSegment}
+   * @param maxBlobSize The max blob size
+   * @return the {@link CostBenefitInfo} for the best candidate to compact. {@code null} if there isn't any.
+   */
+  private CostBenefitInfo getMiddleRangeToCompact(NavigableMap<LogSegmentName, Long> validDataPerLogSegments,
+      long segmentCapacity, long segmentHeaderSize, long maxBlobSize, BlobStoreStats blobStoreStats) {
+    Map.Entry<LogSegmentName, Long> firstEntry = validDataPerLogSegments.firstEntry();
+    Map.Entry<LogSegmentName, Long> lastEntry = validDataPerLogSegments.lastEntry();
+
+    String storeId = blobStoreStats.getStoreId();
+    // when boots up, give it a chance to try the "middle range compaction"
+    if (!blobToLastMiddleRangeCompaction.containsKey(storeId)) {
+      // stagger the initial run cross 2 hours
+      long staggerTime =
+          random.nextInt(2 * 60 * 60 * 1000) % storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs;
+      blobToLastMiddleRangeCompaction.put(storeId,
+          time.milliseconds() - storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs + staggerTime);
+    }
+
+    if (time.milliseconds() - blobToLastMiddleRangeCompaction.get(storeId)
+        >= storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs) {
+      // find the first log segment has valid data percentage <= the percentage threshold
+      while (firstEntry != null) {
+        if (firstEntry.getValue() / (segmentCapacity * 1.0)
+            <= storeConfig.storeMaxLogSegmentValidDataPercentageToQualifyCompaction) {
+          break;
+        }
+        firstEntry = validDataPerLogSegments.higherEntry(firstEntry.getKey());
+      }
+      if (firstEntry != null) {
+        // find the last log segment has valid data percentage <= the percentage threshold
+        while (lastEntry != null && firstEntry.getKey().compareTo(lastEntry.getKey()) < 0) {
+          if (lastEntry.getValue() / (segmentCapacity * 1.0)
+              <= storeConfig.storeMaxLogSegmentValidDataPercentageToQualifyCompaction) {
+            break;
+          }
+          lastEntry = validDataPerLogSegments.lowerEntry(lastEntry.getKey());
+        }
+        if (lastEntry != null && firstEntry.getKey().compareTo(lastEntry.getKey()) < 0) {
+          CostBenefitInfo costBenefitInfo =
+              getCostBenefitInfo(firstEntry.getKey(), lastEntry.getKey(), validDataPerLogSegments, segmentCapacity,
+                  segmentHeaderSize, maxBlobSize, true);
+          if (costBenefitInfo.getBenefit() > 1) {
+            logger.info("Merging middle log segments which are qualified for compaction {} ", costBenefitInfo);
+            blobToLastMiddleRangeCompaction.put(storeId, time.milliseconds());
+            return costBenefitInfo;
+          }
+        }
+      }
+      logger.info("Merging middle log segments, no qualified middle range. ");
+    }
+
+    return null;
+  }
+
+  /**
    * Finds the best candidate to compact by finding the candidate with the best cost benefit ratio
    * @param validDataPerLogSegments the valid data size for each log segment in the form of a {@link NavigableMap} of segment names to
    * valid data sizes.
@@ -111,54 +165,16 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
     // try to reclaim as many log segments as possible with reasonable cost.
     if (storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs != 0) {
       weightOnBenefit = true;
-      String storeId = blobStoreStats.getStoreId();
-      // when boots up, give it a chance to try the "middle range compaction"
-      if (!blobToLastMiddleRangeCompaction.containsKey(storeId)) {
-        // stagger the initial run cross 2 hours
-        long staggerTime =
-            random.nextInt(2 * 60 * 60 * 1000) % storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs;
-        blobToLastMiddleRangeCompaction.put(storeId,
-            time.milliseconds() - storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs + staggerTime);
-      }
-
-      if (time.milliseconds() - blobToLastMiddleRangeCompaction.get(storeId)
-          >= storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs) {
-        // find the first log segment has valid data percentage <= the percentage threshold
-        while (firstEntry != null) {
-          if (firstEntry.getValue() / (segmentCapacity * 1.0)
-              <= storeConfig.storeMaxLogSegmentValidDataPercentageToQualifyCompaction) {
-            break;
-          }
-          firstEntry = validDataPerLogSegments.higherEntry(firstEntry.getKey());
-        }
-        if (firstEntry != null) {
-          // find the last log segment has valid data percentage <= the percentage threshold
-          while (lastEntry != null && firstEntry.getKey().compareTo(lastEntry.getKey()) < 0) {
-            if (lastEntry.getValue() / (segmentCapacity * 1.0)
-                <= storeConfig.storeMaxLogSegmentValidDataPercentageToQualifyCompaction) {
-              break;
-            }
-            lastEntry = validDataPerLogSegments.lowerEntry(lastEntry.getKey());
-          }
-          if (lastEntry != null && firstEntry.getKey().compareTo(lastEntry.getKey()) < 0) {
-            CostBenefitInfo costBenefitInfo =
-                getCostBenefitInfo(firstEntry.getKey(), lastEntry.getKey(), validDataPerLogSegments, segmentCapacity,
-                    segmentHeaderSize, maxBlobSize, weightOnBenefit);
-            if (costBenefitInfo.getBenefit() > 1) {
-              logger.info("Merging middle log segments which are qualified for compaction {} ", costBenefitInfo);
-              blobToLastMiddleRangeCompaction.put(storeId, time.milliseconds());
-              return costBenefitInfo;
-            }
-          }
-        }
-        logger.info("Merging middle log segments, no qualified middle range. ");
+      bestCandidateToCompact =
+          getMiddleRangeToCompact(validDataPerLogSegments, segmentCapacity, segmentHeaderSize, maxBlobSize,
+              blobStoreStats);
+      if (bestCandidateToCompact != null) {
+        return bestCandidateToCompact;
       }
     }
 
     // weigh more on least IO effort
     // try to reclaim some log segments with the least IO effort
-    firstEntry = validDataPerLogSegments.firstEntry();
-    lastEntry = validDataPerLogSegments.lastEntry();
     while (firstEntry != null) {
       Map.Entry<LogSegmentName, Long> endEntry = lastEntry;
       while (endEntry != null && firstEntry.getKey().compareTo(endEntry.getKey()) <= 0) {
@@ -220,7 +236,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
     int benefit = totalSegmentsToBeCompacted - (int) Math.ceil(totalCost / (maxCapacityPerSegment * 1.0));
 
     if (weightOnBenefit) {
-      if (totalCost != adjustedTotalCost) {
+      if (totalCost < adjustedTotalCost) {
         logger.info("getCostBenefitInfo {} cost {} adjusted cost {}",
             validDataSizePerLogSegment.subMap(firstLogSegmentName, true, lastLogSegmentName, true).keySet(), totalCost,
             adjustedTotalCost);

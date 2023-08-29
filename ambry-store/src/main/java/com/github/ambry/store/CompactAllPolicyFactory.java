@@ -47,7 +47,6 @@ public class CompactAllPolicyFactory implements CompactionPolicyFactory {
  */
 class CompactAllPolicy implements CompactionPolicy {
 
-  final static long ERROR_MARGIN_MS = 1000 * 60 * 60;
   private final StoreConfig storeConfig;
   private final Time time;
   private final long messageRetentionTimeInMs;
@@ -74,14 +73,9 @@ class CompactAllPolicy implements CompactionPolicy {
             blobStoreStats.getValidDataSizeByLogSegment(
                 new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
         if (validDataSizeByLogSegment != null) {
-          final StringBuilder sizeLog = new StringBuilder(
-              "Valid data size for " + dataDir + " from BlobStoreStats " + validDataSizeByLogSegment.getFirst()
-                  + " segments: ");
-          validDataSizeByLogSegment.getSecond().forEach((logSegmentName, validDataSize) -> {
-            sizeLog.append(logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB "
-                + validDataSize * 1.0 / segmentCapacity + "%;");
-          });
-          logger.info(sizeLog.toString());
+          String sizeLog =
+              blobStoreStats.dumpLogSegmentSize(validDataSizeByLogSegment.getSecond(), segmentCapacity, dataDir);
+          logger.info(sizeLog);
         }
       }
     }

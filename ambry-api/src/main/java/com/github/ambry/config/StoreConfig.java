@@ -234,7 +234,7 @@ public class StoreConfig {
 
   /**
    * Only the log segment whose valid data percentage is less or equal than the specified number
-   * will be qualified for compaction.number.
+   * will be qualified for compaction.
    */
   @Config("store.max.log.segment.valid.data.percentage.to.qualify.compaction")
   public final double storeMaxLogSegmentValidDataPercentageToQualifyCompaction;
@@ -247,7 +247,7 @@ public class StoreConfig {
   public final double storeStatsBasedCompactionMinCostInPercentage;
 
   /**
-   * the time interval to run the "middle range compaction" in the stalts based compaction.
+   * the time interval to run the "middle range compaction" in the stats based compaction.
    * the interval is in milliseconds.
    */
   @Config("store.stats.based.middle.range.compaction.interval.in.ms")
