@@ -129,7 +129,7 @@ public class ClusterChangeHandlerTest {
     props.setProperty("clustermap.listen.cross.colo", Boolean.toString(true));
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc,
-            useAggregatedView);
+            useAggregatedView, 100, 1000);
     helixManagerFactory =
         new HelixClusterManagerTest.MockHelixManagerFactory(helixCluster, znRecordMap, null, useAggregatedView);
   }

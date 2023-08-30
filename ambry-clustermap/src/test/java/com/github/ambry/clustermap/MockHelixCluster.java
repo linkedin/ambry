@@ -31,7 +31,6 @@ import static com.github.ambry.clustermap.HelixBootstrapUpgradeUtil.HelixAdminOp
  * Mocks a cluster in Helix, keeps all states internally.
  */
 public class MockHelixCluster {
-  private static final int MAX_PARTITIONS_IN_ONE_RESOURCE = 100;
   private final MockHelixAdminFactory helixAdminFactory;
   private final Map<String, DcZkInfo> dataCenterToZkAddress;
   private final Map<String, MockHelixAdmin> helixAdmins;
@@ -39,24 +38,30 @@ public class MockHelixCluster {
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final String zkLayoutPath;
-  private String localDC;
   private boolean isAggregatedViewUsed;
+  private final int maxPartitionsInOneResource;
   private MockHelixAdmin localHelixAdmin;
 
   /**
    * Instantiate a MockHelixCluster.
-   * @param clusterName the name of the cluster.
-   * @param hardwareLayoutPath the path to the {@link HardwareLayout} file used to bootstrap this cluster.
-   * @param partitionLayoutPath the path to the {@link PartitionLayout} file used to bootstrap this cluster.
-   * @param zkLayoutPath the path to the file containing the zk layout json string.
-   * @param localDC
-   * @param isAggregatedViewUsed
+   *
+   * @param clusterName                          the name of the cluster.
+   * @param hardwareLayoutPath                   the path to the {@link HardwareLayout} file used to bootstrap this
+   *                                             cluster.
+   * @param partitionLayoutPath                  the path to the {@link PartitionLayout} file used to bootstrap this
+   *                                             cluster.
+   * @param zkLayoutPath                         the path to the file containing the zk layout json string.
+   * @param localDC                              local data center name
+   * @param isAggregatedViewUsed                 {@code True} if aggregated view is used
+   * @param maxPartitionsInOneResource           maximum partitions that can be present under one helix resource
+   * @param maxInstancesInOneResourceForFullAuto maximum instances that can be present under one helix resource
    * @throws Exception
    */
   MockHelixCluster(String clusterName, String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
-      String localDC, boolean isAggregatedViewUsed) throws Exception {
-    this.localDC = localDC;
+      String localDC, boolean isAggregatedViewUsed, int maxPartitionsInOneResource,
+      int maxInstancesInOneResourceForFullAuto) throws Exception {
     this.isAggregatedViewUsed = isAggregatedViewUsed;
+    this.maxPartitionsInOneResource = maxPartitionsInOneResource;
     helixAdminFactory = new MockHelixAdminFactory();
     helixAdmins = helixAdminFactory.getAllHelixAdmins();
     this.hardwareLayoutPath = hardwareLayoutPath;
@@ -65,9 +70,9 @@ public class MockHelixCluster {
     String jsonString = Utils.readStringFromFile(zkLayoutPath);
     dataCenterToZkAddress = parseDcJsonAndPopulateDcInfo(jsonString);
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", MAX_PARTITIONS_IN_ONE_RESOURCE, false, false, helixAdminFactory, false,
+        "all", maxPartitionsInOneResource, false, false, helixAdminFactory, false,
         ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, DataNodeConfigSourceType.INSTANCE_CONFIG, false,
-        1000);
+        maxInstancesInOneResourceForFullAuto);
     this.clusterName = clusterName;
     this.localHelixAdmin =
         helixAdminFactory.getHelixAdmin(dataCenterToZkAddress.get(localDC).getZkConnectStrs().get(0));
@@ -80,7 +85,7 @@ public class MockHelixCluster {
    */
   void upgradeWithNewHardwareLayout(String hardwareLayoutPath) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
-        "all", MAX_PARTITIONS_IN_ONE_RESOURCE, false, false, helixAdminFactory, false,
+        "all", maxPartitionsInOneResource, false, false, helixAdminFactory, false,
         ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, DataNodeConfigSourceType.INSTANCE_CONFIG, false,
         1000);
     triggerInstanceConfigChangeNotification();

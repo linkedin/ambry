@@ -231,7 +231,7 @@ public class HelixClusterManagerTest {
 
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc,
-            useAggregatedView);
+            useAggregatedView, 100, 1000);
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       if (partitionId.getPartitionState().equals(PartitionState.READ_ONLY)) {
         String helixPartitionName = partitionId.toPathString();
@@ -336,7 +336,7 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
     MockHelixCluster testCluster =
         new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
-            useAggregatedView);
+            useAggregatedView, 100, 1000);
 
     List<DataNode> initialNodes = testHardwareLayout1.getAllExistingDataNodes();
     Partition partitionToTest = (Partition) testPartitionLayout1.getPartitionLayout().getPartitions(null).get(0);
@@ -974,7 +974,7 @@ public class HelixClusterManagerTest {
     idealState.setInstanceGroupTag(instanceGroupTag);
     helixCluster.refreshIdealState();
     for (DataNode dataNode : allLocalDcDataNodes) {
-      assertFalse("IdealState is on FULL_AUTO with tag, but instances don't have tags",
+      assertFalse("Should not be in FULL_AUTO since IdealState is not on FULL_AUTO and instances don't have tags",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
@@ -985,7 +985,8 @@ public class HelixClusterManagerTest {
       InstanceConfig instanceConfig =
           helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
       instanceConfig.addTag(instanceGroupTag);
-      assertFalse("Should be on FULL_AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+      assertFalse("Should not be in FULL_AUTO since IdealState is not on FULL_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
 
@@ -993,8 +994,7 @@ public class HelixClusterManagerTest {
     idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
     helixCluster.refreshIdealState();
     for (DataNode dataNode : allLocalDcDataNodes) {
-      assertTrue("IdealState is on FULL_AUTO, but there is no tag for resource",
-          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+      assertTrue("Should be in FULL_AUTO mode", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     assertTrue(registry.getGauges().keySet().contains(totalInstanceMetricName));
 
@@ -1037,6 +1037,88 @@ public class HelixClusterManagerTest {
       instanceConfig.removeTag("random_tag");
       instanceConfig.addTag(instanceGroupTag);
       assertFalse("Resource is in SEMI AUTO", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+  }
+
+  @Test
+  public void testHostFullAutoWithMultipleTags() throws Exception {
+    // For aggregated view, it will always return false
+    assumeTrue(!useComposite && !useAggregatedView);
+
+    // Create a new helix cluster with "maxPartitionsInOneResource" set to 2 when creating MockHelixCluster below so
+    // that there are atleast 2 resources created in helix.
+    clusterManager.close();
+    metricRegistry = new MetricRegistry();
+    String staticClusterName = "TestOnly";
+    File tempDir = Files.createTempDirectory("helixClusterManagerTest").toFile();
+    tempDir.deleteOnExit();
+    String tempDirPath = tempDir.getAbsolutePath();
+    String testHardwareLayoutPath = tempDirPath + File.separator + "hardwareLayoutTest.json";
+    String testPartitionLayoutPath = tempDirPath + File.separator + "partitionLayoutTest.json";
+    String testZkLayoutPath = tempDirPath + File.separator + "zkLayoutPath.json";
+    // initialize test hardware layout and partition layout, create mock helix cluster for testing.
+    TestHardwareLayout testHardwareLayout = constructInitialHardwareLayoutJSON(staticClusterName);
+    TestPartitionLayout testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, 3, localDc);
+    JSONObject zkJson = constructZkLayoutJSON(dcsToZkInfo.values());
+    Utils.writeJsonObjectToFile(zkJson, testZkLayoutPath);
+    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), testHardwareLayoutPath);
+    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
+    MockHelixCluster helixCluster =
+        new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
+            useAggregatedView, 2, 0);
+
+    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
+
+    verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
+
+    List<DataNode> allLocalDcDataNodes = testHardwareLayout.getAllDataNodesFromDc(localDc);
+
+    // Should have more than one Resource when bootup
+    List<String> resourceNames = helixCluster.getResources(localDc);
+    assertEquals("Should have more than one resource when bootup", 2, resourceNames.size());
+    String resource1 = resourceNames.get(0);
+    String resource2 = resourceNames.get(1);
+
+    // 1. Verify data nodes with multiple resource tags are in Full-Auto if all resources are in Full Auto
+    IdealState idealStateForResource1 = helixCluster.getResourceIdealState(resource1, localDc);
+    IdealState idealStateForResource2 = helixCluster.getResourceIdealState(resource2, localDc);
+
+    // Add a tag for each resource
+    final String tag1 = "TAG_1000000";
+    final String tag2 = "TAG_1000001";
+    idealStateForResource1.setInstanceGroupTag(tag1);
+    idealStateForResource2.setInstanceGroupTag(tag2);
+
+    // Add both tags to data nodes
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(tag1);
+      instanceConfig.addTag(tag2);
+    }
+
+    // Update resource to FULL_AUTO
+    idealStateForResource1.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    idealStateForResource2.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+
+    // Refresh ideal state
+    helixCluster.refreshIdealState();
+
+    // All the data nodes must be in Full Auto
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertTrue("Should be in FULL_AUTO mode", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // 2. Verify data nodes with multiple resource tags are in Semi-Auto if any resource is in Semi Auto
+    idealStateForResource2 = helixCluster.getResourceIdealState(resource2, localDc);
+    idealStateForResource2.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
+    helixCluster.refreshIdealState();
+    // All the data nodes must be in Full Auto
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertFalse("Should be in SEMI_AUTO mode since resource 2 is in SEMI_AUTO",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
   }
 

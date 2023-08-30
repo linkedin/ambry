@@ -465,13 +465,14 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * Return if the data node is in full auto mode. If the {@code shouldCheckPropertyStore} is true,
-   * this mode would also check if the data node is going through FULL_AUTO migration from property
-   * store.
+   * Returns true if all the helix resources that this host belongs to are in Full Auto mode. If the
+   * {@code shouldCheckPropertyStore} is true, this mode would also check if the data node is going through
+   * FULL_AUTO migration from property store.
    * @param dataNodeId The {@link DataNodeId} to check.
    * @param shouldCheckPropertyStore True to check property store if this data node id is in full auto
    *                                 migration and return true if that's the case.
-   * @return
+   * @return {@code True} if all the helix resources that this host belongs to are in Full Auto. Else, returns
+   *         {@code False}
    */
   boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId, boolean shouldCheckPropertyStore) {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
@@ -487,28 +488,31 @@ public class HelixClusterManager implements ClusterMap {
       logger.trace("DataNode {} doesn't have any tags", instanceName);
       return false;
     }
-    // Before turn on FULL_AUTO, we have to make sure each host only stores partitions from one resource.
-    // Meaning there should be only one tag in the list
-    if (tags.size() != 1) {
-      logger.trace("DataNode {} has multiple tags {}", instanceName, tags);
-      return false;
+    logger.trace("Instance {} has tags {}", instanceName, tags);
+    // Check if all the resources that this host belongs to are in FULL_AUTO mode
+    for (String tag : tags) {
+      ResourceProperty property = dcToTagToResourceProperty.get(dcName).get(tag);
+      if (property == null) {
+        logger.trace("No Resource property found for tag {}", tag);
+        return false;
+      }
+      // Return false if any of the resource is in semi-auto
+      if (!property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
+        logger.trace("Resource with tag {} is in semi-auto mode", tag);
+        return false;
+      }
+
+      if (shouldCheckPropertyStore) {
+        // Return false if any of the resource is not present in Full-Auto migration list
+        ZNRecord zNRecord =
+            helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+        if (zNRecord == null || !zNRecord.getListField(RESOURCES_STR).contains(property.name)) {
+          logger.trace("Resource with tag {} is in not present in /AdminConfigs/FullAutoMigration list", tag);
+          return false;
+        }
+      }
     }
-    // Make sure all the resources turned on FULL_AUTO mode
-    String tag = tags.iterator().next();
-    ResourceProperty property = dcToTagToResourceProperty.get(dcName).get(tag);
-    if (property == null) {
-      return false;
-    }
-    // Return true if either the resource is in Full-auto or we are rolling back from Full-auto to Semi-auto
-    if (property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
-      return true;
-    }
-    // If we are here, then ResourceProperty shows RebalanceMode as NOT FULL_AUTO.
-    if (!shouldCheckPropertyStore) {
-      return false;
-    }
-    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
-    return zNRecord != null && zNRecord.getListField(RESOURCES_STR).contains(property.name);
+    return true;
   }
 
   @Override
