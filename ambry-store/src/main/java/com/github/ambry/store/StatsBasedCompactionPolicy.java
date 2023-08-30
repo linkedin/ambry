@@ -87,11 +87,12 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
 
   /**
    * Finds middle range to compact.
-   * The first log segment and the last segment have to have less valid data then the configured threshold.
+   * The first log segment and the last segment have to have less valid data than the configured threshold.
    * @param validDataPerLogSegments the valid data size for each log segment in the form of a {@link NavigableMap}
    * @param segmentCapacity Segment capacity of one {@link LogSegment}
    * @param segmentHeaderSize Segment header size of a {@link LogSegment}
    * @param maxBlobSize The max blob size
+   * @param blobStoreStats the {@link BlobStoreStats}
    * @return the {@link CostBenefitInfo} for the best candidate to compact. {@code null} if there isn't any.
    */
   private CostBenefitInfo getMiddleRangeToCompact(NavigableMap<LogSegmentName, Long> validDataPerLogSegments,
@@ -152,6 +153,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
    * @param segmentCapacity Segment capacity of one {@link LogSegment}
    * @param segmentHeaderSize Segment header size of a {@link LogSegment}
    * @param maxBlobSize The max blob size
+   * @param blobStoreStats the {@link BlobStoreStats}
    * @return the {@link CostBenefitInfo} for the best candidate to compact. {@code null} if there isn't any.
    */
   private CostBenefitInfo getBestCandidateToCompact(NavigableMap<LogSegmentName, Long> validDataPerLogSegments,

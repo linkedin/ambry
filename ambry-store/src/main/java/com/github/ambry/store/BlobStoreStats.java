@@ -381,6 +381,13 @@ class BlobStoreStats implements StoreStats, Closeable {
     return retValue;
   }
 
+  /**
+   * Dump the log segment size in a human readable way.
+   * @param validDataSizeByLogSegment a map from log segment name to valid size
+   * @param segmentCapacity Segment capacity of one {@link LogSegment}
+   * @param dataDir data directory on the disk
+   * @return the dump string of the log segment valid size in a human readable way.
+   */
   String dumpLogSegmentSize(NavigableMap<LogSegmentName, Long> validDataSizeByLogSegment, long segmentCapacity,
       String dataDir) {
     final StringBuilder sizeLog = new StringBuilder("Valid data size for " + dataDir + " from log segments: ");
