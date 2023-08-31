@@ -188,14 +188,21 @@ public class PartitionLayout {
     }
   }
 
+  public void removePartition(Partition partition) {
+    if (partitionMap.remove(ByteBuffer.wrap(partition.getBytes())) != null) {
+      validate();
+      partitionSelectionHelper.updatePartitions(partitionMap.values(), localDatacenterName);
+    }
+  }
+
   private void validateClusterName() {
     if (clusterName == null) {
       throw new IllegalStateException("ClusterName cannot be null.");
     }
     if (!hardwareLayout.getClusterName().equals(clusterName)) {
       throw new IllegalStateException(
-          "PartitionLayout cluster name does not match that of HardwareLayout: " + clusterName + " != " + hardwareLayout
-              .getClusterName());
+          "PartitionLayout cluster name does not match that of HardwareLayout: " + clusterName + " != "
+              + hardwareLayout.getClusterName());
     }
   }
 
@@ -342,8 +349,8 @@ public class PartitionLayout {
     }
 
     @Override
-    public void getReplicaIdsByStates(Map<ReplicaState, List<Replica>> replicasByState, Partition partition, Set<ReplicaState> states,
-        String dcName) {
+    public void getReplicaIdsByStates(Map<ReplicaState, List<Replica>> replicasByState, Partition partition,
+        Set<ReplicaState> states, String dcName) {
       throw new UnsupportedOperationException("Not supported in static cluster map");
     }
 

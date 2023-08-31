@@ -167,6 +167,15 @@ public class ClusterMapUtils {
   }
 
   /**
+   * Construct and return the instance name for given data node id
+   * @param dataNodeId the {@link DataNodeId} object.
+   * @return the constructed instance name.
+   */
+  public static String getInstanceName(DataNodeId dataNodeId) {
+    return getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
+  }
+
+  /**
    * Parses DC information JSON string and returns a map of datacenter name to {@link DcZkInfo}.
    * @param dcInfoJsonString the string containing the DC info.
    * @return a map of dcName -> DcInfo.

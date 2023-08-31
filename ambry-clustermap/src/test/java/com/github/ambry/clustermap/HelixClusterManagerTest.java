@@ -102,6 +102,7 @@ public class HelixClusterManagerTest {
   private final boolean overrideEnabled;
   private final boolean listenCrossColo;
   private final boolean useAggregatedView;
+  private final boolean fullAutoCompatible;
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
 
@@ -127,15 +128,17 @@ public class HelixClusterManagerTest {
     return Arrays.asList(
         // @formatter:off
         new Object[][]{
-            {false, false, true, false},
-            {false, true, true, false},
-            {true, false, true, false},
-            {false, false, false, false},
-            {false, true, false, false},
-            {true, false, false, false},
-            {false, false, true, true},
-            {false, true, true, true},
-            {true, false, true, true}
+            {false, false, true, false, false},
+            {false, true, true, false, false},
+            {true, false, true, false, false},
+            {false, false, false, false, false},
+            {false, true, false, false, false},
+            {true, false, false, false, false},
+            {false, false, true, true, false},
+            {false, true, true, true, false},
+            {true, false, true, true, false},
+            {false, false, true, false, true},
+            {false, false, true, true, true}
         });
         // @formatter:on
   }
@@ -151,11 +154,12 @@ public class HelixClusterManagerTest {
    * @throws Exception
    */
   public HelixClusterManagerTest(boolean useComposite, boolean overrideEnabled, boolean listenCrossColo,
-      boolean useAggregatedView) throws Exception {
+      boolean useAggregatedView, boolean fullAutoCompatible) throws Exception {
     this.useComposite = useComposite;
     this.overrideEnabled = overrideEnabled;
     this.listenCrossColo = listenCrossColo;
     this.useAggregatedView = useAggregatedView;
+    this.fullAutoCompatible = fullAutoCompatible;
     MockitoAnnotations.initMocks(this);
     localDc = helixDcs[0];
     remoteDc = helixDcs[1];
@@ -231,7 +235,7 @@ public class HelixClusterManagerTest {
 
     helixCluster =
         new MockHelixCluster(clusterNamePrefixInHelix, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDc,
-            useAggregatedView, 100, 1000);
+            useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
     for (PartitionId partitionId : testPartitionLayout.getPartitionLayout().getPartitions(null)) {
       if (partitionId.getPartitionState().equals(PartitionState.READ_ONLY)) {
         String helixPartitionName = partitionId.toPathString();
@@ -316,7 +320,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void inconsistentReplicaCapacityTest() throws Exception {
-    assumeTrue(listenCrossColo);
+    assumeTrue(listenCrossColo && !fullAutoCompatible);
     clusterManager.close();
     metricRegistry = new MetricRegistry();
     String staticClusterName = "TestOnly";
@@ -336,7 +340,7 @@ public class HelixClusterManagerTest {
     Utils.writeJsonObjectToFile(testPartitionLayout1.getPartitionLayout().toJSONObject(), testPartitionLayoutPath);
     MockHelixCluster testCluster =
         new MockHelixCluster("AmbryTest-", testHardwareLayoutPath, testPartitionLayoutPath, testZkLayoutPath, localDc,
-            useAggregatedView, 100, 1000);
+            useAggregatedView, 100, fullAutoCompatible ? 10000 : -1);
 
     List<DataNode> initialNodes = testHardwareLayout1.getAllExistingDataNodes();
     Partition partitionToTest = (Partition) testPartitionLayout1.getPartitionLayout().getPartitions(null).get(0);
@@ -620,7 +624,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void getNewReplicaInFullAutoBasicTest() throws Exception {
-    assumeTrue(!useComposite);
+    assumeTrue(!useComposite && fullAutoCompatible);
     metricRegistry = new MetricRegistry();
 
     // Set the resource and all data nodes in local dc to FULL_AUTO
@@ -681,7 +685,7 @@ public class HelixClusterManagerTest {
    */
   @Test
   public void getNewReplicaInFullAutoDiskUsageTest() throws Exception {
-    assumeTrue(!useComposite);
+    assumeTrue(!useComposite && fullAutoCompatible);
     metricRegistry = new MetricRegistry();
     // Set the node to FullAuto
     List<String> resourceNames = helixCluster.getResources(localDc);
@@ -927,7 +931,7 @@ public class HelixClusterManagerTest {
   @Test
   public void testHostFullAuto() throws Exception {
     // For aggregated view, it will always return false
-    assumeTrue(!useComposite && !useAggregatedView);
+    assumeTrue(!useComposite && !useAggregatedView && fullAutoCompatible);
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
 
@@ -967,7 +971,6 @@ public class HelixClusterManagerTest {
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
     assertFalse(registry.getGauges().keySet().contains(totalInstanceMetricName));
-
 
     // Now update resource to have a tag
     final String instanceGroupTag = "TAG_1000000";
@@ -1144,7 +1147,7 @@ public class HelixClusterManagerTest {
   @Test
   public void testRollBackFromFullAuto() throws Exception {
     // For aggregated view, it will always return false
-    assumeTrue(!useComposite && !useAggregatedView);
+    assumeTrue(!useComposite && !useAggregatedView && fullAutoCompatible);
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
 
@@ -1189,7 +1192,7 @@ public class HelixClusterManagerTest {
   @Test
   public void testRollBackFromFullAutoForDifferentResource() throws Exception {
     // For aggregated view, it will always return false
-    assumeTrue(!useComposite && !useAggregatedView);
+    assumeTrue(!useComposite && !useAggregatedView && fullAutoCompatible);
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
 

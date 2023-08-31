@@ -1120,7 +1120,7 @@ public class TestUtils {
     private JSONObject addPartitionAndUpdateJsonPartitionLayout(String partitionClass,
         List<DataNode> nodesToHostNewPartition) {
       version += 1;
-      int nextPartitionIndex = jsonPartitions.length();
+      int nextPartitionIndex = jsonPartitions.length() + basePartitionId;
       List<Disk> disksToPlaceNewPartition = new ArrayList<>();
       Random random = new Random();
       nodesToHostNewPartition.forEach(
