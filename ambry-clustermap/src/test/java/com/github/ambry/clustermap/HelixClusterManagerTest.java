@@ -43,7 +43,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
-import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.model.IdealState;
@@ -121,6 +120,8 @@ public class HelixClusterManagerTest {
   private final int numOfPartialReadWrite = 3;
   private int numOfReadOnly;
   private int numOfReadWrite;
+
+  static final long DEFAULT_REPLICA_CAPACITY_IN_BYTES = 100L * 1024 * 1024 * 1024;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
@@ -254,6 +255,7 @@ public class HelixClusterManagerTest {
     props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
     props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
     props.setProperty("clustermap.listen.cross.colo", Boolean.toString(listenCrossColo));
+    props.setProperty("clustermap.default.replica.capacity.in.bytes", Long.toString(DEFAULT_REPLICA_CAPACITY_IN_BYTES));
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     Map<String, ZNRecord> znRecordMap = new HashMap<>();
     znRecordMap.put(PARTITION_OVERRIDE_ZNODE_PATH, znRecord);
@@ -656,22 +658,10 @@ public class HelixClusterManagerTest {
         helixClusterManager.getBootstrapReplicaMap().size());
 
     // Case 2. We are creating a bootstrap replica for a new partition
-    String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1000);
-    // Case 2.1 there is no resource config
-    assertNull("Missing resource config", helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode));
-    // Case 2.1 resource config created
-    ResourceConfig resourceConfig = new ResourceConfig.Builder(resourceName).build();
-    resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR, String.valueOf(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES));
-    ConfigAccessor configAccessor =
-        helixFactory.getZKHelixManager(clusterMapConfig.clusterMapClusterName, selfInstanceName, InstanceType.SPECTATOR,
-            parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(localDc)
-                .getZkConnectStrs()
-                .get(0)).getConfigAccessor();
-    configAccessor.setResourceConfig(clusterMapConfig.clusterMapClusterName, resourceName, resourceConfig);
-    newPartitionId = String.valueOf(idealState.getNumPartitions() + 1001);
+    String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1001);
     bootstrapReplica = helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode);
     assertNotNull(bootstrapReplica);
-    assertEquals(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES, bootstrapReplica.getCapacityInBytes());
+    assertEquals(DEFAULT_REPLICA_CAPACITY_IN_BYTES, bootstrapReplica.getCapacityInBytes());
 
     helixClusterManager.close();
   }

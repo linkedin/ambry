@@ -41,7 +41,6 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
-import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
@@ -53,7 +52,6 @@ import org.apache.helix.api.listeners.RoutingTableChangeListener;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
-import org.apache.helix.model.ResourceConfig;
 import org.apache.helix.spectator.RoutingTableSnapshot;
 import org.apache.helix.store.zk.ZkHelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -114,14 +112,6 @@ public class HelixClusterManager implements ClusterMap {
   private final AtomicLong currentXid;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   private HelixAggregatedViewClusterInfo helixAggregatedViewClusterInfo = null;
-
-  // The map from resource name to resource config, This is only used in FULL AUTO. This map is not going to be updated
-  // if the ResourceConfig is updated, but we are only using default replica capacity from the ResourceConfig. So if you
-  // update the default replica capacity in ResourceConfig, you have to restart the process for this map to get updated.
-  // And this map doesn't store any resources from other datacenter.
-  //
-  // We probably only need to fetch one resource config, which this data node belongs to (This data node has to be a server node).
-  private final ConcurrentHashMap<String, ResourceConfig> resourceConfigs = new ConcurrentHashMap<>();
 
   // instance name to tag mapping and the reverse mapping from tag to instance name, these two maps
   // only contains the instances from local datacenter
@@ -813,10 +803,9 @@ public class HelixClusterManager implements ClusterMap {
       AmbryPartition currentPartition =
           partitionNameToAmbryPartition.putIfAbsent(mappedPartition.toPathString(), mappedPartition);
       if (currentPartition == null) {
-        // If the partition is new, we get the default replica capacity from resource config
         logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
         currentPartition = mappedPartition;
-        replicaCapacity = getReplicaCapacityFromResourceConfig(partitionIdStr, dataNodeId);
+        replicaCapacity = clusterMapConfig.clustermapDefaultReplicaCapacityInBytes;
       } else {
         // For existing partitions, we should already have other replicas in the map
         replicaCapacity = currentPartition.getReplicaIds().get(0).getCapacityInBytes();
@@ -841,46 +830,6 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * Get default replica capacity from resource config. A data node belongs to only one resource, if we are creating a
-   * new partition for this data node, we can get the default capace from this resource's config.
-   * @param partitionIdStr The partition id in string.
-   * @param dataNodeId The data node to create a new replica in.
-   * @return The default replica capacity
-   */
-  private long getReplicaCapacityFromResourceConfig(String partitionIdStr, DataNodeId dataNodeId) {
-    String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
-    InstanceConfig instanceConfig = localHelixAdmin.getInstanceConfig(clusterName, instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalArgumentException("Instance config for " + instanceName + " doesn't exist");
-    }
-    String dcName = dataNodeId.getDatacenterName();
-    List<String> tags = instanceConfig.getTags();
-    // we should only have one tag
-    String tag = tags.get(0);
-    String resourceName = dcToTagToResourceProperty.get(dcName).get(tag).name;
-    if (!resourceConfigs.contains(resourceName)) {
-      ConfigAccessor configAccessor = null;
-      if (clusterMapConfig.clusterMapUseAggregatedView) {
-        configAccessor = helixAggregatedViewClusterInfo.helixManager.getConfigAccessor();
-      } else {
-        configAccessor = ((HelixDcInfo) dcToDcInfo.get(dcName)).helixManager.getConfigAccessor();
-      }
-      logger.info("Fetching resource config for {} to create bootstrap replica for partition {}", resourceName,
-          partitionIdStr);
-      ResourceConfig resourceConfig = configAccessor.getResourceConfig(clusterName, resourceName);
-      if (resourceConfig != null) {
-        resourceConfigs.putIfAbsent(resourceName, resourceConfig);
-      }
-    }
-    ResourceConfig resourceConfig = resourceConfigs.get(resourceName);
-    if (resourceConfig == null || resourceConfig.getSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR) == null) {
-      throw new IllegalArgumentException("Missing default replica capacity from resource " + resourceName
-          + " when creating bootstrap replica for partition " + partitionIdStr);
-    }
-    return Long.parseLong(resourceConfig.getSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR));
-  }
-
-  /**
    * Get a disk with maximum available space for bootstrapping replica in Full auto mode. This method is synchronized
    * since it can be queried concurrently when multiple replicas are bootstrapped.
    * @param dataNode the {@link DataNodeId} on which disk is needed
@@ -895,9 +844,9 @@ public class HelixClusterManager implements ClusterMap {
       if (disk.getState() == HardwareState.UNAVAILABLE) {
         continue;
       }
-      if (disk.getAvailableSpaceInBytes() < DEFAULT_REPLICA_CAPACITY_IN_BYTES) {
+      if (disk.getAvailableSpaceInBytes() < clusterMapConfig.clustermapDefaultReplicaCapacityInBytes) {
         logger.debug("Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}", disk,
-            disk.getAvailableSpaceInBytes(), DEFAULT_REPLICA_CAPACITY_IN_BYTES);
+            disk.getAvailableSpaceInBytes(), clusterMapConfig.clustermapDefaultReplicaCapacityInBytes);
         continue;
       }
       if (disk.getAvailableSpaceInBytes() == maxAvailableDiskSpace) {
