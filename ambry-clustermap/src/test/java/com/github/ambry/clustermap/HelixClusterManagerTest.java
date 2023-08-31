@@ -1111,7 +1111,7 @@ public class HelixClusterManagerTest {
       assertTrue("Should be in FULL_AUTO mode", helixClusterManager.isDataNodeInFullAutoMode(dataNode));
     }
 
-    // 2. Verify data nodes with multiple resource tags are in Semi-Auto if any resource is in Semi Auto
+    // 2. Verify data nodes is in SEMI_AUTO if one the resource tags are in SEMI_AUTO
     idealStateForResource2 = helixCluster.getResourceIdealState(resource2, localDc);
     idealStateForResource2.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
     helixCluster.refreshIdealState();
@@ -1119,6 +1119,21 @@ public class HelixClusterManagerTest {
     for (DataNode dataNode : allLocalDcDataNodes) {
       assertFalse("Should be in SEMI_AUTO mode since resource 2 is in SEMI_AUTO",
           helixClusterManager.isDataNodeInFullAutoMode(dataNode));
+    }
+
+    // 3. Verify data node is still in FULL_AUTO if the SEMI_AUTO resources are present in /AdminConfigs/FullAutoMigration
+    String addr = "localhost:" + dcsToZkInfo.get(localDc).getPort();
+    HelixPropertyStore<ZNRecord> propertyStore =
+        CommonUtils.createHelixPropertyStore(addr, "/" + helixCluster.getClusterName() + "/" + PROPERTYSTORE_STR, null);
+    ZNRecord zNRecord = new ZNRecord(FULL_AUTO_MIGRATION_STR);
+    zNRecord.setListField(RESOURCES_STR, Collections.singletonList(resource2));
+    propertyStore.set(FULL_AUTO_MIGRATION_ZNODE_PATH, zNRecord, AccessOption.PERSISTENT);
+    helixCluster.refreshIdealState();
+    for (DataNode dataNode : allLocalDcDataNodes) {
+      assertTrue("Resource should considered as FULL AUTO while it is rolling back to help with local disk selection",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode, true));
+      assertFalse("Resource should considered NOT IN FULL AUTO when not checking the property store",
+          helixClusterManager.isDataNodeInFullAutoMode(dataNode, false));
     }
   }
 

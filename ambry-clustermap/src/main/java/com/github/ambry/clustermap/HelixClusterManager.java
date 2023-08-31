@@ -466,15 +466,16 @@ public class HelixClusterManager implements ClusterMap {
 
   /**
    * Returns true if all the helix resources that this host belongs to are in Full Auto mode. If the
-   * {@code shouldCheckPropertyStore} is true, this mode would also check if the data node is going through
-   * FULL_AUTO migration from property store.
-   * @param dataNodeId The {@link DataNodeId} to check.
-   * @param shouldCheckPropertyStore True to check property store if this data node id is in full auto
-   *                                 migration and return true if that's the case.
+   * {@code checkIfMigratingFromSemiAutoToFullAuto} is true, this mode would also check if the data node is going
+   * through FULL_AUTO migration from property store.
+   *
+   * @param dataNodeId                             The {@link DataNodeId} to check.
+   * @param checkIfMigratingFromSemiAutoToFullAuto True to check property store if this data node id is in full auto
+   *                                               migration and return true if that's the case.
    * @return {@code True} if all the helix resources that this host belongs to are in Full Auto. Else, returns
-   *         {@code False}
+   * {@code False}
    */
-  boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId, boolean shouldCheckPropertyStore) {
+  boolean isDataNodeInFullAutoMode(DataNodeId dataNodeId, boolean checkIfMigratingFromSemiAutoToFullAuto) {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
     if (instanceNameToAmbryDataNode.get(instanceName) == null) {
       throw new IllegalArgumentException("Instance " + instanceName + " doesn't exist");
@@ -489,29 +490,42 @@ public class HelixClusterManager implements ClusterMap {
       return false;
     }
     logger.trace("Instance {} has tags {}", instanceName, tags);
+
+    // Get list of resources in middle of migration to Full Auto
+    Set<String> resourcesMigratingToFullAuto = new HashSet<>();
+    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+    if (zNRecord != null) {
+      resourcesMigratingToFullAuto.addAll(zNRecord.getListField(RESOURCES_STR));
+    }
+
     // Check if all the resources that this host belongs to are in FULL_AUTO mode
     for (String tag : tags) {
       ResourceProperty property = dcToTagToResourceProperty.get(dcName).get(tag);
       if (property == null) {
-        logger.trace("No Resource property found for tag {}", tag);
-        return false;
-      }
-      // Return false if any of the resource is in semi-auto
-      if (!property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
-        logger.trace("Resource with tag {} is in semi-auto mode", tag);
+        logger.trace("Datanode {} is in SEMI_AUTO since its resource tag has no property found {}", instanceName, tag);
         return false;
       }
 
-      if (shouldCheckPropertyStore) {
-        // Return false if any of the resource is not present in Full-Auto migration list
-        ZNRecord zNRecord =
-            helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
-        if (zNRecord == null || !zNRecord.getListField(RESOURCES_STR).contains(property.name)) {
-          logger.trace("Resource with tag {} is in not present in /AdminConfigs/FullAutoMigration list", tag);
+      if (property.rebalanceMode.equals(IdealState.RebalanceMode.FULL_AUTO)) {
+        continue;
+      }
+
+      // Resource is not in FULL_AUTO. Check if we are in middle of migration to FULL_AUTO and are falling back to SEMI_AUTO
+      if (checkIfMigratingFromSemiAutoToFullAuto) {
+        if (!resourcesMigratingToFullAuto.contains(property.name)) {
+          logger.trace("Datanode {} is in SEMI_AUTO since its resource with tag {} is in semi-auto", instanceName, tag);
           return false;
         }
+      } else {
+        // Resource is neither in FULL_AUTO nor is falling back from FULL_AUTO to SEMI_AUTO. Return false.
+        logger.trace("Datanode {} is in SEMI_AUTO since its resource with tag {} is in semi-auto", instanceName, tag);
+        return false;
       }
     }
+
+    // All resources that this host belongs are either in FULL_AUTO or are falling back from FULL_AUTO to SEMI_AUTO.
+    // Consider this node to be in FULL_AUTO
+    logger.trace("Datanode {} is in FULL_AUTO", instanceName);
     return true;
   }
 
