@@ -493,9 +493,9 @@ public class HelixClusterManager implements ClusterMap {
 
     // Get list of resources in middle of migration to Full Auto
     Set<String> resourcesMigratingToFullAuto = new HashSet<>();
-    ZNRecord zNRecord = helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
-    if (zNRecord != null) {
-      resourcesMigratingToFullAuto.addAll(zNRecord.getListField(RESOURCES_STR));
+    ZNRecord record = helixPropertyStoreInLocalDc.get(FULL_AUTO_MIGRATION_ZNODE_PATH, null, AccessOption.PERSISTENT);
+    if (record != null && record.getListField(RESOURCES_STR) != null) {
+      resourcesMigratingToFullAuto.addAll(record.getListField(RESOURCES_STR));
     }
 
     // Check if all the resources that this host belongs to are in FULL_AUTO mode
