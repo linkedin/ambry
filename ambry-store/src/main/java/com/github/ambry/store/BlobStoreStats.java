@@ -382,6 +382,24 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
+   * Dump the log segment size in a human readable way.
+   * @param validDataSizeByLogSegment a map from log segment name to valid size
+   * @param segmentCapacity Segment capacity of one {@link LogSegment}
+   * @param dataDir data directory on the disk
+   * @return the dump string of the log segment valid size in a human readable way.
+   */
+  String dumpLogSegmentSize(NavigableMap<LogSegmentName, Long> validDataSizeByLogSegment, long segmentCapacity,
+      String dataDir) {
+    final StringBuilder sizeLog = new StringBuilder("Valid data size for " + dataDir + " from log segments: ");
+    validDataSizeByLogSegment.forEach((logSegmentName, validDataSize) -> {
+      sizeLog.append(
+          logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB " + validDataSize * 1.0 / segmentCapacity
+              + "%;");
+    });
+    return sizeLog.toString();
+  }
+
+  /**
    * Gets the storage stats for all serviceIds and their containerIds as of now (the time when the API is called).
    * Storage stats is comprised of 3 values: 1. valid data size (logicalStorageUsage) 2. physical data size 3. number of blobs.
    * The following data are considered as valid data for this API:

@@ -18,13 +18,16 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.Properties;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 
 import static com.github.ambry.store.CompactionPolicyTest.*;
+import static org.junit.Assert.*;
 
 
 public class StatsBasedCompactionPolicyTest {
@@ -44,8 +47,12 @@ public class StatsBasedCompactionPolicyTest {
    * @throws InterruptedException
    */
   public StatsBasedCompactionPolicyTest() throws InterruptedException {
+    setupBlobStore(properties);
+  }
+
+  public void setupBlobStore(Properties prop) throws InterruptedException {
     Pair<MockBlobStore, StoreConfig> initState =
-        CompactionPolicyTest.initializeBlobStore(properties, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
+        CompactionPolicyTest.initializeBlobStore(prop, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
     config = initState.getSecond();
     blobStore = initState.getFirst();
     mockBlobStoreStats = blobStore.getBlobStoreStats();
@@ -114,6 +121,100 @@ public class StatsBasedCompactionPolicyTest {
         }
       }
     }
+  }
+
+  /**
+   * Verify the CompactionDetails is as expected.
+   * @param logSegments log segments not in journal
+   * @param validPercentage for each log segment, the valid size percentage
+   * @param expectedCandidateIndex the index of the expected log segment candidates
+   * @throws StoreException
+   */
+  private void verifyMiddleRangeCompactionDetails(List<LogSegmentName> logSegments, double[] validPercentage,
+      int[] expectedCandidateIndex) throws StoreException {
+    // please make sure logSegments size is equal to validPercentage array size.
+    assertEquals(logSegments.size(), validPercentage.length);
+
+    NavigableMap<LogSegmentName, Long> validDataSize = new TreeMap<>();
+    int i = 0;
+    for (LogSegmentName logSegmentName : logSegments) {
+      validDataSize.put(logSegmentName, (long) (blobStore.segmentCapacity * validPercentage[i]));
+      i++;
+    }
+
+    List<LogSegmentName> expectedCandidate = null;
+    if (expectedCandidateIndex != null) {
+      expectedCandidate = new ArrayList<>();
+      for (int index : expectedCandidateIndex) {
+        expectedCandidate.add(logSegments.get(index));
+      }
+    }
+
+    mockBlobStoreStats.validDataSizeByLogSegments = validDataSize;
+    CompactionPolicyTest.verifyCompactionDetails(expectedCandidate == null ? null
+            : new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, expectedCandidate, null), blobStore,
+        compactionPolicy);
+  }
+
+  /**
+   * Test the benefits oriented compaction.
+   * 1. test the middle range compaction
+   * 2. test the stats cost tuning
+   * @throws StoreException, InterruptedException
+   */
+  @Test
+  public void testGetCompactionDetailsBenefitOriented() throws StoreException, InterruptedException {
+    long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
+    // the test is designed to use for 10 log segments.
+    assertEquals(logSegmentCount, 10);
+    long middleRangeCompactionInterval = 60 * 60 * 24 * 1000; // 1 day
+    /**
+     * test the fine tuned stats based compaction which weighs more the benefits
+     */
+    // existing stats base compaction will prefer the compaction group with least IO effort.
+    // the new compaction weights more on the compaction benefits as long as the IO effort is reasonable.
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
+    double[] validPercentage = {0.9, 0.8, 0.05, 0.01, 0.01, 0.05, 0.1, 0.2, 0.4, 0.7};
+    // with the existing stats based compaction, we'll compact two log segments.
+    int[] expectedCandidateIndex = {3, 4};
+    verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
+
+    Properties benefitBasedCompactionProperties = new Properties();
+    // set the interval to not zero, it enabled both the "middle range compaction" and "tuned stats based compaction"
+    benefitBasedCompactionProperties.setProperty("store.stats.based.middle.range.compaction.interval.in.ms",
+        Long.toString(middleRangeCompactionInterval));
+    setupBlobStore(benefitBasedCompactionProperties);
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
+
+    // with the tuned stats based compaction, we'll compact four log segment.
+    // by default store.stats.based.compaction.min.cost.in.percentage = 0.06
+    // the log segments which has less than 6% valid data are all picked.
+    expectedCandidateIndex = new int[]{2, 3, 4, 5};
+    verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
+
+    /**
+     * test the middle range compaction
+     */
+    // by default, "store.max.log.segment.valid.data.percentage.to.qualify.compaction" = 30%
+    // case 1: compaction the middle range. the valid size threshold is 0.3
+    ((MockTime) time).sleep(middleRangeCompactionInterval * 2 + 1);
+    validPercentage = new double[]{0.9, 0.8, 0.5, 0.3, 0.2, 0.1, 0.1, 0.2, 0.4, 0.7};
+    expectedCandidateIndex = new int[]{3, 4, 5, 6, 7};
+    verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
+
+    // case 2: only one log segment has valid size less than the threshold.
+    // middle range compaction won't run. Fall back to the stats based compaction.
+    ((MockTime) time).sleep(middleRangeCompactionInterval * 2 + 1);
+    validPercentage = new double[]{0.9, 0.8, 0.5, 0.4, 0.6, 0.6, 0.3, 0.5, 0.7, 0.8};
+    expectedCandidateIndex = new int[]{5, 6, 7};
+    verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
+
+    // case 3: no log segment has valid size less than the threshold.
+    // middle range compaction won't run. Fall back to the stats based compaction.
+    ((MockTime) time).sleep(middleRangeCompactionInterval * 2 + 1);
+    validPercentage = new double[]{0.9, 0.8, 0.5, 0.4, 0.6, 0.6, 0.4, 0.5, 0.7, 0.8};
+    expectedCandidateIndex = new int[]{3, 4, 5, 6};
+    verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
   }
 
   /**

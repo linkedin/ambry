@@ -233,6 +233,27 @@ public class StoreConfig {
   public final int storeMinLogSegmentCountToReclaimToTriggerCompaction;
 
   /**
+   * Only the log segment whose valid data percentage is less or equal than the specified number
+   * will be qualified for compaction.
+   */
+  @Config("store.max.log.segment.valid.data.percentage.to.qualify.compaction")
+  public final double storeMaxLogSegmentValidDataPercentageToQualifyCompaction;
+
+  /**
+   * In the stats based compaction, set the min cost for each log segment.
+   * If the IO effort is less than it, still count the cost as this min cost.
+   */
+  @Config("store.stats.based.compaction.min.cost.in.percentage")
+  public final double storeStatsBasedCompactionMinCostInPercentage;
+
+  /**
+   * the time interval to run the "middle range compaction" in the stats based compaction.
+   * the interval is in milliseconds.
+   */
+  @Config("store.stats.based.middle.range.compaction.interval.in.ms")
+  public final long storeStatsBasedMiddleRangeCompactionIntervalInMs;
+
+  /**
    * The number of buckets for stats bucketing, a value of 0 will disable bucketing.
    */
   @Config("store.stats.bucket.count")
@@ -615,6 +636,14 @@ public class StoreConfig {
         "com.github.ambry.store.CompactAllPolicyFactory");
     storeMinLogSegmentCountToReclaimToTriggerCompaction =
         verifiableProperties.getIntInRange("store.min.log.segment.count.to.reclaim.to.trigger.compaction", 1, 1, 1000);
+    storeStatsBasedMiddleRangeCompactionIntervalInMs =
+        verifiableProperties.getLongInRange("store.stats.based.middle.range.compaction.interval.in.ms", 0, 0,
+            Long.MAX_VALUE);
+    storeMaxLogSegmentValidDataPercentageToQualifyCompaction =
+        verifiableProperties.getDoubleInRange("store.max.log.segment.valid.data.percentage.to.qualify.compaction", 0.30,
+            0.0, 1.0);
+    storeStatsBasedCompactionMinCostInPercentage =
+        verifiableProperties.getDoubleInRange("store.stats.based.compaction.min.cost.in.percentage", 0.06, 0.0, 1.0);
     storeStatsBucketCount = verifiableProperties.getIntInRange("store.stats.bucket.count", 0, 0, 10000);
     storeStatsBucketSpanInMinutes =
         verifiableProperties.getLongInRange("store.stats.bucket.span.in.minutes", 60, 1, 10000);

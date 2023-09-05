@@ -32,10 +32,11 @@ import org.slf4j.LoggerFactory;
  * one time out of storeCompactionPolicySwitchPeriod.
  */
 public class HybridCompactionPolicy implements CompactionPolicy {
-  private final Time time;
   private final StoreConfig storeConfig;
   private static final Logger logger = LoggerFactory.getLogger(HybridCompactionPolicy.class);
   private final Map<String, CompactionPolicySwitchInfo> blobToCompactionPolicySwitchInfoMap;
+  private final StatsBasedCompactionPolicy statsBasedPolicy;
+  private final CompactAllPolicy compactAllPolicy;
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private static final String COMPACT_POLICY_INFO_FILE_NAME = "compactionPolicyInfo.json";
   private static final String COMPACT_POLICY_INFO_FILE_NAME_V2 = "compactionPolicyInfoV2.json";
@@ -45,8 +46,9 @@ public class HybridCompactionPolicy implements CompactionPolicy {
 
   HybridCompactionPolicy(StoreConfig storeConfig, Time time) {
     this.storeConfig = storeConfig;
-    this.time = time;
     this.blobToCompactionPolicySwitchInfoMap = new HashMap<>();
+    statsBasedPolicy = new StatsBasedCompactionPolicy(storeConfig, time);
+    compactAllPolicy = new CompactAllPolicy(storeConfig, time);
   }
 
   /**
@@ -134,12 +136,12 @@ public class HybridCompactionPolicy implements CompactionPolicy {
       CompactionPolicySwitchInfo compactionPolicySwitchInfo, String storeId, String dataDir) {
     if (compactionPolicySwitchInfo == null) {
       logger.trace("CompactionPolicySwitchInfo is null for store : {}, dataDir : {}", storeId, dataDir);
-      return new StatsBasedCompactionPolicy(storeConfig, time);
+      return statsBasedPolicy;
     }
     if (readyToTriggerCompactionAllPolicy(compactionPolicySwitchInfo)) {
       logger.trace("Return CompactAllPolicy this round for store : {}, dataDir : {}", storeId, dataDir);
       updateCompactionInfoWhenCompactAll(compactionPolicySwitchInfo);
-      return new CompactAllPolicy(storeConfig, time);
+      return compactAllPolicy;
     } else {
       if (compactionPolicySwitchInfo.getLastCompactAllTime() == 0) {
         logger.error("Last compact all time is {} for store : {}, dataDir : {}",
@@ -152,7 +154,7 @@ public class HybridCompactionPolicy implements CompactionPolicy {
         logger.trace("Set next round is compactAllPolicy to true");
         compactionPolicySwitchInfo.setNextRoundIsCompactAllPolicy(true);
       }
-      return new StatsBasedCompactionPolicy(storeConfig, time);
+      return statsBasedPolicy;
     }
   }
 
