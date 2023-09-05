@@ -268,7 +268,8 @@ public class VcrServer {
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(currentNode.getHttp2Port(), requestResponseChannel, sslHttp2Factory,
-                nettyConfig, http2ClientConfig, serverMetrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
+                nettyConfig, http2ClientConfig, serverMetrics, nettyMetrics, http2ServerMetrics, serverSecurityService,
+                vcrRequestsForHttp2);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }

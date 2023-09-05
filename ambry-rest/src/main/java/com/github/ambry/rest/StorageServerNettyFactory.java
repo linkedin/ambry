@@ -22,6 +22,7 @@ import com.github.ambry.network.http2.AmbryNetworkRequestHandler;
 import com.github.ambry.network.http2.AmbrySendToHttp2Adaptor;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.network.http2.Http2ServerStreamHandler;
+import com.github.ambry.protocol.RequestAPI;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http2.Http2StreamFrameToHttpObjectCodec;
@@ -46,23 +47,25 @@ public class StorageServerNettyFactory implements NioServerFactory {
 
   /**
    * Creates a new instance of StorageServerNettyFactory.
-   * @param http2Port the port for HTTP2 request.
+   * @param http2Port              the port for HTTP2 request.
    * @param requestResponseChannel the {@link RequestResponseChannel} to receive original ambry request and send
    *                               original ambry response.
-   * @param sslFactory the {@link SSLFactory} used to construct the {@link javax.net.ssl.SSLEngine} used for
-   *                          handling http2 requests.
-   * @param nettyConfig the nettyConfig
-   * @param http2ClientConfig the http2ClientConfig
-   * @param serverMetrics the serverMetrics
-   * @param nettyMetrics the nettyMetrics
-   * @param http2ServerMetrics the http2ServerMetrics
-   * @param serverSecurityService the serverSecurityService used to create ServerSecurityHandler
+   * @param sslFactory             the {@link SSLFactory} used to construct the {@link javax.net.ssl.SSLEngine} used for
+   *                               handling http2 requests.
+   * @param nettyConfig            the nettyConfig
+   * @param http2ClientConfig      the http2ClientConfig
+   * @param serverMetrics          the serverMetrics
+   * @param nettyMetrics           the nettyMetrics
+   * @param http2ServerMetrics     the http2ServerMetrics
+   * @param serverSecurityService  the serverSecurityService used to create ServerSecurityHandler
+   * @param requestAPI             the {@link RequestAPI} class that handles incoming requests
    * @throws IllegalArgumentException if any of the arguments are null.
    */
 
   public StorageServerNettyFactory(int http2Port, RequestResponseChannel requestResponseChannel, SSLFactory sslFactory,
       NettyConfig nettyConfig, Http2ClientConfig http2ClientConfig, ServerMetrics serverMetrics,
-      NettyMetrics nettyMetrics, Http2ServerMetrics http2ServerMetrics, ServerSecurityService serverSecurityService) {
+      NettyMetrics nettyMetrics, Http2ServerMetrics http2ServerMetrics, ServerSecurityService serverSecurityService,
+      RequestAPI requestAPI) {
     if (requestResponseChannel == null || sslFactory == null || nettyConfig == null || http2ClientConfig == null
         || serverMetrics == null || nettyMetrics == null || http2ServerMetrics == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of StorageServerNettyFactory");
@@ -74,10 +77,10 @@ public class StorageServerNettyFactory implements NioServerFactory {
     // Http2StreamFrameToHttpObjectCodec and AmbrySendToHttp2Adaptor, each of them should only have one instance.
 
     ServerSecurityHandler serverSecurityHandler = new ServerSecurityHandler(serverSecurityService, serverMetrics);
-    Http2ServerStreamHandler http2ServerStreamHandler =
-        new Http2ServerStreamHandler(new AmbryNetworkRequestHandler(requestResponseChannel, http2ServerMetrics),
-            new Http2StreamFrameToHttpObjectCodec(true),
-            new AmbrySendToHttp2Adaptor(true, http2ClientConfig.http2FrameMaxSize), http2ClientConfig);
+    Http2ServerStreamHandler http2ServerStreamHandler = new Http2ServerStreamHandler(
+        new AmbryNetworkRequestHandler(requestResponseChannel, http2ServerMetrics, requestAPI),
+        new Http2StreamFrameToHttpObjectCodec(true),
+        new AmbrySendToHttp2Adaptor(true, http2ClientConfig.http2FrameMaxSize), http2ClientConfig);
     ConnectionStatsHandler connectionStatsHandler = new ConnectionStatsHandler(nettyMetrics);
     Map<Integer, ChannelInitializer<SocketChannel>> initializers = Collections.singletonMap(http2Port,
         new StorageServerNettyChannelInitializer(http2ClientConfig, http2ServerMetrics, sslFactory,

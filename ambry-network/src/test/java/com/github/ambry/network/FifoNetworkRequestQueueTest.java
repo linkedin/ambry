@@ -23,11 +23,12 @@ import static org.junit.Assert.*;
 
 public class FifoNetworkRequestQueueTest {
   private final int timeout = 100;
+  private final int capacity = 100;
 
   @Test
   public void testOffer() throws InterruptedException {
     MockTime mockTime = new MockTime();
-    FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, mockTime);
+    FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, mockTime, capacity);
     int numRequests = 5;
     for (int i = 0; i < numRequests; i++) {
       requestQueue.offer(new MockRequest(0));
@@ -40,7 +41,7 @@ public class FifoNetworkRequestQueueTest {
   @Test
   public void testTake() throws InterruptedException {
     MockTime mockTime = new MockTime();
-    FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, mockTime);
+    FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, mockTime, capacity);
 
     // Test de-queuing a request
     MockRequest sentRequest = new MockRequest(0);
@@ -70,7 +71,7 @@ public class FifoNetworkRequestQueueTest {
   @Test
   public void testSize() throws InterruptedException {
     int size = 5;
-    FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, new MockTime());
+    FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, new MockTime(), capacity);
     for (int i = 0; i < size; i++) {
       requestQueue.offer(new MockRequest(0));
     }

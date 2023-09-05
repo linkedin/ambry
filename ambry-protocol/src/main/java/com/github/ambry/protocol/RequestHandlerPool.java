@@ -15,8 +15,13 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.utils.Utils;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,13 +30,10 @@ import org.slf4j.LoggerFactory;
  * Request handler pool. A pool of threads that handle requests
  */
 public class RequestHandlerPool implements Closeable {
-
-  private Thread[] threads = null;
-  private RequestHandler[] handlers = null;
-  private Thread requestDropperThread = null;
-  private RequestDropper requestDropper = null;
   private final RequestResponseChannel requestResponseChannel;
   private static final Logger logger = LoggerFactory.getLogger(RequestHandlerPool.class);
+  ExecutorService requestHandlerService;
+  ExecutorService requestDropperService = null;
 
   /**
    * Create and start a pool of {@link RequestHandler}s.
@@ -43,19 +45,27 @@ public class RequestHandlerPool implements Closeable {
    */
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, RequestAPI requests,
       String handlerPrefix, boolean enableDropper) {
-    threads = new Thread[numThreads];
-    handlers = new RequestHandler[numThreads];
     this.requestResponseChannel = requestResponseChannel;
+    // 1. Start worker threads for handling requests
+    ThreadFactory requestHandlerThreadFactory =
+        new ThreadFactoryBuilder().setNameFormat(handlerPrefix + "request-handler-%d")
+            .setDaemon(true)
+            .setUncaughtExceptionHandler((t, e) -> logger.error("Encountered throwable in {}", t, e))
+            .build();
+    requestHandlerService = Executors.newFixedThreadPool(numThreads, requestHandlerThreadFactory);
     for (int i = 0; i < numThreads; i++) {
-      handlers[i] = new RequestHandler(i, requestResponseChannel, requests);
-      threads[i] = Utils.daemonThread(handlerPrefix + "request-handler-" + i, handlers[i]);
-      threads[i].start();
+      requestHandlerService.submit(new RequestHandler(i, requestResponseChannel, requests));
     }
-    // Also, start a thread to drop any un-queued and expired requests in requestResponceChannel.
+
+    // 2. Start a worker thread for rejecting stale requests.
     if (enableDropper) {
-      requestDropper = new RequestDropper(requestResponseChannel, requests);
-      requestDropperThread = Utils.daemonThread(handlerPrefix + "request-dropper", requestDropper);
-      requestDropperThread.start();
+      ThreadFactory requestDropperThreadFactory =
+          new ThreadFactoryBuilder().setNameFormat(handlerPrefix + "request-dropper-%d")
+              .setDaemon(true)
+              .setUncaughtExceptionHandler((t, e) -> logger.error("Encountered throwable in {}", t, e))
+              .build();
+      requestDropperService = Executors.newSingleThreadExecutor(requestDropperThreadFactory);
+      requestDropperService.submit(new RequestDropper(requestResponseChannel, requests));
     }
   }
 
@@ -82,20 +92,16 @@ public class RequestHandlerPool implements Closeable {
   public void shutdown() {
     try {
       logger.info("shutting down");
-      for (RequestHandler handler : handlers) {
-        handler.shutdown();
+      if (requestHandlerService != null) {
+        logger.info("Shutting down request handler threads");
+        Utils.shutDownExecutorService(requestHandlerService, 5, TimeUnit.MINUTES);
       }
-      for (Thread thread : threads) {
-        thread.join();
-      }
-      if (requestDropper != null) {
-        requestDropper.shutdown();
-      }
-      if (requestDropperThread != null) {
-        requestDropperThread.join();
+      if (requestDropperService != null) {
+        logger.info("Shutting down request dropper threads");
+        Utils.shutDownExecutorService(requestDropperService, 5, TimeUnit.MINUTES);
       }
       // Shutdown request response channel to release memory of any requests still present in the channel
-      if(requestResponseChannel != null){
+      if (requestResponseChannel != null) {
         requestResponseChannel.shutdown();
       }
       logger.info("shut down completely");

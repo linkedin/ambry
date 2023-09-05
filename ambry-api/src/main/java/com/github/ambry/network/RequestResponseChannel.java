@@ -52,9 +52,10 @@ public interface RequestResponseChannel {
   /**
    * Sends a request received from network over the channel. The request gets queued by the channel.
    * @param request The request to be queued by the channel
+   * @return {@code True} if we are able to queue the request over the channel. Else {@code False}
    * @throws InterruptedException
    */
-  void sendRequest(NetworkRequest request) throws InterruptedException;
+  boolean sendRequest(NetworkRequest request) throws InterruptedException;
 
   /**
    * Closes the connection on which the original request came

@@ -15,7 +15,6 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
-import com.github.ambry.server.EmptyRequest;
 import java.util.Collection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,10 +41,6 @@ public class RequestDropper implements Runnable {
         // is available.
         requestsToDrop = requestChannel.getDroppedRequests();
         for (NetworkRequest requestToDrop : requestsToDrop) {
-          if (requestToDrop.equals(EmptyRequest.getInstance())) {
-            logger.debug("Request dropper received shut down command");
-            return;
-          }
           requests.dropRequest(requestToDrop);
           logger.trace("Request dropper dropping request {}", requestToDrop);
         }
@@ -61,10 +56,6 @@ public class RequestDropper implements Runnable {
         }
       }
     }
-  }
-
-  public void shutdown() throws InterruptedException {
-    requestChannel.sendRequest(EmptyRequest.getInstance());
   }
 }
 

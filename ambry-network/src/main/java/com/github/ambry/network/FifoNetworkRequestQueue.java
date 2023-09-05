@@ -13,7 +13,6 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.server.EmptyRequest;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,30 +28,31 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class FifoNetworkRequestQueue implements NetworkRequestQueue {
   private final int timeout;
   private final Time time;
-  // Queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue. This
-  // would prevent the queue from growing unbounded.
-  private final BlockingQueue<NetworkRequest> queue = new LinkedBlockingQueue<>();
+  // Bounded queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue.
+  private final BlockingQueue<NetworkRequest> queue;
   // Queue to hold timed out requests. The requests in this queue would be continuously picked up by 'request-dropper'
   // thread. This would prevent the queue from growing unbounded.
   private final BlockingQueue<NetworkRequest> droppedRequestsQueue = new LinkedBlockingQueue<>();
 
-  FifoNetworkRequestQueue(int timeout, Time time) {
+  /**
+   * @param timeout for the requests waiting in the incoming request queue.
+   * @param time system {@link Time}
+   * @param capacity capacity of the queue holding incoming requests.
+   */
+  FifoNetworkRequestQueue(int timeout, Time time, int capacity) {
     this.timeout = timeout;
     this.time = time;
+    this.queue = new LinkedBlockingQueue<>(capacity);
   }
 
   /**
    * Inserts the element into queue.
    * @param request element to be inserted.
+   * @return {@code True} if the element was added to this queue, else {@code False}
    */
   @Override
-  public void offer(NetworkRequest request) throws InterruptedException {
-    queue.offer(request);
-    if (request.equals(EmptyRequest.getInstance())) {
-      // This is a internal generated request used to signal shutdown. Add it to dropped requests queue as well so that
-      // request-dropper thread shuts down gracefully.
-      droppedRequestsQueue.offer(request);
-    }
+  public boolean offer(NetworkRequest request) throws InterruptedException {
+    return queue.offer(request);
   }
 
   @Override
@@ -108,10 +108,6 @@ public class FifoNetworkRequestQueue implements NetworkRequestQueue {
   }
 
   private boolean needToDrop(NetworkRequest request) {
-    if (request.equals(EmptyRequest.getInstance())) {
-      // This is a internal generated request used to signal shutdown. Don't consider it as expired.
-      return false;
-    }
     return time.milliseconds() - request.getStartTimeInMs() > timeout;
   }
 }

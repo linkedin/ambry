@@ -21,8 +21,9 @@ interface NetworkRequestQueue {
   /**
    * Inserts request into queue.
    * @param request to be inserted.
+   * @return {@code True} if request is added to request queue. Else {@code False}
    */
-  void offer(NetworkRequest request) throws InterruptedException;
+  boolean offer(NetworkRequest request) throws InterruptedException;
 
   /**
    * Get next request to serve (waiting if necessary).

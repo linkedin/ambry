@@ -15,7 +15,6 @@ package com.github.ambry.protocol;
 
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
-import com.github.ambry.server.EmptyRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,10 +39,6 @@ public class RequestHandler implements Runnable {
     while (true) {
       try {
         req = requestChannel.receiveRequest();
-        if (req.equals(EmptyRequest.getInstance())) {
-          logger.debug("Request handler {} received shut down command", id);
-          return;
-        }
         requests.handleRequests(req);
         logger.trace("Request handler {} handling request {}", id, req);
       } catch (Throwable e) {
@@ -58,10 +53,6 @@ public class RequestHandler implements Runnable {
         }
       }
     }
-  }
-
-  public void shutdown() throws InterruptedException {
-    requestChannel.sendRequest(EmptyRequest.getInstance());
   }
 }
 

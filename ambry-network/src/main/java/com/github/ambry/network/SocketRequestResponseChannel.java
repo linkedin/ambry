@@ -137,10 +137,12 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
     switch (config.requestQueueType) {
       case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
         this.networkRequestQueue = new AdaptiveLifoCoDelNetworkRequestQueue(config.adaptiveLifoQueueThreshold,
-            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, time);
+            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, time,
+            config.requestQueueCapacity);
         break;
       case BASIC_QUEUE_WITH_FIFO:
-        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, time);
+        this.networkRequestQueue =
+            new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, time, config.requestQueueCapacity);
         break;
       default:
         throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
@@ -153,10 +155,13 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
     }
   }
 
-  /** Send a request to be handled, potentially blocking until there is room in the queue for the request */
+  /**
+   * Send a request to be handled
+   * @return {@code True} if we are able to queue the request over the channel. Else {@code False}
+   */
   @Override
-  public void sendRequest(NetworkRequest request) throws InterruptedException {
-    networkRequestQueue.offer(request);
+  public boolean sendRequest(NetworkRequest request) throws InterruptedException {
+    return networkRequestQueue.offer(request);
   }
 
   /** Send a response back to the socket server to be sent over the network */

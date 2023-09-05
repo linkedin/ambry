@@ -37,7 +37,6 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.DiskManagerConfig;
 import com.github.ambry.config.Http2ClientConfig;
-import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
@@ -91,7 +90,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -332,7 +330,8 @@ public class AmbryServer {
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(nodeId.getHttp2Port(), requestResponseChannel, sslHttp2Factory, nettyConfig,
-                http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
+                http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService,
+                ambryServerRequestsForHttp2);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }

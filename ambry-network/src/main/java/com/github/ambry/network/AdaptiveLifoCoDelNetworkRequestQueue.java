@@ -13,7 +13,6 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.server.EmptyRequest;
 import com.github.ambry.utils.Time;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +36,7 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   private final Time time;
   // Queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue. This
   // would prevent the queue from growing unbounded.
-  private final LinkedBlockingDeque<NetworkRequest> deque = new LinkedBlockingDeque<>();
+  private final LinkedBlockingDeque<NetworkRequest> deque;
   // Queue to hold timed out requests. The requests in this queue would be continuously picked up by 'request-dropper'
   // thread. This would prevent the queue from growing unbounded.
   private final BlockingQueue<NetworkRequest> droppedRequestsQueue = new LinkedBlockingQueue<>();
@@ -62,28 +61,25 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   private volatile boolean emptyRequestReceived = false;
 
   /**
-   *  @param lifoThreshold the fraction of capacity used at which to switch the queue from FIFO to LIFO mode.
+   * @param lifoThreshold      the fraction of capacity used at which to switch the queue from FIFO to LIFO mode.
    * @param coDelTargetDelayMs the target delay in ms to use for the controlled delay algorithm.
-   * @param coDelIntervalMs the target interval in ms to use for the controlled delay algorithm.
-   * @param time {@link Time} instance.
+   * @param coDelIntervalMs    the target interval in ms to use for the controlled delay algorithm.
+   * @param time               {@link Time} instance.
+   * @param capacity           the capacity of the queue
    */
-  AdaptiveLifoCoDelNetworkRequestQueue(int lifoThreshold, int coDelTargetDelayMs, int coDelIntervalMs, Time time) {
+  AdaptiveLifoCoDelNetworkRequestQueue(int lifoThreshold, int coDelTargetDelayMs, int coDelIntervalMs, Time time,
+      int capacity) {
     this.coDelTargetDelayMs = coDelTargetDelayMs;
     this.coDelIntervalMs = coDelIntervalMs;
     this.lifoThreshold = lifoThreshold;
     this.time = time;
     intervalTimeMs = time.milliseconds();
+    deque = new LinkedBlockingDeque<>(capacity);
   }
 
   @Override
-  public void offer(NetworkRequest request) throws InterruptedException {
-    deque.offer(request);
-    if (request.equals(EmptyRequest.getInstance())) {
-      // This is a internal generated request used to signal shutdown. Add it to dropped requests queue as well so that
-      // request-dropper thread shuts down gracefully.
-      droppedRequestsQueue.offer(request);
-      emptyRequestReceived = true;
-    }
+  public boolean offer(NetworkRequest request) throws InterruptedException {
+    return deque.offer(request);
   }
 
   /**
@@ -181,10 +177,6 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
    *         internal queue state (deemed overloaded).
    */
   private boolean needToDrop(NetworkRequest request) {
-    if (request.equals(EmptyRequest.getInstance())) {
-      // This is a internal generated request used to signal shutdown. Don't consider it as expired.
-      return false;
-    }
     long currentTimeMs = time.milliseconds();
     long requestDelayMs = currentTimeMs - request.getStartTimeInMs();
 

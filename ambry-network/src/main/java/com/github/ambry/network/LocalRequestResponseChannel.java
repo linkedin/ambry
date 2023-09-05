@@ -37,12 +37,12 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
 
   @Override
-  public void sendRequest(NetworkRequest request) {
-    requestQueue.offer(request);
+  public boolean sendRequest(NetworkRequest request) {
     if (request instanceof LocalChannelRequest) {
       LocalChannelRequest localRequest = (LocalChannelRequest) request;
-      logger.debug("Added request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
+      logger.debug("Adding request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
     }
+    return requestQueue.offer(request);
   }
 
   @Override

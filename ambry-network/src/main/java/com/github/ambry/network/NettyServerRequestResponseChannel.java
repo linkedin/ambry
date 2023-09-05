@@ -16,7 +16,6 @@ package com.github.ambry.network;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
-import com.github.ambry.server.EmptyRequest;
 import com.github.ambry.utils.SystemTime;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -43,10 +42,12 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     switch (config.requestQueueType) {
       case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
         this.networkRequestQueue = new AdaptiveLifoCoDelNetworkRequestQueue(config.adaptiveLifoQueueThreshold,
-            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance());
+            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance(),
+            config.requestQueueCapacity);
         break;
       case BASIC_QUEUE_WITH_FIFO:
-        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, SystemTime.getInstance());
+        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, SystemTime.getInstance(),
+            config.requestQueueCapacity);
         break;
       default:
         throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
@@ -56,11 +57,18 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
         networkRequestQueue::numDroppedRequests);
   }
 
-  /** Send a request to be handled */
+  /**
+   * Send a request to be handled
+   * @return {@code True} if we are able to send the request over the channel. Else {@code False}
+   */
   @Override
-  public void sendRequest(NetworkRequest request) throws InterruptedException {
-    networkRequestQueue.offer(request);
-    http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
+  public boolean sendRequest(NetworkRequest networkRequest) throws InterruptedException {
+    if (networkRequestQueue.offer(networkRequest)) {
+      http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - networkRequest.getStartTimeInMs());
+      return true;
+    } else {
+      return false;
+    }
   }
 
   /** Send a response back via netty outbound handlers */
@@ -135,20 +143,16 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
    * @param request incoming network request.
    * @return false if there was any error while reading the first 8 bytes. Else, return true.
    */
-  private boolean consumeSizeHeader(NetworkRequest request) throws InterruptedException {
-    if (request.equals(EmptyRequest.getInstance())) {
-      logger.debug("Request handler {} received shut down command ", request);
-    } else {
-      DataInputStream stream = new DataInputStream(request.getInputStream());
-      try {
-        stream.readLong();
-      } catch (IOException e) {
-        logger.error("Encountered an error while reading length out of request {}, close the connection", request, e);
-        closeConnection(request);
-        // Release the memory held by this request.
-        request.release();
-        return false;
-      }
+  public boolean consumeSizeHeader(NetworkRequest request) throws InterruptedException {
+    DataInputStream stream = new DataInputStream(request.getInputStream());
+    try {
+      stream.readLong();
+    } catch (IOException e) {
+      logger.error("Encountered an error while reading length out of request {}, close the connection", request, e);
+      closeConnection(request);
+      // Release the memory held by this request.
+      request.release();
+      return false;
     }
     return true;
   }
