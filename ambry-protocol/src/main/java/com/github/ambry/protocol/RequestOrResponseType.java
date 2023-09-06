@@ -34,4 +34,6 @@ public enum RequestOrResponseType {
   UndeleteResponse,
   ReplicateBlobRequest,
   ReplicateBlobResponse,
+  PurgeRequest,
+  PurgeResponse
 }
