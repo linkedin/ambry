@@ -32,8 +32,7 @@ import org.slf4j.LoggerFactory;
 public class RequestHandlerPool implements Closeable {
   private final RequestResponseChannel requestResponseChannel;
   private static final Logger logger = LoggerFactory.getLogger(RequestHandlerPool.class);
-  ExecutorService requestHandlerService;
-  ExecutorService requestDropperService = null;
+  ExecutorService requestHandlerExecutorService;
 
   /**
    * Create and start a pool of {@link RequestHandler}s.
@@ -41,10 +40,9 @@ public class RequestHandlerPool implements Closeable {
    * @param requestResponseChannel the {@link RequestResponseChannel} for the handlers to use.
    * @param requests the {@link RequestAPI} instance used by the handlers for dispatching requests.
    * @param handlerPrefix the prefix of the thread name.
-   * @param enableDropper enable the dropper thread if it's true
    */
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, RequestAPI requests,
-      String handlerPrefix, boolean enableDropper) {
+      String handlerPrefix) {
     this.requestResponseChannel = requestResponseChannel;
     // 1. Start worker threads for handling requests
     ThreadFactory requestHandlerThreadFactory =
@@ -52,20 +50,9 @@ public class RequestHandlerPool implements Closeable {
             .setDaemon(true)
             .setUncaughtExceptionHandler((t, e) -> logger.error("Encountered throwable in {}", t, e))
             .build();
-    requestHandlerService = Executors.newFixedThreadPool(numThreads, requestHandlerThreadFactory);
+    requestHandlerExecutorService = Executors.newFixedThreadPool(numThreads, requestHandlerThreadFactory);
     for (int i = 0; i < numThreads; i++) {
-      requestHandlerService.submit(new RequestHandler(i, requestResponseChannel, requests));
-    }
-
-    // 2. Start a worker thread for rejecting stale requests.
-    if (enableDropper) {
-      ThreadFactory requestDropperThreadFactory =
-          new ThreadFactoryBuilder().setNameFormat(handlerPrefix + "request-dropper-%d")
-              .setDaemon(true)
-              .setUncaughtExceptionHandler((t, e) -> logger.error("Encountered throwable in {}", t, e))
-              .build();
-      requestDropperService = Executors.newSingleThreadExecutor(requestDropperThreadFactory);
-      requestDropperService.submit(new RequestDropper(requestResponseChannel, requests));
+      requestHandlerExecutorService.submit(new RequestHandler(i, requestResponseChannel, requests));
     }
   }
 
@@ -76,7 +63,7 @@ public class RequestHandlerPool implements Closeable {
    * @param requests the {@link RequestAPI} instance used by the handlers for dispatching requests.
    */
   public RequestHandlerPool(int numThreads, RequestResponseChannel requestResponseChannel, RequestAPI requests) {
-    this(numThreads, requestResponseChannel, requests, "", true);
+    this(numThreads, requestResponseChannel, requests, "");
   }
 
   /**
@@ -92,13 +79,9 @@ public class RequestHandlerPool implements Closeable {
   public void shutdown() {
     try {
       logger.info("shutting down");
-      if (requestHandlerService != null) {
+      if (requestHandlerExecutorService != null) {
         logger.info("Shutting down request handler threads");
-        Utils.shutDownExecutorService(requestHandlerService, 5, TimeUnit.MINUTES);
-      }
-      if (requestDropperService != null) {
-        logger.info("Shutting down request dropper threads");
-        Utils.shutDownExecutorService(requestDropperService, 5, TimeUnit.MINUTES);
+        Utils.shutDownExecutorService(requestHandlerExecutorService, 5, TimeUnit.MINUTES);
       }
       // Shutdown request response channel to release memory of any requests still present in the channel
       if (requestResponseChannel != null) {

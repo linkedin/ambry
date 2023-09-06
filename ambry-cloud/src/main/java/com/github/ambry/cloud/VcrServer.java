@@ -49,6 +49,7 @@ import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
+import com.github.ambry.protocol.ServerRequestResponseUtil;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NioServer;
@@ -254,22 +255,23 @@ public class VcrServer {
         NettyMetrics nettyMetrics = new NettyMetrics(registry);
         Http2ServerMetrics http2ServerMetrics = new Http2ServerMetrics(registry);
         Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
+        FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
 
         NettyServerRequestResponseChannel requestResponseChannel =
-            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, serverMetrics);
+            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, serverMetrics,
+                new ServerRequestResponseUtil(clusterMap, findTokenHelper));
 
         VcrRequests vcrRequestsForHttp2 =
             new VcrRequests(cloudStorageManager, requestResponseChannel, clusterMap, currentNode, registry,
-                serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,
-                vcrReplicationManager, storeKeyFactory, storeKeyConverterFactory);
+                serverMetrics, findTokenHelper, notificationSystem, vcrReplicationManager, storeKeyFactory,
+                storeKeyConverterFactory);
         requestHandlerPoolForHttp2 =
             new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
                 vcrRequestsForHttp2);
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(currentNode.getHttp2Port(), requestResponseChannel, sslHttp2Factory,
-                nettyConfig, http2ClientConfig, serverMetrics, nettyMetrics, http2ServerMetrics, serverSecurityService,
-                vcrRequestsForHttp2);
+                nettyConfig, http2ClientConfig, serverMetrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }

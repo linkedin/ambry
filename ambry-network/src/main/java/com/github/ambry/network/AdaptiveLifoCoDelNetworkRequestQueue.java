@@ -14,9 +14,6 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.Time;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,13 +31,8 @@ import org.slf4j.LoggerFactory;
 public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue {
   private static final Logger logger = LoggerFactory.getLogger(AdaptiveLifoCoDelNetworkRequestQueue.class);
   private final Time time;
-  // Queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue. This
-  // would prevent the queue from growing unbounded.
+  // Bounded queue to hold incoming requests.
   private final LinkedBlockingDeque<NetworkRequest> deque;
-  // Queue to hold timed out requests. The requests in this queue would be continuously picked up by 'request-dropper'
-  // thread. This would prevent the queue from growing unbounded.
-  private final BlockingQueue<NetworkRequest> droppedRequestsQueue = new LinkedBlockingQueue<>();
-
   // If queue if full more than this size, we switch to LIFO mode.
   private final int lifoThreshold;
   // Both are in milliseconds
@@ -56,9 +48,6 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   private final AtomicBoolean isOverloaded = new AtomicBoolean(false);
   // Variable used to track changing of queue modes from FIFO to LIFO and vice versa.
   private final AtomicBoolean lifoMode = new AtomicBoolean(false);
-  // Variable used to track if emptyRequestReceived was called on server. If emptyRequestReceived is received, this
-  // indicates server is shutting down. Since request handler threads are waiting on this request, switch to LIFO mode.
-  private volatile boolean emptyRequestReceived = false;
 
   /**
    * @param lifoThreshold      the fraction of capacity used at which to switch the queue from FIFO to LIFO mode.
@@ -91,57 +80,28 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
    */
   @Override
   public NetworkRequest take() throws InterruptedException {
-    while (true) {
-      NetworkRequest nextRequest;
-      if (useLifoMode()) {
-        nextRequest = deque.pollLast();
-      } else {
-        nextRequest = deque.pollFirst();
-      }
-      if (nextRequest == null) {
-        // If there are no requests in the queue, wait until a new request comes.
-        nextRequest = deque.take();
-      }
-      // If the request expired, add it to dropped request queue and continue.
-      if (needToDrop(nextRequest)) {
-        droppedRequestsQueue.offer(nextRequest);
-        continue;
-      }
-      return nextRequest;
+    NetworkRequest nextRequest;
+    if (useLifoMode()) {
+      nextRequest = deque.pollLast();
+    } else {
+      nextRequest = deque.pollFirst();
     }
+    if (nextRequest == null) {
+      // If there are no requests in the queue, wait until a new request comes.
+      nextRequest = deque.take();
+    }
+    return nextRequest;
   }
 
   @Override
-  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
-    List<NetworkRequest> droppedRequests = new ArrayList<>();
-    NetworkRequest droppedRequest;
-    while ((droppedRequest = droppedRequestsQueue.poll()) != null) {
-      droppedRequests.add(droppedRequest);
-    }
-    if (droppedRequests.isEmpty()) {
-      // If there are no dropped requests in the queue, wait until there is one.
-      droppedRequest = droppedRequestsQueue.take();
-      droppedRequests.add(droppedRequest);
-    }
-    return droppedRequests;
-  }
-
-  @Override
-  public int numActiveRequests() {
+  public int size() {
     return deque.size();
-  }
-
-  @Override
-  public int numDroppedRequests() {
-    return droppedRequestsQueue.size();
   }
 
   @Override
   public void close() {
     deque.forEach(NetworkRequest::release);
     deque.clear();
-    droppedRequestsQueue.forEach(NetworkRequest::release);
-    droppedRequestsQueue.clear();
   }
 
   @Override
@@ -154,11 +114,6 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
    * @return {@code true} if the queue should operate in LIFO mode.
    */
   private boolean useLifoMode() {
-    if (emptyRequestReceived) {
-      // If emptyRequestReceived is received, this indicates server is shutting down. Since request handler threads are
-      // waiting on this request, switch to LIFO mode.
-      return true;
-    }
     boolean localLifoMode = deque.size() > lifoThreshold;
     if (localLifoMode && lifoMode.compareAndSet(false, true)) {
       // Mode changed to LIFO
@@ -176,7 +131,8 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
    * @return {@code true} if this request needs to be dropped to reduce overload based on request creation timestamp and
    *         internal queue state (deemed overloaded).
    */
-  private boolean needToDrop(NetworkRequest request) {
+  @Override
+  public boolean isExpired(NetworkRequest request) {
     long currentTimeMs = time.milliseconds();
     long requestDelayMs = currentTimeMs - request.getStartTimeInMs();
 
@@ -199,6 +155,6 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
       minDelayMs = requestDelayMs;
     }
 
-    return isOverloaded.get() && requestDelayMs > 2 * coDelTargetDelayMs;
+    return isOverloaded.get() && requestDelayMs > 2L * coDelTargetDelayMs;
   }
 }

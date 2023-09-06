@@ -66,6 +66,7 @@ import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
+import com.github.ambry.protocol.ServerRequestResponseUtil;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
@@ -319,7 +320,8 @@ public class AmbryServer {
 
         logger.info("Http2 port {} is enabled. Starting HTTP/2 service.", nodeId.getHttp2Port());
         NettyServerRequestResponseChannel requestResponseChannel =
-            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, metrics);
+            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, metrics,
+                new ServerRequestResponseUtil(clusterMap, findTokenHelper));
         AmbryServerRequests ambryServerRequestsForHttp2 =
             new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
                 findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
@@ -330,8 +332,7 @@ public class AmbryServer {
 
         NioServerFactory nioServerFactory =
             new StorageServerNettyFactory(nodeId.getHttp2Port(), requestResponseChannel, sslHttp2Factory, nettyConfig,
-                http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService,
-                ambryServerRequestsForHttp2);
+                http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
         nettyHttp2Server = nioServerFactory.getNioServer();
         nettyHttp2Server.start();
       }
@@ -353,7 +354,7 @@ public class AmbryServer {
                   diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0),
                   connectionPool);
           // Right now we only open single thread for the repairHandlerPool
-          repairHandlerPool = new RequestHandlerPool(1, localChannel, repairRequests, "Repair-", false);
+          repairHandlerPool = new RequestHandlerPool(1, localChannel, repairRequests, "Repair-");
           // start the repairRequestSender. It sends requests through the localChannel to the repairHandlerPool
           repairRequestsSender =
               new RepairRequestsSender(localChannel, localClientFactory, clusterMap, nodeId, repairRequestsDb,

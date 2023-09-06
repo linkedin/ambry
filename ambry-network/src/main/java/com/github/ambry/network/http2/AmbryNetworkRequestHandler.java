@@ -13,9 +13,11 @@
  */
 package com.github.ambry.network.http2;
 
+import com.github.ambry.network.BoundedNettyByteBufReceive;
 import com.github.ambry.network.NettyServerRequest;
+import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
-import com.github.ambry.protocol.RequestAPI;
+import com.github.ambry.network.SocketServer;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -23,6 +25,7 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.FullHttpRequest;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.nio.channels.ReadableByteChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,46 +38,29 @@ public class AmbryNetworkRequestHandler extends SimpleChannelInboundHandler<Full
   private static final Logger logger = LoggerFactory.getLogger(AmbryNetworkRequestHandler.class);
   private final RequestResponseChannel requestResponseChannel;
   private final Http2ServerMetrics http2ServerMetrics;
-  private final RequestAPI requestAPI;
 
   public AmbryNetworkRequestHandler(RequestResponseChannel requestResponseChannel,
-      Http2ServerMetrics http2ServerMetrics, RequestAPI requestAPI) {
+      Http2ServerMetrics http2ServerMetrics) {
     this.requestResponseChannel = requestResponseChannel;
     this.http2ServerMetrics = http2ServerMetrics;
-    this.requestAPI = requestAPI;
   }
 
   @Override
   protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest msg) {
     ByteBuf dup = msg.content().retainedDuplicate();
+    NettyServerRequest networkRequest = new NettyServerRequest(ctx, dup);
     try {
-      NettyServerRequest networkRequest = new NettyServerRequest(ctx, dup);
-      boolean isRequestQueued = requestResponseChannel.sendRequest(networkRequest);
-      // Reject the request if input queue is full.
-      if (!isRequestQueued) {
-        try {
-          // 1. Consume the first 8 bytes of the input stream which represents the size of the request. This is added to the
-          // request since Ambry's SocketServer stack needs to know the number of the bytes to read for a request
-          // (see BoundedNettyByteBufReceive#readFrom(ReadableByteChannel) method). This is not needed when using
-          // Netty HTTP2 server stack. We can remove this once SocketServer stack is retired. For now, we are
-          // consuming the bytes here so that rest of request handling in server is same.
-          DataInputStream stream = new DataInputStream(networkRequest.getInputStream());
-          stream.readLong();
-          // 2. Use RequestAPI class to reject the request. This method will update the metrics and send response immediately.
-          requestAPI.dropRequest(networkRequest);
-        } catch (IOException e) {
-          logger.error("Encountered an error while reading length out of request {}, close the connection",
-              networkRequest, e);
-          ctx.channel().close();
-        } finally {
-          // 3. Release the memory held by this request.
-          networkRequest.release();
-        }
-      }
+      discardHeaderBytes(networkRequest);
+      requestResponseChannel.sendRequest(networkRequest);
     } catch (InterruptedException e) {
       dup.release();
       http2ServerMetrics.requestResponseChannelErrorCount.inc();
       logger.warn("Can't send NettyServerRequest to requestResponseChannel. Cause: ", e);
+    } catch (IOException e) {
+      logger.error("Encountered an error while reading length out of request {}, close the connection {}",
+          networkRequest, ctx.channel(), e);
+      ctx.channel().close();
+      networkRequest.release();
     }
   }
 
@@ -83,5 +69,18 @@ public class AmbryNetworkRequestHandler extends SimpleChannelInboundHandler<Full
     http2ServerMetrics.http2StreamExceptionCount.inc();
     logger.warn("Exception caught in AmbryNetworkRequestHandler, cause: ", cause);
     ctx.channel().close();
+  }
+
+  /**
+   * Consume the first 8 bytes of the input stream which represents the size of the request. This is added to the
+   * request since legacy Ambry's {@link SocketServer} stack needs to know the number of the bytes to read for a request
+   * (see {@link BoundedNettyByteBufReceive#readFrom(ReadableByteChannel)} method). This is not needed when using
+   * Netty HTTP2 server stack. We can remove this once {@link SocketServer} stack is retired. For now, we are
+   * discarding the bytes here so that rest of request handling in server is same.
+   * @param request incoming request
+   */
+  private void discardHeaderBytes(NetworkRequest request) throws IOException {
+    DataInputStream stream = new DataInputStream(request.getInputStream());
+    stream.readLong();
   }
 }

@@ -15,6 +15,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.utils.MockTime;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
 
@@ -34,8 +35,7 @@ public class FifoNetworkRequestQueueTest {
       requestQueue.offer(new MockRequest(0));
     }
     // No requests should have been moved to dropped queue since we didn't have any timeout.
-    assertEquals("Mismatch in number of active requests", numRequests, requestQueue.numActiveRequests());
-    assertEquals("Mismatch in number of dropped requests", 0, requestQueue.numDroppedRequests());
+    assertEquals("Mismatch in number of active requests", numRequests, requestQueue.size());
   }
 
   @Test
@@ -63,7 +63,7 @@ public class FifoNetworkRequestQueueTest {
     requestQueue.offer(validRequest);
 
     receivedRequest = requestQueue.take();
-    List<NetworkRequest> droppedRequests = requestQueue.getDroppedRequests();
+    List<NetworkRequest> droppedRequests = new ArrayList<>();
     assertEquals("Mismatch in dropped requests", expiredRequest, droppedRequests.iterator().next());
     assertEquals("Mismatch in valid requests", validRequest, receivedRequest);
   }
@@ -75,7 +75,7 @@ public class FifoNetworkRequestQueueTest {
     for (int i = 0; i < size; i++) {
       requestQueue.offer(new MockRequest(0));
     }
-    assertEquals("Mismatch in size of queue", size, requestQueue.numActiveRequests());
+    assertEquals("Mismatch in size of queue", size, requestQueue.size());
   }
 
   /**

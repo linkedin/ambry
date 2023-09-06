@@ -15,7 +15,6 @@ package com.github.ambry.network;
 
 import com.github.ambry.utils.BatchBlockingQueue;
 import java.io.InputStream;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -37,12 +36,12 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
   private static final ResponseInfo WAKEUP_MARKER = new ResponseInfo(null, null, null);
 
   @Override
-  public boolean sendRequest(NetworkRequest request) {
+  public void sendRequest(NetworkRequest request) {
+    requestQueue.offer(request);
     if (request instanceof LocalChannelRequest) {
       LocalChannelRequest localRequest = (LocalChannelRequest) request;
       logger.debug("Adding request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
     }
-    return requestQueue.offer(request);
   }
 
   @Override
@@ -53,11 +52,6 @@ public class LocalRequestResponseChannel implements RequestResponseChannel {
       logger.debug("Removed request for {}, queue size now {}", localRequest.processorId, requestQueue.size());
     }
     return request;
-  }
-
-  @Override
-  public List<NetworkRequest> getDroppedRequests() {
-    return Collections.emptyList();
   }
 
   @Override

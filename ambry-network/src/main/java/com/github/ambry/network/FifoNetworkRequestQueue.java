@@ -14,25 +14,18 @@
 package com.github.ambry.network;
 
 import com.github.ambry.utils.Time;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 
 /**
- * A FIFO queue to hold network requests. It Internally, it maintains two queues, a queue to hold active requests and
- * another one to hold timed out requests. Both are unbounded queues but since we have {@code RequestHandler} and
- * {@code RequestDropper thread} reading from them continuously, they shouldn't grow in indefinitely.
+ * A FIFO queue to hold network requests.
  */
 public class FifoNetworkRequestQueue implements NetworkRequestQueue {
   private final int timeout;
   private final Time time;
-  // Bounded queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue.
+  // Bounded queue to hold incoming requests
   private final BlockingQueue<NetworkRequest> queue;
-  // Queue to hold timed out requests. The requests in this queue would be continuously picked up by 'request-dropper'
-  // thread. This would prevent the queue from growing unbounded.
-  private final BlockingQueue<NetworkRequest> droppedRequestsQueue = new LinkedBlockingQueue<>();
 
   /**
    * @param timeout for the requests waiting in the incoming request queue.
@@ -57,49 +50,18 @@ public class FifoNetworkRequestQueue implements NetworkRequestQueue {
 
   @Override
   public NetworkRequest take() throws InterruptedException {
-    while (true) {
-      // If there are no requests in the queue, wait until a new request comes.
-      NetworkRequest nextRequest = queue.take();
-      // If the request expired, add it to dropped requests queue and continue.
-      if (needToDrop(nextRequest)) {
-        droppedRequestsQueue.offer(nextRequest);
-        continue;
-      }
-      return nextRequest;
-    }
+    return queue.take();
   }
 
   @Override
-  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
-    List<NetworkRequest> droppedRequests = new ArrayList<>();
-    NetworkRequest droppedRequest;
-    while ((droppedRequest = droppedRequestsQueue.poll()) != null) {
-      droppedRequests.add(droppedRequest);
-    }
-    if (droppedRequests.isEmpty()) {
-      // If there are no dropped requests in the queue, wait until there is one.
-      droppedRequest = droppedRequestsQueue.take();
-      droppedRequests.add(droppedRequest);
-    }
-    return droppedRequests;
-  }
-
-  @Override
-  public int numActiveRequests() {
+  public int size() {
     return queue.size();
-  }
-
-  @Override
-  public int numDroppedRequests() {
-    return droppedRequestsQueue.size();
   }
 
   @Override
   public void close() {
     queue.forEach(NetworkRequest::release);
-    droppedRequestsQueue.forEach(NetworkRequest::release);
     queue.clear();
-    droppedRequestsQueue.clear();
   }
 
   @Override
@@ -107,7 +69,8 @@ public class FifoNetworkRequestQueue implements NetworkRequestQueue {
     return queue.toString();
   }
 
-  private boolean needToDrop(NetworkRequest request) {
+  @Override
+  public boolean isExpired(NetworkRequest request) {
     return time.milliseconds() - request.getStartTimeInMs() > timeout;
   }
 }
