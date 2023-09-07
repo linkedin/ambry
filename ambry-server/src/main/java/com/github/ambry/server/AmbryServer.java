@@ -308,7 +308,7 @@ public class AmbryServer {
       requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
           registry, metrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
           diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0));
-      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
+      requestHandlerPool = new RequestHandlerPool(1,
           networkServer.getRequestResponseChannel(), requests);
       networkServer.start();
 
