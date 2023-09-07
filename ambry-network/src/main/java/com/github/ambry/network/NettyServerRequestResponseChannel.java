@@ -100,57 +100,14 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
 
   @Override
   public NetworkRequest receiveRequest() throws InterruptedException {
-    NetworkRequest request;
-    while (true) {
-      request = networkRequestQueue.take();
-      http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
-      if (consumeSizeHeader(request)) {
-        return request;
-      }
-    }
+    NetworkRequest request = networkRequestQueue.take();
+    http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
+    return request;
   }
 
   @Override
   public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
-    while (true) {
-      List<NetworkRequest> droppedRequests = networkRequestQueue.getDroppedRequests();
-      List<NetworkRequest> validDroppedRequests = new ArrayList<>();
-      for (NetworkRequest requestToDrop : droppedRequests) {
-        if (consumeSizeHeader(requestToDrop)) {
-          validDroppedRequests.add(requestToDrop);
-        }
-      }
-      if (!validDroppedRequests.isEmpty()) {
-        return validDroppedRequests;
-      }
-    }
-  }
-
-  /**
-   * Consume the first 8 bytes of the input stream which represents the size of the request. This is added to the
-   * request since Ambry's {@link SocketServer} stack needs to know the number of the bytes to read for a request
-   * (see {@link BoundedNettyByteBufReceive#readFrom(ReadableByteChannel)} method). This is not needed when using
-   * Netty HTTP2 server stack. We can remove this once {@link SocketServer} stack is retired. For now, we are
-   * consuming the bytes here so that rest of request handling in server is same.
-   * @param request incoming network request.
-   * @return false if there was any error while reading the first 8 bytes. Else, return true.
-   */
-  private boolean consumeSizeHeader(NetworkRequest request) throws InterruptedException {
-    if (request.equals(EmptyRequest.getInstance())) {
-      logger.debug("Request handler {} received shut down command ", request);
-    } else {
-      DataInputStream stream = new DataInputStream(request.getInputStream());
-      try {
-        stream.readLong();
-      } catch (IOException e) {
-        logger.error("Encountered an error while reading length out of request {}, close the connection", request, e);
-        closeConnection(request);
-        // Release the memory held by this request.
-        request.release();
-        return false;
-      }
-    }
-    return true;
+    return networkRequestQueue.getDroppedRequests();
   }
 
   /**
