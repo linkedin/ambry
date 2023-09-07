@@ -206,53 +206,11 @@ public class AmbryRequests implements RequestAPI {
   @Override
   public void dropRequest(NetworkRequest networkRequest) throws InterruptedException {
     try {
-      InputStream is = networkRequest.getInputStream();
-      DataInputStream dis = is instanceof DataInputStream ? (DataInputStream) is : new DataInputStream(is);
-      RequestOrResponseType type = RequestOrResponseType.values()[dis.readShort()];
-      RequestOrResponse request;
-      Response response;
       long requestProcessingStartTime = SystemTime.getInstance().milliseconds();
       long requestQueueTime = requestProcessingStartTime - networkRequest.getStartTimeInMs();
-      switch (type) {
-        case PutRequest:
-          request = PutRequest.readFrom(dis, clusterMap);
-          response =
-              new PutResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
-          break;
-        case GetRequest:
-          request = GetRequest.readFrom(dis, clusterMap);
-          response =
-              new GetResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
-          break;
-        case DeleteRequest:
-          request = DeleteRequest.readFrom(dis, clusterMap);
-          response = new DeleteResponse(request.getCorrelationId(), request.getClientId(),
-              ServerErrorCode.Retry_After_Backoff);
-          break;
-        case TtlUpdateRequest:
-          request = TtlUpdateRequest.readFrom(dis, clusterMap);
-          response = new TtlUpdateResponse(request.getCorrelationId(), request.getClientId(),
-              ServerErrorCode.Retry_After_Backoff);
-          break;
-        case UndeleteRequest:
-          request = UndeleteRequest.readFrom(dis, clusterMap);
-          response = new UndeleteResponse(request.getCorrelationId(), request.getClientId(),
-              ServerErrorCode.Retry_After_Backoff);
-          break;
-        case ReplicaMetadataRequest:
-          request = ReplicaMetadataRequest.readFrom(dis, clusterMap, findTokenHelper);
-          response = new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(),
-              ServerErrorCode.Retry_After_Backoff,
-              ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId()));
-          break;
-        case AdminRequest:
-          request = AdminRequest.readFrom(dis, clusterMap);
-          response =
-              new AdminResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.Retry_After_Backoff);
-          break;
-        default:
-          throw new UnsupportedOperationException("Request type not supported");
-      }
+      ServerRequestResponseHelper requestResponseHelper = new ServerRequestResponseHelper(clusterMap, findTokenHelper);
+      RequestOrResponse request = requestResponseHelper.getDecodedRequest(networkRequest);
+      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
       // Log the request and response in public access logs
       long requestProcessingTime = SystemTime.getInstance().milliseconds() - requestProcessingStartTime;
       publicAccessLogger.info("{} {} processingTime {}", request, response, requestProcessingTime);
