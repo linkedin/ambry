@@ -24,13 +24,16 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.github.ambry.repair.RepairRequestRecord.OperationType;
+import static com.github.ambry.repair.RepairRequestRecord.*;
 
 
 /**
@@ -60,7 +63,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    * Select the records for one partition with the oldest operation time.
    */
   // @formatter:off
-  private static final String GET_QUERY = String.format(""
+  private static final String GET_REQUESTS_QUERY = String.format(""
       + "SELECT %s, %s, %s, %s, %s, %s, %s "
       + "FROM %s "
       + "WHERE %s = ? "
@@ -76,16 +79,29 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    * Select the records for one partition but exclude the record with this source replica(hostname + hostport)
    */
   // @formatter:off
-  private static final String GET_QUERY_EXCLUDE_SOURCE_REPLICA = String.format(""
-          + "SELECT %s, %s, %s, %s, %s, %s, %s "
-          + "FROM %s "
-          + "WHERE %s = ? and (%s != ? or %s != ?) "
-          + "ORDER BY %s ASC "
-          + "LIMIT ?",
+  private static final String GET_REQUESTS_QUERY_EXCLUDE_SOURCE_REPLICA = String.format(""
+      + "SELECT %s, %s, %s, %s, %s, %s, %s "
+      + "FROM %s "
+      + "WHERE %s = ? and (%s != ? or %s != ?) "
+      + "ORDER BY %s ASC "
+      + "LIMIT ?",
       BLOB_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
       REPAIR_REQUESTS_TABLE,
       PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT,
       OPERATION_TIME);
+  // @formatter:on
+
+  /**
+   * Select the partition which are under repair and it has TtlUpdate to repair
+   */
+  // @formatter:off
+  private static final String GET_PARTITIONS_QUERY_EXCLUDE_SOURCE_REPLICA_TEMPLATE = String.format(""
+      + "SELECT DISTINCT %s "
+      + "FROM %s "
+      + "WHERE %s = ? and (%s != ? or %s != ?) and %s IN ",
+      PARTITION_ID,
+      REPAIR_REQUESTS_TABLE,
+      OPERATION_TYPE, SOURCE_HOST_NAME, SOURCE_HOST_PORT, PARTITION_ID);
   // @formatter:on
 
   /**
@@ -178,7 +194,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   @Override
   public List<RepairRequestRecord> getRepairRequestsForPartition(long partitionId) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      try (PreparedStatement statement = connection.prepareStatement(GET_QUERY)) {
+      try (PreparedStatement statement = connection.prepareStatement(GET_REQUESTS_QUERY)) {
         statement.setLong(1, partitionId);
         statement.setInt(2, config.listMaxResults);
         try (ResultSet resultSet = statement.executeQuery()) {
@@ -218,7 +234,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   public List<RepairRequestRecord> getRepairRequestsExcludingHost(long partitionId, String sourceHostName,
       int sourceHostPort) throws SQLException {
     try (Connection connection = dataSource.getConnection()) {
-      try (PreparedStatement statement = connection.prepareStatement(GET_QUERY_EXCLUDE_SOURCE_REPLICA)) {
+      try (PreparedStatement statement = connection.prepareStatement(GET_REQUESTS_QUERY_EXCLUDE_SOURCE_REPLICA)) {
         statement.setLong(1, partitionId);
         statement.setString(2, sourceHostName);
         statement.setInt(3, sourceHostPort);
@@ -237,6 +253,40 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
                 new RepairRequestRecord(blobId, partitionId, hostName, hostPort, operationType, operationTime.getTime(),
                     lifeVersion, expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
             result.add(record);
+          }
+          return result;
+        }
+      }
+    } catch (SQLException e) {
+      metrics.repairDbErrorGetCount.inc();
+      logger.error("failed to get records from {} due to {}", dataSource, e.getMessage());
+      throw e;
+    }
+  }
+
+  /**
+   * Get the partitions which have TtlUpdate requests to repair.
+   * @param sourceHostName the host name of the source replica
+   * @param sourceHostPort the host port of the source replica
+   * @param partitions the partitions to check
+   * @return the partitions which have TtlUpdate requests to repair.
+   */
+  @Override
+  public Set<Long> getPartitionsNeedRepair(String sourceHostName, int sourceHostPort, List<Long> partitions)
+      throws SQLException {
+    String partitionsStr = partitions.stream().map(n -> n.toString()).collect(Collectors.joining(","));
+    String query = String.format(GET_PARTITIONS_QUERY_EXCLUDE_SOURCE_REPLICA_TEMPLATE + " (%s) ", partitionsStr);
+
+    try (Connection connection = dataSource.getConnection()) {
+      try (PreparedStatement statement = connection.prepareStatement(query)) {
+        statement.setShort(1, (short) OperationType.TtlUpdateRequest.ordinal());
+        statement.setString(2, sourceHostName);
+        statement.setInt(3, sourceHostPort);
+        try (ResultSet resultSet = statement.executeQuery()) {
+          Set<Long> result = new HashSet<>();
+          while (resultSet.next()) {
+            Long p = resultSet.getLong(1);
+            result.add(p);
           }
           return result;
         }

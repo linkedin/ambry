@@ -33,7 +33,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.junit.Test;
 
@@ -81,6 +83,7 @@ public class MysqlRepairRequestsDbTest {
     prepareDb(100);
 
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    List<Long> partitions = partitionIds.stream().map(p -> p.getId()).collect(Collectors.toList());
     int blobsPerContainer = 5;
 
     String hostName1 = "localhost1";
@@ -119,19 +122,33 @@ public class MysqlRepairRequestsDbTest {
     // on one node with name as thisNodeName and port as thisNodePort,
     // read the database but exclude all the records which has the source replica as this node.
     // we should run ODR to fix the requests on the nodes except the source replica
+    Set<Long> partitionsNeedRepair = repairRequestsDb.getPartitionsNeedRepair(thisNodeName, thisNodePort, partitions);
     for (PartitionId id : partitionIds) {
       List<RepairRequestRecord> recordFromStore =
           repairRequestsDb.getRepairRequestsExcludingHost((int) id.getId(), thisNodeName, thisNodePort);
+      Set<Long> partitionsNeedRepairUpdated;
       Map<String, RepairRequestRecord> orgRecords = records.get((int) id.getId());
-      for (RepairRequestRecord record : recordFromStore) {
-        RepairRequestRecord org = orgRecords.get(record.getBlobId());
-        assertEquals("Record does not match expectation ", org, record);
-        assertTrue("should exclude this node",
-            !thisNodeName.equals(record.getSourceHostName()) || thisNodePort != record.getSourceHostPort());
-        orgRecords.remove(record.getBlobId());
-        repairRequestsDb.removeRepairRequests(record.getBlobId(), record.getOperationType());
+      if (recordFromStore.size() > 0) {
+        for (RepairRequestRecord record : recordFromStore) {
+          RepairRequestRecord org = orgRecords.get(record.getBlobId());
+          assertEquals("Record does not match expectation ", org, record);
+          assertTrue("should exclude this node",
+              !thisNodeName.equals(record.getSourceHostName()) || thisNodePort != record.getSourceHostPort());
+          orgRecords.remove(record.getBlobId());
+          repairRequestsDb.removeRepairRequests(record.getBlobId(), record.getOperationType());
+        }
+        partitionsNeedRepairUpdated = repairRequestsDb.getPartitionsNeedRepair(thisNodeName, thisNodePort, partitions);
+        assertTrue(partitionsNeedRepair.contains(id.getId()));
+        assertFalse(partitionsNeedRepairUpdated.contains(id.getId()));
+        assertEquals(partitionsNeedRepair.size(), partitionsNeedRepairUpdated.size() + 1);
+      } else {
+        partitionsNeedRepairUpdated = repairRequestsDb.getPartitionsNeedRepair(thisNodeName, thisNodePort, partitions);
+        assertEquals(partitionsNeedRepairUpdated, partitionsNeedRepair);
+        assertFalse(partitionsNeedRepairUpdated.contains(id.getId()));
       }
+      partitionsNeedRepair = partitionsNeedRepairUpdated;
     }
+    assertTrue(partitionsNeedRepair.size() == 0);
 
     // get the remaining records.
     for (PartitionId id : partitionIds) {

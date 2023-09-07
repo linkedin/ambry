@@ -15,10 +15,11 @@
 package com.github.ambry.repair;
 
 import java.io.Closeable;
+import java.sql.SQLException;
 import java.util.List;
-import javax.sql.DataSource;
+import java.util.Set;
 
-import static com.github.ambry.repair.RepairRequestRecord.OperationType;
+import static com.github.ambry.repair.RepairRequestRecord.*;
 
 
 /**
@@ -58,6 +59,9 @@ public interface RepairRequestsDb extends Closeable {
    */
   List<RepairRequestRecord> getRepairRequestsExcludingHost(long partitionId, String hostName, int hostPort)
       throws Exception;
+
+  Set<Long> getPartitionsNeedRepair(String sourceHostName, int sourceHostPort, List<Long> partitions)
+      throws SQLException;
 
   /**
    * The max number of result sets it will return for each query
