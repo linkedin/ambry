@@ -281,6 +281,11 @@ class InMemoryStore implements Store {
   }
 
   @Override
+  public void purge(List<MessageInfo> messageInfos) {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public void forceDelete(List<MessageInfo> infos) throws StoreException {
     throw new UnsupportedOperationException("Method not supported");
   }

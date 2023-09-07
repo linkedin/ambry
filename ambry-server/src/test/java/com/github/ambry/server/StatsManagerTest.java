@@ -607,6 +607,11 @@ public class StatsManagerTest {
     }
 
     @Override
+    public void purge(List<MessageInfo> messageInfos) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
     public void forceDelete(List<MessageInfo> infos) throws StoreException {
       throw new IllegalStateException("Not implemented");
     }

@@ -225,6 +225,11 @@ public class CloudBlobStoreV2 implements Store {
   }
 
   @Override
+  public void purge(List<MessageInfo> messageInfos) throws StoreException {
+    throw new UnsupportedOperationException("Method not supported");
+  }
+
+  @Override
   public short undelete(MessageInfo messageInfo) throws StoreException {
     // TODO
     return 0;
