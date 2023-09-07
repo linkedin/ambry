@@ -108,4 +108,11 @@ public class RequestHandlerPool implements Closeable {
   public void close() throws IOException {
     shutdown();
   }
+
+  /**
+   * @return request handlers. Exposed for testing.
+   */
+  RequestHandler[] getHandlers() {
+    return handlers;
+  }
 }

@@ -17,6 +17,7 @@ import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.server.EmptyRequest;
 import java.util.Collection;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,7 @@ public class RequestDropper implements Runnable {
   private final RequestResponseChannel requestChannel;
   private final RequestAPI requests;
   private static final Logger logger = LoggerFactory.getLogger(RequestDropper.class);
+  private final AtomicBoolean running = new AtomicBoolean(true);
 
   public RequestDropper(RequestResponseChannel requestChannel, RequestAPI requests) {
     this.requestChannel = requestChannel;
@@ -36,7 +38,7 @@ public class RequestDropper implements Runnable {
 
   public void run() {
     Collection<NetworkRequest> requestsToDrop = null;
-    while (true) {
+    while (isRunning()) {
       try {
         // Get timed out requests from the channel. If there are no timed out requests, we wait until a dropped request
         // is available.
@@ -64,7 +66,17 @@ public class RequestDropper implements Runnable {
   }
 
   public void shutdown() throws InterruptedException {
+    running.set(false);
     requestChannel.sendRequest(EmptyRequest.getInstance());
+  }
+
+  /**
+   * Information on whether this request handler is accepting requests. This will return {@code false} as soon as
+   * {@link this#shutdown()} is called.
+   * @return {@code true} if in a state to receive requests. {@code false} otherwise.
+   */
+  private boolean isRunning() {
+    return running.get();
   }
 }
 
