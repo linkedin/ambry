@@ -72,7 +72,7 @@ public class PurgeRequest extends RequestOrResponse {
 
   @Override
   public void accept(RequestVisitor visitor) {
-    // TODO Efficient Metadata Operations: Implement this.
+    // TODO Efficient_Metadata_Operations_TODO: Implement this.
   }
 
   @Override
