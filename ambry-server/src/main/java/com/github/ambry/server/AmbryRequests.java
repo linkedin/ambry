@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.protocol;
+package com.github.ambry.server;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
@@ -48,11 +48,37 @@ import com.github.ambry.network.ServerNetworkResponseMetrics;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.notification.UpdateType;
+import com.github.ambry.protocol.AdminRequest;
+import com.github.ambry.protocol.AdminRequestOrResponseType;
+import com.github.ambry.protocol.AdminResponseWithContent;
+import com.github.ambry.protocol.BlobIndexAdminRequest;
+import com.github.ambry.protocol.CompositeSend;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.ReplicaMetadataRequest;
+import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.protocol.ReplicateBlobRequest;
+import com.github.ambry.protocol.ReplicateBlobResponse;
+import com.github.ambry.protocol.RequestAPI;
+import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.protocol.RequestVisitor;
+import com.github.ambry.protocol.TtlUpdateRequest;
+import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
-import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
@@ -164,7 +190,7 @@ public class AmbryRequests implements RequestAPI {
       if (networkRequest instanceof LocalChannelRequest) {
         RequestOrResponse request =
             (RequestOrResponse) ((LocalChannelRequest) networkRequest).getRequestInfo().getRequest();
-        type = request.type;
+        type = request.getRequestType();
       } else {
         DataInputStream stream = new DataInputStream(networkRequest.getInputStream());
         type = RequestOrResponseType.values()[stream.readShort()];
@@ -715,7 +741,7 @@ public class AmbryRequests implements RequestAPI {
       replicateBlobRequest = ReplicateBlobRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     }
 
-    if (replicateBlobRequest.versionId == ReplicateBlobRequest.VERSION_2) {
+    if (replicateBlobRequest.getVersionId() == ReplicateBlobRequest.VERSION_2) {
       handleReplicateBlobRequestV2(request, replicateBlobRequest);
       return;
     }
@@ -1345,7 +1371,7 @@ public class AmbryRequests implements RequestAPI {
     MessageFormatInputStream stream =
         new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobEncryptionKey(),
             receivedRequest.getBlobProperties(), receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(),
-            receivedRequest.getBlobSize(), receivedRequest.getBlobType(), (short) 0, receivedRequest.isCompressed);
+            receivedRequest.getBlobSize(), receivedRequest.getBlobType(), (short) 0, receivedRequest.isCompressed());
     BlobProperties properties = receivedRequest.getBlobProperties();
     long expirationTime = Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
         properties.getTimeToLiveInSeconds());

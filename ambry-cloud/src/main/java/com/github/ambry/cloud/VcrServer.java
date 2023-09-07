@@ -49,7 +49,7 @@ import com.github.ambry.network.http2.Http2NetworkClientFactory;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
-import com.github.ambry.protocol.ServerRequestResponseUtil;
+import com.github.ambry.network.ServerRequestResponseUtil;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.rest.NettyMetrics;
 import com.github.ambry.rest.NioServer;

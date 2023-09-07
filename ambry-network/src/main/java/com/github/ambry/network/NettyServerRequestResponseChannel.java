@@ -17,7 +17,6 @@ import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.protocol.RequestOrResponse;
-import com.github.ambry.protocol.ServerRequestResponseUtil;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.SystemTime;

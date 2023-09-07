@@ -21,7 +21,7 @@ import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.AmbryRequests;
+import com.github.ambry.server.AmbryRequests;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationEngine;
