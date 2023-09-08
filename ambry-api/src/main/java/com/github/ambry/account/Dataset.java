@@ -56,7 +56,7 @@ public class Dataset {
    * by up to 100 characters that are alphanumeric, {@code _} , {@code .} , or {@code -} (underscore, period,
    * or hyphen).
    */
-  private static final Pattern AMBRY_VALID_DATASET_NAME_PATTERN = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.-]{0,100}");
+  private static final Pattern AMBRY_VALID_DATASET_NAME_PATTERN = Pattern.compile("[a-zA-Z0-9][a-zA-Z0-9_.-]{0,150}");
   private static final int AMBRY_DATASET_RETENTION_POLICY_MAX_LENGTH = 100;
 
   static final String ACCOUNT_NAME_KEY = "accountName";
