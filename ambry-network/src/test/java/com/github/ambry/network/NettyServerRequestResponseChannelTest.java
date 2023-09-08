@@ -54,15 +54,11 @@ public class NettyServerRequestResponseChannelTest {
     Assert.assertEquals(13, ((NettyServerRequest) request).content().readableBytes());
 
     channel.sendRequest(createEmptyNettyServerRequest());
-    channel.sendRequest(createEmptyNettyServerRequest());
-    channel.sendRequest(createNettyServerRequest(17));
-
-    request = channel.receiveRequest();
-    Assert.assertTrue(request instanceof NettyServerRequest);
-    Assert.assertEquals(17, ((NettyServerRequest) request).content().readableBytes());
-
     channel.sendRequest(createNettyServerRequest(19));
     channel.sendRequest(createNettyServerRequest(23));
+    request = channel.receiveRequest();
+    Assert.assertTrue(request instanceof NettyServerRequest);
+    Assert.assertEquals(0, ((NettyServerRequest) request).content().readableBytes());
     request = channel.receiveRequest();
     Assert.assertTrue(request instanceof NettyServerRequest);
     Assert.assertEquals(19, ((NettyServerRequest) request).content().readableBytes());
@@ -136,10 +132,8 @@ public class NettyServerRequestResponseChannelTest {
   }
 
   private NettyServerRequest createNettyServerRequest(int len) {
-    byte[] array = new byte[len + 8];
+    byte[] array = new byte[len];
     TestUtils.RANDOM.nextBytes(array);
-    ByteBuffer byteBuffer = ByteBuffer.wrap(array);
-    byteBuffer.putLong(len);
     ByteBuf content = Unpooled.wrappedBuffer(array);
     return new NettyServerRequest(null, content);
   }
