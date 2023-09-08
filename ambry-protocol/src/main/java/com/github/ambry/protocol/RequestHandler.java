@@ -16,6 +16,7 @@ package com.github.ambry.protocol;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.server.EmptyRequest;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,7 @@ public class RequestHandler implements Runnable {
   private final RequestResponseChannel requestChannel;
   private final RequestAPI requests;
   private static final Logger logger = LoggerFactory.getLogger(RequestHandler.class);
+  private final AtomicBoolean running = new AtomicBoolean(true);
 
   public RequestHandler(int id, RequestResponseChannel requestChannel, RequestAPI requests) {
     this.id = id;
@@ -37,7 +39,7 @@ public class RequestHandler implements Runnable {
 
   public void run() {
     NetworkRequest req = null;
-    while (true) {
+    while (isRunning()) {
       try {
         req = requestChannel.receiveRequest();
         if (req.equals(EmptyRequest.getInstance())) {
@@ -61,7 +63,17 @@ public class RequestHandler implements Runnable {
   }
 
   public void shutdown() throws InterruptedException {
+    running.set(false);
     requestChannel.sendRequest(EmptyRequest.getInstance());
+  }
+
+  /**
+   * Information on whether this request handler is accepting requests. This will return {@code false} as soon as
+   * {@link this#shutdown()} is called.
+   * @return {@code true} if in a state to receive requests. {@code false} otherwise.
+   */
+  boolean isRunning() {
+    return running.get();
   }
 }
 
