@@ -16,15 +16,14 @@ package com.github.ambry.network;
 import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
-import com.github.ambry.server.EmptyRequest;
+import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.protocol.Response;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.SystemTime;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.channels.ReadableByteChannel;
-import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,16 +36,22 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   private static final Logger logger = LoggerFactory.getLogger(NettyServerRequestResponseChannel.class);
   private final Http2ServerMetrics http2ServerMetrics;
   private final NetworkRequestQueue networkRequestQueue;
+  private final ServerMetrics serverMetrics;
+  private final ServerRequestResponseHelper requestResponseHelper;
 
   public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics,
-      ServerMetrics serverMetrics) {
+      ServerMetrics serverMetrics, ServerRequestResponseHelper requestResponseHelper) {
+    this.serverMetrics = serverMetrics;
+    this.requestResponseHelper = requestResponseHelper;
     switch (config.requestQueueType) {
       case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
         this.networkRequestQueue = new AdaptiveLifoCoDelNetworkRequestQueue(config.adaptiveLifoQueueThreshold,
-            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance());
+            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, SystemTime.getInstance(),
+            config.requestQueueCapacity);
         break;
       case BASIC_QUEUE_WITH_FIFO:
-        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, SystemTime.getInstance());
+        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, SystemTime.getInstance(),
+            config.requestQueueCapacity);
         break;
       default:
         throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
@@ -59,8 +64,12 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   /** Send a request to be handled */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
-    networkRequestQueue.offer(request);
-    http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
+    if (networkRequestQueue.offer(request)) {
+      http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
+    } else {
+      // If incoming request queue is full, reject the request.
+      rejectRequest(request);
+    }
   }
 
   /** Send a response back via netty outbound handlers */
@@ -80,7 +89,9 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
       public void operationComplete(ChannelFuture future) throws Exception {
         long responseFlushTime = System.currentTimeMillis() - sendStartTime;
         http2ServerMetrics.responseFlushTime.update(responseFlushTime);
-        metrics.updateSendTime(responseFlushTime);
+        if (metrics != null) {
+          metrics.updateSendTime(responseFlushTime);
+        }
       }
     };
     ctx.channel().writeAndFlush(payloadToSend).addListener(channelFutureListener);
@@ -116,6 +127,24 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   @Override
   public void shutdown() {
     networkRequestQueue.close();
+  }
+
+  /**
+   * Reject request with backoff error code.
+   * @param networkRequest incoming request
+   */
+  void rejectRequest(NetworkRequest networkRequest) throws InterruptedException {
+    RequestOrResponse request;
+    try {
+      request = requestResponseHelper.getDecodedRequest(networkRequest);
+      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+      serverMetrics.totalRequestDroppedRate.mark();
+      sendResponse(response, networkRequest, null);
+    } catch (IOException | InterruptedException e) {
+      closeConnection(networkRequest);
+    } finally {
+      networkRequest.release();
+    }
   }
 }
 

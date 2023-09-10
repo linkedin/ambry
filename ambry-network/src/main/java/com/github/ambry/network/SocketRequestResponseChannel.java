@@ -137,10 +137,12 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
     switch (config.requestQueueType) {
       case ADAPTIVE_QUEUE_WITH_LIFO_CO_DEL:
         this.networkRequestQueue = new AdaptiveLifoCoDelNetworkRequestQueue(config.adaptiveLifoQueueThreshold,
-            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, time);
+            config.adaptiveLifoQueueCodelTargetDelayMs, config.requestQueueTimeoutMs, time,
+            config.requestQueueCapacity);
         break;
       case BASIC_QUEUE_WITH_FIFO:
-        this.networkRequestQueue = new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, time);
+        this.networkRequestQueue =
+            new FifoNetworkRequestQueue(config.requestQueueTimeoutMs, time, config.requestQueueCapacity);
         break;
       default:
         throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);

@@ -12,11 +12,26 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.protocol;
+package com.github.ambry.network;
 
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.network.LocalRequestResponseChannel;
-import com.github.ambry.network.NetworkRequest;
+import com.github.ambry.protocol.AdminRequest;
+import com.github.ambry.protocol.AdminResponse;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.ReplicaMetadataRequest;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.RequestOrResponse;
+import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.protocol.Response;
+import com.github.ambry.protocol.TtlUpdateRequest;
+import com.github.ambry.protocol.TtlUpdateResponse;
+import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.protocol.UndeleteResponse;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.server.ServerErrorCode;
 import io.netty.buffer.ByteBufInputStream;

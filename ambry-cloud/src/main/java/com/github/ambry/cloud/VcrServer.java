@@ -42,6 +42,7 @@ import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.NetworkServer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.network.ServerRequestResponseHelper;
 import com.github.ambry.network.SocketNetworkClientFactory;
 import com.github.ambry.network.SocketServer;
 import com.github.ambry.network.http2.Http2ClientMetrics;
@@ -254,14 +255,14 @@ public class VcrServer {
         NettyMetrics nettyMetrics = new NettyMetrics(registry);
         Http2ServerMetrics http2ServerMetrics = new Http2ServerMetrics(registry);
         Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
-
+        FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
         NettyServerRequestResponseChannel requestResponseChannel =
-            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, serverMetrics);
-
+            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, serverMetrics,
+                new ServerRequestResponseHelper(clusterMap, findTokenHelper));
         VcrRequests vcrRequestsForHttp2 =
             new VcrRequests(cloudStorageManager, requestResponseChannel, clusterMap, currentNode, registry,
-                serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,
-                vcrReplicationManager, storeKeyFactory, storeKeyConverterFactory);
+                serverMetrics, findTokenHelper, notificationSystem, vcrReplicationManager, storeKeyFactory,
+                storeKeyConverterFactory);
         requestHandlerPoolForHttp2 =
             new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
                 vcrRequestsForHttp2);

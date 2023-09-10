@@ -37,6 +37,7 @@ public class NetworkConfig {
   public static final String SELECTOR_USE_DIRECT_BUFFERS = "selector.use.direct.buffers";
   public static final String REQUEST_QUEUE_TYPE = "request.queue.type";
   public static final String REQUEST_QUEUE_TIMEOUT_MS = "request.queue.timeout.ms";
+  public static final String REQUEST_QUEUE_CAPACITY = "request.queue.capacity";
   public static final String ADAPTIVE_LIFO_QUEUE_CODEL_TARGET_DELAY_MS = "adaptive.lifo.queue.codel.target.delay.ms";
   public static final String ADAPTIVE_LIFO_QUEUE_THRESHOLD = "adaptive.lifo.queue.threshold";
 
@@ -138,6 +139,12 @@ public class NetworkConfig {
   public final int requestQueueTimeoutMs;
 
   /**
+   * Size of incoming request queue.
+   */
+  @Config(REQUEST_QUEUE_CAPACITY)
+  public final int requestQueueCapacity;
+
+  /**
    * The maximum queue delay that is allowed for a request when using Controlled delay algorithm.
    */
   @Config(ADAPTIVE_LIFO_QUEUE_CODEL_TARGET_DELAY_MS)
@@ -170,6 +177,8 @@ public class NetworkConfig {
     requestQueueType = verifiableProperties.getEnum(REQUEST_QUEUE_TYPE, RequestQueueType.class,
         RequestQueueType.BASIC_QUEUE_WITH_FIFO);
     requestQueueTimeoutMs = verifiableProperties.getIntInRange(REQUEST_QUEUE_TIMEOUT_MS, 2000, 0, Integer.MAX_VALUE);
+    // Used 5000 since Ambry incoming max qps seems to be 2.5K in last few weeks and default request.queue.timeout is 2 seconds
+    requestQueueCapacity = verifiableProperties.getIntInRange(REQUEST_QUEUE_CAPACITY, 5000, 0, Integer.MAX_VALUE);
     adaptiveLifoQueueCodelTargetDelayMs =
         verifiableProperties.getIntInRange(ADAPTIVE_LIFO_QUEUE_CODEL_TARGET_DELAY_MS, 100, 0, Integer.MAX_VALUE);
     adaptiveLifoQueueThreshold =
