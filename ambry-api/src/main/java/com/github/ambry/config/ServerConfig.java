@@ -30,6 +30,15 @@ public class ServerConfig {
   @Default("7")
   public final int serverRequestHandlerNumOfThreads;
 
+
+  /**
+   * The number of request handler threads used by the server to process requests
+   */
+  public static final String SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS = "server.request.handler.num.socket.server.threads";
+  public final int DEFAULT_SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS = 1;
+  @Config(SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS)
+  public final int serverRequestHandlerNumSocketServerThreads;
+
   /**
    * The number of scheduler threads the server will use to perform background tasks (store, replication)
    */
@@ -119,6 +128,9 @@ public class ServerConfig {
   public final String serverRepairRequestsDbFactory;
 
   public ServerConfig(VerifiableProperties verifiableProperties) {
+    serverRequestHandlerNumSocketServerThreads =
+        verifiableProperties.getInt(SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS,
+            DEFAULT_SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS);
     serverRequestHandlerNumOfThreads = verifiableProperties.getInt("server.request.handler.num.of.threads", 7);
     serverSchedulerNumOfthreads = verifiableProperties.getInt("server.scheduler.num.of.threads", 10);
     serverStatsReportsToPublish =
