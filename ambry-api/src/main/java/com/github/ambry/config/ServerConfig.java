@@ -32,7 +32,7 @@ public class ServerConfig {
 
 
   /**
-   * The number of request handler threads used by the server to process requests
+   * The number of request handler threads used by the socket-server to process requests
    */
   public static final String SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS = "server.request.handler.num.socket.server.threads";
   public final int DEFAULT_SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS = 1;
