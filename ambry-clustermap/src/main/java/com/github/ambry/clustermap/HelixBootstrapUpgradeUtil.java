@@ -1558,9 +1558,6 @@ public class HelixBootstrapUpgradeUtil {
           // Some instance names might not have a resource name, now assign the resource name to it
           instanceNames.forEach(in -> instanceNameToOneResource.put(in + "_" + numReplica, resourceId));
           resourceIdToInstances.get(resourceId).addAll(instanceNames);
-          Set<String> instances = resourceIdToInstances.get(resourceId);
-          ensureOrThrow(instances.size() <= maxInstancesInOneResourceForFullAuto,
-              "Resource has more than " + maxInstancesInOneResourceForFullAuto + " hosts: " + instances);
         } else {
           String errorMessage =
               String.format("Partition %s belong to different hosts of different resources, hosts: %s, resources %s",
@@ -2605,6 +2602,8 @@ public class HelixBootstrapUpgradeUtil {
           } else {
             verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
             verifyDataNodeAndDiskEquivalencyInDc(dc, clusterName, partitionLayout);
+            // Remove dc from dcToResourceIdToIdealState, so we fetch all the data from helix again.
+            dcToResourceIdToIdealState.remove(dc.getName());
             maybeVerifyResourcesAreFullAutoCompatible(dc.getName(), clusterName);
           }
         } catch (Throwable t) {
