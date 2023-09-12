@@ -23,36 +23,44 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * A FIFO queue to hold network requests. It Internally, it maintains two queues, a queue to hold active requests and
- * another one to hold timed out requests. Both are unbounded queues but since we have {@code RequestHandler} and
- * {@code RequestDropper thread} reading from them continuously, they shouldn't grow in indefinitely.
+ * another one to hold timed out requests.
  */
 public class FifoNetworkRequestQueue implements NetworkRequestQueue {
   private final int timeout;
   private final Time time;
-  // Queue to hold active requests. If a request times out in the queue, it would be moved to droppedRequestsQueue. This
-  // would prevent the queue from growing unbounded.
-  private final BlockingQueue<NetworkRequest> queue = new LinkedBlockingQueue<>();
+  // Queue to hold active requests.
+  private final BlockingQueue<NetworkRequest> queue;
   // Queue to hold timed out requests. The requests in this queue would be continuously picked up by 'request-dropper'
   // thread. This would prevent the queue from growing unbounded.
   private final BlockingQueue<NetworkRequest> droppedRequestsQueue = new LinkedBlockingQueue<>();
 
-  FifoNetworkRequestQueue(int timeout, Time time) {
+  /**
+   * @param timeout for the requests waiting in the incoming request queue.
+   * @param time system {@link Time}
+   * @param capacity capacity of the queue holding incoming requests.
+   */
+  FifoNetworkRequestQueue(int timeout, Time time, int capacity) {
     this.timeout = timeout;
     this.time = time;
+    this.queue = new LinkedBlockingQueue<>(capacity);
   }
 
   /**
    * Inserts the element into queue.
    * @param request element to be inserted.
+   * @return
    */
   @Override
-  public void offer(NetworkRequest request) throws InterruptedException {
-    queue.offer(request);
-    if (request.equals(EmptyRequest.getInstance())) {
-      // This is a internal generated request used to signal shutdown. Add it to dropped requests queue as well so that
-      // request-dropper thread shuts down gracefully.
-      droppedRequestsQueue.offer(request);
+  public boolean offer(NetworkRequest request) throws InterruptedException {
+    if (queue.offer(request)) {
+      if (request.equals(EmptyRequest.getInstance())) {
+        // This is a internal generated request used to signal shutdown. Add it to dropped requests queue as well so that
+        // request-dropper thread shuts down gracefully.
+        droppedRequestsQueue.offer(request);
+      }
+      return true;
     }
+    return false;
   }
 
   @Override

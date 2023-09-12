@@ -21,12 +21,15 @@ import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import java.nio.ByteBuffer;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import org.junit.Assert;
 import org.junit.Test;
+import com.github.ambry.protocol.RequestOrResponse;
+
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -35,6 +38,40 @@ import org.junit.Test;
 public class NettyServerRequestResponseChannelTest {
   private final static int QUEUE_TIMEOUT_MS = 500;
   private final static int REQUEST_SIZE = 10;
+
+  @Test
+  public void testNoRejectRequests() throws InterruptedException {
+    Properties properties = new Properties();
+    properties.setProperty(NetworkConfig.REQUEST_QUEUE_CAPACITY, "2");
+    NettyServerRequestResponseChannel channel =
+        spy(new NettyServerRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)),
+            new Http2ServerMetrics(new MetricRegistry()), new ServerMetrics(new MetricRegistry(), this.getClass()),
+            null));
+    // Fill up channel
+    channel.sendRequest(createNettyServerRequest(1));
+    channel.sendRequest(createNettyServerRequest(1));
+    // Verify rejectRequest() is not invoked
+    verify(channel, never()).rejectRequest(any());
+  }
+
+  @Test
+  public void testRejectRequests() throws InterruptedException {
+    Properties properties = new Properties();
+    properties.setProperty(NetworkConfig.REQUEST_QUEUE_CAPACITY, "2");
+    ServerRequestResponseHelper requestResponseHelper = mock(ServerRequestResponseHelper.class);
+    NettyServerRequestResponseChannel channel =
+        spy(new NettyServerRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)),
+            new Http2ServerMetrics(new MetricRegistry()), new ServerMetrics(new MetricRegistry(), this.getClass()),
+            requestResponseHelper));
+    doNothing().when(channel).rejectRequest(any());
+    // Fill up channel
+    channel.sendRequest(createNettyServerRequest(1));
+    channel.sendRequest(createNettyServerRequest(1));
+    // Add overflow
+    channel.sendRequest(createNettyServerRequest(1));
+    // Verify rejectRequest() is invoked
+    verify(channel, atLeastOnce()).rejectRequest(any());
+  }
 
   /**
    * Test send and receive requests
@@ -46,7 +83,8 @@ public class NettyServerRequestResponseChannelTest {
     Properties properties = new Properties();
     RequestResponseChannel channel =
         new NettyServerRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)),
-            new Http2ServerMetrics(new MetricRegistry()), new ServerMetrics(new MetricRegistry(), this.getClass()));
+            new Http2ServerMetrics(new MetricRegistry()), new ServerMetrics(new MetricRegistry(), this.getClass()),
+            null);
 
     channel.sendRequest(createNettyServerRequest(13));
     NetworkRequest request = channel.receiveRequest();
@@ -74,7 +112,7 @@ public class NettyServerRequestResponseChannelTest {
     ServerMetrics serverMetrics = new ServerMetrics(new MetricRegistry(), this.getClass());
     RequestResponseChannel channel =
         new NettyServerRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)),
-            new Http2ServerMetrics(new MetricRegistry()), serverMetrics);
+            new Http2ServerMetrics(new MetricRegistry()), serverMetrics, null);
 
     List<NetworkRequest> validRequests = new ArrayList<>();
     List<NetworkRequest> droppedRequests = new ArrayList<>();

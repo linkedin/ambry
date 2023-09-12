@@ -25,7 +25,7 @@ import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.network.LocalRequestResponseChannel;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
-import com.github.ambry.protocol.AmbryRequests;
+import com.github.ambry.server.AmbryRequests;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetRequest;

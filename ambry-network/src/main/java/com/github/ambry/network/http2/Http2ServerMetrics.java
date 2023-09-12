@@ -16,6 +16,7 @@ package com.github.ambry.network.http2;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 
 
@@ -28,8 +29,10 @@ public class Http2ServerMetrics {
   public final Histogram requestQueuingTime;
   public final Histogram requestTotalProcessingTime;
   public final Histogram responseFlushTime;
+  public final Meter requestRate;
 
   public final Counter requestResponseChannelErrorCount;
+  public final Counter requestResponseChannelDroppedCount;
   public final Counter http2ParentExceptionCount;
   public final Counter http2StreamExceptionCount;
 
@@ -38,14 +41,16 @@ public class Http2ServerMetrics {
     requestQueuingTime = registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "RequestQueuingTime"));
     requestTotalProcessingTime =
         registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "RequestTotalProcessingTime"));
-    responseFlushTime =
-        registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "ResponseFlushTime"));
+    responseFlushTime = registry.histogram(MetricRegistry.name(Http2ServerMetrics.class, "ResponseFlushTime"));
 
     requestResponseChannelErrorCount =
         registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "RequestResponseChannelErrorCount"));
+    requestResponseChannelDroppedCount =
+        registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "RequestResponseChannelDroppedCount"));
     http2ParentExceptionCount =
         registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "Http2ParentExceptionCount"));
     http2StreamExceptionCount =
         registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "Http2StreamExceptionCount"));
+    requestRate = registry.meter(MetricRegistry.name(Http2ServerMetrics.class, "RequestRate"));
   }
 }

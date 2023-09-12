@@ -298,7 +298,8 @@ project(':ambry-network') {
         compile project(':ambry-api'),
                 project(':ambry-utils'),
                 project(':ambry-commons'),
-                project(':ambry-clustermap')
+                project(':ambry-clustermap'),
+                project(':ambry-protocol')
         compile "io.netty:netty-all:$nettyVersion"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_linux_x86_64"
         compile "io.netty:netty-tcnative-boringssl-static:$nettyTcNativeBoringSSLStatic_osx_aarch_64"
@@ -406,8 +407,7 @@ project(':ambry-protocol') {
                 project(':ambry-clustermap'),
                 project(':ambry-messageformat'),
                 project(':ambry-utils'),
-                project(':ambry-commons'),
-                project(':ambry-network')
+                project(':ambry-commons')
         testCompile project(':ambry-test-utils')
     }
 }
@@ -482,7 +482,8 @@ project(':ambry-cloud') {
             project(':ambry-commons'),
             project(':ambry-account'),
             project(':ambry-replication'),
-            project(':ambry-rest')
+            project(':ambry-rest'),
+            project(':ambry-server')
         compile "com.azure:azure-storage-blob:$azureStorageBlobVersion"
         compile "com.azure:azure-storage-blob-batch:$azureStorageBlobBatchVersion"
         compile "com.azure:azure-identity:$azureIdentityVersion"

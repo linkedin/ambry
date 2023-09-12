@@ -53,7 +53,6 @@ import com.github.ambry.protocol.AdminRequest;
 import com.github.ambry.protocol.AdminRequestOrResponseType;
 import com.github.ambry.protocol.AdminResponse;
 import com.github.ambry.protocol.AdminResponseWithContent;
-import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.BlobStoreControlAction;
 import com.github.ambry.protocol.BlobStoreControlAdminRequest;
 import com.github.ambry.protocol.CatchupStatusAdminRequest;

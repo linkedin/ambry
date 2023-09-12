@@ -267,7 +267,7 @@ public class RouterUtils {
   /**
    * This method is applicable when we are processing responses received from Azure APIs in Frontend via {@link LocalNetworkClient}.
    * The responses received from Azure are constructed as java objects such as {@link GetResponse}, {@link PutResponse} in
-   * {@link com.github.ambry.protocol.AmbryRequests} class methods from {@link com.github.ambry.protocol.RequestHandler}
+   * AmbryRequests class methods from {@link com.github.ambry.protocol.RequestHandler}
    * threads running within the Frontend itself. The content in these responses is available as buffer but we access it
    * as stream in the Frontend router. Hence, we create new Response objects by having a stream enclose the buffer.
    *
