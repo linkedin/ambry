@@ -64,6 +64,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   /** Send a request to be handled */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
+    http2ServerMetrics.requestRate.mark();
     if (networkRequestQueue.offer(request)) {
       http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
     } else {
@@ -138,6 +139,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     try {
       request = requestResponseHelper.getDecodedRequest(networkRequest);
       Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
+      http2ServerMetrics.requestResponseChannelDroppedCount.inc();
       serverMetrics.totalRequestDroppedRate.mark();
       sendResponse(response, networkRequest, null);
     } catch (IOException | InterruptedException e) {
