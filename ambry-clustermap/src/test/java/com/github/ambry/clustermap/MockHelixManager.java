@@ -276,11 +276,7 @@ class MockHelixManager implements HelixManager {
 
   void triggerRoutingTableNotification() {
     NotificationContext notificationContext = new NotificationContext(this);
-    if (isAggregatedViewCluster) {
-      routingTableProvider.onExternalViewChange(Collections.emptyList(), notificationContext);
-    } else {
-      routingTableProvider.onStateChange(instanceName, Collections.emptyList(), notificationContext);
-    }
+    routingTableProvider.onExternalViewChange(Collections.emptyList(), notificationContext);
   }
 
   //****************************
