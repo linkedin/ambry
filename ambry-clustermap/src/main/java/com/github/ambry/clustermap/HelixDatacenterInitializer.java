@@ -145,7 +145,7 @@ class HelixDatacenterInitializer {
     // read constructed view. The latter one takes lesser time since we don't have to wait for controller to calculate
     // the view but has more read traffic.
     logger.info("Creating routing table provider associated with Helix manager at {}", zkConnectStr);
-    RoutingTableProvider routingTableProvider = new RoutingTableProvider(manager, PropertyType.CURRENTSTATES);
+    RoutingTableProvider routingTableProvider = new RoutingTableProvider(manager, PropertyType.EXTERNALVIEW);
     logger.info("Routing table provider is created in {}", dcName);
     routingTableProvider.addRoutingTableChangeListener(clusterChangeHandler, null);
     logger.info("Registered routing table change listeners in {}", dcName);
