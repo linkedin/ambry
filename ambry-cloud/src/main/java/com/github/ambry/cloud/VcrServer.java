@@ -242,7 +242,7 @@ public class VcrServer {
               registry, serverMetrics, new FindTokenHelper(storeKeyFactory, replicationConfig), notificationSystem,
               vcrReplicationManager, storeKeyFactory, storeKeyConverterFactory);
 
-      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads,
+      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumSocketServerThreads,
           networkServer.getRequestResponseChannel(), requests);
 
       networkServer.start();
