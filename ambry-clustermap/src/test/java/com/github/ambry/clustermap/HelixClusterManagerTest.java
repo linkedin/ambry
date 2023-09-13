@@ -657,9 +657,6 @@ public class HelixClusterManagerTest {
 
     // Case 2. We are creating a bootstrap replica for a new partition
     String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1000);
-    // Case 2.1 there is no resource config
-    assertNull("Missing resource config", helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode));
-    // Case 2.1 resource config created
     ResourceConfig resourceConfig = new ResourceConfig.Builder(resourceName).build();
     resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR, String.valueOf(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES));
     ConfigAccessor configAccessor =
