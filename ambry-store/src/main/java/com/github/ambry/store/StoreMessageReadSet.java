@@ -164,6 +164,9 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
    */
   void doPrefetch(long relativeOffset, long size) throws IOException {
     long sizeToRead = Math.min(size, getMessageInfo().getSize() - relativeOffset);
+    if ((int) sizeToRead >  4 * 1024 * 1024) {
+      logger.error("Buffer size greater than 4MB for chunk {}", getMessageInfo().getStoreKey().getID());
+    }
     prefetchedData = PooledByteBufAllocator.DEFAULT.ioBuffer((int) sizeToRead);
     long fetchStartTime = SystemTime.getInstance().milliseconds();
     prefetchedData.writeBytes(getChannel(), offset.getOffset() + relativeOffset, (int) sizeToRead);
