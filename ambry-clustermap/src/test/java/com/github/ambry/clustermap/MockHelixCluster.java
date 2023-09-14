@@ -41,27 +41,27 @@ public class MockHelixCluster {
   private boolean isAggregatedViewUsed;
   private final int maxPartitionsInOneResource;
   private MockHelixAdmin localHelixAdmin;
+  private final int maxInstancesInOneResourceForFullAuto;
 
   /**
    * Instantiate a MockHelixCluster.
-   *
-   * @param clusterName                          the name of the cluster.
-   * @param hardwareLayoutPath                   the path to the {@link HardwareLayout} file used to bootstrap this
-   *                                             cluster.
-   * @param partitionLayoutPath                  the path to the {@link PartitionLayout} file used to bootstrap this
-   *                                             cluster.
-   * @param zkLayoutPath                         the path to the file containing the zk layout json string.
-   * @param localDC                              local data center name
-   * @param isAggregatedViewUsed                 {@code True} if aggregated view is used
+   * @param clusterName the name of the cluster.
+   * @param hardwareLayoutPath the path to the {@link HardwareLayout} file used to bootstrap this cluster.
+   * @param partitionLayoutPath the path to the {@link PartitionLayout} file used to bootstrap this cluster.
+   * @param zkLayoutPath the path to the file containing the zk layout json string.
+   * @param localDC local datacenter name
+   * @param isAggregatedViewUsed True is aggregated view is enabled in helix cluster manager
    * @param maxPartitionsInOneResource           maximum partitions that can be present under one helix resource
-   * @param maxInstancesInOneResourceForFullAuto maximum instances that can be present under one helix resource
+   * @param maxInstancesInOneResourceForFullAuto maximum number of instances in one resource for full auto, set it -1
+   *                                             to keep resources full auto incompatiable.
    * @throws Exception
    */
   MockHelixCluster(String clusterName, String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
       String localDC, boolean isAggregatedViewUsed, int maxPartitionsInOneResource,
       int maxInstancesInOneResourceForFullAuto) throws Exception {
-    this.isAggregatedViewUsed = isAggregatedViewUsed;
     this.maxPartitionsInOneResource = maxPartitionsInOneResource;
+    this.isAggregatedViewUsed = isAggregatedViewUsed;
+    this.maxInstancesInOneResourceForFullAuto = maxInstancesInOneResourceForFullAuto;
     helixAdminFactory = new MockHelixAdminFactory();
     helixAdmins = helixAdminFactory.getAllHelixAdmins();
     this.hardwareLayoutPath = hardwareLayoutPath;
@@ -79,6 +79,24 @@ public class MockHelixCluster {
   }
 
   /**
+   * Instantiate a MockHelixCluster.
+   *
+   * @param clusterName                          the name of the cluster.
+   * @param hardwareLayoutPath                   the path to the {@link HardwareLayout} file used to bootstrap this
+   *                                             cluster.
+   * @param partitionLayoutPath                  the path to the {@link PartitionLayout} file used to bootstrap this
+   *                                             cluster.
+   * @param zkLayoutPath                         the path to the file containing the zk layout json string.
+   * @param localDC                              local data center name
+   * @param isAggregatedViewUsed                 {@code True} if aggregated view is used
+   * @throws Exception
+   */
+  MockHelixCluster(String clusterName, String hardwareLayoutPath, String partitionLayoutPath, String zkLayoutPath,
+      String localDC, boolean isAggregatedViewUsed) throws Exception {
+    this(clusterName, hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, localDC, isAggregatedViewUsed, 100, 1000);
+  }
+
+  /**
    * Upgrade based on the hardwareLayout.
    * @param hardwareLayoutPath the new hardware layout.
    * @throws Exception
@@ -87,7 +105,7 @@ public class MockHelixCluster {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
         "all", maxPartitionsInOneResource, false, false, helixAdminFactory, false,
         ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, BootstrapCluster, DataNodeConfigSourceType.INSTANCE_CONFIG, false,
-        1000);
+        maxInstancesInOneResourceForFullAuto);
     triggerInstanceConfigChangeNotification();
   }
 
@@ -101,7 +119,7 @@ public class MockHelixCluster {
       HelixBootstrapUpgradeUtil.HelixAdminOperation adminOperation) throws Exception {
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterName,
         "all", 3, false, false, helixAdminFactory, false, ClusterMapConfig.DEFAULT_STATE_MODEL_DEF, adminOperation,
-        DataNodeConfigSourceType.INSTANCE_CONFIG, false, 1000);
+        DataNodeConfigSourceType.INSTANCE_CONFIG, false, maxInstancesInOneResourceForFullAuto);
     triggerInstanceConfigChangeNotification();
   }
 
