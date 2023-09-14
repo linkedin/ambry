@@ -211,6 +211,7 @@ public class NamedBlobPutHandler {
         if (RestUtils.isNamedBlobStitchRequest(restRequest)) {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+            frontendMetrics.addDatasetVersionRate.mark();
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           RetainingAsyncWritableChannel channel =
@@ -219,6 +220,7 @@ public class NamedBlobPutHandler {
         } else {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+            frontendMetrics.addDatasetVersionRate.mark();
             addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
           }
           PutBlobOptions options = getPutBlobOptionsFromRequest();
@@ -616,6 +618,7 @@ public class NamedBlobPutHandler {
         LOGGER.error(
             "Dataset version create failed for accountName: " + accountName + " containerName: " + containerName
                 + " datasetName: " + datasetName + " version: " + version);
+        frontendMetrics.addDatasetVersionError.inc();
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
@@ -719,6 +722,7 @@ public class NamedBlobPutHandler {
       return (r, e) -> {
         try {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+            frontendMetrics.deleteDatasetVersionIfUploadFailCount.inc();
             Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
             String version = (String) restResponseChannel.getHeader(Headers.TARGET_DATASET_VERSION);
             accountService.deleteDatasetVersion(dataset.getAccountName(), dataset.getContainerName(),
@@ -726,6 +730,7 @@ public class NamedBlobPutHandler {
           }
         } catch (Exception ex) {
           LOGGER.error("Best effort to delete the dataset version when upload failed");
+          frontendMetrics.deleteDatasetVersionError.inc();
         }
         if (callback != null) {
           callback.onCompletion(r, e);

@@ -198,6 +198,7 @@ class TtlUpdateHandler {
     private Callback<PutResult> updateNamedBlobTtlCallback() {
       return buildCallback(metrics.updateNamedBlobTtlCallbackMetrics, datasetVersion -> {
         if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          metrics.updateTtlDatasetVersionRate.mark();
           updateTtlForDatasetVersion();
         }
         processResponseHelper();
@@ -230,6 +231,7 @@ class TtlUpdateHandler {
      * @throws RestServiceException
      */
     private void updateTtlForDatasetVersion() throws RestServiceException {
+      long startUpdateTtlDatasetVersionTime = System.currentTimeMillis();
       String datasetVersionPathString = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.BLOB_ID, true);
       DatasetVersionPath datasetVersionPath = DatasetVersionPath.parse(datasetVersionPathString, restRequest.getArgs());
       String accountName = datasetVersionPath.getAccountName();
@@ -238,10 +240,13 @@ class TtlUpdateHandler {
       String version = datasetVersionPath.getVersion();
       try {
         accountService.updateDatasetVersionTtl(accountName, containerName, datasetName, version);
+        metrics.updateTtlDatasetVersionProcessingTimeInMs.update(
+            System.currentTimeMillis() - startUpdateTtlDatasetVersionTime);
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset version update failed for accountName: " + accountName + " containerName: " + containerName
                 + " datasetName: " + datasetName + " version: " + version);
+        metrics.ttlUpdateDatasetVersionError.inc();
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
