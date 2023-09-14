@@ -261,13 +261,20 @@ public class FrontendMetrics {
   public final Counter addDatasetVersionError;
   public final Counter getDatasetVersionError;
   public final Counter deleteDatasetVersionError;
+  public final Counter ttlUpdateDatasetVersionError;
+  public final Counter listDatasetVersionError;
   public final Counter deleteDatasetVersionOutOfRetentionError;
+  public final Counter deleteDatasetVersionIfUploadFailCount;
   public final Meter addDatasetVersionRate;
   public final Meter getDatasetVersionRate;
   public final Meter deleteDatasetVersionRate;
+  public final Meter updateTtlDatasetVersionRate;
+  public final Meter listDatasetVersionRate;
   public final Histogram addDatasetVersionProcessingTimeInMs;
   public final Histogram getDatasetVersionProcessingTimeInMs;
   public final Histogram deleteDatasetVersionProcessingTimeInMs;
+  public final Histogram updateTtlDatasetVersionProcessingTimeInMs;
+  public final Histogram listDatasetVersionProcessingTimeInMs;
   private final MetricRegistry metricRegistry;
 
   /**
@@ -389,7 +396,8 @@ public class FrontendMetrics {
     headBlobSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "securityPostProcessRequest", metricRegistry);
     headBlobRouterMetrics = new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "router", metricRegistry);
-    headBlobIdConversionMetrics = new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "idConversion", metricRegistry);
+    headBlobIdConversionMetrics =
+        new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "idConversion", metricRegistry);
     headBlobSecurityProcessResponseMetrics =
         new AsyncOperationTracker.Metrics(HeadBlobHandler.class, "securityProcessResponse", metricRegistry);
 
@@ -672,20 +680,34 @@ public class FrontendMetrics {
     getDatasetVersionError =
         metricRegistry.counter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionError"));
     deleteDatasetVersionError =
-        metricRegistry.counter(MetricRegistry.name(GetBlobHandler.class, "DeleteDatasetVersionError"));
+        metricRegistry.counter(MetricRegistry.name(DeleteBlobHandler.class, "DeleteDatasetVersionError"));
+    ttlUpdateDatasetVersionError =
+        metricRegistry.counter(MetricRegistry.name(TtlUpdateHandler.class, "TtlUpdateDatasetVersionError"));
+    listDatasetVersionError =
+        metricRegistry.counter(MetricRegistry.name(ListDatasetVersionHandler.class, "ListDatasetVersionError"));
     deleteDatasetVersionOutOfRetentionError = metricRegistry.counter(
         MetricRegistry.name(NamedBlobPutHandler.class, "DeleteDatasetVersionOutOfRetentionError"));
+    deleteDatasetVersionIfUploadFailCount =
+        metricRegistry.counter(MetricRegistry.name(NamedBlobPutHandler.class, "DeleteDatasetVersionIfUploadFailCount"));
     addDatasetVersionRate =
         metricRegistry.meter(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionRate"));
     getDatasetVersionRate = metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionRate"));
     deleteDatasetVersionRate =
-        metricRegistry.meter(MetricRegistry.name(GetBlobHandler.class, "DeleteDatasetVersionRate"));
+        metricRegistry.meter(MetricRegistry.name(DeleteBlobHandler.class, "DeleteDatasetVersionRate"));
+    updateTtlDatasetVersionRate =
+        metricRegistry.meter(MetricRegistry.name(TtlUpdateHandler.class, "UpdateTtlDatasetVersionRate"));
+    listDatasetVersionRate =
+        metricRegistry.meter(MetricRegistry.name(ListDatasetVersionHandler.class, "ListDatasetVersionRate"));
     addDatasetVersionProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(NamedBlobPutHandler.class, "AddDatasetVersionProcessingTimeInMs"));
     getDatasetVersionProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobHandler.class, "GetDatasetVersionProcessingTimeInMs"));
     deleteDatasetVersionProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetBlobHandler.class, "DeleteDatasetVersionProcessingTimeInMs"));
+    updateTtlDatasetVersionProcessingTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(TtlUpdateHandler.class, "updateTtlDatasetVersionProcessingTimeInMs"));
+    listDatasetVersionProcessingTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(ListDatasetVersionHandler.class, "ListDatasetVersionProcessingTimeInMs"));
     this.metricRegistry = metricRegistry;
   }
 

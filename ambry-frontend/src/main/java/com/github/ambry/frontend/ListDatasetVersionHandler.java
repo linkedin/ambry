@@ -124,6 +124,7 @@ public class ListDatasetVersionHandler {
       return buildCallback(frontendMetrics.getDatasetsSecurityPostProcessRequestMetrics, securityCheckResult -> {
         LOGGER.debug("Received request for listing all datasets with arguments: {}", restRequest.getArgs());
         accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+        frontendMetrics.listDatasetVersionRate.mark();
         Page<String> datasetList = listAllValidDatasetVersions();
         ReadableStreamChannel channel =
             FrontendUtils.serializeJsonToChannel(datasetList.toJsonWithoutKey(Function.identity()));
@@ -140,6 +141,7 @@ public class ListDatasetVersionHandler {
      * @throws RestServiceException
      */
     private Page<String> listAllValidDatasetVersions() throws RestServiceException {
+      long startListDatasetVersionTime = System.currentTimeMillis();
       String accountName = null;
       String containerName = null;
       String pageToken = null;
@@ -150,11 +152,16 @@ public class ListDatasetVersionHandler {
         containerName = dataset.getContainerName();
         datasetName = dataset.getDatasetName();
         pageToken = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_PAGE_PARAM, false);
-        return accountService.listAllValidDatasetVersions(accountName, containerName, datasetName, pageToken);
+        Page<String> result =
+            accountService.listAllValidDatasetVersions(accountName, containerName, datasetName, pageToken);
+        frontendMetrics.listDatasetVersionProcessingTimeInMs.update(
+            System.currentTimeMillis() - startListDatasetVersionTime);
+        return result;
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " pageToken "
                 + pageToken);
+        frontendMetrics.listDatasetVersionError.inc();
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
