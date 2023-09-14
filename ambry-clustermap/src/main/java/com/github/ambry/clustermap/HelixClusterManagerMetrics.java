@@ -18,6 +18,7 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.HelixClusterManager.HelixClusterManagerQueryHelper;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -223,6 +224,19 @@ class HelixClusterManagerMetrics {
       registry.gauge(
           MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_TotalRegisteredHostDiskCapacity"),
           () -> resourceTotalRegisteredHostDiskCapacity);
+
+      Gauge<Integer> resourceTotalDiskCapacityUsage =
+          () -> helixClusterManager.getResourceTotalDiskCapacityUsage(resource);
+      registry.gauge(MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_TotalDiskCapacityUsage"),
+          () -> resourceTotalDiskCapacityUsage);
+
+      // register replica state metrics
+      for (ReplicaState replicaState : EnumSet.complementOf(EnumSet.of(ReplicaState.DROPPED))) {
+        Gauge<Integer> stateReplicaCountInResource =
+            () -> helixClusterManager.getReplicaCountForStateInResource(replicaState, resource);
+        registry.gauge(MetricRegistry.name(HelixClusterManager.class,
+            "Resource_" + resource + "_ReplicaCountInState" + replicaState.name()), () -> stateReplicaCountInResource);
+      }
     }
     // register host metrics
     Gauge<Integer> registeredHostDiskCapacity = helixClusterManager::getRegisteredHostDiskCapacity;
@@ -230,6 +244,9 @@ class HelixClusterManagerMetrics {
         () -> registeredHostDiskCapacity);
     Gauge<Integer> hostReplicaCount = helixClusterManager::getHostReplicaCount;
     registry.gauge(MetricRegistry.name(HelixClusterManager.class, "HostReplicaCount"), () -> hostReplicaCount);
+    Gauge<Integer> hostTotalDiskCapacityUsage = helixClusterManager::getHostTotalDiskCapacityUsage;
+    registry.gauge(MetricRegistry.name(HelixClusterManager.class, "HostTotalDiskCapacityUsage"),
+        () -> hostTotalDiskCapacityUsage);
   }
 
   /**
@@ -245,5 +262,6 @@ class HelixClusterManagerMetrics {
 
     registry.remove(MetricRegistry.name(HelixClusterManager.class, "RegisteredHostDiskCapacity"));
     registry.remove(MetricRegistry.name(HelixClusterManager.class, "HostReplicaCount"));
+    registry.remove(MetricRegistry.name(HelixClusterManager.class, "HostTotalDiskCapacityUsage"));
   }
 }

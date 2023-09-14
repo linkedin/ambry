@@ -35,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiFunction;
@@ -50,6 +51,8 @@ import org.apache.helix.api.listeners.IdealStateChangeListener;
 import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.api.listeners.RoutingTableChangeListener;
+import org.apache.helix.model.ClusterConfig;
+import org.apache.helix.model.ExternalView;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
@@ -122,6 +125,10 @@ public class HelixClusterManager implements ClusterMap {
   //
   // We probably only need to fetch one resource config, which this data node belongs to (This data node has to be a server node).
   private final ConcurrentHashMap<String, ResourceConfig> resourceConfigs = new ConcurrentHashMap<>();
+  // This is a map from partition name to disk weight, for those partitions that don't default disk weight.
+  // We would only get the partitions from the resources the current host belongs to. This map would be empty in ambry-frontend.
+  private final ConcurrentHashMap<String, Integer> diskWeightForPartitions = new ConcurrentHashMap<>();
+  private final AtomicInteger partitionDefaultDiskWeight = new AtomicInteger(0);
 
   // instance name to tag mapping and the reverse mapping from tag to instance name, these two maps
   // only contains the instances from local datacenter
@@ -859,6 +866,69 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * Return resource config from the cache if it's present, otherwise, fetch it from Helix.
+   * @param resourceName The resource name
+   * @param dcName The datacenter name
+   * @return The {@link ResourceConfig} object. If there is no config for the given resource name, null would be returned.
+   */
+  private ResourceConfig getResourceConfig(String resourceName, String dcName) {
+    if (!resourceConfigs.contains(resourceName)) {
+      ConfigAccessor configAccessor;
+      if (clusterMapConfig.clusterMapUseAggregatedView) {
+        configAccessor = helixAggregatedViewClusterInfo.helixManager.getConfigAccessor();
+      } else {
+        configAccessor = ((HelixDcInfo) dcToDcInfo.get(dcName)).helixManager.getConfigAccessor();
+      }
+      logger.info("Fetching resource config for {}", resourceName);
+      ResourceConfig resourceConfig = configAccessor.getResourceConfig(clusterName, resourceName);
+      if (resourceConfig != null) {
+        try {
+          Map<String, Map<String, Integer>> partitionCapacityMap = resourceConfig.getPartitionCapacityMap();
+          if (partitionCapacityMap != null && !partitionCapacityMap.isEmpty()) {
+            partitionCapacityMap.forEach((partition, capacityMap) -> {
+              if (capacityMap.containsKey(DISK_KEY)) {
+                diskWeightForPartitions.put(partition, capacityMap.get(DISK_KEY));
+              }
+            });
+          }
+        } catch (Exception e) {
+          logger.error("Failed to get partition capacity map from resource config for resource {} in dc {}",
+              resourceName, dcName, e);
+        }
+      } else {
+        // There is no config created for this resource, just make an empty one
+        logger.info("No resource config found for {} in dc {}", resourceName, dcName);
+        resourceConfig = new ResourceConfig(resourceName);
+      }
+      resourceConfigs.putIfAbsent(resourceName, resourceConfig);
+    }
+    return resourceConfigs.get(resourceName);
+  }
+
+  /**
+   * Return partition's default disk weight. It gets the weight from a local cache, if the weight is not present, it
+   * will fetch it from cluster config.
+   * @return
+   */
+  private int getPartitionDefaultDiskWeight() {
+    if (partitionDefaultDiskWeight.get() == 0) {
+      ConfigAccessor configAccessor;
+      if (clusterMapConfig.clusterMapUseAggregatedView) {
+        configAccessor = helixAggregatedViewClusterInfo.helixManager.getConfigAccessor();
+      } else {
+        configAccessor =
+            ((HelixDcInfo) dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName)).helixManager.getConfigAccessor();
+      }
+      logger.info("Fetching cluster config for {}", clusterName);
+      ClusterConfig clusterConfig = configAccessor.getClusterConfig(clusterName);
+      int defaultPartitionDiskWeight = clusterConfig.getDefaultPartitionWeightMap().get(DISK_KEY);
+      logger.info("Default partition disk weight is {} for cluster {}", defaultPartitionDiskWeight, clusterName);
+      partitionDefaultDiskWeight.compareAndSet(0, defaultPartitionDiskWeight);
+    }
+    return partitionDefaultDiskWeight.get();
+  }
+
+  /**
    * Get default replica capacity from resource config. A data node belongs to only one resource, if we are creating a
    * new partition for this data node, we can get the default capace from this resource's config.
    * @param partitionIdStr The partition id in string.
@@ -867,7 +937,7 @@ public class HelixClusterManager implements ClusterMap {
    */
   private long getReplicaCapacityFromResourceConfig(String partitionIdStr, DataNodeId dataNodeId) {
     String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
-    InstanceConfig instanceConfig = localHelixAdmin.getInstanceConfig(clusterName, instanceName);
+    InstanceConfig instanceConfig = instanceNameToInstanceConfig.get(instanceName);
     if (instanceConfig == null) {
       throw new IllegalArgumentException("Instance config for " + instanceName + " doesn't exist");
     }
@@ -876,21 +946,7 @@ public class HelixClusterManager implements ClusterMap {
     // we should only have one tag
     String tag = tags.get(0);
     String resourceName = dcToTagToResourceProperty.get(dcName).get(tag).name;
-    if (!resourceConfigs.contains(resourceName)) {
-      ConfigAccessor configAccessor = null;
-      if (clusterMapConfig.clusterMapUseAggregatedView) {
-        configAccessor = helixAggregatedViewClusterInfo.helixManager.getConfigAccessor();
-      } else {
-        configAccessor = ((HelixDcInfo) dcToDcInfo.get(dcName)).helixManager.getConfigAccessor();
-      }
-      logger.info("Fetching resource config for {} to create bootstrap replica for partition {}", resourceName,
-          partitionIdStr);
-      ResourceConfig resourceConfig = configAccessor.getResourceConfig(clusterName, resourceName);
-      if (resourceConfig != null) {
-        resourceConfigs.putIfAbsent(resourceName, resourceConfig);
-      }
-    }
-    ResourceConfig resourceConfig = resourceConfigs.get(resourceName);
+    ResourceConfig resourceConfig = getResourceConfig(resourceName, dcName);
     if (resourceConfig == null || resourceConfig.getSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR) == null) {
       throw new IllegalArgumentException("Missing default replica capacity from resource " + resourceName
           + " when creating bootstrap replica for partition " + partitionIdStr);
@@ -968,8 +1024,7 @@ public class HelixClusterManager implements ClusterMap {
   int getLiveInstanceCount(String resource) {
     return (int) (getAllInstancesForResource(resource).stream()
         .map(instanceNameToAmbryDataNode::get)
-        .filter(dn -> dn.getState() == HardwareState.AVAILABLE)
-        .count());
+        .filter(dn -> dn.getState() == HardwareState.AVAILABLE).count());
   }
 
   long getResourceTotalRegisteredHostDiskCapacity(String resource) {
@@ -979,6 +1034,84 @@ public class HelixClusterManager implements ClusterMap {
         .sum();
   }
 
+  int getReplicaCountForStateInResource(ReplicaState state, String resource) {
+    Collection<ExternalView> externalViews;
+    if (clusterMapConfig.clusterMapUseAggregatedView) {
+      externalViews = globalRoutingTableSnapshotRef.get().getExternalViews();
+    } else {
+      externalViews =
+          dcToRoutingTableSnapshotRef.get(clusterMapConfig.clusterMapDatacenterName).get().getExternalViews();
+    }
+    return getReplicaCountForStateInExternalView(state, externalViews, resource,
+        clusterMapConfig.clusterMapUseAggregatedView);
+  }
+
+  int getReplicaCountForStateInExternalView(ReplicaState state, Collection<ExternalView> externalViews, String resource,
+      boolean checkDatacenter) {
+    if (externalViews == null || externalViews.isEmpty()) {
+      return 0;
+    }
+    return externalViews.stream().filter(ev -> ev.getResourceName().equals(resource)).findFirst().map(ev -> {
+      int result = 0;
+      for (String partition : ev.getPartitionSet()) {
+        Map<String, String> states = ev.getStateMap(partition);
+        if (!states.isEmpty()) {
+          result += states.entrySet().stream().filter(ent -> {
+            if (!ent.getValue().equals(state.name())) {
+              return false;
+            }
+            if (checkDatacenter) {
+              AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(ent.getKey());
+              return dataNode != null && dataNode.getDatacenterName().equals(clusterMapConfig.clusterMapDatacenterName);
+            }
+            return true;
+          }).count();
+        }
+      }
+      return result;
+    }).orElse(0);
+  }
+
+  int getPartitionDiskWeight(String partition) {
+    return diskWeightForPartitions.getOrDefault(partition, getPartitionDefaultDiskWeight());
+  }
+
+  int getResourceTotalDiskCapacityUsage(String resource) {
+    // call this method to fill up the partition capacity map from resource config
+    getResourceConfig(resource, clusterMapConfig.clusterMapDatacenterName);
+    Collection<ExternalView> externalViews;
+    if (clusterMapConfig.clusterMapUseAggregatedView) {
+      externalViews = globalRoutingTableSnapshotRef.get().getExternalViews();
+    } else {
+      externalViews =
+          dcToRoutingTableSnapshotRef.get(clusterMapConfig.clusterMapDatacenterName).get().getExternalViews();
+    }
+    if (externalViews == null || externalViews.isEmpty()) {
+      return 0;
+    }
+    return externalViews.stream().filter(ev -> ev.getResourceName().equals(resource)).findFirst().map(ev -> {
+      int result = 0;
+      for (String partition : ev.getPartitionSet()) {
+        Map<String, String> states = ev.getStateMap(partition);
+
+        int weight = getPartitionDiskWeight(partition);
+        if (!states.isEmpty()) {
+          int numReplica;
+          if (clusterMapConfig.clusterMapUseAggregatedView) {
+            numReplica = (int) states.keySet().stream().filter(instance -> {
+              AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instance);
+              return dataNode != null && dataNode.getDatacenterName().equals(clusterMapConfig.clusterMapDatacenterName);
+            }).count();
+          } else {
+            numReplica = states.size();
+          }
+          result += numReplica * weight;
+        }
+      }
+      return result;
+    }).orElse(0);
+  }
+
   int getRegisteredHostDiskCapacity() {
     return instanceNameToInstanceConfig.get(selfInstanceName).getInstanceCapacityMap().get(DISK_KEY);
   }
@@ -986,6 +1119,17 @@ public class HelixClusterManager implements ClusterMap {
   int getHostReplicaCount() {
     AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(selfInstanceName);
     return ambryDataNodeToAmbryReplicas.get(dataNode).size();
+  }
+
+  int getHostTotalDiskCapacityUsage() {
+    AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(selfInstanceName);
+    String dcName = dataNode.getDatacenterName();
+    for (String tag : instanceNameToInstanceConfig.get(selfInstanceName).getTags()) {
+      // Call this method to make sure the partition weight map is populated
+      getResourceConfig(dcToTagToResourceProperty.get(dcName).get(tag).name, clusterMapConfig.clusterMapDatacenterName);
+    }
+    Map<String, AmbryReplica> replicas = ambryDataNodeToAmbryReplicas.get(dataNode);
+    return replicas.keySet().stream().mapToInt(this::getPartitionDiskWeight).sum();
   }
 
   /**
