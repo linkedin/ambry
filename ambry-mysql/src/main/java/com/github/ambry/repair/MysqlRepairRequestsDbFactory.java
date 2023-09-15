@@ -19,12 +19,13 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.mysql.MySqlUtils;
+import com.github.ambry.utils.Time;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,11 +39,13 @@ public class MysqlRepairRequestsDbFactory implements RepairRequestsDbFactory {
   private final MysqlRepairRequestsDbConfig config;
   private final MetricRegistry metrics;
   private final DataSource dataSource;
+  private final Time time;
 
   public MysqlRepairRequestsDbFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      String localDatacenter) throws Exception {
+      String localDatacenter, Time time) throws Exception {
     this.config = new MysqlRepairRequestsDbConfig(verifiableProperties);
     this.metrics = metricRegistry;
+    this.time = time;
 
     // Get the db endpoint for this local data center.
     if (config.dbInfo == null || config.dbInfo.isEmpty()) {
@@ -66,7 +69,7 @@ public class MysqlRepairRequestsDbFactory implements RepairRequestsDbFactory {
 
   @Override
   public MysqlRepairRequestsDb getRepairRequestsDb() {
-    return new MysqlRepairRequestsDb(dataSource, config, metrics);
+    return new MysqlRepairRequestsDb(dataSource, config, metrics, time);
   }
 
   /**

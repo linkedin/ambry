@@ -15,8 +15,10 @@
 package com.github.ambry.repair;
 
 import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.MysqlRepairRequestsDbConfig;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -129,12 +131,14 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   private final DataSource dataSource;
   private final MysqlRepairRequestsDbConfig config;
   private final Metrics metrics;
+  private final Time time;
 
   public MysqlRepairRequestsDb(DataSource dataSource, MysqlRepairRequestsDbConfig config,
-      MetricRegistry metricsRegistry) {
+      MetricRegistry metricsRegistry, Time time) {
     this.dataSource = dataSource;
     this.config = config;
     this.metrics = new Metrics(metricsRegistry);
+    this.time = time;
   }
 
   /**
@@ -144,12 +148,14 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    */
   @Override
   public void removeRepairRequests(String blobId, OperationType operationType) throws SQLException {
+    long startTime = time.milliseconds();
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(DELETE_QUERY)) {
         statement.setBytes(1, Base64.decodeBase64(blobId));
         statement.setShort(2, (short) operationType.ordinal());
         statement.executeUpdate();
       }
+      metrics.repairDbRemoveRequestTimeInMs.update(time.milliseconds() - startTime);
     } catch (SQLException e) {
       metrics.repairDbErrorRemoveCount.inc();
       logger.error("failed to delete record from {} due to {}", dataSource, e.getMessage());
@@ -163,6 +169,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    */
   @Override
   public void putRepairRequests(RepairRequestRecord record) throws SQLException {
+    long startTime = time.milliseconds();
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(INSERT_QUERY)) {
         statement.setBytes(1, Base64.decodeBase64(record.getBlobId()));
@@ -179,6 +186,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
         }
         statement.executeUpdate();
       }
+      metrics.repairDbPutRequestTimeInMs.update(time.milliseconds() - startTime);
     } catch (SQLException e) {
       metrics.repairDbErrorPutCount.inc();
       logger.error("failed to insert record to {} due to {}", dataSource, e.getMessage());
@@ -193,6 +201,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    */
   @Override
   public List<RepairRequestRecord> getRepairRequestsForPartition(long partitionId) throws SQLException {
+    long startTime = time.milliseconds();
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(GET_REQUESTS_QUERY)) {
         statement.setLong(1, partitionId);
@@ -213,6 +222,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
                     expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
             result.add(record);
           }
+          metrics.repairDbGetRequestTimeInMs.update(time.milliseconds() - startTime);
           return result;
         }
       }
@@ -233,6 +243,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   @Override
   public List<RepairRequestRecord> getRepairRequestsExcludingHost(long partitionId, String sourceHostName,
       int sourceHostPort) throws SQLException {
+    long startTime = time.milliseconds();
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(GET_REQUESTS_QUERY_EXCLUDE_SOURCE_REPLICA)) {
         statement.setLong(1, partitionId);
@@ -254,6 +265,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
                     lifeVersion, expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
             result.add(record);
           }
+          metrics.repairDbGetRequestTimeInMs.update(time.milliseconds() - startTime);
           return result;
         }
       }
@@ -274,6 +286,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   @Override
   public Set<Long> getPartitionsNeedRepair(String sourceHostName, int sourceHostPort, List<Long> partitions)
       throws SQLException {
+    long startTime = time.milliseconds();
     String partitionsStr = partitions.stream().map(n -> n.toString()).collect(Collectors.joining(","));
     String query = String.format(GET_PARTITIONS_QUERY_EXCLUDE_SOURCE_REPLICA_TEMPLATE + " (%s) ", partitionsStr);
 
@@ -288,6 +301,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
             Long p = resultSet.getLong(1);
             result.add(p);
           }
+          metrics.repairDbGetPartitionTimeInMs.update(time.milliseconds() - startTime);
           return result;
         }
       }
@@ -325,6 +339,11 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
     public final Counter repairDbErrorPutCount;
     public final Counter repairDbErrorGetCount;
 
+    public final Histogram repairDbGetRequestTimeInMs;
+    public final Histogram repairDbGetPartitionTimeInMs;
+    public final Histogram repairDbPutRequestTimeInMs;
+    public final Histogram repairDbRemoveRequestTimeInMs;
+
     /**
      * Constructor to create the Metrics.
      * @param metricRegistry The {@link MetricRegistry}.
@@ -336,6 +355,15 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
           metricRegistry.counter(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbErrorPutCount"));
       repairDbErrorGetCount =
           metricRegistry.counter(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbErrorGetCount"));
+
+      repairDbGetRequestTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbGetRequestTimeInMs"));
+      repairDbGetPartitionTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbGetPartitionTimeInMs"));
+      repairDbPutRequestTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbPutRequestTimeInMs"));
+      repairDbRemoveRequestTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MysqlRepairRequestsDb.class, "RepairDbRemoveRequestTimeInMs"));
     }
   }
 }

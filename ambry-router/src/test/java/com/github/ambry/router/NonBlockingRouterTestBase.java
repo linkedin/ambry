@@ -225,7 +225,7 @@ public class NonBlockingRouterTestBase {
     RepairRequestsDbFactory factory = null;
     if (routerConfig.routerRepairRequestsDbFactory != null) {
       factory = Utils.getObj(routerConfig.routerRepairRequestsDbFactory, verifiableProperties,
-          routerMetrics.getMetricRegistry(), localDcName);
+          routerMetrics.getMetricRegistry(), localDcName, mockTime);
     }
     router = new NonBlockingRouter(routerConfig, factory, routerMetrics,
         new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,

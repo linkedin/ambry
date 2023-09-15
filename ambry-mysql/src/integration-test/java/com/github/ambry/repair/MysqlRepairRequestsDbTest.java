@@ -23,6 +23,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -52,6 +53,7 @@ public class MysqlRepairRequestsDbTest {
   private MysqlRepairRequestsDb repairRequestsDb = null;
   private final InMemAccountService accountService;
   MockClusterMap clusterMap;
+  private final MockTime time = new MockTime();
 
   public MysqlRepairRequestsDbTest() throws Exception {
     accountService = new InMemAccountService(false, false);
@@ -68,7 +70,8 @@ public class MysqlRepairRequestsDbTest {
 
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metrics = new MetricRegistry();
-    MysqlRepairRequestsDbFactory factory = new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, LOCAL_DC);
+    MysqlRepairRequestsDbFactory factory =
+        new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, LOCAL_DC, time);
     repairRequestsDb = factory.getRepairRequestsDb();
 
     cleanup();

@@ -340,8 +340,8 @@ public class AmbryServer {
         // if we have a RepairRequestsDB, start the threads to fix the partially failed requests.
         try {
           RepairRequestsDbFactory factory =
-              Utils.getObj(serverConfig.serverRepairRequestsDbFactory, properties, registry,
-                  nodeId.getDatacenterName());
+              Utils.getObj(serverConfig.serverRepairRequestsDbFactory, properties, registry, nodeId.getDatacenterName(),
+                  time);
           RepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
 
           localChannel = new LocalRequestResponseChannel();

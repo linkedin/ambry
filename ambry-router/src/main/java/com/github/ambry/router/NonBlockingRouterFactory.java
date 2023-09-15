@@ -137,7 +137,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
         try {
           String localDc = clusterMap.getDatacenterName(clusterMap.getLocalDatacenterId());
           repairRequestsDbFactory = Utils.getObj(routerConfig.routerRepairRequestsDbFactory, verifiableProperties,
-              clusterMap.getMetricRegistry(), localDc);
+              clusterMap.getMetricRegistry(), localDc, time);
           logger.info("Created RepairRequestsDbFactory {} ", repairRequestsDbFactory);
         } catch (Exception e) {
           logger.error("Failed to create RepairRequestsDbFactory", e);

@@ -51,6 +51,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -111,6 +112,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   private static final Logger logger = LoggerFactory.getLogger(NonBlockingRouterTest.class);
 
   protected static MysqlRepairRequestsDb repairDb = null;
+  protected static MockTime staticMockTime = new MockTime();
 
   /**
    * Initialize parameters common to all tests.
@@ -126,7 +128,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   @BeforeClass
   public static void setup() throws Exception {
-    repairDb = createRepairRequestsConnection("DC3");
+    repairDb = createRepairRequestsConnection("DC3", staticMockTime);
   }
 
   @Parameterized.Parameters
@@ -3637,8 +3639,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   /*
    * Create a db connection to the RepairRequests db and cleanup the db.
    * @param localDc : name of the local data center.
+   * @param time : System Time
    */
-  static MysqlRepairRequestsDb createRepairRequestsConnection(String localDc) throws Exception {
+  static MysqlRepairRequestsDb createRepairRequestsConnection(String localDc, Time time) throws Exception {
     Properties properties = new Properties();
     String dbInfo = "["
         + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC1\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"},"
@@ -3651,7 +3654,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     MetricRegistry metrics = new MetricRegistry();
-    MysqlRepairRequestsDbFactory factory = new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, localDc);
+    MysqlRepairRequestsDbFactory factory =
+        new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, localDc, time);
     MysqlRepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
 
     // cleanup the database

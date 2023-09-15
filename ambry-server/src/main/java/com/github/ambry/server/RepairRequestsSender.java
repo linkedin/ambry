@@ -125,6 +125,31 @@ class RepairRequestsSender implements Runnable {
     }
   }
 
+  /*
+   * partition compaction control
+   * stop the compaction on the partitions which have TtlUpdate RepairRequests to fix.
+   * resume the compaction on the partitions which have fixed the RepairRequests.
+   */
+  void partitionCompactionControl() throws SQLException {
+    Set<Long> partitionsUnderRepair = getPartitionIdsNeedRepair();
+    for (long partition : partitionsCompactionDisabled) {
+      if (!partitionsUnderRepair.contains(partition)) {
+        partitionsCompactionDisabled.remove(partition);
+        PartitionId partitionId = clusterMap.getPartitionIdByName(Long.toString(partition));
+        storageManager.controlCompactionForBlobStore(partitionId, true);
+        logger.info("RepairRequests Sender: enable compaction on {} {}", nodeId, partitionId);
+      }
+    }
+    for (long partition : partitionsUnderRepair) {
+      if (!partitionsCompactionDisabled.contains(partition)) {
+        partitionsCompactionDisabled.add(partition);
+        PartitionId partitionId = clusterMap.getPartitionIdByName(Long.toString(partition));
+        storageManager.controlCompactionForBlobStore(partitionId, false);
+        logger.info("RepairRequests Sender: disable compaction on {} {}", nodeId, partitionId);
+      }
+    }
+  }
+
   public void run() {
     while (!shutdown) {
       try {
@@ -132,26 +157,8 @@ class RepairRequestsSender implements Runnable {
         boolean hasError = false;
         // if some partitions have more requests, continue to handle them.
         while (hasMore && !hasError) {
-          /*
-           * partition compaction control
-           */
-          Set<Long> partitionsUnderRepair = getPartitionIdsNeedRepair();
-          for (long partition : partitionsCompactionDisabled) {
-            if (!partitionsUnderRepair.contains(partition)) {
-              partitionsCompactionDisabled.remove(partition);
-              PartitionId partitionId = clusterMap.getPartitionIdByName(Long.toString(partition));
-              storageManager.controlCompactionForBlobStore(partitionId, true);
-              logger.info("RepairRequests Sender: enable compaction on {} {}", nodeId, partitionId);
-            }
-          }
-          for (long partition : partitionsUnderRepair) {
-            if (!partitionsCompactionDisabled.contains(partition)) {
-              partitionsCompactionDisabled.add(partition);
-              PartitionId partitionId = clusterMap.getPartitionIdByName(Long.toString(partition));
-              storageManager.controlCompactionForBlobStore(partitionId, false);
-              logger.info("RepairRequests Sender: disable compaction on {} {}", nodeId, partitionId);
-            }
-          }
+          // Based on the RepairRequest status, control the compaction on each partition.
+          partitionCompactionControl();
 
           /*
            * handle the RepairRequests
@@ -287,8 +294,7 @@ class RepairRequestsSender implements Runnable {
    */
   Set<Long> getPartitionIdsNeedRepair() throws SQLException {
     // each server has 12 * 23 partition. right now search in one single query.
-    Set<Long> partitionsNeedRepair = db.getPartitionsNeedRepair(nodeId.getHostname(), nodeId.getPort(), partitionIds);
-    return partitionsNeedRepair;
+    return db.getPartitionsNeedRepair(nodeId.getHostname(), nodeId.getPort(), partitionIds);
   }
 
   public void shutdown() {
