@@ -48,9 +48,6 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   private final AtomicBoolean isOverloaded = new AtomicBoolean(false);
   // Variable used to track changing of queue modes from FIFO to LIFO and vice versa.
   private final AtomicBoolean lifoMode = new AtomicBoolean(false);
-  // Variable used to track if emptyRequestReceived was called on server. If emptyRequestReceived is received, this
-  // indicates server is shutting down. Since request handler threads are waiting on this request, switch to LIFO mode.
-  private final boolean emptyRequestReceived = false;
 
   /**
    * @param lifoThreshold      the fraction of capacity used at which to switch the queue from FIFO to LIFO mode.
@@ -113,11 +110,6 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
    * @return {@code true} if the queue should operate in LIFO mode.
    */
   private boolean useLifoMode() {
-    if (emptyRequestReceived) {
-      // If emptyRequestReceived is received, this indicates server is shutting down. Since request handler threads are
-      // waiting on this request, switch to LIFO mode.
-      return true;
-    }
     boolean localLifoMode = deque.size() > lifoThreshold;
     if (localLifoMode && lifoMode.compareAndSet(false, true)) {
       // Mode changed to LIFO
