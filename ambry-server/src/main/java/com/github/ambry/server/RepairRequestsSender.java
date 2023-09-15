@@ -21,6 +21,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.network.LocalNetworkClient;
@@ -33,7 +34,9 @@ import com.github.ambry.protocol.ReplicateBlobResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.repair.RepairRequestRecord;
 import com.github.ambry.repair.RepairRequestsDb;
+import com.github.ambry.store.StorageManager;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -68,10 +71,14 @@ class RepairRequestsSender implements Runnable {
   private final DataNodeId nodeId;
   // LOCAL_CONSISTENCY_TODO. May listen to the Helix to get updated partition lists.
   private final ClusterParticipant clusterParticipant;
+  // partitions of which compaction are disabled.
+  private final Set<Long> partitionsCompactionDisabled;
   // The database which stores the RepairRequestRecord
   private final RepairRequestsDb db;
   // partition id list this data node gets assigned
   private final List<Long> partitionIds;
+  // storage manager
+  private final StorageManager storageManager;
   // Hashmap from partition id to the replicas
   private final Map<Long, ReplicaId> partition2Replicas;
   // generator to generate the correlation ids.
@@ -95,7 +102,7 @@ class RepairRequestsSender implements Runnable {
    */
   public RepairRequestsSender(RequestResponseChannel requestChannel, LocalNetworkClientFactory factory,
       ClusterMap clusterMap, DataNodeId nodeId, RepairRequestsDb repairRequestsDb,
-      ClusterParticipant clusterParticipant, MetricRegistry metricsRegistry) {
+      ClusterParticipant clusterParticipant, MetricRegistry metricsRegistry, StorageManager storageManager) {
     this.requestChannel = requestChannel;
     this.client = factory.getNetworkClient();
     this.clusterMap = clusterMap;
@@ -105,6 +112,8 @@ class RepairRequestsSender implements Runnable {
     this.db = repairRequestsDb;
     this.maxResults = db.getListMaxResults();
     this.metrics = new Metrics(metricsRegistry);
+    this.storageManager = storageManager;
+    this.partitionsCompactionDisabled = new HashSet<>();
 
     // LOCAL_CONSISTENCY_TODO. listen to the clustermap change and make the modification accordingly.
     partitionIds = new ArrayList<>();
@@ -116,6 +125,31 @@ class RepairRequestsSender implements Runnable {
     }
   }
 
+  /*
+   * partition compaction control
+   * stop the compaction on the partitions which have TtlUpdate RepairRequests to fix.
+   * resume the compaction on the partitions which have fixed the RepairRequests.
+   */
+  void partitionCompactionControl() throws SQLException {
+    Set<Long> partitionsUnderRepair = getPartitionIdsNeedRepair();
+    for (long partition : partitionsCompactionDisabled) {
+      if (!partitionsUnderRepair.contains(partition)) {
+        partitionsCompactionDisabled.remove(partition);
+        PartitionId partitionId = clusterMap.getPartitionIdByName(Long.toString(partition));
+        storageManager.controlCompactionForBlobStore(partitionId, true);
+        logger.info("RepairRequests Sender: enable compaction on {} {}", nodeId, partitionId);
+      }
+    }
+    for (long partition : partitionsUnderRepair) {
+      if (!partitionsCompactionDisabled.contains(partition)) {
+        partitionsCompactionDisabled.add(partition);
+        PartitionId partitionId = clusterMap.getPartitionIdByName(Long.toString(partition));
+        storageManager.controlCompactionForBlobStore(partitionId, false);
+        logger.info("RepairRequests Sender: disable compaction on {} {}", nodeId, partitionId);
+      }
+    }
+  }
+
   public void run() {
     while (!shutdown) {
       try {
@@ -123,6 +157,12 @@ class RepairRequestsSender implements Runnable {
         boolean hasError = false;
         // if some partitions have more requests, continue to handle them.
         while (hasMore && !hasError) {
+          // Based on the RepairRequest status, control the compaction on each partition.
+          partitionCompactionControl();
+
+          /*
+           * handle the RepairRequests
+           */
           hasMore = false;
           hasError = false;
           // loop all the partitions. For each partition, we handle maxResults number of requests.
@@ -246,6 +286,15 @@ class RepairRequestsSender implements Runnable {
     }
 
     return requestInfos;
+  }
+
+  /**
+   * Get partitions which have RepairRequests to fix
+   * @return list of partition ids.
+   */
+  Set<Long> getPartitionIdsNeedRepair() throws SQLException {
+    // each server has 12 * 23 partition. right now search in one single query.
+    return db.getPartitionsNeedRepair(nodeId.getHostname(), nodeId.getPort(), partitionIds);
   }
 
   public void shutdown() {

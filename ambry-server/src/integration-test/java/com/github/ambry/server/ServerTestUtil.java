@@ -121,6 +121,7 @@ import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -5052,7 +5053,7 @@ final class ServerTestUtil {
     ConnectedChannel thirdChannel = null;
 
     // Open the db connection and use it to generate repair requests.
-    MysqlRepairRequestsDb db = createRepairRequestsConnection(sourceDataNode.getDatacenterName());
+    MysqlRepairRequestsDb db = createRepairRequestsConnection(sourceDataNode.getDatacenterName(), cluster.time);
 
     // open connection channel to all data nodes.
     List<ConnectedChannel> channels = new ArrayList<>();
@@ -5280,7 +5281,7 @@ final class ServerTestUtil {
    * Create a db connection to the RepairRequests db and cleanup the db.
    * @param localDc : name of the local data center.
    */
-  static MysqlRepairRequestsDb createRepairRequestsConnection(String localDc) throws Exception {
+  static MysqlRepairRequestsDb createRepairRequestsConnection(String localDc, Time time) throws Exception {
     try {
       Properties properties = Utils.loadPropsFromResource("repairRequests_mysql.properties");
       properties.setProperty(MysqlRepairRequestsDbConfig.LIST_MAX_RESULTS, Integer.toString(100));
@@ -5288,7 +5289,8 @@ final class ServerTestUtil {
 
       VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
       MetricRegistry metrics = new MetricRegistry();
-      MysqlRepairRequestsDbFactory factory = new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, localDc);
+      MysqlRepairRequestsDbFactory factory =
+          new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, localDc, time);
       MysqlRepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
 
       // cleanup the database

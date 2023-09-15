@@ -340,8 +340,8 @@ public class AmbryServer {
         // if we have a RepairRequestsDB, start the threads to fix the partially failed requests.
         try {
           RepairRequestsDbFactory factory =
-              Utils.getObj(serverConfig.serverRepairRequestsDbFactory, properties, registry,
-                  nodeId.getDatacenterName());
+              Utils.getObj(serverConfig.serverRepairRequestsDbFactory, properties, registry, nodeId.getDatacenterName(),
+                  time);
           RepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
 
           localChannel = new LocalRequestResponseChannel();
@@ -357,7 +357,7 @@ public class AmbryServer {
           // start the repairRequestSender. It sends requests through the localChannel to the repairHandlerPool
           repairRequestsSender =
               new RepairRequestsSender(localChannel, localClientFactory, clusterMap, nodeId, repairRequestsDb,
-                  clusterParticipants.get(0), registry);
+                  clusterParticipants.get(0), registry, storageManager);
           Thread repairThread = Utils.daemonThread("Repair-Sender", repairRequestsSender);
           repairThread.start();
           logger.info("RepairRequests: open the db and started the handling thread {}.", repairRequestsDb);
