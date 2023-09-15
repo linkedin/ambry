@@ -290,7 +290,6 @@ public class ServerMetrics {
   private final Class<?> requestClass;
 
   public Gauge<Integer> activeRequestsQueueSize;
-  public Gauge<Integer> droppedRequestsQueueSize;
 
   public ServerMetrics(MetricRegistry registry, Class<?> requestClass) {
     this(registry, requestClass, null);
@@ -645,12 +644,9 @@ public class ServerMetrics {
         registry.counter(MetricRegistry.name(requestClass, "ServerValidateConnectionFailure"));
   }
 
-  public void registerRequestQueuesMetrics(Gauge<Integer> activeRequestsQueueSize,
-      Gauge<Integer> droppedRequestsQueueSize) {
+  public void registerRequestQueuesMetrics(Gauge<Integer> activeRequestsQueueSize) {
     this.activeRequestsQueueSize = registry.gauge(MetricRegistry.name(ServerMetrics.class, "ActiveRequestsQueueSize"),
         () -> activeRequestsQueueSize);
-    this.droppedRequestsQueueSize = registry.gauge(MetricRegistry.name(ServerMetrics.class, "DroppedRequestsQueueSize"),
-        () -> droppedRequestsQueueSize);
   }
 
   public void registerParticipantsMismatchMetrics() {

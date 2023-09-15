@@ -32,7 +32,8 @@ public class Http2ServerMetrics {
   public final Meter requestRate;
 
   public final Counter requestResponseChannelErrorCount;
-  public final Counter requestResponseChannelDroppedCount;
+  public final Counter requestResponseChannelDroppedOnOverflowCount;
+  public final Counter requestResponseChannelDroppedOnExpiryCount;
   public final Counter http2ParentExceptionCount;
   public final Counter http2StreamExceptionCount;
 
@@ -45,8 +46,10 @@ public class Http2ServerMetrics {
 
     requestResponseChannelErrorCount =
         registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "RequestResponseChannelErrorCount"));
-    requestResponseChannelDroppedCount =
-        registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "RequestResponseChannelDroppedCount"));
+    requestResponseChannelDroppedOnOverflowCount =
+        registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "RequestResponseChannelDroppedOnOverflowCount"));
+    requestResponseChannelDroppedOnExpiryCount =
+        registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "RequestResponseChannelDroppedOnExpiryCount"));
     http2ParentExceptionCount =
         registry.counter(MetricRegistry.name(Http2ServerMetrics.class, "Http2ParentExceptionCount"));
     http2StreamExceptionCount =

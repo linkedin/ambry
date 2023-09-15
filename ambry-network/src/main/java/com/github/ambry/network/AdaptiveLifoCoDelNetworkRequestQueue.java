@@ -15,11 +15,7 @@ package com.github.ambry.network;
 
 import com.github.ambry.server.EmptyRequest;
 import com.github.ambry.utils.Time;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,13 +31,9 @@ import org.slf4j.LoggerFactory;
 public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue {
   private static final Logger logger = LoggerFactory.getLogger(AdaptiveLifoCoDelNetworkRequestQueue.class);
   private final Time time;
-  // Queue to hold active requests.
   private final LinkedBlockingDeque<NetworkRequest> deque;
-  // Queue to hold timed out requests. The requests in this queue would be continuously picked up by 'request-dropper'
-  // thread. This would prevent the queue from growing unbounded.
-  private final BlockingQueue<NetworkRequest> droppedRequestsQueue = new LinkedBlockingQueue<>();
 
-  // If queue if full more than this size, we switch to LIFO mode.
+  // If queue is full more than this size, we switch to LIFO mode.
   private final int lifoThreshold;
   // Both are in milliseconds
   private final int coDelTargetDelayMs;
@@ -58,7 +50,7 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
   private final AtomicBoolean lifoMode = new AtomicBoolean(false);
   // Variable used to track if emptyRequestReceived was called on server. If emptyRequestReceived is received, this
   // indicates server is shutting down. Since request handler threads are waiting on this request, switch to LIFO mode.
-  private volatile boolean emptyRequestReceived = false;
+  private final boolean emptyRequestReceived = false;
 
   /**
    * @param lifoThreshold      the fraction of capacity used at which to switch the queue from FIFO to LIFO mode.
@@ -79,78 +71,36 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
 
   @Override
   public boolean offer(NetworkRequest request) throws InterruptedException {
-    if (deque.offer(request)) {
-      if (request.equals(EmptyRequest.getInstance())) {
-        // This is an internal generated request used to signal shutdown. Add it to dropped requests queue as well so that
-        // request-dropper thread shuts down gracefully.
-        droppedRequestsQueue.offer(request);
-        emptyRequestReceived = true;
-      }
-      return true;
-    }
-    return false;
+    return deque.offer(request);
   }
 
   /**
-   * Behaves as {@link LinkedBlockingQueue#take()}, except it will silently
-   * skip all calls which it thinks should be dropped.
-   *
-   * @return the head of this queue
-   * @throws InterruptedException if interrupted while waiting
+   * @return the head of the queue if operating in LIFO mode. Else, returns the tail of the queue.
    */
   @Override
   public NetworkRequest take() throws InterruptedException {
-    while (true) {
-      NetworkRequest nextRequest;
-      if (useLifoMode()) {
-        nextRequest = deque.pollLast();
-      } else {
-        nextRequest = deque.pollFirst();
-      }
-      if (nextRequest == null) {
-        // If there are no requests in the queue, wait until a new request comes.
-        nextRequest = deque.take();
-      }
-      // If the request expired, add it to dropped request queue and continue.
-      if (needToDrop(nextRequest)) {
-        droppedRequestsQueue.offer(nextRequest);
-        continue;
-      }
-      return nextRequest;
+    NetworkRequest nextRequest;
+    if (useLifoMode()) {
+      nextRequest = deque.pollLast();
+    } else {
+      nextRequest = deque.pollFirst();
     }
+    if (nextRequest == null) {
+      // If there are no requests in the queue, wait until a new request comes.
+      nextRequest = deque.take();
+    }
+    return nextRequest;
   }
 
   @Override
-  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
-    List<NetworkRequest> droppedRequests = new ArrayList<>();
-    NetworkRequest droppedRequest;
-    while ((droppedRequest = droppedRequestsQueue.poll()) != null) {
-      droppedRequests.add(droppedRequest);
-    }
-    if (droppedRequests.isEmpty()) {
-      // If there are no dropped requests in the queue, wait until there is one.
-      droppedRequest = droppedRequestsQueue.take();
-      droppedRequests.add(droppedRequest);
-    }
-    return droppedRequests;
-  }
-
-  @Override
-  public int numActiveRequests() {
+  public int size() {
     return deque.size();
-  }
-
-  @Override
-  public int numDroppedRequests() {
-    return droppedRequestsQueue.size();
   }
 
   @Override
   public void close() {
     deque.forEach(NetworkRequest::release);
     deque.clear();
-    droppedRequestsQueue.forEach(NetworkRequest::release);
-    droppedRequestsQueue.clear();
   }
 
   @Override
@@ -185,7 +135,8 @@ public class AdaptiveLifoCoDelNetworkRequestQueue implements NetworkRequestQueue
    * @return {@code true} if this request needs to be dropped to reduce overload based on request creation timestamp and
    *         internal queue state (deemed overloaded).
    */
-  private boolean needToDrop(NetworkRequest request) {
+  @Override
+  public boolean isExpired(NetworkRequest request) {
     if (request.equals(EmptyRequest.getInstance())) {
       // This is a internal generated request used to signal shutdown. Don't consider it as expired.
       return false;

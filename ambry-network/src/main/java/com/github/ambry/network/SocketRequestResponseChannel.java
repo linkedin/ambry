@@ -21,7 +21,6 @@ import com.github.ambry.utils.Time;
 import io.netty.buffer.ByteBuf;
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.slf4j.Logger;
@@ -190,11 +189,6 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
     return networkRequestQueue.take();
   }
 
-  @Override
-  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
-    return networkRequestQueue.getDroppedRequests();
-  }
-
   /** Get a response for the given processor if there is one */
   public NetworkResponse receiveResponse(int processor) throws InterruptedException {
     return responseQueues.get(processor).poll();
@@ -205,11 +199,7 @@ public class SocketRequestResponseChannel implements RequestResponseChannel {
   }
 
   public int getRequestQueueSize() {
-    return networkRequestQueue.numActiveRequests();
-  }
-
-  public int getDroppedRequestsQueueSize() {
-    return networkRequestQueue.numDroppedRequests();
+    return networkRequestQueue.size();
   }
 
   public int getResponseQueueSize(int processor) {

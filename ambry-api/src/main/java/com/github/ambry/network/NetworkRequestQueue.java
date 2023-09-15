@@ -13,9 +13,6 @@
  */
 package com.github.ambry.network;
 
-import java.util.List;
-
-
 interface NetworkRequestQueue {
 
   /**
@@ -32,20 +29,15 @@ interface NetworkRequestQueue {
   NetworkRequest take() throws InterruptedException;
 
   /**
-   * Get list of requests which have timed out in queue or couldn't be added to queue due to capacity.
-   * @return list of {@link NetworkRequest}s to be dropped.
+   * @return the size of the queue.
    */
-  List<NetworkRequest> getDroppedRequests() throws InterruptedException;
+  int size();
 
   /**
-   * @return the size of the queue containing active requests.
+   * @param request dequeued.
+   * @return {@code true} if the request expired. Else, return false.
    */
-  int numActiveRequests();
-
-  /**
-   * @return the size of the queue containing dropped requests.
-   */
-  int numDroppedRequests();
+  boolean isExpired(NetworkRequest request);
 
   /**
    * Releases the resources in the queue.
