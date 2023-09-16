@@ -15,7 +15,6 @@ package com.github.ambry.network;
 
 import com.github.ambry.utils.MockTime;
 import java.io.InputStream;
-import java.util.List;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -33,9 +32,7 @@ public class FifoNetworkRequestQueueTest {
     for (int i = 0; i < numRequests; i++) {
       requestQueue.offer(new MockRequest(0));
     }
-    // No requests should have been moved to dropped queue since we didn't have any timeout.
-    assertEquals("Mismatch in number of active requests", numRequests, requestQueue.numActiveRequests());
-    assertEquals("Mismatch in number of dropped requests", 0, requestQueue.numDroppedRequests());
+    assertEquals("Mismatch in number of active requests", numRequests, requestQueue.size());
   }
 
   @Test
@@ -54,18 +51,6 @@ public class FifoNetworkRequestQueueTest {
     mockTime.sleep(timeout - 1);
     receivedRequest = requestQueue.take();
     assertEquals("Requests to serve must not be empty", sentRequest, receivedRequest);
-
-    // Test case where there is one expired request and one valid request
-    MockRequest expiredRequest = new MockRequest(mockTime.milliseconds());
-    requestQueue.offer(expiredRequest);
-    mockTime.sleep(timeout + 1);
-    MockRequest validRequest = new MockRequest(mockTime.milliseconds());
-    requestQueue.offer(validRequest);
-
-    receivedRequest = requestQueue.take();
-    List<NetworkRequest> droppedRequests = requestQueue.getDroppedRequests();
-    assertEquals("Mismatch in dropped requests", expiredRequest, droppedRequests.iterator().next());
-    assertEquals("Mismatch in valid requests", validRequest, receivedRequest);
   }
 
   @Test
@@ -75,7 +60,7 @@ public class FifoNetworkRequestQueueTest {
     for (int i = 0; i < size; i++) {
       requestQueue.offer(new MockRequest(0));
     }
-    assertEquals("Mismatch in size of queue", size, requestQueue.numActiveRequests());
+    assertEquals("Mismatch in size of queue", size, requestQueue.size());
   }
 
   /**

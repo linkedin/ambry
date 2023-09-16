@@ -24,7 +24,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import java.io.IOException;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,8 +56,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
         throw new IllegalArgumentException("Queue type not supported by channel: " + config.requestQueueType);
     }
     this.http2ServerMetrics = http2ServerMetrics;
-    serverMetrics.registerRequestQueuesMetrics(networkRequestQueue::numActiveRequests,
-        networkRequestQueue::numDroppedRequests);
+    serverMetrics.registerRequestQueuesMetrics(networkRequestQueue::size);
   }
 
   /** Send a request to be handled */
@@ -69,7 +67,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
       http2ServerMetrics.requestEnqueueTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
     } else {
       // If incoming request queue is full, reject the request.
-      rejectRequest(request);
+      rejectRequest(request, false);
     }
   }
 
@@ -112,14 +110,17 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
 
   @Override
   public NetworkRequest receiveRequest() throws InterruptedException {
-    NetworkRequest request = networkRequestQueue.take();
-    http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
-    return request;
-  }
-
-  @Override
-  public List<NetworkRequest> getDroppedRequests() throws InterruptedException {
-    return networkRequestQueue.getDroppedRequests();
+    while (true) {
+      NetworkRequest request = networkRequestQueue.take();
+      http2ServerMetrics.requestQueuingTime.update(System.currentTimeMillis() - request.getStartTimeInMs());
+      if (networkRequestQueue.isExpired(request)) {
+        // If the request is stale, it means that server is overloaded and unable to process them in time. Reject the
+        // request with backoff error code.
+        rejectRequest(request, true);
+        continue;
+      }
+      return request;
+    }
   }
 
   /**
@@ -133,13 +134,18 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   /**
    * Reject request with backoff error code.
    * @param networkRequest incoming request
+   * @param isExpired      {@code true} if request is expired. Else {@code false}
    */
-  void rejectRequest(NetworkRequest networkRequest) throws InterruptedException {
+  void rejectRequest(NetworkRequest networkRequest, boolean isExpired) throws InterruptedException {
     RequestOrResponse request;
     try {
       request = requestResponseHelper.getDecodedRequest(networkRequest);
       Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
-      http2ServerMetrics.requestResponseChannelDroppedCount.inc();
+      if (isExpired) {
+        http2ServerMetrics.requestResponseChannelDroppedOnExpiryCount.inc();
+      } else {
+        http2ServerMetrics.requestResponseChannelDroppedOnOverflowCount.inc();
+      }
       serverMetrics.totalRequestDroppedRate.mark();
       sendResponse(response, networkRequest, null);
     } catch (IOException | InterruptedException e) {

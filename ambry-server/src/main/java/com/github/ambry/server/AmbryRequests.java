@@ -72,8 +72,6 @@ import com.github.ambry.protocol.RequestAPI;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.RequestVisitor;
-import com.github.ambry.protocol.Response;
-import com.github.ambry.network.ServerRequestResponseHelper;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.protocol.UndeleteRequest;
@@ -227,34 +225,6 @@ public class AmbryRequests implements RequestAPI {
       }
     } catch (Exception e) {
       logger.error("Error while handling request {} closing connection", networkRequest, e);
-      requestResponseChannel.closeConnection(networkRequest);
-    }
-  }
-
-  @Override
-  public void dropRequest(NetworkRequest networkRequest) throws InterruptedException {
-    try {
-      long requestProcessingStartTime = SystemTime.getInstance().milliseconds();
-      long requestQueueTime = requestProcessingStartTime - networkRequest.getStartTimeInMs();
-      ServerRequestResponseHelper requestResponseHelper = new ServerRequestResponseHelper(clusterMap, findTokenHelper);
-      RequestOrResponse request = requestResponseHelper.getDecodedRequest(networkRequest);
-      Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
-      // Log the request and response in public access logs
-      long requestProcessingTime = SystemTime.getInstance().milliseconds() - requestProcessingStartTime;
-      publicAccessLogger.info("{} {} processingTime {}", request, response, requestProcessingTime);
-      // Update common metrics for the request
-      RequestMetricsUpdater metricsUpdater =
-          new RequestMetricsUpdater(requestQueueTime, requestProcessingTime, 0, 0, true);
-      request.accept(metricsUpdater);
-      Histogram responseQueueTime = metricsUpdater.getResponseQueueTimeHistogram();
-      Histogram responseSendTime = metricsUpdater.getResponseSendTimeHistogram();
-      Histogram responseTotalTime = metricsUpdater.getRequestTotalTimeHistogram();
-      // Send response
-      requestResponseChannel.sendResponse(response, networkRequest,
-          new ServerNetworkResponseMetrics(responseQueueTime, responseSendTime, responseTotalTime, null, null,
-              requestQueueTime));
-    } catch (Exception e) {
-      logger.error("Error while handling networkRequest " + networkRequest + " closing connection", e);
       requestResponseChannel.closeConnection(networkRequest);
     }
   }
