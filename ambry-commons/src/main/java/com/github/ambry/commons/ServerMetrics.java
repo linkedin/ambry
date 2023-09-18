@@ -267,6 +267,7 @@ public class ServerMetrics {
   public final Counter unknownFormatError;
   public final Counter idNotFoundError;
   public final Counter idDeletedError;
+  public final Counter idPurgedError;
   public final Counter idUndeletedError;
   public final Counter idNotDeletedError;
   public final Counter lifeVersionConflictError;
@@ -622,6 +623,7 @@ public class ServerMetrics {
     unknownFormatError = registry.counter(MetricRegistry.name(requestClass, "UnknownFormatError"));
     idNotFoundError = registry.counter(MetricRegistry.name(requestClass, "IDNotFoundError"));
     idDeletedError = registry.counter(MetricRegistry.name(requestClass, "IDDeletedError"));
+    idPurgedError = registry.counter(MetricRegistry.name(requestClass, "IDPurgedError"));
     idUndeletedError = registry.counter(MetricRegistry.name(requestClass, "IDUndeletedError"));
     idNotDeletedError = registry.counter(MetricRegistry.name(requestClass, "IDNotDeletedError"));
     lifeVersionConflictError = registry.counter(MetricRegistry.name(requestClass, "lifeVersionConflictError"));

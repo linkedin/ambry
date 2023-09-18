@@ -523,7 +523,7 @@ class EventTracker {
 
   /**
    * Tracks the purge event that arrived on {@code host}:{@code port}.
-   * @param host the host that received the compact message.
+   * @param host the host that received the purge request.
    * @param port the port of the host that describes the instance along with {@code host}.
    */
   void trackPurge(String host, int port) {

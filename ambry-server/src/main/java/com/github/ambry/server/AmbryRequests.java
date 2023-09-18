@@ -60,6 +60,8 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.protocol.PurgeRequest;
+import com.github.ambry.protocol.PurgeResponse;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
@@ -506,7 +508,7 @@ public class AmbryRequests implements RequestAPI {
       ServerErrorCode error =
           validateRequest(purgeRequest.getBlobId().getPartition(), RequestOrResponseType.PurgeRequest, false);
       if (error != ServerErrorCode.No_Error) {
-        logger.error("Validating delete request failed with error {} for request {}", error, purgeRequest);
+        logger.error("Validating purge request failed with error {} for request {}", error, purgeRequest);
         response = new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(), error);
       } else {
         BlobId convertedBlobId = (BlobId) convertedStoreKey;
@@ -514,8 +516,8 @@ public class AmbryRequests implements RequestAPI {
             convertedBlobId.getContainerId(), purgeRequest.getPurgeTimeInMs()).isDeleted(true)
             .lifeVersion(MessageInfo.LIFE_VERSION_FROM_FRONTEND)
             .build();
-        Store storeToDelete = storeManager.getStore(purgeRequest.getBlobId().getPartition());
-        storeToDelete.purge(Collections.singletonList(info));
+        Store storeToPurge = storeManager.getStore(purgeRequest.getBlobId().getPartition());
+        storeToPurge.purge(Collections.singletonList(info));
         response =
             new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
@@ -527,27 +529,25 @@ public class AmbryRequests implements RequestAPI {
       boolean logInErrorLevel = false;
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
         metrics.idNotFoundError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-        metrics.ttlExpiredError.inc();
-      } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        metrics.idDeletedError.inc();
+      } else if (e.getErrorCode() == StoreErrorCodes.ID_Purged) {
+        metrics.idPurgedError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.Authorization_Failure) {
         metrics.purgeAuthorizationFailure.inc();
       } else {
         logInErrorLevel = true;
-        metrics.unExpectedStoreDeleteError.inc();
+        metrics.unExpectedStorePurgeError.inc();
       }
       if (logInErrorLevel) {
-        logger.error("Store exception on a compact message with error code {} for request {}", e.getErrorCode(), purgeRequest,
-            e);
+        logger.error("Store exception on a purge message with error code {} for request {}", e.getErrorCode(),
+            purgeRequest, e);
       } else {
-        logger.trace("Store exception on a compact with error code {} for request {}", e.getErrorCode(), purgeRequest,
+        logger.trace("Store exception on a purge with error code {} for request {}", e.getErrorCode(), purgeRequest,
             e);
       }
       response = new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(),
           ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
     } catch (Exception e) {
-      logger.error("Unknown exception for compact message request {}", purgeRequest, e);
+      logger.error("Unknown exception for purge request {}", purgeRequest, e);
       response = new PurgeResponse(purgeRequest.getCorrelationId(), purgeRequest.getClientId(),
           ServerErrorCode.Unknown_Error);
       metrics.unExpectedStorePurgeError.inc();
