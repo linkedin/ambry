@@ -37,6 +37,7 @@ public class StoreMetrics {
   public final Timer getResponse;
   public final Timer putResponse;
   public final Timer deleteResponse;
+  public final Timer purgeResponse;
   public final Timer ttlUpdateResponse;
   public final Timer undeleteResponse;
   public final Timer findEntriesSinceResponse;
@@ -87,6 +88,7 @@ public class StoreMetrics {
   public final Counter identicalPutAttemptCount;
   public final Counter getAuthorizationFailureCount;
   public final Counter deleteAuthorizationFailureCount;
+  public final Counter purgeAuthorizationFailureCount;
   public final Counter ttlUpdateAuthorizationFailureCount;
   public final Counter undeleteAuthorizationFailureCount;
   public final Counter keyInFindEntriesAbsent;
@@ -141,6 +143,7 @@ public class StoreMetrics {
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreDeleteResponse"));
+    purgeResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePurgeResponse"));
     ttlUpdateResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreTtlUpdateResponse"));
     undeleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreUndeleteResponse"));
     findEntriesSinceResponse =
@@ -216,6 +219,8 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStore.class, name + "GetAuthorizationFailureCount"));
     deleteAuthorizationFailureCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "DeleteAuthorizationFailureCount"));
+    purgeAuthorizationFailureCount =
+        registry.counter(MetricRegistry.name(BlobStore.class, name + "PurgeAuthorizationFailureCount"));
     ttlUpdateAuthorizationFailureCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "TtlUpdateAuthorizationFailureCount"));
     undeleteAuthorizationFailureCount =

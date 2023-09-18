@@ -563,6 +563,11 @@ public class BlobStore implements Store {
                 "Cannot delete id " + info.getStoreKey() + " since it is already deleted in the index.",
                 StoreErrorCodes.ID_Deleted);
           }
+          if (value.isPurge()) {
+            throw new StoreException(
+                "Cannot purge id " + info.getStoreKey() + " since it is already purged in the index.",
+                StoreErrorCodes.ID_Purged);
+          }
           revisedLifeVersion = value.getLifeVersion();
         } else {
           // This is a delete request from replication
@@ -778,6 +783,10 @@ public class BlobStore implements Store {
           throw new StoreException(
               "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
               StoreErrorCodes.ID_Deleted);
+        } else if (value.isPurge()) {
+          throw new StoreException(
+              "Cannot update TTL of " + info.getStoreKey() + " since it is already purged in the index.",
+              StoreErrorCodes.ID_Purged);
         } else if (value.isTtlUpdate()) {
           throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
               StoreErrorCodes.Already_Updated);
@@ -805,6 +814,10 @@ public class BlobStore implements Store {
                 throw new StoreException(
                     "Cannot update TTL of " + info.getStoreKey() + " since it is already deleted in the index.",
                     StoreErrorCodes.ID_Deleted);
+              } else if (value.isPurge()) {
+                throw new StoreException(
+                    "Cannot update TTL of " + info.getStoreKey() + " since it is already purged in the index.",
+                    StoreErrorCodes.ID_Purged);
               } else if (value.isTtlUpdate()) {
                 throw new StoreException("TTL of " + info.getStoreKey() + " is already updated in the index.",
                     StoreErrorCodes.Already_Updated);

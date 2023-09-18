@@ -1026,6 +1026,12 @@ class PersistentIndex {
       validateSanityForUndeleteWithoutLifeVersion(key, values);
       return;
     }
+    for (IndexValue indexValue : values) {
+      if (indexValue.isPurge()) {
+        throw new StoreException(
+            "Id " + key + " cannot be undeleted as it has been purged in index " + dataDir,StoreErrorCodes.ID_Purged);
+      }
+    }
     // This is from replication. For replication, undelete should be permitted only when
     // 1. The oldest record is PUT
     // 2. the latest record's lifeVersion is less then undelete's lifeVersion.
@@ -1341,6 +1347,8 @@ class PersistentIndex {
         } else {
           readOptions = getDeletedBlobReadOptions(value, id, indexSegments);
         }
+      } else if (value.isPurge()) {
+          throw new StoreException("Id " + id + " has been purged in index " + dataDir, StoreErrorCodes.ID_Purged);
       } else if (isExpired(value) && !getOptions.contains(StoreGetOptions.Store_Include_Expired)) {
         throw new StoreException("Id " + id + " has expired ttl in index " + dataDir, StoreErrorCodes.TTL_Expired);
       } else if (value.isUndelete()) {

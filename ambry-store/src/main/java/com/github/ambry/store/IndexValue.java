@@ -50,7 +50,7 @@ import static com.github.ambry.account.Container.*;
 class IndexValue implements Comparable<IndexValue> {
 
   enum Flags {
-    Delete_Index, Ttl_Update_Index, Undelete_Index
+    Delete_Index, Ttl_Update_Index, Undelete_Index, Purge_Index
   }
 
   final static byte FLAGS_DEFAULT_VALUE = (byte) 0;
@@ -267,6 +267,14 @@ class IndexValue implements Comparable<IndexValue> {
    */
   boolean isDelete() {
     return isFlagSet(Flags.Delete_Index);
+  }
+
+  /**
+   * Helper function for isFlagSet(Flags.Purge_Index).
+   * @return true when the Purge_Index is set.
+   */
+  boolean isPurge() {
+    return isFlagSet(Flags.Purge_Index);
   }
 
   /**
