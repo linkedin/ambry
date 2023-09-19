@@ -4686,15 +4686,20 @@ final class ServerTestUtil {
    * @param channel the {@link ConnectedChannel} to make the {@link GetRequest} on.
    * @param blobId the ID of the blob to TTL update
    * @param ts the operation time
+   * @param expectedError expected error code
    * @throws IOException
    */
-  static void updateBlobTtl(ConnectedChannel channel, BlobId blobId, long ts) throws IOException {
+  static void updateBlobTtl(ConnectedChannel channel, BlobId blobId, long ts, ServerErrorCode expectedError)
+      throws IOException {
     TtlUpdateRequest ttlUpdateRequest = new TtlUpdateRequest(1, "updateBlobTtl", blobId, Utils.Infinite_Time, ts);
     DataInputStream stream = channel.sendAndReceive(ttlUpdateRequest).getInputStream();
     TtlUpdateResponse ttlUpdateResponse = TtlUpdateResponse.readFrom(stream);
     releaseNettyBufUnderneathStream(stream);
-    assertEquals("Unexpected ServerErrorCode for TtlUpdateRequest", ServerErrorCode.No_Error,
-        ttlUpdateResponse.getError());
+    assertEquals("Unexpected ServerErrorCode for TtlUpdateRequest", expectedError, ttlUpdateResponse.getError());
+  }
+
+  static void updateBlobTtl(ConnectedChannel channel, BlobId blobId, long ts) throws IOException {
+    updateBlobTtl(channel, blobId, ts, ServerErrorCode.No_Error);
   }
 
   static void deleteBlob(ConnectedChannel channel, BlobId blobId, long ts) throws Exception {
@@ -5118,6 +5123,9 @@ final class ServerTestUtil {
     BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
         properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
+    BlobId expiredId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
+        BlobId.BlobDataType.DATACHUNK);
 
     BlobId blobId;
     long operationTime;
@@ -5177,7 +5185,7 @@ final class ServerTestUtil {
       checkDeleteRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs());
       cluster.time.sleep(1000);
 
-      // source doesn't have the PutBlob. Add Delete RepairRequest to the db.
+      // 3. source doesn't have the PutBlob. Add Delete RepairRequest to the db.
       // ODR will repair the tombstone.
       blobId = blobId3;
       getBlobAndVerify(blobId, sourceChannel, ServerErrorCode.Blob_Not_Found, propertiesWithTtl, userMetadata, data,
@@ -5190,6 +5198,47 @@ final class ServerTestUtil {
       getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.Include_All);
       checkDeleteRecord(targetChannel, clusterMap, blobId, operationTime);
+      cluster.time.sleep(1000);
+
+      // 4. On the sourceDataNode, the blob is ttlUpdated. On the targetDataNode, it has the blob.
+      // When the Repair starts, the blob is expired.
+      // But ODR inherits the original operation time when it was first called. So BlobStore.updateTtl won't reject it.
+      blobId = expiredId;
+      // propertiesWithExpiredTtl will expire is 2s.
+      BlobProperties propertiesWithExpiredTtl =
+          new BlobProperties(dataSize, "serviceid1", "ownerid", "image/png", false, TimeUnit.SECONDS.toSeconds(2),
+              cluster.time.milliseconds(), accountId, containerId, testEncryption, null, null, null, null);
+      // write to both source and target nodes.
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithExpiredTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
+      putRequest = new PutRequest(1, "client1", blobId, propertiesWithExpiredTtl, ByteBuffer.wrap(userMetadata),
+          Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+          testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+      putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+      long expiryTimeMs = getExpiryTimeMs(propertiesWithExpiredTtl);
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, false, expiryTimeMs);
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, false, expiryTimeMs);
+      // now after 1s, update Ttl on the source. It is successful.
+      cluster.time.sleep(1000);
+      operationTime = cluster.time.milliseconds();
+      updateBlobTtl(sourceChannel, blobId, operationTime);
+      checkTtlUpdateStatus(sourceChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      // make the blob expired
+      cluster.time.sleep(10000);
+      // if we update TtlUpdate right now on target with current operation time, it'll fail.
+      updateBlobTtl(targetChannel, blobId, cluster.time.milliseconds(), ServerErrorCode.Blob_Update_Not_Allowed);
+      // But the repairRequest inherit the operation time from the source replica when the request was first sent.
+      // so it should be successful.
+      addRepairRequestForTtlUpdate(db, sourceDataNode, blobId, operationTime, Utils.Infinite_Time);
+
+      // wait for the replication to catch up
+      notificationSystem.awaitBlobReplicates(blobId.getID());
+      getBlobAndVerify(blobId, targetChannel, ServerErrorCode.No_Error, propertiesWithExpiredTtl, userMetadata, data,
+          encryptionKey, clusterMap, blobIdFactory, testEncryption);
+      checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
+      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, operationTime, Utils.Infinite_Time);
       cluster.time.sleep(1000);
 
       /*
