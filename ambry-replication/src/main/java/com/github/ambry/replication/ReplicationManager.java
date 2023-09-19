@@ -214,8 +214,8 @@ public class ReplicationManager extends ReplicationEngine {
       List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
       if (!peerReplicas.isEmpty()) {
         remoteReplicaInfos = createRemoteReplicaInfos(peerReplicas, replicaId);
-        updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
       }
+      updatePartitionInfoMaps(remoteReplicaInfos, replicaId);
       logger.info("Assigning thread for {}", replicaId.getPartitionId());
       addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);
       // No need to update persistor to explicitly persist tokens for new replica because background persistor will
