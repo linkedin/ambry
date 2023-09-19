@@ -141,7 +141,9 @@ public class HelixFullAutoReconstructResourceTool {
     }
 
     for (Map.Entry<Integer, List<String>> entry : cliqueToHosts.entrySet()) {
-      System.out.println("Clique = " + entry.getKey() + ", Hosts = " + entry.getValue());
+      System.out.println("Resource = " + entry.getKey() + ", Hosts = " + entry.getValue());
+      System.out.println();
+      System.out.println();
     }
   }
 
@@ -183,7 +185,11 @@ public class HelixFullAutoReconstructResourceTool {
     }
 
     for (Map.Entry<Integer, Set<String>> entry : cliqueToPartitions.entrySet()) {
-      System.out.println("Clique = " + entry.getKey() + ", Partitions = " + entry.getValue());
+      System.out.println(
+          "Resource = " + entry.getKey() + ", number of partitions = " + entry.getValue().size() + ", Partitions = "
+              + entry.getValue());
+      System.out.println();
+      System.out.println();
     }
   }
 
