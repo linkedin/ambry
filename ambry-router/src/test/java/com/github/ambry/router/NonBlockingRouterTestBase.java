@@ -89,6 +89,7 @@ public class NonBlockingRouterTestBase {
   protected static final int PUT_CONTENT_SIZE = 1000;
   protected static final int USER_METADATA_SIZE = 10;
   protected static final int NOT_FOUND_CACHE_TTL_MS = 1000;
+  protected static final short LIFE_VERSION_FROM_FRONTEND = -1;
   protected final AtomicReference<MockSelectorState> mockSelectorState = new AtomicReference<>(MockSelectorState.Good);
   protected final MockTime mockTime;
   protected final MockKeyManagementService kms;
