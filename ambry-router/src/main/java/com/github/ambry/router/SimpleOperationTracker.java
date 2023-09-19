@@ -383,13 +383,17 @@ class SimpleOperationTracker implements OperationTracker {
   }
 
   /**
-   * @param eligibleReplicaCount eligible replicas to send Delete Requests.
-   * @return true if it's possible to run offline repair for the Delete
+   * @param eligibleReplicaCount eligible replicas to send Requests.
+   * @return true if it's possible to run offline repair for the Delete or TtlUpdate
    */
   public boolean possibleRunOfflineRepair(int eligibleReplicaCount) {
-    // LOCAL_CONSISTENCY_TODO: after enabled TtlUpdate offline repair in TtlUpdateOperation, add the condition here.
-    return (eligibleReplicaCount >= 1 && routerOperation == RouterOperation.DeleteOperation
-        && routerConfig.routerDeleteOfflineRepairEnabled);
+    // @formatter:off
+    return (eligibleReplicaCount >= 1
+        && (
+              (routerOperation == RouterOperation.TtlUpdateOperation && routerConfig.routerTtlUpdateOfflineRepairEnabled)
+              || (routerOperation == RouterOperation.DeleteOperation && routerConfig.routerDeleteOfflineRepairEnabled)
+           ));
+    // @formatter:on
   }
 
   /**

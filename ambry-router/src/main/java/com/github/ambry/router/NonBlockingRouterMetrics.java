@@ -130,6 +130,8 @@ public class NonBlockingRouterMetrics {
   public final Counter replicateBlobErrorCount;
   public final Counter offlineRepairOnDeleteCount;
   public final Counter offlineRepairOnDeleteErrorCount;
+  public final Counter offlineRepairOnTtlUpdateCount;
+  public final Counter offlineRepairOnTtlUpdateErrorCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
 
@@ -474,6 +476,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnDeleteCount"));
     offlineRepairOnDeleteErrorCount =
         metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnDeleteErrorCount"));
+    offlineRepairOnTtlUpdateCount =
+        metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnTtlUpdateCount"));
+    offlineRepairOnTtlUpdateErrorCount =
+        metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnTtlUpdateErrorCount"));
 
     // Performance metrics for operation managers.
     putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));

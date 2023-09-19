@@ -28,6 +28,8 @@ import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.repair.RepairRequestRecord;
+import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.utils.Time;
 import java.util.Iterator;
@@ -37,6 +39,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.store.MessageInfo.*;
 
 
 /**
@@ -72,6 +76,8 @@ class TtlUpdateOperation {
   private final NonBlockingRouter nonBlockingRouter;
   private ReplicateBlobCallback replicateBlobCallback;
   private final String originatingDcName;
+
+  private final RepairRequestsDb repairRequestsDb;
 
   /**
    * Instantiates a {@link TtlUpdateOperation}.
@@ -109,6 +115,7 @@ class TtlUpdateOperation {
     this.operationQuotaCharger =
         new OperationQuotaCharger(quotaChargeCallback, blobId, this.getClass().getSimpleName(), routerMetrics);
     this.nonBlockingRouter = nonBlockingRouter;
+    this.repairRequestsDb = nonBlockingRouter.getRepairRequestsDb();
   }
 
   /**
@@ -368,10 +375,31 @@ class TtlUpdateOperation {
     // 2. and at least one replica returned NOT_FOUND status.
     // 3. and at least one replica returned successful status.
     // 4. and error code precedence is over AmbryUnavailable. If we have one success and one delete, shouldn't do retry.
+    // @formatter:off
     RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
-    return (routerConfig.routerRepairWithReplicateBlobOnTtlUpdateEnabled && operationTracker.hasNotFound()
-        && operationTracker.getSuccessCount() > 0 && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(
-        RouterErrorCode.AmbryUnavailable));
+    return (routerConfig.routerRepairWithReplicateBlobOnTtlUpdateEnabled
+        && operationTracker.hasNotFound()
+        && operationTracker.getSuccessCount() > 0
+        && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable));
+    // @formatter:on
+  }
+
+  /**
+   * Check if we want to save the partially failed request to the secondary storage and fix it offline.
+   * @return true if choose to fix it offline.
+   */
+  private boolean shouldRunOfflineRepair() {
+    // the conditions to offline repair the TtlUpdate request.
+    // 1. the feature is enabled and the repair request db is not null
+    // 2. and at least one replica returned successful status.
+    // 3. and error code precedence is over AmbryUnavailable. We don't do offline repair if BlobExpired or TooManyRequests.
+    RouterErrorCode errorCode = ((RouterException) operationException.get()).getErrorCode();
+    // @formatter:off
+    return (repairRequestsDb != null
+        && routerConfig.routerTtlUpdateOfflineRepairEnabled
+        && operationTracker.getSuccessCount() > 0
+        && getPrecedenceLevel(errorCode) >= getPrecedenceLevel(RouterErrorCode.AmbryUnavailable));
+    // @formatter:on
   }
 
   /**
@@ -398,6 +426,28 @@ class TtlUpdateOperation {
         } else if (operationTracker.hasSomeUnavailability()) {
           setOperationException(new RouterException("TtlUpdateOperation failed possibly because of offline replicas",
               RouterErrorCode.AmbryUnavailable));
+        }
+
+        // check if we want to record the partially failed request and repair in the background.
+        if (shouldRunOfflineRepair()) {
+          RepairRequestRecord record = null;
+          try {
+            List<ReplicaId> successfulReplica = operationTracker.getSuccessReplica();
+            DataNodeId sourceDataNode = successfulReplica.get(0).getDataNodeId();
+            record =
+                new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
+                    sourceDataNode.getPort(), RepairRequestRecord.OperationType.TtlUpdateRequest, operationTimeMs,
+                    LIFE_VERSION_FROM_FRONTEND, expiresAtMs);
+            repairRequestsDb.putRepairRequests(record);
+
+            // treat the ttlUpdate command as a success
+            operationException.set(null);
+            routerMetrics.offlineRepairOnTtlUpdateCount.inc();
+            LOGGER.info("RepairRequest : inject repair request {} to the database {}", record, repairRequestsDb);
+          } catch (Exception e) {
+            routerMetrics.offlineRepairOnTtlUpdateErrorCount.inc();
+            LOGGER.error("RepairRequest : failed to write the {} to the database {}", record, repairRequestsDb);
+          }
         }
       }
 
