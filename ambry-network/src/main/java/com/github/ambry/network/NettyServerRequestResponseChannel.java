@@ -23,7 +23,6 @@ import com.github.ambry.utils.SystemTime;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +36,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   private final NetworkRequestQueue networkRequestQueue;
   private final ServerMetrics serverMetrics;
   private final ServerRequestResponseHelper requestResponseHelper;
+  protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
 
   public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics,
       ServerMetrics serverMetrics, ServerRequestResponseHelper requestResponseHelper) {
@@ -147,8 +147,12 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
         http2ServerMetrics.requestResponseChannelDroppedOnOverflowCount.inc();
       }
       serverMetrics.totalRequestDroppedRate.mark();
+      // Log the request and response in public access logs
+      long requestProcessingTime = SystemTime.getInstance().milliseconds() - networkRequest.getStartTimeInMs();
+      publicAccessLogger.info("{} {} processingTime {}", request, response, requestProcessingTime);
       sendResponse(response, networkRequest, null);
-    } catch (IOException | InterruptedException e) {
+    } catch (Exception e) {
+      logger.error("Error while handling request {} closing connection", networkRequest, e);
       closeConnection(networkRequest);
     } finally {
       networkRequest.release();

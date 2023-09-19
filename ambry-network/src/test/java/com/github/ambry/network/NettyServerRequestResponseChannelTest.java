@@ -21,6 +21,7 @@ import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.utils.TestUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import java.io.IOException;
 import java.util.Properties;
 import org.junit.Assert;
 import org.junit.Test;
@@ -67,6 +68,27 @@ public class NettyServerRequestResponseChannelTest {
     channel.sendRequest(createNettyServerRequest(1));
     // Verify rejectRequest() is invoked
     verify(channel, atLeastOnce()).rejectRequest(any(), anyBoolean());
+  }
+
+  @Test
+  public void testRejectRequestsWithException() throws IOException, InterruptedException {
+    Properties properties = new Properties();
+    properties.setProperty(NetworkConfig.REQUEST_QUEUE_CAPACITY, "2");
+    ServerRequestResponseHelper requestResponseHelper = mock(ServerRequestResponseHelper.class);
+    NettyServerRequestResponseChannel channel =
+        spy(new NettyServerRequestResponseChannel(new NetworkConfig(new VerifiableProperties(properties)),
+            new Http2ServerMetrics(new MetricRegistry()), new ServerMetrics(new MetricRegistry(), this.getClass()),
+            requestResponseHelper));
+    when(requestResponseHelper.getDecodedRequest(any())).thenThrow(
+        new UnsupportedOperationException("Request type not supported"));
+    // Fill up channel
+    channel.sendRequest(createNettyServerRequest(1));
+    channel.sendRequest(createNettyServerRequest(1));
+    channel.sendRequest(createNettyServerRequest(1));
+    // Verify rejectRequest() is invoked for last request
+    verify(channel, times(1)).rejectRequest(any(), anyBoolean());
+    // Verify close connection is invoked due to exception
+    verify(channel, times(1)).closeConnection(any());
   }
 
   /**
