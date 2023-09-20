@@ -161,7 +161,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
       long requestProcessingTime = SystemTime.getInstance().milliseconds() - networkRequest.getStartTimeInMs();
       publicAccessLogger.info("{} {} processingTime {}", request, response, requestProcessingTime);
       sendResponse(response, networkRequest, null);
-    } catch (Exception e) {
+    } catch (Throwable e) {
       logger.error("Error while handling request {} closing connection", networkRequest, e);
       closeConnection(networkRequest);
     } finally {
