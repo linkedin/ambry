@@ -72,7 +72,7 @@ public class TtlUpdateRequest extends RequestOrResponse {
    * @param operationTimeMs the time of the operation (in ms)
    * @param version the version of the TtlUpdateRequest
    */
-  TtlUpdateRequest(int correlationId, String clientId, BlobId blobId, long expiresAtMs, long operationTimeMs,
+  public TtlUpdateRequest(int correlationId, String clientId, BlobId blobId, long expiresAtMs, long operationTimeMs,
       short version) {
     super(TtlUpdateRequest, version, correlationId, clientId);
     this.blobId = blobId;
