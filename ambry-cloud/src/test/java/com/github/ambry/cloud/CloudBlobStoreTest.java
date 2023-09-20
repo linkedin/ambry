@@ -14,6 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -115,17 +117,23 @@ public class CloudBlobStoreTest {
   private final int defaultCacheLimit = 1000;
   private CloudConfig cloudConfig;
 
+  protected String ambryBackupVersion;
+  public static final String AZURITE_CONNECTION_STRING =  "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;" +
+      "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;" +
+      "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;";
   /**
-   * Run in both VCR and live serving mode.
-   * @return an array with both {@code false} and {@code true}.
+   * Test parameters
+   * Version 1 = Legacy VCR code and tests
+   * Version 2 = VCR 2.0 with Sync cloud destination - AzureCloudDestinationSync
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{CloudConfig.AMBRY_BACKUP_VERSION_2}});
   }
 
-  public CloudBlobStoreTest(boolean isVcr) throws Exception {
-    this.isVcr = isVcr;
+  public CloudBlobStoreTest(String ambryBackupVersion) throws Exception {
+    this.ambryBackupVersion = ambryBackupVersion;
+    this.isVcr = true; // Just hardcode true. false is for blueshift, which is deprecated.
     partitionId = new MockPartitionId();
     clusterMap = new MockClusterMap();
   }
@@ -148,9 +156,21 @@ public class CloudBlobStoreTest {
     properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(cacheLimit));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     cloudConfig = new CloudConfig(verifiableProperties);
-    dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList(), clusterMap)
-        : mock(CloudDestination.class);
-    vcrMetrics = new VcrMetrics(new MetricRegistry());
+    MetricRegistry metricRegistry = new MetricRegistry();
+    vcrMetrics = new VcrMetrics(metricRegistry);
+    if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
+      dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList(), clusterMap)
+          : mock(CloudDestination.class);
+    } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
+      // This test suite is a mess because it has been hacked thrice for 3 different use-cases.
+      // You will see a lot of if-else conditions.
+
+      // To run the azurite azure storage desktop emulator:
+      // $ npm install -g azurite
+      // $ azurite
+      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AZURITE_CONNECTION_STRING);
+      dest = new AzureCloudDestinationSync(verifiableProperties, metricRegistry, clusterMap);
+    }
     store = new CloudBlobStore(verifiableProperties, partitionId, dest, clusterMap, vcrMetrics);
     if (start) {
       store.start();
@@ -168,6 +188,16 @@ public class CloudBlobStoreTest {
     properties.setProperty("clustermap.resolve.hostnames", "false");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(64));
     properties.setProperty(CloudConfig.CLOUD_IS_VCR, String.valueOf(isVcr));
+  }
+
+  @Test
+  public void testAzureCloudDestinationSync() {
+    Properties properties = new Properties();
+    setBasicProperties(properties);
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AZURITE_CONNECTION_STRING);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    MetricRegistry metricRegistry = new MetricRegistry();
+    dest = new AzureCloudDestinationSync(verifiableProperties, metricRegistry, clusterMap);
   }
 
   /** Test the CloudBlobStore put method. */
@@ -206,9 +236,11 @@ public class CloudBlobStoreTest {
       }
     }
     store.put(messageWriteSet);
-    LatchBasedInMemoryCloudDestination inMemoryDest = (LatchBasedInMemoryCloudDestination) dest;
-    assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
-    assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
+    if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
+      LatchBasedInMemoryCloudDestination inMemoryDest = (LatchBasedInMemoryCloudDestination) dest;
+      assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
+      assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
+    }
     assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
     verifyCacheHits(expectedUploads, 0);
 
@@ -227,8 +259,11 @@ public class CloudBlobStoreTest {
       }
     }
     int expectedSkips = isVcr ? expectedUploads : 0;
-    assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
-    assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
+    if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
+      LatchBasedInMemoryCloudDestination inMemoryDest = (LatchBasedInMemoryCloudDestination) dest;
+      assertEquals("Unexpected blobs count", expectedUploads, inMemoryDest.getBlobsUploaded());
+      assertEquals("Unexpected byte count", expectedBytesUploaded, inMemoryDest.getBytesUploaded());
+    }
     assertEquals("Unexpected skipped count", expectedSkips, vcrMetrics.blobUploadSkippedCount.getCount());
     verifyCacheHits(2 * expectedUploads, expectedUploads);
 

@@ -423,12 +423,14 @@ public abstract class StorageClient implements AzureStorageClient {
       /*
        retryPolicyType – null defaults to EXPONENTIAL
        maxTries – null defaults to 4
-       tryTimeoutInSeconds – null defaults to Integer.MAX_VALUE seconds, so set to cloudRequestTimeout
+       tryTimeoutInSeconds – null defaults to Integer.MAX_VALUE seconds, so set to cloudRequestTimeout. Should be between 1 and 2147483647
        retryDelayInMs – null defaults to 4ms when retryPolicyType is EXPONENTIAL
        maxRetryDelayInMs – null defaults to 120ms
        */
+      Integer tryTimeoutInSeconds =
+          Math.toIntExact(Math.max(1, TimeUnit.MILLISECONDS.toSeconds(cloudConfig.cloudRequestTimeout)));
       RequestRetryOptions retryOptions =
-          new RequestRetryOptions(null, null, (int) TimeUnit.MILLISECONDS.toSeconds(cloudConfig.cloudRequestTimeout),
+          new RequestRetryOptions(null, null, tryTimeoutInSeconds,
               null, null, null);
       return buildBlobServiceSyncClient(client, new Configuration(), retryOptions, azureCloudConfig);
     } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
