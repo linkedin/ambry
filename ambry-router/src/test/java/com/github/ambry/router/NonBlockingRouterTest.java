@@ -181,8 +181,9 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           + "{\"url\":\"jdbc:mysql://localhost/AmbryRepairRequests?serverTimezone=UTC\",\"datacenter\":\"DC3\",\"isWriteable\":\"true\",\"username\":\"travis\",\"password\":\"\"}"
           + "]";
       properties.setProperty("mysql.repair.requests.db.info", dbInfo);
-      // enable offline repair for delete
+      // enable offline repair for delete and ttlupdate
       properties.setProperty("router.delete.offline.repair.enabled", "true");
+      properties.setProperty("router.ttlupdate.offline.repair.enabled", "true");
     }
 
     return properties;
@@ -1421,7 +1422,7 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       String blobIdStr =
           router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
               .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      router.updateBlobTtl(blobIdStr, serviceId, -1);
+      router.updateBlobTtl(blobIdStr, serviceId, Utils.Infinite_Time);
       GetBlobResult localGetBlobResult =
           router.getBlob(blobIdStr, new GetBlobOptionsBuilder().build(), null, null).get();
 
@@ -1451,7 +1452,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       assertEqual(localGetBlobResult, remoteGetBlobResult);
       // check the ttl is updated on the remote replica.
-      Assert.assertEquals(remoteGetBlobResult.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds(), -1);
+      Assert.assertEquals(remoteGetBlobResult.getBlobInfo().getBlobProperties().getTimeToLiveInSeconds(),
+          Utils.Infinite_Time);
       layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
     } finally {
       // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
@@ -2502,53 +2504,128 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
-   * Test TTLUpdate first hits 503. Then run ReplicateBlob and Retry. It is successful.
+   * TtlUpdate first hits 503. Then it's either fixed by ODR or by offline repair.
+   * @param enableODR enable On demand replication
+   * @param enableOfflineRepair enable the offline repair
+   * @return a pair of the blob id and source replica which returns the success status.
    * @throws Exception
    */
-  @Test
-  public void testBlobTtlUpdate503AndThenRetrySuccess() throws Exception {
-    try {
-      String updateServiceId = "update-service";
-      MockServerLayout layout = new MockServerLayout(mockClusterMap);
-      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
-          new LoggingNotificationSystem());
-      setOperationParams();
-      String blobId =
-          router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
-              .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-      assertTtl(router, Collections.singleton(blobId), TimeUnit.DAYS.toSeconds(7));
+  public Pair<BlobId, DataNodeId> blobTtlUpdate503AndThenFixedByODROrOffline(boolean enableODR,
+      boolean enableOfflineRepair) throws Exception {
+    String updateServiceId = "update-service";
+    MockServerLayout layout = new MockServerLayout(mockClusterMap);
+    setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, enableODR, enableOfflineRepair), layout,
+        new LoggingNotificationSystem());
+    setOperationParams();
+    String blobId = router.putBlob(putBlobProperties, putUserMetadata, putChannel, new PutBlobOptionsBuilder().build())
+        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    assertTtl(router, Collections.singleton(blobId), TimeUnit.DAYS.toSeconds(7));
 
-      // set two replicas Replica_Unavailable.
-      DataNodeId sourceDataNode = null;
-      for (MockServer server : layout.getMockServers()) {
-        if (server.getDataCenter().equals(localDcName)) {
-          // local DC, return NO_ERROR for one replica,
-          if (sourceDataNode == null) {
-            sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
-          } else {
-            server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
-          }
-        }
-      }
-      router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get();
-
-      // simulate Replica_Unavailable for all local replicas. Then verify ttl from the remote replica
-      for (MockServer server : layout.getMockServers()) {
-        if (server.getDataCenter().equals(localDcName)) {
+    // set two replicas Replica_Unavailable.
+    DataNodeId sourceDataNode = null;
+    for (MockServer server : layout.getMockServers()) {
+      if (server.getDataCenter().equals(localDcName)) {
+        // local DC, return NO_ERROR for one replica,
+        if (sourceDataNode == null) {
+          sourceDataNode = mockClusterMap.getDataNodeId(server.getHostName(), server.getHostPort());
+        } else {
           server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
         }
       }
-      assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
+    }
 
-      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
+    try {
+      router.updateBlobTtl(blobId, updateServiceId, Utils.Infinite_Time).get();
+      if (!enableODR && !enableOfflineRepair) {
+        fail("Should fail with un-available if ODR and offline repair are disabled.");
+      }
+    } catch (Exception e) {
+      if (!enableODR && !enableOfflineRepair) {
+        RouterException r = (RouterException) e.getCause();
+        Assert.assertEquals(RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+      } else {
+        fail("Should be successful when ODR or offline repair is enabled.");
+      }
+    }
+
+    // simulate Replica_Unavailable for all local replicas. Then verify ttl from the remote replica
+    for (MockServer server : layout.getMockServers()) {
+      if (server.getDataCenter().equals(localDcName)) {
+        server.setServerErrorForAllRequests(ServerErrorCode.Replica_Unavailable);
+      }
+    }
+    try {
+      router.getBlob(blobId, new GetBlobOptionsBuilder().build(), null, null).get();
+      if (enableODR) {
+        assertTtl(router, Collections.singleton(blobId), Utils.Infinite_Time);
+      } else {
+        fail("Should return AmbryUnavailable if ODR is not enabled.");
+      }
+    } catch (Exception e) {
+      RouterException r = (RouterException) e.getCause();
+      if (!enableODR) {
+        Assert.assertEquals("GetBlob error is not expected", RouterErrorCode.AmbryUnavailable, r.getErrorCode());
+      } else {
+        fail("Shouldn't hit exception when ODR is enabled.");
+      }
     } finally {
-      // Since we are using same blob ID for all tests, clear cache which stores blobs that are not found in router.
+      layout.getMockServers().forEach(mockServer -> mockServer.setServerErrorForAllRequests(null));
       router.getNotFoundCache().invalidateAll();
-
       if (router != null) {
         router.close();
       }
     }
+
+    return new Pair<>(RouterUtils.getBlobIdFromString(blobId, mockClusterMap), sourceDataNode);
+  }
+
+  /**
+   * Test TTLUpdate hits 503. Do nothing and fail.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobTtlUpdate503AndThenFail() throws Exception {
+    blobTtlUpdate503AndThenFixedByODROrOffline(false, false);
+  }
+
+  /**
+   * Test TTLUpdate first hits 503. Then run ReplicateBlob and Retry. It is successful.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobTtlUpdate503AndThenODRSuccess() throws Exception {
+    blobTtlUpdate503AndThenFixedByODROrOffline(true, false);
+  }
+
+  /**
+   * Test TTLUpdate first hits 503. Then run offline Repair. It is successful. Database has the record.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobTtlUpdate503AndOfflineRepair() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    Pair<BlobId, DataNodeId> result = blobTtlUpdate503AndThenFixedByODROrOffline(false, true);
+    BlobId blobId = result.getFirst();
+    DataNodeId sourceDataNode = result.getSecond();
+    long operationTime = SystemTime.getInstance().milliseconds();
+    RepairRequestRecord expectedRecord =
+        new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.TtlUpdateRequest, operationTime,
+            LIFE_VERSION_FROM_FRONTEND, Utils.Infinite_Time);
+    verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
+    cleanRepairRequestsDb(repairDb);
+  }
+
+  /**
+   * Test TTLUpdate first hits 503. Enable both ODR and offline repair. But only ODR takes effect. No db record.
+   * @throws Exception
+   */
+  @Test
+  public void testBlobTtlUpdate503AndThenODRAndOffRepair() throws Exception {
+    cleanRepairRequestsDb(repairDb);
+    Pair<BlobId, DataNodeId> result = blobTtlUpdate503AndThenFixedByODROrOffline(true, true);
+    BlobId blobId = result.getFirst();
+    verifyRepairRequestRecordInDb(repairDb, blobId, null);
   }
 
   /**
@@ -2952,7 +3029,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     long operationTime = SystemTime.getInstance().milliseconds();
     RepairRequestRecord expectedRecord =
         new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
-            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, -1);
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime,
+            LIFE_VERSION_FROM_FRONTEND, Utils.Infinite_Time);
     verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
     cleanRepairRequestsDb(repairDb);
   }
@@ -3110,7 +3188,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     long operationTime = SystemTime.getInstance().milliseconds();
     RepairRequestRecord expectedRecord =
         new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
-            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, -1);
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime,
+            LIFE_VERSION_FROM_FRONTEND, Utils.Infinite_Time);
     verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
   }
 
@@ -3260,7 +3339,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     long operationTime = SystemTime.getInstance().milliseconds();
     RepairRequestRecord expectedRecord =
         new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
-            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, -1);
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime,
+            LIFE_VERSION_FROM_FRONTEND, Utils.Infinite_Time);
     verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
     cleanRepairRequestsDb(repairDb);
   }
@@ -3349,7 +3429,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
     long operationTime = SystemTime.getInstance().milliseconds();
     RepairRequestRecord expectedRecord =
         new RepairRequestRecord(blobId.getID(), blobId.getPartition().getId(), sourceDataNode.getHostname(),
-            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime, (short) -1, -1);
+            sourceDataNode.getPort(), RepairRequestRecord.OperationType.DeleteRequest, operationTime,
+            LIFE_VERSION_FROM_FRONTEND, Utils.Infinite_Time);
     verifyRepairRequestRecordInDb(repairDb, blobId, expectedRecord);
   }
 
