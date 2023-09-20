@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -121,9 +122,7 @@ public class CloudBlobStoreTest {
   private CloudConfig cloudConfig;
 
   protected String ambryBackupVersion;
-  public static final String AZURITE_CONNECTION_STRING =  "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;" +
-      "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;" +
-      "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;";
+
   /**
    * Test parameters
    * Version 1 = Legacy VCR code and tests
@@ -166,16 +165,8 @@ public class CloudBlobStoreTest {
           : mock(CloudDestination.class);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
       // TODO: This test suite needs improvements. It has a mixture of code from 3 different use-cases.
-      // You will see a lot of if-else conditions.
-
-      // To run the azurite azure storage desktop emulator:
-      // $ npm install -g azurite
-      // $ azurite
-      // Run the tests on your desktop.
-      // To run unit-tests on each PR, we need to install azurite in github.
-      // Installing azurite via github action takes 45m and still fails.
-      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AZURITE_CONNECTION_STRING);
-      dest = new AzureCloudDestinationSync(verifiableProperties, metricRegistry, clusterMap);
+      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
+      dest = new AzuriteUtils().getAzuriteClient(new VerifiableProperties(properties), metricRegistry, clusterMap);
     }
     store = new CloudBlobStore(verifiableProperties, partitionId, dest, clusterMap, vcrMetrics);
     if (start) {
@@ -196,22 +187,10 @@ public class CloudBlobStoreTest {
     properties.setProperty(CloudConfig.CLOUD_IS_VCR, String.valueOf(isVcr));
   }
 
-  protected boolean connectToAzurite() {
-    try {
-      Properties properties = new Properties();
-      setBasicProperties(properties);
-      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AZURITE_CONNECTION_STRING);
-      dest = new AzureCloudDestinationSync(new VerifiableProperties(properties), new MetricRegistry(), clusterMap);
-      return true;
-    } catch (Exception e) {
-      logger.error("Failed to connect to Azurite due to {}", e.toString());
-      return false;
-    }
-  }
   @Before
   public void beforeTest() {
     assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1) ||
-        (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && connectToAzurite()));
+        (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && new AzuriteUtils().connectToAzurite()));
   }
 
   /** Test the CloudBlobStore put method. */
