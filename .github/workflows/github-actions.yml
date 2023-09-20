@@ -52,6 +52,11 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
 
+      - name: Install and run Azurite
+        run: |
+          npm install -g azurite
+          azurite --silent &
+
   store-test:
 
     runs-on: ubuntu-latest
