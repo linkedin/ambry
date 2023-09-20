@@ -21,10 +21,14 @@ import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PurgeRequest;
+import com.github.ambry.protocol.PurgeResponse;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.ReplicateBlobRequest;
+import com.github.ambry.protocol.ReplicateBlobResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
@@ -86,6 +90,12 @@ public class ServerRequestResponseHelper {
         case AdminRequest:
           request = AdminRequest.readFrom(dis, clusterMap);
           break;
+        case ReplicateBlobRequest:
+          request = ReplicateBlobRequest.readFrom(dis, clusterMap);
+          break;
+        case PurgeRequest:
+          request = PurgeRequest.readFrom(dis, clusterMap);
+          break;
         default:
           throw new UnsupportedOperationException("Request type not supported");
       }
@@ -136,6 +146,12 @@ public class ServerRequestResponseHelper {
         break;
       case AdminRequest:
         response = new AdminResponse(request.getCorrelationId(), request.getClientId(), serverErrorCode);
+        break;
+      case ReplicateBlobRequest:
+        response = new ReplicateBlobResponse(request.getCorrelationId(), request.getClientId(), serverErrorCode);
+        break;
+      case PurgeRequest:
+        response = new PurgeResponse(request.getCorrelationId(), request.getClientId(), serverErrorCode);
         break;
       default:
         throw new UnsupportedOperationException("Request type not supported");

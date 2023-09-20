@@ -23,7 +23,6 @@ import com.github.ambry.utils.SystemTime;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +36,7 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
   private final NetworkRequestQueue networkRequestQueue;
   private final ServerMetrics serverMetrics;
   private final ServerRequestResponseHelper requestResponseHelper;
+  protected static final Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
 
   public NettyServerRequestResponseChannel(NetworkConfig config, Http2ServerMetrics http2ServerMetrics,
       ServerMetrics serverMetrics, ServerRequestResponseHelper requestResponseHelper) {
@@ -57,6 +57,17 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     }
     this.http2ServerMetrics = http2ServerMetrics;
     serverMetrics.registerRequestQueuesMetrics(networkRequestQueue::size);
+  }
+
+  /**
+   * Test constructor
+   */
+  public NettyServerRequestResponseChannel(Http2ServerMetrics http2ServerMetrics, ServerMetrics serverMetrics,
+      ServerRequestResponseHelper requestResponseHelper, NetworkRequestQueue networkRequestQueue) {
+    this.http2ServerMetrics = http2ServerMetrics;
+    this.networkRequestQueue = networkRequestQueue;
+    this.serverMetrics = serverMetrics;
+    this.requestResponseHelper = requestResponseHelper;
   }
 
   /** Send a request to be handled */
@@ -137,9 +148,8 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
    * @param isExpired      {@code true} if request is expired. Else {@code false}
    */
   void rejectRequest(NetworkRequest networkRequest, boolean isExpired) throws InterruptedException {
-    RequestOrResponse request;
     try {
-      request = requestResponseHelper.getDecodedRequest(networkRequest);
+      RequestOrResponse request = requestResponseHelper.getDecodedRequest(networkRequest);
       Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
       if (isExpired) {
         http2ServerMetrics.requestResponseChannelDroppedOnExpiryCount.inc();
@@ -147,8 +157,12 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
         http2ServerMetrics.requestResponseChannelDroppedOnOverflowCount.inc();
       }
       serverMetrics.totalRequestDroppedRate.mark();
+      // Log the request and response in public access logs
+      long requestProcessingTime = SystemTime.getInstance().milliseconds() - networkRequest.getStartTimeInMs();
+      publicAccessLogger.info("{} {} processingTime {}", request, response, requestProcessingTime);
       sendResponse(response, networkRequest, null);
-    } catch (IOException | InterruptedException e) {
+    } catch (Throwable e) {
+      logger.error("Error while handling request {} closing connection", networkRequest, e);
       closeConnection(networkRequest);
     } finally {
       networkRequest.release();

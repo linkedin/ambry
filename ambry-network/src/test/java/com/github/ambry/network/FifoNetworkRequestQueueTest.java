@@ -28,39 +28,43 @@ public class FifoNetworkRequestQueueTest {
   public void testOffer() throws InterruptedException {
     MockTime mockTime = new MockTime();
     FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, mockTime, capacity);
-    int numRequests = 5;
-    for (int i = 0; i < numRequests; i++) {
-      requestQueue.offer(new MockRequest(0));
-    }
-    assertEquals("Mismatch in number of active requests", numRequests, requestQueue.size());
+    MockRequest mockRequest = new MockRequest(0);
+    requestQueue.offer(mockRequest);
+    assertEquals("Mismatch in size of the queue", 1, requestQueue.size());
+    assertEquals("Mismatch in request de-queued", mockRequest, requestQueue.take());
+    assertEquals("Mismatch in size of the queue", 0, requestQueue.size());
   }
 
   @Test
-  public void testTake() throws InterruptedException {
+  public void testExpiry() throws InterruptedException {
     MockTime mockTime = new MockTime();
     FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, mockTime, capacity);
-
-    // Test de-queuing a request
-    MockRequest sentRequest = new MockRequest(0);
-    requestQueue.offer(sentRequest);
+    MockRequest firstRequest = new MockRequest(0);
+    requestQueue.offer(firstRequest);
+    mockTime.sleep(timeout + 1);
+    MockRequest secondRequest = new MockRequest(0);
+    requestQueue.offer(secondRequest);
+    // 1. Verify 1st request is expired
     NetworkRequest receivedRequest = requestQueue.take();
-    assertEquals("Mismatch in request queued", sentRequest, receivedRequest);
-
-    // Test case where request is valid
-    requestQueue.offer(sentRequest);
-    mockTime.sleep(timeout - 1);
+    assertEquals("Mismatch in request queued", firstRequest, receivedRequest);
+    assertTrue("Request should be expired", requestQueue.isExpired(receivedRequest));
+    // 2. Verify 2nd request is valid
     receivedRequest = requestQueue.take();
-    assertEquals("Requests to serve must not be empty", sentRequest, receivedRequest);
+    assertEquals("Mismatch in request queued", secondRequest, receivedRequest);
+    assertTrue("Request should not be expired", requestQueue.isExpired(receivedRequest));
   }
 
   @Test
-  public void testSize() throws InterruptedException {
-    int size = 5;
-    FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, new MockTime(), capacity);
-    for (int i = 0; i < size; i++) {
-      requestQueue.offer(new MockRequest(0));
-    }
-    assertEquals("Mismatch in size of queue", size, requestQueue.size());
+  public void testCapacity() throws InterruptedException {
+    MockTime mockTime = new MockTime();
+    // Keep capacity as 2
+    int capacity = 2;
+    FifoNetworkRequestQueue requestQueue = new FifoNetworkRequestQueue(timeout, mockTime, capacity);
+    // Verify 2 requests are able to be queued
+    assertTrue("Queuing should be successful", requestQueue.offer(new MockRequest(0)));
+    assertTrue("Queuing should be successful", requestQueue.offer(new MockRequest(0)));
+    // Verify 3rd request fails to be queued
+    assertFalse("Queuing should fail", requestQueue.offer(new MockRequest(0)));
   }
 
   /**
