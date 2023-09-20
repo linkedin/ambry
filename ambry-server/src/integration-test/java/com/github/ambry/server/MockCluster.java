@@ -257,6 +257,7 @@ public class MockCluster {
     props.setProperty("store.deleted.message.retention.minutes", "60");
     props.setProperty("store.validate.authorization", "true");
     props.setProperty("store.segment.size.in.bytes", Long.toString(MockReplicaId.MOCK_REPLICA_CAPACITY / 10));
+    props.setProperty("store.ttl.update.buffer.time.seconds", "0");
     props.setProperty("replication.token.flush.interval.seconds", "5");
     props.setProperty("replication.validate.message.stream", "true");
     props.setProperty("clustermap.cluster.name", "test");
