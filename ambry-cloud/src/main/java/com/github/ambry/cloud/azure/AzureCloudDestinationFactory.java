@@ -40,6 +40,8 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   private final AzureReplicationFeed.FeedType azureReplicationFeedType;
   private final ClusterMap clusterMap;
 
+  protected VerifiableProperties verifiableProperties;
+  protected MetricRegistry metricRegistry;
   /**
    * Constructor for {@link AzureCloudDestinationFactory}
    * @param verifiableProperties properties containing configs.
@@ -54,19 +56,28 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
     azureMetrics = new AzureMetrics(metricRegistry);
     azureReplicationFeedType = getReplicationFeedType(verifiableProperties);
     this.clusterMap = clusterMap;
+    this.verifiableProperties = verifiableProperties;
+    this.metricRegistry = metricRegistry;
   }
 
   @Override
   public CloudDestination getCloudDestination() throws IllegalStateException {
-    try {
-      AzureCloudDestination dest =
-          new AzureCloudDestination(cloudConfig, azureCloudConfig, clusterName, vcrMetrics, azureMetrics,
-              azureReplicationFeedType, clusterMap);
-      dest.testAzureConnectivity();
-      return dest;
-    } catch (Exception e) {
-      logger.error("Error initializing Azure destination: {}", e.getMessage());
-      throw (e instanceof IllegalStateException) ? (IllegalStateException) e : new IllegalStateException(e);
+    if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
+      try {
+        AzureCloudDestination dest =
+            new AzureCloudDestination(cloudConfig, azureCloudConfig, clusterName, vcrMetrics, azureMetrics,
+                azureReplicationFeedType, clusterMap);
+        dest.testAzureConnectivity();
+        return dest;
+      } catch (Exception e) {
+        logger.error("Error initializing Azure destination: {}", e.getMessage());
+        throw (e instanceof IllegalStateException) ? (IllegalStateException) e : new IllegalStateException(e);
+      }
+    } else if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
+      return new AzureCloudDestinationSync(verifiableProperties, metricRegistry, clusterMap);
+    }  else {
+      // Invalid backup version
+      throw new RuntimeException(String.format("Invalid azure backup version %s", cloudConfig.ambryBackupVersion));
     }
   }
 

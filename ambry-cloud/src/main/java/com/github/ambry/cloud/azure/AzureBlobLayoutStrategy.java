@@ -149,6 +149,9 @@ public class AzureBlobLayoutStrategy {
     String blobIdStr = blobMetadata.getId();
     int nameVersion = blobMetadata.getNameSchemeVersion();
     switch (nameVersion) {
+      case 1:
+        // snalli@: I have discussed thoroughly with MSFT that adding a 4 random char at the beginning does not help at all
+        return blobIdStr;
       default:
         // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
         return blobIdStr.substring(blobIdStr.length() - 4) + BLOB_NAME_SEPARATOR + blobIdStr;

@@ -199,33 +199,20 @@ public class VcrServer {
       VcrMetrics vcrMetrics = new VcrMetrics(registry);
 
       logger.info("Ambry backup version = {}", cloudConfig.ambryBackupVersion);
-      if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
-        // Backup 1.0
-        if (cloudDestinationFactory == null) {
-          cloudDestinationFactory =
-              Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap);
-        }
-        cloudDestination = cloudDestinationFactory.getCloudDestination();
-        vcrClusterParticipant =
-            ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass, cloudConfig,
-                clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
-                registry)).getVcrClusterParticipant();
-        cloudStorageManager = new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
-        vcrReplicationManager = new VcrReplicationManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
-            cloudStorageManager, storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler,
-            networkClientFactory, vcrMetrics, notificationSystem, storeKeyConverterFactory,
-            serverConfig.serverMessageTransformer);
-      } else if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
-        // Backup 2.0
-        vcrClusterParticipant = new HelixVcrClusterParticipantV2(properties, registry, clusterMap, accountService);
-        cloudStorageManager = new CloudStorageManagerV2(properties, registry, clusterMap);
-        vcrReplicationManager =
-            new VcrReplicationManagerV2(properties, registry, clusterMap, cloudStorageManager, storeKeyFactory,
-                vcrClusterParticipant, scheduler, networkClientFactory, notificationSystem, storeKeyConverterFactory);
-      } else {
-        // Invalid backup version
-        throw new RuntimeException(String.format("Invalid azure backup version %s", cloudConfig.ambryBackupVersion));
+      if (cloudDestinationFactory == null) {
+        cloudDestinationFactory =
+            Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap);
       }
+      cloudDestination = cloudDestinationFactory.getCloudDestination();
+      vcrClusterParticipant =
+          ((VcrClusterAgentsFactory) Utils.getObj(cloudConfig.vcrClusterAgentsFactoryClass, cloudConfig,
+              clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
+              registry)).getVcrClusterParticipant();
+      cloudStorageManager = new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
+      vcrReplicationManager = new VcrReplicationManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
+          cloudStorageManager, storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler,
+          networkClientFactory, vcrMetrics, notificationSystem, storeKeyConverterFactory,
+          serverConfig.serverMessageTransformer);
       vcrReplicationManager.start();
 
       DataNodeId currentNode = vcrClusterParticipant.getCurrentDataNodeId();
