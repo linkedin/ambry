@@ -79,6 +79,7 @@ public class AzureMetrics {
   public static final String COMPACTION_PROGRESS_WRITE_ERROR_COUNT = "CompactionProgressWriteErrorCount";
   public static final String ABS_TOKEN_REFRESH_ATTEMPT_COUNT = "ABSTokenRefreshAttemptCount";
   public static final String ABS_TOKEN_PERSIST_FAILURE_COUNT = "ABSTokenPersistFailureCount";
+  public static final String ABS_TOKEN_RETRIEVE_FAILURE_COUNT = "ABSTokenRetrieveFailureCount";
   public static final String ABS_FORBIDDEN_EXCEPTION_COUNT = "ABSForbiddenExceptionCount";
   public static final String STORAGE_CLIENT_OPERATION_RETRY_COUNT = "StorageClientOperationRetryCount";
   public static final String STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT = "StorageClientOperationExceptionCount";
@@ -148,6 +149,8 @@ public class AzureMetrics {
   public final Counter compactionProgressWriteErrorCount;
   public final Counter absTokenRefreshAttemptCount;
   public final Counter absTokenPersistFailureCount;
+  public final Counter absTokenRetrieveFailureCount;
+
   public final Counter absForbiddenExceptionCount;
   public final Counter storageClientOperationRetryCount;
   public final Counter storageClientOperationExceptionCount;
@@ -237,6 +240,8 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(StorageClient.class, ABS_TOKEN_REFRESH_ATTEMPT_COUNT));
     absTokenPersistFailureCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, ABS_TOKEN_PERSIST_FAILURE_COUNT));
+    absTokenRetrieveFailureCount =
+        registry.counter(MetricRegistry.name(AzureCloudDestination.class, ABS_TOKEN_RETRIEVE_FAILURE_COUNT));
     absForbiddenExceptionCount =
         registry.counter(MetricRegistry.name(StorageClient.class, ABS_FORBIDDEN_EXCEPTION_COUNT));
     storageClientOperationRetryCount =
