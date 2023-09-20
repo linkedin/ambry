@@ -1,3 +1,16 @@
+/**
+ * Copyright 2023 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.rest.PagedIterable;
@@ -62,10 +75,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param clusterMap
    */
   public AzureCloudDestinationSync(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
-    // azureCloudConfig.azureNameSchemeVersion = 1
-    // azureCloudConfig.azureBlobContainerStrategy = PARTITION
-    // cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
-    // cloudConfig.recentBlobCacheLimit = 0; unnecessary, repl-logic avoids duplicates
+    /**
+     * These are the configs to be changed for vcr-2.0
+     *
+     *    azureCloudConfig.azureNameSchemeVersion = 1
+     *    azureCloudConfig.azureBlobContainerStrategy = PARTITION
+     *    cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
+     *    cloudConfig.recentBlobCacheLimit = 0; unnecessary, repl-logic avoids duplicate messages any ways
+     */
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.cloudConfig = new CloudConfig(verifiableProperties);
@@ -165,12 +182,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
   public boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) throws CloudStorageException {
     /**
-     * Current impl is inefficient because the caller does at most a 4MB memcpy from src to dst stream in CloudBlobStore.appendFrom - for each blob !
-     * messageSievingInputStream has a list of input-streams already, where each stream is a blob.
-     * We can just pass the src input-stream to azure-sdk as shown below, and it would take care of the rest.
+     * Current impl of this fn is inefficient because the caller does a 0-4MB memcpy from src to dst stream
+     * in CloudBlobStore.appendFrom - for each blob !
+     * But due to historical code design, we are restricted to implement in the current inefficient way.
      *
-     *  CloudBlobStore.put(messageWriteSet) can directly call AzureCloudDestinationSync.uploadBlob(messageWriteSet) and,
-     *  then we can do this:
+     * Efficient way is to just pass the src input-stream to azure-sdk as shown below.
+     * messageSievingInputStream has a list of input-streams already, where each stream is a blob.
+     *
+     *  If CloudBlobStore.put(messageWriteSet) can directly call AzureCloudDestinationSync.uploadBlob(messageWriteSet),
+     *  then we can do this here:
      *
      *     MessageSievingInputStream messageSievingInputStream =
      *         (MessageSievingInputStream) ((MessageFormatWriteSet) messageSetToWrite).getStreamToWrite();
@@ -180,7 +200,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *     // Pass the stream to azure-sdk, no need of a memcpy
      *     BlobParallelUploadOptions blobParallelUploadOptions = new BlobParallelUploadOptions(messageStreamListIter.next());
      *
-     * But due to historical code design, we are restricted to implement in the current inefficient way.
      */
     Timer.Context storageTimer = null;
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(cloudBlobMetadata);
