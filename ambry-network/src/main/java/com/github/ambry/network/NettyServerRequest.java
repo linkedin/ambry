@@ -36,6 +36,16 @@ public class NettyServerRequest extends AbstractByteBufHolder<NettyServerRequest
     this.startTimeInMs = System.currentTimeMillis();
   }
 
+  /**
+   * Test constructor
+   */
+  public NettyServerRequest(ChannelHandlerContext ctx, ByteBuf content, long creationTime) {
+    this.ctx = ctx;
+    this.content = content;
+    this.inputStream = new NettyByteBufDataInputStream(content);
+    this.startTimeInMs = creationTime;
+  }
+
   ChannelHandlerContext getCtx() {
     return ctx;
   }

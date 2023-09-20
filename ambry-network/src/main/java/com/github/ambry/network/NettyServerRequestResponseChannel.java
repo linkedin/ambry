@@ -59,6 +59,17 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
     serverMetrics.registerRequestQueuesMetrics(networkRequestQueue::size);
   }
 
+  /**
+   * Test constructor
+   */
+  public NettyServerRequestResponseChannel(Http2ServerMetrics http2ServerMetrics, ServerMetrics serverMetrics,
+      ServerRequestResponseHelper requestResponseHelper, NetworkRequestQueue networkRequestQueue) {
+    this.http2ServerMetrics = http2ServerMetrics;
+    this.networkRequestQueue = networkRequestQueue;
+    this.serverMetrics = serverMetrics;
+    this.requestResponseHelper = requestResponseHelper;
+  }
+
   /** Send a request to be handled */
   @Override
   public void sendRequest(NetworkRequest request) throws InterruptedException {
@@ -137,9 +148,8 @@ public class NettyServerRequestResponseChannel implements RequestResponseChannel
    * @param isExpired      {@code true} if request is expired. Else {@code false}
    */
   void rejectRequest(NetworkRequest networkRequest, boolean isExpired) throws InterruptedException {
-    RequestOrResponse request;
     try {
-      request = requestResponseHelper.getDecodedRequest(networkRequest);
+      RequestOrResponse request = requestResponseHelper.getDecodedRequest(networkRequest);
       Response response = requestResponseHelper.createErrorResponse(request, ServerErrorCode.Retry_After_Backoff);
       if (isExpired) {
         http2ServerMetrics.requestResponseChannelDroppedOnExpiryCount.inc();
