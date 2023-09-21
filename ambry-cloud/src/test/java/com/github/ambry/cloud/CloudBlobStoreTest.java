@@ -130,7 +130,7 @@ public class CloudBlobStoreTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{CloudConfig.AMBRY_BACKUP_VERSION_2}});
+    return Arrays.asList(new Object[][]{{CloudConfig.AMBRY_BACKUP_VERSION_1}, {CloudConfig.AMBRY_BACKUP_VERSION_2}});
   }
 
   public CloudBlobStoreTest(String ambryBackupVersion) throws Exception {
@@ -165,8 +165,11 @@ public class CloudBlobStoreTest {
           : mock(CloudDestination.class);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
       // TODO: This test suite needs improvements. It has a mixture of code from 3 different use-cases.
-      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
-      dest = new AzuriteUtils().getAzuriteClient(new VerifiableProperties(properties), metricRegistry, clusterMap);
+      properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
+      properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "PARTITION");
+      properties.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1");
+      // Azure container name will be <clusterName>-<partitionId>, so dev-0 for this test
+      dest = new AzuriteUtils().getAzuriteClient(properties, metricRegistry, clusterMap);
     }
     store = new CloudBlobStore(verifiableProperties, partitionId, dest, clusterMap, vcrMetrics);
     if (start) {

@@ -50,8 +50,7 @@ public class AzuriteUtils {
       properties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "localhost");
       properties.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, "localhost");
       properties.setProperty("clustermap.resolve.hostnames", "false");
-      properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AZURITE_CONNECTION_STRING);
-      getAzuriteClient(new VerifiableProperties(properties), new MetricRegistry(), null);
+      getAzuriteClient(properties, new MetricRegistry(), null);
       return true;
     } catch (Exception e) {
       logger.error("Failed to connect to AzuriteUtils due to {}", e.toString());
@@ -61,12 +60,13 @@ public class AzuriteUtils {
 
   /**
    * Returns a client to connect to Azurite
-   * @param verifiableProperties Properties
+   * @param Properties Properties
    * @param metricRegistry Metrics
    * @param clusterMap Cluster map
    * @return Sync client to connect to Azurite
    */
-  public AzureCloudDestinationSync getAzuriteClient(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
-    return new AzureCloudDestinationSync(verifiableProperties, metricRegistry,  clusterMap);
+  public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
+    return new AzureCloudDestinationSync(new VerifiableProperties(properties), metricRegistry,  clusterMap);
   }
 }

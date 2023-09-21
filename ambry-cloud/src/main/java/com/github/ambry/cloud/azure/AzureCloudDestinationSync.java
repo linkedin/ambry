@@ -202,6 +202,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *
      */
     Timer.Context storageTimer = null;
+    // setNameSchemeVersion is an ugly remnant of legacy code. We have to set it explicitly.
+    cloudBlobMetadata.setNameSchemeVersion(azureCloudConfig.azureNameSchemeVersion);
+    // Unfortunately, Azure cloud does not accept single character container names like 0, 1, a etc.
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(cloudBlobMetadata);
     String blobIdStr = blobLayout.blobFilePath;
     try {
@@ -239,11 +242,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
           && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
         // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
         azureMetrics.blobUploadConflictCount.inc();
-        logger.debug("Failed to upload blob {} to Azure blob storage because it already exists",
-            blobIdStr);
+        logger.debug("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
       }
       azureMetrics.blobUploadErrorCount.inc();
-      logger.error("Failed to upload blob {} to Azure blob storage because {}", blobIdStr,
+      logger.error("Failed to upload blob {} to Azure blob storage because {}", blobLayout,
           e.getMessage());
       throw new RuntimeException(e);
     } finally {

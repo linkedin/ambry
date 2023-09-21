@@ -71,6 +71,12 @@ public class AzureBlobLayoutStrategy {
       this.containerName = containerName;
       this.blobFilePath = blobFilePath;
     }
+
+    @Override
+    public String toString() {
+      String toStr = String.format("[containerName = {}, blobFilePath = {}]", containerName, blobFilePath);
+      return toStr;
+    }
   }
 
   /**
