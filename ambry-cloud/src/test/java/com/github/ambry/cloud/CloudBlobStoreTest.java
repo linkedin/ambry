@@ -168,10 +168,6 @@ public class CloudBlobStoreTest {
           : mock(CloudDestination.class);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
       // TODO: This test suite needs improvements. It has a mixture of code from 3 different use-cases.
-      // V2 does not use cosmos
-      properties.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "does_not_matter");
-      properties.setProperty(AzureCloudConfig.COSMOS_DATABASE, "does_not_matter");
-      properties.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "does_not_matter");
       properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
       properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "PARTITION");
       properties.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1");
