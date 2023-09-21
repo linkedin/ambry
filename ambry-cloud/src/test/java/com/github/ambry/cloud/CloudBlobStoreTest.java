@@ -132,7 +132,7 @@ public class CloudBlobStoreTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{CloudConfig.AMBRY_BACKUP_VERSION_2}});
+    return Arrays.asList(new Object[][]{{CloudConfig.AMBRY_BACKUP_VERSION_1}, {CloudConfig.AMBRY_BACKUP_VERSION_2}});
   }
 
   public CloudBlobStoreTest(String ambryBackupVersion) throws Exception {
