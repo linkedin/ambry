@@ -204,7 +204,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = null;
     // setNameSchemeVersion is an ugly remnant of legacy code. We have to set it explicitly.
     cloudBlobMetadata.setNameSchemeVersion(azureCloudConfig.azureNameSchemeVersion);
-    // Unfortunately, Azure cloud does not accept single character container names like 0, 1, a etc.
+    // Azure cloud container names must be 3 - 63 char
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(cloudBlobMetadata);
     String blobIdStr = blobLayout.blobFilePath;
     try {
