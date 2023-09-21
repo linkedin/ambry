@@ -60,12 +60,16 @@ public class AzuriteUtils {
 
   /**
    * Returns a client to connect to Azurite
-   * @param Properties Properties
+   * @param Properties properties
    * @param metricRegistry Metrics
    * @param clusterMap Cluster map
    * @return Sync client to connect to Azurite
    */
   public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
+    // V2 does not use cosmos
+    properties.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "does_not_matter");
+    properties.setProperty(AzureCloudConfig.COSMOS_DATABASE, "does_not_matter");
+    properties.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "does_not_matter");
     properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
     return new AzureCloudDestinationSync(new VerifiableProperties(properties), metricRegistry,  clusterMap);
   }
