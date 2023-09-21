@@ -41,8 +41,6 @@ public class AzuriteUtils {
      * $ azurite
      *
      * Run the tests on your desktop.
-     * Run unit-tests using azurite on each PR is not an option because
-     * installing azurite via github action takes 45m and still fails.
      */
     try {
       Properties properties = new Properties();
