@@ -243,6 +243,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
         azureMetrics.blobUploadConflictCount.inc();
         logger.debug("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
+        return true;
       }
       azureMetrics.blobUploadErrorCount.inc();
       logger.error("Failed to upload blob {} to Azure blob storage because {}", blobLayout,
