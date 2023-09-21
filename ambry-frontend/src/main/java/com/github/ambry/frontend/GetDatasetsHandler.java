@@ -153,7 +153,7 @@ public class GetDatasetsHandler {
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "
-                + datasetName);
+                + datasetName, ex);
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }

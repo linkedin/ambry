@@ -353,7 +353,7 @@ public class GetBlobHandler {
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Failed to get dataset version for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + version);
+                + " datasetName: " + datasetName + " version: " + version, ex);
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }

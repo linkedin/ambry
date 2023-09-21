@@ -44,6 +44,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getClusterMapSnapshotMetricsGroup;
   public final RestRequestMetricsGroup getAccountsMetricsGroup;
   public final RestRequestMetricsGroup getDatasetsMetricsGroup;
+  public final RestRequestMetricsGroup listDatasetsMetricsGroup;
   public final RestRequestMetricsGroup getStatsReportMetricsGroup;
   // HEAD
   public final RestRequestMetricsGroup headBlobMetricsGroup;
@@ -75,7 +76,7 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics updateBlobTtlSecurityProcessResponseMetrics;
   // NAMED BLOB TTL
   public final AsyncOperationTracker.Metrics updateNamedBlobTtlCallbackMetrics;
-  
+
   public final AsyncOperationTracker.Metrics deleteBlobSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics deleteBlobSecurityPostProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics deleteBlobRouterMetrics;
@@ -121,6 +122,9 @@ public class FrontendMetrics {
 
   public final AsyncOperationTracker.Metrics getDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getDatasetsSecurityPostProcessRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics listDatasetsSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics listDatasetsSecurityPostProcessRequestMetrics;
 
   public final AsyncOperationTracker.Metrics deleteDatasetsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics deleteDatasetsSecurityPostProcessRequestMetrics;
@@ -317,6 +321,8 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, metricRegistry, frontendConfig);
     getDatasetsMetricsGroup =
         new RestRequestMetricsGroup(GetDatasetsHandler.class, "GetDatasets", false, metricRegistry, frontendConfig);
+    listDatasetsMetricsGroup =
+        new RestRequestMetricsGroup(GetDatasetsHandler.class, "ListDatasets", false, metricRegistry, frontendConfig);
     getStatsReportMetricsGroup =
         new RestRequestMetricsGroup(GetStatsReportHandler.class, "GetStatsReport", false, metricRegistry,
             frontendConfig);
@@ -447,6 +453,11 @@ public class FrontendMetrics {
     getDatasetsSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityProcessRequest", metricRegistry);
     getDatasetsSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityPostProcessRequest", metricRegistry);
+
+    listDatasetsSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityProcessRequest", metricRegistry);
+    listDatasetsSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetDatasetsHandler.class, "SecurityPostProcessRequest", metricRegistry);
 
     deleteDatasetsSecurityProcessRequestMetrics =

@@ -231,7 +231,7 @@ public class DeleteBlobHandler {
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Failed to delete dataset version for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + version);
+                + " datasetName: " + datasetName + " version: " + version, ex);
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
