@@ -207,6 +207,12 @@ public class ClusterMapConfig {
   public final String clusterMapDefaultPartitionClass;
 
   /**
+   * Default capacity of a replica in this cluster.
+   */
+  @Config("clustermap.default.replica.capacity.in.bytes")
+  public final long clustermapDefaultReplicaCapacityInBytes;
+
+  /**
    * The current xid for this cluster manager. Any changes beyond this xid will be ignored by the cluster manager.
    */
   @Config("clustermap.current.xid")
@@ -410,5 +416,8 @@ public class ClusterMapConfig {
     clusterMapUseAggregatedView = verifiableProperties.getBoolean(CLUSTERMAP_USE_AGGREGATED_VIEW, false);
     clustermapDistributedLockLeaseTimeoutInMs =
         verifiableProperties.getLong(DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS, 60 * 1000);
+    clustermapDefaultReplicaCapacityInBytes =
+        verifiableProperties.getLongInRange("clustermap.default.replica.capacity.in.bytes", 384L * 1024 * 1024 * 1024,
+            0, Long.MAX_VALUE);
   }
 }
