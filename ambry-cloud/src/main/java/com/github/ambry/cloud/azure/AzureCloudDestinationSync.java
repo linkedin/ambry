@@ -42,6 +42,8 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.store.StoreErrorCodes;
+import com.github.ambry.store.StoreException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -243,12 +245,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
         // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
         azureMetrics.blobUploadConflictCount.inc();
         logger.debug("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
+        // We should rarely be here because we get here from replication logic which checks if a blob exists or not before uploading it.
+        // However, return true to allow replication to proceed instead of halting it otherwise the replication token will not advance.
+        // The blob in the cloud is safe as Azure prevented us from overwriting it.
         return true;
       }
       azureMetrics.blobUploadErrorCount.inc();
-      logger.error("Failed to upload blob {} to Azure blob storage because {}", blobLayout,
-          e.getMessage());
-      throw new RuntimeException(e);
+      String error = String.format("Failed to upload blob %s to Azure blob storage because %s", blobLayout, e.getMessage());
+      logger.error(error);
+      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.Unknown_Error));
     } finally {
       if (storageTimer != null) {
         storageTimer.stop();
