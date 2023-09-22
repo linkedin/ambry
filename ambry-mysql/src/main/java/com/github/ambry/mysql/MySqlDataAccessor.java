@@ -181,10 +181,6 @@ public class MySqlDataAccessor {
 
     // If the active connection is good and it's the best endpoint, keep it.
     if (activeConnection != null && !isBetterEndpoint(bestEndpoint, connectedEndpoint)) {
-      if (config != null && !config.transactionIsolationLevel.equals(TransactionIsolationLevel.TRANSACTION_NONE)) {
-        activeConnection.setTransactionIsolation(
-            convertStringToTransactionLevel(config.transactionIsolationLevel.name()));
-      }
       return activeConnection;
     }
     // See if we can do better
@@ -199,11 +195,6 @@ public class MySqlDataAccessor {
       activeConnection = endpointConnectionPair.getSecond();
       String qualifier = connectedEndpoint.isWriteable() ? "writable" : "read-only";
       logger.info("Connected to {} endpoint: {}", qualifier, connectedEndpoint.getUrl());
-    }
-    //since we will support auto purge, it's better that the isolation level con be programmed by config.
-    if (config != null && !config.transactionIsolationLevel.equals(TransactionIsolationLevel.TRANSACTION_NONE)) {
-      activeConnection.setTransactionIsolation(
-          convertStringToTransactionLevel(config.transactionIsolationLevel.name()));
     }
     return activeConnection;
   }
@@ -264,6 +255,11 @@ public class MySqlDataAccessor {
       credentials.setProperty("password", candidateEndpoint.getPassword());
       try {
         Connection connection = mysqlDriver.connect(candidateEndpoint.getUrl(), credentials);
+        //since we will support auto purge, it's better that the isolation level con be programmed by config.
+        if (config != null && !config.transactionIsolationLevel.equals(TransactionIsolationLevel.TRANSACTION_NONE)) {
+          connection.setTransactionIsolation(
+              convertStringToTransactionLevel(config.transactionIsolationLevel.name()));
+        }
         metrics.connectionSuccessCount.inc();
         return new Pair<>(candidateEndpoint, connection);
       } catch (SQLException e) {
