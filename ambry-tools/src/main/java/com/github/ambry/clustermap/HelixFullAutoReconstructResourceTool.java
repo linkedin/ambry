@@ -33,8 +33,6 @@ import org.apache.helix.model.IdealState;
 import org.apache.helix.model.ResourceConfig;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 public class HelixFullAutoReconstructResourceTool {
@@ -111,16 +109,16 @@ public class HelixFullAutoReconstructResourceTool {
 
   public void reconstructResources() {
     // 1. Construct clique to hosts map
-    buildCliqueToHostsMap();
+    buildResourceToHostsMap();
 
     // 2. Get partitions in each clique
-    buildCliqueToPartitionsMap();
+    buildResourceToPartitionsMap();
 
     // 3. Create resources for new cliques
     createNewResources();
   }
 
-  public void buildCliqueToHostsMap() {
+  public void buildResourceToHostsMap() {
     JSONObject root = new JSONObject(cliqueLayout);
     JSONObject dcInfo = root.getJSONObject(dc);
     JSONArray clusterInfo = dcInfo.getJSONArray(clusterName);
@@ -147,7 +145,7 @@ public class HelixFullAutoReconstructResourceTool {
     }
   }
 
-  public void buildCliqueToPartitionsMap() {
+  public void buildResourceToPartitionsMap() {
 
     // 1. Get partitions in each host
     List<String> resourcesInCluster = helixAdmin.getResourcesInCluster(helixClusterName);
@@ -210,7 +208,6 @@ public class HelixFullAutoReconstructResourceTool {
 
   /**
    * Build and create a new IdealState for the given resource name and partition layout.
-   *
    * @param resourceName    The name of the newly created resource
    * @param preferenceLists The partition layout
    */
@@ -229,7 +226,6 @@ public class HelixFullAutoReconstructResourceTool {
 
   /**
    * Build a new IdealState for the given resource name and partition layout
-   *
    * @param resourceName    The name of the newly created resource
    * @param preferenceLists The partition layout
    * @return The new IdealState
@@ -237,6 +233,7 @@ public class HelixFullAutoReconstructResourceTool {
   private IdealState buildIdealState(String resourceName, Map<String, List<String>> preferenceLists) {
     IdealState idealState = new IdealState(resourceName);
     idealState.setStateModelDefRef(ClusterMapConfig.DEFAULT_STATE_MODEL_DEF);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.SEMI_AUTO);
     for (Map.Entry<String, List<String>> entry : preferenceLists.entrySet()) {
       String partitionName = entry.getKey();
       ArrayList<String> instances = new ArrayList<>(entry.getValue());
@@ -248,6 +245,11 @@ public class HelixFullAutoReconstructResourceTool {
     if (!idealState.isValid()) {
       throw new IllegalStateException("IdealState could not be validated for new resource " + resourceName);
     }
+    System.out.println(
+        "Building ideal state for resource " + resourceName + ". State model = " + idealState.getStateModelDefRef()
+            + ", Rebalance mode = " + idealState.getRebalanceMode() + ", number of partitions = "
+            + idealState.getNumPartitions() + ", replicas = " + idealState.getReplicas() + ", preference list = "
+            + idealState.getPreferenceLists());
     return idealState;
   }
 }
