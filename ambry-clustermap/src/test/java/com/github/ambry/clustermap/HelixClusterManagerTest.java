@@ -662,7 +662,8 @@ public class HelixClusterManagerTest {
     // Case 2. We are creating a bootstrap replica for a new partition
     String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1000);
     ResourceConfig resourceConfig = new ResourceConfig.Builder(resourceName).build();
-    resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR, String.valueOf(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES));
+    long sampleCapacity = DEFAULT_REPLICA_CAPACITY_IN_BYTES - 100;
+    resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR, String.valueOf(sampleCapacity));
     ConfigAccessor configAccessor =
         helixFactory.getZKHelixManager(clusterMapConfig.clusterMapClusterName, selfInstanceName, InstanceType.SPECTATOR,
             parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(localDc)
@@ -672,7 +673,7 @@ public class HelixClusterManagerTest {
     newPartitionId = String.valueOf(idealState.getNumPartitions() + 1001);
     bootstrapReplica = helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode);
     assertNotNull(bootstrapReplica);
-    assertEquals(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES, bootstrapReplica.getCapacityInBytes());
+    assertEquals(sampleCapacity, bootstrapReplica.getCapacityInBytes());
 
     helixClusterManager.close();
   }
