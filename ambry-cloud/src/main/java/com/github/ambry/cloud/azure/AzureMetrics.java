@@ -29,6 +29,9 @@ public class AzureMetrics {
   public static final String BLOB_UPDATE_DELETE_TIME_SUCCESS_RATE = "BlobUpdateDeleteTimeSuccessRate";
   public static final String BLOB_UPDATE_DELETE_TIME_LATENCY = "blobUpdateDeleteTimeLatency";
   public static final String BLOB_UPDATE_DELETE_TIME_ERROR_COUNT = "BlobUpdateDeleteTimeErrorCount";
+  public static final String BLOB_UNDELETE_SUCCESS_RATE = "BlobUndeleteTimeSuccessRate";
+  public static final String BLOB_UNDELETE_LATENCY = "blobUndeleteLatency";
+  public static final String BLOB_UNDELETE_ERROR_COUNT = "blobUndeleteErrorCount";
   public static final String BLOB_UPLOAD_ERROR_COUNT = "BlobUploadErrorCount";
   public static final String BLOB_DOWNLOAD_REQUEST_COUNT = "BlobDownloadRequestCount";
   public static final String BLOB_DOWNLOAD_SUCCESS_COUNT = "BlobDownloadSuccessCount";
@@ -90,7 +93,9 @@ public class AzureMetrics {
   public final Meter blobUpdateDeleteTimeSucessRate;
   public final Timer blobUpdateDeleteTimeLatency;
   public final Counter blobUpdateDeleteTimeErrorCount;
-
+  public final Meter blobUndeleteSucessRate;
+  public final Timer blobUndeleteLatency;
+  public final Counter blobUndeleteErrorCount;
   public final Counter blobUploadErrorCount;
   public final Counter blobDownloadRequestCount;
   public final Counter blobDownloadSuccessCount;
@@ -157,6 +162,9 @@ public class AzureMetrics {
     blobUpdateDeleteTimeLatency = registry.timer(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UPDATE_DELETE_TIME_LATENCY));
     blobUpdateDeleteTimeSucessRate = registry.meter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UPDATE_DELETE_TIME_SUCCESS_RATE));
     blobUpdateDeleteTimeErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UPDATE_DELETE_TIME_ERROR_COUNT));
+    blobUndeleteLatency = registry.timer(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UNDELETE_LATENCY));
+    blobUndeleteSucessRate = registry.meter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UNDELETE_SUCCESS_RATE));
+    blobUndeleteErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UNDELETE_ERROR_COUNT));
     blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UPLOAD_ERROR_COUNT));
     blobDownloadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_REQUEST_COUNT));
