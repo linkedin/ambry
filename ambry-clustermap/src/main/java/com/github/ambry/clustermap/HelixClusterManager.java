@@ -831,8 +831,8 @@ public class HelixClusterManager implements ClusterMap {
       ambryPartition =
           new AmbryPartition(Long.parseLong(partitionIdStr), clusterMapConfig.clusterMapDefaultPartitionClass,
               helixClusterManagerQueryHelper);
-      // If the partition is new, we get the default replica capacity from resource config
-      replicaCapacity = getReplicaCapacityFromResourceConfig(partitionIdStr, dataNodeId);
+      // If the partition is new, we get the default replica capacity from config
+      replicaCapacity = clusterMapConfig.clustermapDefaultReplicaCapacityInBytes;
       logger.info("Partition {} is currently not present in cluster map, creating first replica with capacity {} ",
           partitionIdStr, replicaCapacity);
     } else {
@@ -924,32 +924,6 @@ public class HelixClusterManager implements ClusterMap {
       partitionDefaultDiskWeight.compareAndSet(0, defaultPartitionDiskWeight);
     }
     return partitionDefaultDiskWeight.get();
-  }
-
-  /**
-   * Get default replica capacity from resource config. A data node belongs to only one resource, if we are creating a
-   * new partition for this data node, we can get the default capace from this resource's config.
-   * @param partitionIdStr The partition id in string.
-   * @param dataNodeId The data node to create a new replica in.
-   * @return The default replica capacity
-   */
-  private long getReplicaCapacityFromResourceConfig(String partitionIdStr, DataNodeId dataNodeId) {
-    String instanceName = getInstanceName(dataNodeId.getHostname(), dataNodeId.getPort());
-    InstanceConfig instanceConfig = instanceNameToInstanceConfig.get(instanceName);
-    if (instanceConfig == null) {
-      throw new IllegalArgumentException("Instance config for " + instanceName + " doesn't exist");
-    }
-    String dcName = dataNodeId.getDatacenterName();
-    List<String> tags = instanceConfig.getTags();
-    // we should only have one tag
-    String tag = tags.get(0);
-    String resourceName = dcToTagToResourceProperty.get(dcName).get(tag).name;
-    ResourceConfig resourceConfig = getResourceConfig(resourceName, dcName);
-    if (resourceConfig == null || resourceConfig.getSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR) == null) {
-      throw new IllegalArgumentException("Missing default replica capacity from resource " + resourceName
-          + " when creating bootstrap replica for partition " + partitionIdStr);
-    }
-    return Long.parseLong(resourceConfig.getSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR));
   }
 
   /**

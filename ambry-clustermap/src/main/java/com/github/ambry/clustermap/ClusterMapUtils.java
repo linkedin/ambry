@@ -79,7 +79,6 @@ public class ClusterMapUtils {
   static final String REPLICAS_STR_SEPARATOR = ":";
   static final String REPLICAS_CAPACITY_STR = "replicaCapacityInBytes";
   static final String REPLICA_TYPE_STR = "replicaType";
-  static final String DEFAULT_REPLICA_CAPACITY_STR = "defaultReplicaCapacityInBytes";
   public static final String SSL_PORT_STR = "sslPort";
   public static final String HTTP2_PORT_STR = "http2Port";
   static final String RACKID_STR = "rackId";
@@ -107,9 +106,6 @@ public class ClusterMapUtils {
   public static long MIN_REPLICA_CAPACITY_IN_BYTES = 1024 * 1024 * 1024L;
   static final long MAX_REPLICA_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024 * 1024;
   static final long MIN_DISK_CAPACITY_IN_BYTES = 10L * 1024 * 1024 * 1024;
-  // TODO: Temporary defaults to be used when adding replicas in helix FULL_AUTO mode. These replica configs will need
-  //  to stored in configs or helix for each cluster.
-  static final long DEFAULT_REPLICA_CAPACITY_IN_BYTES = 100L * 1024 * 1024 * 1024;
   static final int CURRENT_SCHEMA_VERSION = 0;
   static final String WRITABLE_LOG_STR = "writable";
   static final String FULLY_WRITABLE_LOG_STR = "fully writable";

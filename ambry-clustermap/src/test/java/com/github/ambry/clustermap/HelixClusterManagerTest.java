@@ -43,7 +43,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
-import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
 import org.apache.helix.model.IdealState;
@@ -247,17 +246,7 @@ public class HelixClusterManagerTest {
     hostname = currentNode.getHostname();
     portNum = currentNode.getPort();
     selfInstanceName = getInstanceName(hostname, portNum);
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", hostname);
-    props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
-    props.setProperty("clustermap.aggregated.view.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
-    props.setProperty("clustermap.use.aggregated.view", Boolean.toString(useAggregatedView));
-    props.setProperty("clustermap.datacenter.name", localDc);
-    props.setProperty("clustermap.port", Integer.toString(portNum));
-    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
-    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
-    props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
-    props.setProperty("clustermap.listen.cross.colo", Boolean.toString(listenCrossColo));
+    Properties props = getProperties(overrideEnabled, listenCrossColo, useAggregatedView);
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     Map<String, ZNRecord> znRecordMap = new HashMap<>();
     znRecordMap.put(PARTITION_OVERRIDE_ZNODE_PATH, znRecord);
@@ -272,6 +261,21 @@ public class HelixClusterManagerTest {
       metricRegistry = new MetricRegistry();
       clusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, metricRegistry);
     }
+  }
+
+  private Properties getProperties(boolean overrideEnabled, boolean listenCrossColo, boolean useAggregatedView) {
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", hostname);
+    props.setProperty("clustermap.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.aggregated.view.cluster.name", clusterNamePrefixInHelix + clusterNameStatic);
+    props.setProperty("clustermap.use.aggregated.view", Boolean.toString(useAggregatedView));
+    props.setProperty("clustermap.datacenter.name", localDc);
+    props.setProperty("clustermap.port", Integer.toString(portNum));
+    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props.setProperty("clustermap.current.xid", Long.toString(CURRENT_XID));
+    props.setProperty("clustermap.enable.partition.override", Boolean.toString(overrideEnabled));
+    props.setProperty("clustermap.listen.cross.colo", Boolean.toString(listenCrossColo));
+    return props;
   }
 
   @BeforeClass
@@ -642,8 +646,12 @@ public class HelixClusterManagerTest {
       instanceConfig.addTag(tag);
     }
 
-    // Set ZNRecord is NULL in Helix PropertyStore
+    // Create Helix cluster manager
+    Properties props = getProperties(overrideEnabled, listenCrossColo, useAggregatedView);
+    long defaultReplicaCapacity = 50L * 1024 * 1024 * 1024;
+    props.setProperty("clustermap.default.replica.capacity.in.bytes", String.valueOf(defaultReplicaCapacity));
     MockHelixManagerFactory helixFactory = new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     HelixClusterManager helixClusterManager =
         new HelixClusterManager(clusterMapConfig, selfInstanceName, helixFactory, metricRegistry);
 
@@ -660,20 +668,12 @@ public class HelixClusterManagerTest {
         helixClusterManager.getBootstrapReplicaMap().size());
 
     // Case 2. We are creating a bootstrap replica for a new partition
-    String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1000);
-    ResourceConfig resourceConfig = new ResourceConfig.Builder(resourceName).build();
-    long sampleCapacity = DEFAULT_REPLICA_CAPACITY_IN_BYTES - 100;
-    resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR, String.valueOf(sampleCapacity));
-    ConfigAccessor configAccessor =
-        helixFactory.getZKHelixManager(clusterMapConfig.clusterMapClusterName, selfInstanceName, InstanceType.SPECTATOR,
-            parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(localDc)
-                .getZkConnectStrs()
-                .get(0)).getConfigAccessor();
-    configAccessor.setResourceConfig(clusterMapConfig.clusterMapClusterName, resourceName, resourceConfig);
-    newPartitionId = String.valueOf(idealState.getNumPartitions() + 1001);
+    String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1001);
     bootstrapReplica = helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode);
     assertNotNull(bootstrapReplica);
-    assertEquals(sampleCapacity, bootstrapReplica.getCapacityInBytes());
+    assertEquals(defaultReplicaCapacity, bootstrapReplica.getCapacityInBytes());
+    assertEquals("There should be 2 entries in bootstrap replica map", 2,
+        helixClusterManager.getBootstrapReplicaMap().size());
 
     helixClusterManager.close();
   }
