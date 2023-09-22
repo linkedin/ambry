@@ -141,8 +141,10 @@ class AmbryDisk implements DiskId, Resource {
    * @param capacityInBytes the new capacity in bytes.
    */
   void setDiskCapacityInBytes(long capacityInBytes) {
+    ClusterMapUtils.validateDiskCapacity(capacityInBytes, maxCapacityInBytes);
+    // Update the available disk space
+    availableSpaceInBytes.getAndAdd(capacityInBytes - rawCapacityBytes);
     rawCapacityBytes = capacityInBytes;
-    ClusterMapUtils.validateDiskCapacity(rawCapacityBytes, maxCapacityInBytes);
   }
 
   /**
@@ -172,6 +174,14 @@ class AmbryDisk implements DiskId, Resource {
   @Override
   public long getAvailableSpaceInBytes() {
     return availableSpaceInBytes.get();
+  }
+
+  /**
+   * Set disk available space. Exposed for testing
+   * @param value disk available space
+   */
+  void setDiskAvailableSpace(long value) {
+    availableSpaceInBytes.set(value);
   }
 }
 

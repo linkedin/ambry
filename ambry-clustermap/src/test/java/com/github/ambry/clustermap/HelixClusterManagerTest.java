@@ -662,7 +662,8 @@ public class HelixClusterManagerTest {
     // Case 2. We are creating a bootstrap replica for a new partition
     String newPartitionId = String.valueOf(idealState.getNumPartitions() + 1000);
     ResourceConfig resourceConfig = new ResourceConfig.Builder(resourceName).build();
-    resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR, String.valueOf(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES));
+    long sampleCapacity = DEFAULT_REPLICA_CAPACITY_IN_BYTES - 100;
+    resourceConfig.putSimpleConfig(DEFAULT_REPLICA_CAPACITY_STR, String.valueOf(sampleCapacity));
     ConfigAccessor configAccessor =
         helixFactory.getZKHelixManager(clusterMapConfig.clusterMapClusterName, selfInstanceName, InstanceType.SPECTATOR,
             parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(localDc)
@@ -672,7 +673,7 @@ public class HelixClusterManagerTest {
     newPartitionId = String.valueOf(idealState.getNumPartitions() + 1001);
     bootstrapReplica = helixClusterManager.getBootstrapReplica(newPartitionId, ambryDataNode);
     assertNotNull(bootstrapReplica);
-    assertEquals(3 * DEFAULT_REPLICA_CAPACITY_IN_BYTES, bootstrapReplica.getCapacityInBytes());
+    assertEquals(sampleCapacity, bootstrapReplica.getCapacityInBytes());
 
     helixClusterManager.close();
   }
@@ -699,49 +700,116 @@ public class HelixClusterManagerTest {
       instanceConfig.addTag(tag);
     }
 
-    // Set ZNRecord is NULL in Helix PropertyStore
+    // Create Helix cluster manager
     HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
         new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
     // Select a partition for getting the bootstrap replica
-    PartitionId partitionOfNewReplica = helixClusterManager.getAllPartitionIds(null).get(0);
+    PartitionId partition = helixClusterManager.getAllPartitionIds(null).get(0);
+    // Get list of disks present on the node
     HelixClusterManager.HelixClusterManagerQueryHelper clusterManagerCallback =
         helixClusterManager.getManagerQueryHelper();
     AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
-
     List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(ambryDataNode));
-    long originalDiskSpace = disks.get(0).getAvailableSpaceInBytes();
-    // Initialize disk capacity to some maximum value for tests
+    // Get replica capacity of new replica
+    long replicaCapacity = partition.getReplicaIds().get(0).getCapacityInBytes();
+
+    // 1. Verify all disks are used in round-robin fashion
     for (AmbryDisk disk : disks) {
-      disk.increaseAvailableSpaceInBytes(DEFAULT_REPLICA_CAPACITY_IN_BYTES * 10);
+      // Set each disk capacity equal to twice the replica capacity
+      disk.setDiskAvailableSpace(2 * replicaCapacity);
     }
-
     Set<AmbryDisk> potentialDisks = new HashSet<>(disks);
-
-    // 1. Success case: Verify all disks are used in round-robin fashion
     for (int i = 0; i < disks.size(); i++) {
-      ReplicaId bootstrapReplica =
-          helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
+      ReplicaId bootstrapReplica = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode);
       assertTrue("Correct disk is not used", potentialDisks.contains((AmbryDisk) bootstrapReplica.getDiskId()));
       potentialDisks.remove((AmbryDisk) bootstrapReplica.getDiskId());
     }
 
-    // 2. Failure case: None of the disks have enough space to host the replica
+    // 2. Verify bootstrapping fails when disk space is empty
     for (AmbryDisk disk : disks) {
-      disk.decreaseAvailableSpaceInBytes(disk.getAvailableSpaceInBytes() - 100);
+      disk.setDiskAvailableSpace(replicaCapacity - 100);
     }
     assertNull("Bootstrapping replica should be fail since no disk space is available",
-        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode));
+        helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode));
 
-    // 3. Disk healthy case: make all the disks except for one to be unavailable
-    for (AmbryDisk disk : disks) {
-      disk.increaseAvailableSpaceInBytes(originalDiskSpace - disk.getAvailableSpaceInBytes());
-      disk.setState(HardwareState.UNAVAILABLE);
+    // 3. Verify disk with the most space is used
+    AmbryDisk expectedDisk = null;
+    for (int i = 0; i < disks.size(); i++) {
+      AmbryDisk disk = disks.get(i);
+      if (i == 0) {
+        expectedDisk = disk;
+        disk.setDiskAvailableSpace(2 * replicaCapacity);
+      } else {
+        disk.setDiskAvailableSpace(replicaCapacity);
+      }
     }
-    AmbryDisk healthyDisk = disks.get(disks.size() / 2);
-    healthyDisk.setState(HardwareState.AVAILABLE);
-    ReplicaId bootstrapReplica =
-        helixClusterManager.getBootstrapReplica(partitionOfNewReplica.toPathString(), ambryDataNode);
-    assertEquals(healthyDisk, bootstrapReplica.getDiskId());
+    ReplicaId bootstrapReplica = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode);
+    assertEquals("Mismatch in disk used", expectedDisk, bootstrapReplica.getDiskId());
+
+    helixClusterManager.close();
+  }
+
+  /**
+   * Test correct disk is used while getting new replica in full auto.
+   */
+  @Test
+  public void getNewReplicaInFullAutoRaceConditionTest() throws Exception {
+    assumeTrue(!useComposite && fullAutoCompatible);
+    metricRegistry = new MetricRegistry();
+
+    // 1. Set up for test
+    // 1.1 Set the node to FullAuto
+    List<String> resourceNames = helixCluster.getResources(localDc);
+    String resourceName = resourceNames.get(0);
+    String tag = "TAG_100000";
+    IdealState idealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    idealState.setInstanceGroupTag(tag);
+    helixCluster.refreshIdealState();
+    for (DataNode dataNode : testHardwareLayout.getAllDataNodesFromDc(localDc)) {
+      String instanceName = ClusterMapUtils.getInstanceName(dataNode.getHostname(), dataNode.getPort());
+      InstanceConfig instanceConfig =
+          helixCluster.getHelixAdminFromDc(localDc).getInstanceConfig(helixCluster.getClusterName(), instanceName);
+      instanceConfig.addTag(tag);
+    }
+    // 1.2 Create Helix cluster manager
+    HelixClusterManager helixClusterManager = new HelixClusterManager(clusterMapConfig, selfInstanceName,
+        new MockHelixManagerFactory(helixCluster, null, null, useAggregatedView), metricRegistry);
+    // 1.3 Get list of disks present on the node
+    HelixClusterManager.HelixClusterManagerQueryHelper clusterManagerCallback =
+        helixClusterManager.getManagerQueryHelper();
+    AmbryDataNode ambryDataNode = helixClusterManager.getDataNodeId(currentNode.getHostname(), currentNode.getPort());
+    List<AmbryDisk> disks = new ArrayList<>(clusterManagerCallback.getDisks(ambryDataNode));
+    // 1.4 Select partition for getting the bootstrap replicas
+    PartitionId partition = helixClusterManager.getAllPartitionIds(null).get(0);
+    long replicaCapacity = partition.getReplicaIds().get(0).getCapacityInBytes();
+    // 1.5 Let only 2 disks be available
+    for (int i = 0; i < disks.size(); i++) {
+      AmbryDisk disk = disks.get(i);
+      if (i == 0 || i == 1) {
+        disk.setDiskAvailableSpace(replicaCapacity);
+      } else {
+        disk.setDiskAvailableSpace(0);
+      }
+    }
+
+    // 2. Bootstrap 2 replicas in separate threads
+    final ReplicaId[] bootstrapReplica1 = new ReplicaId[1];
+    final ReplicaId[] bootstrapReplica2 = new ReplicaId[1];
+    Thread t1 = new Thread(
+        () -> bootstrapReplica1[0] = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode));
+    Thread t2 = new Thread(
+        () -> bootstrapReplica2[0] = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode));
+    t1.start();
+    t2.start();
+    t1.join();
+    t2.join();
+
+    // 3. Verify that both bootstrapping of both replicas are successful
+    assertNotNull("Bootstrapping of replica must be successful", bootstrapReplica1[0]);
+    assertNotNull("Bootstrapping of replica must be successful", bootstrapReplica2[0]);
+    // 4. Verify disks for both replicas are different
+    assertNotEquals("Both disks must be different", bootstrapReplica1[0].getDiskId(), bootstrapReplica2[0].getDiskId());
 
     helixClusterManager.close();
   }
