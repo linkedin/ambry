@@ -245,7 +245,7 @@ class TtlUpdateHandler {
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset version update failed for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + version);
+                + " datasetName: " + datasetName + " version: " + version, ex);
         metrics.ttlUpdateDatasetVersionError.inc();
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));

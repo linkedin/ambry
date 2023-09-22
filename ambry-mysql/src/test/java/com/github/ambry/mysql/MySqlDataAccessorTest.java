@@ -14,6 +14,9 @@
 package com.github.ambry.mysql;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.SQLException;
@@ -52,8 +55,8 @@ public class MySqlDataAccessorTest {
   @Test
   public void testInputErrors() throws Exception {
     // Pass no endpoints
-    expectFailure(() -> new MySqlDataAccessor(Collections.emptyList(), localDc, metrics), "no endpoints",
-        e -> e instanceof IllegalArgumentException);
+    expectFailure(() -> new MySqlDataAccessor(Collections.emptyList(), localDc, metrics, null),
+        "no endpoints", e -> e instanceof IllegalArgumentException);
   }
 
   @Test

@@ -13,6 +13,8 @@
  */
 package com.github.ambry.mysql;
 
+import com.github.ambry.config.MySqlAccountServiceConfig;
+import com.github.ambry.named.TransactionIsolationLevel;
 import com.github.ambry.utils.Pair;
 import com.mysql.cj.exceptions.MysqlErrorNumbers;
 import java.sql.BatchUpdateException;
@@ -30,7 +32,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
-import org.apache.zookeeper.Op;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +59,7 @@ public class MySqlDataAccessor {
   private long lastConnectionAttemptTime = 0;
   // TODO: make config property
   private long connectionRetryWaitTime = TimeUnit.SECONDS.toMillis(30);
+  private MySqlAccountServiceConfig config;
 
   /**
    * List of operation types on the mysql store.
@@ -67,10 +69,12 @@ public class MySqlDataAccessor {
   }
 
   /** Production constructor */
-  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter, MySqlMetrics metrics)
+  public MySqlDataAccessor(List<DbEndpoint> inputEndpoints, String localDatacenter, MySqlMetrics metrics,
+      MySqlAccountServiceConfig config)
       throws SQLException {
     this.metrics = metrics;
     setup(inputEndpoints, localDatacenter);
+    this.config = config;
   }
 
   /** Test constructor */
@@ -190,9 +194,31 @@ public class MySqlDataAccessor {
       connectedEndpoint = endpointConnectionPair.getFirst();
       activeConnection = endpointConnectionPair.getSecond();
       String qualifier = connectedEndpoint.isWriteable() ? "writable" : "read-only";
-      logger.info("Connected to {} enpoint: {}", qualifier, connectedEndpoint.getUrl());
+      logger.info("Connected to {} endpoint: {}", qualifier, connectedEndpoint.getUrl());
     }
     return activeConnection;
+  }
+
+  /**
+   * Convert the String value to the Isolation level.
+   * @param transactionIsolationLevel The string value of isolation level.
+   * @return the Isolation level.
+   */
+  private int convertStringToTransactionLevel(String transactionIsolationLevel) {
+    switch (transactionIsolationLevel) {
+      case "TRANSACTION_NONE":
+        return Connection.TRANSACTION_NONE;
+      case "TRANSACTION_READ_UNCOMMITTED":
+        return Connection.TRANSACTION_READ_UNCOMMITTED;
+      case "TRANSACTION_READ_COMMITTED":
+        return Connection.TRANSACTION_READ_COMMITTED;
+      case "TRANSACTION_REPEATABLE_READ":
+        return Connection.TRANSACTION_REPEATABLE_READ;
+      case "TRANSACTION_SERIALIZABLE":
+        return Connection.TRANSACTION_SERIALIZABLE;
+      default:
+        throw new IllegalArgumentException("Invalid transaction level: " + transactionIsolationLevel);
+    }
   }
 
   /**
@@ -229,6 +255,11 @@ public class MySqlDataAccessor {
       credentials.setProperty("password", candidateEndpoint.getPassword());
       try {
         Connection connection = mysqlDriver.connect(candidateEndpoint.getUrl(), credentials);
+        //since we will support auto purge, it's better that the isolation level con be programmed by config.
+        if (config != null && !config.transactionIsolationLevel.equals(TransactionIsolationLevel.TRANSACTION_NONE)) {
+          connection.setTransactionIsolation(
+              convertStringToTransactionLevel(config.transactionIsolationLevel.name()));
+        }
         metrics.connectionSuccessCount.inc();
         return new Pair<>(candidateEndpoint, connection);
       } catch (SQLException e) {

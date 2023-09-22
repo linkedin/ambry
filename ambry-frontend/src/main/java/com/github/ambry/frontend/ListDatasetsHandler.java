@@ -65,7 +65,7 @@ public class ListDatasetsHandler {
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
     RestRequestMetrics requestMetrics =
-        frontendMetrics.getDatasetsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+        frontendMetrics.listDatasetsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
     restRequest.getMetricsTracker().injectMetrics(requestMetrics);
     // get dataset request have their account/container name in request header, so checks can be done at early stage.
     accountAndContainerInjector.injectAccountAndContainerForDatasetRequest(restRequest);
@@ -103,7 +103,7 @@ public class ListDatasetsHandler {
     }
 
     private Callback<Void> securityProcessRequestCallback() {
-      return buildCallback(frontendMetrics.getDatasetsSecurityProcessRequestMetrics,
+      return buildCallback(frontendMetrics.listDatasetsSecurityProcessRequestMetrics,
           securityCheckResult -> securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback()),
           uri, LOGGER, finalCallback);
     }
@@ -114,7 +114,7 @@ public class ListDatasetsHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
     private Callback<Void> securityPostProcessRequestCallback() {
-      return buildCallback(frontendMetrics.getDatasetsSecurityPostProcessRequestMetrics, securityCheckResult -> {
+      return buildCallback(frontendMetrics.listDatasetsSecurityPostProcessRequestMetrics, securityCheckResult -> {
         LOGGER.debug("Received request for listing all datasets with arguments: {}", restRequest.getArgs());
         Page<String> datasetList = listAllValidDatasets();
         ReadableStreamChannel channel =
@@ -143,7 +143,7 @@ public class ListDatasetsHandler {
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " pageToken "
-                + pageToken);
+                + pageToken, ex);
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }

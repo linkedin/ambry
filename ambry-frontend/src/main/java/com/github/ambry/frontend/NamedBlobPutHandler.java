@@ -640,7 +640,7 @@ public class NamedBlobPutHandler {
       } catch (AccountServiceException ex) {
         LOGGER.error(
             "Dataset version update failed for accountName: " + accountName + " containerName: " + containerName
-                + " datasetName: " + datasetName + " version: " + targetVersion);
+                + " datasetName: " + datasetName + " version: " + targetVersion, ex);
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
@@ -729,7 +729,7 @@ public class NamedBlobPutHandler {
                 dataset.getDatasetName(), version);
           }
         } catch (Exception ex) {
-          LOGGER.error("Best effort to delete the dataset version when upload failed");
+          LOGGER.error("Best effort to delete the dataset version when upload failed", ex);
           frontendMetrics.deleteDatasetVersionError.inc();
         }
         if (callback != null) {
