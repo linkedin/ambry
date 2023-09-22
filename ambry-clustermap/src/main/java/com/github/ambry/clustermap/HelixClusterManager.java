@@ -818,49 +818,47 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
-   * Gets bootstrap replica in Helix full auto mode.
+   * Gets bootstrap replica in Helix full auto mode. Since helix can add multiple replicas simultaneously, synchronizing
+   * this method to avoid over-allocating a disk.
    * @param partitionIdStr the partition id string
    * @param dataNodeId the {@link DataNodeId} on which bootstrap replica is placed
    * @return {@link ReplicaId} if there is a new replica satisfying given partition and data node. {@code null} otherwise.
    */
-  private ReplicaId getBootstrapReplicaInFullAuto(String partitionIdStr, DataNodeId dataNodeId) {
-    long replicaCapacity = 0;
-    AmbryDisk disk = getDiskForBootstrapReplica((AmbryDataNode) dataNodeId);
-    if (disk == null) {
-      logger.error("No Disk is available to host bootstrap replica. Cannot create the replica.");
-      return null;
-    }
-    boolean decreasedDiskSpace = false;
-    try {
-      AmbryPartition mappedPartition =
+  private synchronized ReplicaId getBootstrapReplicaInFullAuto(String partitionIdStr, DataNodeId dataNodeId) {
+    long replicaCapacity;
+    AmbryPartition ambryPartition;
+    if (!partitionNameToAmbryPartition.containsKey(partitionIdStr)) {
+      ambryPartition =
           new AmbryPartition(Long.parseLong(partitionIdStr), clusterMapConfig.clusterMapDefaultPartitionClass,
               helixClusterManagerQueryHelper);
-      AmbryPartition currentPartition =
-          partitionNameToAmbryPartition.putIfAbsent(mappedPartition.toPathString(), mappedPartition);
-      if (currentPartition == null) {
-        // If the partition is new, we get the default replica capacity from resource config
-        logger.info("Partition {} is currently not present in cluster map, a new partition is created", partitionIdStr);
-        currentPartition = mappedPartition;
-        replicaCapacity = getReplicaCapacityFromResourceConfig(partitionIdStr, dataNodeId);
-      } else {
-        // For existing partitions, we should already have other replicas in the map
-        replicaCapacity = currentPartition.getReplicaIds().get(0).getCapacityInBytes();
+      // If the partition is new, we get the default replica capacity from resource config
+      replicaCapacity = getReplicaCapacityFromResourceConfig(partitionIdStr, dataNodeId);
+      logger.info("Partition {} is currently not present in cluster map, creating first replica with capacity {} ",
+          partitionIdStr, replicaCapacity);
+    } else {
+      ambryPartition = partitionNameToAmbryPartition.get(partitionIdStr);
+      // For existing partitions, we should already have other replicas in the map
+      replicaCapacity = ambryPartition.getReplicaIds().get(0).getCapacityInBytes();
+      logger.info("Partition {} is already present in cluster map, creating replica with capacity {} ", partitionIdStr,
+          replicaCapacity);
+    }
+
+    try {
+      AmbryDisk disk = getDiskForBootstrapReplica((AmbryDataNode) dataNodeId, replicaCapacity);
+      if (disk == null) {
+        logger.error("Failed to create bootstrap replica for partition {} due to insufficient disk space",
+            partitionIdStr);
+        return null;
       }
-      disk.decreaseAvailableSpaceInBytes(replicaCapacity);
-      decreasedDiskSpace = true;
-      AmbryServerReplica replica =
-          new AmbryServerReplica(clusterMapConfig, currentPartition, disk, true, replicaCapacity,
-              ReplicaSealStatus.NOT_SEALED);
+      partitionNameToAmbryPartition.putIfAbsent(ambryPartition.toPathString(), ambryPartition);
+      AmbryServerReplica replica = new AmbryServerReplica(clusterMapConfig, ambryPartition, disk, true, replicaCapacity,
+          ReplicaSealStatus.NOT_SEALED);
       logger.info("Created bootstrap replica {} for Partition {}", replica, partitionIdStr);
+      disk.decreaseAvailableSpaceInBytes(replicaCapacity);
       return replica;
     } catch (Exception e) {
       logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
           dataNodeId, e);
-      // We have decreased the available space on the disk since we thought that it will be used to host replica. Since
-      // bootstrapping replica failed, increase the available disk space back.
-      if (decreasedDiskSpace) {
-        disk.increaseAvailableSpaceInBytes(replicaCapacity);
-      }
       return null;
     }
   }
@@ -957,11 +955,12 @@ public class HelixClusterManager implements ClusterMap {
   /**
    * Get a disk with maximum available space for bootstrapping replica in Full auto mode. This method is synchronized
    * since it can be queried concurrently when multiple replicas are bootstrapped.
-   * @param dataNode the {@link DataNodeId} on which disk is needed
+   * @param dataNode        the {@link DataNodeId} on which disk is needed
+   * @param replicaCapacity the capacity of the replica in bytes
    * @return {@link AmbryDisk} which has maximum available or free capacity. If none of the disks have free space,
    * returns null.
    */
-  synchronized private AmbryDisk getDiskForBootstrapReplica(AmbryDataNode dataNode) {
+  private AmbryDisk getDiskForBootstrapReplica(AmbryDataNode dataNode, long replicaCapacity) {
     Set<AmbryDisk> disks = ambryDataNodeToAmbryDisks.get(dataNode);
     List<AmbryDisk> potentialDisks = new ArrayList<>();
     long maxAvailableDiskSpace = 0;
@@ -969,9 +968,10 @@ public class HelixClusterManager implements ClusterMap {
       if (disk.getState() == HardwareState.UNAVAILABLE) {
         continue;
       }
-      if (disk.getAvailableSpaceInBytes() < DEFAULT_REPLICA_CAPACITY_IN_BYTES) {
-        logger.debug("Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}", disk,
-            disk.getAvailableSpaceInBytes(), DEFAULT_REPLICA_CAPACITY_IN_BYTES);
+      if (disk.getAvailableSpaceInBytes() < replicaCapacity) {
+        logger.info(
+            "Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}. Checking another disk",
+            disk, disk.getAvailableSpaceInBytes(), replicaCapacity);
         continue;
       }
       if (disk.getAvailableSpaceInBytes() == maxAvailableDiskSpace) {
@@ -983,13 +983,12 @@ public class HelixClusterManager implements ClusterMap {
       }
     }
     if (potentialDisks.isEmpty()) {
+      logger.error("No disk space available to host new replica with capacity {}", replicaCapacity);
       return null;
     }
 
     // Select first available disk with maximum available capacity.
-    AmbryDisk disk = potentialDisks.get(0);
-
-    return disk;
+    return potentialDisks.get(0);
   }
 
   /**
