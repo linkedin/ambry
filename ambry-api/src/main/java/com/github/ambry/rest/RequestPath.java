@@ -13,6 +13,9 @@
  */
 package com.github.ambry.rest;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +60,12 @@ public class RequestPath {
       // to ensure IdConverter and IdSigningService can receive a valid blob id and correctly identify it.
       String blobIdStr =
           parse(blobIdHeader, Collections.emptyMap(), prefixesToRemove, clusterName).getOperationOrBlobId(false);
+      // BlobId is url encoded in order to pass blob names with special characters
+      try {
+        blobIdStr = URLDecoder.decode(blobIdStr, StandardCharsets.UTF_8.name());
+      } catch (UnsupportedEncodingException exception) {
+        throw new RestServiceException("Invalid blob id " + blobIdStr, exception, RestServiceErrorCode.BadRequest);
+      }
       restRequest.setArg(Headers.BLOB_ID, blobIdStr);
     }
     String path;

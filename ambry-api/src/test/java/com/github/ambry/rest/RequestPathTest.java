@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -111,8 +112,8 @@ public class RequestPathTest {
   public void testOperationMatching() {
     String operation = "opToMatch";
     Stream.of(new RequestPath("", "", "", "/" + operation + "/abc/def", null, NO_BLOB_SEGMENT_IDX_SPECIFIED),
-        new RequestPath("", "", "", "/" + operation, null, NO_BLOB_SEGMENT_IDX_SPECIFIED),
-        new RequestPath("", "", "", "/" + operation + "/", null, NO_BLOB_SEGMENT_IDX_SPECIFIED))
+            new RequestPath("", "", "", "/" + operation, null, NO_BLOB_SEGMENT_IDX_SPECIFIED),
+            new RequestPath("", "", "", "/" + operation + "/", null, NO_BLOB_SEGMENT_IDX_SPECIFIED))
         .forEach(requestPath -> {
           assertTrue("Operation should match", requestPath.matchesOperation(operation));
           assertTrue("Operation should match", requestPath.matchesOperation("/" + operation));
@@ -198,6 +199,33 @@ public class RequestPathTest {
         headers);
   }
 
+  @Test
+  public void testBlobNameInRequestHeader() {
+    String prefixToRemove = "media";
+    Map<String, String> blobNamePairs = Stream.of(
+            new String[][]{{"/named/account/container/blobname", "/named/account/container/blobname"},
+                {"/named/account/container/test%20123.json", "/named/account/container/test 123.json"},
+                {"/named/account/container/donne%CC%81es_2.xls", "/named/account/container/données_2.xls"},
+                {"/named/account/container/%E6%96%87%E4%BB%B6.txt", "/named/account/container/文件.txt"},
+                {"%2Fnamed%2Faccount%2Fcontainer%2Ffilename.json", "/named/account/container/filename.json"},
+                {"/named/account/container/%2Fa%2Fb%2Fc%2Fd.txt", "/named/account/container//a/b/c/d.txt"}})
+        .collect(Collectors.toMap(d -> d[0], d -> d[1]));
+    for (Map.Entry<String, String> namePairs : blobNamePairs.entrySet()) {
+      String blobName = namePairs.getKey();
+      String expectedBlobName = namePairs.getValue();
+      // we purposely add prefix and sub resource into blob id string in request header
+      JSONObject headers = new JSONObject();
+      headers.putOpt(RestUtils.Headers.BLOB_ID, prefixToRemove + "/" + CLUSTER_NAME + blobName);
+
+      String path = prefixToRemove + "/" + CLUSTER_NAME;
+      RequestPath expectedRequestPath =
+          new RequestPath(prefixToRemove, CLUSTER_NAME, "/" + Operations.GET_SIGNED_URL, expectedBlobName, null,
+              NO_BLOB_SEGMENT_IDX_SPECIFIED);
+      parseRequestPathAndVerify(path, Collections.singletonList(prefixToRemove), CLUSTER_NAME, expectedRequestPath,
+          headers);
+    }
+  }
+
   /**
    * Form the request, call {@link RequestPath#parse}, and check the result.
    * @param requestPath the request path to supply
@@ -230,8 +258,8 @@ public class RequestPathTest {
       RequestPath.parse(restRequest, null, null);
     } catch (RestServiceException e) {
       assertEquals(RestServiceErrorCode.BadRequest, e.getErrorCode());
-      assert(e.getMessage().startsWith("java.lang.ArrayIndexOutOfBoundsException"));
-    }  catch (UnsupportedEncodingException | URISyntaxException e) {
+      assert (e.getMessage().startsWith("java.lang.ArrayIndexOutOfBoundsException"));
+    } catch (UnsupportedEncodingException | URISyntaxException e) {
       throw new RuntimeException(e);
     }
   }
