@@ -162,6 +162,8 @@ public class CloudBlobStoreTest {
     MetricRegistry metricRegistry = new MetricRegistry();
     vcrMetrics = new VcrMetrics(metricRegistry);
     if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
+      currentCacheLimit = cacheLimit;
+      properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(currentCacheLimit));
       dest = inMemoryDestination ? new LatchBasedInMemoryCloudDestination(Collections.emptyList(), clusterMap)
           : mock(CloudDestination.class);
     } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
