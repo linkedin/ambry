@@ -175,13 +175,14 @@ public class CloudBlobStoreTest {
        * snalli@:
        * Just disable the cache. It just adds another layer of complexity and more of a nuisance than any help.
        * The intent of the cache was to absorb duplicate writes from hitting Azure and mimic a disk-based store in error-handling.
-       * It fails to do that.
+       * It fails to do that. The cache was probably introduced to prevent throttling from CosmosDB or the author didn't fully understand replication or caching.
        *
        * 1. Duplicate writes will be rare because replication checks for a blob in cloud at the expected state before uploading or updating it.
        *    Duplicate writes can also be avoided by Azure using an ETag conditional check in the HTTP request. So why cache ?
        * 2. Caching should improve performance but must never alter program behavior.
        *    But the current backup stack V1 in VCR behaves differently when the cache is present from when it is absent.
-       *    (Set the cache-size to 0 and see for yourself !)
+       *    If an entry is not found in the cache, then the request goes through to Azure leading to an unexpected result.
+       *    Set the cache-size to 0 and see for yourself !
        * 3. For the cache to be effective, it should be populated on the getMetadata() path, but it's not. So what's the point of the cache ?
        *
        * I don't have the cycles to fix CloudBlobStore V1 and reason about cache management.
