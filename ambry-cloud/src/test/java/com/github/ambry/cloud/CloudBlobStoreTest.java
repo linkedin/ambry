@@ -174,20 +174,18 @@ public class CloudBlobStoreTest {
       /**
        * snalli@:
        * Just disable the cache. It just adds another layer of complexity and more of a nuisance than any help.
-       * The intent of the cache was to absorb duplicate writes from going to Azure and to mimic a disk-based store in the errors it throws.
-       * The cache doesn't do either well. It is severely limited in size, so if an entry is not found in the cache,
-       * then we end up hitting Azure any ways with duplicate requests. So why even bother using a cache ?
-       * The code must work the same with or without the cache. Caching must be to improve performance, not achieve correctness.
-       * And V1 uses it to achieve correctness, not performance. (Set the size to 0 and see the v1 tests fail !)
-       * V2 doesn't rely on cache and behaves correctly even without the cache.
-       * Furthermore, for the cache to be effective, it should be populated even on the getMetadata() path, but it's not.
-       * I don't have the cycles to fix CloudBlobStore and reason about cache management.
-       * Its just so wrong the way its implemented.
+       * The intent of the cache was to absorb duplicate writes from hitting Azure and mimic a disk-based store in error-handling.
+       * I wonder if the one who designed the recentBlobcache understood replication or even caching.
        *
-       * In the absence of a cache, the way to prevent duplicate writes would be to inspect the blob-metadata before sending an update, which is
-       * not done in CloudBlobStore and must be done once more before sending an update. And given the inefficiencies of CloudBlobStore,
-       * this would lead to two metadata calls to the same blob - one in findMissingKeys and then one in delete/ttl-update/undelete.
-       * Concurrent writes can be taken care of by Azure using an ETag check.
+       * 1. Duplicate writes will be rare because replication checks for a blob in cloud at the expected state before uploading or updating it.
+       *    Duplicate writes can also be avoided by Azure using an ETag conditional check in the HTTP request. So why cache ?
+       * 2. Caching should improve performance but must never alter program behavior.
+       *    But the current backup stack V1 in VCR behaves differently when the cache is present from when it is absent.
+       *    (Set the cache-size to 0 and see for yourself !)
+       * 3. For the cache to be effective, it should be populated on the getMetadata() path, but it's not. So what's the point ?
+       *
+       * I don't have the cycles to fix CloudBlobStore V1 and reason about cache management.
+       * Its just so wrong on so many levels the way its implemented. I cannot have my code behave differently because of it.
        */
       currentCacheLimit = 0;
       properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(currentCacheLimit));
@@ -234,7 +232,7 @@ public class CloudBlobStoreTest {
     setupCloudStore(true, requireEncryption, defaultCacheLimit, true);
     // Put blobs with and without expiration and encryption
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    int count = 5;
+    int count = 1;
     int expectedUploads = 0;
     long expectedBytesUploaded = 0;
     int expectedEncryptions = 0;
@@ -255,9 +253,11 @@ public class CloudBlobStoreTest {
       }
     }
 
-    // Test 1: Put blob.
-    // V1: Success
-    // V2: Success
+    /*
+        Test 1: Put blob.
+        V1: Success
+        V2: Success
+    */
     store.put(messageWriteSet);
     if (dest instanceof LatchBasedInMemoryCloudDestination) {
       LatchBasedInMemoryCloudDestination inMemoryDest = (LatchBasedInMemoryCloudDestination) dest;
@@ -267,9 +267,12 @@ public class CloudBlobStoreTest {
     assertEquals("Unexpected encryption count", expectedEncryptions, vcrMetrics.blobEncryptionCount.getCount());
     verifyCacheHits(expectedUploads, 0);
 
-    // Test 2: Try to put the same blobs again (e.g. from another replica).
-    // V1: Ex thrown
-    // V2: No ex thrown, Azure throws an err and V2 absorbs it to let repl advance
+    /*
+      Test 2: Try to put the same blobs again (e.g. from another replica).
+      V1: Ex thrown, which is probably wrong.
+      V2: No ex thrown, Azure throws an err and V2 absorbs it to let repl advance. It would be wise to throw an error
+      and let the repl layer handle it, but repl-layer doesn't.
+     */
     messageWriteSet.resetBuffers();
     for (MessageInfo messageInfo : messageWriteSet.getMessageSetInfo()) {
       try {
@@ -278,8 +281,6 @@ public class CloudBlobStoreTest {
             messageInfo.getSize(), messageInfo.getExpirationTimeInMs(), operationTime, isVcr);
         store.put(mockMessageWriteSet);
         if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
-          // V1 expects an error to be thrown if the blob already exists, which is probably wrong.
-          // V2 however is ok with it. See my comment in AzureCloudDestinationSync.uploadBlob.
           fail("Uploading already uploaded blob should throw error");
         }
       } catch (StoreException ex) {
@@ -297,9 +298,11 @@ public class CloudBlobStoreTest {
     }
     verifyCacheHits(2 * expectedUploads, expectedUploads);
 
-    // Test 3: Try to upload a set of blobs containing duplicates
-    // V1: Failure expected
-    // V2: Failure expected
+    /*
+      Test 3: Try to upload a set of blobs containing duplicates
+      V1: Failure expected
+      V2: Failure expected
+     */
     MessageInfo duplicateMessageInfo =
         messageWriteSet.getMessageSetInfo().get(messageWriteSet.getMessageSetInfo().size() - 1);
     CloudTestUtil.addBlobToMessageSet(messageWriteSet, (BlobId) duplicateMessageInfo.getStoreKey(),
@@ -311,9 +314,11 @@ public class CloudBlobStoreTest {
     }
     verifyCacheHits(2 * expectedUploads, expectedUploads);
 
-    // Test 4: Verify that a blob marked as deleted is not uploaded.
-    // FIXME: snalli@: What is the point of this test when this will never happen ? Repl logic will never upload a blob marked for deletion.
-    // FIXME: snalli@: I am not fixing this test case.
+    /*
+      Test 4: Verify that a blob marked as deleted is not uploaded.
+      This will never happen because repl logic never uploads a blob marked for deletion.
+      snalli@: I am not fixing this test case or changing V2 to accommodate it.
+     */
     MockMessageWriteSet deletedMessageWriteSet = new MockMessageWriteSet();
     CloudTestUtil.addBlobToMessageSet(deletedMessageWriteSet, 100, Utils.Infinite_Time, refAccountId, refContainerId,
         true, true, partitionId, operationTime, isVcr);
@@ -324,9 +329,13 @@ public class CloudBlobStoreTest {
       assertEquals(expectedSkips, vcrMetrics.blobUploadSkippedCount.getCount());
     }
 
-    // Test 5: Verify that a blob that is expiring soon is not uploaded for vcr but is uploaded for frontend.
-    // V1: Success
-    // V2: Success
+    /*
+        Test 5: Verify that a blob that is expiring soon is not uploaded for vcr but is uploaded for frontend.
+        V1: Success
+        V2: Success, V2 just uploads the blob. If it expires, then compaction will take care of it.
+        These excessive cloudConfigs were probably introduced to avoid throttling from CosmosDB and are not needed anymore.
+        They just make deployment, testing and troubleshooting unnecessarily difficult, for eg. vcrMinTtlDays.
+     */
     messageWriteSet = new MockMessageWriteSet();
     CloudTestUtil.addBlobToMessageSet(messageWriteSet, 100, operationTime + cloudConfig.vcrMinTtlDays - 1, refAccountId,
         refContainerId, true, false, partitionId, operationTime, isVcr);

@@ -84,6 +84,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *    azureCloudConfig.azureBlobContainerStrategy = PARTITION
      *    cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
      *    cloudConfig.recentBlobCacheLimit = 0; unnecessary, repl-logic avoids duplicate messages any ways
+     *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
      */
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     this.azureMetrics = new AzureMetrics(metricRegistry);
@@ -246,8 +247,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureMetrics.blobUploadConflictCount.inc();
         logger.debug("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
         // We should rarely be here because we get here from replication logic which checks if a blob exists or not before uploading it.
-        // However, return true to allow replication to proceed instead of halting it otherwise the replication token will not advance.
-        // The blob in the cloud is safe as Azure prevented us from overwriting it.
+        // However, we end up here, return true to allow replication to proceed instead of halting it. Else the replication token will not advance.
+        // The blob in the cloud is safe as Azure prevented us from overwriting it due to an ETag check.
         return true;
       }
       azureMetrics.blobUploadErrorCount.inc();
