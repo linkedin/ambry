@@ -79,7 +79,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   public AzureCloudDestinationSync(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
       throws ReflectiveOperationException {
-    /**
+    /*
      * These are the configs to be changed for vcr-2.0
      *
      *    azureCloudConfig.azureNameSchemeVersion = 1
@@ -186,10 +186,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
   @Override
   public boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) throws CloudStorageException {
-    /**
+    /*
      * Current impl of this fn is inefficient because the caller does a 0-4MB memcpy from src to dst stream
      * in CloudBlobStore.appendFrom - for each blob !
      * But due to historical code design, we are restricted to implement in the current inefficient way.
+     * A memcpy makes sense if we mutate the buffer before uploading - encrypt, compress etc. - but we don't.
+     * So it's just a remnant from legacy code probably hindering performance.
      *
      * Efficient way is to just pass the src input-stream to azure-sdk as shown below.
      * messageSievingInputStream has a list of input-streams already, where each stream is a blob.

@@ -171,7 +171,7 @@ public class CloudBlobStoreTest {
       properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
       properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "PARTITION");
       properties.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1");
-      /**
+      /*
        * snalli@:
        * Just disable the cache. It just adds another layer of complexity and more of a nuisance than any help.
        * The intent of the cache was to absorb duplicate writes from hitting Azure and mimic a disk-based store in error-handling.
