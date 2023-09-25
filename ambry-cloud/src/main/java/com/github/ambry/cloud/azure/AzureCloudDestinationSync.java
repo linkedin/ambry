@@ -202,7 +202,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
     /*
      * Current impl of this fn is inefficient because the caller does a 0-4MB memcpy from src to dst stream
      * in CloudBlobStore.appendFrom - for each blob !
-     * But due to historical code design, we are restricted to implement in the current inefficient way.
      * A memcpy makes sense if we mutate the buffer before uploading - encrypt, compress etc. - but we don't.
      * So it's just a remnant from legacy code probably hindering performance.
      *
