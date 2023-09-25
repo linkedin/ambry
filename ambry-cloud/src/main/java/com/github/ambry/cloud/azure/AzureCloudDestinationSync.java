@@ -183,6 +183,19 @@ public class AzureCloudDestinationSync implements CloudDestination {
     return blobContainerClient;
   }
 
+  protected Map<String, String> cloudBlobMetadatatoMap(CloudBlobMetadata cloudBlobMetadata) {
+    Map<String, String> metadata = cloudBlobMetadata.toMap();
+    if (!metadata.containsKey(CloudBlobMetadata.FIELD_LIFE_VERSION)) {
+      /*
+          Add the life-version explicitly, even if it is 0.
+          Make it easier to determine what is the life-version of a blob instead of interpreting its
+          absence as 0 and confusing the reader. It was a mistake in V1 to not add it.
+       */
+      metadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, "0");
+    }
+    return metadata;
+  }
+
   @Override
   public boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
       InputStream blobInputStream) throws CloudStorageException {
@@ -223,7 +236,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       // https://learn.microsoft.com/en-us/java/api/com.azure.storage.blob.blobclient?view=azure-java-stable
       blobParallelUploadOptions.setRequestConditions(new BlobRequestConditions().setIfNoneMatch("*"));
       // This is ambry metadata, uninterpreted by azure
-      blobParallelUploadOptions.setMetadata(cloudBlobMetadata.toMap());
+      blobParallelUploadOptions.setMetadata(cloudBlobMetadatatoMap(cloudBlobMetadata));
       // Without content-type, get-blob floods log with warnings
       blobParallelUploadOptions.setHeaders(new BlobHttpHeaders().setContentType("application/octet-stream"));
 
