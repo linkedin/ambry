@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
-import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
@@ -148,7 +147,8 @@ public class CloudBlobStoreTest {
    * @param cacheLimit size of the store's recent blob cache.
    * @param start whether to start the store.
    */
-  private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, int cacheLimit, boolean start) {
+  private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, int cacheLimit, boolean start)
+      throws ReflectiveOperationException {
     Properties properties = new Properties();
     // Required clustermap properties
     setBasicProperties(properties);
@@ -175,17 +175,18 @@ public class CloudBlobStoreTest {
        * snalli@:
        * Just disable the cache. It just adds another layer of complexity and more of a nuisance than any help.
        * The intent of the cache was to absorb duplicate writes from hitting Azure and mimic a disk-based store in error-handling.
-       * I wonder if the one who designed the recentBlobcache understood replication or even caching.
+       * It fails to do that.
        *
        * 1. Duplicate writes will be rare because replication checks for a blob in cloud at the expected state before uploading or updating it.
        *    Duplicate writes can also be avoided by Azure using an ETag conditional check in the HTTP request. So why cache ?
        * 2. Caching should improve performance but must never alter program behavior.
        *    But the current backup stack V1 in VCR behaves differently when the cache is present from when it is absent.
        *    (Set the cache-size to 0 and see for yourself !)
-       * 3. For the cache to be effective, it should be populated on the getMetadata() path, but it's not. So what's the point ?
+       * 3. For the cache to be effective, it should be populated on the getMetadata() path, but it's not. So what's the point of the cache ?
        *
        * I don't have the cycles to fix CloudBlobStore V1 and reason about cache management.
-       * Its just so wrong on so many levels the way its implemented. I cannot have my code behave differently because of it.
+       * Its just wrong the way its implemented and I cannot have V2 code behave differently because of it.
+       * However, I have tested it with both a null cache and a valid cache.
        */
       currentCacheLimit = 0;
       properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(currentCacheLimit));
@@ -213,8 +214,13 @@ public class CloudBlobStoreTest {
 
   @Before
   public void beforeTest() {
-    assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1) ||
-        (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && new AzuriteUtils().connectToAzurite()));
+    boolean isV1 = ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1);
+    boolean isConnectToAzurite = new AzuriteUtils().connectToAzurite();
+    boolean isV2 = ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2);
+    if (!(isV1 || (isV2 && isConnectToAzurite))) {
+      logger.error("isV1 = {}, isV2 = {}, isConnectToAzurite = {}", isV1, isV2, isConnectToAzurite);
+    }
+    assumeTrue(isV1 || (isV2 && isConnectToAzurite));
   }
 
   /** Test the CloudBlobStore put method. */

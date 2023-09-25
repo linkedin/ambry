@@ -44,6 +44,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -76,7 +77,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param metricRegistry
    * @param clusterMap
    */
-  public AzureCloudDestinationSync(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
+  public AzureCloudDestinationSync(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
+      throws ReflectiveOperationException {
     /**
      * These are the configs to be changed for vcr-2.0
      *
@@ -93,10 +95,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
     this.clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.partitionToAzureStore = new ConcurrentHashMap<>();
     this.vcrMetrics = new VcrMetrics(metricRegistry);
-    // We are using connection-string based client in production
-    this.azureStorageClient =
-        new ConnectionStringBasedStorageClient(cloudConfig, azureCloudConfig, azureMetrics).getStorageSyncClient();
     this.azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig);
+    logger.info("azureCloudConfig.azureStorageClientClass = {}", azureCloudConfig.azureStorageClientClass);
+    this.azureStorageClient =
+        ((StorageClient) Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics)).getStorageSyncClient();
     testAzureStorageConnectivity();
     logger.info("Created AzureCloudDestinationSync");
   }

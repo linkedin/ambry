@@ -61,7 +61,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   }
 
   @Override
-  public CloudDestination getCloudDestination() throws IllegalStateException {
+  public CloudDestination getCloudDestination() throws IllegalStateException, ReflectiveOperationException {
     if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
       try {
         AzureCloudDestination dest =

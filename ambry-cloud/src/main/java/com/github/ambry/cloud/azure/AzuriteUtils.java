@@ -51,19 +51,19 @@ public class AzuriteUtils {
       getAzuriteClient(properties, new MetricRegistry(), null);
       return true;
     } catch (Exception e) {
-      logger.error("Failed to connect to AzuriteUtils due to {}", e.toString());
+      logger.error("Failed to connect to Azurite due to {}", e.toString());
       return false;
     }
   }
 
   /**
    * Returns a client to connect to Azurite
-   * @param Properties properties
    * @param metricRegistry Metrics
    * @param clusterMap Cluster map
    * @return Sync client to connect to Azurite
    */
-  public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry, ClusterMap clusterMap) {
+  public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry, ClusterMap clusterMap)
+      throws ReflectiveOperationException {
     // V2 does not use cosmos
     properties.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "does_not_matter");
     properties.setProperty(AzureCloudConfig.COSMOS_DATABASE, "does_not_matter");
