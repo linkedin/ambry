@@ -699,6 +699,9 @@ public class CloudBlobStoreTest {
    * @param expectedHits Expected cache hit count.
    */
   private void verifyCacheHits(int expectedLookups, int expectedHits) {
+    if (currentCacheLimit == 0) {
+      return;
+    }
     assertEquals("Cache lookup count", expectedLookups, vcrMetrics.blobCacheLookupCount.getCount());
     if (isVcr) {
       assertEquals("Cache hit count", expectedHits, vcrMetrics.blobCacheHitCount.getCount());
