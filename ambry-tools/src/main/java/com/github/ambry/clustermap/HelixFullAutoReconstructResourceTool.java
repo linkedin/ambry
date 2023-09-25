@@ -18,12 +18,15 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
@@ -42,19 +45,19 @@ public class HelixFullAutoReconstructResourceTool {
   private final String cliqueLayout;
   private final String dc;
   private final boolean dryRun;
-  private final HelixAdmin helixAdmin;
-  private final Map<Integer, List<String>> cliqueToHosts = new HashMap<>();
-  private final Map<Integer, Set<String>> cliqueToPartitions = new HashMap<>();
+  private final HelixAdmin admin;
+  private final Map<Integer, List<String>> resourceToHosts = new HashMap<>();
+  private final Map<Integer, Set<String>> resourceToPartitions = new TreeMap<>();
   private final Map<String, List<String>> preferenceLists = new HashMap<>();
   Map<String, List<String>> currentStates = new HashMap<>();
-  int cliqueId = 9999;
+  int resourceId = 9999;
   int port = 15088;
 
   public static void main(String[] args) throws Exception {
     OptionParser parser = new OptionParser();
 
-    ArgumentAcceptingOptionSpec<String> clusterNameOpt = parser.accepts("clusterName", "Helix cluster name")
-        .withRequiredArg()
+    ArgumentAcceptingOptionSpec<String> clusterNameOpt =
+        parser.accepts("clusterName", "Helix cluster name").withRequiredArg()
         .describedAs("cluster_name")
         .ofType(String.class);
 
@@ -78,16 +81,23 @@ public class HelixFullAutoReconstructResourceTool {
             .describedAs("clique_info_path")
             .ofType(String.class);
 
+    ArgumentAcceptingOptionSpec<String> resourcesOpt = parser.accepts("resources",
+            "The comma-separated resources to create. Use '--resources all' to migrate all resources")
+        .withRequiredArg()
+        .describedAs("resources")
+        .ofType(String.class);
+
     OptionSet options = parser.parse(args);
     String clusterName = options.valueOf(clusterNameOpt);
     String dcName = options.valueOf(dcNameOpt);
     String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
     String cliqueLayoutPath = options.valueOf(cliqueLayoutPathOpt);
+    String resources = options.valueOf(resourcesOpt) == null ? "all" : options.valueOf(resourcesOpt);
 
     HelixFullAutoReconstructResourceTool helixFullAutoReconstructResourceTool =
         new HelixFullAutoReconstructResourceTool(clusterName, dcName, options.has(dryRun), zkLayoutPath,
             cliqueLayoutPath);
-    helixFullAutoReconstructResourceTool.reconstructResources();
+    helixFullAutoReconstructResourceTool.reconstructResources(resources);
 
     System.out.println("======== HelixFullAutoReconstructResourceTool completed successfully! ========");
     System.out.println("( If program doesn't exit, please use Ctrl-c to terminate. )");
@@ -104,10 +114,13 @@ public class HelixFullAutoReconstructResourceTool {
     Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress =
         ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
     String zkConnectStr = dataCenterToZkAddress.get(dc).getZkConnectStrs().get(0);
-    this.helixAdmin = new HelixAdminFactory().getHelixAdmin(zkConnectStr);
+    this.admin = new HelixAdminFactory().getHelixAdmin(zkConnectStr);
   }
 
-  public void reconstructResources() {
+  /**
+   * @param commaSeparatedResources comma separated list
+   */
+  public void reconstructResources(String commaSeparatedResources) {
     // 1. Construct clique to hosts map
     buildResourceToHostsMap();
 
@@ -115,42 +128,87 @@ public class HelixFullAutoReconstructResourceTool {
     buildResourceToPartitionsMap();
 
     // 3. Create resources for new cliques
-    createNewResources();
+    Set<String> resources = new HashSet<>();
+    if (!commaSeparatedResources.equals("all")) {
+      resources =
+          Arrays.stream(commaSeparatedResources.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
+    }
+    Set<String> resourcesInHelix = new HashSet<>(admin.getResourcesInCluster(helixClusterName));
+    List<String> invalidResources = new ArrayList<>();
+    for (String resource : resources) {
+      if (resourcesInHelix.contains(resource)) {
+        invalidResources.add(resource);
+      }
+    }
+    if (!invalidResources.isEmpty()) {
+      throw new IllegalArgumentException("Helix cluster already contains resources " + invalidResources);
+    }
+
+    createNewResources(resources);
   }
 
+  /**
+   * Build resource to hosts map
+   * Resource 1 -> [host1, host2, host3... host6]
+   * Resource 2 -> [host7, host8, host9... host12]
+   */
   public void buildResourceToHostsMap() {
     JSONObject root = new JSONObject(cliqueLayout);
     JSONObject dcInfo = root.getJSONObject(dc);
     JSONArray clusterInfo = dcInfo.getJSONArray(clusterName);
 
+    Map<String, List<Integer>> hostToResources = new HashMap<>();
+
     // 1. Get hosts in each clique
     for (int i = 0; i < clusterInfo.length(); i++) {
       JSONArray cliqueInfo = clusterInfo.getJSONArray(i);
-      cliqueId++;
-      cliqueToHosts.put(cliqueId, new ArrayList<>());
+      resourceId++;
+      resourceToHosts.put(resourceId, new ArrayList<>());
+      if (cliqueInfo.length() > 2) {
+        throw new IllegalStateException("Resource " + cliqueInfo + " has more than 2 cliques");
+      }
       for (int j = 0; j < cliqueInfo.length(); j++) {
         JSONArray subCliqueInfo = cliqueInfo.getJSONObject(j).getJSONArray("current_clique");
         for (int k = 0; k < subCliqueInfo.length(); k++) {
           JSONObject hostInfo = subCliqueInfo.getJSONObject(k);
           String host = hostInfo.getString("host");
-          cliqueToHosts.get(cliqueId).add(host);
+          resourceToHosts.get(resourceId).add(host);
+          if (!hostToResources.containsKey(host)) {
+            hostToResources.put(host, new ArrayList<>());
+          }
+          hostToResources.get(host).add(resourceId);
         }
       }
     }
 
-    for (Map.Entry<Integer, List<String>> entry : cliqueToHosts.entrySet()) {
-      System.out.println("Resource = " + entry.getKey() + ", Hosts = " + entry.getValue());
-      System.out.println();
-      System.out.println();
+    // Validate host is present only in 1 resource such as host1 -> [resource 1], host2 -> [resource 2]..
+    for (Map.Entry<String, List<Integer>> entry : hostToResources.entrySet()) {
+      String host = entry.getKey();
+      List<Integer> resources = entry.getValue();
+      if (resources.size() != 1) {
+        throw new IllegalStateException(
+            "Input is invalid. Host " + host + "is present in more than 1 resource " + resources);
+      }
+    }
+
+    for (Map.Entry<Integer, List<String>> entry : resourceToHosts.entrySet()) {
+      Integer resourceId = entry.getKey();
+      List<String> hosts = entry.getValue();
+      System.out.println("Resource = " + resourceId + " has " + hosts.size() + " hosts. Hosts are " + hosts);
     }
   }
 
+  /**
+   * Build resource to partitions map
+   * Resource 1 -> [P1, P2,... P100]
+   */
   public void buildResourceToPartitionsMap() {
 
-    // 1. Get partitions in each host
-    List<String> resourcesInCluster = helixAdmin.getResourcesInCluster(helixClusterName);
+    // 1. Build host to partitions map
+    // Host1 -> [P1, P2... P13]
+    List<String> resourcesInCluster = admin.getResourcesInCluster(helixClusterName);
     for (String resourceName : resourcesInCluster) {
-      IdealState idealState = helixAdmin.getResourceIdealState(helixClusterName, resourceName);
+      IdealState idealState = admin.getResourceIdealState(helixClusterName, resourceName);
       Map<String, List<String>> preferenceLists = idealState.getPreferenceLists();
       this.preferenceLists.putAll(preferenceLists);
       for (Map.Entry<String, List<String>> entry : preferenceLists.entrySet()) {
@@ -165,44 +223,67 @@ public class HelixFullAutoReconstructResourceTool {
       }
     }
 
-    // 2. Build clique to partitions set
-    for (Map.Entry<Integer, List<String>> entry : cliqueToHosts.entrySet()) {
-      int cliqueId = entry.getKey();
+    // 2. Build resource to partitions map by going via resources -> hosts -> partitions
+    // Resource 10000 -> [P1, P2.. P100]
+    Map<String, Set<Integer>> partitionToResources = new HashMap<>();
+    for (Map.Entry<Integer, List<String>> entry : resourceToHosts.entrySet()) {
+      int resourceId = entry.getKey();
       List<String> hosts = entry.getValue();
-      cliqueToPartitions.put(cliqueId, new HashSet<>());
-      Set<String> partitionSet = cliqueToPartitions.get(cliqueId);
+      resourceToPartitions.put(resourceId, new HashSet<>());
+      Set<String> partitionSet = resourceToPartitions.get(resourceId);
       for (String host : hosts) {
         String instanceName = ClusterMapUtils.getInstanceName(host, port);
         if (currentStates.containsKey(instanceName)) {
           List<String> partitions = currentStates.get(instanceName);
           partitionSet.addAll(partitions);
+          for (String partition : partitions) {
+            if (!partitionToResources.containsKey(partition)) {
+              partitionToResources.put(partition, new HashSet<>());
+            }
+            partitionToResources.get(partition).add(resourceId);
+          }
         } else {
-          System.err.println("Instance " + instanceName + " is not present in cluster or has empty current state");
+          throw new IllegalStateException(
+              "Instance \" + instanceName + \" is not present in cluster or has empty current state");
         }
       }
     }
 
-    for (Map.Entry<Integer, Set<String>> entry : cliqueToPartitions.entrySet()) {
+    // Verify partition is present in only one resource. P1 -> [Resource 10000], P2 -> [Resource 10000]
+    for (Map.Entry<String, Set<Integer>> entry : partitionToResources.entrySet()) {
+      String partition = entry.getKey();
+      Set<Integer> resources = entry.getValue();
+      if (resources.size() != 1) {
+        List<String> preferenceList = preferenceLists.get(partition);
+        throw new IllegalStateException(
+            "Partition " + partition + " is present in more than 1 resource " + resources + ". Its preference list is "
+                + preferenceList);
+      }
+    }
+
+    for (Map.Entry<Integer, Set<String>> entry : resourceToPartitions.entrySet()) {
       System.out.println(
           "Resource = " + entry.getKey() + ", number of partitions = " + entry.getValue().size() + ", Partitions = "
               + entry.getValue());
-      System.out.println();
-      System.out.println();
     }
   }
 
-  public void createNewResources() {
-    // 1. For each newly formed clique, add a resource in helix cluster
-    for (Map.Entry<Integer, Set<String>> entry : cliqueToPartitions.entrySet()) {
-      int cliqueId = entry.getKey();
+  /**
+   * Create new resources (10000, 10001, 10002... ) in helix
+   */
+  public void createNewResources(Set<String> resources) {
+    for (Map.Entry<Integer, Set<String>> entry : resourceToPartitions.entrySet()) {
+      int resourceId = entry.getKey();
       Set<String> partitions = entry.getValue();
-      String resource = String.valueOf(cliqueId);
-      Map<String, List<String>> resourcePreferenceLists = new HashMap<>();
-      for (String partition : partitions) {
-        List<String> preferenceList = preferenceLists.get(partition);
-        resourcePreferenceLists.put(partition, preferenceList);
+      String resource = String.valueOf(resourceId);
+      if (resources.isEmpty() || resources.contains(resource)) {
+        Map<String, List<String>> resourcePreferenceLists = new HashMap<>();
+        for (String partition : partitions) {
+          List<String> preferenceList = preferenceLists.get(partition);
+          resourcePreferenceLists.put(partition, preferenceList);
+        }
+        buildAndCreateIdealState(resource, resourcePreferenceLists);
       }
-      buildAndCreateIdealState(resource, resourcePreferenceLists);
     }
   }
 
@@ -214,7 +295,7 @@ public class HelixFullAutoReconstructResourceTool {
   private void buildAndCreateIdealState(String resourceName, Map<String, List<String>> preferenceLists) {
     IdealState idealState = buildIdealState(resourceName, preferenceLists);
     if (!dryRun) {
-      helixAdmin.addResource(clusterName, resourceName, idealState);
+      admin.addResource(clusterName, resourceName, idealState);
       System.out.println(
           "Added " + preferenceLists.size() + " new partitions under resource " + resourceName + " in dc " + dc);
     } else {
