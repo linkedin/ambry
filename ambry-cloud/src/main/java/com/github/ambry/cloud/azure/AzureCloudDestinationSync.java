@@ -189,7 +189,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       /*
           Add the life-version explicitly, even if it is 0.
           Make it easier to determine what is the life-version of a blob instead of interpreting its
-          absence as 0 and confusing the reader. It was a mistake in V1 to not add it.
+          absence as 0 and confusing the reader.
        */
       metadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, "0");
     }
