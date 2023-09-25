@@ -881,24 +881,37 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
       setOperationParams();
 
-      // In each DC, set up the servers such that one node always succeeds and the other nodes return an unknown_error and
+      // In local DC, set up the servers such that one node always succeeds and the other nodes return an unknown_error and
       // no_error alternately. This will make it with a very high probability that there will at least be a time that a
       // put will succeed on a node but will fail on the other two.
       List<DataNodeId> dataNodeIds = mockClusterMap.getDataNodeIds();
       List<ServerErrorCode> serverErrorList = new ArrayList<>();
+      List<ServerErrorCode> deleteErrorList = new ArrayList<>();
       for (int i = 0; i < NUM_MAX_ATTEMPTS; i++) {
         serverErrorList.add(ServerErrorCode.Unknown_Error);
         serverErrorList.add(ServerErrorCode.No_Error);
+        deleteErrorList.add(ServerErrorCode.Blob_Not_Found);
       }
-      Set<String> healthyNodeDC = new HashSet<>();
+
+      // return NOT_FOUND for background deleter. Test router will ignore NOT_FOUND for background deleter.
+      DataNodeId healthyLocalNode = null;
       for (DataNodeId dataNodeId : dataNodeIds) {
         MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
-        if (healthyNodeDC.contains(dataNodeId.getDatacenterName())) {
-          server.setServerErrors(serverErrorList);
+        if (server.getDataCenter().equals(localDcName)) {
+          if (healthyLocalNode == null) {
+            // one healthy local node
+            server.resetServerErrors();
+            healthyLocalNode = dataNodeId;
+          } else {
+            // the other two local nodes
+            server.setServerErrors(serverErrorList);
+            server.setServerErrorsByType(RequestOrResponseType.DeleteRequest, deleteErrorList);
+          }
         } else {
+          // remote nodes
           server.resetServerErrors();
+          server.setServerErrorsByType(RequestOrResponseType.DeleteRequest, deleteErrorList);
         }
-        healthyNodeDC.add(dataNodeId.getDatacenterName());
       }
 
       // Submit the put operation and wait for it to succeed.

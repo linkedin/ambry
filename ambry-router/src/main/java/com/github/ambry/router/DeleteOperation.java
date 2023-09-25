@@ -459,6 +459,14 @@ class DeleteOperation {
             logger.error("RepairRequest : failed to write the {} to the database {}", record, repairRequestsDb);
           }
         }
+
+        // ignore the NOT_FOUND error for the background deleter.
+        if (serviceId != null && serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX)
+            && operationException.get() != null
+            && ((RouterException) operationException.get()).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
+          operationException.set(null);
+          logger.info("Ignore BlobNotFound error from the background deleter. {}", blobId);
+        }
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
         try {

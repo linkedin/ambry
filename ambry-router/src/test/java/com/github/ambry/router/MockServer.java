@@ -71,6 +71,7 @@ import static com.github.ambry.messageformat.MessageFormatRecord.*;
 class MockServer {
   private ServerErrorCode hardError = null;
   private LinkedList<ServerErrorCode> serverErrors = new LinkedList<ServerErrorCode>();
+  private final HashMap<RequestOrResponseType, LinkedList<ServerErrorCode>> serverErrorsByType = new HashMap<>();
   private final Map<String, StoredBlob> blobs = new ConcurrentHashMap<>();
   private boolean shouldRespond = true;
   private short blobFormatVersion = MessageFormatRecord.Blob_Version_V3;
@@ -95,6 +96,15 @@ class MockServer {
     this.hostName = hostName;
     this.hostPort = port;
     this.layout = layout;
+    this.serverErrorsByType.put(RequestOrResponseType.PutRequest, new LinkedList<>());
+    this.serverErrorsByType.put(RequestOrResponseType.GetRequest, new LinkedList<>());
+    this.serverErrorsByType.put(RequestOrResponseType.DeleteRequest, new LinkedList<>());
+    this.serverErrorsByType.put(RequestOrResponseType.TtlUpdateRequest, new LinkedList<>());
+    this.serverErrorsByType.put(RequestOrResponseType.UndeleteRequest, new LinkedList<>());
+    this.serverErrorsByType.put(RequestOrResponseType.ReplicaMetadataRequest, new LinkedList<>());
+    this.serverErrorsByType.put(RequestOrResponseType.ReplicateBlobRequest, new LinkedList<>());
+    this.serverErrorsByType.put(RequestOrResponseType.PutRequest, new LinkedList<>());
+    this.serverErrorsByType.put(RequestOrResponseType.AdminRequest, new LinkedList<>());
   }
 
   public String getHostName() {
@@ -116,9 +126,17 @@ class MockServer {
     if (!shouldRespond) {
       return null;
     }
-    ServerErrorCode serverError =
-        hardError != null ? hardError : serverErrors.size() > 0 ? serverErrors.poll() : ServerErrorCode.No_Error;
+    // Error order:
+    // 1. hardError
+    // 2. if No_Error, use serverErrorsByType
+    // 3. if No_Error, use serverErrors
     RequestOrResponseType type = ((RequestOrResponse) send).getRequestType();
+    LinkedList<ServerErrorCode> errorsByType = serverErrorsByType.get(type);
+    ServerErrorCode serverError =
+        hardError != null ? hardError : errorsByType.size() > 0 ? errorsByType.poll() : ServerErrorCode.No_Error;
+    if (serverError == ServerErrorCode.No_Error) {
+      serverError = serverErrors.size() > 0 ? serverErrors.poll() : ServerErrorCode.No_Error;
+    }
     RequestOrResponse response;
     requestCounts.computeIfAbsent(type, k -> new LongAdder()).increment();
     switch (type) {
@@ -636,6 +654,11 @@ class MockServer {
     this.serverErrors.addAll(serverErrors);
   }
 
+  public void setServerErrorsByType(RequestOrResponseType type, List<ServerErrorCode> serverErrors) {
+    this.serverErrorsByType.get(type).clear();
+    this.serverErrorsByType.get(type).addAll(serverErrors);
+  }
+
   /**
    * Set the error to be set in the responses for all requests from this point onwards (until/unless another set or
    * reset method for errors is invoked).
@@ -662,6 +685,15 @@ class MockServer {
     this.serverErrors.clear();
     this.hardError = null;
     this.getErrorOnDataBlobOnly = false;
+    this.serverErrorsByType.get(RequestOrResponseType.PutRequest).clear();
+    this.serverErrorsByType.get(RequestOrResponseType.GetRequest).clear();
+    this.serverErrorsByType.get(RequestOrResponseType.DeleteRequest).clear();
+    this.serverErrorsByType.get(RequestOrResponseType.TtlUpdateRequest).clear();
+    this.serverErrorsByType.get(RequestOrResponseType.UndeleteRequest).clear();
+    this.serverErrorsByType.get(RequestOrResponseType.ReplicaMetadataRequest).clear();
+    this.serverErrorsByType.get(RequestOrResponseType.ReplicateBlobRequest).clear();
+    this.serverErrorsByType.get(RequestOrResponseType.PutRequest).clear();
+    this.serverErrorsByType.get(RequestOrResponseType.AdminRequest).clear();
   }
 
   /**
