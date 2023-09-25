@@ -176,7 +176,7 @@ public class CloudBlobStoreTest {
        * Just disable the cache. It just adds another layer of complexity and more of a nuisance than any help.
        * The intent of the cache was to absorb duplicate writes from hitting Azure and mimic a disk-based store in error-handling.
        * It fails to do that. The cache was probably introduced to prevent throttling from CosmosDB or the author didn't fully understand replication or caching.
-       *
+       * V2 doesn't use CosmosDB.
        * 1. Duplicate writes will be rare because replication checks for a blob in cloud at the expected state before uploading or updating it.
        *    Duplicate writes can also be avoided by Azure using an ETag conditional check in the HTTP request. So why cache ?
        * 2. Caching should improve performance but must never alter program behavior.
@@ -340,7 +340,7 @@ public class CloudBlobStoreTest {
         Test 5: Verify that a blob that is expiring soon is not uploaded for vcr but is uploaded for frontend.
         V1: Success
         V2: Success, V2 just uploads the blob. If it expires, then compaction will take care of it.
-        These excessive cloudConfigs were probably introduced to avoid throttling from CosmosDB and are not needed anymore.
+        These cloudConfigs were probably introduced to avoid throttling from CosmosDB and are not needed anymore.
         They just make deployment, testing and troubleshooting unnecessarily difficult, for eg. vcrMinTtlDays.
      */
     messageWriteSet = new MockMessageWriteSet();
