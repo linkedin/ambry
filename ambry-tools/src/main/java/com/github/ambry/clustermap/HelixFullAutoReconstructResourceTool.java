@@ -140,6 +140,7 @@ public class HelixFullAutoReconstructResourceTool {
         invalidResources.add(resource);
       }
     }
+    // Verify input resources to add are not present in helix already
     if (!invalidResources.isEmpty()) {
       throw new IllegalArgumentException("Helix cluster already contains resources " + invalidResources);
     }
@@ -246,7 +247,15 @@ public class HelixFullAutoReconstructResourceTool {
           throw new IllegalStateException(
               "Instance \" + instanceName + \" is not present in cluster or has empty current state");
         }
+        currentStates.remove(instanceName);
       }
+    }
+
+    // Verify number of hosts in layout == number of hosts in helix cluster
+    if (!currentStates.isEmpty()) {
+      throw new IllegalStateException(
+          "There are additional hosts in helix cluster which are not present in input layout file. Hosts = "
+              + currentStates.keySet());
     }
 
     // Verify partition is present in only one resource. P1 -> [Resource 10000], P2 -> [Resource 10000]
