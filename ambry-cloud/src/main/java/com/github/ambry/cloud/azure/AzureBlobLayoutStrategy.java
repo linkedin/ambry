@@ -74,7 +74,7 @@ public class AzureBlobLayoutStrategy {
 
     @Override
     public String toString() {
-      String toStr = String.format("[containerName = {}, blobFilePath = {}]", containerName, blobFilePath);
+      String toStr = String.format("(%s/%s)", containerName, blobFilePath);
       return toStr;
     }
   }
