@@ -182,7 +182,7 @@ public class CloudBlobStoreTest {
        * 2. Caching should improve performance but must never alter program behavior.
        *    But the current backup stack V1 in VCR behaves differently when the cache is present from when it is absent.
        *    If an entry is not found in the cache, then the request goes through to Azure leading to an unexpected result.
-       *    Set the cache-size to 0 and see for yourself !
+       *    Set the cache-size to 0 for V1 tests and see for yourself !
        * 3. For the cache to be effective, it should be populated on the getMetadata() path, but it's not. So what's the point of the cache ?
        *
        * I don't have the cycles to fix CloudBlobStore V1 and reason about cache management.
