@@ -149,7 +149,7 @@ public class HelixFullAutoReconstructResourceTool {
   }
 
   /**
-   * Build resource to hosts map
+   * Build resource to hosts map from layout file
    * Resource 1 -> [host1, host2, host3... host6]
    * Resource 2 -> [host7, host8, host9... host12]
    */
@@ -209,6 +209,10 @@ public class HelixFullAutoReconstructResourceTool {
     // Host1 -> [P1, P2... P13]
     List<String> resourcesInCluster = admin.getResourcesInCluster(helixClusterName);
     for (String resourceName : resourcesInCluster) {
+      if (Integer.parseInt(resourceName) >= 10000) {
+        System.out.println("Ignoring resource " + resourceName + "in cluster when fetching hosts current states");
+        continue;
+      }
       IdealState idealState = admin.getResourceIdealState(helixClusterName, resourceName);
       Map<String, List<String>> preferenceLists = idealState.getPreferenceLists();
       this.preferenceLists.putAll(preferenceLists);
@@ -281,10 +285,15 @@ public class HelixFullAutoReconstructResourceTool {
    * Create new resources (10000, 10001, 10002... ) in helix
    */
   public void createNewResources(Set<String> resources) {
+    Set<String> resourcesInCluster = new HashSet<>(admin.getResourcesInCluster(helixClusterName));
     for (Map.Entry<Integer, Set<String>> entry : resourceToPartitions.entrySet()) {
       int resourceId = entry.getKey();
       Set<String> partitions = entry.getValue();
       String resource = String.valueOf(resourceId);
+      if (resourcesInCluster.contains(resource)) {
+        System.out.println("Resource " + resource + " is already present in cluster. Continuing");
+        continue;
+      }
       if (resources.isEmpty() || resources.contains(resource)) {
         Map<String, List<String>> resourcePreferenceLists = new HashMap<>();
         for (String partition : partitions) {
@@ -304,7 +313,7 @@ public class HelixFullAutoReconstructResourceTool {
   private void buildAndCreateIdealState(String resourceName, Map<String, List<String>> preferenceLists) {
     IdealState idealState = buildIdealState(resourceName, preferenceLists);
     if (!dryRun) {
-      admin.addResource(clusterName, resourceName, idealState);
+      admin.addResource(helixClusterName, resourceName, idealState);
       System.out.println(
           "Added " + preferenceLists.size() + " new partitions under resource " + resourceName + " in dc " + dc);
     } else {
