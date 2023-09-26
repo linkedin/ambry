@@ -454,7 +454,62 @@ public class AzureCloudDestinationSync implements CloudDestination {
   @Override
   public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
-    return 0;
+    Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
+    AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+    String blobIdStr = blobLayout.blobFilePath;
+    BlobProperties blobProperties = getBlobProperties(blobLayout);
+    Map<String, String> cloudMetadata = blobProperties.getMetadata();
+
+    // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
+    // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
+    if (cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)
+        && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) != Utils.Infinite_Time) {
+      String error = String.format("Cannot update TTL of %s since it is already deleted in cloud.", blobIdStr);
+      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted));
+    }
+
+    /*
+    // Legacy cloudBlobStore does not expect an exception. However,
+    // below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
+    // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
+    if (cloudMetadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)
+        && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) == Utils.Infinite_Time) {
+      String error = String.format("TTL of %s is already updated in cloud.", blobIdStr);
+      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.Already_Updated));
+    }
+    */
+
+    Map<String, String> newMetadata = new HashMap<>();
+    newMetadata.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(Utils.Infinite_Time));
+    cloudMetadata.putAll(newMetadata);
+
+    // lifeVersion must always be present
+    short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+
+    try {
+      logger.debug("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      Response<Void> response = updateMetadata(blobLayout, blobProperties, cloudMetadata);
+      // Success rate is effective, success counter is ineffective because it just monotonically increases
+      azureMetrics.blobUpdateTTLSucessRate.mark();
+      logger.debug("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+          blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
+      return cloudlifeVersion;
+    } catch (Throwable t) {
+      azureMetrics.blobUpdateTTLErrorCount.inc();
+      // Due to legacy CloudBlobStore, we have to handle 404 as a special case when it can actually be a general case.
+      if (t instanceof BlobStorageException
+          && ((BlobStorageException) t).getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        // We should never be here because replication logic checks if a blob exists or not before undeleting it.
+        String error = String.format("Failed to update TTL blob {} in Azure blob storage because it does not exist", blobLayout);
+        logger.error(error);
+        throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Not_Found), CloudBlobStore.STATUS_NOT_FOUND, false, null);
+      }
+      String error = String.format("Failed to update TTL blob %s in Azure blob storage because %s", blobLayout, t.getMessage());
+      logger.error(error);
+      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.Unknown_Error));
+    } finally {
+      storageTimer.stop();
+    } // try-catch
   }
 
   @Override
