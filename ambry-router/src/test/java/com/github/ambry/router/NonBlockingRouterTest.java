@@ -3607,15 +3607,15 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       otherServerError.add(ServerErrorCode.No_Error);      // Put for the first data chunk
       otherServerError.add(ServerErrorCode.Unknown_Error); // second data chunk
       otherServerError.add(ServerErrorCode.Unknown_Error); // slipped chunk
-      // also it fails the background deletion with NOT_FOUND
-      otherServerError.add(ServerErrorCode.Blob_Not_Found); // delete 1st blob
-      otherServerError.add(ServerErrorCode.Blob_Not_Found); // delete 2nd blob
-      otherServerError.add(ServerErrorCode.Blob_Not_Found); // delete 3rd blob
+      // also it fails the background deletion with Unknown_Error
+      otherServerError.add(ServerErrorCode.Unknown_Error); // delete 1st blob
+      otherServerError.add(ServerErrorCode.Unknown_Error); // delete 2nd blob
+      otherServerError.add(ServerErrorCode.Unknown_Error); // delete 3rd blob
 
       // For the remote servers. Won't receive PutRequest. The following errors are for deletion
-      remoteServerError.add(ServerErrorCode.Blob_Not_Found); // delete 1st blob
-      remoteServerError.add(ServerErrorCode.Blob_Not_Found); // delete 2nd blob
-      remoteServerError.add(ServerErrorCode.Blob_Not_Found); // delete 3rd blob
+      remoteServerError.add(ServerErrorCode.Unknown_Error); // delete 1st blob
+      remoteServerError.add(ServerErrorCode.Unknown_Error); // delete 2nd blob
+      remoteServerError.add(ServerErrorCode.Unknown_Error); // delete 3rd blob
 
       DataNodeId sourceDataNode = null;
       String localDcName = "DC3";
