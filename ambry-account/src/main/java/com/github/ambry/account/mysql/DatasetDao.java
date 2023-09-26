@@ -66,6 +66,7 @@ public class DatasetDao {
   public static final String RETENTION_COUNT = "retentionCount";
   public static final String RETENTION_TIME_IN_SECONDS = "retentionTimeInSeconds";
   public static final String USER_TAGS = "userTags";
+  public static final String DELETED_TS = "deleted_ts";
   public static final String DELETE_TS = "delete_ts";
 
   // Dataset version table fields
@@ -110,74 +111,80 @@ public class DatasetDao {
             DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY,
             RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS);
     updateDatasetIfExpiredSql = String.format(
-        "update %s set %s = ?, %s = now(3), %s = ?, %s = ?, %s = ?, %s = ?, %s = NULL where %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
-        DATASET_TABLE, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
-        RETENTION_TIME_IN_SECONDS, USER_TAGS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+        "update %1$s set %2$s = ?, %3$s = now(3), %4$s = ?, %5$s = ?, %6$s = ?, %7$s = ?, %8$s = NULL, %12$s = NULL "
+            + "where %9$s = ? and %10$s = ? and %11$s = ? and GREATEST(%8$s, %12$s) < now(3)", DATASET_TABLE,
+        VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS,
+        DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DELETED_TS);
     //update the dataset field, in order to support partial update, if one parameter is null, keep the original value.
     updateDatasetSql = String.format(
         "update %1$s set %2$s = now(3)," + "`retentionPolicy` = IFNULL(?, `retentionPolicy`), "
             + "`retentionCount` = IFNULL(?, `retentionCount`), "
             + "`retentionTimeInSeconds` = IFNULL(?, `retentionTimeInSeconds`)," + "`userTags` = IFNULL(?, `userTags`)"
-            + " where %7$s = ? and %8$s = ? and %9$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
-        RETENTION_TIME_IN_SECONDS, USER_TAGS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
-    getDatasetByNameSql =
-        String.format("select %s, %s, %s, %s, %s, %s, %s, %s from %s where %s = ? and %s = ? and %s = ?", DATASET_NAME,
-            VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT,
-            RETENTION_TIME_IN_SECONDS, USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+            + " where %7$s = ? and %8$s = ? and %9$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_POLICY,
+        RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    getDatasetByNameSql = String.format(
+        "select %1$s, %2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %13$s from %9$s where %10$s = ? and %11$s = ? and %12$s = ?",
+        DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS,
+        USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DELETED_TS);
     deleteDatasetByIdSql = String.format(
-        "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
-        DATASET_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+        "update %1$s set %2$s = now(3), %3$s = now(3), %7$s = now(3) where (COALESCE(%2$s, %7$s) IS NULL or COALESCE(%2$s, %7$s) > now(3)) "
+            + "and %4$s = ? and %5$s = ? and %6$s = ?", DATASET_TABLE, DELETE_TS, LAST_MODIFIED_TIME, ACCOUNT_ID,
+        CONTAINER_ID, DATASET_NAME, DELETED_TS);
     listValidDatasetsSql = String.format(
-        "select %1$s from %2$s where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and (%1$s >= ? or ? IS NULL) "
-            + "ORDER BY %1$s ASC LIMIT ?", DATASET_NAME, DATASET_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID);
+        "select %1$s from %2$s where (COALESCE(%3$s, %6$s) IS NULL or COALESCE(%3$s, %6$s) > now(3)) and %4$s = ? and %5$s = ? and (%1$s >= ? or ? IS NULL) "
+            + "ORDER BY %1$s ASC LIMIT ?", DATASET_NAME, DATASET_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
+        DELETED_TS);
     getVersionSchemaSql =
         String.format("select %s from %s where %s = ? and %s = ? and %s = ?", VERSION_SCHEMA, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
-    insertDatasetVersionSql =
-        String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), now(3), ?, ?)",
-            DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, CREATION_TIME, LAST_MODIFIED_TIME,
-            DELETE_TS, DATASET_VERSION_STATE);
+    insertDatasetVersionSql = String.format(
+        "insert into %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s, %10$s) values (?, ?, ?, ?, now(3), now(3), ?, ?, ?)",
+        DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, CREATION_TIME, LAST_MODIFIED_TIME,
+        DELETE_TS, DATASET_VERSION_STATE, DELETED_TS);
     updateDatasetVersionStateSql =
         String.format("update %s set %s = ?, %s = now(3) where %s = ? and %s = ? and %s = ? and %s = ?",
             DATASET_VERSION_TABLE, DATASET_VERSION_STATE, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
             VERSION);
-    getLatestVersionSqlForDownload = String.format("select %1$s, %2$s from %3$s "
-            + "where (%4$s IS NULL or %4$s > now(3)) and (%5$s, %6$s, %7$s, %8$s) = (?, ?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
-        VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
-        DATASET_VERSION_STATE);
+    getLatestVersionSqlForDownload = String.format("select %1$s, %2$s, %8$s from %3$s "
+            + "where (COALESCE(%2$s, %8$s) IS NULL or COALESCE(%2$s, %8$s) > now(3)) and (%4$s, %5$s, %6$s, %7$s) = (?, ?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
+        VERSION, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DATASET_VERSION_STATE,
+        DELETED_TS);
     listLatestVersionSqlForUpload = String.format("select %1$s from %2$s "
-            + "where (%3$s IS NULL or %3$s > now(3)) and (%4$s, %5$s, %6$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1", VERSION,
-        DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
-    listValidVersionForDatasetDeletionSql =
-        String.format("select %s, %s from %s " + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ?",
-            VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+            + "where (COALESCE(%3$s, %7$s) IS NULL or COALESCE(%3$s, %7$s) > now(3)) and (%4$s, %5$s, %6$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
+        VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DELETED_TS);
+    listValidVersionForDatasetDeletionSql = String.format("select %1$s, %2$s, %7$s from %3$s "
+            + "where (COALESCE(%2$s, %7$s) IS NULL or COALESCE(%2$s, %7$s) > now(3)) and %4$s = ? and %5$s = ? and %6$s = ?",
+        VERSION, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DELETED_TS);
     // list all valid versions sorted by last modified time, and skip the first N records which is not out of retentionCount.
-    listVersionByModifiedTimeAndFilterByRetentionSql = String.format("select %s, %s from %s "
-            + "where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? and %s = ? ORDER BY %s DESC LIMIT ?, 100",
-        VERSION, DELETE_TS, DATASET_VERSION_TABLE, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
-        DATASET_VERSION_STATE, LAST_MODIFIED_TIME);
+    listVersionByModifiedTimeAndFilterByRetentionSql = String.format("select %1$s, %2$s, %9$s from %3$s "
+            + "where (COALESCE(%2$s, %9$s) IS NULL or COALESCE(%2$s, %9$s) > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? ORDER BY %8$s DESC LIMIT ?, 100",
+        VERSION, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DATASET_VERSION_STATE,
+        LAST_MODIFIED_TIME, DELETED_TS);
     listValidDatasetVersionsByPageSql = String.format("select %1$s from %2$s "
-            + "where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and %1$s >= ? "
-            + "ORDER BY %1$s ASC LIMIT ?", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
-        DATASET_VERSION_STATE);
-    listValidDatasetVersionsByListSql = String.format("select %1$s, %3$s, %8$s from %2$s "
-            + "where (%3$s IS NULL or %3$s > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? "
+            + "where (COALESCE(%3$s, %8$s) IS NULL or COALESCE(%3$s, %8$s) > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and %1$s >= ? "
+            + "ORDER BY %1$s ASC LIMIT ?", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
+        DATASET_NAME, DATASET_VERSION_STATE, DELETED_TS);
+    listValidDatasetVersionsByListSql = String.format("select %1$s, %3$s, %9$s, %8$s from %2$s "
+            + "where (COALESCE(%3$s, %9$s) IS NULL or COALESCE(%3$s, %9$s) > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? "
             + "ORDER BY %1$s ASC", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
-        DATASET_VERSION_STATE, CREATION_TIME);
+        DATASET_VERSION_STATE, CREATION_TIME, DELETED_TS);
     updateDatasetVersionTtlSql = String.format(
-        "update %s set %s = NULL where %s = ? and %s = ? and %s = ? and %s = ? and (delete_ts is NULL or delete_ts > now(3)) and %s = ?",
-        DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
-    getDatasetVersionByNameSql =
-        String.format("select %s, %s from %s where %s = ? and %s = ? and %s = ? and %s = ? and %s = ?", LAST_MODIFIED_TIME,
-            DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE);
+        "update %1$s set %2$s = NULL and %8$s = NULL where %3$s = ? and %4$s = ? and %5$s = ? and %6$s = ? and "
+            + "(COALESCE(%2$s, %8$s) is NULL or COALESCE(%2$s, %8$s) > now(3)) and %7$s = ?", DATASET_VERSION_TABLE,
+        DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE, DELETED_TS);
+    getDatasetVersionByNameSql = String.format(
+        "select %1$s, %2$s, %9$s from %3$s where %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and %8$s = ?",
+        LAST_MODIFIED_TIME, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION,
+        DATASET_VERSION_STATE, DELETED_TS);
     deleteDatasetVersionByIdSql = String.format(
-        "update %s set %s = now(3), %s = now(3) where (%s IS NULL or %s > now(3)) and %s = ? and %s = ? and %s = ? and %s = ?",
-        DATASET_VERSION_TABLE, DELETE_TS, LAST_MODIFIED_TIME, DELETE_TS, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
-        DATASET_NAME, VERSION);
+        "update %1$s set %2$s = now(3), %3$s = now(3), %8$s = now(3) where (COALESCE(%2$s, %8$s) IS NULL or COALESCE(%2$s, %8$s) > now(3)) "
+            + "and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ?", DATASET_VERSION_TABLE, DELETE_TS,
+        LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DELETED_TS);
     updateDatasetVersionIfExpiredSql = String.format(
-        "update %s set %s = ?, %s = now(3), %s = now(3), %s = ?, %s = ? where %s = ? and %s = ? and %s = ? and %s = ? and delete_ts < now(3)",
+        "update %1$s set %2$s = ?, %3$s = now(3), %4$s = now(3), %5$s = ?, %6$s = ?, %11$s = ? where %7$s = ? and %8$s = ? and %9$s = ? and %10$s = ? "
+            + "and COALESCE(%5$s, %11$s) < now(3)",
         DATASET_VERSION_TABLE, VERSION, CREATION_TIME, LAST_MODIFIED_TIME, DELETE_TS, DATASET_VERSION_STATE, ACCOUNT_ID,
-        CONTAINER_ID, DATASET_NAME, VERSION);
+        CONTAINER_ID, DATASET_NAME, VERSION, DELETED_TS);
   }
 
   /**
@@ -795,7 +802,7 @@ public class DatasetDao {
       resultSet = statement.executeQuery();
       while (resultSet.next()) {
         long versionValue = resultSet.getLong(VERSION);
-        Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
+        Timestamp deletionTime = getLatestTimeStamp(resultSet.getTimestamp(DELETE_TS), resultSet.getTimestamp(DELETED_TS));
         String version = convertVersionValueToVersion(versionValue, versionSchema);
         datasetVersionRecordList.add(
             new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime)));
@@ -892,7 +899,7 @@ public class DatasetDao {
       }
       long versionValue = resultSet.getLong(VERSION);
       version = convertVersionValueToVersion(versionValue, versionSchema);
-      deletionTime = resultSet.getTimestamp(DELETE_TS);
+      deletionTime = getLatestTimeStamp(resultSet.getTimestamp(DELETE_TS), resultSet.getTimestamp(DELETED_TS));
     } finally {
       closeQuietly(resultSet);
     }
@@ -1003,7 +1010,7 @@ public class DatasetDao {
       while (resultSet.next()) {
         long versionValue = resultSet.getLong(VERSION);
         String version = convertVersionValueToVersion(versionValue, versionSchema);
-        Timestamp deletionTime = resultSet.getTimestamp(DELETE_TS);
+        Timestamp deletionTime = getLatestTimeStamp(resultSet.getTimestamp(DELETE_TS), resultSet.getTimestamp(DELETED_TS));
         DatasetVersionRecord datasetVersionRecord =
             new DatasetVersionRecord(accountId, containerId, datasetName, version, timestampToMs(deletionTime));
         datasetVersionRecords.add(datasetVersionRecord);
@@ -1114,7 +1121,7 @@ public class DatasetDao {
       List<DatasetVersionRecord> entries = new ArrayList<>();
       while (resultSet.next()) {
         long versionValue = resultSet.getLong(VERSION);
-        long expirationTimeMs = timestampToMs(resultSet.getTimestamp(DELETE_TS));
+        long expirationTimeMs = timestampToMs(getLatestTimeStamp(resultSet.getTimestamp(DELETE_TS), resultSet.getTimestamp(DELETED_TS)));
         long creationTimeMs = timestampToMs(resultSet.getTimestamp(CREATION_TIME));
         String version = convertVersionValueToVersion(versionValue, versionSchema);
         entries.add(
@@ -1190,10 +1197,13 @@ public class DatasetDao {
     } else {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
     }
+    //Update both delete_ts and deleted_ts
     if (updatedExpirationTimeMs == Infinite_Time) {
       statement.setTimestamp(5, null);
+      statement.setTimestamp(7, null);
     } else {
       statement.setTimestamp(5, new Timestamp(updatedExpirationTimeMs));
+      statement.setTimestamp(7, new Timestamp(updatedExpirationTimeMs));
     }
     statement.setInt(6, datasetVersionState.ordinal());
     statement.executeUpdate();
@@ -1227,16 +1237,19 @@ public class DatasetDao {
     } else {
       updatedExpirationTimeMs = Utils.addSecondsToEpochTime(creationTimeInMs, dataset.getRetentionTimeInSeconds());
     }
+    //update both delete_ts and deleted_ts
     if (updatedExpirationTimeMs == Infinite_Time) {
       statement.setTimestamp(2, null);
+      statement.setTimestamp(4, null);
     } else {
       statement.setTimestamp(2, new Timestamp(updatedExpirationTimeMs));
+      statement.setTimestamp(4, new Timestamp(updatedExpirationTimeMs));
     }
     statement.setInt(3, datasetVersionState.ordinal());
-    statement.setInt(4, accountId);
-    statement.setInt(5, containerId);
-    statement.setString(6, datasetName);
-    statement.setLong(7, version);
+    statement.setInt(5, accountId);
+    statement.setInt(6, containerId);
+    statement.setString(7, datasetName);
+    statement.setLong(8, version);
     int count = statement.executeUpdate();
     if (count <= 0) {
       throw new AccountServiceException("The dataset version already exist", AccountServiceErrorCode.ResourceConflict);
@@ -1480,7 +1493,7 @@ public class DatasetDao {
             "Dataset not found for account: " + accountId + " container: " + containerId + " dataset: " + datasetName,
             AccountServiceErrorCode.NotFound);
       }
-      deletionTime = resultSet.getTimestamp(DELETE_TS);
+      deletionTime = getLatestTimeStamp(resultSet.getTimestamp(DELETE_TS), resultSet.getTimestamp(DELETED_TS));
       long currentTime = System.currentTimeMillis();
       if (compareTimestamp(deletionTime, currentTime) <= 0) {
         throw new AccountServiceException(
@@ -1652,7 +1665,7 @@ public class DatasetDao {
             "Dataset version not found for account: " + accountId + " container: " + containerId + " dataset: "
                 + datasetName + " version: " + version, AccountServiceErrorCode.NotFound);
       }
-      deletionTime = resultSet.getTimestamp(DELETE_TS);
+      deletionTime = getLatestTimeStamp(resultSet.getTimestamp(DELETE_TS), resultSet.getTimestamp(DELETED_TS));
       long currentTime = System.currentTimeMillis();
       if (compareTimestamp(deletionTime, currentTime) <= 0) {
         throw new AccountServiceException(
