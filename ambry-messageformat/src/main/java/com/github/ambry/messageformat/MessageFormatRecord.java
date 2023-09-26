@@ -219,13 +219,6 @@ public class MessageFormatRecord {
     }
   }
 
-  /**
-   * Deserialize the bytes in the InputStream to A BlobData
-   * @param stream
-   * @return
-   * @throws IOException
-   * @throws MessageFormatException
-   */
   public static BlobData deserializeBlob(InputStream stream) throws IOException, MessageFormatException {
     return deserializeAndGetBlobWithVersion(stream).getBlobData();
   }
