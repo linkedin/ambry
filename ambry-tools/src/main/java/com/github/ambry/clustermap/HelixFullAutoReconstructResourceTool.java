@@ -133,18 +133,6 @@ public class HelixFullAutoReconstructResourceTool {
       resources =
           Arrays.stream(commaSeparatedResources.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
     }
-    Set<String> resourcesInHelix = new HashSet<>(admin.getResourcesInCluster(helixClusterName));
-    List<String> invalidResources = new ArrayList<>();
-    for (String resource : resources) {
-      if (resourcesInHelix.contains(resource)) {
-        invalidResources.add(resource);
-      }
-    }
-    // Verify input resources to add are not present in helix already
-    if (!invalidResources.isEmpty()) {
-      throw new IllegalArgumentException("Helix cluster already contains resources " + invalidResources);
-    }
-
     createNewResources(resources);
   }
 
@@ -209,8 +197,11 @@ public class HelixFullAutoReconstructResourceTool {
     // Host1 -> [P1, P2... P13]
     List<String> resourcesInCluster = admin.getResourcesInCluster(helixClusterName);
     for (String resourceName : resourcesInCluster) {
+      if (!resourceName.matches("\\d+")) {
+        continue;
+      }
       if (Integer.parseInt(resourceName) >= 10000) {
-        System.out.println("Ignoring resource " + resourceName + "in cluster when fetching hosts current states");
+        System.out.println("Ignoring resource " + resourceName + " in cluster when fetching hosts current states");
         continue;
       }
       IdealState idealState = admin.getResourceIdealState(helixClusterName, resourceName);
