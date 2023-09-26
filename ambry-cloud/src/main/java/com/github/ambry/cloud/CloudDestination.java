@@ -217,4 +217,11 @@ public interface CloudDestination extends Closeable {
    * @return {@link CloudContainerCompactor} object that would do container compaction for cloud.
    */
   CloudContainerCompactor getContainerCompactor();
+
+  /**
+   * For testing only
+   * @param id
+   * @return
+   */
+  default boolean doesBlobExist(BlobId id) {return false;};
 }

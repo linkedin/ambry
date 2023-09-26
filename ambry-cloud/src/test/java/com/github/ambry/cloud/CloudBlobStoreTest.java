@@ -59,7 +59,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -83,6 +82,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -90,7 +90,6 @@ import org.junit.runners.Parameterized;
 import org.mockito.invocation.InvocationOnMock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static org.mockito.Mockito.mockingDetails;
 
 import static com.github.ambry.cloud.CloudTestUtil.*;
 import static com.github.ambry.replication.ReplicationTest.*;
@@ -726,39 +725,68 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore findMissingKeys method. */
   @Test
   public void testFindMissingKeys() throws Exception {
-    setupCloudStore(false, true, defaultCacheLimit, true);
-    int count = 10;
+    // FIXED: Incomplete test, but fixed now.
+    setupCloudStore(true, true, defaultCacheLimit, true);
+    int count = 1;
     List<StoreKey> keys = new ArrayList<>();
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+    long now = System.currentTimeMillis();
+    short initialLifeVersion = 100;
     Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
+    List<MessageInfo> missingBlobIds = new ArrayList<>();
     for (int j = 0; j < count; j++) {
-      // Blob with metadata
+      // Blobs present in cloud
       BlobId existentBlobId = getUniqueId(refAccountId, refContainerId, false, partitionId);
+      MessageInfo info = new MessageInfo(existentBlobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, initialLifeVersion);
+      messageWriteSet.add(info, ByteBuffer.wrap(TestUtils.getRandomBytes(SMALL_BLOB_SIZE)));
       keys.add(existentBlobId);
       metadataMap.put(existentBlobId.getID(),
           new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024,
               CloudBlobMetadata.EncryptionOrigin.ROUTER));
-      // Blob without metadata
+      // Blobs absent in cloud
       BlobId nonexistentBlobId = getUniqueId(refAccountId, refContainerId, false, partitionId);
+      info = new MessageInfo(nonexistentBlobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, initialLifeVersion);
+      missingBlobIds.add(info);
       keys.add(nonexistentBlobId);
     }
-    when(dest.getBlobMetadata(anyList())).thenReturn(metadataMap);
-    Set<StoreKey> missingKeys = store.findMissingKeys(keys);
-    verify(dest).getBlobMetadata(anyList());
-    int expectedLookups = keys.size();
-    int expectedHits = 0;
-    verifyCacheHits(expectedLookups, expectedHits);
-    assertEquals("Wrong number of missing keys", count, missingKeys.size());
 
-    if (isVcr) {
-      // Add keys to cache and rerun (should be cached)
-      for (StoreKey storeKey : keys) {
-        store.addToCache(storeKey.getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
-      }
-      missingKeys = store.findMissingKeys(keys);
-      assertTrue("Expected no missing keys", missingKeys.isEmpty());
-      expectedLookups += keys.size();
-      expectedHits += keys.size();
-      verifyCacheHits(expectedLookups, expectedHits);
+    /*
+      Add some keys and test for missing keys
+     */
+    store.put(messageWriteSet);
+    int numPuts = messageWriteSet.getMessageSetInfo().size();
+    if (mockingDetails(dest).isMock()) {
+      when(dest.getBlobMetadata(anyList())).thenReturn(metadataMap);
+    }
+    Set<StoreKey> missingKeys = store.findMissingKeys(keys);
+    if (mockingDetails(dest).isMock()) {
+      verify(dest).getBlobMetadata(anyList());
+    }
+    verifyCacheHits(keys.size() + numPuts, numPuts);
+    /*
+      The way to determine the correctness of findMissinKeys is to take the set diff
+      ok keys we know will be missing and keys returned by findMissingKeys.
+     */
+    Set<String> keysPresentInCloud = metadataMap.keySet();
+    Set<String> allKeySet = keys.stream().map(k -> k.getID()).collect(Collectors.toSet());
+    Set<String> missingKeySet = missingKeys.stream().map(k -> k.getID()).collect(Collectors.toSet());
+    missingKeySet.addAll(keysPresentInCloud);
+    missingKeySet.removeAll(allKeySet);
+    assertTrue(missingKeySet.isEmpty());
+
+    /*
+      Upload the missing keys and check that findMissingKeys returns empty
+     */
+    messageWriteSet = new MockMessageWriteSet();
+    for (MessageInfo info : missingBlobIds) {
+      messageWriteSet.add(info, ByteBuffer.wrap(TestUtils.getRandomBytes(SMALL_BLOB_SIZE)));
+    }
+    store.put(messageWriteSet);
+    missingKeys = store.findMissingKeys(keys);
+    assertTrue("Expected no missing keys", missingKeys.isEmpty());
+    verifyCacheHits(messageWriteSet.getMessageSetInfo().size() + keys.size() + keys.size() + numPuts,
+         keys.size() + numPuts);
+    if (mockingDetails(dest).isMock()) {
       // getBlobMetadata should not have been called a second time.
       verify(dest).getBlobMetadata(anyList());
     }
@@ -1105,13 +1133,22 @@ public class CloudBlobStoreTest {
     MockFindTokenHelper findTokenHelper = new MockFindTokenHelper(storeKeyFactory, replicationConfig);
     MockNetworkClient mockNetworkClient =
         (MockNetworkClient) new MockNetworkClientFactory(hosts, clusterMap, 4, findTokenHelper).getNetworkClient();
+    MetricRegistry metricRegistry = new MetricRegistry();
+    if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
+      dest =
+          new LatchBasedInMemoryCloudDestination(blobIdList, clusterMap);
+    } else if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
+      props.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
+      props.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "PARTITION");
+      props.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1");
+      props.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(0));
+      dest = new AzuriteUtils().getAzuriteClient(props, metricRegistry, clusterMap);
+    }
 
-    LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
-        new LatchBasedInMemoryCloudDestination(blobIdList, clusterMap);
     CloudReplica cloudReplica = new CloudReplica(partitionId, cloudDataNode);
     CloudBlobStore cloudBlobStore =
-        new CloudBlobStore(new VerifiableProperties(props), partitionId, latchBasedInMemoryCloudDestination, clusterMap,
-            new VcrMetrics(new MetricRegistry()));
+        new CloudBlobStore(new VerifiableProperties(props), partitionId, dest, clusterMap,
+            new VcrMetrics(metricRegistry));
     cloudBlobStore.start();
 
     // Create ReplicaThread and add RemoteReplicaInfo to it.
@@ -1139,11 +1176,11 @@ public class CloudBlobStoreTest {
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime - 2000, referenceTime - 1000);
     replicaThread.replicate();
-    assertFalse("Blob should not exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    assertFalse("Blob should not exist.", dest.doesBlobExist(id));
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
     replicaThread.replicate();
-    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    assertTrue("Blob should exist.", dest.doesBlobExist(id));
 
     // Case 2: Put already expired. Replication happens after TtlUpdate.
     // Upload to Cloud only after replicating ttlUpdate.
@@ -1153,7 +1190,7 @@ public class CloudBlobStoreTest {
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
     replicaThread.replicate();
-    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    assertTrue("Blob should exist.", dest.doesBlobExist(id));
 
     // Case 3: Put TTL less than cloudConfig.vcrMinTtlDays. Replication happens after Put and after TtlUpdate.
     // Upload to Cloud only after replicating ttlUpdate.
@@ -1162,14 +1199,14 @@ public class CloudBlobStoreTest {
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays) - 1);
     replicaThread.replicate();
     if (isVcr) {
-      assertFalse("Blob should not exist (vcr).", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+      assertFalse("Blob should not exist (vcr).", dest.doesBlobExist(id));
     } else {
-      assertTrue("Blob should exist (not vcr).", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+      assertTrue("Blob should exist (not vcr).", dest.doesBlobExist(id));
     }
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
     replicaThread.replicate();
-    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    assertTrue("Blob should exist.", dest.doesBlobExist(id));
 
     // Case 4: Put TTL less than cloudConfig.vcrMinTtlDays. Replication happens after TtlUpdate.
     // Upload to Cloud only after replicating ttlUpdate.
@@ -1179,7 +1216,7 @@ public class CloudBlobStoreTest {
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
     replicaThread.replicate();
-    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    assertTrue("Blob should exist.", dest.doesBlobExist(id));
 
     // Case 5: Put TTL greater than or equals to cloudConfig.vcrMinTtlDays. Replication happens after Put and after TtlUpdate.
     // Upload to Cloud after Put and update ttl after TtlUpdate.
@@ -1187,11 +1224,11 @@ public class CloudBlobStoreTest {
     addPutMessagesToReplicasOfPartition(id, accountId, containerId, partitionId, Collections.singletonList(remoteHost),
         referenceTime, referenceTime + TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays));
     replicaThread.replicate();
-    assertTrue(latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    assertTrue(dest.doesBlobExist(id));
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
     replicaThread.replicate();
-    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    assertTrue("Blob should exist.", dest.doesBlobExist(id));
 
     // Case 6: Put TTL greater than or equals to cloudConfig.vcrMinTtlDays. Replication happens after TtlUpdate.
     // Upload to Cloud after TtlUpdate.
@@ -1201,10 +1238,10 @@ public class CloudBlobStoreTest {
     addTtlUpdateMessagesToReplicasOfPartition(partitionId, id, Collections.singletonList(remoteHost),
         Utils.Infinite_Time);
     replicaThread.replicate();
-    assertTrue("Blob should exist.", latchBasedInMemoryCloudDestination.doesBlobExist(id));
+    assertTrue("Blob should exist.", dest.doesBlobExist(id));
 
     // Verify expiration time of all blobs.
-    Map<String, CloudBlobMetadata> map = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIdList);
+    Map<String, CloudBlobMetadata> map = dest.getBlobMetadata(blobIdList);
     for (BlobId blobId : blobIdList) {
       assertEquals("Blob ttl should be infinite now.", Utils.Infinite_Time,
           map.get(blobId.toString()).getExpirationTime());

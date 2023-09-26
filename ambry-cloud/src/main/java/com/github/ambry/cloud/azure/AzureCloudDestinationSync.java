@@ -490,6 +490,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
         && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) != Utils.Infinite_Time;
   }
 
+  /**
+   * For testing
+   * @param blobId
+   * @return
+   */
+  @Override
+  public boolean doesBlobExist(BlobId blobId) {
+    AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+    try {
+      return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).exists();
+    } catch (Throwable t) {
+      String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
+      logger.error(error);
+      return false;
+    }
+  }
+
   @Override
   public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
@@ -568,7 +585,27 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
-    return null;
+    /*
+        This is used by findMissingKeys, which is a highly inefficient way of checking for existence esp. when
+        Azure SDK provides a lightweight exists() method. findMissingKeys() doesn't even use the metadata provided.
+        It just discards it. But due to legacy reasons, we are forced to impl this way.
+     */
+    Map<String, CloudBlobMetadata> cloudBlobMetadataMap = new HashMap<>();
+    for (BlobId blobId: blobIds) {
+      AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+      try {
+        BlobProperties blobProperties = getBlobProperties(blobLayout);
+        cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
+      } catch (Throwable t) {
+        if (t instanceof CloudStorageException
+            && ((CloudStorageException) t).getStatusCode() == CloudBlobStore.STATUS_NOT_FOUND) {
+          // We should never be here because replication logic checks if a blob exists or not before undeleting it.
+          String dbg = String.format("Blob %s absent in Azure blob storage", blobLayout);
+          logger.error(dbg);
+        }
+      }
+    }
+    return cloudBlobMetadataMap;
   }
 
   @Override

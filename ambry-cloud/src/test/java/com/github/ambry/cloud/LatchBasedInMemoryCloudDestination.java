@@ -496,7 +496,13 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
     };
   }
 
-  boolean doesBlobExist(BlobId blobId) {
+  /**
+   * For testing
+   * @param blobId
+   * @return
+   */
+  @Override
+  public boolean doesBlobExist(BlobId blobId) {
     return map.containsKey(blobId);
   }
 
