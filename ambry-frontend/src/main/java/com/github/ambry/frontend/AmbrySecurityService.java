@@ -38,6 +38,8 @@ import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
@@ -97,6 +99,23 @@ class AmbrySecurityService implements SecurityService {
     if (exception == null && urlSigningService.isRequestSigned(restRequest)) {
       urlSigningService.verifySignedRequest(restRequest, (r, e) -> {
         frontendMetrics.securityServicePreProcessRequestTimeInMs.update(System.currentTimeMillis() - startTimeMs);
+        // This is a hack to make sure the blob names are url encoded in the restRequest so later in the RequestPath.parse
+        // it be can be correctly decoded back.
+        // The reason why we have to do this for signed url, is that in signed urls, blob names are placed in the query
+        // parameter, not in the header, so it's already url decoded. In most case, decode an already decoded string
+        // won't change this string, but there is a one special case - "+". A url encoded "+" is "%2B", but a url encode
+        // space " " is "+". So if the blob name contains a "+", then it would be decoded to "+" and then further
+        // decoded to " " if we don't re-encode it here.
+        // And we have to do this after verifying signed url since this would change the signature.
+        if (restRequest.getArgs().get(Headers.BLOB_ID) != null) {
+          try {
+            String encodedBlobId =
+                URLEncoder.encode((String) restRequest.getArgs().get(Headers.BLOB_ID), StandardCharsets.UTF_8.name());
+            restRequest.setArg(Headers.BLOB_ID, encodedBlobId);
+          } catch (Exception encodingException) {
+            LOGGER.error("Failed to encode blob id signed url: {}", restRequest.getArgs().get(Headers.BLOB_ID), e);
+          }
+        }
         callback.onCompletion(r, e);
       });
     } else {
