@@ -171,6 +171,13 @@ import static org.junit.Assert.*;
 final class ServerTestUtil {
   private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER = QuotaTestUtils.createTestQuotaChargeCallback();
 
+  static byte[] getBlobData(BlobData blobData) {
+    byte[] actualBlobData = new byte[(int) blobData.getSize()];
+    ByteBuf buffer = blobData.content();
+    buffer.readBytes(actualBlobData);
+    return actualBlobData;
+  }
+
   static byte[] getBlobDataAndRelease(BlobData blobData) {
     byte[] actualBlobData = new byte[(int) blobData.getSize()];
     ByteBuf buffer = blobData.content();
@@ -517,7 +524,8 @@ final class ServerTestUtil {
       assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.No_Error,
           adminResponseWithContent.getError());
       jsonBytes = adminResponseWithContent.getContent();
-      messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {});
+      messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
+      });
       // We should have one message info
       assertEquals(1, messages.size());
       MessageInfo deleteRecordInfo = messages.values().stream().findFirst().get();
@@ -2662,35 +2670,50 @@ final class ServerTestUtil {
 
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId4 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId5 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId6 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId7 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId8 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId9 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId10 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId11 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId12 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId13 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId14 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId15 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
 
       Port sourcePort = new Port(sourceDataNode.getHttp2Port(), PortType.HTTP2);
       Port targetPort = new Port(targetDataNode.getHttp2Port(), PortType.HTTP2);
@@ -2992,14 +3015,16 @@ final class ServerTestUtil {
       undeleteBlob(sourceChannel, blobId10, cluster.time.milliseconds(), (short) 1);
       // create blob16 on the sourceDataNode
       BlobId blobId16 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       putRequest = new PutRequest(1, "client1", blobId16, properties, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
       // create blob17 on the targetDataNode
       BlobId blobId17 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       putRequest = new PutRequest(1, "client1", blobId17, properties, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
@@ -3807,7 +3832,8 @@ final class ServerTestUtil {
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
       checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
       // the TtlUpdate Operation Time will be same as the PutBlob time since we apply TtlUpdate from the GetRequest.
-      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(), Utils.Infinite_Time);
+      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(),
+          Utils.Infinite_Time);
       cluster.time.sleep(1000);
 
       // 7. On the sourceDatanode blob is ttlUpdated. On the targetDataNode, putBlob.
@@ -3926,7 +3952,8 @@ final class ServerTestUtil {
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
       // The TtlUpdate and Delete operation is same as the source replica's PutBlob creation time.
       // It's not same as the source replica's TtlUpdate or Delete operation time. But it's ok.
-      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(), Utils.Infinite_Time);
+      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(),
+          Utils.Infinite_Time);
       checkDeleteRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs());
       cluster.time.sleep(1000);
 
@@ -3954,7 +3981,8 @@ final class ServerTestUtil {
       replicateDeleteBlob(targetChannel, blobId, sourceDataNode, delOperationTime, ServerErrorCode.No_Error);
       getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
-      checkDeleteRecord(targetChannel, clusterMap, blobId, delOperationTime); // should be delOperationTime not operationTime
+      checkDeleteRecord(targetChannel, clusterMap, blobId,
+          delOperationTime); // should be delOperationTime not operationTime
       cluster.time.sleep(1000);
 
       // 12. On the sourceDataNode, the blob is deleted. On the targetDataNode, it's ttlUpdated.
@@ -4164,8 +4192,8 @@ final class ServerTestUtil {
           channel = thirdChannel;
         }
 
-        getBlobAndVerify(blobId1, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data, encryptionKey,
-            clusterMap, blobIdFactory, testEncryption, GetOption.None);
+        getBlobAndVerify(blobId1, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
 
         getBlobAndVerify(blobId2, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
             encryptionKey, clusterMap, blobIdFactory, testEncryption);
@@ -4831,8 +4859,8 @@ final class ServerTestUtil {
     releaseNettyBufUnderneathStream(stream);
   }
 
-  static void checkTtlUpdateRecord(ConnectedChannel channel, ClusterMap clusterMap, BlobId blobId, long expectedOperationTime,
-      long expectedExpiryTimeMs) throws IOException {
+  static void checkTtlUpdateRecord(ConnectedChannel channel, ClusterMap clusterMap, BlobId blobId,
+      long expectedOperationTime, long expectedExpiryTimeMs) throws IOException {
     // Use BlobIndexAdminRequest to verify we have the right TtlUpdate record
     BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId,
         new AdminRequest(AdminRequestOrResponseType.BlobIndex, blobId.getPartition(), 1, "clientid2"));
@@ -4844,7 +4872,9 @@ final class ServerTestUtil {
     byte[] jsonBytes = adminResponseWithContent.getContent();
     ObjectMapper objectMapper = new ObjectMapper();
     StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
-    Map<String, MessageInfo> messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {});
+    Map<String, MessageInfo> messages =
+        objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
+        });
     // find the TtlUpdate record
     MessageInfo ttlUpdateRecord = null;
     for (MessageInfo mg : messages.values()) {
@@ -5073,9 +5103,8 @@ final class ServerTestUtil {
       } else if (channel.getRemoteHost().equals(targetDataNode.getHostname())
           && channel.getRemotePort() == targetDataNode.getPortToConnectTo().getPort()) {
         targetChannel = channel;
-      } else if (channel.getRemoteHost().equals(thirdDataNode.getHostname()) && channel.getRemotePort() == thirdDataNode
-          .getPortToConnectTo()
-          .getPort()) {
+      } else if (channel.getRemoteHost().equals(thirdDataNode.getHostname())
+          && channel.getRemotePort() == thirdDataNode.getPortToConnectTo().getPort()) {
         thirdChannel = channel;
       }
     }
