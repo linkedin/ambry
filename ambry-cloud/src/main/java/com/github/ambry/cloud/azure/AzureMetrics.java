@@ -26,6 +26,9 @@ public class AzureMetrics {
   public static final String BLOB_UPLOAD_REQUEST_COUNT = "BlobUploadRequestCount";
   public static final String BLOB_UPLOAD_SUCCESS_COUNT = "BlobUploadSuccessCount";
   public static final String BLOB_UPLOAD_SUCCESS_RATE = "BlobUploadSuccessRate";
+  public static final String BLOB_UPDATE_TTL_SUCCESS_RATE = "BlobUpdateTTLSuccessRate";
+  public static final String BLOB_UPDATE_TTL_LATENCY = "blobUpdateTTLLatency";
+  public static final String BLOB_UPDATE_TTL_ERROR_COUNT = "BlobUpdateTTLErrorCount";
   public static final String BLOB_UPDATE_DELETE_TIME_SUCCESS_RATE = "BlobUpdateDeleteTimeSuccessRate";
   public static final String BLOB_UPDATE_DELETE_TIME_LATENCY = "blobUpdateDeleteTimeLatency";
   public static final String BLOB_UPDATE_DELETE_TIME_ERROR_COUNT = "BlobUpdateDeleteTimeErrorCount";
@@ -96,6 +99,9 @@ public class AzureMetrics {
   public final Meter blobUndeleteSucessRate;
   public final Timer blobUndeleteLatency;
   public final Counter blobUndeleteErrorCount;
+  public final Meter blobUpdateTTLSucessRate;
+  public final Timer blobUpdateTTLLatency;
+  public final Counter blobUpdateTTLErrorCount;
   public final Counter blobUploadErrorCount;
   public final Counter blobDownloadRequestCount;
   public final Counter blobDownloadSuccessCount;
@@ -165,6 +171,9 @@ public class AzureMetrics {
     blobUndeleteLatency = registry.timer(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UNDELETE_LATENCY));
     blobUndeleteSucessRate = registry.meter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UNDELETE_SUCCESS_RATE));
     blobUndeleteErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UNDELETE_ERROR_COUNT));
+    blobUpdateTTLLatency = registry.timer(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UPDATE_TTL_LATENCY));
+    blobUpdateTTLSucessRate = registry.meter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UPDATE_TTL_SUCCESS_RATE));
+    blobUpdateTTLErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UPDATE_TTL_ERROR_COUNT));
     blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestinationSync.class, BLOB_UPLOAD_ERROR_COUNT));
     blobDownloadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_REQUEST_COUNT));

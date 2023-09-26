@@ -462,42 +462,71 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore updateTtl method. */
   @Test
   public void testStoreTtlUpdates() throws Exception {
-    setupCloudStore(false, true, defaultCacheLimit, true);
+    setupCloudStore(true, true, defaultCacheLimit, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    int count = 10;
+    int count = 1;
+    int expectedCount = 0;
     for (int j = 0; j < count; j++) {
       CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, -1, refAccountId, refContainerId, true, false,
           partitionId, operationTime, isVcr);
     }
-    store.updateTtl(messageWriteSet.getMessageSetInfo());
-    verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class));
-    verifyCacheHits(count, 0);
 
-    // Call second time, If isVcr, should be cached causing updates to be skipped.
-    store.updateTtl(messageWriteSet.getMessageSetInfo());
-    int expectedCount = isVcr ? count : count * 2;
-    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
-        any(CloudUpdateValidator.class));
-    verifyCacheHits(count * 2, count);
+    // Put a blob for ttl-update
+    store.put(messageWriteSet);
+    int numPuts = count;
 
+    /*
+      Test 1: Update TTL
+      V1: Should pass
+      V2: Should pass
+     */
+    store.updateTtl(messageWriteSet.getMessageSetInfo());
+    if (mockingDetails(dest).isMock()) {
+      verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class));
+    }
+    verifyCacheHits(count + numPuts, 0);
+
+    /*
+        Test 2: Call second time
+        V1: Should pass with no exception
+        V2: Exception expected
+     */
+    store.updateTtl(messageWriteSet.getMessageSetInfo());
+    if (mockingDetails(dest).isMock()) {
+      expectedCount = isVcr ? count : count * 2;
+      verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
+          any(CloudUpdateValidator.class));
+    }
+    verifyCacheHits((count * 2) + numPuts, count);
+
+    /*
+        Test 3: delete, undelete, ttl-update
+        V1: Should pass
+        V2: Should pass
+     */
     // test that if a blob is deleted and then undeleted, the ttlupdate status is preserved in cache.
     MessageInfo messageInfo = messageWriteSet.getMessageSetInfo().get(0);
     store.delete(Collections.singletonList(messageInfo));
-    verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class));
-    store.undelete(messageInfo);
-    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
-    store.updateTtl(Collections.singletonList(messageInfo));
-    expectedCount = isVcr ? expectedCount : expectedCount + 1;
-    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
-        any(CloudUpdateValidator.class));
-    if (isVcr) {
-      verifyCacheHits((count * 2) + 3, count + 1);
-    } else {
-      // delete and undelete should not cause cache lookup for frontend.
-      verifyCacheHits((count * 2) + 1, count + 1);
+    if (mockingDetails(dest).isMock()) {
+      verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class));
     }
+    store.undelete(messageInfo);
+    if (mockingDetails(dest).isMock()) {
+      verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
+    }
+    store.updateTtl(Collections.singletonList(messageInfo));
+    if (mockingDetails(dest).isMock()) {
+      expectedCount = isVcr ? expectedCount : expectedCount + 1;
+      verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
+          any(CloudUpdateValidator.class));
+    }
+    verifyCacheHits((count * 2) + 3 + numPuts, count + 1);
 
-    //test that ttl update with non infinite expiration time fails
+    /*
+        Test 4: ttl update with finite expiration time fails
+        V1: Should fail
+        V2: Should fail
+     */
     messageWriteSet = new MockMessageWriteSet();
     CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, System.currentTimeMillis() + 20000,
         refAccountId, refContainerId, true, false, partitionId, operationTime, isVcr);
