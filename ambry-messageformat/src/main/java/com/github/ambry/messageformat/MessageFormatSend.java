@@ -22,7 +22,6 @@ import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
@@ -130,7 +129,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
           // If we can successfully deserialize BlobAll, then the message content is correct
           try {
             ByteBuf messageData = readSet.getPrefetchedData(i).duplicate();
-            MessageFormatRecord.deserializeBlobAll(new NettyByteBufDataInputStream(messageData), storeKeyFactory);
+            MessageFormatRecord.deserializeBlobAll(new ByteBufInputStream(messageData), storeKeyFactory);
           } catch (Exception e) {
             metrics.messageFormatExceptionCount.inc();
             logger.error("Failed to deserialize the BlobAll from message format send for StoreKey {}.", storeKey, e);
@@ -231,7 +230,7 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
         data.release();
       }
       if (!(e instanceof MessageFormatException)) {
-        logger.error("Error when calculating offsets", e);
+        logger.trace("Error when calculating offsets", e);
         throw new MessageFormatException("IOError when calculating offsets ", e, MessageFormatErrorCodes.IO_Error);
       } else {
         throw (MessageFormatException) e;
