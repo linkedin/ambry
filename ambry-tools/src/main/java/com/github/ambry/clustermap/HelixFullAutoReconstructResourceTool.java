@@ -30,6 +30,7 @@ import java.util.stream.Collectors;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 import joptsimple.OptionSpecBuilder;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
@@ -56,8 +57,8 @@ public class HelixFullAutoReconstructResourceTool {
   public static void main(String[] args) throws Exception {
     OptionParser parser = new OptionParser();
 
-    ArgumentAcceptingOptionSpec<String> clusterNameOpt =
-        parser.accepts("clusterName", "Helix cluster name").withRequiredArg()
+    ArgumentAcceptingOptionSpec<String> clusterNameOpt = parser.accepts("clusterName", "Helix cluster name")
+        .withRequiredArg()
         .describedAs("cluster_name")
         .ofType(String.class);
 
@@ -82,22 +83,30 @@ public class HelixFullAutoReconstructResourceTool {
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> resourcesOpt = parser.accepts("resources",
-            "The comma-separated resources to create. Use '--resources all' to migrate all resources")
+            "The comma-separated commaSeparatedResources to create. Use '--resources all' to reconstruct or drop all resources")
         .withRequiredArg()
         .describedAs("resources")
         .ofType(String.class);
+
+    OptionSpec<Void> dropResourcesOpt =
+        parser.accepts("dropResources", "Drops commaSeparatedResources from given Ambry cluster from Helix");
 
     OptionSet options = parser.parse(args);
     String clusterName = options.valueOf(clusterNameOpt);
     String dcName = options.valueOf(dcNameOpt);
     String zkLayoutPath = options.valueOf(zkLayoutPathOpt);
     String cliqueLayoutPath = options.valueOf(cliqueLayoutPathOpt);
-    String resources = options.valueOf(resourcesOpt) == null ? "all" : options.valueOf(resourcesOpt);
+    String commaSeparatedResources = options.valueOf(resourcesOpt) == null ? "all" : options.valueOf(resourcesOpt);
 
     HelixFullAutoReconstructResourceTool helixFullAutoReconstructResourceTool =
         new HelixFullAutoReconstructResourceTool(clusterName, dcName, options.has(dryRun), zkLayoutPath,
             cliqueLayoutPath);
-    helixFullAutoReconstructResourceTool.reconstructResources(resources);
+
+    if (options.has(dropResourcesOpt)) {
+      helixFullAutoReconstructResourceTool.dropOldResources(commaSeparatedResources);
+    } else {
+      helixFullAutoReconstructResourceTool.reconstructResources(commaSeparatedResources);
+    }
 
     System.out.println("======== HelixFullAutoReconstructResourceTool completed successfully! ========");
     System.out.println("( If program doesn't exit, please use Ctrl-c to terminate. )");
@@ -269,6 +278,44 @@ public class HelixFullAutoReconstructResourceTool {
       System.out.println(
           "Resource = " + entry.getKey() + ", number of partitions = " + entry.getValue().size() + ", Partitions = "
               + entry.getValue());
+    }
+  }
+
+  /**
+   * Drop resources
+   */
+  public void dropOldResources(String commaSeparatedResources) {
+    // Get resources to drop from user input.
+    Set<String> helixResources =
+        admin.getResourcesInCluster(clusterName).stream().filter(s -> s.matches("\\d+")).collect(Collectors.toSet());
+    Set<String> resourcesToDrop;
+    if (commaSeparatedResources.equalsIgnoreCase("all")) {
+      resourcesToDrop = helixResources;
+    } else {
+      resourcesToDrop =
+          Arrays.stream(commaSeparatedResources.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
+      resourcesToDrop.removeIf(resource -> {
+        if (!helixResources.contains(resource)) {
+          System.err.println(
+              "Resource " + resource + " is not present in cluster " + helixClusterName + " in dc " + dc);
+          return true;
+        }
+        if (Integer.parseInt(resource) >= 10000) {
+          System.err.println("Resource " + resource + " is greater or equal to 10000. Not dropping it");
+          return true;
+        }
+        return false;
+      });
+    }
+
+    // Drop resources
+    for (String resourceName : resourcesToDrop) {
+      if (!dryRun) {
+        System.out.println("Dropping resource " + resourceName + " in cluster " + helixClusterName);
+        admin.dropResource(helixClusterName, resourceName);
+      } else {
+        System.out.println("Dry Run. This will drop resource " + resourceName + " in cluster " + helixClusterName);
+      }
     }
   }
 
