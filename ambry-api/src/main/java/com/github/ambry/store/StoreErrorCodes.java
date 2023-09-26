@@ -39,5 +39,7 @@ public enum StoreErrorCodes {
   Life_Version_Conflict,
   ID_Not_Deleted,
   ID_Undeleted,
-  ID_Deleted_Permanently
+  ID_Deleted_Permanently,
+  // TODO Efficient_Metadata_Operations_TODO : ID_Purged error should be handled in all of the store's methods.
+  ID_Purged
 }

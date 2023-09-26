@@ -420,6 +420,7 @@ class EventTracker {
   private final int numberOfReplicas;
   private final Helper creationHelper;
   private final Helper deletionHelper;
+  private final Helper purgeHelper;
   private final Helper undeleteHelper;
   private final Helper replicateHelper;
   private final ConcurrentMap<UpdateType, Helper> updateHelpers = new ConcurrentHashMap<>();
@@ -497,6 +498,7 @@ class EventTracker {
     numberOfReplicas = expectedNumberOfReplicas;
     creationHelper = new Helper(numberOfReplicas);
     deletionHelper = new Helper(numberOfReplicas);
+    purgeHelper = new Helper(numberOfReplicas);
     undeleteHelper = new Helper(numberOfReplicas);
     // On-demand-replication, we usually only need one replica to replicate the Blob.
     replicateHelper = new Helper(1);
@@ -518,6 +520,15 @@ class EventTracker {
    */
   void trackDeletion(String host, int port) {
     deletionHelper.track(host, port);
+  }
+
+  /**
+   * Tracks the purge event that arrived on {@code host}:{@code port}.
+   * @param host the host that received the purge request.
+   * @param port the port of the host that describes the instance along with {@code host}.
+   */
+  void trackPurge(String host, int port) {
+    purgeHelper.track(host, port);
   }
 
   /**
@@ -685,6 +696,13 @@ class MockNotificationSystem implements NotificationSystem {
       BlobReplicaSourceType sourceType) {
     objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
         .trackDeletion(sourceHost, port);
+  }
+
+  @Override
+  public synchronized void onBlobReplicaPurged(String sourceHost, int port, String blobId,
+      BlobReplicaSourceType sourceType) {
+    objectTracker.computeIfAbsent(blobId, k -> new EventTracker(getNumReplicas(blobId)))
+        .trackPurge(sourceHost, port);
   }
 
   @Override
