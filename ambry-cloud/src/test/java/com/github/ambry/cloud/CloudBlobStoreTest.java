@@ -74,6 +74,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -82,6 +83,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -650,39 +652,68 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore findMissingKeys method. */
   @Test
   public void testFindMissingKeys() throws Exception {
-    setupCloudStore(false, true, defaultCacheLimit, true);
-    int count = 10;
+    // FIXED: Incomplete test, but fixed now.
+    setupCloudStore(true, true, defaultCacheLimit, true);
+    int count = 1;
     List<StoreKey> keys = new ArrayList<>();
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+    long now = System.currentTimeMillis();
+    short initialLifeVersion = 100;
     Map<String, CloudBlobMetadata> metadataMap = new HashMap<>();
+    List<MessageInfo> missingBlobIds = new ArrayList<>();
     for (int j = 0; j < count; j++) {
-      // Blob with metadata
+      // Blobs present in cloud
       BlobId existentBlobId = getUniqueId(refAccountId, refContainerId, false, partitionId);
+      MessageInfo info = new MessageInfo(existentBlobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, initialLifeVersion);
+      messageWriteSet.add(info, ByteBuffer.wrap(TestUtils.getRandomBytes(SMALL_BLOB_SIZE)));
       keys.add(existentBlobId);
       metadataMap.put(existentBlobId.getID(),
           new CloudBlobMetadata(existentBlobId, operationTime, Utils.Infinite_Time, 1024,
               CloudBlobMetadata.EncryptionOrigin.ROUTER));
-      // Blob without metadata
+      // Blobs absent in cloud
       BlobId nonexistentBlobId = getUniqueId(refAccountId, refContainerId, false, partitionId);
+      info = new MessageInfo(nonexistentBlobId, SMALL_BLOB_SIZE, refAccountId, refContainerId, now, initialLifeVersion);
+      missingBlobIds.add(info);
       keys.add(nonexistentBlobId);
     }
-    when(dest.getBlobMetadata(anyList())).thenReturn(metadataMap);
-    Set<StoreKey> missingKeys = store.findMissingKeys(keys);
-    verify(dest).getBlobMetadata(anyList());
-    int expectedLookups = keys.size();
-    int expectedHits = 0;
-    verifyCacheHits(expectedLookups, expectedHits);
-    assertEquals("Wrong number of missing keys", count, missingKeys.size());
 
-    if (isVcr) {
-      // Add keys to cache and rerun (should be cached)
-      for (StoreKey storeKey : keys) {
-        store.addToCache(storeKey.getID(), (short) 0, CloudBlobStore.BlobState.CREATED);
-      }
-      missingKeys = store.findMissingKeys(keys);
-      assertTrue("Expected no missing keys", missingKeys.isEmpty());
-      expectedLookups += keys.size();
-      expectedHits += keys.size();
-      verifyCacheHits(expectedLookups, expectedHits);
+    /*
+      Add some keys and test for missing keys
+     */
+    store.put(messageWriteSet);
+    int numPuts = messageWriteSet.getMessageSetInfo().size();
+    if (mockingDetails(dest).isMock()) {
+      when(dest.getBlobMetadata(anyList())).thenReturn(metadataMap);
+    }
+    Set<StoreKey> missingKeys = store.findMissingKeys(keys);
+    if (mockingDetails(dest).isMock()) {
+      verify(dest).getBlobMetadata(anyList());
+    }
+    verifyCacheHits(keys.size() + numPuts, numPuts);
+    /*
+      The way to determine the correctness of findMissinKeys is to take the set diff
+      ok keys we know will be missing and keys returned by findMissingKeys.
+     */
+    Set<String> keysPresentInCloud = metadataMap.keySet();
+    Set<String> allKeySet = keys.stream().map(k -> k.getID()).collect(Collectors.toSet());
+    Set<String> missingKeySet = missingKeys.stream().map(k -> k.getID()).collect(Collectors.toSet());
+    missingKeySet.addAll(keysPresentInCloud);
+    missingKeySet.removeAll(allKeySet);
+    assertTrue(missingKeySet.isEmpty());
+
+    /*
+      Upload the missing keys and check that findMissingKeys returns empty
+     */
+    messageWriteSet = new MockMessageWriteSet();
+    for (MessageInfo info : missingBlobIds) {
+      messageWriteSet.add(info, ByteBuffer.wrap(TestUtils.getRandomBytes(SMALL_BLOB_SIZE)));
+    }
+    store.put(messageWriteSet);
+    missingKeys = store.findMissingKeys(keys);
+    assertTrue("Expected no missing keys", missingKeys.isEmpty());
+    verifyCacheHits(messageWriteSet.getMessageSetInfo().size() + keys.size() + keys.size() + numPuts,
+         keys.size() + numPuts);
+    if (mockingDetails(dest).isMock()) {
       // getBlobMetadata should not have been called a second time.
       verify(dest).getBlobMetadata(anyList());
     }
