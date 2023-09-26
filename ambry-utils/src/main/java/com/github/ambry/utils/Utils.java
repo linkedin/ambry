@@ -1500,6 +1500,17 @@ public class Utils {
   }
 
   /**
+   * Get the latest timestamp, and if one of the timestamp is null, return the non-null timestamp.
+   */
+  public static Timestamp getLatestTimeStamp(Timestamp timestamp1, Timestamp timestamp2) {
+    if (compareTimestamp(timestamp1, timestampToMs(timestamp2)) > 0) {
+      return timestamp1;
+    } else {
+      return timestamp2;
+    }
+  }
+
+  /**
    * @param timestamp a {@link Timestamp}, can be null.
    * @return the milliseconds since the epoch if {@code timestamp} is non-null, or {@link Utils#Infinite_Time} if null.
    */
