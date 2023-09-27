@@ -120,15 +120,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return blobContainerClient
    */
   protected BlobContainerClient getBlobStore(String partitionId) {
-    BlobContainerClient blobContainerClient;
+    BlobContainerClient blobContainerClient = azureStorageClient.getBlobContainerClient(String.valueOf(partitionId));
     try {
-      blobContainerClient = azureStorageClient.getBlobContainerClient(String.valueOf(partitionId));
-    } catch (BlobStorageException blobStorageException) {
-      if (blobStorageException.getErrorCode().equals(BlobErrorCode.CONTAINER_NOT_FOUND)) {
-        logger.error("Azure blob storage container for partition {} not found due to {}", partitionId,
-            blobStorageException.getServiceMessage());
+      if (!blobContainerClient.exists()) {
+        logger.error("Azure blob storage container for partition {} does not exist", partitionId);
         return null;
       }
+    } catch (BlobStorageException blobStorageException) {
       vcrMetrics.azureStoreContainerGetError.inc();
       logger.error("Failed to get Azure blob storage container for partition {} due to {}", partitionId,
           blobStorageException.getServiceMessage());
@@ -165,8 +163,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @return {@link CloudBlobStoreV2}
    */
   protected BlobContainerClient createOrGetBlobStore(String partitionId) {
-    // Get or create container
+    // Get container ref from local cache
     BlobContainerClient blobContainerClient = partitionToAzureStore.get(partitionId);
+
+    // If cache miss, then get container ref from cloud
+    if (blobContainerClient == null) {
+      blobContainerClient = getBlobStore(partitionId);
+    }
+
+    // If container absent, then create container and get ref
     if (blobContainerClient == null) {
       blobContainerClient = createBlobStore(partitionId);
     }
