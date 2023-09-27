@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -136,13 +137,29 @@ public class HelixFullAutoReconstructResourceTool {
     // 2. Get partitions in each clique
     buildResourceToPartitionsMap();
 
-    // 3. Create resources for new cliques
-    Set<String> resources = new HashSet<>();
-    if (!commaSeparatedResources.equals("all")) {
-      resources =
+    // Get resources to create
+    Set<String> helixResources = admin.getResourcesInCluster(helixClusterName)
+        .stream()
+        .filter(s -> s.matches("\\d+"))
+        .collect(Collectors.toSet());
+    Set<String> resourcesToCreate;
+    if (commaSeparatedResources.equals("all")) {
+      resourcesToCreate = resourceToPartitions.keySet().stream().map(String::valueOf).collect(Collectors.toSet());
+    } else {
+      resourcesToCreate =
           Arrays.stream(commaSeparatedResources.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
     }
-    createNewResources(resources);
+    resourcesToCreate.removeIf(resource -> {
+      if (helixResources.contains(resource)) {
+        System.err.println(
+            "Resource " + resource + " is already present in cluster " + helixClusterName + " in dc " + dc
+                + ". Not adding again");
+        return true;
+      }
+      return false;
+    });
+    // 3. Create resourcesToCreate for new cliques
+    createNewResources(resourcesToCreate);
   }
 
   /**
@@ -285,27 +302,43 @@ public class HelixFullAutoReconstructResourceTool {
    * Drop resources
    */
   public void dropOldResources(String commaSeparatedResources) {
+
     // Get resources to drop from user input.
-    Set<String> helixResources =
-        admin.getResourcesInCluster(clusterName).stream().filter(s -> s.matches("\\d+")).collect(Collectors.toSet());
+    Set<String> helixResources = admin.getResourcesInCluster(helixClusterName)
+        .stream()
+        .filter(s -> s.matches("\\d+"))
+        .collect(Collectors.toSet());
     Set<String> resourcesToDrop;
     if (commaSeparatedResources.equalsIgnoreCase("all")) {
       resourcesToDrop = helixResources;
     } else {
       resourcesToDrop =
           Arrays.stream(commaSeparatedResources.replaceAll("\\p{Space}", "").split(",")).collect(Collectors.toSet());
-      resourcesToDrop.removeIf(resource -> {
-        if (!helixResources.contains(resource)) {
-          System.err.println(
-              "Resource " + resource + " is not present in cluster " + helixClusterName + " in dc " + dc);
-          return true;
-        }
-        if (Integer.parseInt(resource) >= 10000) {
-          System.err.println("Resource " + resource + " is greater or equal to 10000. Not dropping it");
-          return true;
-        }
-        return false;
-      });
+    }
+
+    // Remove resources which are not in helix and >= 10000
+    resourcesToDrop.removeIf(resource -> {
+      if (!helixResources.contains(resource)) {
+        System.err.println("Resource " + resource + " is not present in cluster " + helixClusterName + " in dc " + dc);
+        return true;
+      }
+      if (Integer.parseInt(resource) >= 10000) {
+        System.err.println("Resource " + resource + " is greater or equal to 10000. Not dropping it");
+        return true;
+      }
+      return false;
+    });
+
+    if (!dryRun) {
+      System.out.println(
+          "This will drop resources " + resourcesToDrop + " in cluster " + helixClusterName + " in dc " + dc);
+      System.out.println("Enter yes to continue. Any other string to abort");
+      Scanner scanner = new Scanner(System.in);
+      String input = scanner.nextLine();
+      if (!input.equals("yes")) {
+        System.out.println("Aborting dropping resources");
+        return;
+      }
     }
 
     // Drop resources
@@ -320,26 +353,29 @@ public class HelixFullAutoReconstructResourceTool {
   }
 
   /**
-   * Create new resources (10000, 10001, 10002... ) in helix
+   * Create new inputResources (10000, 10001, 10002... ) in helix
    */
   public void createNewResources(Set<String> resources) {
-    Set<String> resourcesInCluster = new HashSet<>(admin.getResourcesInCluster(helixClusterName));
-    for (Map.Entry<Integer, Set<String>> entry : resourceToPartitions.entrySet()) {
-      int resourceId = entry.getKey();
-      Set<String> partitions = entry.getValue();
-      String resource = String.valueOf(resourceId);
-      if (resourcesInCluster.contains(resource)) {
-        System.out.println("Resource " + resource + " is already present in cluster. Continuing");
-        continue;
+    if (!dryRun) {
+      System.out.println(
+          "This will add new resources " + resources + " in cluster " + helixClusterName + " in dc " + dc);
+      System.out.println("Enter yes to continue. Any other string to abort");
+      Scanner scanner = new Scanner(System.in);
+      String input = scanner.nextLine();
+      if (!input.equals("yes")) {
+        System.out.println("Aborted adding resources");
+        return;
       }
-      if (resources.isEmpty() || resources.contains(resource)) {
-        Map<String, List<String>> resourcePreferenceLists = new HashMap<>();
-        for (String partition : partitions) {
-          List<String> preferenceList = preferenceLists.get(partition);
-          resourcePreferenceLists.put(partition, preferenceList);
-        }
-        buildAndCreateIdealState(resource, resourcePreferenceLists);
+    }
+
+    for (String resource : resources) {
+      Set<String> partitions = resourceToPartitions.get(Integer.parseInt(resource));
+      Map<String, List<String>> resourcePreferenceLists = new HashMap<>();
+      for (String partition : partitions) {
+        List<String> preferenceList = preferenceLists.get(partition);
+        resourcePreferenceLists.put(partition, preferenceList);
       }
+      buildAndCreateIdealState(resource, resourcePreferenceLists);
     }
   }
 
