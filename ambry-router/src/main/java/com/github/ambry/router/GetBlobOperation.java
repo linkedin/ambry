@@ -880,9 +880,6 @@ class GetBlobOperation extends GetOperation {
             routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
             ByteBuf decryptedContent = result.getDecryptedBlobContent();
             ByteBuf decompressedContent = decompressContent(decryptedContent);
-            // If the decompressed content is valid, don't use decryptedContent anymore, so we release it.
-            // If the decompressed content is null, which means the operation failed, just release the decryptedContent.
-            decryptedContent.release();
             if (decompressedContent != null) {
               chunkIndexToBuf.put(chunkIndex, filterChunkToRange(decompressedContent));
               numChunksRetrieved.incrementAndGet();
@@ -920,7 +917,7 @@ class GetBlobOperation extends GetOperation {
     protected ByteBuf decompressContent(ByteBuf sourceBuffer) {
       if (!isChunkCompressed) {
         // Blob is not compressed.  Return source buffer and increase the counter.
-        return sourceBuffer.retain();
+        return sourceBuffer;
       }
 
       try {
@@ -932,6 +929,10 @@ class GetBlobOperation extends GetOperation {
             RouterErrorCode.UnexpectedInternalError));
         setOperationCompleted();
         return null;
+      } finally {
+        // If the decompressed content is valid, don't use sourceBuffer anymore, so we release it.
+        // If the decompressed content is null, which means the operation failed, just release the sourceBuffer.
+        sourceBuffer.release();
       }
     }
 
@@ -1125,9 +1126,6 @@ class GetBlobOperation extends GetOperation {
           }
           routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
           ByteBuf decompressedContent = decompressContent(chunkBuf);
-          // If the decompressed content is valid, don't use chunkBuf anymore, so we release it.
-          // If the decompressed content is null, which means the operation failed, just release the chunkBuf.
-          chunkBuf.release();
           if (decompressedContent != null) {
             chunkIndexToBuf.put(chunkIndex, filterChunkToRange(decompressedContent));
             numChunksRetrieved.incrementAndGet();
@@ -1585,7 +1583,6 @@ class GetBlobOperation extends GetOperation {
               routerMetrics.getFirstDataChunkLatencyMs.update(System.currentTimeMillis() - submissionTimeMs);
               routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
               ByteBuf decompressedContent = decompressContent(decryptedBlobContent);
-              decryptedBlobContent.release();
               if (decompressedContent == null) {
                 progressTracker.setCryptoJobFailed();
               } else {
@@ -1861,9 +1858,6 @@ class GetBlobOperation extends GetOperation {
           routerMetrics.getDataChunkLatencyMs.update(System.currentTimeMillis() - initializedTimeMs);
 
           ByteBuf decompressedContent = decompressContent(chunkBuf);
-          // If the decompressed content is valid, don't use chunkBuf anymore, so we release it.
-          // If the decompressed content is null, which means the operation failed, just release the chunkBuf.
-          chunkBuf.release();
           if (decompressedContent != null) {
             totalSize = decompressedContent.readableBytes();
             if (!resolveRange(totalSize)) {
