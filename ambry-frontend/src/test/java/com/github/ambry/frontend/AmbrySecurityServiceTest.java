@@ -187,8 +187,18 @@ public class AmbrySecurityServiceTest {
         Assert.assertEquals("Should be a bad request", RestServiceErrorCode.BadRequest, rse.getErrorCode());
       }
     }
+
+    // verify blob id is encoded in signed url
+    String encodedBlobName = URLEncoder.encode("/named/account/container/données", StandardCharsets.UTF_8.name());
+    String url = "https://localhost:1717/?" + RestUtils.Headers.BLOB_ID + "=" + encodedBlobName;
+    RestRequest restRequest = createRestRequest(RestMethod.GET, url, null);
+    URL_SIGNING_SERVICE_FACTORY.isRequestSigned = true;
+    URL_SIGNING_SERVICE_FACTORY.verifySignedRequestException = null;
+    securityService.preProcessRequest(restRequest).get();
+    Assert.assertEquals(encodedBlobName, restRequest.getArgs().get(RestUtils.Headers.BLOB_ID));
+
     // verify request args regarding to tracking is set accordingly
-    RestRequest restRequest = createRestRequest(RestMethod.GET, "/", null);
+    restRequest = createRestRequest(RestMethod.GET, "/", null);
     securityService.preProcessRequest(restRequest).get();
     Assert.assertTrue("The arg with key: ambry-internal-keys-send-tracking-info should be set to true",
         (Boolean) restRequest.getArgs().get(RestUtils.InternalKeys.SEND_TRACKING_INFO));
@@ -199,7 +209,7 @@ public class AmbrySecurityServiceTest {
         new AmbrySecurityService(frontendConfig, new FrontendMetrics(new MetricRegistry(), frontendConfig),
             URL_SIGNING_SERVICE_FACTORY.getUrlSigningService(), hostLevelThrottler, QUOTA_MANAGER);
     restRequest = createRestRequest(RestMethod.GET, "/", null);
-    securityServiceWithTrackingDisabled.preProcessRequest(restRequest);
+    securityServiceWithTrackingDisabled.preProcessRequest(restRequest).get();
     Assert.assertFalse("The arg with key: ambry-internal-keys-send-tracking-info should be set to false",
         (Boolean) restRequest.getArgs().get(RestUtils.InternalKeys.SEND_TRACKING_INFO));
   }

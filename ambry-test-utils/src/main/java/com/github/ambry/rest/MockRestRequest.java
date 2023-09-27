@@ -13,8 +13,8 @@
  */
 package com.github.ambry.rest;
 
-import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.FutureResult;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -23,6 +23,8 @@ import java.net.URISyntaxException;
 import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -166,7 +168,7 @@ public class MockRestRequest implements RestRequest {
   @Override
   public String getUri() {
     onEventComplete(Event.GetUri);
-    return (uri == null) ? null: uri.toString();
+    return (uri == null) ? null : uri.toString();
   }
 
   @Override
@@ -377,7 +379,7 @@ public class MockRestRequest implements RestRequest {
       while (headerKeys.hasNext()) {
         String headerKey = headerKeys.next();
         Object headerValue = JSONObject.NULL.equals(headers.get(headerKey)) ? null : headers.get(headerKey);
-        addOrUpdateArg(headerKey, headerValue);
+        addOrUpdateArgNoDecoding(headerKey, headerValue);
       }
     }
 
@@ -411,6 +413,36 @@ public class MockRestRequest implements RestRequest {
     key = URLDecoder.decode(key, "UTF-8");
     if (value != null && value instanceof String) {
       String valueStr = URLDecoder.decode((String) value, "UTF-8");
+      StringBuilder sb;
+      if (args.get(key) == null) {
+        sb = new StringBuilder(valueStr);
+        args.put(key, sb);
+      } else {
+        sb = (StringBuilder) args.get(key);
+        sb.append(MULTIPLE_HEADER_VALUE_DELIMITER).append(value);
+      }
+    } else if (value != null && args.containsKey(key)) {
+      throw new IllegalStateException("Value of key [" + key + "] is not a string and it already exists in the args");
+    } else {
+      args.put(key, value);
+    }
+  }
+
+  /**
+   * Adds a {@code key}, {@code value} pair to args without any decoding. If {@code key} already exists,
+   * {@code value} is added to a list of values.
+   * @param key the key of the argument.
+   * @param value the value of the argument.
+   * @throws UnsupportedEncodingException if {@code key} or {@code value} cannot be URL decoded.
+   */
+  private void addOrUpdateArgNoDecoding(String key, Object value) throws UnsupportedEncodingException {
+    if (value != null && value instanceof String) {
+      CharsetEncoder encoder = StandardCharsets.US_ASCII.newEncoder();
+      if (!encoder.canEncode(key) || !encoder.canEncode((String) value)) {
+        throw new IllegalArgumentException(
+            "Key " + key + " or Value " + value + "is not valid, since they are not all ascii");
+      }
+      String valueStr = (String) value;
       StringBuilder sb;
       if (args.get(key) == null) {
         sb = new StringBuilder(valueStr);

@@ -29,7 +29,9 @@ import com.github.ambry.utils.Utils;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -111,10 +113,18 @@ public class RestUtilsTest {
    * @param userMetadata {@link Map} which has the new entries that has to be added
    * @throws org.json.JSONException
    */
-  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata) throws JSONException {
+  public static void setUserMetadataHeaders(JSONObject headers, Map<String, String> userMetadata) throws Exception {
     if (userMetadata != null) {
+      CharsetEncoder encoder = StandardCharsets.US_ASCII.newEncoder();
       for (String key : userMetadata.keySet()) {
-        headers.put(key, userMetadata.get(key));
+        String value = userMetadata.get(key);
+        if (encoder.canEncode(value)) {
+          headers.put(key, userMetadata.get(key));
+        } else {
+          String newKey = key.replaceFirst(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX,
+              RestUtils.Headers.USER_META_DATA_ENCODED_HEADER_PREFIX);
+          headers.put(newKey, URLEncoder.encode(value, StandardCharsets.UTF_8.name()));
+        }
       }
     }
   }

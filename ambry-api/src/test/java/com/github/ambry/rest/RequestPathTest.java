@@ -205,9 +205,11 @@ public class RequestPathTest {
     Map<String, String> blobNamePairs = Stream.of(
             new String[][]{{"/named/account/container/blobname", "/named/account/container/blobname"},
                 {"/named/account/container/test%20123.json", "/named/account/container/test 123.json"},
+                {"/named/account/container/test+123.json", "/named/account/container/test 123.json"},
+                {"/named/account/container/test%2B123.json", "/named/account/container/test+123.json"},
                 {"/named/account/container/donne%CC%81es_2.xls", "/named/account/container/données_2.xls"},
                 {"/named/account/container/%E6%96%87%E4%BB%B6.txt", "/named/account/container/文件.txt"},
-                {"%2Fnamed%2Faccount%2Fcontainer%2Ffilename.json", "/named/account/container/filename.json"},
+                {"/named%2Faccount%2Fcontainer%2Ffilename.json", "/named/account/container/filename.json"},
                 {"/named/account/container/%2Fa%2Fb%2Fc%2Fd.txt", "/named/account/container//a/b/c/d.txt"}})
         .collect(Collectors.toMap(d -> d[0], d -> d[1]));
     for (Map.Entry<String, String> namePairs : blobNamePairs.entrySet()) {
