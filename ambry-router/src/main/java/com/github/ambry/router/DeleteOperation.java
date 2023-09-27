@@ -465,6 +465,7 @@ class DeleteOperation {
             && operationException.get() != null
             && ((RouterException) operationException.get()).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
           operationException.set(null);
+          routerMetrics.backgroundDeleterNotFoundCount.inc();
           logger.info("Ignore BlobNotFound error from the background deleter. {}", blobId);
         }
       }
