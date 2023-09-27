@@ -164,7 +164,7 @@ class AzureCloudDestination implements CloudDestination {
     this.clusterMap = clusterMap;
   }
 
-  static CloudStorageException toCloudStorageException(String message, Exception e, AzureMetrics azureMetrics) {
+  public static CloudStorageException toCloudStorageException(String message, Exception e, AzureMetrics azureMetrics) {
     Long retryDelayMs = null;
     int statusCode;
     if (e instanceof BlobStorageException) {

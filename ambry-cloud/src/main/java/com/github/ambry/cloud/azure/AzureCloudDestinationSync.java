@@ -226,7 +226,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *
      */
     Timer.Context storageTimer = null;
-    // setNameSchemeVersion is an ugly remnant of legacy code. We have to set it explicitly.
+    // setNameSchemeVersion is a remnant of legacy code. We have to set it explicitly.
     cloudBlobMetadata.setNameSchemeVersion(azureCloudConfig.azureNameSchemeVersion);
     // Azure cloud container names must be 3 - 63 char
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(cloudBlobMetadata);
@@ -268,14 +268,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureMetrics.blobUploadConflictCount.inc();
         logger.debug("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
         // We should rarely be here because we get here from replication logic which checks if a blob exists or not before uploading it.
-        // However, we end up here, return true to allow replication to proceed instead of halting it. Else the replication token will not advance.
+        // However, if we end up here, return true to allow replication to proceed instead of halting it. Else the replication token will not advance.
         // The blob in the cloud is safe as Azure prevented us from overwriting it due to an ETag check.
         return true;
       }
       azureMetrics.blobUploadErrorCount.inc();
       String error = String.format("Failed to upload blob %s to Azure blob storage because %s", blobLayout, e.getMessage());
       logger.error(error);
-      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.Unknown_Error));
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
     } finally {
       if (storageTimer != null) {
         storageTimer.stop();
