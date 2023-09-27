@@ -106,13 +106,16 @@ public class DatasetDao {
     this.dataAccessor = dataAccessor;
     this.mySqlAccountServiceConfig = mySqlAccountServiceConfig;
     this.metrics = metrics;
+    //adding a dataset to db, we only support permanent dataset, and the only way to delete dataset is by calling deleteDatasetByIdSql
     insertDatasetSql =
         String.format("insert into %s (%s, %s, %s, %s, %s, %s, %s, %s, %s) values (?, ?, ?, ?, now(3), ?, ?, ?, ?)",
             DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY,
             RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS);
+    //if dataset is expired, we can create a dataset with same primary key, but we have to use update instead of insert.
+    //need to make sure the delete_ts is set back to null as the only way to delete a dataset is by calling deleteDatasetByIdSql.
     updateDatasetIfExpiredSql = String.format(
         "update %1$s set %2$s = ?, %3$s = now(3), %4$s = ?, %5$s = ?, %6$s = ?, %7$s = ?, %8$s = NULL, %12$s = NULL "
-            + "where %9$s = ? and %10$s = ? and %11$s = ? and GREATEST(%8$s, %12$s) < now(3)", DATASET_TABLE,
+            + "where %9$s = ? and %10$s = ? and %11$s = ? and COALESCE(%8$s, %12$s) < now(3)", DATASET_TABLE,
         VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS,
         DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DELETED_TS);
     //update the dataset field, in order to support partial update, if one parameter is null, keep the original value.
@@ -122,64 +125,81 @@ public class DatasetDao {
             + "`retentionTimeInSeconds` = IFNULL(?, `retentionTimeInSeconds`)," + "`userTags` = IFNULL(?, `userTags`)"
             + " where %7$s = ? and %8$s = ? and %9$s = ?", DATASET_TABLE, LAST_MODIFIED_TIME, RETENTION_POLICY,
         RETENTION_COUNT, RETENTION_TIME_IN_SECONDS, USER_TAGS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME);
+    //get the dataset metadata.
     getDatasetByNameSql = String.format(
         "select %1$s, %2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %13$s from %9$s where %10$s = ? and %11$s = ? and %12$s = ?",
         DATASET_NAME, VERSION_SCHEMA, LAST_MODIFIED_TIME, RETENTION_POLICY, RETENTION_COUNT, RETENTION_TIME_IN_SECONDS,
         USER_TAGS, DELETE_TS, DATASET_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DELETED_TS);
+    //delete the dataset.
     deleteDatasetByIdSql = String.format(
         "update %1$s set %2$s = now(3), %3$s = now(3), %7$s = now(3) where (COALESCE(%2$s, %7$s) IS NULL or COALESCE(%2$s, %7$s) > now(3)) "
             + "and %4$s = ? and %5$s = ? and %6$s = ?", DATASET_TABLE, DELETE_TS, LAST_MODIFIED_TIME, ACCOUNT_ID,
         CONTAINER_ID, DATASET_NAME, DELETED_TS);
+    //list all the datasets under a container.
     listValidDatasetsSql = String.format(
         "select %1$s from %2$s where (COALESCE(%3$s, %6$s) IS NULL or COALESCE(%3$s, %6$s) > now(3)) and %4$s = ? and %5$s = ? and (%1$s >= ? or ? IS NULL) "
             + "ORDER BY %1$s ASC LIMIT ?", DATASET_NAME, DATASET_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
         DELETED_TS);
+    //get the version schema of a dataset. When we upload/download a dataset version, we need to check the version schema first.
     getVersionSchemaSql =
         String.format("select %s from %s where %s = ? and %s = ? and %s = ?", VERSION_SCHEMA, DATASET_TABLE, ACCOUNT_ID,
             CONTAINER_ID, DATASET_NAME);
+    //insert a dataset version into db.
     insertDatasetVersionSql = String.format(
         "insert into %1$s (%2$s, %3$s, %4$s, %5$s, %6$s, %7$s, %8$s, %9$s, %10$s) values (?, ?, ?, ?, now(3), now(3), ?, ?, ?)",
         DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, CREATION_TIME, LAST_MODIFIED_TIME,
         DELETE_TS, DATASET_VERSION_STATE, DELETED_TS);
+    //dataset version has in_progress and ready states.
+    //when we put the dataset version, the flow is add dataset version in_progress -> add named blob -> add regular blob -> update dataset version to ready state.
+    //Only the dataset version in ready state will be considered as a valid version.
     updateDatasetVersionStateSql =
         String.format("update %s set %s = ?, %s = now(3) where %s = ? and %s = ? and %s = ? and %s = ?",
             DATASET_VERSION_TABLE, DATASET_VERSION_STATE, LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
             VERSION);
+    //get the current latest version to download when user provide version == LATEST/MAJOR/MINOR/PATCH
     getLatestVersionSqlForDownload = String.format("select %1$s, %2$s, %8$s from %3$s "
             + "where (COALESCE(%2$s, %8$s) IS NULL or COALESCE(%2$s, %8$s) > now(3)) and (%4$s, %5$s, %6$s, %7$s) = (?, ?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
         VERSION, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DATASET_VERSION_STATE,
         DELETED_TS);
+    //get the latest version + 1 for upload when user provide version == LATEST/MAJOR/MINOR/PATCH
     listLatestVersionSqlForUpload = String.format("select %1$s from %2$s "
             + "where (COALESCE(%3$s, %7$s) IS NULL or COALESCE(%3$s, %7$s) > now(3)) and (%4$s, %5$s, %6$s) = (?, ?, ?) ORDER BY %1$s DESC LIMIT 1",
         VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DELETED_TS);
+    //when we delete a dataset, we will delete all the versions under the dataset. This is to list all versions under a dataset.
     listValidVersionForDatasetDeletionSql = String.format("select %1$s, %2$s, %7$s from %3$s "
             + "where (COALESCE(%2$s, %7$s) IS NULL or COALESCE(%2$s, %7$s) > now(3)) and %4$s = ? and %5$s = ? and %6$s = ?",
         VERSION, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DELETED_TS);
-    // list all valid versions sorted by last modified time, and skip the first N records which is not out of retentionCount.
+    //list all valid versions sorted by last modified time, and skip the first N records which is not out of retentionCount.
     listVersionByModifiedTimeAndFilterByRetentionSql = String.format("select %1$s, %2$s, %9$s from %3$s "
             + "where (COALESCE(%2$s, %9$s) IS NULL or COALESCE(%2$s, %9$s) > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? ORDER BY %8$s DESC LIMIT ?, 100",
         VERSION, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, DATASET_VERSION_STATE,
         LAST_MODIFIED_TIME, DELETED_TS);
+    //list dataset versions under a dataset by page.
     listValidDatasetVersionsByPageSql = String.format("select %1$s from %2$s "
             + "where (COALESCE(%3$s, %8$s) IS NULL or COALESCE(%3$s, %8$s) > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and %1$s >= ? "
             + "ORDER BY %1$s ASC LIMIT ?", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID,
         DATASET_NAME, DATASET_VERSION_STATE, DELETED_TS);
+    //this is used for customized retention policy where we need to provide all versions under a dataset ordered by version number.
     listValidDatasetVersionsByListSql = String.format("select %1$s, %3$s, %9$s, %8$s from %2$s "
             + "where (COALESCE(%3$s, %9$s) IS NULL or COALESCE(%3$s, %9$s) > now(3)) and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? "
             + "ORDER BY %1$s ASC", VERSION, DATASET_VERSION_TABLE, DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME,
         DATASET_VERSION_STATE, CREATION_TIME, DELETED_TS);
+    //this is to update the dataset version to permanent.
     updateDatasetVersionTtlSql = String.format(
         "update %1$s set %2$s = NULL and %8$s = NULL where %3$s = ? and %4$s = ? and %5$s = ? and %6$s = ? and "
             + "(COALESCE(%2$s, %8$s) is NULL or COALESCE(%2$s, %8$s) > now(3)) and %7$s = ?", DATASET_VERSION_TABLE,
         DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE, DELETED_TS);
+    //get the dataset version.
     getDatasetVersionByNameSql = String.format(
         "select %1$s, %2$s, %9$s from %3$s where %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ? and %8$s = ?",
         LAST_MODIFIED_TIME, DELETE_TS, DATASET_VERSION_TABLE, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION,
         DATASET_VERSION_STATE, DELETED_TS);
+    //delete a dataset version
     deleteDatasetVersionByIdSql = String.format(
         "update %1$s set %2$s = now(3), %3$s = now(3), %8$s = now(3) where (COALESCE(%2$s, %8$s) IS NULL or COALESCE(%2$s, %8$s) > now(3)) "
             + "and %4$s = ? and %5$s = ? and %6$s = ? and %7$s = ?", DATASET_VERSION_TABLE, DELETE_TS,
         LAST_MODIFIED_TIME, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DELETED_TS);
+    //if dataset version is expired, we can create a dataset version with same primary key, but we have to use update instead of insert.
     updateDatasetVersionIfExpiredSql = String.format(
         "update %1$s set %2$s = ?, %3$s = now(3), %4$s = now(3), %5$s = ?, %6$s = ?, %11$s = ? where %7$s = ? and %8$s = ? and %9$s = ? and %10$s = ? "
             + "and COALESCE(%5$s, %11$s) < now(3)",
