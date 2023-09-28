@@ -132,6 +132,7 @@ public class NonBlockingRouterMetrics {
   public final Counter offlineRepairOnDeleteErrorCount;
   public final Counter offlineRepairOnTtlUpdateCount;
   public final Counter offlineRepairOnTtlUpdateErrorCount;
+  public final Counter backgroundDeleterNotFoundCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
 
@@ -473,13 +474,15 @@ public class NonBlockingRouterMetrics {
     missingDataChunkErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "MissingDataChunkErrorCount"));
     offlineRepairOnDeleteCount =
-        metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnDeleteCount"));
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnDeleteCount"));
     offlineRepairOnDeleteErrorCount =
-        metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnDeleteErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnDeleteErrorCount"));
     offlineRepairOnTtlUpdateCount =
-        metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnTtlUpdateCount"));
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnTtlUpdateCount"));
     offlineRepairOnTtlUpdateErrorCount =
-        metricRegistry.counter(MetricRegistry.name(DeleteOperation.class, "OfflineRepairOnTtlUpdateErrorCount"));
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnTtlUpdateErrorCount"));
+    backgroundDeleterNotFoundCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterNotFoundCount"));
 
     // Performance metrics for operation managers.
     putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));
