@@ -864,6 +864,8 @@ public class AzureCloudDestinationTest {
       cloudDestination = factory.getCloudDestination();
       fail("Expected exception");
     } catch (IllegalStateException ex) {
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
     } finally {
       if (cloudDestination != null) {
         cloudDestination.close();

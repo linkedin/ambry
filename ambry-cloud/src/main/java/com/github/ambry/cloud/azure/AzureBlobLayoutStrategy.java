@@ -71,6 +71,12 @@ public class AzureBlobLayoutStrategy {
       this.containerName = containerName;
       this.blobFilePath = blobFilePath;
     }
+
+    @Override
+    public String toString() {
+      String toStr = String.format("(%s/%s)", containerName, blobFilePath);
+      return toStr;
+    }
   }
 
   /**
@@ -149,9 +155,13 @@ public class AzureBlobLayoutStrategy {
     String blobIdStr = blobMetadata.getId();
     int nameVersion = blobMetadata.getNameSchemeVersion();
     switch (nameVersion) {
-      default:
+      case 0:
         // Use the last four chars as prefix to assist in Azure sharding, since beginning of blobId has little variation.
         return blobIdStr.substring(blobIdStr.length() - 4) + BLOB_NAME_SEPARATOR + blobIdStr;
+      case 1:
+      default:
+        // snalli@: I have discussed thoroughly with MSFT that prefixing 4 random char does not help at all!
+        return blobIdStr;
     }
   }
 

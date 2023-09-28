@@ -108,7 +108,7 @@ public class AzureIntegrationTest {
   }
 
   @Before
-  public void setup() {
+  public void setup() throws ReflectiveOperationException {
     testProperties = new Properties();
     try (InputStream input = this.getClass().getClassLoader().getResourceAsStream(propFileName)) {
       if (input == null) {
@@ -136,7 +136,7 @@ public class AzureIntegrationTest {
    * @return an {@link AzureCloudDestination} instance built from the supplied properties.
    * @param verProps the {@link VerifiableProperties} to use.
    */
-  private AzureCloudDestination getAzureDestination(VerifiableProperties verProps) {
+  private AzureCloudDestination getAzureDestination(VerifiableProperties verProps) throws ReflectiveOperationException {
     return (AzureCloudDestination) new AzureCloudDestinationFactory(verProps, new MetricRegistry(),
         clusterMap).getCloudDestination();
   }
