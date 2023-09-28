@@ -15,6 +15,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.TreeMap;
@@ -46,6 +48,7 @@ public class HelixFullAutoReconstructResourceTool {
   private final String helixClusterName;
   private final String cliqueLayout;
   private final String dc;
+  private final String zkConnectStr;
   private final boolean dryRun;
   private final HelixAdmin admin;
   private final Map<Integer, List<String>> resourceToHosts = new HashMap<>();
@@ -92,6 +95,9 @@ public class HelixFullAutoReconstructResourceTool {
     OptionSpec<Void> dropResourcesOpt =
         parser.accepts("dropResources", "Drops commaSeparatedResources from given Ambry cluster from Helix");
 
+    OptionSpec<Void> printResourceInfoOpt =
+        parser.accepts("printResources", "Print resource info from given Ambry cluster from Helix");
+
     OptionSet options = parser.parse(args);
     String clusterName = options.valueOf(clusterNameOpt);
     String dcName = options.valueOf(dcNameOpt);
@@ -105,6 +111,8 @@ public class HelixFullAutoReconstructResourceTool {
 
     if (options.has(dropResourcesOpt)) {
       helixFullAutoReconstructResourceTool.dropOldResources(commaSeparatedResources);
+    } else if (options.has(printResourceInfoOpt)) {
+      helixFullAutoReconstructResourceTool.printResourceInfo();
     } else {
       helixFullAutoReconstructResourceTool.reconstructResources(commaSeparatedResources);
     }
@@ -123,8 +131,69 @@ public class HelixFullAutoReconstructResourceTool {
     this.cliqueLayout = Utils.readStringFromFile(cliqueLayoutPath);
     Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress =
         ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
-    String zkConnectStr = dataCenterToZkAddress.get(dc).getZkConnectStrs().get(0);
+    zkConnectStr = dataCenterToZkAddress.get(dc).getZkConnectStrs().get(0);
     this.admin = new HelixAdminFactory().getHelixAdmin(zkConnectStr);
+  }
+
+  /**
+   *
+   */
+  public void printResourceInfo() {
+
+    ClusterMapConfig config = getClusterMapConfig(helixClusterName, dc, null);
+    try (PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = new PropertyStoreToDataNodeConfigAdapter(
+        zkConnectStr, config)) {
+
+      List<String> resourcesInCluster = admin.getResourcesInCluster(helixClusterName);
+      for (String resourceName : resourcesInCluster) {
+        if (!resourceName.matches("\\d+")) {
+          continue;
+        }
+        // 1. Get instances and partitions in this resource
+        Set<String> instances = new HashSet<>();
+        Set<String> partitions = new HashSet<>();
+        IdealState idealState = admin.getResourceIdealState(helixClusterName, resourceName);
+        Map<String, List<String>> preferenceLists = idealState.getPreferenceLists();
+        for (Map.Entry<String, List<String>> entry : preferenceLists.entrySet()) {
+          partitions.add(entry.getKey());
+          instances.addAll(entry.getValue());
+        }
+
+        // 2. Calculate capacity and weights
+        long capacity = 0;
+        long weight = partitions.size() * 3 * 386L;
+        Map<String, List<String>> rackToInstances = new HashMap<>();
+        for (String instanceName : instances) {
+          DataNodeConfig dataNodeConfig = propertyStoreAdapter.get(instanceName);
+          Map<String, DataNodeConfig.DiskConfig> diskConfigs = dataNodeConfig.getDiskConfigs();
+          for (DataNodeConfig.DiskConfig diskConfig : diskConfigs.values()) {
+            capacity += diskConfig.getDiskCapacityInBytes();
+          }
+          String rackId = dataNodeConfig.getRackId();
+          if (!rackToInstances.containsKey(rackId)) {
+            rackToInstances.put(rackId, new ArrayList<>());
+          }
+          rackToInstances.get(rackId).add(instanceName);
+        }
+
+        capacity = capacity / 1024 / 1024 / 1024;
+
+        // 3. Print if there are 2 or more hosts in same rack
+        for (Map.Entry<String, List<String>> entry1 : rackToInstances.entrySet()) {
+          String rackId = entry1.getKey();
+          List<String> instanceNames = entry1.getValue();
+          if (instanceNames.size() > 1) {
+            System.err.println(
+                "Rack " + rackId + " in resource " + resourceName + " has more than 1 host" + instanceNames);
+          }
+        }
+
+        // 4. Print resource to weight and capacity
+        System.out.println(
+            "Resource " + resourceName + ", capacity = " + capacity + ", weight = " + weight + ", percentage = " + (
+                1.0 * weight / capacity * 100.0));
+      }
+    }
   }
 
   /**
@@ -424,5 +493,27 @@ public class HelixFullAutoReconstructResourceTool {
             + idealState.getNumPartitions() + ", replicas = " + idealState.getReplicas() + ", preference list = "
             + idealState.getPreferenceLists());
     return idealState;
+  }
+
+  /**
+   * Exposed for test use.
+   * @param clusterName cluster name to use in the config
+   * @param dcName datacenter name to use in the config
+   * @param zkLayoutPath if non-null, read ZK connection configs from the file at this path.
+   * @return the {@link ClusterMapConfig}
+   */
+  static ClusterMapConfig getClusterMapConfig(String clusterName, String dcName, String zkLayoutPath) {
+    Properties props = new Properties();
+    props.setProperty("clustermap.host.name", "localhost");
+    props.setProperty("clustermap.cluster.name", clusterName);
+    props.setProperty("clustermap.datacenter.name", dcName);
+    if (zkLayoutPath != null) {
+      try {
+        props.setProperty("clustermap.dcs.zk.connect.strings", Utils.readStringFromFile(zkLayoutPath));
+      } catch (IOException e) {
+        throw new RuntimeException("Could not read zk layout file", e);
+      }
+    }
+    return new ClusterMapConfig(new VerifiableProperties(props));
   }
 }
