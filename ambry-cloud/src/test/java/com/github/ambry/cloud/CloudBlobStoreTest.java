@@ -538,7 +538,10 @@ public class CloudBlobStoreTest {
       verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     }
 
-    // Test 2: Put, delete and Undelete
+    // Test 2: Put and Undelete
+    // It's possible VCR sees this pattern of request
+    // Peer replica : PUT[0] -> DELETE[0] -> UNDELETE[1]
+    // VCR : PUT[0] -> DELETE/UNDELETE[1] in the same message
     // V1: Should pass
     // V2: Should pass
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
@@ -549,8 +552,8 @@ public class CloudBlobStoreTest {
       when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class))).thenReturn(
           (short) (initialLifeVersion+1));
     }
-    store.delete(Collections.singletonList(messageInfo));
-    int numDeletes = 1;
+    // store.delete(Collections.singletonList(messageInfo));
+    int numDeletes = 0;
     MessageInfo undeleteMessage = new MessageInfo.Builder(messageInfo)
         .isDeleted(false)
         .isUndeleted(true)
@@ -628,6 +631,23 @@ public class CloudBlobStoreTest {
     if (mockingDetails(dest).isMock()) {
       verify(dest, times(3)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     }
+
+    // Test 5: Put, delete and Undelete
+    // V1: Should pass
+    // V2: Should pass
+    messageWriteSet = new MockMessageWriteSet();
+    messageInfo =
+        new MessageInfo(getUniqueId(refAccountId, refContainerId, true, partitionId), SMALL_BLOB_SIZE, refAccountId,
+            refContainerId, now, initialLifeVersion);
+    messageWriteSet.add(messageInfo, ByteBuffer.wrap(TestUtils.getRandomBytes((int) messageInfo.getSize())));
+    store.put(messageWriteSet);
+    store.delete(Collections.singletonList(messageInfo));
+    undeleteMessage = new MessageInfo.Builder(messageInfo)
+        .isDeleted(false)
+        .isUndeleted(true)
+        .lifeVersion((short) (initialLifeVersion+1))
+        .build();
+    assertEquals(initialLifeVersion+1, store.undelete(undeleteMessage));
   }
 
   /** Test the CloudBlobStore findMissingKeys method. */
