@@ -421,9 +421,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
     // Below is the correct behavior. For ref, look at BlobStore::undelete and ReplicaThread::applyUndelete
     try {
       if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+        /*
+          If we are here, it means the cloudLifeVersion >= replicaLifeVersion.
+          Cloud is either ahead of server or caught up.
+         */
         // lifeVersion must always be present
         short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
-        // Below is the correct behavior. For ref, look at BlobStore::undelete and ReplicaThread::applyUndelete
+        /*
+          if cloudLifeVersion == replicaLifeVersion && deleteTime absent in cloudMetatadata, then something is wrong. Throw Life_Version_Conflict.
+          if cloudLifeVersion == replicaLifeVersion && deleteTime != -1, then something is wrong. Throw Life_Version_Conflict.
+         */
         if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)
             && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) == Utils.Infinite_Time) {
           azureMetrics.blobUndeleteErrorCount.inc();
