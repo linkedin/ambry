@@ -386,7 +386,7 @@ public class RestUtils {
    * Ambry specific keys used internally in a {@link RestRequest}.
    */
   public static final class InternalKeys {
-    private static final String KEY_PREFIX = "ambry-internal-key-";
+    public static final String KEY_PREFIX = "ambry-internal-key-";
 
     /**
      * The key for the target {@link com.github.ambry.account.Account} indicated by the request.

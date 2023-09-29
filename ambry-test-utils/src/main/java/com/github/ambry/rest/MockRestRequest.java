@@ -437,10 +437,13 @@ public class MockRestRequest implements RestRequest {
    */
   private void addOrUpdateArgNoDecoding(String key, Object value) throws UnsupportedEncodingException {
     if (value != null && value instanceof String) {
-      CharsetEncoder encoder = StandardCharsets.US_ASCII.newEncoder();
-      if (!encoder.canEncode(key) || !encoder.canEncode((String) value)) {
-        throw new IllegalArgumentException(
-            "Key " + key + " or Value " + value + "is not valid, since they are not all ascii");
+      if (!key.startsWith(RestUtils.InternalKeys.KEY_PREFIX)) {
+        // For any key rather than ambry internal key, value should be all ascii.
+        CharsetEncoder encoder = StandardCharsets.US_ASCII.newEncoder();
+        if (!encoder.canEncode(key) || !encoder.canEncode((String) value)) {
+          throw new IllegalArgumentException(
+              "Key " + key + " or Value " + value + "is not valid, since they are not all ascii");
+        }
       }
       String valueStr = (String) value;
       StringBuilder sb;
