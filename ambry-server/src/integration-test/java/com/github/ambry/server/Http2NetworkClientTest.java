@@ -171,6 +171,7 @@ public class Http2NetworkClientTest {
     DataInputStream dis = new NettyByteBufDataInputStream(responseInfos.get(0).content());
     PutResponse putResponse = PutResponse.readFrom(dis);
     assertEquals("No error expected.", ServerErrorCode.No_Error, putResponse.getError());
+    responseInfos.get(0).release();
 
     // Get the blob
     // get blob properties
@@ -210,8 +211,9 @@ public class Http2NetworkClientTest {
     byte[] userMetadataOutput = blobAll.getBlobInfo().getUserMetadata();
     assertArrayEquals(usermetadata, userMetadataOutput);
     // verify content
-    byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+    byte[] actualBlobData = getBlobData(blobAll.getBlobData());
     assertArrayEquals("Content mismatch.", data, actualBlobData);
+    responseInfos.get(0).release();
   }
 
   @Test

@@ -171,14 +171,10 @@ import static org.junit.Assert.*;
 final class ServerTestUtil {
   private static final QuotaChargeCallback QUOTA_CHARGE_EVENT_LISTENER = QuotaTestUtils.createTestQuotaChargeCallback();
 
-  static byte[] getBlobDataAndRelease(BlobData blobData) {
+  static byte[] getBlobData(BlobData blobData) {
     byte[] actualBlobData = new byte[(int) blobData.getSize()];
     ByteBuf buffer = blobData.content();
-    try {
-      buffer.readBytes(actualBlobData);
-    } finally {
-      buffer.release();
-    }
+    buffer.readBytes(actualBlobData);
     return actualBlobData;
   }
 
@@ -404,7 +400,7 @@ final class ServerTestUtil {
       GetResponse resp4 = GetResponse.readFrom(stream, clusterMap);
       responseStream = resp4.getInputStream();
       BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
-      byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+      byte[] actualBlobData = getBlobData(blobAll.getBlobData());
       // verify content
       assertArrayEquals("Content mismatch.", data, actualBlobData);
       if (testEncryption) {
@@ -517,7 +513,8 @@ final class ServerTestUtil {
       assertEquals(new String(adminResponseWithContent.getContent()), ServerErrorCode.No_Error,
           adminResponseWithContent.getError());
       jsonBytes = adminResponseWithContent.getContent();
-      messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {});
+      messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
+      });
       // We should have one message info
       assertEquals(1, messages.size());
       MessageInfo deleteRecordInfo = messages.values().stream().findFirst().get();
@@ -670,7 +667,7 @@ final class ServerTestUtil {
       resp1 = GetResponse.readFrom(stream, clusterMap);
       responseStream = resp1.getInputStream();
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
-      actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+      actualBlobData = getBlobData(blobAll.getBlobData());
       assertArrayEquals("Content mismatch.", data, actualBlobData);
       releaseNettyBufUnderneathStream(stream);
       // undelete a not-deleted blob should return fail
@@ -710,7 +707,7 @@ final class ServerTestUtil {
       resp1 = GetResponse.readFrom(stream, clusterMap);
       responseStream = resp1.getInputStream();
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
-      actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+      actualBlobData = getBlobData(blobAll.getBlobData());
       assertArrayEquals("Content mismatch", data, actualBlobData);
       releaseNettyBufUnderneathStream(stream);
       // Bounce servers to make them read the persisted token file.
@@ -725,7 +722,7 @@ final class ServerTestUtil {
       resp1 = GetResponse.readFrom(stream, clusterMap);
       responseStream = resp1.getInputStream();
       blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
-      actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+      actualBlobData = getBlobData(blobAll.getBlobData());
       assertArrayEquals("Content mismatch", data, actualBlobData);
       releaseNettyBufUnderneathStream(stream);
       channel.disconnect();
@@ -1027,7 +1024,7 @@ final class ServerTestUtil {
         resp = GetResponse.readFrom(stream, clusterMap);
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-          byte[] blobout = getBlobDataAndRelease(blobData);
+          byte[] blobout = getBlobData(blobData);
           assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
@@ -1055,7 +1052,7 @@ final class ServerTestUtil {
               getExpiryTimeMs(blobAll.getBlobInfo().getBlobProperties()));
           assertEquals("Expiration time mismatch (MessageInfo)", expectedExpiryTimeMs,
               resp.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getExpirationTimeInMs());
-          byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
+          byte[] blobout = getBlobData(blobAll.getBlobData());
           assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -1257,7 +1254,7 @@ final class ServerTestUtil {
       } else {
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-          byte[] blobout = getBlobDataAndRelease(blobData);
+          byte[] blobout = getBlobData(blobData);
           assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
@@ -1287,7 +1284,7 @@ final class ServerTestUtil {
       } else {
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
-          byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
+          byte[] blobout = getBlobData(blobAll.getBlobData());
           assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -1395,7 +1392,7 @@ final class ServerTestUtil {
       } else {
         try {
           BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-          byte[] blobout = getBlobDataAndRelease(blobData);
+          byte[] blobout = getBlobData(blobData);
           assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("MessageMetadata should not have been null",
@@ -1423,7 +1420,7 @@ final class ServerTestUtil {
       } else {
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
-          byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
+          byte[] blobout = getBlobData(blobAll.getBlobData());
           assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -1477,7 +1474,7 @@ final class ServerTestUtil {
         assertFalse(info.isDeleted());
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
-          byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
+          byte[] blobout = getBlobData(blobAll.getBlobData());
           assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -1522,7 +1519,7 @@ final class ServerTestUtil {
         assertTrue(info.isDeleted());
         try {
           BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp.getInputStream(), blobIdFactory);
-          byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
+          byte[] blobout = getBlobData(blobAll.getBlobData());
           assertArrayEquals(data, blobout);
           if (testEncryption) {
             assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -1721,7 +1718,7 @@ final class ServerTestUtil {
     GetResponse resp2 = GetResponse.readFrom(stream, clusterMap);
     InputStream responseStream = resp2.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, blobIdFactory);
-    byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+    byte[] actualBlobData = getBlobData(blobAll.getBlobData());
     assertArrayEquals("Content mismatch.", data, actualBlobData);
     releaseNettyBufUnderneathStream(stream);
     // delete a blob on a restarted store , which should succeed
@@ -1930,7 +1927,7 @@ final class ServerTestUtil {
       GetResponse resp3 = GetResponse.readFrom(stream, clusterMap);
       try {
         BlobData blobData = MessageFormatRecord.deserializeBlob(resp3.getInputStream());
-        byte[] blobout = getBlobDataAndRelease(blobData);
+        byte[] blobout = getBlobData(blobData);
         assertArrayEquals(dataList.get(0), blobout);
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null",
@@ -1954,7 +1951,7 @@ final class ServerTestUtil {
       GetResponse resp4 = GetResponse.readFrom(stream, clusterMap);
       try {
         BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(resp4.getInputStream(), blobIdFactory);
-        byte[] blobout = getBlobDataAndRelease(blobAll.getBlobData());
+        byte[] blobout = getBlobData(blobAll.getBlobData());
         assertArrayEquals(dataList.get(0), blobout);
         if (testEncryption) {
           assertNotNull("MessageMetadata should not have been null", blobAll.getBlobEncryptionKey());
@@ -2662,35 +2659,50 @@ final class ServerTestUtil {
 
       short blobIdVersion = CommonTestUtils.getCurrentBlobIdVersion();
       BlobId blobId1 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId4 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId5 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId6 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId7 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId8 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId9 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId10 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId11 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId12 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId13 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId14 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       BlobId blobId15 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
 
       Port sourcePort = new Port(sourceDataNode.getHttp2Port(), PortType.HTTP2);
       Port targetPort = new Port(targetDataNode.getHttp2Port(), PortType.HTTP2);
@@ -2992,14 +3004,16 @@ final class ServerTestUtil {
       undeleteBlob(sourceChannel, blobId10, cluster.time.milliseconds(), (short) 1);
       // create blob16 on the sourceDataNode
       BlobId blobId16 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       putRequest = new PutRequest(1, "client1", blobId16, properties, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
       putBlob(putRequest, sourceChannel, ServerErrorCode.No_Error);
       // create blob17 on the targetDataNode
       BlobId blobId17 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption, BlobId.BlobDataType.DATACHUNK);
+          properties.getAccountId(), properties.getContainerId(), partitionId, testEncryption,
+          BlobId.BlobDataType.DATACHUNK);
       putRequest = new PutRequest(1, "client1", blobId17, properties, ByteBuffer.wrap(userMetadata),
           Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
           testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
@@ -3807,7 +3821,8 @@ final class ServerTestUtil {
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
       checkTtlUpdateStatus(targetChannel, clusterMap, blobIdFactory, blobId, data, true, Utils.Infinite_Time);
       // the TtlUpdate Operation Time will be same as the PutBlob time since we apply TtlUpdate from the GetRequest.
-      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(), Utils.Infinite_Time);
+      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(),
+          Utils.Infinite_Time);
       cluster.time.sleep(1000);
 
       // 7. On the sourceDatanode blob is ttlUpdated. On the targetDataNode, putBlob.
@@ -3926,7 +3941,8 @@ final class ServerTestUtil {
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
       // The TtlUpdate and Delete operation is same as the source replica's PutBlob creation time.
       // It's not same as the source replica's TtlUpdate or Delete operation time. But it's ok.
-      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(), Utils.Infinite_Time);
+      checkTtlUpdateRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs(),
+          Utils.Infinite_Time);
       checkDeleteRecord(targetChannel, clusterMap, blobId, propertiesWithTtl.getCreationTimeInMs());
       cluster.time.sleep(1000);
 
@@ -3954,7 +3970,8 @@ final class ServerTestUtil {
       replicateDeleteBlob(targetChannel, blobId, sourceDataNode, delOperationTime, ServerErrorCode.No_Error);
       getBlobAndVerify(blobId, targetChannel, ServerErrorCode.Blob_Deleted, propertiesWithTtl, userMetadata, data,
           encryptionKey, clusterMap, blobIdFactory, testEncryption);
-      checkDeleteRecord(targetChannel, clusterMap, blobId, delOperationTime); // should be delOperationTime not operationTime
+      checkDeleteRecord(targetChannel, clusterMap, blobId,
+          delOperationTime); // should be delOperationTime not operationTime
       cluster.time.sleep(1000);
 
       // 12. On the sourceDataNode, the blob is deleted. On the targetDataNode, it's ttlUpdated.
@@ -4164,8 +4181,8 @@ final class ServerTestUtil {
           channel = thirdChannel;
         }
 
-        getBlobAndVerify(blobId1, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data, encryptionKey,
-            clusterMap, blobIdFactory, testEncryption, GetOption.None);
+        getBlobAndVerify(blobId1, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
+            encryptionKey, clusterMap, blobIdFactory, testEncryption, GetOption.None);
 
         getBlobAndVerify(blobId2, channel, ServerErrorCode.No_Error, propertiesWithTtl, userMetadata, data,
             encryptionKey, clusterMap, blobIdFactory, testEncryption);
@@ -4562,7 +4579,7 @@ final class ServerTestUtil {
     GetResponse resp = GetResponse.readFrom(stream, clusterMap);
     assertEquals(ServerErrorCode.No_Error, resp.getError());
     BlobData blobData = MessageFormatRecord.deserializeBlob(resp.getInputStream());
-    byte[] blobout = getBlobDataAndRelease(blobData);
+    byte[] blobout = getBlobData(blobData);
     assertArrayEquals(dataToCheck, blobout);
     if (encryptionKey != null) {
       assertNotNull("EncryptionKey should not have been null",
@@ -4613,7 +4630,7 @@ final class ServerTestUtil {
     assertArrayEquals(expectedUserMetadata, userMetadataOutput);
 
     // verify the content
-    byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+    byte[] actualBlobData = getBlobData(blobAll.getBlobData());
     assertArrayEquals("Content mismatch.", expectedData, actualBlobData);
     if (testEncryption) {
       assertNotNull("EncryptionKey should not ne null", blobAll.getBlobEncryptionKey());
@@ -4822,7 +4839,7 @@ final class ServerTestUtil {
     response = GetResponse.readFrom(stream, clusterMap);
     InputStream responseStream = response.getInputStream();
     BlobAll blobAll = MessageFormatRecord.deserializeBlobAll(responseStream, storeKeyFactory);
-    byte[] actualBlobData = getBlobDataAndRelease(blobAll.getBlobData());
+    byte[] actualBlobData = getBlobData(blobAll.getBlobData());
     assertArrayEquals("Content mismatch.", expectedBlobData, actualBlobData);
     messageInfo = response.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0);
     assertEquals("Blob ID not as expected", blobId, messageInfo.getStoreKey());
@@ -4831,8 +4848,8 @@ final class ServerTestUtil {
     releaseNettyBufUnderneathStream(stream);
   }
 
-  static void checkTtlUpdateRecord(ConnectedChannel channel, ClusterMap clusterMap, BlobId blobId, long expectedOperationTime,
-      long expectedExpiryTimeMs) throws IOException {
+  static void checkTtlUpdateRecord(ConnectedChannel channel, ClusterMap clusterMap, BlobId blobId,
+      long expectedOperationTime, long expectedExpiryTimeMs) throws IOException {
     // Use BlobIndexAdminRequest to verify we have the right TtlUpdate record
     BlobIndexAdminRequest blobIndexAdminRequest = new BlobIndexAdminRequest(blobId,
         new AdminRequest(AdminRequestOrResponseType.BlobIndex, blobId.getPartition(), 1, "clientid2"));
@@ -4844,7 +4861,9 @@ final class ServerTestUtil {
     byte[] jsonBytes = adminResponseWithContent.getContent();
     ObjectMapper objectMapper = new ObjectMapper();
     StoreKeyJacksonConfig.setupObjectMapper(objectMapper, new BlobIdFactory(clusterMap));
-    Map<String, MessageInfo> messages = objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {});
+    Map<String, MessageInfo> messages =
+        objectMapper.readValue(jsonBytes, new TypeReference<Map<String, MessageInfo>>() {
+        });
     // find the TtlUpdate record
     MessageInfo ttlUpdateRecord = null;
     for (MessageInfo mg : messages.values()) {
@@ -5073,9 +5092,8 @@ final class ServerTestUtil {
       } else if (channel.getRemoteHost().equals(targetDataNode.getHostname())
           && channel.getRemotePort() == targetDataNode.getPortToConnectTo().getPort()) {
         targetChannel = channel;
-      } else if (channel.getRemoteHost().equals(thirdDataNode.getHostname()) && channel.getRemotePort() == thirdDataNode
-          .getPortToConnectTo()
-          .getPort()) {
+      } else if (channel.getRemoteHost().equals(thirdDataNode.getHostname())
+          && channel.getRemotePort() == thirdDataNode.getPortToConnectTo().getPort()) {
         thirdChannel = channel;
       }
     }

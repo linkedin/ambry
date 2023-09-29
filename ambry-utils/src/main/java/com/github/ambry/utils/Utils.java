@@ -409,7 +409,7 @@ public class Utils {
       ByteBuf nettyByteBuf = ((NettyByteBufDataInputStream) inputStream).getBuffer();
       // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
       int startIndex = nettyByteBuf.readerIndex();
-      output = nettyByteBuf.retainedSlice(startIndex, dataSize);
+      output = nettyByteBuf.slice(startIndex, dataSize);
       crcStream.updateCrc(output.nioBuffer());
       nettyByteBuf.readerIndex(startIndex + dataSize);
     } else {
