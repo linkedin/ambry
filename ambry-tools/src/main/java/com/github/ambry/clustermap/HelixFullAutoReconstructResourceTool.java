@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -51,20 +52,19 @@ public class HelixFullAutoReconstructResourceTool {
   private final String zkConnectStr;
   private final boolean dryRun;
   private final HelixAdmin admin;
-  private final Map<Integer, List<String>> resourceToHosts = new HashMap<>();
-  private final Map<Integer, Set<String>> resourceToPartitions = new TreeMap<>();
+  private final Map<Integer, List<String>> resourceToHosts = new TreeMap<>();
+  private Map<Integer, Set<String>> resourceToPartitions = new TreeMap<>();
   private final Map<String, List<String>> preferenceLists = new HashMap<>();
   Map<String, List<String>> currentStates = new HashMap<>();
-  int resourceId = 9999;
+  int resourceId;
   int port = 15088;
+  boolean isVideoCluster;
 
   public static void main(String[] args) throws Exception {
     OptionParser parser = new OptionParser();
 
     ArgumentAcceptingOptionSpec<String> clusterNameOpt = parser.accepts("clusterName", "Helix cluster name")
-        .withRequiredArg()
-        .describedAs("cluster_name")
-        .ofType(String.class);
+        .withRequiredArg().describedAs("cluster_name").ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> dcNameOpt = parser.accepts("dc", "Data center name")
         .withRequiredArg()
@@ -74,6 +74,8 @@ public class HelixFullAutoReconstructResourceTool {
 
     OptionSpecBuilder dryRun = parser.accepts("dryRun", "Dry Run mode");
 
+    OptionSpecBuilder videoCluster = parser.accepts("video", "Is for Video cluster");
+
     ArgumentAcceptingOptionSpec<String> zkLayoutPathOpt =
         parser.accepts("zkLayoutPath", "The path to the json file containing zookeeper connect info")
             .withRequiredArg()
@@ -81,8 +83,7 @@ public class HelixFullAutoReconstructResourceTool {
             .ofType(String.class);
 
     ArgumentAcceptingOptionSpec<String> cliqueLayoutPathOpt =
-        parser.accepts("cliqueLayoutPath", "The path to the json file containing cliques info")
-            .withRequiredArg()
+        parser.accepts("cliqueLayoutPath", "The path to the json file containing cliques info").withRequiredArg()
             .describedAs("clique_info_path")
             .ofType(String.class);
 
@@ -107,7 +108,7 @@ public class HelixFullAutoReconstructResourceTool {
 
     HelixFullAutoReconstructResourceTool helixFullAutoReconstructResourceTool =
         new HelixFullAutoReconstructResourceTool(clusterName, dcName, options.has(dryRun), zkLayoutPath,
-            cliqueLayoutPath);
+            cliqueLayoutPath, options.has(videoCluster));
 
     if (options.has(dropResourcesOpt)) {
       helixFullAutoReconstructResourceTool.dropOldResources(commaSeparatedResources);
@@ -123,7 +124,7 @@ public class HelixFullAutoReconstructResourceTool {
   }
 
   public HelixFullAutoReconstructResourceTool(String clusterName, String dc, boolean dryRun, String zkLayoutPath,
-      String cliqueLayoutPath) throws IOException {
+      String cliqueLayoutPath, boolean isVideoCluster) throws IOException {
     this.clusterName = clusterName;
     this.dc = dc;
     this.dryRun = dryRun;
@@ -133,6 +134,8 @@ public class HelixFullAutoReconstructResourceTool {
         ClusterMapUtils.parseDcJsonAndPopulateDcInfo(Utils.readStringFromFile(zkLayoutPath));
     zkConnectStr = dataCenterToZkAddress.get(dc).getZkConnectStrs().get(0);
     this.admin = new HelixAdminFactory().getHelixAdmin(zkConnectStr);
+    this.isVideoCluster = isVideoCluster;
+    this.resourceId = isVideoCluster ? 19999 : 9999;
   }
 
   /**
@@ -144,54 +147,81 @@ public class HelixFullAutoReconstructResourceTool {
     try (PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = new PropertyStoreToDataNodeConfigAdapter(
         zkConnectStr, config)) {
 
+      // 1. Get instance to rack mapping and instance to capacity mapping from Property store
+      Map<String, String> instanceToRack = new HashMap<>();
+      Map<String, Long> instanceToCapacity = new HashMap<>();
+      List<String> instancesInCluster = admin.getInstancesInCluster(helixClusterName);
+      for (String instanceName : instancesInCluster) {
+        DataNodeConfig dataNodeConfig = propertyStoreAdapter.get(instanceName);
+        instanceToRack.put(instanceName, dataNodeConfig.getRackId());
+        long capacity = 0;
+        for (DataNodeConfig.DiskConfig diskConfig : dataNodeConfig.getDiskConfigs().values()) {
+          capacity += diskConfig.getDiskCapacityInBytes();
+        }
+        instanceToCapacity.put(instanceName, capacity / 1024 / 1024 / 1024);
+      }
+
+      // 2. For each resource, check the usage and any faulty partitions
       List<String> resourcesInCluster = admin.getResourcesInCluster(helixClusterName);
+      Collections.sort(resourcesInCluster);
       for (String resourceName : resourcesInCluster) {
         if (!resourceName.matches("\\d+")) {
           continue;
         }
-        // 1. Get instances and partitions in this resource
         Set<String> instances = new HashSet<>();
         Set<String> partitions = new HashSet<>();
         IdealState idealState = admin.getResourceIdealState(helixClusterName, resourceName);
-        Map<String, List<String>> preferenceLists = idealState.getPreferenceLists();
-        for (Map.Entry<String, List<String>> entry : preferenceLists.entrySet()) {
-          partitions.add(entry.getKey());
-          instances.addAll(entry.getValue());
+        Map<String, Set<String>> rackToInstances = new HashMap<>();
+        Map<String, Set<String>> currentStates = new HashMap<>();
+        for (Map.Entry<String, List<String>> entry : idealState.getPreferenceLists().entrySet()) {
+          String partition = entry.getKey();
+          List<String> replicas = entry.getValue();
+          partitions.add(partition);
+          instances.addAll(replicas);
+          for (String replica : replicas) {
+            String rack = instanceToRack.get(replica);
+            if (!rackToInstances.containsKey(rack)) {
+              rackToInstances.put(rack, new HashSet<>());
+            }
+            rackToInstances.get(rack).add(replica);
+            if (!currentStates.containsKey(replica)) {
+              currentStates.put(replica, new HashSet<>());
+            }
+            currentStates.get(replica).add(entry.getKey());
+          }
         }
 
-        // 2. Calculate capacity and weights
+        // Print usage and invalid partitions
         long capacity = 0;
         long weight = partitions.size() * 3 * 386L;
-        Map<String, List<String>> rackToInstances = new HashMap<>();
         for (String instanceName : instances) {
-          DataNodeConfig dataNodeConfig = propertyStoreAdapter.get(instanceName);
-          Map<String, DataNodeConfig.DiskConfig> diskConfigs = dataNodeConfig.getDiskConfigs();
-          for (DataNodeConfig.DiskConfig diskConfig : diskConfigs.values()) {
-            capacity += diskConfig.getDiskCapacityInBytes();
-          }
-          String rackId = dataNodeConfig.getRackId();
-          if (!rackToInstances.containsKey(rackId)) {
-            rackToInstances.put(rackId, new ArrayList<>());
-          }
-          rackToInstances.get(rackId).add(instanceName);
+          capacity += instanceToCapacity.get(instanceName);
         }
-
-        capacity = capacity / 1024 / 1024 / 1024;
-
-        // 3. Print if there are 2 or more hosts in same rack
-        for (Map.Entry<String, List<String>> entry1 : rackToInstances.entrySet()) {
-          String rackId = entry1.getKey();
-          List<String> instanceNames = entry1.getValue();
-          if (instanceNames.size() > 1) {
-            System.err.println(
-                "Rack " + rackId + " in resource " + resourceName + " has more than 1 host" + instanceNames);
-          }
-        }
-
-        // 4. Print resource to weight and capacity
+        System.out.println("------------------ Resource " + resourceName + " -----------------------");
         System.out.println(
-            "Resource " + resourceName + ", capacity = " + capacity + ", weight = " + weight + ", percentage = " + (
-                1.0 * weight / capacity * 100.0));
+            "capacity = " + capacity + ", weight = " + weight + ", percentage = " + (1.0 * weight / capacity * 100.0));
+        System.out.println();
+        for (String rack : rackToInstances.keySet()) {
+          Set<String> hosts = rackToInstances.get(rack);
+          if (hosts.size() == 2) {
+            Iterator<String> iterator = hosts.iterator();
+            String hostA = iterator.next();
+            String hostB = iterator.next();
+            Set<String> partitionsInHostA = currentStates.get(hostA);
+            Set<String> partitionsInHostB = currentStates.get(hostB);
+            Set<String> partitionsOnlyInA = new HashSet<>(partitionsInHostA);
+            partitionsOnlyInA.removeAll(partitionsInHostB);
+            partitionsInHostA.removeAll(partitionsOnlyInA);
+            System.out.println(
+                "Rack = " + rack + ", hosts = " + hosts + ", number of shared partitions = " + partitionsInHostA.size()
+                    + ", sample partition = " + (!partitionsInHostA.isEmpty() ? partitionsInHostA.iterator().next()
+                    : ""));
+          } else if (hosts.size() > 2) {
+            System.err.println("Rack " + rack + " has more than 2 instances in same new clique. They are " + hosts);
+          }
+        }
+        System.out.println();
+        System.out.println();
       }
     }
   }
@@ -228,7 +258,9 @@ public class HelixFullAutoReconstructResourceTool {
       return false;
     });
     // 3. Create resourcesToCreate for new cliques
-    createNewResources(resourcesToCreate);
+    List<String> resources = new ArrayList<>(resourcesToCreate);
+    Collections.sort(resources);
+    createNewResources(resources);
   }
 
   /**
@@ -316,12 +348,15 @@ public class HelixFullAutoReconstructResourceTool {
 
     // 2. Build resource to partitions map by going via resources -> hosts -> partitions
     // Resource 10000 -> [P1, P2.. P100]
+
+    Map<Integer, Set<String>> resourceToPartitionsTemp = new TreeMap<>();
+
     Map<String, Set<Integer>> partitionToResources = new HashMap<>();
     for (Map.Entry<Integer, List<String>> entry : resourceToHosts.entrySet()) {
       int resourceId = entry.getKey();
       List<String> hosts = entry.getValue();
-      resourceToPartitions.put(resourceId, new HashSet<>());
-      Set<String> partitionSet = resourceToPartitions.get(resourceId);
+      resourceToPartitionsTemp.put(resourceId, new HashSet<>());
+      Set<String> partitionSet = resourceToPartitionsTemp.get(resourceId);
       for (String host : hosts) {
         String instanceName = ClusterMapUtils.getInstanceName(host, port);
         if (currentStates.containsKey(instanceName)) {
@@ -357,6 +392,43 @@ public class HelixFullAutoReconstructResourceTool {
         throw new IllegalStateException(
             "Partition " + partition + " is present in more than 1 resource " + resources + ". Its preference list is "
                 + preferenceList);
+      }
+    }
+
+    // Split the resources if it is video cluster
+    if (!isVideoCluster) {
+      resourceToPartitions = resourceToPartitionsTemp;
+    } else {
+      int newResourceId = 10000;
+      for (Map.Entry<Integer, Set<String>> entry : resourceToPartitionsTemp.entrySet()) {
+        int resourceId = entry.getKey();
+        System.out.println("Splitting resource " + resourceId);
+        Set<String> partitions = entry.getValue();
+        Set<String> threeReplicaPartitions = new HashSet<>();
+        Set<String> singleReplicaPartitions = new HashSet<>();
+
+        for (String partition : partitions) {
+          if (preferenceLists.get(partition).size() == 3) {
+            threeReplicaPartitions.add(partition);
+          } else if (preferenceLists.get(partition).size() == 1) {
+            singleReplicaPartitions.add(partition);
+          } else {
+            throw new IllegalStateException("Partition should have either 3 or 1 replica");
+          }
+        }
+
+        if (threeReplicaPartitions.size() > 0) {
+          System.out.println("Creating new 3-replica partitions resource " + newResourceId + ".Num of partitions = "
+              + threeReplicaPartitions.size());
+          resourceToPartitions.put(newResourceId, new HashSet<>(threeReplicaPartitions));
+        }
+        newResourceId++;
+        if (singleReplicaPartitions.size() > 0) {
+          System.out.println("Creating new 1-replica partitions resource " + newResourceId + ".Num of partitions = "
+              + singleReplicaPartitions.size());
+          resourceToPartitions.put(newResourceId, new HashSet<>(singleReplicaPartitions));
+        }
+        newResourceId++;
       }
     }
 
@@ -424,7 +496,7 @@ public class HelixFullAutoReconstructResourceTool {
   /**
    * Create new inputResources (10000, 10001, 10002... ) in helix
    */
-  public void createNewResources(Set<String> resources) {
+  public void createNewResources(List<String> resources) {
     if (!dryRun) {
       System.out.println(
           "This will add new resources " + resources + " in cluster " + helixClusterName + " in dc " + dc);
