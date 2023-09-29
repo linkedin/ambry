@@ -538,7 +538,7 @@ public class CloudBlobStoreTest {
       verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     }
 
-    // Test 1: Put and Undelete
+    // Test 2: Put, delete and Undelete
     // V1: Should pass
     // V2: Should pass
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
@@ -546,10 +546,18 @@ public class CloudBlobStoreTest {
     store.put(messageWriteSet);
     int numPuts = 1;
     if (mockingDetails(dest).isMock()) {
-      when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class))).thenReturn(initialLifeVersion);
+      when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class))).thenReturn(
+          (short) (initialLifeVersion+1));
     }
-    assertEquals(initialLifeVersion, store.undelete(messageInfo));
-    verifyCacheHits(1 + numPuts + numUndelete, 0);
+    store.delete(Collections.singletonList(messageInfo));
+    int numDeletes = 1;
+    MessageInfo undeleteMessage = new MessageInfo.Builder(messageInfo)
+        .isDeleted(false)
+        .isUndeleted(true)
+        .lifeVersion((short) (initialLifeVersion+1))
+        .build();
+    assertEquals(initialLifeVersion+1, store.undelete(undeleteMessage));
+    verifyCacheHits(1 + numPuts + numDeletes + numUndelete, 0);
     if (mockingDetails(dest).isMock()) {
       verify(dest, times(2)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     }
@@ -565,13 +573,13 @@ public class CloudBlobStoreTest {
               new StoreException("undeleted blob", StoreErrorCodes.ID_Undeleted)));
     }
     try {
-      store.undelete(messageInfo);
+      store.undelete(undeleteMessage);
       fail("Undelete is expected to throw an exception");
     } catch (StoreException ex) {
       // The expected value must come first
       assertEquals(StoreErrorCodes.ID_Undeleted, ex.getErrorCode());
     }
-    verifyCacheHits(2 + numPuts + numUndelete, 1);
+    verifyCacheHits(2 + numPuts + numDeletes + numUndelete, 1);
     if (mockingDetails(dest).isMock()) {
       verify(dest, times(2)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     }
@@ -588,15 +596,18 @@ public class CloudBlobStoreTest {
           .thenThrow(new CloudStorageException("undeleted blob",
               new StoreException("undeleted blob", StoreErrorCodes.ID_Undeleted)));
     }
+    undeleteMessage = new MessageInfo.Builder(messageInfo)
+        .lifeVersion((short) (initialLifeVersion-1))
+        .build();
     try {
-      store.undelete(messageInfo);
+      store.undelete(undeleteMessage);
       fail("Undelete is expected to throw an exception");
     } catch (StoreException ex) {
       StoreErrorCodes storeErrorCode = currentCacheLimit > 0 ? StoreErrorCodes.ID_Undeleted : StoreErrorCodes.Life_Version_Conflict;
       // The expected value must come first
       assertEquals(storeErrorCode, ex.getErrorCode());
     }
-    verifyCacheHits(3 + numPuts + numUndelete, 2);
+    verifyCacheHits(3 + numPuts + numDeletes + numUndelete, 2);
     if (mockingDetails(dest).isMock()) {
       verify(dest, times(2)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     }
@@ -606,13 +617,14 @@ public class CloudBlobStoreTest {
     // V2: Should pass and return the higher life version
     if (mockingDetails(dest).isMock()) {
       when(dest.undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class))).thenReturn(
-          (short) (initialLifeVersion+1));
+          (short) (initialLifeVersion+2));
     }
-    messageInfo =
-        new MessageInfo(messageInfo.getStoreKey(), SMALL_BLOB_SIZE, refAccountId, refContainerId, now, (short) (initialLifeVersion + 1));
+    undeleteMessage = new MessageInfo.Builder(messageInfo)
+        .lifeVersion((short) (initialLifeVersion+2))
+        .build();
     // The expected value must come first
-    assertEquals(initialLifeVersion+1, store.undelete(messageInfo));
-    verifyCacheHits(4 + numPuts + numUndelete, 2);
+    assertEquals(initialLifeVersion+2, store.undelete(undeleteMessage));
+    verifyCacheHits(4 + numPuts + numDeletes + numUndelete, 2);
     if (mockingDetails(dest).isMock()) {
       verify(dest, times(3)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
     }

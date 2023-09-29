@@ -413,48 +413,60 @@ public class AzureCloudDestinationSync implements CloudDestination {
     String blobIdStr = blobLayout.blobFilePath;
     BlobProperties blobProperties = getBlobProperties(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
-    // lifeVersion must always be present
-    short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
-    // Below is the correct behavior. For ref, look at BlobStore::undelete and ReplicaThread::applyUndelete
-    if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)
-        && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) == Utils.Infinite_Time) {
-      String error = String.format("Cannot undelete id %s as it is undeleted in cloud", blobIdStr);
-      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Undeleted));
-    }
+    Map<String, Object> newMetadata = new HashMap<>();
+    newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(Utils.Infinite_Time));
+    newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
+
     // Don't rely on the CloudBlobStore.recentCache to do the "right" thing.
     // Below is the correct behavior. For ref, look at BlobStore::undelete and ReplicaThread::applyUndelete
-    if (cloudlifeVersion > lifeVersion) {
-      String error = String.format("Cannot undelete id %s as it has a higher lifeVersion than the message info: %s > %s",
-          blobIdStr, cloudlifeVersion, lifeVersion);
-      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict));
+    try {
+      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+        // lifeVersion must always be present
+        short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+        // Below is the correct behavior. For ref, look at BlobStore::undelete and ReplicaThread::applyUndelete
+        if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)
+            && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) == Utils.Infinite_Time) {
+          azureMetrics.blobUndeleteErrorCount.inc();
+          String error = String.format("Failed to undelete blob %s as it is undeleted in cloud", blobIdStr);
+          logger.error(error);
+          throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Undeleted), azureMetrics);
+        }
+        azureMetrics.blobUndeleteErrorCount.inc();
+        String error = String.format("Failed to undelete blob %s as it has a same or higher life version in cloud than replicated message : %s >= %s",
+            blobIdStr, cloudlifeVersion, lifeVersion);
+        logger.error(error);
+        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), azureMetrics);
+      }
+    } catch (StoreException e) {
+      azureMetrics.blobUndeleteErrorCount.inc();
+      String error = String.format("Failed to undelete blob %s in Azure blob storage because %s", blobLayout, e.getMessage());
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
     }
 
-    Map<String, String> newMetadata = new HashMap<>();
-    newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(Utils.Infinite_Time));
-    newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, String.valueOf(lifeVersion));
-    cloudMetadata.putAll(newMetadata);
+    newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
 
     try {
       logger.debug("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
-      Response<Void> response = updateMetadata(blobLayout, blobProperties, cloudMetadata);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUndeleteSucessRate.mark();
       logger.debug("Successfully reset deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return lifeVersion;
-    } catch (Throwable t) {
-      azureMetrics.blobUndeleteErrorCount.inc();
-      // Due to legacy CloudBlobStore, we have to handle 404 as a special case when it can actually be a general case.
-      if (t instanceof BlobStorageException
-          && ((BlobStorageException) t).getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-        // We should never be here because replication logic checks if a blob exists or not before undeleting it.
-        String error = String.format("Failed to undelete blob {} in Azure blob storage because it does not exist", blobLayout);
-        logger.error(error);
-        throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Not_Found), CloudBlobStore.STATUS_NOT_FOUND, false, null);
+    } catch (BlobStorageException bse) {
+      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
+      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
+        azureMetrics.blobUpdateConflictCount.inc();
       }
-      String error = String.format("Failed to undelete blob %s in Azure blob storage because %s", blobLayout, t.getMessage());
+      String error = String.format("Failed to undelete blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
       logger.error(error);
-      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.Unknown_Error));
+      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+    } catch (Throwable t) {
+      // Unknown error
+      azureMetrics.blobUndeleteErrorCount.inc();
+      String error = String.format("Failed to undelete blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
     } finally {
       storageTimer.stop();
     } // try-catch
