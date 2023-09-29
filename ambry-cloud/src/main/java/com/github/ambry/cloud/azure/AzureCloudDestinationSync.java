@@ -341,32 +341,37 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
-      CloudUpdateValidator unused) throws CloudStorageException {
+      CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
     Timer.Context storageTimer = azureMetrics.blobUpdateDeleteTimeLatency.time();
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
-    Map<String, String> newMetadata = new HashMap<>();
+    Map<String, Object> newMetadata = new HashMap<>();
     newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
-    newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, String.valueOf(lifeVersion));
+    newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
     BlobProperties blobProperties = getBlobProperties(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
-    // lifeVersion must always be present
-    short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
-    // This is the correct behavior. For ref, look at BlobStore::delete and ReplicaThread::applyUpdatesToBlobInLocalStore
-    if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)
-        && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) != Utils.Infinite_Time ) {
-      String error = String.format("Cannot delete id %s since it is already marked as deleted in cloud", blobIdStr);
-      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted));
+
+    try {
+      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+        // lifeVersion must always be present
+        short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+        if (cloudlifeVersion > lifeVersion) {
+          String error = String.format("Failed to update deleteTime of blob %s as it has a higher life version in cloud than replicated message: %s > %s",
+              blobIdStr, cloudlifeVersion, lifeVersion);
+          logger.error(error);
+          throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), azureMetrics);
+        }
+        String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
+        logger.error(error);
+        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), azureMetrics);
+      }
+    } catch (StoreException e) {
+      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
+      String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
     }
-    // Don't rely on the CloudBlobStore.recentCache to do the "right" thing.
-    // This is the correct behavior. For ref, look at BlobStore::delete and ReplicaThread::applyUpdatesToBlobInLocalStore
-    // Repl layer handles it.
-    if (cloudlifeVersion > lifeVersion) {
-      String error = String.format("Cannot delete id %s since it has a higher lifeVersion than the message info: %s > %s",
-          blobIdStr, cloudlifeVersion, lifeVersion);
-      throw new CloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict));
-    }
-    cloudMetadata.putAll(newMetadata);
+
+    newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
     try {
       logger.debug("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
@@ -384,6 +389,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
     } catch (Throwable t) {
+      // Unknown error
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
