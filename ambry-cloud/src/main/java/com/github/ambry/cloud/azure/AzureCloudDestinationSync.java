@@ -491,7 +491,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   /**
-   * For testing
+   * For testing, ironic that its used for testing and not for prod
    * @param blobId
    * @return
    */
