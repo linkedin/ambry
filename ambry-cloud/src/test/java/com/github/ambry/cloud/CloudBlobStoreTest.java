@@ -217,12 +217,16 @@ public class CloudBlobStoreTest {
   @Before
   public void beforeTest() {
     boolean isV1 = ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1);
-    boolean isConnectToAzurite = new AzuriteUtils().connectToAzurite();
     boolean isV2 = ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2);
+    boolean isConnectToAzurite = isV2 ? new AzuriteUtils().connectToAzurite() : false;
     if (!(isV1 || (isV2 && isConnectToAzurite))) {
       logger.error("isV1 = {}, isV2 = {}, isConnectToAzurite = {}", isV1, isV2, isConnectToAzurite);
     }
     assumeTrue(isV1 || (isV2 && isConnectToAzurite));
+  }
+
+  protected void v1TestOnly() {
+    assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1));
   }
 
   /** Test the CloudBlobStore put method. */
@@ -795,6 +799,7 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore findEntriesSince method. */
   @Test
   public void testFindEntriesSince() throws Exception {
+    v1TestOnly();
     setupCloudStore(false, true, defaultCacheLimit, true);
     long maxTotalSize = 1000000;
     // 1) start with empty token, call find, return some data
@@ -838,6 +843,7 @@ public class CloudBlobStoreTest {
   /** Test CloudBlobStore cache eviction. */
   @Test
   public void testCacheEvictionOrder() throws Exception {
+    v1TestOnly();
     assumeTrue(isVcr);
 
     // setup store with small cache size
@@ -907,6 +913,7 @@ public class CloudBlobStoreTest {
   /** Test verifying behavior when store not started. */
   @Test
   public void testStoreNotStarted() throws Exception {
+    v1TestOnly();
     // Create store and don't start it.
     setupCloudStore(false, true, defaultCacheLimit, false);
     List<StoreKey> keys = Collections.singletonList(getUniqueId(refAccountId, refContainerId, false, partitionId));
@@ -936,6 +943,7 @@ public class CloudBlobStoreTest {
   /** Test verifying exception handling behavior. */
   @Test
   public void testExceptionalDest() throws Exception {
+    v1TestOnly();
     CloudDestination exDest = mock(CloudDestination.class);
     when(exDest.uploadBlob(any(BlobId.class), anyLong(), any(), any(InputStream.class))).thenThrow(
         new CloudStorageException("ouch"));
@@ -978,6 +986,7 @@ public class CloudBlobStoreTest {
   /* Test retry behavior */
   @Test
   public void testExceptionRetry() throws Exception {
+    v1TestOnly();
     CloudDestination exDest = mock(CloudDestination.class);
     long retryDelay = 5;
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
@@ -1254,6 +1263,7 @@ public class CloudBlobStoreTest {
    */
   @Test
   public void testStoreGets() throws Exception {
+    v1TestOnly();
     testStoreGets(false);
     testStoreGets(true);
   }
