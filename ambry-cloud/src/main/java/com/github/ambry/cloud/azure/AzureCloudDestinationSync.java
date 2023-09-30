@@ -501,7 +501,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).exists();
     } catch (Throwable t) {
-      String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
+      String error = String.format("Failed to check if blob %s exists in Azure blob storage due to %s", blobLayout, t.getMessage());
       logger.error(error);
       return false;
     }
@@ -586,9 +586,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
   @Override
   public Map<String, CloudBlobMetadata> getBlobMetadata(List<BlobId> blobIds) throws CloudStorageException {
     /*
-        This is used by findMissingKeys, which is a highly inefficient way of checking for existence esp. when
-        Azure SDK provides a lightweight exists() method. findMissingKeys() doesn't even use the metadata provided.
-        It just discards it. But due to legacy reasons, we are forced to impl this way.
+        This is used by findMissingKeys, which doesn't even use the metadata provided.
+        It just discards it. But due to legacy reasons, we are required to impl this way.
+        We could use one-liner Azure SDK provided lightweight exists() method, which internally fetches blob-properties
+        and does the same thing that findMissingKeys does.
      */
     Map<String, CloudBlobMetadata> cloudBlobMetadataMap = new HashMap<>();
     for (BlobId blobId: blobIds) {
