@@ -13,14 +13,17 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.core.http.HttpHeaderName;
 import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Context;
+import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.models.BlobContainerItem;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobHttpHeaders;
+import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.BlockBlobItem;
@@ -29,6 +32,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudBlobStore;
 import com.github.ambry.cloud.CloudBlobStoreV2;
 import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
@@ -50,6 +54,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -300,10 +305,98 @@ public class AzureCloudDestinationSync implements CloudDestination {
     throw new UnsupportedOperationException("downloadBlobAsync will not be implemented for AzureCloudDestinationSync");
   }
 
+  /**
+   * Synchronously update blob metadata
+   * @param blobLayout Blob layout
+   * @param metadata Blob metadata
+   * @return HTTP response and blob metadata
+   */
+  protected Response<Void> updateBlobMetadata(AzureBlobLayoutStrategy.BlobLayout blobLayout, BlobProperties blobProperties, Map<String, String> metadata) {
+    BlobClient blobClient = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath);
+    BlobRequestConditions blobRequestConditions = new BlobRequestConditions().setIfMatch(blobProperties.getETag());
+    return blobClient.setMetadataWithResponse(metadata, blobRequestConditions,
+        Duration.ofMillis(cloudConfig.cloudRequestTimeout), Context.NONE);
+  }
+
+  /**
+   * Returns blob properties from Azure
+   * @param blobLayout BlobLayout
+   * @return Blob properties
+   * @throws CloudStorageException
+   */
+  protected BlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout)
+      throws CloudStorageException {
+    try {
+      return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
+    } catch (BlobStorageException bse) {
+      String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+    } catch (Throwable t) {
+      String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+    }
+  }
+
   @Override
   public boolean deleteBlob(BlobId blobId, long deletionTime, short lifeVersion,
       CloudUpdateValidator cloudUpdateValidator) throws CloudStorageException {
-    return false;
+    Timer.Context storageTimer = azureMetrics.blobUpdateDeleteTimeLatency.time();
+    AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+    String blobIdStr = blobLayout.blobFilePath;
+    Map<String, Object> newMetadata = new HashMap<>();
+    newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(deletionTime));
+    newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
+    BlobProperties blobProperties = getBlobProperties(blobLayout);
+    Map<String, String> cloudMetadata = blobProperties.getMetadata();
+
+    try {
+      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+        // lifeVersion must always be present
+        short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+        if (cloudlifeVersion > lifeVersion) {
+          String error = String.format("Failed to update deleteTime of blob %s as it has a higher life version in cloud than replicated message: %s > %s",
+              blobIdStr, cloudlifeVersion, lifeVersion);
+          logger.error(error);
+          throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), azureMetrics);
+        }
+        String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
+        logger.error(error);
+        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), azureMetrics);
+      }
+    } catch (StoreException e) {
+      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
+      String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+    }
+
+    newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
+    try {
+      logger.debug("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
+      // Success rate is effective, success counter is ineffective because it just monotonically increases
+      azureMetrics.blobUpdateDeleteTimeSucessRate.mark();
+      logger.debug("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+          blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
+      return true;
+    } catch (BlobStorageException bse) {
+      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
+      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
+        azureMetrics.blobUpdateConflictCount.inc();
+      }
+      String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+    } catch (Throwable t) {
+      // Unknown error
+      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
+      String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+    } finally {
+      storageTimer.stop();
+    } // try-catch
   }
 
   @Override

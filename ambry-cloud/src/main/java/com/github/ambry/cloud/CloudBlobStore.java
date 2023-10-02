@@ -68,12 +68,12 @@ import static com.github.ambry.cloud.CloudBlobMetadata.*;
 /**
  * The blob store that reflects data in a cloud storage.
  */
-class CloudBlobStore implements Store {
+public class CloudBlobStore implements Store {
 
   private static final Logger logger = LoggerFactory.getLogger(CloudBlobStore.class);
   private static final int cacheInitialCapacity = 1000;
   private static final float cacheLoadFactor = 0.75f;
-  static final int STATUS_NOT_FOUND = 404;
+  public static final int STATUS_NOT_FOUND = 404;
   private static final short IGNORE_LIFE_VERSION = -2;
   private final PartitionId partitionId;
   private final CloudDestination cloudDestination;
