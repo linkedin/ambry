@@ -84,8 +84,8 @@ public class CloudTokenPersistorTest {
   @Before
   public void beforeTest() {
     boolean isV1 = ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1);
-    boolean isConnectToAzurite = new AzuriteUtils().connectToAzurite();
     boolean isV2 = ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2);
+    boolean isConnectToAzurite = isV2 ? new AzuriteUtils().connectToAzurite() : false;
     if (!(isV1 || (isV2 && isConnectToAzurite))) {
       logger.error("isV1 = {}, isV2 = {}, isConnectToAzurite = {}", isV1, isV2, isConnectToAzurite);
     }
