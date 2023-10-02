@@ -417,9 +417,9 @@ public class AzureCloudConfig {
 
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
-    cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT);
-    cosmosDatabase = verifiableProperties.getString(COSMOS_DATABASE);
-    cosmosCollection = verifiableProperties.getString(COSMOS_COLLECTION);
+    cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT, ""); // just add a default "" else instantiation fails
+    cosmosDatabase = verifiableProperties.getString(COSMOS_DATABASE, ""); // just add a default "" else instantiation fails
+    cosmosCollection = verifiableProperties.getString(COSMOS_COLLECTION, ""); // just add a default "" else instantiation fails
     cosmosDeletedContainerCollection = verifiableProperties.getString(COSMOS_DELETED_CONTAINER_COLLECTION, "");
     cosmosKey = verifiableProperties.getString(COSMOS_KEY, "");
     cosmosKeySecretName = verifiableProperties.getString(COSMOS_KEY_SECRET_NAME, "");

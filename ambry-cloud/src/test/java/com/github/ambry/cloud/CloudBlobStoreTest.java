@@ -59,6 +59,7 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -154,6 +155,7 @@ public class CloudBlobStoreTest {
     // Required clustermap properties
     setBasicProperties(properties);
     // Require encryption for uploading
+    properties.setProperty(CloudConfig.VCR_MIN_TTL_DAYS, String.valueOf(0)); // Disable this. Makes testing difficult.
     properties.setProperty(CloudConfig.VCR_REQUIRE_ENCRYPTION, Boolean.toString(requireEncryption));
     properties.setProperty(CloudConfig.CLOUD_BLOB_CRYPTO_AGENT_FACTORY_CLASS,
         TestCloudBlobCryptoAgentFactory.class.getName());
@@ -462,42 +464,113 @@ public class CloudBlobStoreTest {
   /** Test the CloudBlobStore updateTtl method. */
   @Test
   public void testStoreTtlUpdates() throws Exception {
-    setupCloudStore(false, true, defaultCacheLimit, true);
+    setupCloudStore(true, true, defaultCacheLimit, true);
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-    int count = 10;
-    for (int j = 0; j < count; j++) {
-      CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, -1, refAccountId, refContainerId, true, false,
-          partitionId, operationTime, isVcr);
+    int expectedCount = 0;
+    long now = System.currentTimeMillis();
+    short initialLifeVersion = 100;
+    BlobId blobId = getUniqueId(refAccountId, refContainerId, true, partitionId);
+    MessageInfo info = new MessageInfo(blobId, SMALL_BLOB_SIZE, false, false, false, System.currentTimeMillis() + 600000, null, refAccountId, refContainerId, now, initialLifeVersion);
+    messageWriteSet.add(info, ByteBuffer.wrap(TestUtils.getRandomBytes(SMALL_BLOB_SIZE)));
+
+    // Put a blob for ttl-update
+    store.put(messageWriteSet);
+    int numPuts = 1;
+
+    /*
+      Test 1: Update TTL
+      V1: Should pass with no exc
+      V2: Should pass with no exc
+     */
+    MessageInfo ttlUpdateMessage = new MessageInfo.Builder(messageWriteSet.getMessageSetInfo().get(0))
+        .expirationTimeInMs(-1)
+        .isTtlUpdated(true)
+        .build();
+    store.updateTtl(Collections.singletonList(ttlUpdateMessage));
+    if (mockingDetails(dest).isMock()) {
+      verify(dest, times(1)).updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class));
     }
-    store.updateTtl(messageWriteSet.getMessageSetInfo());
-    verify(dest, times(count)).updateBlobExpiration(any(BlobId.class), anyLong(), any(CloudUpdateValidator.class));
-    verifyCacheHits(count, 0);
+    verifyCacheHits(1 + numPuts, 0);
 
-    // Call second time, If isVcr, should be cached causing updates to be skipped.
-    store.updateTtl(messageWriteSet.getMessageSetInfo());
-    int expectedCount = isVcr ? count : count * 2;
-    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
-        any(CloudUpdateValidator.class));
-    verifyCacheHits(count * 2, count);
-
-    // test that if a blob is deleted and then undeleted, the ttlupdate status is preserved in cache.
-    MessageInfo messageInfo = messageWriteSet.getMessageSetInfo().get(0);
-    store.delete(Collections.singletonList(messageInfo));
-    verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class));
-    store.undelete(messageInfo);
-    verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
-    store.updateTtl(Collections.singletonList(messageInfo));
-    expectedCount = isVcr ? expectedCount : expectedCount + 1;
-    verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
-        any(CloudUpdateValidator.class));
-    if (isVcr) {
-      verifyCacheHits((count * 2) + 3, count + 1);
-    } else {
-      // delete and undelete should not cause cache lookup for frontend.
-      verifyCacheHits((count * 2) + 1, count + 1);
+    /*
+        Test 2: Call a second time
+        V1: Should pass with no exc
+        V2: Exception expected, Already_Updated
+     */
+    try {
+      store.updateTtl(Collections.singletonList(ttlUpdateMessage));
+      if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
+        fail("UpdateTTL must throw Already_Updated error");
+      }
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.Already_Updated, e.getErrorCode());
     }
+    if (mockingDetails(dest).isMock()) {
+      verify(dest, times(1)).updateBlobExpiration(any(BlobId.class), anyLong(),
+          any(CloudUpdateValidator.class));
+    }
+    verifyCacheHits(2 + numPuts, 1);
 
-    //test that ttl update with non infinite expiration time fails
+    /*
+        Test 3: delete, ttl-update
+        V1: Should pass with an exc
+        V2: Should pass with an exc, ID_Deleted
+     */
+    MessageInfo deleteMessage = new MessageInfo.Builder(ttlUpdateMessage)
+        .isDeleted(true)
+        .build();
+    store.delete(Collections.singletonList(deleteMessage));
+    int numDeletes = 1;
+    try {
+      store.updateTtl(Collections.singletonList(ttlUpdateMessage));
+      if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
+        fail("UpdateTTL must throw Already_Updated error");
+      }
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.ID_Deleted, e.getErrorCode());
+    }
+    if (mockingDetails(dest).isMock()) {
+      verify(dest, times(1)).deleteBlob(any(BlobId.class), anyLong(), anyShort(), any(CloudUpdateValidator.class));
+    }
+    verifyCacheHits(3 + numPuts + numDeletes, 2);
+
+    /*
+        Test 4: undelete, ttl-update
+        V1: Should pass with an exc
+        V2: Should pass with an exc, Already_Updated
+     */
+    MessageInfo unDeleteMessage = new MessageInfo.Builder(deleteMessage)
+        .isUndeleted(true)
+        .lifeVersion((short) (initialLifeVersion+1))
+        .build();
+    store.undelete(unDeleteMessage);
+    int numUnDeletes = 1;
+    if (mockingDetails(dest).isMock()) {
+      verify(dest, times(1)).undeleteBlob(any(BlobId.class), anyShort(), any(CloudUpdateValidator.class));
+    }
+    ttlUpdateMessage = new MessageInfo.Builder(unDeleteMessage)
+        .expirationTimeInMs(-1)
+        .build();
+    try {
+      store.updateTtl(Collections.singletonList(ttlUpdateMessage));
+      if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
+        fail("UpdateTTL must throw Already_Updated error");
+      }
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.Already_Updated, e.getErrorCode());
+    }
+    if (mockingDetails(dest).isMock()) {
+      expectedCount = isVcr ? expectedCount : expectedCount + 1;
+      verify(dest, times(expectedCount)).updateBlobExpiration(any(BlobId.class), anyLong(),
+          any(CloudUpdateValidator.class));
+    }
+    verifyCacheHits(4 + numPuts + numDeletes + numUnDeletes, 3);
+
+    /*
+        Test 5: ttl update with finite expiration time fails
+        V1: Should fail
+        V2: Should fail
+     */
     messageWriteSet = new MockMessageWriteSet();
     CloudTestUtil.addBlobToMessageSet(messageWriteSet, SMALL_BLOB_SIZE, System.currentTimeMillis() + 20000,
         refAccountId, refContainerId, true, false, partitionId, operationTime, isVcr);

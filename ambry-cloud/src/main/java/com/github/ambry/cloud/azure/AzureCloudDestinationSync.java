@@ -32,7 +32,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudBlobStore;
 import com.github.ambry.cloud.CloudBlobStoreV2;
 import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
@@ -485,10 +484,79 @@ public class AzureCloudDestinationSync implements CloudDestination {
     throw new UnsupportedOperationException("undeleteBlobAsync will not be implemented for AzureCloudDestinationSync");
   }
 
+  protected boolean isDeleted(Map<String, String> cloudMetadata) {
+    return cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)
+        && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) != Utils.Infinite_Time;
+  }
+
   @Override
   public short updateBlobExpiration(BlobId blobId, long expirationTime, CloudUpdateValidator cloudUpdateValidator)
       throws CloudStorageException {
-    return 0;
+    Timer.Context storageTimer = azureMetrics.blobUpdateTTLLatency.time();
+    AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+    String blobIdStr = blobLayout.blobFilePath;
+    BlobProperties blobProperties = getBlobProperties(blobLayout);
+    Map<String, String> cloudMetadata = blobProperties.getMetadata();
+    Map<String, Object> newMetadata = new HashMap<>();
+    newMetadata.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(Utils.Infinite_Time));
+
+    // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
+    // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
+    // It is absorbed by applyTtlUpdate::L1395.
+    // The validator doesn't check for this, perhaps another gap in legacy code.
+    if (isDeleted(cloudMetadata)) {
+      String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), azureMetrics);
+    }
+
+    try {
+      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+        // Legacy cloudBlobStore does not expect an exception. However,
+        // below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
+        // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
+        // It is absorbed by applyTtlUpdate::L1395
+        azureMetrics.blobUpdateTTLErrorCount.inc();
+        String error = String.format("Unable to update TTL of %s as its TTL is already updated cloud", blobIdStr);
+        logger.error(error);
+        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Already_Updated), azureMetrics);
+      }
+    } catch (StoreException e) {
+      // Auth error from validator
+      azureMetrics.blobUpdateTTLErrorCount.inc();
+      String error = String.format("Unable to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+    }
+
+    newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
+
+    // lifeVersion must always be present because we add it explicitly before PUT
+    short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
+
+    try {
+      logger.debug("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
+      // Success rate is effective, success counter is ineffective because it just monotonically increases
+      azureMetrics.blobUpdateTTLSucessRate.mark();
+      logger.debug("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+          blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
+      return cloudlifeVersion;
+    } catch (BlobStorageException bse) {
+      azureMetrics.blobUpdateTTLErrorCount.inc();
+      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
+        azureMetrics.blobUpdateConflictCount.inc();
+      }
+      String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+    } catch (Throwable t) {
+      azureMetrics.blobUpdateTTLErrorCount.inc();
+      String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+    } finally {
+      storageTimer.stop();
+    } // try-catch
   }
 
   @Override
