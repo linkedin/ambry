@@ -625,16 +625,74 @@ public class AzureCloudDestinationSync implements CloudDestination {
     return 0;
   }
 
+  // Azure naming rules: https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata
+  public static final String TOKEN_CONTAINER = "replica-token-container";
+
+  /**
+   * Return AzureTokenFileName
+   * @param tokenLayout Token layout
+   * @param tokenFileName Token file name
+   * @return AzureTokenFileName
+   */
+  protected String getAzureTokenFileName(AzureBlobLayoutStrategy.BlobLayout tokenLayout, String tokenFileName) {
+    return tokenLayout.containerName + "-" + tokenFileName;
+  }
   @Override
   public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
       throws CloudStorageException {
+    /*
+      Would have loved to upload the token for each partition separately as an index-able file in
+      Azure Storage's table offering but due to lack of time and legacy constraints, here is the impl.
+      https://learn.microsoft.com/en-us/azure/cosmos-db/table/support?toc=https%3A%2F%2Flearn.microsoft.com%2Fen-us%2Fazure%2Fstorage%2Ftables%2Ftoc.json&bc=https%3A%2F%2Flearn.microsoft.com%2Fen-us%2Fazure%2Fbread%2Ftoc.json
 
+      Current impl:
+      Its copied straight from V1. The only change is the naming and location of token.
+      With blobLayoutStrategy = PARTITION, the V1 code stores each the token for each container in the container itself.
+      This makes searching for the token extremely difficult.
+      So for V2, I store the tokens in TOKEN_CONTAINER
+     */
+    // Prepare to upload token to Azure blob storage
+    AzureBlobLayoutStrategy.BlobLayout
+        tokenLayout = azureBlobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
+    String azureTokenFileName = getAzureTokenFileName(tokenLayout, tokenFileName);
+    // There is no parallelism, but we still need to create and pass this object to SDK.
+    BlobParallelUploadOptions blobParallelUploadOptions =
+        new BlobParallelUploadOptions(inputStream);
+    // Without content-type, get-token floods log with warnings
+    blobParallelUploadOptions.setHeaders(new BlobHttpHeaders().setContentType("application/octet-stream"));
+    try {
+      BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
+      ////////////////////////////////// Upload token to Azure blob storage ////////////////////////////////////////
+          blobContainerClient.getBlobClient(azureTokenFileName)
+              .uploadWithResponse(blobParallelUploadOptions, Duration.ofMillis(cloudConfig.cloudRequestTimeout),
+                  Context.NONE);
+      ////////////////////////////////// Upload token to Azure blob storage ////////////////////////////////////////
+    } catch (Exception e) {
+      azureMetrics.absTokenPersistFailureCount.inc();
+      String error = String.format("Unable to persist token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+    }
   }
 
   @Override
   public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
       throws CloudStorageException {
-    return false;
+    // Prepare to download token from Azure blob storage
+    AzureBlobLayoutStrategy.BlobLayout
+        tokenLayout = azureBlobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
+    String azureTokenFileName = getAzureTokenFileName(tokenLayout, tokenFileName);
+    try {
+      BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
+      ////////////////////////////////// Download token from Azure blob storage ////////////////////////////////////////
+      blobContainerClient.getBlobClient(azureTokenFileName)
+          .download(outputStream);
+      ////////////////////////////////// Download token from Azure blob storage ////////////////////////////////////////
+      return true;
+    } catch (Exception e) {
+      azureMetrics.absTokenRetrieveFailureCount.inc();
+      String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+    }
   }
 
   @Override
