@@ -530,7 +530,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
 
-    // lifeVersion must always be present
+    // lifeVersion must always be present because we add it explicitly before PUT
     short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
 
     try {
