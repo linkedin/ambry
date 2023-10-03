@@ -2958,6 +2958,7 @@ public class HelixBootstrapUpgradeUtil {
     for (String resourceName : admin.getResourcesInCluster(clusterName)) {
       if (!resourceName.matches("\\d+")) {
         info("[{}] Ignoring resource {} as it is not part of the cluster map", dcName.toUpperCase(), resourceName);
+        continue;
       }
 
       IdealState resourceIS = admin.getResourceIdealState(clusterName, resourceName);
