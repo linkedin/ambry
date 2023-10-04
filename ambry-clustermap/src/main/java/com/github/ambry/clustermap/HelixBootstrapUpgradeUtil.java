@@ -2005,6 +2005,9 @@ public class HelixBootstrapUpgradeUtil {
                 dryRun ? "No action as dry run" : "Updating Helix using static",
                 String.join(",", instanceSetInHelix), String.join(",", instanceSetInStatic));
             // @formatter:on
+            if (instanceSetInStatic.size() < instanceSetInHelix.size()) {
+              warning("*****STOP STOP STOP*****: New instance set has less replicas than what is in helix");
+            }
             if (!dryRun) {
               ArrayList<String> newInstances = new ArrayList<>(instanceSetInStatic);
               Collections.shuffle(newInstances);
