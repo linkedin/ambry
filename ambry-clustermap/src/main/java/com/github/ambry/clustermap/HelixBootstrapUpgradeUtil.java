@@ -2854,9 +2854,9 @@ public class HelixBootstrapUpgradeUtil {
         .filter(rn -> rn.matches("\\d+"))
         .mapToInt(Integer::parseInt)
         .allMatch(i -> i < FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER);
-    ensureOrThrow(allResourceFullAutoCompatible || allResourceNotFullAutoCompatible,
-        "Resource has to be all greater than " + FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER
-            + " or all less than it");
+    //ensureOrThrow(allResourceFullAutoCompatible || allResourceNotFullAutoCompatible,
+    //   "Resource has to be all greater than " + FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER
+    //         + " or all less than it");
     if (!allResourceFullAutoCompatible) {
       info("[{}] Resources are not FULL_AUTO compatible in cluster {}", dcName.toUpperCase(), clusterName);
       return false;
