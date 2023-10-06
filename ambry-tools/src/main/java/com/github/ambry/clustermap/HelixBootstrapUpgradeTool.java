@@ -92,6 +92,8 @@ public class HelixBootstrapUpgradeTool {
    *             layout as the reference datacenter.
    */
   public static void main(String[] args) throws Exception {
+    // Making sure when using this tool, we always prompt to user about delete
+    shouldPrompt = true;
     OptionParser parser = new OptionParser();
 
     OptionSpec<Void> dropClusterOpt = parser.accepts("dropCluster",

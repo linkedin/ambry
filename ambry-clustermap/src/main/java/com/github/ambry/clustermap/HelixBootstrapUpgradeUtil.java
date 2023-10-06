@@ -43,6 +43,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
 import org.apache.helix.ConfigAccessor;
@@ -114,6 +116,8 @@ import static org.apache.helix.model.ResourceConfig.*;
  *}
  */
 public class HelixBootstrapUpgradeUtil {
+  // Should prompt to user to confirm the delete of any instance of resource
+  static boolean shouldPrompt = false;
   static final int FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER = 10000;
   static final int DEFAULT_MAX_PARTITIONS_PER_RESOURCE = 100;
   static final String HELIX_DISABLED_PARTITION_STR =
@@ -164,6 +168,7 @@ public class HelixBootstrapUpgradeUtil {
   private final AtomicInteger partitionsDisabled = new AtomicInteger();
   private final AtomicInteger partitionsEnabled = new AtomicInteger();
   private final AtomicInteger partitionsReset = new AtomicInteger();
+  private final Lock lock = new ReentrantLock();
   private Map<String, ClusterMapUtils.DcZkInfo> dataCenterToZkAddress;
   private HelixClusterManager validatingHelixClusterManager;
   private static final Logger logger = LoggerFactory.getLogger("Helix bootstrap tool");
@@ -1935,6 +1940,21 @@ public class HelixBootstrapUpgradeUtil {
 
   private void removeDataNodeConfigFromHelix(String dcName, String instanceName,
       PropertyStoreToDataNodeConfigAdapter adapter) {
+    if (shouldPrompt) {
+      // use lock to protect prompt from concurrent operations.
+      lock.lock();
+      String question =
+          String.format("Are you sure you want to remove instance %s from property store and instance config",
+              instanceName);
+      String line = System.console().readLine("%s (y[es]/n[o]): ", question).toLowerCase();
+      boolean shouldDelete = line.equals("yes") || line.equals("y");
+      lock.unlock();
+
+      if (!shouldDelete) {
+        // terminate the process right away.
+        System.exit(1);
+      }
+    }
     adminForDc.get(dcName).dropInstance(clusterName, new InstanceConfig(instanceName));
     if (dataNodeConfigSourceType == PROPERTY_STORE) {
       if (adapter.remove(instanceName)) {
@@ -2074,6 +2094,21 @@ public class HelixBootstrapUpgradeUtil {
           info("[{}] Resource {} has no partition, {}", dcName.toUpperCase(), resourceId,
               dryRun ? "no action as dry run" : "dropping");
           if (!dryRun) {
+            if (shouldPrompt) {
+              // use lock to protect prompt from concurrent operations.
+              lock.lock();
+              String question = String.format(
+                  "Are you sure you want to drop resource %d from ideal state? This operation would remove all the partitions under this resource",
+                  resourceId);
+              String line = System.console().readLine("%s (y[es]/n[o]): ", question).toLowerCase();
+              boolean shouldDelete = line.equals("yes") || line.equals("y");
+              lock.unlock();
+
+              if (!shouldDelete) {
+                // terminate the process right away.
+                System.exit(1);
+              }
+            }
             dcAdmin.dropResource(clusterName, String.valueOf(resourceId));
           }
           resourcesDropped.getAndIncrement();
@@ -2857,6 +2892,10 @@ public class HelixBootstrapUpgradeUtil {
         .filter(rn -> rn.matches("\\d+"))
         .mapToInt(Integer::parseInt)
         .allMatch(i -> i < FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER);
+    // When there is mixed of new and old resources, it means we are in the middle of resource reconstruction.
+    // We don't want to do any changes to the helix cluster map if that's the case. Since a partition can belong
+    // to more than one resources, we would remove partitions from one of them and that would cause troubles.
+    // DON'T continue when there is mixed of new and old resources.
     ensureOrThrow(allResourceFullAutoCompatible || allResourceNotFullAutoCompatible,
         "Resource has to be all greater than " + FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER
             + " or all less than it");
