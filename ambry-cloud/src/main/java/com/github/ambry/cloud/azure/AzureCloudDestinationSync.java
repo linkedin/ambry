@@ -112,6 +112,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * Tests connection to Azure blob storage
    */
   protected void testAzureStorageConnectivity() {
+    logger.info("Testing Azure Storage connectivity");
     PagedIterable<BlobContainerItem> blobContainerItemPagedIterable = azureStorageClient.listBlobContainers();
     for (BlobContainerItem blobContainerItem : blobContainerItemPagedIterable) {
       logger.info("Azure blob storage container = {}", blobContainerItem.getName());
@@ -664,11 +665,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
     blobParallelUploadOptions.setHeaders(new BlobHttpHeaders().setContentType("application/octet-stream"));
     try {
       BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
-      ////////////////////////////////// Upload token to Azure blob storage ////////////////////////////////////////
-          blobContainerClient.getBlobClient(azureTokenFileName)
-              .uploadWithResponse(blobParallelUploadOptions, Duration.ofMillis(cloudConfig.cloudRequestTimeout),
-                  Context.NONE);
-      ////////////////////////////////// Upload token to Azure blob storage ////////////////////////////////////////
+      // Upload token to Azure blob storage
+      blobContainerClient.getBlobClient(azureTokenFileName)
+          .uploadWithResponse(blobParallelUploadOptions, Duration.ofMillis(cloudConfig.cloudRequestTimeout),
+              Context.NONE);
     } catch (Exception e) {
       azureMetrics.absTokenPersistFailureCount.inc();
       String error = String.format("Unable to persist token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
@@ -685,10 +685,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
     String azureTokenFileName = getAzureTokenFileName(tokenLayout, tokenFileName);
     try {
       BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
-      ////////////////////////////////// Download token from Azure blob storage ////////////////////////////////////////
+      // Download token from Azure blob storage
       blobContainerClient.getBlobClient(azureTokenFileName)
           .download(outputStream);
-      ////////////////////////////////// Download token from Azure blob storage ////////////////////////////////////////
       return true;
     } catch (Exception e) {
       azureMetrics.absTokenRetrieveFailureCount.inc();
