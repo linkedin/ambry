@@ -257,6 +257,7 @@ public class ReplicaThread implements Runnable {
         //  independently without waiting for each other. This would make sure that slower replicas won't block faster
         //  replicas.
         replicate();
+        time.sleep(2000);
         lock.lock();
         try {
           if (running && allDisabled) {
@@ -268,6 +269,8 @@ public class ReplicaThread implements Runnable {
           lock.unlock();
         }
       }
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
     } finally {
       running = false;
       shutdownLatch.countDown();

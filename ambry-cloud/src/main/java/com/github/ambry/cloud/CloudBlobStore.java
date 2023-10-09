@@ -1300,10 +1300,11 @@ public class CloudBlobStore implements Store {
               "FindKey", partitionId.toPathString());
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
       if (cloudBlobMetadata != null) {
-        return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
-            cloudBlobMetadata.isExpired(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
+        MessageInfo messageInfo = new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
+            cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
             (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
             cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
+        return messageInfo;
       } else {
         throw new StoreException(String.format("FindKey couldn't find key: %s", key), StoreErrorCodes.ID_Not_Found);
       }

@@ -90,7 +90,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *    azureCloudConfig.azureNameSchemeVersion = 1
      *    azureCloudConfig.azureBlobContainerStrategy = PARTITION
      *    cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
-     *    cloudConfig.recentBlobCacheLimit = 0; unnecessary, repl-logic avoids duplicate messages any ways
+     *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, repl-logic avoids duplicate messages any ways
      *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
      */
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
@@ -330,6 +330,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
     } catch (BlobStorageException bse) {
+      if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        return null;
+      }
       String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
       logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
@@ -597,14 +600,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
       AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
         BlobProperties blobProperties = getBlobProperties(blobLayout);
-        cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
-      } catch (Throwable t) {
-        if (t instanceof CloudStorageException
-            && ((CloudStorageException) t).getStatusCode() == CloudBlobStore.STATUS_NOT_FOUND) {
-          // We should never be here because replication logic checks if a blob exists or not before undeleting it.
-          String dbg = String.format("Blob %s absent in Azure blob storage", blobLayout);
-          logger.error(dbg);
+        if (blobProperties != null) {
+          cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
         }
+      } catch (Throwable t) {
+        String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
+        logger.error(error);
+        throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
       }
     }
     return cloudBlobMetadataMap;
@@ -686,12 +688,21 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
       // Download token from Azure blob storage
-      blobContainerClient.getBlobClient(azureTokenFileName)
-          .download(outputStream);
+      blobContainerClient.getBlobClient(azureTokenFileName).download(outputStream);
       return true;
+    } catch (BlobStorageException e) {
+      azureMetrics.absTokenRetrieveFailureCount.inc();
+      String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
+      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        logger.warn(error);
+        return false;
+      }
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
     } catch (Exception e) {
       azureMetrics.absTokenRetrieveFailureCount.inc();
       String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
+      logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
     }
   }

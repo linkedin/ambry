@@ -464,6 +464,13 @@ public class CloudBlobMetadata {
   }
 
   /**
+   * @return True if expirationTime = -1, else false.
+   */
+  public boolean isTtlUpdated() {
+    return expirationTime == Utils.Infinite_Time;
+  }
+
+  /**
    * @return true if this blob is undeleted.
    */
   public boolean isUndeleted() {
