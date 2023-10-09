@@ -331,6 +331,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
     } catch (BlobStorageException bse) {
       if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        // Return null if blob was not found. Caller will handle ti.
         return null;
       }
       String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
@@ -600,6 +601,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
       AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
         BlobProperties blobProperties = getBlobProperties(blobLayout);
+        // We are trying to find blobs present on servers but absent in cloud. Many PUTs fall into this bucket.
+        // Do not print any errors as this is expected when the servers are ahead of cloud and cloud is a bit stale.
         if (blobProperties != null) {
           cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
         }
@@ -688,18 +691,20 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
       // Download token from Azure blob storage
-      blobContainerClient.getBlobClient(azureTokenFileName).download(outputStream);
+      blobContainerClient.getBlobClient(azureTokenFileName)
+          .download(outputStream);
       return true;
     } catch (BlobStorageException e) {
       azureMetrics.absTokenRetrieveFailureCount.inc();
       String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
+      logger.error(error);
       if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-        logger.warn(error);
+        // When we are starting from scratch, the backing store will not have any tokens.
+        // Return false if the blob is not found. The caller will handle it.
         return false;
       }
-      logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
-    } catch (Exception e) {
+    } catch (Throwable e) {
       azureMetrics.absTokenRetrieveFailureCount.inc();
       String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
       logger.error(error);
