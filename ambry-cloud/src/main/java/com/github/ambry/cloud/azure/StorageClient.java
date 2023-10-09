@@ -18,6 +18,7 @@ import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Configuration;
+import com.azure.core.util.ConfigurationBuilder;
 import com.azure.core.util.Context;
 import com.azure.core.util.FluxUtil;
 import com.azure.storage.blob.BlobContainerAsyncClient;
@@ -415,9 +416,12 @@ public abstract class StorageClient implements AzureStorageClient {
     try {
       validateABSAuthConfigs(azureCloudConfig);
       ProxyOptions proxyOptions = null;
-      if (cloudConfig.vcrProxyHost != null) {
+      if (cloudConfig.vcrProxyHost != null && !cloudConfig.vcrProxyHost.isEmpty()) {
+        logger.info("Using vcrProxyHost:vcrProxyPort {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
         proxyOptions = new ProxyOptions(ProxyOptions.Type.HTTP,
             new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
+      } else {
+        logger.info("No vcrProxyHost provided");
       }
       HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
       /*
@@ -432,7 +436,7 @@ public abstract class StorageClient implements AzureStorageClient {
       RequestRetryOptions retryOptions =
           new RequestRetryOptions(null, null, tryTimeoutInSeconds,
               null, null, null);
-      return buildBlobServiceSyncClient(client, new Configuration(), retryOptions, azureCloudConfig);
+      return buildBlobServiceSyncClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
     } catch (MalformedURLException | InterruptedException | ExecutionException ex) {
       logger.error("Error building ABS blob service client: {}", ex.getMessage());
       throw new IllegalStateException(ex);
