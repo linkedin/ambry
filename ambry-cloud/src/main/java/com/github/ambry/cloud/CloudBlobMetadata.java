@@ -464,6 +464,10 @@ public class CloudBlobMetadata {
   }
 
   /**
+   * A TTL-UPDATE to cloud sets the expirationTime to -1 in Azure blob metadata.
+   * Additionally, a blob can be uploaded to Azure with expirationTime to -1.
+   * Both these cases are indistinguishable in cloud because it is not a log-structured file on disk.
+   * Both these cases do not warrant a ttl-update, and therefore we must return false when the expiry is -1.
    * @return True if expirationTime = -1, else false.
    */
   public boolean isTtlUpdated() {

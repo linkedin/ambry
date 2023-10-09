@@ -603,6 +603,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         BlobProperties blobProperties = getBlobProperties(blobLayout);
         // We are trying to find blobs present on servers but absent in cloud. Many PUTs fall into this bucket.
         // Do not print any errors as this is expected when the servers are ahead of cloud and cloud is a bit stale.
+        // blobProperties == null when a blob is absent in cloud.
         if (blobProperties != null) {
           cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
         }
