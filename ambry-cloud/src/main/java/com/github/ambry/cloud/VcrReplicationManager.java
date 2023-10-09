@@ -259,11 +259,6 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
       throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
     }
-    if (partitionId.getId() != 1037) {
-      logger.debug("|snkt| Not replicating partition {}", partitionId.getId());
-      return;
-    }
-    logger.info("|snkt| Replicating partition {}", partitionId.getId());
     ReplicaId cloudReplica = new CloudReplica(partitionId, vcrClusterParticipant.getCurrentDataNodeId());
     if (!storeManager.addBlobStore(cloudReplica)) {
       logger.error("Can't start cloudstore for replica {}", cloudReplica);
@@ -272,14 +267,8 @@ public class VcrReplicationManager extends ReplicationEngine {
     List<? extends ReplicaId> peerReplicas = cloudReplica.getPeerReplicaIds();
     List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
     Store store = storeManager.getStore(partitionId);
-    String hostToReplicate = "lor1-0002874.int.linkedin.com";
     if (peerReplicas != null) {
       for (ReplicaId peerReplica : peerReplicas) {
-        if (!peerReplica.getDataNodeId().getHostname().equals(hostToReplicate)) {
-          logger.info("|snkt| Not replicating from host {}", hostToReplicate);
-          continue;
-        }
-        logger.info("|snkt| Replicating from host {}", hostToReplicate);
         if (!shouldReplicateFromDc(peerReplica.getDataNodeId().getDatacenterName())) {
           logger.error("Skipping replication from {}", peerReplica.getDataNodeId().getDatacenterName());
           continue;
