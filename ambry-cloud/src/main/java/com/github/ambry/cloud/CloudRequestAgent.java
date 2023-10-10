@@ -86,7 +86,8 @@ public class CloudRequestAgent {
         vcrMetrics.retryWaitTimeMsec.inc(delay);
       } else {
         // Either not retryable or exhausted attempts.
-        logger.error("{} failed partition {} statusCode {} cause {} made {} attempts.", actionName, partitionPath,
+        // Not very useful to log error here as they are printed in several other places
+        logger.debug("{} failed partition {} statusCode {} cause {} made {} attempts.", actionName, partitionPath,
             statusCode, cause, attempts);
         throw cse;
       }
