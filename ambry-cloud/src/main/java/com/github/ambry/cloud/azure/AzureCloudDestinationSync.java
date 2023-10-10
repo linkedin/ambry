@@ -32,8 +32,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudBlobStore;
-import com.github.ambry.cloud.CloudBlobStoreV2;
 import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
@@ -166,7 +164,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   /**
    * Creates an object that stores blobs in Azure blob storage
    * @param partitionId Partition ID
-   * @return {@link CloudBlobStoreV2}
+   * @return {@link BlobContainerClient}
    */
   protected BlobContainerClient createOrGetBlobStore(String partitionId) {
     // Get container ref from local cache
@@ -528,6 +526,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     // It is absorbed by applyTtlUpdate::L1395.
     // The validator doesn't check for this, perhaps another gap in legacy code.
     if (isDeleted(cloudMetadata)) {
+      // Replication must first undelete the deleted blob, and then update-TTL.
       String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
       logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), azureMetrics);
@@ -535,14 +534,28 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     try {
       if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
-        // Legacy cloudBlobStore does not expect an exception. However,
-        // below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
-        // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
-        // It is absorbed by applyTtlUpdate::L1395
-        azureMetrics.blobUpdateTTLErrorCount.inc();
+        /*
+          Legacy cloudBlobStore does not expect an exception. However, below is the correct behavior.
+          For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
+          ReplicaThread::applyUpdatesToBlobInLocalStore does all necessary checks before calling updateTTL however,
+          ReplicaThread::handleGetResponse does not.
+
+          We can come here from ReplicaThread::handleGetResponse L1258 that applies PUT+TTL without checking if the blob
+          uploaded is permanent. The validator reports the blob has already been ttl-updated, and we end up flooding the logs
+          and incrementing metrics. To avoid this, just don't inc any error metric or print any logs. However, this would
+          mask a scenario where we are erroneously trying to update the ttl of permanent blob. This is ok because we prevent
+          an unnecessary request to cloud without sacrificing any correctness. The ReplicaThread should actually check before
+          applying a ttl-update, but it was written for disk-based log, and not a cloud-based backup system.
+         */
+        // azureMetrics.blobUpdateTTLErrorCount.inc();
         String error = String.format("Unable to update TTL of %s as its TTL is already updated cloud", blobIdStr);
-        logger.error(error);
-        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Already_Updated), azureMetrics);
+        logger.trace(error);
+        /*
+          Set azureMetrics to null to prevent updating any metrics.
+          Throw Already_Updated and the caller will handle it at applyTtlUpdate::L1395.
+          Don't rely on the recentBlobCache as it could experience an eviction.
+         */
+        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Already_Updated), null);
       }
     } catch (StoreException e) {
       // Auth error from validator
