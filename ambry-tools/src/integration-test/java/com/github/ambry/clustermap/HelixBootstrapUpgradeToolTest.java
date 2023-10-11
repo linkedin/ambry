@@ -451,10 +451,12 @@ public class HelixBootstrapUpgradeToolTest {
     testHardwareLayout = constructInitialHardwareLayoutJSON(CLUSTER_NAME_IN_STATIC_CLUSTER_MAP);
     testPartitionLayout =
         constructInitialPartitionLayoutJSON(testHardwareLayout, DEFAULT_MAX_PARTITIONS_PER_RESOURCE, null);
-    long expectedResourceCountWithRemovals =
+    long realResourceCount =
         (testPartitionLayout.getPartitionLayout().getPartitionCount() - 1) / DEFAULT_MAX_PARTITIONS_PER_RESOURCE + 1;
+    Assert.assertNotEquals(realResourceCount, expectedResourceCountWithoutRemovals);
+    // With, or without force removal, tool won't remove resources.
     writeBootstrapOrUpgrade(expectedResourceCountWithoutRemovals, false);
-    writeBootstrapOrUpgrade(expectedResourceCountWithRemovals, true);
+    writeBootstrapOrUpgrade(expectedResourceCountWithoutRemovals, true);
   }
 
   /**
@@ -779,7 +781,8 @@ public class HelixBootstrapUpgradeToolTest {
         .filter(partitionId -> partitionId.getId() < secondResourceBasePartitionId)
         .findFirst()
         .get();
-    List<ReplicaId> replicasNotFullAuto = partitionNotFullAuto.getReplicas().stream()
+    List<ReplicaId> replicasNotFullAuto = partitionNotFullAuto.getReplicas()
+        .stream()
         .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(dcStr))
         .collect(Collectors.toList());
     Set<String> instancesNotFullAuto = replicasNotFullAuto.stream()
@@ -801,7 +804,8 @@ public class HelixBootstrapUpgradeToolTest {
         .collect(Collectors.toList());
     List<DataNode> dataNodeIdInSecondResource = testHardwareLayout.getAllDataNodesFromDc(dcStr)
         .stream()
-        .filter(dn -> dn.getPort() >= secondResourceBasePort).collect(Collectors.toList());
+        .filter(dn -> dn.getPort() >= secondResourceBasePort)
+        .collect(Collectors.toList());
 
     DataNode dataNode1 = dataNodeIdInSecondResource.stream()
         .filter(dn -> !instances.contains(ClusterMapUtils.getInstanceName(dn)))
@@ -834,20 +838,14 @@ public class HelixBootstrapUpgradeToolTest {
     checkPartitionReplicas(dcStr, clusterName, FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER + 1,
         partition.toPathString(), instances);
 
-    // Test 8: remove a partition not under a FULL AUTO resource
-    testPartitionLayout.getPartitionLayout().removePartition(partitionNotFullAuto);
-    writeBootstrapOrUpgrade(expectedResourceCount, true, dataNode);
-    checkPartitionReplicas(dcStr, clusterName, FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER,
-        partitionNotFullAuto.toPathString(), null);
-
-    // Test 9: replace a host under FULL AUTO resource
+    // Test 8: replace a host under FULL AUTO resource
     DataNode randomDataNode = (DataNode) replicas.get(0).getDataNodeId();
     testPartitionLayout.replaceDataNodeWithNewOne(randomDataNode);
     writeBootstrapOrUpgrade(expectedResourceCount, true, dataNode);
     checkPartitionReplicas(dcStr, clusterName, FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER + 1,
         partition.toPathString(), instances);
 
-    // Test 10: replace a host not under a FULL AUTO resource
+    // Test 9: replace a host not under a FULL AUTO resource
     randomDataNode = (DataNode) replicasNotFullAuto.get(0).getDataNodeId();
     final DataNode constDataNode = randomDataNode;
     Set<PartitionId> partitionBelongToDataNode = testPartitionLayout.getPartitionLayout()
@@ -864,7 +862,7 @@ public class HelixBootstrapUpgradeToolTest {
         partitionBelongToDataNode.stream().map(PartitionId::toPathString).collect(Collectors.toSet()),
         getInstanceName(newDataNode), true);
 
-    // Test 11: uplift resource, but only with half of the capacity and partitions
+    // Test 10: uplift resource, but only with half of the capacity and partitions
     basePort += dataNode * 2 + 2; // it has two datacenter
     basePartitionId += numPartition + 1; // it has two datacenter
     TestHardwareLayout thirdTestHardwareLayout =
