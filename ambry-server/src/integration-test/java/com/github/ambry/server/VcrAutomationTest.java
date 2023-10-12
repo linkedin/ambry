@@ -23,11 +23,9 @@ import com.github.ambry.clustermap.HelixAdminFactory;
 import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil;
 import com.github.ambry.clustermap.HelixClusterAgentsFactory;
 import com.github.ambry.clustermap.HelixVcrUtil;
-
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
-
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -187,17 +185,7 @@ public class VcrAutomationTest {
         TestUtils.checkAndSleep(partitionCount + newPartitionCount,
             () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size(), 5000));
 
-    // Partition remove case:
-
-    testPartitionLayout = constructInitialPartitionLayoutJSON(testHardwareLayout, partitionCount, null);
-    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, clusterPrefix,
-        dcName, 10, false, true, new HelixAdminFactory(), false, mainClusterStateModelDef,
-        HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false, 0);
-
-    makeSureHelixBalance(vcrServer, helixBalanceVerifier);
-    Assert.assertTrue("Partition assignment is not correct.", TestUtils.checkAndSleep(partitionCount,
-        () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size(), 5000));
+    // Partition remove case: the case is removed.
 
     helixControllerManager.syncStop();
     vcrHelixControllerManager.syncStop();

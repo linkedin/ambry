@@ -1981,6 +1981,7 @@ public class HelixBootstrapUpgradeUtil {
     TreeMap<Integer, Set<String>> resourceIdToInstances = dcToResourceIdToInstances.get(dcName);
     Map<String, Set<Integer>> instanceNameToResources = dcToInstanceToResourceIds.get(dcName);
     Map<Integer, IdealState> resourceIdToIdealState = dcToResourceIdToIdealState.get(dcName);
+    Map<String, Integer> partitionToResourceId = dcToPartitionToResourceId.get(dcName);
     // maxResource may vary from one dc to another (special partition class allows partitions to exist in one dc only)
     int maxResource = -1;
     for (int resourceId : new ArrayList<>(resourceIdToIdealState.keySet())) {
@@ -1995,24 +1996,16 @@ public class HelixBootstrapUpgradeUtil {
         Set<String> instanceSetInHelix = resourceIs.getInstanceSet(partitionName);
         Set<String> instanceSetInStatic = partitionsToInstancesInDc.remove(partitionName);
         if (instanceSetInStatic == null || instanceSetInStatic.isEmpty()) {
-          if (forceRemove) {
-            info("[{}] *** Partition {} no longer present in the static clustermap, {} *** ", dcName.toUpperCase(),
-                partitionName, dryRun ? "no action as dry run" : "removing from Resource");
-            // this is a hacky way of removing a partition from the resource, as there isn't another way today.
-            // Helix team is planning to provide an API for this.
-            if (!dryRun) {
-              resourceIs.getRecord().getListFields().remove(partitionName);
-            }
-            resourceModified = true;
-          } else {
-            info(
-                "[{}] *** forceRemove option not provided, resources will not be removed (use --forceRemove to forcefully remove)",
-                dcName.toUpperCase());
-            expectMoreInHelixDuringValidate = true;
-            partitionsNotForceRemovedByDc.computeIfAbsent(dcName, k -> ConcurrentHashMap.newKeySet())
-                .add(partitionName);
+          info(
+              "[{}] No instance set in static clustermap for partition {}, but will not remove this partition from resource. To remove partition, please use helix API",
+              dcName.toUpperCase(), partitionName);
+          expectMoreInHelixDuringValidate = true;
+          partitionsNotForceRemovedByDc.computeIfAbsent(dcName, k -> ConcurrentHashMap.newKeySet()).add(partitionName);
+          if (partitionToResourceId.get(partitionName) == resourceId) {
+            info("[{}] Remove partition to resource id for partition {} and resource id{}", dcName.toUpperCase(),
+                partitionName, resourceId);
+            partitionToResourceId.remove(partitionName);
           }
-          resourceIdToInstances.remove(resourceId);
         } else if (!instanceSetInStatic.equals(instanceSetInHelix)) {
           // we change the IdealState only when the operation is meant to bootstrap cluster or indeed update IdealState
           if (EnumSet.of(HelixAdminOperation.UpdateIdealState, HelixAdminOperation.BootstrapCluster)
@@ -2091,28 +2084,11 @@ public class HelixBootstrapUpgradeUtil {
       resourceIs.setNumPartitions(resourceIs.getPartitionSet().size());
       if (resourceModified) {
         if (resourceIs.getPartitionSet().isEmpty()) {
-          info("[{}] Resource {} has no partition, {}", dcName.toUpperCase(), resourceId,
-              dryRun ? "no action as dry run" : "dropping");
-          if (!dryRun) {
-            if (shouldPrompt) {
-              // use lock to protect prompt from concurrent operations.
-              lock.lock();
-              String question = String.format(
-                  "Are you sure you want to drop resource %d from ideal state? This operation would remove all the partitions under this resource",
-                  resourceId);
-              String line = System.console().readLine("%s (y[es]/n[o]): ", question).toLowerCase();
-              boolean shouldDelete = line.equals("yes") || line.equals("y");
-              lock.unlock();
-
-              if (!shouldDelete) {
-                // terminate the process right away.
-                System.exit(1);
-              }
-            }
-            dcAdmin.dropResource(clusterName, String.valueOf(resourceId));
-          }
-          resourcesDropped.getAndIncrement();
+          info("[{}] Resource {} has no partition, to remove this resource, please use helix API", dcName.toUpperCase(),
+              resourceId);
           resourceIdToIdealState.remove(resourceId);
+          resourceIdToInstances.remove(resourceId);
+          expectMoreInHelixDuringValidate = true;
         } else {
           if (!dryRun) {
             dcAdmin.setResourceIdealState(clusterName, String.valueOf(resourceId), resourceIs);
@@ -2632,7 +2608,7 @@ public class HelixBootstrapUpgradeUtil {
           "Cluster not found in ZK " + dataCenterToZkAddress.get(dc.getName()));
       Utils.newThread(() -> {
         try {
-          if (dcToResourceIdToIdealState.get(dc.getName()).values().stream().anyMatch(this::isIdealStateInFullAuto)) {
+          if (anyResourceInFullAuto(dc.getName())) {
             info("[{}] There are FULL AUTO resource, skip verification", dc.getName());
           } else {
             verifyResourcesAndPartitionEquivalencyInDc(dc, clusterName, partitionLayout);
@@ -2763,7 +2739,7 @@ public class HelixBootstrapUpgradeUtil {
    * @return
    */
   Map<Integer, IdealState> getIdealStateForAllResource(HelixAdmin admin, String dcName) {
-    Map<Integer, IdealState> allIdealStates = new HashMap<>();
+    Map<Integer, IdealState> allIdealStates = new TreeMap<>();
     for (String resourceName : admin.getResourcesInCluster(clusterName)) {
       if (!resourceName.matches("\\d+")) {
         info("[{}] Ignoring resource {} as it is not part of the cluster map", dcName.toUpperCase(), resourceName);
@@ -2847,6 +2823,14 @@ public class HelixBootstrapUpgradeUtil {
     return resourceIdToIdealState.values().stream().allMatch(this::isIdealStateInFullAuto);
   }
 
+  private boolean anyResourceInFullAuto(String dcName) {
+    Map<Integer, IdealState> resourceIdToIdealState = dcToResourceIdToIdealState.get(dcName);
+    if (resourceIdToIdealState.isEmpty()) {
+      return false;
+    }
+    return resourceIdToIdealState.values().stream().anyMatch(this::isIdealStateInFullAuto);
+  }
+
   private boolean isIdealStateInFullAuto(IdealState state) {
     return state.getRebalanceMode() == IdealState.RebalanceMode.FULL_AUTO;
   }
@@ -2904,6 +2888,8 @@ public class HelixBootstrapUpgradeUtil {
       return false;
     }
     if (maxInstancesInOneResourceForFullAuto <= 0) {
+      ensureOrThrow(!anyResourceInFullAuto(dcName), "There are resources in FULL AUTO for dc " + dcName
+          + ", but maxInstancesInOneResourceForFullAuto is not a valid number");
       warning("****************************************");
       warning(
           "[{}] Cluster {} is in FULL_AUTO compatible mode, but max instances in one resource [{}] is not a valid number for FULL_AUTO",
