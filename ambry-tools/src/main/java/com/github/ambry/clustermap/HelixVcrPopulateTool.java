@@ -60,8 +60,8 @@ public class HelixVcrPopulateTool {
     OptionSet options = parser.parse(args);
 
     String[] destZkAndCluster = options.valueOf(destOpt).split(HelixVcrUtil.SEPARATOR);
-    if (destZkAndCluster.length != 2) {
-      errorAndExit("dest argument must have form 'zkString/clusterName'");
+    if (destZkAndCluster.length != 3) {
+      errorAndExit("dest argument must have form 'zkString/namespace/clusterName'");
     }
     String destZkString = destZkAndCluster[0];
     String destClusterName = destZkAndCluster[1];
@@ -88,8 +88,8 @@ public class HelixVcrPopulateTool {
       boolean dryRun = options.has(dryRunOpt);
       if (options.has(srcOpt)) {
         String[] srcZkAndCluster = options.valueOf(srcOpt).split(SEPARATOR);
-        if (srcZkAndCluster.length != 2) {
-          errorAndExit("src argument must have form 'zkString/clusterName'");
+        if (srcZkAndCluster.length != 3) {
+          errorAndExit("src argument must have form 'zkString/namespace/clusterName'");
         }
         String srcZkString = srcZkAndCluster[0];
         String srcClusterName = srcZkAndCluster[1];
