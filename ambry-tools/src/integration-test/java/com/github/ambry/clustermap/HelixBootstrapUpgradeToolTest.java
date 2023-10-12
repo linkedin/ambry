@@ -37,8 +37,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.apache.helix.AccessOption;
+import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixException;
 import org.apache.helix.manager.zk.ZKHelixAdmin;
+import org.apache.helix.model.ClusterConfig;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.store.HelixPropertyStore;
@@ -895,6 +897,36 @@ public class HelixBootstrapUpgradeToolTest {
     writeBootstrapOrUpgrade(expectedResourceCount, true, dataNode);
     addExpectedPartitionAndInstanceToResource(secondTestPartitionLayout,
         FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER + 2, instancesUnderResourcesInDc, partitionsUnderResourcesInDc);
+
+    // Test 11: replace a host not under a FULL AUTO resource, when the clusterconfig has topology aware turned on
+    ConfigAccessor configAccessor = new ConfigAccessor("localhost:" + dcsToZkInfo.get(dcStr).getPort());
+    ClusterConfig clusterConfig = configAccessor.getClusterConfig(clusterName);
+    clusterConfig.setTopologyAwareEnabled(true);
+    configAccessor.setClusterConfig(clusterName, clusterConfig);
+
+    randomDataNode = (DataNode) replicasNotFullAuto.get(1).getDataNodeId();
+    final DataNode constDataNode2 = randomDataNode;
+    partitionBelongToDataNode = testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
+        .stream()
+        .filter(partitionId -> partitionIncludeDataNode(partitionId, constDataNode2))
+        .collect(Collectors.toSet());
+    newDataNode = testPartitionLayout.replaceDataNodeWithNewOne(randomDataNode);
+    writeBootstrapOrUpgrade(expectedResourceCount, true, dataNode);
+    checkInstanceInPartition(dcStr, clusterName, FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER,
+        partitionBelongToDataNode.stream().map(PartitionId::toPathString).collect(Collectors.toSet()),
+        getInstanceName(randomDataNode), false);
+    checkInstanceInPartition(dcStr, clusterName, FULL_AUTO_COMPATIBLE_RESOURCE_NAME_START_NUMBER,
+        partitionBelongToDataNode.stream().map(PartitionId::toPathString).collect(Collectors.toSet()),
+        getInstanceName(newDataNode), true);
+
+    InstanceConfig instanceConfig = configAccessor.getInstanceConfig(clusterName, getInstanceName(newDataNode));
+    System.out.println("Domain for new data node: " + instanceConfig.getDomainAsString());
+    Assert.assertNotNull(instanceConfig.getDomainAsString());
+    Assert.assertFalse(instanceConfig.getDomainAsString().isEmpty());
+    Assert.assertNotNull(instanceConfig.getInstanceCapacityMap());
+    Assert.assertTrue(instanceConfig.getInstanceCapacityMap().containsKey("DISK"));
+    configAccessor.close();
   }
 
   private void turnOnFullAutoOnResource(int resourceId, String dcName, String clusterName) {

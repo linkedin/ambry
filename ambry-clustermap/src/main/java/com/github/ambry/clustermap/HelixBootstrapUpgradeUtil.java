@@ -1922,20 +1922,50 @@ public class HelixBootstrapUpgradeUtil {
 
   private void addDataNodeConfigToHelix(String dcName, DataNodeConfig dataNodeConfig,
       PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
+    ConfigAccessor configAccessor = new ConfigAccessor(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
+    boolean shouldSetFullAutoValues;
+    try {
+      ClusterConfig clusterConfig = configAccessor.getClusterConfig(clusterName);
+      // if the topology aware is enabled in this cluster, which means we are in the middle of transitioning to FULL AUTO
+      // we should set the FULL AUTO values for the new instances.
+      shouldSetFullAutoValues = clusterConfig.isTopologyAwareEnabled();
+    } catch (Exception e) {
+      shouldSetFullAutoValues = false;
+    }
     // if this is a new instance, we should add it to both InstanceConfig and PropertyStore
+    InstanceConfig instanceConfigToSet;
     if (dataNodeConfigSourceType == PROPERTY_STORE) {
       // when source type is PROPERTY_STORE, we only need to add an InstanceConfig with minimum required information (i.e. hostname, port etc)
-      InstanceConfig instanceConfig = new InstanceConfig(dataNodeConfig.getInstanceName());
-      instanceConfig.setHostName(dataNodeConfig.getHostName());
-      instanceConfig.setPort(Integer.toString(dataNodeConfig.getPort()));
-      adminForDc.get(dcName).addInstance(clusterName, instanceConfig);
+      instanceConfigToSet = new InstanceConfig(dataNodeConfig.getInstanceName());
+      instanceConfigToSet.setHostName(dataNodeConfig.getHostName());
+      instanceConfigToSet.setPort(Integer.toString(dataNodeConfig.getPort()));
     } else {
-      adminForDc.get(dcName).addInstance(clusterName, converter.convert(dataNodeConfig));
+      instanceConfigToSet = converter.convert(dataNodeConfig);
     }
+    if (shouldSetFullAutoValues) {
+      // set the FULL AUTO VALUE, including DOMAIN and INSTANCE_CAPACITY_MAP, no tag will be added since this is still SEMI AUTO
+      Map<String, String> domainMap = new HashMap<>();
+      domainMap.put(RACK_KEY, dataNodeConfig.getRackId());
+      domainMap.put(HOST_KEY, dataNodeConfig.getInstanceName());
+      instanceConfigToSet.setDomain(domainMap);
+
+      Map<String, Integer> capacityMap = new HashMap<>();
+      long capacity = dataNodeConfig.getDiskConfigs()
+          .values()
+          .stream()
+          .mapToLong(DataNodeConfig.DiskConfig::getDiskCapacityInBytes)
+          .sum();
+      long capacityInGB = capacity / 1024 / 1024 / 1024;
+      int actualCapacityInGB = (int) ((double) INSTANCE_MAX_CAPACITY_PERCENTAGE / 100 * capacityInGB);
+      capacityMap.put(DISK_KEY, actualCapacityInGB);
+      instanceConfigToSet.setInstanceCapacityMap(capacityMap);
+    }
+    adminForDc.get(dcName).addInstance(clusterName, instanceConfigToSet);
     if (!adapter.set(dataNodeConfig)) {
       logger.error("[{}] Failed to add config for new node {} in the property store.", dcName.toUpperCase(),
           dataNodeConfig.getInstanceName());
     }
+    configAccessor.close();
   }
 
   private void removeDataNodeConfigFromHelix(String dcName, String instanceName,
