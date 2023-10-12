@@ -1923,10 +1923,15 @@ public class HelixBootstrapUpgradeUtil {
   private void addDataNodeConfigToHelix(String dcName, DataNodeConfig dataNodeConfig,
       PropertyStoreToDataNodeConfigAdapter adapter, InstanceConfigToDataNodeConfigAdapter.Converter converter) {
     ConfigAccessor configAccessor = new ConfigAccessor(dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0));
-    ClusterConfig clusterConfig = configAccessor.getClusterConfig(clusterName);
-    // if the topology aware is enabled in this cluster, which means we are in the middle of transitioning to FULL AUTO
-    // we should set the FULL AUTO values for the new instances.
-    boolean shouldSetFullAutoValues = clusterConfig.isTopologyAwareEnabled();
+    boolean shouldSetFullAutoValues;
+    try {
+      ClusterConfig clusterConfig = configAccessor.getClusterConfig(clusterName);
+      // if the topology aware is enabled in this cluster, which means we are in the middle of transitioning to FULL AUTO
+      // we should set the FULL AUTO values for the new instances.
+      shouldSetFullAutoValues = clusterConfig.isTopologyAwareEnabled();
+    } catch (Exception e) {
+      shouldSetFullAutoValues = false;
+    }
     // if this is a new instance, we should add it to both InstanceConfig and PropertyStore
     InstanceConfig instanceConfigToSet;
     if (dataNodeConfigSourceType == PROPERTY_STORE) {
