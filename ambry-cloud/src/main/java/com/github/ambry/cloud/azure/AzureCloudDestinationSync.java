@@ -266,7 +266,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       azureMetrics.blobUploadSuccessRate.mark();
       // Measure ingestion rate, helps decide fleet size
       azureMetrics.backupSuccessByteRate.mark(inputLength);
-      logger.debug("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
+      logger.trace("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
           blobIdStr, blockBlobItemResponse.getStatusCode(),
           blockBlobItemResponse.getValue().getETag());
     } catch (Exception e) {
@@ -385,11 +385,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
     try {
-      logger.debug("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      logger.trace("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUpdateDeleteTimeSucessRate.mark();
-      logger.debug("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+      logger.trace("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return true;
     } catch (BlobStorageException bse) {
@@ -465,11 +465,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
 
     try {
-      logger.debug("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      logger.trace("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUndeleteSucessRate.mark();
-      logger.debug("Successfully reset deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+      logger.trace("Successfully reset deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return lifeVersion;
     } catch (BlobStorageException bse) {
@@ -579,11 +579,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
     short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
 
     try {
-      logger.debug("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      logger.trace("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUpdateTTLSucessRate.mark();
-      logger.debug("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+      logger.trace("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return cloudlifeVersion;
     } catch (BlobStorageException bse) {
