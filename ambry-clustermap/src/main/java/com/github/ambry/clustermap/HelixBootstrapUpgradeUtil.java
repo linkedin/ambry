@@ -2979,7 +2979,8 @@ public class HelixBootstrapUpgradeUtil {
           .map(state -> numReplicasForIdealState(dcName, state))
           .collect(Collectors.toSet());
       ensureOrThrow(numberReplicasInResource.size() == ent.getValue().size(),
-          "Instance " + ent.getKey() + " in DC " + dcName + " has multiple resources having same number of replicas");
+          "Instance " + ent.getKey() + " in DC " + dcName + " has multiple resources having same number of replicas: "
+              + ent.getValue());
 
       // make sure different resources has the same set of instances
       Set<String> instancesToCompare = null;
@@ -2990,9 +2991,21 @@ public class HelixBootstrapUpgradeUtil {
           instancesToCompare = instances;
           firstResourceId = resourceId;
         } else {
-          ensureOrThrow(instances.equals(instancesToCompare),
-              "Instance " + ent.getKey() + " belongs to multiple resource, but resource " + firstResourceId
-                  + " don't have to the same set of instances as resource " + resourceId);
+          if (instances.size() == instancesToCompare.size()) {
+            ensureOrThrow(instances.equals(instancesToCompare),
+                "Instance " + ent.getKey() + " belongs to multiple resource, but resource " + firstResourceId
+                    + " doesn't have the same set of instances as resource " + resourceId);
+          } else if (instances.size() < instancesToCompare.size()) {
+            ensureOrThrow(instancesToCompare.containsAll(instances),
+                "Instance " + ent.getKey() + " belongs to multiple resource, but resource " + firstResourceId
+                    + " doesn't contain all the instances in resource " + resourceId);
+          } else {
+            ensureOrThrow(instances.containsAll(instancesToCompare),
+                "Instance " + ent.getKey() + " belongs to multiple resource, but resource " + resourceId
+                    + " doesn't contain all the instances in resource " + firstResourceId);
+            firstResourceId = resourceId;
+            instancesToCompare = instances;
+          }
         }
       }
     }
