@@ -14,7 +14,14 @@
 package com.github.ambry.cloud;
 
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreErrorCodes;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,9 +93,16 @@ public class CloudRequestAgent {
         vcrMetrics.retryWaitTimeMsec.inc(delay);
       } else {
         // Either not retryable or exhausted attempts.
-        // Not very useful to log error here as they are printed in several other places
-        logger.trace("{} failed partition {} statusCode {} cause {} made {} attempts.", actionName, partitionPath,
-            statusCode, cause, attempts);
+        Throwable t = cse.getCause();
+        Set<StoreErrorCodes> errorCodes = new HashSet<>(Arrays.asList(StoreErrorCodes.Already_Updated));
+        if (t instanceof StoreException && errorCodes.contains(((StoreException)t).getErrorCode())) {
+          // Not very useful to log error here as they are printed in several other places
+          logger.trace("{} failed partition {} statusCode {} cause {} made {} attempts.", actionName, partitionPath,
+              statusCode, cause, attempts);
+        } else {
+          logger.error("{} failed partition {} statusCode {} cause {} made {} attempts.", actionName, partitionPath,
+              statusCode, cause, attempts);
+        }
         throw cse;
       }
     } else {
