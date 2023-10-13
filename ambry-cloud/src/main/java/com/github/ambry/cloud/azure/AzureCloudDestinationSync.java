@@ -91,7 +91,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *    cloudConfig.ambryBackupVersion = 2.0
      *    cloudConfig.cloudContainerCompactionEnabled = false; Container are now Ambry partitions, and we do not delete partitions
      *    cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
-     *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, repl-logic avoids duplicate messages any ways
+     *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, as repl-logic avoids duplicate messages any ways
      *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
      */
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
@@ -726,8 +726,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
       String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
       logger.error(error);
       if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-        // When we are starting from scratch, the backing store will not have any tokens.
-        // Return false if the blob is not found. The caller will handle it.
+        /*
+          When we are starting from scratch, the backing store will not have any tokens.
+          Return false if the blob is not found. The caller will handle it.
+         */
         return false;
       }
       throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
