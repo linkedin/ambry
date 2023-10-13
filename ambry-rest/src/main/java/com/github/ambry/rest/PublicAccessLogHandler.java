@@ -255,20 +255,19 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
                 structuredLogMessage.put("principal", principal.toString());
                 Collection<List<?>> subjectAlternativeNames =
                     ((X509Certificate) certificate).getSubjectAlternativeNames();
-                if (subjectAlternativeNames == null || subjectAlternativeNames.isEmpty()) {
-                  continue;
+                if (subjectAlternativeNames != null && !subjectAlternativeNames.isEmpty()) {
+                  /*
+                   * https://docs.oracle.com/javase/7/docs/api/java/security/cert/X509Certificate.html#getSubjectAlternativeNames()
+                   * For getSubjectAlternativeNames, a Collection is returned with an entry representing each GeneralName included in the extension.
+                   * Each entry is a List whose first entry is an Integer (the name type, 0-8) and whose second entry is a String or a byte array.
+                   * */
+                  // here we filter out dns field and value, we don't need those values in public access log.
+                  subjectAlternativeNames = subjectAlternativeNames.stream()
+                      .filter(p -> (Integer) p.get(0) != SAN_DNS_FIELD_ID)
+                      .collect(Collectors.toList());
                 }
-                /*
-                 * https://docs.oracle.com/javase/7/docs/api/java/security/cert/X509Certificate.html#getSubjectAlternativeNames()
-                 * For getSubjectAlternativeNames, a Collection is returned with an entry representing each GeneralName included in the extension.
-                 * Each entry is a List whose first entry is an Integer (the name type, 0-8) and whose second entry is a String or a byte array.
-                 * */
-                // here we filter out dns field and value, we don't need those values in public access log.
-                List<List<?>> sans = subjectAlternativeNames.stream()
-                    .filter(p -> (Integer) p.get(0) != SAN_DNS_FIELD_ID)
-                    .collect(Collectors.toList());
-                sslLogMessage.append(", [san=").append(sans).append("]");
-                structuredLogMessage.put("san", String.valueOf(sans));
+                sslLogMessage.append(", [san=").append(subjectAlternativeNames).append("]");
+                structuredLogMessage.put("san", String.valueOf(subjectAlternativeNames));
               }
             }
           }

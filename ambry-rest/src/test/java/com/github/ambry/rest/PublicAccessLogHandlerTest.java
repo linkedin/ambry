@@ -32,10 +32,12 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.stream.Collectors;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
 import org.junit.Assert;
@@ -280,7 +282,11 @@ public class PublicAccessLogHandlerTest {
     subString = "SSL ([used=" + sslUsed + "]";
     if (sslUsed) {
       subString += ", [principal=" + PEER_CERT.getSubjectX500Principal() + "]";
-      subString += ", [san=" + PEER_CERT.getSubjectAlternativeNames() + "]";
+      Collection<List<?>> sans = PEER_CERT.getSubjectAlternativeNames();
+      if (sans != null && !sans.isEmpty()) {
+        sans = sans.stream().filter(p -> (Integer) p.get(0) != 2).collect(Collectors.toList());
+      }
+      subString += ", [san=" + sans + "]";
     }
     subString += ")";
     Assert.assertTrue("Public Access log entry doesn't have SSL info set correctly", lastLogEntry.contains(subString));
