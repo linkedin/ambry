@@ -26,10 +26,12 @@ import io.netty.handler.ssl.SslHandler;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
 import javax.net.ssl.SSLEngine;
 import javax.security.auth.x500.X500Principal;
-import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.StringMapMessage;
 
 
@@ -38,6 +40,7 @@ import org.apache.logging.log4j.message.StringMapMessage;
  * {@link PublicAccessLogger} assists in logging the required information
  */
 public class PublicAccessLogHandler extends ChannelDuplexHandler {
+  private static final int SAN_DNS_FIELD_ID = 2;
   private final PublicAccessLogger publicAccessLogger;
   private final NettyMetrics nettyMetrics;
   private long requestArrivalTimeInMs;
@@ -247,9 +250,22 @@ public class PublicAccessLogHandler extends ChannelDuplexHandler {
             for (Certificate certificate : sslEngine.getSession().getPeerCertificates()) {
               if (certificate instanceof X509Certificate) {
                 X500Principal principal = ((X509Certificate) certificate).getSubjectX500Principal();
-                Collection subjectAlternativeNames = ((X509Certificate) certificate).getSubjectAlternativeNames();
+
                 sslLogMessage.append(", [principal=").append(principal).append("]");
                 structuredLogMessage.put("principal", principal.toString());
+                Collection<List<?>> subjectAlternativeNames =
+                    ((X509Certificate) certificate).getSubjectAlternativeNames();
+                if (subjectAlternativeNames != null && !subjectAlternativeNames.isEmpty()) {
+                  /*
+                   * https://docs.oracle.com/javase/7/docs/api/java/security/cert/X509Certificate.html#getSubjectAlternativeNames()
+                   * For getSubjectAlternativeNames, a Collection is returned with an entry representing each GeneralName included in the extension.
+                   * Each entry is a List whose first entry is an Integer (the name type, 0-8) and whose second entry is a String or a byte array.
+                   * */
+                  // here we filter out dns field and value, we don't need those values in public access log.
+                  subjectAlternativeNames = subjectAlternativeNames.stream()
+                      .filter(p -> (Integer) p.get(0) != SAN_DNS_FIELD_ID)
+                      .collect(Collectors.toList());
+                }
                 sslLogMessage.append(", [san=").append(subjectAlternativeNames).append("]");
                 structuredLogMessage.put("san", String.valueOf(subjectAlternativeNames));
               }
