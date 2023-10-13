@@ -85,8 +85,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
     /*
      * These are the configs to be changed for vcr-2.0
      *
-     *    azureCloudConfig.azureNameSchemeVersion = 1
      *    azureCloudConfig.azureBlobContainerStrategy = PARTITION
+     *    azureCloudConfig.azureNameSchemeVersion = 1
+     *    azureCloudConfig.azureStorageAccountInfo = null; legacy remnant
+     *    cloudConfig.ambryBackupVersion = 2.0
+     *    cloudConfig.cloudContainerCompactionEnabled = false; Container are now Ambry partitions, and we do not delete partitions
      *    cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
      *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, repl-logic avoids duplicate messages any ways
      *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
