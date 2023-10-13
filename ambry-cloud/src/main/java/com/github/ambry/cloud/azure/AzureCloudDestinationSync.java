@@ -116,6 +116,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.info("Azure blob storage container = {}", blobContainerItem.getName());
       break;
     }
+    logger.info("Successful connection to Azure Storage");
   }
 
   /**
@@ -328,13 +329,18 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
     } catch (BlobStorageException bse) {
+      String msg = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
       if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-        // Return null if blob was not found. Caller will handle ti.
-        return null;
+        /*
+          We encounter many BLOB_NOT_FOUND when uploading new blobs.
+          Trace log will not flood the logs when we encounter BLOB_NOT_FOUND.
+          Set azureMetrics to null so that we don't unnecessarily increment any metrics for this common case.
+         */
+        logger.trace(msg);
+        throw AzureCloudDestination.toCloudStorageException(msg, bse, null);
       }
-      String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
-      logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+      logger.error(msg);
+      throw AzureCloudDestination.toCloudStorageException(msg, bse, azureMetrics);
     } catch (Throwable t) {
       String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
       logger.error(error);
@@ -614,12 +620,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
       AzureBlobLayoutStrategy.BlobLayout blobLayout = this.azureBlobLayoutStrategy.getDataBlobLayout(blobId);
       try {
         BlobProperties blobProperties = getBlobProperties(blobLayout);
-        // We are trying to find blobs present on servers but absent in cloud. Many PUTs fall into this bucket.
-        // Do not print any errors as this is expected when the servers are ahead of cloud and cloud is a bit stale.
-        // blobProperties == null when a blob is absent in cloud.
-        if (blobProperties != null) {
-          cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
+        cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
+      } catch (CloudStorageException cse) {
+        if (cse.getCause() instanceof BlobStorageException &&
+            ((BlobStorageException) cse.getCause()).getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+          /*
+            We mostly get here from findMissingKeys, and we will encounter many blobs missing from cloud before we upload them.
+           */
+          continue;
         }
+        throw cse;
       } catch (Throwable t) {
         String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
         logger.error(error);
