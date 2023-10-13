@@ -274,7 +274,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
         // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
         // azureMetrics.blobUploadConflictCount.inc(); Not a very useful metric
-        logger.debug("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
+        logger.trace("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
         // We should rarely be here because we get here from replication logic which checks if a blob exists or not before uploading it.
         // However, if we end up here, return true to allow replication to proceed instead of halting it. Else the replication token will not advance.
         // The blob in the cloud is safe as Azure prevented us from overwriting it due to an ETag check.
