@@ -556,7 +556,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           an unnecessary request to cloud without sacrificing any correctness. The ReplicaThread should actually check before
           applying a ttl-update, but it was written for disk-based log, and not a cloud-based backup system.
          */
-        // azureMetrics.blobUpdateTTLErrorCount.inc();
+        // azureMetrics.blobUpdateTTLErrorCount.inc(); do not update error metric as this is a flaw in repl-layer
         String error = String.format("Unable to update TTL of %s as its TTL is already updated cloud", blobIdStr);
         logger.trace(error);
         /*
