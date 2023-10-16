@@ -63,8 +63,8 @@ public class HelixVcrPopulateTool {
     if (destZkAndCluster.length != 3) {
       errorAndExit("dest argument must have form 'zkString/namespace/clusterName'");
     }
-    String destZkString = destZkAndCluster[0];
-    String destClusterName = destZkAndCluster[1];
+    String destZkString = destZkAndCluster[0] + HelixVcrUtil.SEPARATOR + destZkAndCluster[1];
+    String destClusterName = destZkAndCluster[2];
     if (!destClusterName.contains("VCR")) {
       errorAndExit("dest should be a VCR cluster.(VCR string should be included)");
     }
@@ -91,8 +91,8 @@ public class HelixVcrPopulateTool {
         if (srcZkAndCluster.length != 3) {
           errorAndExit("src argument must have form 'zkString/namespace/clusterName'");
         }
-        String srcZkString = srcZkAndCluster[0];
-        String srcClusterName = srcZkAndCluster[1];
+        String srcZkString = srcZkAndCluster[0] + HelixVcrUtil.SEPARATOR + srcZkAndCluster[1];
+        String srcClusterName = srcZkAndCluster[2];
         System.out.println("Updating cluster: " + destClusterName + " by checking " + srcClusterName);
         updateResourceAndPartition(srcZkString, srcClusterName, destZkString, destClusterName, config, dryRun);
       } else {
