@@ -36,6 +36,9 @@ public class AzureMetrics {
   public static final String BLOB_UNDELETE_LATENCY = "blobUndeleteLatency";
   public static final String BLOB_UNDELETE_ERROR_COUNT = "blobUndeleteErrorCount";
   public static final String BLOB_UPLOAD_ERROR_COUNT = "BlobUploadErrorCount";
+  public static final String BLOB_GET_PROPERTIES_SUCCESS_RATE = "BlobGetPropertiesSuccessRate";
+  public static final String BLOB_GET_PROPERTIES_LATENCY = "BlobGetPropertiesLatency";
+  public static final String BLOB_GET_PROPERTIES_ERROR_COUNT = "BlobGetPropertiesErrorCount";
   public static final String BLOB_DOWNLOAD_REQUEST_COUNT = "BlobDownloadRequestCount";
   public static final String BLOB_DOWNLOAD_SUCCESS_COUNT = "BlobDownloadSuccessCount";
   public static final String BLOB_DOWNLOAD_ERROR_COUNT = "BlobDownloadErrorCount";
@@ -103,6 +106,9 @@ public class AzureMetrics {
   public final Meter blobUpdateTTLSucessRate;
   public final Timer blobUpdateTTLLatency;
   public final Counter blobUpdateTTLErrorCount;
+  public final Meter blobGetPropertiesSuccessRate;
+  public final Timer blobGetPropertiesLatency;
+  public final Counter blobGetPropertiesErrorCount;
   public final Counter blobUploadErrorCount;
   public final Counter blobDownloadRequestCount;
   public final Counter blobDownloadSuccessCount;
@@ -178,6 +184,9 @@ public class AzureMetrics {
     blobUpdateTTLSucessRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TTL_SUCCESS_RATE));
     blobUpdateTTLErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TTL_ERROR_COUNT));
     blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_ERROR_COUNT));
+    blobGetPropertiesSuccessRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_GET_PROPERTIES_SUCCESS_RATE));
+    blobGetPropertiesLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_GET_PROPERTIES_LATENCY));;
+    blobGetPropertiesErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_GET_PROPERTIES_ERROR_COUNT));
     blobDownloadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_REQUEST_COUNT));
     blobDownloadSuccessCount =

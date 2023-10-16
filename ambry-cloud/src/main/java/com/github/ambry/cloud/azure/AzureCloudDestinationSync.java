@@ -329,8 +329,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   protected BlobProperties getBlobProperties(AzureBlobLayoutStrategy.BlobLayout blobLayout)
       throws CloudStorageException {
+    Timer.Context storageTimer = azureMetrics.blobGetPropertiesLatency.time();
     try {
-      return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
+      BlobProperties blobProperties = createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
+      // Success rate is effective, success counter is ineffective because it just monotonically increases
+      azureMetrics.blobGetPropertiesSuccessRate.mark();
+      logger.trace("Successfully got blob-properties for {} from Azure blob storage with etag = {}",
+          blobLayout.blobFilePath, blobProperties.getETag());
+      return blobProperties;
     } catch (BlobStorageException bse) {
       String msg = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
       if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
@@ -342,12 +348,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
         logger.trace(msg);
         throw AzureCloudDestination.toCloudStorageException(msg, bse, null);
       }
+      azureMetrics.blobGetPropertiesErrorCount.inc();
       logger.error(msg);
       throw AzureCloudDestination.toCloudStorageException(msg, bse, azureMetrics);
     } catch (Throwable t) {
+      azureMetrics.blobGetPropertiesErrorCount.inc();
       String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
       logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+    } finally {
+      storageTimer.stop();
     }
   }
 
