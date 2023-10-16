@@ -32,8 +32,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
-import com.github.ambry.cloud.CloudBlobStore;
-import com.github.ambry.cloud.CloudBlobStoreV2;
 import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudStorageException;
@@ -87,10 +85,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
     /*
      * These are the configs to be changed for vcr-2.0
      *
-     *    azureCloudConfig.azureNameSchemeVersion = 1
      *    azureCloudConfig.azureBlobContainerStrategy = PARTITION
+     *    azureCloudConfig.azureNameSchemeVersion = 1
+     *    azureCloudConfig.azureStorageAccountInfo = null; legacy remnant
+     *    cloudConfig.ambryBackupVersion = 2.0
+     *    cloudConfig.cloudContainerCompactionEnabled = false; Container are now Ambry partitions, and we do not delete partitions
      *    cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
-     *    cloudConfig.recentBlobCacheLimit = 0; unnecessary, repl-logic avoids duplicate messages any ways
+     *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, as repl-logic avoids duplicate messages any ways
      *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
      */
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
@@ -118,6 +119,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.info("Azure blob storage container = {}", blobContainerItem.getName());
       break;
     }
+    logger.info("Successful connection to Azure Storage");
   }
 
   /**
@@ -166,7 +168,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   /**
    * Creates an object that stores blobs in Azure blob storage
    * @param partitionId Partition ID
-   * @return {@link CloudBlobStoreV2}
+   * @return {@link BlobContainerClient}
    */
   protected BlobContainerClient createOrGetBlobStore(String partitionId) {
     // Get container ref from local cache
@@ -264,7 +266,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       azureMetrics.blobUploadSuccessRate.mark();
       // Measure ingestion rate, helps decide fleet size
       azureMetrics.backupSuccessByteRate.mark(inputLength);
-      logger.debug("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
+      logger.trace("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
           blobIdStr, blockBlobItemResponse.getStatusCode(),
           blockBlobItemResponse.getValue().getETag());
     } catch (Exception e) {
@@ -272,7 +274,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           && ((BlobStorageException) e).getErrorCode() == BlobErrorCode.BLOB_ALREADY_EXISTS) {
         // Since VCR replicates from all replicas, a blob can be uploaded by at least two threads concurrently.
         azureMetrics.blobUploadConflictCount.inc();
-        logger.debug("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
+        logger.trace("Failed to upload blob {} to Azure blob storage because it already exists", blobLayout);
         // We should rarely be here because we get here from replication logic which checks if a blob exists or not before uploading it.
         // However, if we end up here, return true to allow replication to proceed instead of halting it. Else the replication token will not advance.
         // The blob in the cloud is safe as Azure prevented us from overwriting it due to an ETag check.
@@ -330,9 +332,18 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).getProperties();
     } catch (BlobStorageException bse) {
-      String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
-      logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+      String msg = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, bse.getMessage());
+      if (bse.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        /*
+          We encounter many BLOB_NOT_FOUND when uploading new blobs.
+          Trace log will not flood the logs when we encounter BLOB_NOT_FOUND.
+          Set azureMetrics to null so that we don't unnecessarily increment any metrics for this common case.
+         */
+        logger.trace(msg);
+        throw AzureCloudDestination.toCloudStorageException(msg, bse, null);
+      }
+      logger.error(msg);
+      throw AzureCloudDestination.toCloudStorageException(msg, bse, azureMetrics);
     } catch (Throwable t) {
       String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
       logger.error(error);
@@ -374,11 +385,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
     try {
-      logger.debug("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      logger.trace("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUpdateDeleteTimeSucessRate.mark();
-      logger.debug("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+      logger.trace("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return true;
     } catch (BlobStorageException bse) {
@@ -454,11 +465,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
 
     try {
-      logger.debug("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      logger.trace("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUndeleteSucessRate.mark();
-      logger.debug("Successfully reset deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+      logger.trace("Successfully reset deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return lifeVersion;
     } catch (BlobStorageException bse) {
@@ -524,6 +535,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     // It is absorbed by applyTtlUpdate::L1395.
     // The validator doesn't check for this, perhaps another gap in legacy code.
     if (isDeleted(cloudMetadata)) {
+      // Replication must first undelete the deleted blob, and then update-TTL.
       String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
       logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), azureMetrics);
@@ -531,14 +543,28 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     try {
       if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
-        // Legacy cloudBlobStore does not expect an exception. However,
-        // below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
-        // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
-        // It is absorbed by applyTtlUpdate::L1395
-        azureMetrics.blobUpdateTTLErrorCount.inc();
+        /*
+          Legacy cloudBlobStore does not expect an exception. However, below is the correct behavior.
+          For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
+          ReplicaThread::applyUpdatesToBlobInLocalStore does all necessary checks before calling updateTTL however,
+          ReplicaThread::handleGetResponse does not.
+
+          We can come here from ReplicaThread::handleGetResponse L1258 that applies PUT+TTL without checking if the blob
+          uploaded is permanent. The validator reports the blob has already been ttl-updated, and we end up flooding the logs
+          and incrementing metrics. To avoid this, just don't inc any error metric or print any logs. However, this would
+          mask a scenario where we are erroneously trying to update the ttl of permanent blob. This is ok because we prevent
+          an unnecessary request to cloud without sacrificing any correctness. The ReplicaThread should actually check before
+          applying a ttl-update, but it was written for disk-based log, and not a cloud-based backup system.
+         */
+        // azureMetrics.blobUpdateTTLErrorCount.inc(); do not update error metric as this is a flaw in repl-layer
         String error = String.format("Unable to update TTL of %s as its TTL is already updated cloud", blobIdStr);
-        logger.error(error);
-        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Already_Updated), azureMetrics);
+        logger.trace(error);
+        /*
+          Set azureMetrics to null to prevent updating any metrics.
+          Throw Already_Updated and the caller will handle it at applyTtlUpdate::L1395.
+          Don't rely on the recentBlobCache as it could experience an eviction.
+         */
+        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Already_Updated), null);
       }
     } catch (StoreException e) {
       // Auth error from validator
@@ -553,11 +579,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
     short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
 
     try {
-      logger.debug("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
+      logger.trace("Updating TTL of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
       azureMetrics.blobUpdateTTLSucessRate.mark();
-      logger.debug("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
+      logger.trace("Successfully updated TTL of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return cloudlifeVersion;
     } catch (BlobStorageException bse) {
@@ -598,13 +624,19 @@ public class AzureCloudDestinationSync implements CloudDestination {
       try {
         BlobProperties blobProperties = getBlobProperties(blobLayout);
         cloudBlobMetadataMap.put(blobId.getID(), CloudBlobMetadata.fromMap(blobProperties.getMetadata()));
-      } catch (Throwable t) {
-        if (t instanceof CloudStorageException
-            && ((CloudStorageException) t).getStatusCode() == CloudBlobStore.STATUS_NOT_FOUND) {
-          // We should never be here because replication logic checks if a blob exists or not before undeleting it.
-          String dbg = String.format("Blob %s absent in Azure blob storage", blobLayout);
-          logger.error(dbg);
+      } catch (CloudStorageException cse) {
+        if (cse.getCause() instanceof BlobStorageException &&
+            ((BlobStorageException) cse.getCause()).getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+          /*
+            We mostly get here from findMissingKeys, and we will encounter many blobs missing from cloud before we upload them.
+           */
+          continue;
         }
+        throw cse;
+      } catch (Throwable t) {
+        String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
+        logger.error(error);
+        throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
       }
     }
     return cloudBlobMetadataMap;
@@ -689,9 +721,22 @@ public class AzureCloudDestinationSync implements CloudDestination {
       blobContainerClient.getBlobClient(azureTokenFileName)
           .download(outputStream);
       return true;
-    } catch (Exception e) {
+    } catch (BlobStorageException e) {
       azureMetrics.absTokenRetrieveFailureCount.inc();
       String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
+      logger.error(error);
+      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
+        /*
+          When we are starting from scratch, the backing store will not have any tokens.
+          Return false if the blob is not found. The caller will handle it.
+         */
+        return false;
+      }
+      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+    } catch (Throwable e) {
+      azureMetrics.absTokenRetrieveFailureCount.inc();
+      String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
+      logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
     }
   }

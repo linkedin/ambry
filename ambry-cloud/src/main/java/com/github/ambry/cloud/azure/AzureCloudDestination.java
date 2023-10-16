@@ -168,10 +168,14 @@ class AzureCloudDestination implements CloudDestination {
     Long retryDelayMs = null;
     int statusCode;
     if (e instanceof BlobStorageException) {
-      azureMetrics.storageErrorCount.inc();
+      if (azureMetrics != null) {
+        azureMetrics.storageErrorCount.inc();
+      }
       statusCode = ((BlobStorageException) e).getStatusCode();
     } else if (e instanceof CosmosException) {
-      azureMetrics.documentErrorCount.inc();
+      if (azureMetrics != null) {
+        azureMetrics.documentErrorCount.inc();
+      }
       statusCode = ((CosmosException) e).getStatusCode();
       retryDelayMs = ((CosmosException) e).getRetryAfterDuration().toMillis();
     } else {

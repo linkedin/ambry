@@ -1301,7 +1301,7 @@ public class CloudBlobStore implements Store {
       CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataListMap.get(key.getID());
       if (cloudBlobMetadata != null) {
         return new MessageInfo(key, cloudBlobMetadata.getSize(), cloudBlobMetadata.isDeleted(),
-            cloudBlobMetadata.isExpired(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
+            cloudBlobMetadata.isTtlUpdated(), cloudBlobMetadata.isUndeleted(), cloudBlobMetadata.getExpirationTime(), null,
             (short) cloudBlobMetadata.getAccountId(), (short) cloudBlobMetadata.getContainerId(),
             cloudBlobMetadata.getLastUpdateTime(), cloudBlobMetadata.getLifeVersion());
       } else {
