@@ -1794,7 +1794,7 @@ public class BlobStoreTest {
   }
 
   /**
-   * Tests that {@link BlobStore#onError()} and {@link BlobStore#onSuccess()} can correctly capture disk related I/O errors
+   * Tests that BlobStore#onError() and BlobStore#onSuccess() can correctly capture disk related I/O errors
    * and properly shutdown the store.
    * @throws StoreException
    */
@@ -1872,7 +1872,8 @@ public class BlobStoreTest {
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
             storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics, mockStoreKeyFactory, recovery,
-            hardDelete, Collections.singletonList(mockDelegate), time, new InMemAccountService(false, false), null);
+            hardDelete, Collections.singletonList(mockDelegate), time, new InMemAccountService(false, false), null,
+            scheduler);
 
     testStore2.start();
     assertTrue("Store should start up", testStore2.isStarted());
@@ -2093,7 +2094,7 @@ public class BlobStoreTest {
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
             diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time,
-            new InMemAccountService(false, false), null);
+            new InMemAccountService(false, false), null, scheduler);
     testStore.start();
     DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
     diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
@@ -2210,7 +2211,7 @@ public class BlobStoreTest {
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
             diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete,
-            Collections.singletonList(delegate), time, new InMemAccountService(false, false), null);
+            Collections.singletonList(delegate), time, new InMemAccountService(false, false), null, scheduler);
     testStore.start();
     assertEquals("Store current state should be OFFLINE if dynamic participant is adopted", OFFLINE,
         testStore.getCurrentState());
@@ -3030,7 +3031,8 @@ public class BlobStoreTest {
     properties.put("store.index.max.number.of.inmem.elements", Integer.toString(MAX_IN_MEM_ELEMENTS));
     properties.put("store.segment.size.in.bytes", Long.toString(segmentCapacity));
     properties.put("store.validate.authorization", "true");
-    properties.put("store.deleted.message.retention.minutes", Integer.toString(CuratedLogIndexState.deleteRetentionHour * 60));
+    properties.put("store.deleted.message.retention.minutes",
+        Integer.toString(CuratedLogIndexState.deleteRetentionHour * 60));
     store = createBlobStore(getMockReplicaId(tempDirStr));
     store.start();
     // advance time by a second in order to be able to add expired keys and to avoid keys that are expired from
@@ -3620,8 +3622,9 @@ public class BlobStoreTest {
    */
   private void verifyPutFailure(MockId idToPut, StoreErrorCodes expectedErrorCode) {
     long crc = random.nextLong();
-    MessageInfo info = new MessageInfo(idToPut, PUT_RECORD_SIZE, false, false, false, expiresAtMs, crc,
-        idToPut.getAccountId(), idToPut.getContainerId(), Utils.Infinite_Time, (short) 0);
+    MessageInfo info =
+        new MessageInfo(idToPut, PUT_RECORD_SIZE, false, false, false, expiresAtMs, crc, idToPut.getAccountId(),
+            idToPut.getContainerId(), Utils.Infinite_Time, (short) 0);
     MessageWriteSet writeSet =
         new MockMessageWriteSet(Collections.singletonList(info), Collections.singletonList(ByteBuffer.allocate(1)));
     try {
@@ -3897,7 +3900,7 @@ public class BlobStoreTest {
         StoreMetrics metrics) {
       super(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
           STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false),
-          null);
+          null, scheduler);
     }
 
     MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
@@ -3905,7 +3908,7 @@ public class BlobStoreTest {
       super(replicaId, replicaId.getPartitionId().toString(), config, scheduler, storeStatsScheduler, diskIOScheduler,
           diskSpaceAllocator, metrics, metrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(),
           STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false),
-          blobStoreStats, null);
+          blobStoreStats, null, scheduler);
     }
 
     /**

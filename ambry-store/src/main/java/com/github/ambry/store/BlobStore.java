@@ -94,6 +94,7 @@ public class BlobStore implements Store {
   private final RemoteTokenTracker remoteTokenTracker;
   private final AtomicInteger errorCount;
   private final AccountService accountService;
+  private final ScheduledExecutorService indexPersistScheduler;
   private Log log;
   private BlobStoreCompactor compactor;
   private BlobStoreStats blobStoreStats;
@@ -124,59 +125,68 @@ public class BlobStore implements Store {
 
   /**
    * Constructor for BlobStore, used in ambry-server
-   * @param replicaId replica associated with BlobStore.  BlobStore id, data directory, and capacity derived from this
-   * @param config the settings for store configuration.
-   * @param taskScheduler the {@link ScheduledExecutorService} for executing short period background tasks.
-   * @param longLivedTaskScheduler the {@link ScheduledExecutorService} for executing long period background tasks.
-   * @param diskIOScheduler schedules disk IO operations
-   * @param diskSpaceAllocator allocates log segment files.
-   * @param metrics the {@link StorageManagerMetrics} instance to use.
+   *
+   * @param replicaId                   replica associated with BlobStore.  BlobStore id, data directory, and capacity
+   *                                    derived from this
+   * @param config                      the settings for store configuration.
+   * @param taskScheduler               the {@link ScheduledExecutorService} for executing short period background
+   *                                    tasks.
+   * @param longLivedTaskScheduler      the {@link ScheduledExecutorService} for executing long period background
+   *                                    tasks.
+   * @param diskIOScheduler             schedules disk IO operations
+   * @param diskSpaceAllocator          allocates log segment files.
+   * @param metrics                     the {@link StorageManagerMetrics} instance to use.
    * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
-   * @param factory the {@link StoreKeyFactory} for parsing store keys.
-   * @param recovery the {@link MessageStoreRecovery} instance to use.
-   * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
-   * @param replicaStatusDelegates delegates used to communicate BlobStore write status(sealed/unsealed, stopped/started)
-   * @param time the {@link Time} instance to use.
-   * @param accountService  the {@link AccountService} instance to use.
-   * @param diskMetrics the {@link DiskMetrics} for the disk of this {@link BlobStore}
+   * @param factory                     the {@link StoreKeyFactory} for parsing store keys.
+   * @param recovery                    the {@link MessageStoreRecovery} instance to use.
+   * @param hardDelete                  the {@link MessageStoreHardDelete} instance to use.
+   * @param replicaStatusDelegates      delegates used to communicate BlobStore write status(sealed/unsealed,
+   *                                    stopped/started)
+   * @param time                        the {@link Time} instance to use.
+   * @param accountService              the {@link AccountService} instance to use.
+   * @param diskMetrics                 the {@link DiskMetrics} for the disk of this {@link BlobStore}
+   * @param indexPersistScheduler       a dedicated {@link ScheduledExecutorService} for persisting index segments.
    */
   public BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       List<ReplicaStatusDelegate> replicaStatusDelegates, Time time, AccountService accountService,
-      DiskMetrics diskMetrics) {
+      DiskMetrics diskMetrics, ScheduledExecutorService indexPersistScheduler) {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
         replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegates, time, accountService,
-        null, diskMetrics);
+        null, diskMetrics, indexPersistScheduler);
   }
 
   /**
    * Constructor for BlobStore, used in ambry-tools
-   * @param storeId id of the BlobStore
-   * @param config the settings for store configuration.
-   * @param taskScheduler the {@link ScheduledExecutorService} for executing background tasks.
-   * @param longLivedTaskScheduler the {@link ScheduledExecutorService} for executing long period background tasks.
-   * @param diskIOScheduler schedules disk IO operations.
-   * @param diskSpaceAllocator allocates log segment files.
-   * @param metrics the {@link StorageManagerMetrics} instance to use.
+   *
+   * @param storeId                     id of the BlobStore
+   * @param config                      the settings for store configuration.
+   * @param taskScheduler               the {@link ScheduledExecutorService} for executing background tasks.
+   * @param longLivedTaskScheduler      the {@link ScheduledExecutorService} for executing long period background
+   *                                    tasks.
+   * @param diskIOScheduler             schedules disk IO operations.
+   * @param diskSpaceAllocator          allocates log segment files.
+   * @param metrics                     the {@link StorageManagerMetrics} instance to use.
    * @param storeUnderCompactionMetrics the {@link StoreMetrics} object used by stores created for compaction.
-   * @param dataDir directory that will be used by the BlobStore for data
-   * @param capacityInBytes capacity of the BlobStore
-   * @param factory the {@link StoreKeyFactory} for parsing store keys.
-   * @param recovery the {@link MessageStoreRecovery} instance to use.
-   * @param hardDelete the {@link MessageStoreHardDelete} instance to use.
-   * @param time the {@link Time} instance to use.
+   * @param dataDir                     directory that will be used by the BlobStore for data
+   * @param capacityInBytes             capacity of the BlobStore
+   * @param factory                     the {@link StoreKeyFactory} for parsing store keys.
+   * @param recovery                    the {@link MessageStoreRecovery} instance to use.
+   * @param hardDelete                  the {@link MessageStoreHardDelete} instance to use.
+   * @param time                        the {@link Time} instance to use.
+   * @param indexPersistScheduler       a dedicated {@link ScheduledExecutorService} for persisting index segments.
    */
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time) {
+      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService indexPersistScheduler) {
     this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator, metrics,
         storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null, null,
-        null);
+        null, indexPersistScheduler);
   }
 
   BlobStore(ReplicaId replicaId, String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
@@ -184,7 +194,8 @@ public class BlobStore implements Store {
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates, Time time,
-      AccountService accountService, BlobStoreStats blobStoreStats, DiskMetrics diskMetrics) {
+      AccountService accountService, BlobStoreStats blobStoreStats, DiskMetrics diskMetrics,
+      ScheduledExecutorService indexPersistScheduler) {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
@@ -201,6 +212,7 @@ public class BlobStore implements Store {
     this.recovery = recovery;
     this.hardDelete = hardDelete;
     this.accountService = accountService;
+    this.indexPersistScheduler = indexPersistScheduler;
     this.replicaStatusDelegates = config.storeReplicaStatusDelegateEnable ? replicaStatusDelegates : null;
     this.time = time;
     this.sealThresholdBytesHigh =
@@ -264,7 +276,7 @@ public class BlobStore implements Store {
         compactor = new BlobStoreCompactor(dataDir, storeId, factory, config, metrics, storeUnderCompactionMetrics,
             diskIOScheduler, diskSpaceAllocator, log, time, sessionId, storeDescriptor.getIncarnationId(),
             accountService, remoteTokenTracker, diskMetrics);
-        index = new PersistentIndex(dataDir, storeId, taskScheduler, log, config, factory, recovery, hardDelete,
+        index = new PersistentIndex(dataDir, storeId, indexPersistScheduler, log, config, factory, recovery, hardDelete,
             diskIOScheduler, metrics, time, sessionId, storeDescriptor.getIncarnationId());
         compactor.initialize(index);
         if (config.storeRebuildTokenBasedOnCompactionHistory) {
