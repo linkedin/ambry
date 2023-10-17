@@ -270,6 +270,13 @@ public class ClusterMapConfig {
    */
   @Config("clustermap.replica.catchup.target")
   public final int clustermapReplicaCatchupTarget;
+  /**
+   * The minimum number of peers that a replica is required to catch up with when it's downward transition from leader/standby
+   * to inactive, offline and dropped. If target is set to 0, then * {@link com.github.ambry.clustermap.ReplicaSyncUpManager}
+   * will use number of replicas in local dc as catchup target.
+   */
+  @Config("clustermap.replica.catchup.target.for.downward.transition")
+  public final int clustermapReplicaCatchupTargetForDownwardTransition;
 
   /**
    * The minimum number of replicas in local datacenter required for a partition to serve PUT request. This is used to
@@ -393,6 +400,9 @@ public class ClusterMapConfig {
         verifiableProperties.getLongInRange("clustermap.replica.catchup.acceptable.lag.bytes", 0L, 0L, Long.MAX_VALUE);
     clustermapReplicaCatchupTarget =
         verifiableProperties.getIntInRange("clustermap.replica.catchup.target", 0, 0, Integer.MAX_VALUE);
+    clustermapReplicaCatchupTargetForDownwardTransition =
+        verifiableProperties.getIntInRange("clustermap.replica.catchup.target.for.downward.transition", 2, 0,
+            Integer.MAX_VALUE);
     clustermapWritablePartitionMinReplicaCount =
         verifiableProperties.getIntInRange("clustermap.writable.partition.min.replica.count", 3, 0, Integer.MAX_VALUE);
     clustermapUpdateDatanodeInfo = verifiableProperties.getBoolean("clustermap.update.datanode.info", false);
