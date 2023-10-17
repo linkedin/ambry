@@ -53,6 +53,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.store.StorageManager.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -265,6 +266,9 @@ public class DiskManager {
       longLivedTaskScheduler.shutdown();
       if (!longLivedTaskScheduler.awaitTermination(30, TimeUnit.SECONDS)) {
         logger.error("Could not terminate long live tasks after DiskManager shutdown");
+      }
+      if (indexPersistScheduler != null) {
+        shutDownExecutorService(indexPersistScheduler, 30, TimeUnit.SECONDS);
       }
     } finally {
       rwLock.readLock().unlock();
