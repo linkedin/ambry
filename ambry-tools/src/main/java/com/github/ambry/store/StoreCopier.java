@@ -167,9 +167,9 @@ public class StoreCopier implements Closeable {
     this.transformers = transformers;
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     src = new BlobStore(storeId, storeConfig, null, null, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
-        srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
+        srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time, null);
     tgt = new BlobStore(storeId + "_tmp", storeConfig, scheduler, null, diskIOScheduler, diskSpaceAllocator, metrics,
-        metrics, tgtDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time);
+        metrics, tgtDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null, time, scheduler);
     src.start();
     tgt.start();
   }

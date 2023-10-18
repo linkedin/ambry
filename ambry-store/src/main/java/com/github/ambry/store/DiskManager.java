@@ -53,6 +53,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.store.StorageManager.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -86,6 +87,8 @@ public class DiskManager {
   private boolean running = false;
   private DiskHealthStatus diskHealthStatus;
   private final DiskHealthCheck diskHealthCheck;
+  // Have a dedicated scheduler for persisting index segments to ensure index segments are always persisted
+  private final ScheduledExecutorService indexPersistScheduler;
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -127,6 +130,7 @@ public class DiskManager {
     this.time = time;
     diskIOScheduler = new DiskIOScheduler(getThrottlers(storeConfig, time));
     longLivedTaskScheduler = Utils.newScheduler(1, true);
+    indexPersistScheduler = Utils.newScheduler(1, "index-persistor-for-disk-" + disk.getMountPath(), false);
     File reserveFileDir = new File(disk.getMountPath(), diskManagerConfig.diskManagerReserveFileDirName);
     diskSpaceAllocator = new DiskSpaceAllocator(diskManagerConfig.diskManagerEnableSegmentPooling, reserveFileDir,
         diskManagerConfig.diskManagerRequiredSwapSegmentsPerSize, metrics);
@@ -142,7 +146,7 @@ public class DiskManager {
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
-                time, accountService, diskMetrics);
+                time, accountService, diskMetrics, indexPersistScheduler);
         stores.put(replica.getPartitionId(), store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
         expectedDirs.add(replica.getReplicaPath());
@@ -263,6 +267,9 @@ public class DiskManager {
       if (!longLivedTaskScheduler.awaitTermination(30, TimeUnit.SECONDS)) {
         logger.error("Could not terminate long live tasks after DiskManager shutdown");
       }
+      if (indexPersistScheduler != null) {
+        shutDownExecutorService(indexPersistScheduler, 30, TimeUnit.SECONDS);
+      }
     } finally {
       rwLock.readLock().unlock();
       metrics.diskShutdownTimeMs.update(time.milliseconds() - startTimeMs);
@@ -360,7 +367,7 @@ public class DiskManager {
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
-                time, accountService, null);
+                time, accountService, null, indexPersistScheduler);
         store.start();
         // collect store segment requirements and add into DiskSpaceAllocator
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());

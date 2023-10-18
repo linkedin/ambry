@@ -93,7 +93,7 @@ class MockStorageManager extends StorageManager {
     TestStore(ReplicaId replicaId, ClusterParticipant clusterParticipant) {
       super(replicaId, new StoreConfig(VPROPS), null, null, null, null, null, null, null, null, null,
           Collections.singletonList(new ReplicaStatusDelegate(clusterParticipant)), new MockTime(),
-          new InMemAccountService(false, false), null);
+          new InMemAccountService(false, false), null, null);
       if (clusterParticipant instanceof HelixParticipant) {
         currentState = ReplicaState.OFFLINE;
       }

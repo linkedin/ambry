@@ -239,7 +239,10 @@ public class StorageManagerTest {
     storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).shutdown();
     assertFalse("Add store onto the DiskManager which is not running should fail",
         storageManager.addBlobStore(newPartition2.getReplicaIds().get(0)));
-    storageManager.getDiskManager(localReplicas.get(0).getPartitionId()).start();
+    // Create storage manager again to create disk managers again
+    storageManager.shutdown();
+    storageManager = createStorageManager(localNode, metricRegistry, null);
+    storageManager.start();
     // test replica addition can correctly handle existing dir (should delete it and create a new one)
     // To verify the directory has been recreated, we purposely put a test file in previous dir.
     PartitionId newPartition3 =
@@ -278,7 +281,7 @@ public class StorageManagerTest {
    * @throws Exception
    */
   @Test
-  public void replicaFromOfflineToBootstrapTest() throws Exception {
+  public void replicaFromOfflineToBootstrapFailureTest() throws Exception {
     generateConfigs(true, false);
     MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
     List<PartitionId> partitionIds = clusterMap.getAllPartitionIds(null);
@@ -328,19 +331,38 @@ public class StorageManagerTest {
     } catch (StateTransitionException e) {
       assertEquals("Error code doesn't match", ReplicaOperationFailure, e.getErrorCode());
     }
-    // restart disk manager to test case where new replica(store) is successfully added into StorageManager
-    storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).start();
+
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  @Test
+  public void replicaFromOfflineToBootstrapSuccessTest() throws Exception {
+    generateConfigs(true, false);
+    MockDataNodeId localNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = clusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        createStorageManager(localNode, metricRegistry, Collections.singletonList(mockHelixParticipant));
+    storageManager.start();
+
+    // 0. get listeners from Helix participant and verify there is a storageManager listener.
+    Map<StateModelListenerType, PartitionStateChangeListener> listeners =
+        mockHelixParticipant.getPartitionStateChangeListeners();
+    assertTrue("Should contain storage manager listener",
+        listeners.containsKey(StateModelListenerType.StorageManagerListener));
+
+    // 1. Test case where new replica(store) is successfully added into StorageManager
+    PartitionId newPartition = clusterMap.createNewPartition(Collections.singletonList(localNode));
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition.toPathString());
     BlobStore newAddedStore = (BlobStore) storageManager.getStore(newPartition);
     assertNotNull("There should be a started store associated with new partition", newAddedStore);
-
-    // 5. verify that new added store has bootstrap file
+    // verify that new added store has bootstrap file
     assertTrue("There should be a bootstrap file indicating store is in BOOTSTRAP state",
         newAddedStore.isBootstrapInProgress());
     assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP,
         newAddedStore.getCurrentState());
 
-    // 6. test that state transition should succeed for existing non-empty replicas (we write some data into store beforehand)
+    // 2. test that state transition should succeed for existing non-empty replicas (we write some data into store beforehand)
     MockId id = new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), Utils.getRandomShort(TestUtils.RANDOM),
         Utils.getRandomShort(TestUtils.RANDOM));
     MessageInfo info =
@@ -355,13 +377,15 @@ public class StorageManagerTest {
     assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP,
         storeToWrite.getCurrentState());
 
-    // 7. test that for new created (empty) store, state transition puts it into BOOTSTRAP state
+    // 3. test that for new created (empty) store, state transition puts it into BOOTSTRAP state
+    ReplicaId replicaId = localReplicas.get(0);
+    Store localStore = storageManager.getStore(replicaId.getPartitionId(), true);
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());
     assertTrue("There should be a bootstrap file because store is empty and probably recreated",
         localStore.isBootstrapInProgress());
     assertEquals("The store's current state should be BOOTSTRAP", ReplicaState.BOOTSTRAP, localStore.getCurrentState());
 
-    // 8. test that when an existing store is already leader or standby, state transition is not going to change it
+    // 4. test that when an existing store is already leader or standby, state transition is not going to change it
     // back to BOOTSTRAP
     storageManager.getStore(localReplicas.get(0).getPartitionId()).setCurrentState(ReplicaState.STANDBY);
     mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(localReplicas.get(0).getPartitionId().toPathString());

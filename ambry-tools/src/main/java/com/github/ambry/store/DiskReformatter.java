@@ -310,7 +310,7 @@ public class DiskReformatter {
     StoreMetrics metrics = new StoreMetrics(new MetricRegistry());
     Store store = new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler,
         diskSpaceAllocator, metrics, metrics, srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null,
-        time);
+        time, null);
     store.start();
     store.shutdown();
   }
