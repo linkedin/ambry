@@ -316,12 +316,14 @@ public class AmbryReplicaSyncUpManager implements ReplicaSyncUpManager {
           remoteDcPeerReplicaAndLag.put(peerReplica, Long.MAX_VALUE);
         }
       }
-      catchupTarget = clusterMapConfig.clustermapReplicaCatchupTarget == 0 ? localDcPeerReplicaAndLag.size()
-          : clusterMapConfig.clustermapReplicaCatchupTarget;
+      int defaultCatchUpTarget =
+          currentState == ReplicaState.BOOTSTRAP ? clusterMapConfig.clustermapReplicaCatchupTarget
+              : clusterMapConfig.clustermapReplicaCatchupTargetForDownwardTransition;
+      catchupTarget = Math.max(defaultCatchUpTarget, localDcPeerReplicaAndLag.size());
       logger.info(
-          "LocalReplicaLagInfo: Partition {}, current state {}, LocalDcPeers {}, RemoteDcPeers: {}, catchupTarget: {}",
+          "LocalReplicaLagInfo: Partition {}, current state {}, LocalDcPeers {}, RemoteDcPeers: {}, defaultCatchupTarget: {}, catchupTarget: {}",
           localReplica.getPartitionId().toPathString(), currentState, localDcPeerReplicaAndLag.keySet(),
-          remoteDcPeerReplicaAndLag.keySet(), catchupTarget);
+          remoteDcPeerReplicaAndLag.keySet(), defaultCatchUpTarget, catchupTarget);
     }
 
     /**
