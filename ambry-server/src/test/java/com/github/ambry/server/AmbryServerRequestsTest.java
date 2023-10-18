@@ -335,6 +335,12 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     storageManager.shutdown();
     storageManager.returnNullStore = true;
     doScheduleCompactionTest(id, ServerErrorCode.Disk_Unavailable);
+
+    // Recreate storage manager and pass it to AmbryRequests so that Disk Managers are created again
+    storageManager = new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper, null);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
+        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
     storageManager.returnNullStore = false;
     storageManager.start();
     // make sure the disk is up when storageManager is restarted.
@@ -713,6 +719,11 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     storageManager.returnNullStore = true;
     sendAndVerifyStoreControlRequest(id, BlobStoreControlAction.StopStore, numReplicasCaughtUpPerPartition,
         ServerErrorCode.Disk_Unavailable);
+    // Recreate storage manager and pass it to AmbryRequests so that disk managers are created again
+    storageManager = new MockStorageManager(validKeysInStore, clusterMap, dataNodeId, findTokenHelper, null);
+    ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper, null, replicationManager, null, serverConfig,
+        diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
     storageManager.returnNullStore = false;
     storageManager.start();
     // test invalid numReplicasCaughtUpPerPartition
