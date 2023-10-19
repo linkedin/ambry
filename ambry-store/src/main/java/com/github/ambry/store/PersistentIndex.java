@@ -265,6 +265,17 @@ class PersistentIndex {
       if (cleanShutdown) {
         cleanShutdownFile.delete();
       }
+
+      // Schedule index persistor before recovering index so that index segments are persisted as they are being recovered
+      if (scheduler != null) {
+        // start scheduler thread to persist index in the background
+        persistorTask = scheduler.scheduleAtFixedRate(persistor,
+            config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
+            config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
+      } else {
+        persistorTask = null;
+      }
+
       if (recovery != null) {
         recover(recovery);
       }
@@ -293,14 +304,6 @@ class PersistentIndex {
         hardDeleter = null;
       }
 
-      if (scheduler != null) {
-        // start scheduler thread to persist index in the background
-        persistorTask = scheduler.scheduleAtFixedRate(persistor,
-            config.storeDataFlushDelaySeconds + new Random().nextInt(Time.SecsPerMin),
-            config.storeDataFlushIntervalSeconds, TimeUnit.SECONDS);
-      } else {
-        persistorTask = null;
-      }
       if (hardDelete != null && config.storeEnableHardDelete) {
         logger.info("Index : {} Starting hard delete thread ", datadir);
         hardDeleteThread = Utils.newThread(HardDeleter.getThreadName(datadir), hardDeleter, true);
