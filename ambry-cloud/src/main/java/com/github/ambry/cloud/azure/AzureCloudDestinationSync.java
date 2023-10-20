@@ -375,17 +375,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     try {
       if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
-        azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
         // lifeVersion must always be present
         short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
         if (cloudlifeVersion > lifeVersion) {
           String error = String.format("Failed to update deleteTime of blob %s as it has a higher life version in cloud than replicated message: %s > %s",
               blobIdStr, cloudlifeVersion, lifeVersion);
-          logger.error(error);
+          logger.trace(error);
           throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), null);
         }
         String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
-        logger.error(error);
+        logger.trace(error);
         throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), null);
       }
     } catch (StoreException e) {
@@ -460,15 +459,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
          */
         if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)
             && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) == Utils.Infinite_Time) {
-          azureMetrics.blobUndeleteErrorCount.inc();
           String error = String.format("Failed to undelete blob %s as it is undeleted in cloud", blobIdStr);
-          logger.error(error);
+          logger.trace(error);
           throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Undeleted), null);
         }
-        azureMetrics.blobUndeleteErrorCount.inc();
         String error = String.format("Failed to undelete blob %s as it has a same or higher life version in cloud than replicated message : %s >= %s",
             blobIdStr, cloudlifeVersion, lifeVersion);
-        logger.error(error);
+        logger.trace(error);
         throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), null);
       }
     } catch (StoreException e) {
@@ -556,7 +553,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     if (isDeleted(cloudMetadata)) {
       // Replication must first undelete the deleted blob, and then update-TTL.
       String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
-      logger.error(error);
+      logger.trace(error);
       throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), null);
     }
 

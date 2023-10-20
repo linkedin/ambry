@@ -94,7 +94,8 @@ public class CloudRequestAgent {
       } else {
         // Either not retryable or exhausted attempts.
         Throwable t = cse.getCause();
-        Set<StoreErrorCodes> errorCodes = new HashSet<>(Arrays.asList(StoreErrorCodes.Already_Updated));
+        Set<StoreErrorCodes> errorCodes = new HashSet<>(Arrays.asList(StoreErrorCodes.Already_Updated,
+            StoreErrorCodes.ID_Deleted, StoreErrorCodes.Life_Version_Conflict, StoreErrorCodes.ID_Undeleted));
         if (t instanceof StoreException && errorCodes.contains(((StoreException)t).getErrorCode())) {
           // Not very useful to log error here as they are printed in several other places
           logger.trace("{} failed partition {} statusCode {} cause {} made {} attempts.", actionName, partitionPath,
