@@ -53,6 +53,9 @@ class HelixClusterManagerMetrics {
   public Gauge<Long> helixClusterManagerRemoteInstantiationFailed;
   public Gauge<Long> helixClusterManagerCurrentXid;
   public final Timer routingTableQueryTime;
+  public final Counter resourceNameMismatchCount;
+  public final Counter resourceNameCacheHitCount;
+  public final Counter resourceNameCacheMissCount;
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -95,6 +98,12 @@ class HelixClusterManagerMetrics {
     routingTableQueryTime = registry.timer(MetricRegistry.name(HelixClusterManager.class, "routingTableQueryTime"));
     instanceDeleteTriggerCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceDeleteTriggerCount"));
+    resourceNameMismatchCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "resourceNameMismatchCount"));
+    resourceNameCacheHitCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "resourceNameCacheHitCount"));
+    resourceNameCacheMissCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "resourceNameCacheMissCount"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated, final long instantiationExceptionCount) {

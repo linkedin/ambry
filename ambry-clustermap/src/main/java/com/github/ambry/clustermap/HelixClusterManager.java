@@ -1118,6 +1118,9 @@ public class HelixClusterManager implements ClusterMap {
    */
   class HelixClusterManagerQueryHelper
       implements ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
+    private final ConcurrentHashMap<String, Map<String, String>> dcToPartitionNameToResourceCache =
+        new ConcurrentHashMap<>();
+
     /**
      * Get all replica ids associated with the given {@link AmbryPartition}
      * @param partition the {@link AmbryPartition} for which to get the list of replicas.
@@ -1155,24 +1158,58 @@ public class HelixClusterManager implements ClusterMap {
       Set<AmbryReplica> replicas = new HashSet<>();
       List<String> dcs = dcName != null ? Collections.singletonList(dcName)
           : dcToDcInfo.values().stream().map(dcInfo -> dcInfo.dcName).collect(Collectors.toList());
+      String partitionName = partition.toPathString();
       for (String dc : dcs) {
-        String resourceName = partitionToResourceNameByDc.get(dc).get(partition.toPathString());
+        int replicaSizeBefore = replicas.size();
+        String resourceName = partitionToResourceNameByDc.get(dc).get(partitionName);
         RoutingTableSnapshot routingTableSnapshot =
             clusterMapConfig.clusterMapUseAggregatedView ? globalRoutingTableSnapshotRef.get()
                 : dcToRoutingTableSnapshotRef.get(dc).get();
-        routingTableSnapshot.getInstancesForResource(resourceName, partition.toPathString(), state.name())
-            .stream()
-            .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-            .filter(dataNode -> dataNode.getDatacenterName().equals(dc))
-            .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partition.toPathString()))
-            .filter(Objects::nonNull)
-            .forEach(replicas::add);
+        getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc, resourceName, partitionName, state,
+            replicas);
+        if (replicas.size() != replicaSizeBefore) {
+          // We found the replicas from the resource name, just continue to next dc.
+          continue;
+        }
+        // There is some change made to resources in IDEALSTATES and it's not yet reflected in EXTERNAALVIEW.
+        // Try to search the partition in all resources
+        helixClusterManagerMetrics.resourceNameMismatchCount.inc();
+        String resourceNameInCache =
+            dcToPartitionNameToResourceCache.computeIfAbsent(dc, k -> new ConcurrentHashMap<>())
+                .get(partition.toPathString());
+        if (resourceNameInCache == null) {
+          helixClusterManagerMetrics.resourceNameCacheMissCount.inc();
+          Collection<String> resourcesFromRoutingTable = routingTableSnapshot.getResources();
+          for (String resource : resourcesFromRoutingTable) {
+            getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc, resource, partitionName, state,
+                replicas);
+            if (replicas.size() != replicaSizeBefore) {
+              // We found the partition in this resource, put this resource in the case.
+              dcToPartitionNameToResourceCache.get(dc).putIfAbsent(partitionName, resource);
+              break;
+            }
+          }
+        } else {
+          helixClusterManagerMetrics.resourceNameCacheHitCount.inc();
+          getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc, resourceNameInCache, partitionName,
+              state, replicas);
+        }
       }
-      logger.debug("Replicas for partition {} with state {} in dc {} are {}. Query time in Ms {}",
-          partition.toPathString(), state.name(), dcName != null ? dcName : "", replicas,
-          SystemTime.getInstance().milliseconds() - startTime);
+      logger.debug("Replicas for partition {} with state {} in dc {} are {}. Query time in Ms {}", partitionName,
+          state.name(), dcName != null ? dcName : "", replicas, SystemTime.getInstance().milliseconds() - startTime);
       operationTimer.stop();
       return new ArrayList<>(replicas);
+    }
+
+    private void getReplicaIdsByStateInRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot, String dc,
+        String resourceName, String partitionName, ReplicaState state, Set<AmbryReplica> replicas) {
+      routingTableSnapshot.getInstancesForResource(resourceName, partitionName, state.name())
+          .stream()
+          .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
+          .filter(dataNode -> dataNode.getDatacenterName().equals(dc))
+          .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partitionName))
+          .filter(Objects::nonNull)
+          .forEach(replicas::add);
     }
 
     @Override

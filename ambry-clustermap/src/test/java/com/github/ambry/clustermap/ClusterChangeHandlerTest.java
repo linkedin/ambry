@@ -37,6 +37,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
+import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.store.HelixPropertyStore;
 import org.apache.helix.zookeeper.datamodel.ZNRecord;
@@ -71,6 +72,7 @@ public class ClusterChangeHandlerTest {
   private final String localDc;
   private final String remoteDc;
   private final boolean overrideEnabled;
+  private final boolean useAggregatedView;
   private final String hardwareLayoutPath;
   private final String partitionLayoutPath;
   private final TestHardwareLayout testHardwareLayout;
@@ -88,6 +90,7 @@ public class ClusterChangeHandlerTest {
   // set up a mock helix cluster, create separate HelixClusterManager with both Simple and Dynamic cluster change handler
   public ClusterChangeHandlerTest(boolean overrideEnabled, boolean useAggregatedView) throws Exception {
     this.overrideEnabled = overrideEnabled;
+    this.useAggregatedView = useAggregatedView;
     File tempDir = Files.createTempDirectory("ClusterChangeHandlerTest-").toFile();
     String tempDirPath = tempDir.getAbsolutePath();
     tempDir.deleteOnExit();
@@ -552,6 +555,165 @@ public class ClusterChangeHandlerTest {
         HelixBootstrapUpgradeUtil.HelixAdminOperation.UpdateIdealState);
     assertEquals("Replica count of testing partition is not correct", previousReplicaCnt,
         partitionInManager.getReplicaIds().size());
+
+    helixClusterManager.close();
+  }
+
+  /**
+   * Test when updates of IDEALSTATE haven't reached to aggregated external view.
+   * @throws Exception
+   */
+  @Test
+  public void getReplicaIdsByStateWithNewResourceNameTest() throws Exception {
+    assumeTrue(useAggregatedView);
+    // create a HelixClusterManager with DynamicClusterChangeHandler
+    Properties properties = new Properties();
+    properties.putAll(props);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(properties));
+    HelixClusterManager helixClusterManager =
+        new HelixClusterManager(clusterMapConfig, selfInstanceName, helixManagerFactory, new MetricRegistry());
+
+    List<String> resourceNames = helixCluster.getResources(localDc);
+    // there should be only ont resource name, which is 0
+    String oldResourceName = resourceNames.get(0);
+
+    // Test case 1: only old resource exists in both ideal state and the external view
+    IdealState oldIdealState = helixCluster.getResourceIdealState(oldResourceName, localDc);
+    for (String partitionName : oldIdealState.getPartitionSet()) {
+      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
+              localDc);
+      assertFalse(replicas.isEmpty());
+      assertEquals(0, helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
+    }
+
+    // Test case 2: create new resource in ideal state, but not external view
+    String newResourceName = String.valueOf(Integer.valueOf(oldResourceName) + 10000);
+
+    IdealState newIdealState = new IdealState(newResourceName);
+    Map<String, List<String>> newPartitions = new HashMap<>();
+    for (Map.Entry<String, List<String>> entry : oldIdealState.getPreferenceLists().entrySet()) {
+      newPartitions.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+    }
+    newIdealState.setPreferenceLists(newPartitions);
+    // this will only add resource to ideal state
+    helixCluster.addNewResource(newResourceName, newIdealState, localDc);
+
+    // Local dc's partition's resource should be updated to newResource name
+    // But the aggregated external view didn't get updated, so the replicas are still in the old resources
+    Map<String, String> partitionToResourceAfterUpdate =
+        (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
+    long mismatchCount = 0;
+    long cacheMissCount = 0;
+    for (String partitionName : newPartitions.keySet()) {
+      assertEquals(newResourceName, partitionToResourceAfterUpdate.get(partitionName));
+      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
+              localDc);
+      assertFalse(replicas.isEmpty());
+      assertEquals(mismatchCount + 1,
+          helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
+      mismatchCount = helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount();
+      assertEquals(cacheMissCount + 1,
+          helixClusterManager.helixClusterManagerMetrics.resourceNameCacheMissCount.getCount());
+      cacheMissCount = helixClusterManager.helixClusterManagerMetrics.resourceNameCacheMissCount.getCount();
+    }
+
+    long cacheHitCount = 0;
+    for (String partitionName : newPartitions.keySet()) {
+      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
+              localDc);
+      assertFalse(replicas.isEmpty());
+      assertEquals(mismatchCount + 1,
+          helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
+      mismatchCount = helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount();
+      assertEquals(cacheHitCount + 1,
+          helixClusterManager.helixClusterManagerMetrics.resourceNameCacheHitCount.getCount());
+      cacheHitCount = helixClusterManager.helixClusterManagerMetrics.resourceNameCacheHitCount.getCount();
+    }
+
+    // Test case 3: new resource are both in ideal state and external view
+    MockHelixAdmin localMockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+    // Use local mock helix admin to add this resource again so that external view would be updated
+    localMockHelixAdmin.addResource(clusterNameStatic, newResourceName, newIdealState);
+    localMockHelixAdmin.triggerRoutingTableNotification();
+    // Sleep 1 second so the routing table notification can be received.
+    Thread.sleep(1000);
+
+    for (String partitionName : newPartitions.keySet()) {
+      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
+              localDc);
+      assertFalse(replicas.isEmpty());
+      assertEquals(mismatchCount, helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
+    }
+
+    // Test case 4: remove the old resource
+    helixCluster.removeResourceIdealState(oldResourceName, localDc);
+    localMockHelixAdmin.triggerRoutingTableNotification();
+    // Sleep 1 second so the routing table notification can be received.
+    Thread.sleep(1000);
+
+    for (String partitionName : newPartitions.keySet()) {
+      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
+              localDc);
+      assertFalse(replicas.isEmpty());
+      assertEquals(mismatchCount, helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
+    }
+
+    // Test 5: the other datacenter going through the same process
+    IdealState oldIdealStateInRemote = helixCluster.getResourceIdealState(oldResourceName, remoteDc);
+    IdealState newIdealStateInRemote = new IdealState(newResourceName);
+    Map<String, List<String>> newPartitionsInRemote = new HashMap<>();
+    for (Map.Entry<String, List<String>> entry : oldIdealStateInRemote.getPreferenceLists().entrySet()) {
+      newPartitionsInRemote.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+    }
+    newIdealStateInRemote.setPreferenceLists(newPartitionsInRemote);
+    // this will only add resource to ideal state
+    helixCluster.addNewResource(newResourceName, newIdealStateInRemote, remoteDc);
+    Map<String, String> partitionToResourceAfterUpdateInRemote =
+        (helixClusterManager).getPartitionToResourceMapByDC().get(remoteDc);
+    for (String partitionName : newPartitionsInRemote.keySet()) {
+      assertEquals(newResourceName, partitionToResourceAfterUpdateInRemote.get(partitionName));
+      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
+              remoteDc);
+      assertFalse(replicas.isEmpty());
+      assertEquals(mismatchCount + 1,
+          helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
+      mismatchCount = helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount();
+      assertEquals(cacheMissCount + 1,
+          helixClusterManager.helixClusterManagerMetrics.resourceNameCacheMissCount.getCount());
+      cacheMissCount = helixClusterManager.helixClusterManagerMetrics.resourceNameCacheMissCount.getCount();
+    }
+    for (String partitionName : newPartitionsInRemote.keySet()) {
+      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
+              remoteDc);
+      assertFalse(replicas.isEmpty());
+      assertEquals(mismatchCount + 1,
+          helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
+      mismatchCount = helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount();
+      assertEquals(cacheHitCount + 1,
+          helixClusterManager.helixClusterManagerMetrics.resourceNameCacheHitCount.getCount());
+      cacheHitCount = helixClusterManager.helixClusterManagerMetrics.resourceNameCacheHitCount.getCount();
+    }
+
+    MockHelixAdmin remoteMockHelixAdmin = helixCluster.getHelixAdminFromDc(remoteDc);
+    remoteMockHelixAdmin.addResource(clusterNameStatic, newResourceName, newIdealStateInRemote);
+    // Trigger routing table notification from local helix admin
+    localMockHelixAdmin.triggerRoutingTableNotification();
+    // Sleep 1 second so the routing table notification can be received.
+    Thread.sleep(1000);
+    for (String partitionName : newPartitionsInRemote.keySet()) {
+      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
+              remoteDc);
+      assertFalse(replicas.isEmpty());
+      assertEquals(mismatchCount, helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
+    }
 
     helixClusterManager.close();
   }
