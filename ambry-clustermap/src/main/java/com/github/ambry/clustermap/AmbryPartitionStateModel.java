@@ -66,10 +66,11 @@ public class AmbryPartitionStateModel extends StateModel {
   private final PartitionStateChangeListener partitionStateChangeListener;
   private final ClusterMapConfig clusterMapConfig;
   private final ConcurrentMap<String, String> partitionNameToResourceName;
+  private final HelixClusterManager clusterManager;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
       PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig,
-      ConcurrentMap<String, String> partitionNameToResourceName) {
+      ConcurrentMap<String, String> partitionNameToResourceName, HelixClusterManager clusterManager) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
@@ -77,6 +78,7 @@ public class AmbryPartitionStateModel extends StateModel {
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
     this.partitionNameToResourceName = partitionNameToResourceName;
+    this.clusterManager = clusterManager;
   }
 
   @Transition(to = "BOOTSTRAP", from = "OFFLINE")
@@ -194,14 +196,23 @@ public class AmbryPartitionStateModel extends StateModel {
   boolean shouldTransition(Message message) {
     String resourceName = message.getResourceName();
     String partitionName = message.getPartitionName();
+    String resourceNameToCompare = clusterManager.getResourceForPartitionInLocalDc(partitionName);
+    if (resourceNameToCompare != null && !resourceNameToCompare.equals(resourceName)) {
+      if (Integer.valueOf(resourceNameToCompare) < Integer.valueOf(resourceName)) {
+        resourceNameToCompare = resourceName;
+      }
+    } else {
+      resourceNameToCompare = resourceName;
+    }
+    final String finalResourceName = resourceNameToCompare;
     String mappedResourceName = partitionNameToResourceName.compute(partitionName, (k, v) -> {
-      if (v == null || v.equals(resourceName)) {
-        return resourceName;
+      if (v == null || v.equals(finalResourceName)) {
+        return finalResourceName;
       }
       try {
         int oldResourceId = Integer.valueOf(v);
-        int newResourceId = Integer.valueOf(resourceName);
-        return newResourceId > oldResourceId ? resourceName : v;
+        int newResourceId = Integer.valueOf(finalResourceName);
+        return newResourceId > oldResourceId ? finalResourceName : v;
       } catch (Exception e) {
         logger.error("Failed to parse resource name to an integer", e);
         throw new StateTransitionException("Failed to parse resource name",

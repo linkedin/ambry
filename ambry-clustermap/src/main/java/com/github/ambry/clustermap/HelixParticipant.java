@@ -62,6 +62,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
 public class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
   public static final String DISK_KEY = "DISK";
   protected final HelixParticipantMetrics participantMetrics;
+  private final HelixClusterManager clusterManager;
   private final String clusterName;
   private final String zkConnectStr;
   private final Object helixAdministrationLock = new Object();
@@ -88,9 +89,10 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
    * @param zkConnectStr the address identifying the zk service which this participant interacts with.
    * @param isSoleParticipant whether this is the sole participant on current node.
    */
-  public HelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory, MetricRegistry metricRegistry,
-      String zkConnectStr, boolean isSoleParticipant) {
+  public HelixParticipant(HelixClusterManager clusterManager, ClusterMapConfig clusterMapConfig,
+      HelixFactory helixFactory, MetricRegistry metricRegistry, String zkConnectStr, boolean isSoleParticipant) {
     this.clusterMapConfig = clusterMapConfig;
+    this.clusterManager = clusterManager;
     this.zkConnectStr = zkConnectStr;
     this.metricRegistry = metricRegistry;
     participantMetrics =
@@ -137,7 +139,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         clusterMapConfig.clustermapStateModelDefinition);
     StateMachineEngine stateMachineEngine = manager.getStateMachineEngine();
     stateMachineEngine.registerStateModelFactory(clusterMapConfig.clustermapStateModelDefinition,
-        new AmbryStateModelFactory(clusterMapConfig, this));
+        new AmbryStateModelFactory(clusterMapConfig, this, clusterManager));
     registerStatsReportAggregationTasks(stateMachineEngine, ambryStatsReports, accountStatsStore, callback);
     try {
       // register server as a participant

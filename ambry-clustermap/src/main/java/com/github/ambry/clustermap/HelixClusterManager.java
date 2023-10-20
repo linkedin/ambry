@@ -671,6 +671,10 @@ public class HelixClusterManager implements ClusterMap {
     return dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getZkConnectStrs().get(0);
   }
 
+  public String getResourceForPartitionInLocalDc(String partitionName) {
+    return partitionToResourceNameByDc.get(clusterMapConfig.clusterMapDatacenterName).get(partitionName);
+  }
+
   /**
    * Add partition if it's not present in cluster-wide partition map and also update cluster-wide allocated usable
    * capacity. If the partition already exists, skip addition and return current partition.
