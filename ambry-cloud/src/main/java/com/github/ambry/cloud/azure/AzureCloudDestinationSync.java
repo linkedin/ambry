@@ -283,7 +283,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       azureMetrics.blobUploadErrorCount.inc();
       String error = String.format("Failed to upload blob %s to Azure blob storage because %s", blobLayout, e.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, e, null);
     } finally {
       if (storageTimer != null) {
         storageTimer.stop();
@@ -350,12 +350,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
       }
       azureMetrics.blobGetPropertiesErrorCount.inc();
       logger.error(msg);
-      throw AzureCloudDestination.toCloudStorageException(msg, bse, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(msg, bse, null);
     } catch (Throwable t) {
       azureMetrics.blobGetPropertiesErrorCount.inc();
       String error = String.format("Failed to get blob properties for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, t, null);
     } finally {
       storageTimer.stop();
     }
@@ -375,22 +375,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     try {
       if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+        azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
         // lifeVersion must always be present
         short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
         if (cloudlifeVersion > lifeVersion) {
           String error = String.format("Failed to update deleteTime of blob %s as it has a higher life version in cloud than replicated message: %s > %s",
               blobIdStr, cloudlifeVersion, lifeVersion);
           logger.error(error);
-          throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), azureMetrics);
+          throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), null);
         }
         String error = String.format("Failed to update deleteTime of blob %s as it is marked for deletion in cloud", blobIdStr);
         logger.error(error);
-        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), azureMetrics);
+        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), null);
       }
     } catch (StoreException e) {
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, e, null);
     }
 
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
@@ -403,19 +404,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return true;
     } catch (BlobStorageException bse) {
-      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
-      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-        azureMetrics.blobUpdateConflictCount.inc();
-      }
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
+      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
+        /*
+          If we are here, it just means that two threads tried to delete concurrently. This is ok.
+         */
+        logger.trace(error);
+        return true;
+      }
+      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, bse, null);
     } catch (Throwable t) {
       // Unknown error
       azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       String error = String.format("Failed to update deleteTime of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, t, null);
     } finally {
       storageTimer.stop();
     } // try-catch
@@ -458,18 +463,18 @@ public class AzureCloudDestinationSync implements CloudDestination {
           azureMetrics.blobUndeleteErrorCount.inc();
           String error = String.format("Failed to undelete blob %s as it is undeleted in cloud", blobIdStr);
           logger.error(error);
-          throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Undeleted), azureMetrics);
+          throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Undeleted), null);
         }
         azureMetrics.blobUndeleteErrorCount.inc();
         String error = String.format("Failed to undelete blob %s as it has a same or higher life version in cloud than replicated message : %s >= %s",
             blobIdStr, cloudlifeVersion, lifeVersion);
         logger.error(error);
-        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), azureMetrics);
+        throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.Life_Version_Conflict), null);
       }
     } catch (StoreException e) {
       azureMetrics.blobUndeleteErrorCount.inc();
       String error = String.format("Failed to undelete blob %s in Azure blob storage because %s", blobLayout, e.getMessage());
-      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, e, null);
     }
 
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
@@ -483,19 +488,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return lifeVersion;
     } catch (BlobStorageException bse) {
-      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
-      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-        azureMetrics.blobUpdateConflictCount.inc();
-      }
       String error = String.format("Failed to undelete blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
+      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
+        /*
+          If we are here, it just means that two threads tried to un-delete concurrently. This is ok.
+        */
+        logger.trace(error);
+        return lifeVersion;
+      }
+      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, bse, null);
     } catch (Throwable t) {
       // Unknown error
       azureMetrics.blobUndeleteErrorCount.inc();
       String error = String.format("Failed to undelete blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, t, null);
     } finally {
       storageTimer.stop();
     } // try-catch
@@ -548,7 +557,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       // Replication must first undelete the deleted blob, and then update-TTL.
       String error = String.format("Unable to update TTL of %s as it is marked for deletion in cloud", blobIdStr);
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Deleted), null);
     }
 
     try {
@@ -580,7 +589,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       // Auth error from validator
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Unable to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, e.getMessage());
-      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, e, null);
     }
 
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
@@ -597,18 +606,22 @@ public class AzureCloudDestinationSync implements CloudDestination {
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return cloudlifeVersion;
     } catch (BlobStorageException bse) {
-      azureMetrics.blobUpdateTTLErrorCount.inc();
-      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
-        azureMetrics.blobUpdateConflictCount.inc();
-      }
       String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, bse.getMessage());
+      if (bse.getErrorCode() == BlobErrorCode.CONDITION_NOT_MET) {
+        /*
+          If we are here, it just means that two threads tried to update-ttl concurrently. This is ok.
+         */
+        logger.trace(error);
+        return cloudlifeVersion;
+      }
+      azureMetrics.blobUpdateTTLErrorCount.inc();
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, bse, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, bse, null);
     } catch (Throwable t) {
       azureMetrics.blobUpdateTTLErrorCount.inc();
       String error = String.format("Failed to update TTL of blob %s in Azure blob storage due to (%s)", blobLayout, t.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, t, null);
     } finally {
       storageTimer.stop();
     } // try-catch
@@ -644,6 +657,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         }
         throw cse;
       } catch (Throwable t) {
+        // Unknown error, increment the generic metric in azureMetrics
         String error = String.format("Failed to get blob metadata for %s from Azure blob storage due to %s", blobLayout, t.getMessage());
         logger.error(error);
         throw AzureCloudDestination.toCloudStorageException(error, t, azureMetrics);
@@ -714,7 +728,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     } catch (Exception e) {
       azureMetrics.absTokenPersistFailureCount.inc();
       String error = String.format("Unable to persist token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
-      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, e, null);
     }
   }
 
@@ -742,12 +756,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
          */
         return false;
       }
-      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, e, null);
     } catch (Throwable e) {
       azureMetrics.absTokenRetrieveFailureCount.inc();
       String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, e, azureMetrics);
+      throw AzureCloudDestination.toCloudStorageException(error, e, null);
     }
   }
 
