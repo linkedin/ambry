@@ -324,6 +324,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       throw new StoreException(String.format("BlobStoreStats is not enabled or closing for store %s", storeId),
           StoreErrorCodes.Store_Shutting_Down);
     }
+    logger.info("Getting valid data size by log segment at time range {} for {}", timeRange, storeId);
     Pair<Long, NavigableMap<LogSegmentName, Long>> retValue = null;
     ScanResults currentScanResults = scanResults.get();
     long referenceTimeInMs = getLogSegmentDeleteRefTimeMs(currentScanResults, timeRange);
@@ -715,8 +716,8 @@ class BlobStoreStats implements StoreStats, Closeable {
       if (indexValue.isDelete()) {
         if (keyFinalStates.containsKey(key)) {
           IndexFinalState state = keyFinalStates.get(key);
-          if (state.isUndelete() || (state.isDelete() && state.getLifeVersion() != indexValue.getLifeVersion()) || state
-              .isTtlUpdate()) {
+          if (state.isUndelete() || (state.isDelete() && state.getLifeVersion() != indexValue.getLifeVersion())
+              || state.isTtlUpdate()) {
             // This DELETE is not valid, when the final state of this storeKey is
             // 1. UNDELETE, or
             // 2. DELETE, but the current lifeVersion is not the same, or
@@ -838,9 +839,9 @@ class BlobStoreStats implements StoreStats, Closeable {
     }
 
     if (valid && !keyFinalStates.containsKey(key)) {
-      keyFinalStates.put(key, new IndexFinalState(ttlUpdateValue.getFlags(), ttlUpdateValue.
-          getOperationTimeInMs(), ttlUpdateValue.getLifeVersion(), ttlUpdateValue.getSize(),
-          ttlUpdateValue.getExpiresAtMs(), ttlUpdateValue.getOffset()));
+      keyFinalStates.put(key, new IndexFinalState(ttlUpdateValue.getFlags(), ttlUpdateValue.getOperationTimeInMs(),
+          ttlUpdateValue.getLifeVersion(), ttlUpdateValue.getSize(), ttlUpdateValue.getExpiresAtMs(),
+          ttlUpdateValue.getOffset()));
     }
     // else, valid = true because a ttl update entry with a put in another log segment is considered valid as long as
     // the put still exists (regardless of its validity)
@@ -1146,6 +1147,7 @@ class BlobStoreStats implements StoreStats, Closeable {
       } else if (expiresAtMs != Utils.Infinite_Time && deleteAtMs == Utils.Infinite_Time) {
         handleLogSegmentExpiredBucketUpdate(results, indexValue, expiresAtMs, SUBTRACT);
       } else if (expiresAtMs != Utils.Infinite_Time && deleteAtMs != Utils.Infinite_Time) {
+        // TODO: should compare expiresAtMs with deleteAtMs or deleteAtMs + deleteRetentionTime?
         if (expiresAtMs < deleteAtMs) {
           handleLogSegmentExpiredBucketUpdate(results, indexValue, expiresAtMs, SUBTRACT);
         } else {
@@ -1285,7 +1287,8 @@ class BlobStoreStats implements StoreStats, Closeable {
     public void run() {
       try {
         if (!cancelled) {
-          validDataSize.set(getValidSize(new TimeRange(System.currentTimeMillis(), getBucketSpanTimeInMs())));
+          long now = System.currentTimeMillis();
+          validDataSize.set(getValidSize(new TimeRange(now - logSegmentForecastOffsetMs, getBucketSpanTimeInMs())));
         }
       } catch (StoreException e) {
         if (e.getErrorCode().equals(StoreErrorCodes.Store_Shutting_Down)) {

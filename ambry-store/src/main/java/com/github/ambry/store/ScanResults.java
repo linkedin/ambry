@@ -101,10 +101,12 @@ class ScanResults {
   // 1. LogSegment has two delta buckets. one for deleted blobs, the other for expired blobs.
   // 2. Since we have a retention period for deleted blob, deleted delta's first bucket would start earlier than expired
   //    delta.
-  // The reason to have two delta buckets is because deleted blobs and expired blobs are invalidated at different time.
+  // The reason to have two delta buckets is that deleted blobs and expired blobs are invalidated at different time.
   // When a blob is deleted, we have to wait for a retention duration(7 days in prod) to invalidate it. But when a blob
-  // is expired, it's invalidated right aways. So when calculating valid size for log segment, we have to pass two time
-  // stamps, a delete reference time, usually is now - 7 days, and a expiry time, usually is now.
+  // is expired, it's invalidated right away. So when calculating valid size for log segment, we have to pass two time
+  // stamps, a delete reference time, usually is now - 7 days, and an expiry time, usually is now.
+  // Or can we just use one map that add the retention time to the delete operation time before passing the delete time
+  // to scan result?
   private final NavigableMap<LogSegmentName, Long> logSegmentBaseBucket = new TreeMap<>();
   private final NavigableMap<Long, NavigableMap<LogSegmentName, Long>> logSegmentDeltaBucketsForDeleted =
       new TreeMap<>();
