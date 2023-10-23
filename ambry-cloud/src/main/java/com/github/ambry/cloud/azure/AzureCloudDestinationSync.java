@@ -15,6 +15,7 @@ package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.HttpHeaderName;
 import com.azure.core.http.rest.PagedIterable;
+import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobClient;
@@ -23,10 +24,13 @@ import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.models.BlobContainerItem;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobHttpHeaders;
+import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobListDetails;
 import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.BlockBlobItem;
+import com.azure.storage.blob.models.ListBlobsOptions;
 import com.azure.storage.blob.options.BlobParallelUploadOptions;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
@@ -57,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -680,9 +685,83 @@ public class AzureCloudDestinationSync implements CloudDestination {
     throw new UnsupportedOperationException("findEntriesSince will not be implemented for AzureCloudDestinationSync");
   }
 
+  /**
+   * Erases blobs from a given list of blobs in cloud
+   * @param blobItemList List of blobs in a container
+   * @param blobContainerClient BlobContainer client
+   * @return The number of blobs erased
+   */
+  protected int eraseBlobs(List<BlobItem> blobItemList, BlobContainerClient blobContainerClient) {
+    int numBlobsPurged = 0;
+    long now = System.currentTimeMillis();
+    long gracePeriod = TimeUnit.DAYS.toMillis(cloudConfig.cloudCompactionGracePeriodDays);
+    for (BlobItem blobItem: blobItemList) {
+      Map<String, String> metadata = blobItem.getMetadata();
+      boolean eraseBlob = false;
+
+      if (metadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
+        long deletionTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_DELETION_TIME));
+        eraseBlob = (deletionTime + gracePeriod) < now;
+        if (eraseBlob) {
+          logger.trace("Erasing blob {} from Azure blob storage because of deletionTime: {} + {} < {}", deletionTime, gracePeriod, now);
+        }
+      } else if (metadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
+        long expirationTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME));
+        eraseBlob = (expirationTime + gracePeriod) < now;
+        if (eraseBlob) {
+          logger.trace("Erasing blob {} from Azure blob storage because of expirationTime: {} + {} < {}", expirationTime, gracePeriod, now);
+        }
+      }
+
+      if (eraseBlob) {
+        if (!cloudConfig.cloudCompactionDryRunEnabled) {
+          Timer.Context storageTimer = azureMetrics.blobCompactionLatency.time();
+          blobContainerClient.getBlobClient(blobItem.getName()).delete();
+          storageTimer.stop();
+          vcrMetrics.blobCompactionRate.mark();
+        }
+        numBlobsPurged += 1;
+      }
+
+    }
+    return numBlobsPurged;
+  }
+
+  /**
+   * Compacts a partition
+   * @param partitionPath the path of the partitions to compact.
+   * @return the number of blobs erased from cloud
+   * @throws CloudStorageException
+   */
   @Override
   public int compactPartition(String partitionPath) throws CloudStorageException {
-    return 0;
+    BlobContainerClient blobContainerClient = createOrGetBlobStore(partitionPath);
+    ListBlobsOptions listBlobsOptions = new ListBlobsOptions().setDetails(new BlobListDetails().setRetrieveMetadata(true));
+    String continuationToken = null;
+    int numBlobsPurged = 0, totalNumBlobs = 0;
+    Timer.Context storageTimer = azureMetrics.partitionCompactionLatency.time();
+    try {
+      logger.info("Initiating compaction of partition {} in Azure blob storage", partitionPath);
+      for (PagedResponse<BlobItem> blobItemPagedResponse :
+          blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
+        continuationToken = blobItemPagedResponse.getContinuationToken();
+        totalNumBlobs += blobItemPagedResponse.getValue().size();
+        numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient);
+        if (continuationToken == null) {
+          logger.trace("Azure blob storage continuationToken is null");
+          break;
+        }
+      }
+      logger.info("Erased {} blobs out of {} from partition {} in Azure blob storage", numBlobsPurged, totalNumBlobs, partitionPath);
+      return numBlobsPurged;
+    } catch (Throwable t) {
+      vcrMetrics.compactionFailureCount.inc();
+      String error = String.format("Failed to compact partition %s due to %s", partitionPath, t.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, t, null);
+    } finally {
+      storageTimer.stop();
+    }
   }
 
   // Azure naming rules: https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata
