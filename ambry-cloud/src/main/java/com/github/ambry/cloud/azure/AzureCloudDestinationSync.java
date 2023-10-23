@@ -440,7 +440,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
     BlobProperties blobProperties = getBlobProperties(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
     Map<String, Object> newMetadata = new HashMap<>();
-    newMetadata.put(CloudBlobMetadata.FIELD_DELETION_TIME, String.valueOf(Utils.Infinite_Time));
     newMetadata.put(CloudBlobMetadata.FIELD_LIFE_VERSION, lifeVersion);
 
     // Don't rely on the CloudBlobStore.recentCache to do the "right" thing.
@@ -475,6 +474,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
     }
 
     newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
+    /*
+      Just remove the deletion time, instead of setting it to -1.
+      It just leads to two cases in code later in compaction, for deleted blobs.
+     */
+    cloudMetadata.remove(CloudBlobMetadata.FIELD_DELETION_TIME);
 
     try {
       logger.trace("Resetting deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
@@ -543,8 +547,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
     String blobIdStr = blobLayout.blobFilePath;
     BlobProperties blobProperties = getBlobProperties(blobLayout);
     Map<String, String> cloudMetadata = blobProperties.getMetadata();
-    Map<String, Object> newMetadata = new HashMap<>();
-    newMetadata.put(CloudBlobMetadata.FIELD_EXPIRATION_TIME, String.valueOf(Utils.Infinite_Time));
 
     // Below is the correct behavior. For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
     // We should never hit this case however because ReplicaThread::applyUpdatesToBlobInLocalStore does all checks.
@@ -558,7 +560,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     }
 
     try {
-      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, newMetadata)) {
+      // preTtlUpdateValidation doesn't use the updateFields arg
+      if (!cloudUpdateValidator.validateUpdate(CloudBlobMetadata.fromMap(cloudMetadata), blobId, null)) {
         /*
           Legacy cloudBlobStore does not expect an exception. However, below is the correct behavior.
           For ref, look at BlobStore::updateTTL and ReplicaThread::applyTtlUpdate.
@@ -589,7 +592,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
       throw AzureCloudDestination.toCloudStorageException(error, e, null);
     }
 
-    newMetadata.forEach((k,v) -> cloudMetadata.put(k, String.valueOf(v)));
+    /*
+      Just remove the expiration time, instead of setting it to -1.
+      It just leads to two cases in code later in compaction and recovery, for permanent blobs.
+     */
+    cloudMetadata.remove(CloudBlobMetadata.FIELD_EXPIRATION_TIME);
 
     // lifeVersion must always be present because we add it explicitly before PUT
     short cloudlifeVersion = Short.parseShort(cloudMetadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION));
