@@ -456,8 +456,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           if cloudLifeVersion == replicaLifeVersion && deleteTime absent in cloudMetatadata, then something is wrong. Throw Life_Version_Conflict.
           if cloudLifeVersion == replicaLifeVersion && deleteTime != -1, then something is wrong. Throw Life_Version_Conflict.
          */
-        if (cloudlifeVersion == lifeVersion && cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)
-            && Long.parseLong(cloudMetadata.get(CloudBlobMetadata.FIELD_DELETION_TIME)) == Utils.Infinite_Time) {
+        if (cloudlifeVersion == lifeVersion && !cloudMetadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
           String error = String.format("Failed to undelete blob %s as it is undeleted in cloud", blobIdStr);
           logger.trace(error);
           throw AzureCloudDestination.toCloudStorageException(error, new StoreException(error, StoreErrorCodes.ID_Undeleted), null);
