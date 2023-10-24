@@ -243,13 +243,6 @@ public class CloudBlobStoreTest {
     assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2));
   }
 
-  /** Test the CloudBlobStore put method. */
-  @Test
-  public void testStorePuts() throws Exception {
-    testStorePuts(false);
-    testStorePuts(true);
-  }
-
   protected void clearContainer(PartitionId testPartitionId, AzureCloudDestinationSync azureCloudDestinationSync, VerifiableProperties verifiableProperties) {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     AzureBlobLayoutStrategy azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, new AzureCloudConfig(verifiableProperties));
@@ -302,6 +295,13 @@ public class CloudBlobStoreTest {
     for (MessageInfo messageInfo: messageInfoList) {
       assertFalse(dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
     }
+  }
+
+  /** Test the CloudBlobStore put method. */
+  @Test
+  public void testStorePuts() throws Exception {
+    testStorePuts(false);
+    testStorePuts(true);
   }
 
   /**
