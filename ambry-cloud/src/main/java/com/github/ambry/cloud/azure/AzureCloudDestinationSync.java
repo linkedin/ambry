@@ -721,6 +721,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
           vcrMetrics.blobCompactionRate.mark();
         }
         numBlobsPurged += 1;
+      } else {
+        logger.trace("Cannot erase blob {} from Azure blob storage because condition not met: {}", blobItem.getName(), eraseReason);
       }
 
     }
