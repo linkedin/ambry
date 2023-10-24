@@ -364,7 +364,7 @@ public class CloudBlobStoreTest {
       assertEquals(dryRun, dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
     }
   }
-  
+
   @Test
   public void testCompactExpiredBlobs()
       throws ReflectiveOperationException, CloudStorageException, InterruptedException, StoreException {
@@ -406,43 +406,6 @@ public class CloudBlobStoreTest {
     for (MessageInfo messageInfo: messageInfoList) {
       // if dryRun = true, then blob must exist
       assertEquals(dryRun, dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
-    }
-  }
-
-  @Test
-  public void testCompactExpiredBlobs()
-      throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
-    v2TestOnly();
-    setupCloudStore(false, false, 0, true);
-    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
-    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
-
-    long maxExpiry = System.currentTimeMillis();
-    for (int j = 0; j < 10; j++) {
-      // permanent blobs
-      // set isVcr = true so that the lifeVersion is 0
-      long now = System.currentTimeMillis();
-      long expiry = now + 1000;
-      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, expiry, refAccountId, refContainerId, false,
-          false, partitionId, now, isVcr);
-      maxExpiry = Math.max(expiry, maxExpiry);
-    }
-
-    // Put blobs
-    store.put(messageWriteSet);
-
-    // Wait for blobs to expire
-    long timeToSleep = maxExpiry - System.currentTimeMillis() + 1000; // a buffer period of 1000 to ensure expiry
-    if (timeToSleep > 0) {
-      logger.info("Sleeping for {} milliseconds for blobs to expire", timeToSleep);
-      TimeUnit.MILLISECONDS.sleep(timeToSleep);
-    }
-
-    // Compact blobs
-    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
-    assertEquals(messageInfoList.size(), dest.compactPartition(String.valueOf(partitionId.getId())));
-    for (MessageInfo messageInfo: messageInfoList) {
-      assertFalse(dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
     }
   }
 
