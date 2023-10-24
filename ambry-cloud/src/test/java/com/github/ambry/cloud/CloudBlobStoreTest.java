@@ -269,6 +269,35 @@ public class CloudBlobStoreTest {
   }
 
   @Test
+  public void testCompactPermanentBlobs()
+      throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
+    v2TestOnly();
+    this.compactionDryRun = false;
+    setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    for (int j = 0; j < 10; j++) {
+      // permanent blobs
+      // set isVcr = true so that the lifeVersion is 0
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, Utils.Infinite_Time, refAccountId, refContainerId, false,
+          false, partitionId, System.currentTimeMillis(), isVcr);
+    }
+
+    // Put blobs
+    store.put(messageWriteSet);
+    TimeUnit.SECONDS.sleep(1);
+
+
+    // Try to Compact blobs
+    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
+    assertEquals(0, dest.compactPartition(String.valueOf(partitionId.getId())));
+    for (MessageInfo messageInfo: messageInfoList) {
+      assertTrue(dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
+    }
+  }
+
+  @Test
   public void testCompactDeletedBlobs()
       throws ReflectiveOperationException, CloudStorageException, InterruptedException, StoreException {
     testCompactDeletedBlobs(false);
