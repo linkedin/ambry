@@ -133,7 +133,7 @@ public class NonBlockingRouterMetrics {
   public final Counter offlineRepairOnTtlUpdateCount;
   public final Counter offlineRepairOnTtlUpdateErrorCount;
   public final Counter backgroundDeleterNotFoundCount;
-  public final Counter backgroundDeleterNotAvailableCount;
+  public final Counter backgroundDeleterExceptionCount;
   public final Counter operationAbortCount;
   public final Counter routerRequestErrorCount;
 
@@ -484,8 +484,8 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OfflineRepairOnTtlUpdateErrorCount"));
     backgroundDeleterNotFoundCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterNotFoundCount"));
-    backgroundDeleterNotAvailableCount =
-        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterNotAvailableCount"));
+    backgroundDeleterExceptionCount =
+        metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "BackgroundDeleterExceptionCount"));
 
     // Performance metrics for operation managers.
     putManagerPollTimeMs = metricRegistry.histogram(MetricRegistry.name(PutManager.class, "PutManagerPollTimeMs"));

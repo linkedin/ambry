@@ -472,7 +472,7 @@ class DeleteOperation {
             // We may hit AmbryUnavailable or other exceptions.
             // Since we don't do any further thing for it anyway, swallow the exception.
             // Just emit with metrics and log error message
-            routerMetrics.backgroundDeleterNotAvailableCount.inc();
+            routerMetrics.backgroundDeleterExceptionCount.inc();
             logger.error("Background deleter hit exception {} {}", blobId, code);
           }
           operationException.set(null);
