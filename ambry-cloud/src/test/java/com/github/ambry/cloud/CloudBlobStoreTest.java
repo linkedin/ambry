@@ -365,7 +365,7 @@ public class CloudBlobStoreTest {
       assertEquals(dryRun, dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
     }
   }
-
+  
   @Test
   public void testCompactExpiredBlobs()
       throws ReflectiveOperationException, CloudStorageException, InterruptedException, StoreException {
