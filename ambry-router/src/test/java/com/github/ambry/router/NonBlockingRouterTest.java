@@ -846,9 +846,23 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   /**
    * Test that even when a composite blob put succeeds, the slipped put data chunks are deleted.
+   * Background deleter hits Blob_Not_Found and swallow the error.
    */
   @Test
-  public void testSuccessfulPutDataChunkDelete() throws Exception {
+  public void testSuccessfulPutDataChunkDeleteCase1() throws Exception {
+    testSuccessfulPutDataChunkDelete(ServerErrorCode.Blob_Not_Found);
+  }
+
+  /**
+   * Test that even when a composite blob put succeeds, the slipped put data chunks are deleted.
+   * Background deleter hits Replica_Unavailable and swallow the error.
+   */
+  @Test
+  public void testSuccessfulPutDataChunkDeleteCase2() throws Exception {
+    testSuccessfulPutDataChunkDelete(ServerErrorCode.Replica_Unavailable);
+  }
+
+  public void testSuccessfulPutDataChunkDelete(ServerErrorCode backgroundDeletorError) throws Exception {
     try {
       // This test is somehow probabilistic. Since it is not possible to devise a mocking to enforce the occurrence of
       // slipped puts given we cannot control the order of the hosts requests are sent and not all requests are sent when
@@ -890,10 +904,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       for (int i = 0; i < NUM_MAX_ATTEMPTS; i++) {
         serverErrorList.add(ServerErrorCode.Unknown_Error);
         serverErrorList.add(ServerErrorCode.No_Error);
-        deleteErrorList.add(ServerErrorCode.Blob_Not_Found);
+        deleteErrorList.add(backgroundDeletorError);
       }
 
-      // return NOT_FOUND for background deleter. Test router will ignore NOT_FOUND for background deleter.
+      // return error for background deleter. Test router will ignore NOT_FOUND or Unavailable for background deleter.
       DataNodeId healthyLocalNode = null;
       for (DataNodeId dataNodeId : dataNodeIds) {
         MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());

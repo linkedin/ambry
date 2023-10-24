@@ -460,13 +460,22 @@ class DeleteOperation {
           }
         }
 
-        // ignore the NOT_FOUND error for the background deleter.
+        // Handle the exceptions of the background deleter
         if (serviceId != null && serviceId.startsWith(BackgroundDeleteRequest.SERVICE_ID_PREFIX)
-            && operationException.get() != null
-            && ((RouterException) operationException.get()).getErrorCode() == RouterErrorCode.BlobDoesNotExist) {
+            && operationException.get() != null) {
+          RouterErrorCode code = ((RouterException) operationException.get()).getErrorCode();
+          if (code == RouterErrorCode.BlobDoesNotExist) {
+            // NOT_FOUND is not an error for the background deleter.
+            routerMetrics.backgroundDeleterNotFoundCount.inc();
+            logger.info("Ignore BlobNotFound error from the background deleter. {}", blobId);
+          } else {
+            // We may hit AmbryUnavailable or other exceptions.
+            // Since we don't do any further thing for it anyway, swallow the exception.
+            // Just emit with metrics and log error message
+            routerMetrics.backgroundDeleterNotAvailableCount.inc();
+            logger.error("Background deleter hit exception {} {}", blobId, code);
+          }
           operationException.set(null);
-          routerMetrics.backgroundDeleterNotFoundCount.inc();
-          logger.info("Ignore BlobNotFound error from the background deleter. {}", blobId);
         }
       }
       if (QuotaUtils.postProcessCharge(quotaChargeCallback)) {
