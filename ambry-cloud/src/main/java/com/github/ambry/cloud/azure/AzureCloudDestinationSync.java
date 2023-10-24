@@ -132,7 +132,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param partitionId Ambry partition
    * @return blobContainerClient
    */
-  protected BlobContainerClient getBlobStore(String partitionId) {
+  public BlobContainerClient getBlobStore(String partitionId) {
     BlobContainerClient blobContainerClient = azureStorageClient.getBlobContainerClient(String.valueOf(partitionId));
     try {
       if (!blobContainerClient.exists()) {
@@ -698,24 +698,24 @@ public class AzureCloudDestinationSync implements CloudDestination {
     for (BlobItem blobItem: blobItemList) {
       Map<String, String> metadata = blobItem.getMetadata();
       boolean eraseBlob = false;
+      String eraseReason = null;
 
       if (metadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
         long deletionTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_DELETION_TIME));
         eraseBlob = (deletionTime + gracePeriod) < now;
-        if (eraseBlob) {
-          logger.trace("Erasing blob {} from Azure blob storage because of deletionTime: {} + {} < {}", deletionTime, gracePeriod, now);
-        }
+        eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_DELETION_TIME, deletionTime, gracePeriod, now);
       } else if (metadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME)) {
         long expirationTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME));
         eraseBlob = (expirationTime + gracePeriod) < now;
-        if (eraseBlob) {
-          logger.trace("Erasing blob {} from Azure blob storage because of expirationTime: {} + {} < {}", expirationTime, gracePeriod, now);
-        }
+        eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime, gracePeriod, now);
       }
 
       if (eraseBlob) {
-        if (!cloudConfig.cloudCompactionDryRunEnabled) {
+        if (cloudConfig.cloudCompactionDryRunEnabled) {
+          logger.trace("[DRY-RUN] Can erase blob {} from Azure blob storage because {}", blobItem.getName(), eraseReason);
+        } else {
           Timer.Context storageTimer = azureMetrics.blobCompactionLatency.time();
+          logger.trace("Erasing blob {} from Azure blob storage because {}", blobItem.getName(), eraseReason);
           blobContainerClient.getBlobClient(blobItem.getName()).delete();
           storageTimer.stop();
           vcrMetrics.blobCompactionRate.mark();
@@ -735,8 +735,19 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   @Override
   public int compactPartition(String partitionPath) throws CloudStorageException {
-    BlobContainerClient blobContainerClient = createOrGetBlobStore(partitionPath);
-    ListBlobsOptions listBlobsOptions = new ListBlobsOptions().setDetails(new BlobListDetails().setRetrieveMetadata(true));
+    /*
+      BlobContainerStrategy must be PARTITION, otherwise compaction will not work because it cannot find the container in ABS.
+      For BlobContainerStrategy to be CONTAINER, we need a blobId to extract accountId and containerId and we don't have that here.
+     */
+    if (AzureBlobLayoutStrategy.BlobContainerStrategy.get(azureCloudConfig.azureBlobContainerStrategy) !=
+        AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION) {
+      logger.info("Unable to compact because BlobContainerStrategy is {} when it must be {}", azureCloudConfig.azureBlobContainerStrategy,
+          AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION);
+      return 0;
+    }
+    BlobContainerClient blobContainerClient = createOrGetBlobStore(azureBlobLayoutStrategy.getClusterAwareAzureContainerName(partitionPath));
+    ListBlobsOptions listBlobsOptions = new ListBlobsOptions().setDetails(new BlobListDetails()
+        .setRetrieveMetadata(true)).setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
     String continuationToken = null;
     int numBlobsPurged = 0, totalNumBlobs = 0;
     Timer.Context storageTimer = azureMetrics.partitionCompactionLatency.time();
@@ -748,7 +759,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         totalNumBlobs += blobItemPagedResponse.getValue().size();
         numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient);
         if (continuationToken == null) {
-          logger.trace("Azure blob storage continuationToken is null");
+          logger.trace("Reached end-of-partition as Azure blob storage continuationToken is null");
           break;
         }
       }

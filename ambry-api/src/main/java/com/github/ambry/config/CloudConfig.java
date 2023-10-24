@@ -451,7 +451,7 @@ public class CloudConfig {
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
     cloudCompactionGracePeriodDays = verifiableProperties.getInt(CLOUD_COMPACTION_GRACE_PERIOD_DAYS, 7);
-    cloudCompactionDryRunEnabled = verifiableProperties.getBoolean(CLOUD_BLOB_COMPACTION_ENABLED, true);
+    cloudCompactionDryRunEnabled = verifiableProperties.getBoolean(CLOUD_COMPACTION_DRY_RUN_ENABLED, true);
     ambryBackupVersion = verifiableProperties.getString(AMBRY_BACKUP_VERSION, DEFAULT_AMBRY_BACKUP_VERSION);
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
     cloudDestinationFactoryClass =
