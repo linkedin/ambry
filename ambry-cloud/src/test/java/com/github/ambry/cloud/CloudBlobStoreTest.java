@@ -13,8 +13,15 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.core.http.rest.PagedResponse;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobListDetails;
+import com.azure.storage.blob.models.ListBlobsOptions;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
@@ -59,7 +66,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -84,6 +90,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -91,7 +98,6 @@ import org.junit.runners.Parameterized;
 import org.mockito.invocation.InvocationOnMock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static org.mockito.Mockito.mockingDetails;
 
 import static com.github.ambry.cloud.CloudTestUtil.*;
 import static com.github.ambry.replication.ReplicationTest.*;
@@ -230,12 +236,44 @@ public class CloudBlobStoreTest {
   protected void v1TestOnly() {
     assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1));
   }
+  protected void v2TestOnly() {
+    assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2));
+  }
 
   /** Test the CloudBlobStore put method. */
   @Test
   public void testStorePuts() throws Exception {
     testStorePuts(false);
     testStorePuts(true);
+  }
+
+  @Test
+  public void testCompactDeletedBlobs()
+      throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
+    v2TestOnly();
+    setupCloudStore(false, false, 0, true);
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    for (int j = 0; j < 10; j++) {
+      // permanent blobs
+      // set isVcr = true so that the lifeVersion is 0
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, Utils.Infinite_Time, refAccountId, refContainerId, false,
+          false, partitionId, System.currentTimeMillis(), isVcr);
+    }
+
+    // Put blobs
+    store.put(messageWriteSet);
+    TimeUnit.SECONDS.sleep(1);
+
+    // Delete blobs
+    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
+    store.delete(messageInfoList);
+
+    // Compact blobs
+    assertEquals(messageInfoList.size(), dest.compactPartition(String.valueOf(partitionId.getId())));
+    for (MessageInfo messageInfo: messageInfoList) {
+      assertFalse(dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
+    }
   }
 
   /**
