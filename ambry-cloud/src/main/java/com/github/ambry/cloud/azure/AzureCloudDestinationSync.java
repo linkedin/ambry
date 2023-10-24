@@ -747,21 +747,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
           AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION);
       return 0;
     }
-    BlobContainerClient blobContainerClient = createOrGetBlobStore(azureBlobLayoutStrategy.getClusterAwareAzureContainerName(partitionPath));
+    String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(partitionPath);
+    BlobContainerClient blobContainerClient = createOrGetBlobStore(containerName);
     ListBlobsOptions listBlobsOptions = new ListBlobsOptions().setDetails(new BlobListDetails()
         .setRetrieveMetadata(true)).setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
     String continuationToken = null;
     int numBlobsPurged = 0, totalNumBlobs = 0;
     Timer.Context storageTimer = azureMetrics.partitionCompactionLatency.time();
     try {
-      logger.info("Initiating compaction of partition {} in Azure blob storage", partitionPath);
+      logger.info("Initiating compaction of partition {} in Azure blob storage", containerName);
       for (PagedResponse<BlobItem> blobItemPagedResponse :
           blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
         continuationToken = blobItemPagedResponse.getContinuationToken();
+        logger.trace("Acquired continuation-token {} for partition {}", continuationToken, containerName);
         totalNumBlobs += blobItemPagedResponse.getValue().size();
         numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient);
         if (continuationToken == null) {
-          logger.trace("Reached end-of-partition as Azure blob storage continuationToken is null");
+          logger.trace("Reached end-of-partition {} as Azure blob storage continuationToken is null", containerName);
           break;
         }
       }
