@@ -698,7 +698,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     for (BlobItem blobItem: blobItemList) {
       Map<String, String> metadata = blobItem.getMetadata();
       boolean eraseBlob = false;
-      String eraseReason = null;
+      String eraseReason = "NONE";
 
       if (metadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
         long deletionTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_DELETION_TIME));
