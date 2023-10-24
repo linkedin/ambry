@@ -131,7 +131,7 @@ public class CloudBlobStoreTest {
 
   protected String ambryBackupVersion;
   protected int currentCacheLimit;
-
+  protected Properties properties;
   /**
    * Test parameters
    * Version 1 = Legacy VCR code and tests
@@ -158,7 +158,7 @@ public class CloudBlobStoreTest {
    */
   private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, int cacheLimit, boolean start)
       throws ReflectiveOperationException {
-    Properties properties = new Properties();
+    properties = new Properties();
     // Required clustermap properties
     setBasicProperties(properties);
     // Require encryption for uploading
@@ -180,6 +180,9 @@ public class CloudBlobStoreTest {
       properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
       properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "PARTITION");
       properties.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1");
+      properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(false));
+      properties.setProperty(CloudConfig.CLOUD_COMPACTION_GRACE_PERIOD_DAYS, String.valueOf(0));
+      properties.setProperty(AzureCloudConfig.AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, String.valueOf(1));
       /*
        * snalli@:
        * Just disable the cache. It just adds another layer of complexity and more of a nuisance than any help.
@@ -247,11 +250,36 @@ public class CloudBlobStoreTest {
     testStorePuts(true);
   }
 
+  protected void clearContainer(PartitionId testPartitionId, AzureCloudDestinationSync azureCloudDestinationSync, VerifiableProperties verifiableProperties) {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    AzureBlobLayoutStrategy azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, new AzureCloudConfig(verifiableProperties));
+    String blobContainerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(String.valueOf(testPartitionId.getId()));
+    BlobContainerClient blobContainerClient = azureCloudDestinationSync.getBlobStore(blobContainerName);
+    if (blobContainerClient == null) {
+      logger.info("Blob container {} does not exist", blobContainerName);
+      return;
+    }
+    ListBlobsOptions listBlobsOptions = new ListBlobsOptions().setDetails(new BlobListDetails().setRetrieveMetadata(true));
+    String continuationToken = null;
+    for (PagedResponse<BlobItem> blobItemPagedResponse :
+        blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
+      continuationToken = blobItemPagedResponse.getContinuationToken();
+      for (BlobItem blobItem : blobItemPagedResponse.getValue()) {
+        blobContainerClient.getBlobClient(blobItem.getName()).delete();
+      }
+      if (continuationToken == null) {
+        logger.info("Reached end-of-partition as Azure blob storage continuationToken is null");
+        break;
+      }
+    }
+  }
+
   @Test
   public void testCompactDeletedBlobs()
       throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
     v2TestOnly();
     setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
     MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
 
     for (int j = 0; j < 10; j++) {
