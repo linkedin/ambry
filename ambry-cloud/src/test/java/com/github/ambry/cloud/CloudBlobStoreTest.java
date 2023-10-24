@@ -239,7 +239,7 @@ public class CloudBlobStoreTest {
     assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1));
   }
   protected void v2TestOnly() {
-    assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2));
+    assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && new AzuriteUtils().connectToAzurite());
   }
 
   protected void clearContainer(PartitionId testPartitionId, AzureCloudDestinationSync azureCloudDestinationSync, VerifiableProperties verifiableProperties) {
