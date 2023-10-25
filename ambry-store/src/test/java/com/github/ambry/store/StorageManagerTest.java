@@ -1312,9 +1312,10 @@ public class StorageManagerTest {
         DataNodeConfigSourceType.PROPERTY_STORE, false, 1000);
 
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
-        parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-            clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
+                clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
     // Mock a state change listener to throw an exception
     PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
     doThrow(new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
@@ -1690,7 +1691,7 @@ public class StorageManagerTest {
      *                              go through standard workflow in the method.
      */
     MockClusterParticipant(Boolean setSealStateReturnVal, Boolean setStopStateReturnVal) {
-      super(clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry(),
+      super(mock(HelixClusterManager.class), clusterMapConfig, new MockHelixManagerFactory(), new MetricRegistry(),
           parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
               clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
       this.setSealStateReturnVal = setSealStateReturnVal;
