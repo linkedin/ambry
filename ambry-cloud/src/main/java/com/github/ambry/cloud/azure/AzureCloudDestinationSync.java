@@ -34,6 +34,8 @@ import com.azure.storage.blob.models.ListBlobsOptions;
 import com.azure.storage.blob.options.BlobParallelUploadOptions;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountUtils;
 import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudContainerCompactor;
@@ -46,10 +48,12 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,8 +61,10 @@ import java.io.OutputStream;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -79,6 +85,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected ConcurrentHashMap<String, BlobContainerClient> partitionToAzureStore;
   protected VcrMetrics vcrMetrics;
   protected final AtomicBoolean shutdownCompaction = new AtomicBoolean(false);
+  protected AccountService accountService;
+  protected StoreConfig storeConfig;
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
 
   /**
@@ -87,7 +95,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param metricRegistry
    * @param clusterMap
    */
-  public AzureCloudDestinationSync(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry, ClusterMap clusterMap)
+  public AzureCloudDestinationSync(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      ClusterMap clusterMap, AccountService accountService)
       throws ReflectiveOperationException {
     /*
      * These are the configs to be changed for vcr-2.0
@@ -101,9 +110,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, as repl-logic avoids duplicate messages any ways
      *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
      */
+    this.accountService = accountService;
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.cloudConfig = new CloudConfig(verifiableProperties);
+    this.storeConfig = new StoreConfig(verifiableProperties);
     this.clusterMap = clusterMap;
     this.clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.partitionToAzureStore = new ConcurrentHashMap<>();
@@ -693,7 +704,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param blobContainerClient BlobContainer client
    * @return The number of blobs erased
    */
-  protected int eraseBlobs(List<BlobItem> blobItemList, BlobContainerClient blobContainerClient) {
+  protected int eraseBlobs(List<BlobItem> blobItemList, BlobContainerClient blobContainerClient, Set<Pair<Short, Short>> deletedContainers) {
     int numBlobsPurged = 0;
     long now = System.currentTimeMillis();
     long gracePeriod = TimeUnit.DAYS.toMillis(cloudConfig.cloudCompactionGracePeriodDays);
@@ -714,6 +725,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
         long expirationTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME));
         eraseBlob = (expirationTime + gracePeriod) < now;
         eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime, gracePeriod, now);
+      } else {
+        Pair<Short, Short> shortShortPair = new Pair<>(Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
+            Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)));
+        eraseBlob = deletedContainers.contains(shortShortPair);
+        eraseReason = String.format("account = %s, container = %s was deleted", shortShortPair.getFirst(), shortShortPair.getSecond());
       }
 
       if (eraseBlob) {
@@ -735,6 +751,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
     return numBlobsPurged;
   }
 
+  protected Set<Pair<Short, Short>> getDeletedContainers() {
+    Set<Container> deletedContainers = AccountUtils.getDeprecatedContainers(accountService, storeConfig.storeContainerDeletionRetentionDays);
+    Set<Pair<Short, Short>> accountContainerPairSet = new HashSet<>();
+    for (Container container: deletedContainers) {
+      accountContainerPairSet.add(new Pair<>(container.getParentAccountId(), container.getId()));
+    }
+    return accountContainerPairSet;
+  }
+
   /**
    * Compacts a partition
    * @param partitionPath the path of the partitions to compact.
@@ -753,6 +778,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           AzureBlobLayoutStrategy.BlobContainerStrategy.PARTITION);
       return 0;
     }
+    Set<Pair<Short, Short>> deletedContainers = getDeletedContainers();
     String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(partitionPath);
     BlobContainerClient blobContainerClient = createOrGetBlobStore(containerName);
     ListBlobsOptions listBlobsOptions = new ListBlobsOptions().setDetails(new BlobListDetails()
@@ -777,7 +803,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           break;
         }
 
-        numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient);
+        numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient, deletedContainers);
         if (continuationToken == null) {
           logger.trace("Reached end-of-partition {} as Azure blob storage continuationToken is null", containerName);
           break;

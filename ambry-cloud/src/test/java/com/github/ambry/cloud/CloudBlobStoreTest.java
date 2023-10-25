@@ -19,6 +19,9 @@ import com.azure.storage.blob.models.BlobItem;
 import com.azure.storage.blob.models.BlobListDetails;
 import com.azure.storage.blob.models.ListBlobsOptions;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.Container;
+import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
@@ -94,6 +97,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,6 +136,8 @@ public class CloudBlobStoreTest {
   protected int currentCacheLimit;
   protected Properties properties;
   protected boolean compactionDryRun = true;
+
+  protected AccountService accountService = mock(AccountService.class);
 
   /**
    * Test parameters
@@ -205,7 +211,7 @@ public class CloudBlobStoreTest {
       currentCacheLimit = 0;
       properties.setProperty(CloudConfig.CLOUD_RECENT_BLOB_CACHE_LIMIT, String.valueOf(currentCacheLimit));
       // Azure container name will be <clusterName>-<partitionId>, so dev-0 for this test
-      dest = new AzuriteUtils().getAzuriteClient(properties, metricRegistry, clusterMap);
+      dest = new AzuriteUtils().getAzuriteClient(properties, metricRegistry, clusterMap, accountService);
     }
     store = new CloudBlobStore(verifiableProperties, partitionId, dest, clusterMap, vcrMetrics);
     if (start) {
@@ -265,6 +271,57 @@ public class CloudBlobStoreTest {
         logger.info("Reached end-of-partition as Azure blob storage continuationToken is null");
         break;
       }
+    }
+  }
+
+  @Test
+  public void testCompactDeletedAccountContainer()
+      throws ReflectiveOperationException, CloudStorageException, InterruptedException, StoreException {
+    testCompactDeletedAccountContainer(true);
+    testCompactDeletedAccountContainer(false);
+  }
+
+  protected void testCompactDeletedAccountContainer(boolean deleteContainer)
+      throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
+    v2TestOnly();
+    this.compactionDryRun = false;
+    setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    for (int j = 0; j < 10; j++) {
+      // permanent blobs
+      // set isVcr = true so that the lifeVersion is 0
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, Utils.Infinite_Time, refAccountId, refContainerId, false,
+          false, partitionId, System.currentTimeMillis(), isVcr);
+    }
+
+    // Put blobs
+    store.put(messageWriteSet);
+    TimeUnit.SECONDS.sleep(1);
+
+    if (deleteContainer) {
+      Container container = new ContainerBuilder()
+          .setParentAccountId(refAccountId)
+          .setId(refContainerId)
+          .setName("testContainer")
+          .setStatus(Container.ContainerStatus.DELETE_IN_PROGRESS)
+          .build();
+      when(accountService.getContainersByStatus(any())).thenReturn(Collections.singleton(container));
+    } else {
+      when(accountService.getContainersByStatus(any())).thenReturn(Collections.emptySet());
+    }
+
+    // Compact blobs
+    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
+    if (deleteContainer) {
+      assertEquals(messageInfoList.size(), dest.compactPartition(String.valueOf(partitionId.getId())));
+    } else {
+      assertEquals(0, dest.compactPartition(String.valueOf(partitionId.getId())));
+    }
+    for (MessageInfo messageInfo: messageInfoList) {
+      // if deleteContainer = true, then blob does not exist
+      assertEquals(deleteContainer, !dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
     }
   }
 

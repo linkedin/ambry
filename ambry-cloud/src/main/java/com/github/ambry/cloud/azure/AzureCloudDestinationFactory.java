@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.VcrMetrics;
@@ -42,13 +43,15 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
 
   protected VerifiableProperties verifiableProperties;
   protected MetricRegistry metricRegistry;
+  protected AccountService accountService;
+
   /**
    * Constructor for {@link AzureCloudDestinationFactory}
    * @param verifiableProperties properties containing configs.
    * @param metricRegistry metric registry.
    */
   public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
-      ClusterMap clusterMap) {
+      ClusterMap clusterMap, AccountService accountService) {
     this.cloudConfig = new CloudConfig(verifiableProperties);
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
     this.clusterName = new ClusterMapConfig(verifiableProperties).clusterMapClusterName;
@@ -58,6 +61,17 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
     this.clusterMap = clusterMap;
     this.verifiableProperties = verifiableProperties;
     this.metricRegistry = metricRegistry;
+    this.accountService = accountService;
+  }
+
+  /**
+   * Constructor for {@link AzureCloudDestinationFactory}
+   * @param verifiableProperties properties containing configs.
+   * @param metricRegistry metric registry.
+   */
+  public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      ClusterMap clusterMap) {
+    this(verifiableProperties, metricRegistry, clusterMap, null);
   }
 
   @Override
@@ -74,7 +88,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
         throw (e instanceof IllegalStateException) ? (IllegalStateException) e : new IllegalStateException(e);
       }
     } else if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2)) {
-      return new AzureCloudDestinationSync(verifiableProperties, metricRegistry, clusterMap);
+      return new AzureCloudDestinationSync(verifiableProperties, metricRegistry, clusterMap, accountService);
     }  else {
       // Invalid backup version
       throw new RuntimeException(String.format("Invalid azure backup version %s", cloudConfig.ambryBackupVersion));
