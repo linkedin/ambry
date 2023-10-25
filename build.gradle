@@ -486,6 +486,7 @@ project(':ambry-cloud') {
             project(':ambry-server')
 
         // use compile to include these jars during compile-time and make it avlb for ambry-tools
+        // https://mvnrepository.com/artifact/com.azure/azure-sdk-bom
         compile platform("com.azure:azure-sdk-bom:$azureSdkBom")
         compile "com.azure:azure-cosmos"
         compile "com.azure:azure-identity"
