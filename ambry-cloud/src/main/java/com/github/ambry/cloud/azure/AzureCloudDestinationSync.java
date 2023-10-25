@@ -772,6 +772,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
         continuationToken = blobItemPagedResponse.getContinuationToken();
         logger.debug("Acquired continuation-token {} for partition {}", continuationToken, containerName);
         totalNumBlobs += blobItemPagedResponse.getValue().size();
+        if (shutdownCompaction.get()) {
+          logger.info("Shut down compaction for partition {}", containerName);
+          break;
+        }
+
         numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient);
         if (continuationToken == null) {
           logger.trace("Reached end-of-partition {} as Azure blob storage continuationToken is null", containerName);
