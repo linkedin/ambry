@@ -55,6 +55,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.DataNodeConfigSourceType.*;
@@ -1182,8 +1183,9 @@ public class HelixBootstrapUpgradeToolTest {
     props.setProperty("clustermap.retry.disable.partition.completion.backoff.ms", Integer.toString(100));
     props.setProperty("clustermap.data.node.config.source.type", dataNodeConfigSourceType.name());
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
-        "localhost:" + zkInfo.getPort(), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(Mockito.mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
+            new MetricRegistry(), "localhost:" + zkInfo.getPort(), true);
     PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter =
         dataNodeConfigSourceType == DataNodeConfigSourceType.INSTANCE_CONFIG ? null
             : new PropertyStoreToDataNodeConfigAdapter("localhost:" + zkInfo.getPort(), clusterMapConfig);
