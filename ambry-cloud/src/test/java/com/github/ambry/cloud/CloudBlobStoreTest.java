@@ -97,7 +97,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -298,7 +297,6 @@ public class CloudBlobStoreTest {
 
     // Put blobs
     store.put(messageWriteSet);
-    TimeUnit.SECONDS.sleep(1);
 
     if (deleteContainer) {
       Container container = new ContainerBuilder()
@@ -343,8 +341,6 @@ public class CloudBlobStoreTest {
 
     // Put blobs
     store.put(messageWriteSet);
-    TimeUnit.SECONDS.sleep(1);
-
 
     // Try to Compact blobs
     dest.stopCompaction();
@@ -373,8 +369,6 @@ public class CloudBlobStoreTest {
 
     // Put blobs
     store.put(messageWriteSet);
-    TimeUnit.SECONDS.sleep(1);
-
 
     // Try to Compact blobs
     List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
@@ -428,6 +422,7 @@ public class CloudBlobStoreTest {
     testCompactExpiredBlobs(false);
     testCompactExpiredBlobs(true);
   }
+
   protected void testCompactExpiredBlobs(boolean dryRun)
       throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
     v2TestOnly();
