@@ -109,7 +109,7 @@ public class AmbryStateModelFactoryTest {
       public void onPartitionBecomeDroppedFromOffline(String partitionName) {
         // no op
       }
-    });
+    }, mock(HelixClusterManager.class));
     StateModel stateModel;
     switch (config.clustermapStateModelDefinition) {
       case ClusterMapConfig.OLD_STATE_MODEL_DEF:
@@ -164,7 +164,7 @@ public class AmbryStateModelFactoryTest {
     when(mockMessage.getResourceName()).thenReturn(resourceName);
     AmbryPartitionStateModel stateModel =
         new AmbryPartitionStateModel(resourceName, partitionName, mockHelixParticipant, config,
-            new ConcurrentHashMap<>());
+            new ConcurrentHashMap<>(), mock(HelixClusterManager.class));
     mockHelixParticipant.setInitialLocalPartitions(new HashSet<>(Collections.singletonList(partitionName)));
     assertStateCount(Arrays.asList("offline"), Arrays.asList(1), metricRegistry);
 
@@ -252,10 +252,12 @@ public class AmbryStateModelFactoryTest {
     ConcurrentMap<String, String> partitionToResource = new ConcurrentHashMap<>();
 
     AmbryPartitionStateModel stateModel =
-        new AmbryPartitionStateModel(resourceName, partitionName, mockHelixParticipant, config, partitionToResource);
+        new AmbryPartitionStateModel(resourceName, partitionName, mockHelixParticipant, config, partitionToResource,
+            mock(HelixClusterManager.class));
 
     AmbryPartitionStateModel newStateModel =
-        new AmbryPartitionStateModel(newResourceName, partitionName, mockHelixParticipant, config, partitionToResource);
+        new AmbryPartitionStateModel(newResourceName, partitionName, mockHelixParticipant, config, partitionToResource,
+            mock(HelixClusterManager.class));
 
     // resource move to bootstrap then new resource start transition
     mockHelixParticipant.setInitialLocalPartitions(new HashSet<>(Collections.singletonList(partitionName)));
@@ -335,6 +337,78 @@ public class AmbryStateModelFactoryTest {
     // call reset method again to mock the case where same partition is reset multiple times during zk disconnection or shutdown
     newStateModel.reset();
     assertStateCount(Arrays.asList("offline"), Arrays.asList(1), metricRegistry);
+    MockHelixManagerFactory.overrideGetHelixManager = false;
+  }
+
+  @Test
+  public void testDuplicatePartitionIdsWithClustermap() {
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    MetricRegistry metricRegistry = new MetricRegistry();
+    MockHelixParticipant.metricRegistry = metricRegistry;
+    DataNodeConfig mockDataNodeConfig = Mockito.mock(DataNodeConfig.class);
+    Set<String> disabledPartitionSet = new HashSet<>();
+    Set<String> enabledPartitionSet = new HashSet<>();
+    when(mockDataNodeConfig.getDisabledReplicas()).thenReturn(disabledPartitionSet);
+    DataNodeConfigSource mockConfigSource = Mockito.mock(DataNodeConfigSource.class);
+    when(mockConfigSource.get(anyString())).thenReturn(mockDataNodeConfig);
+    HelixAdmin mockHelixAdmin = Mockito.mock(HelixAdmin.class);
+    InstanceConfig mockInstanceConfig = Mockito.mock(InstanceConfig.class);
+    doAnswer(invocation -> {
+      String partitionName = invocation.getArgument(1);
+      boolean enable = invocation.getArgument(2);
+      if (enable) {
+        enabledPartitionSet.add(partitionName);
+      }
+      return null;
+    }).when(mockInstanceConfig).setInstanceEnabledForPartition(any(), any(), anyBoolean());
+    when(mockHelixAdmin.getInstanceConfig(anyString(), anyString())).thenReturn(mockInstanceConfig);
+    when(mockHelixAdmin.setInstanceConfig(anyString(), anyString(), any())).thenReturn(true);
+    HelixManager mockHelixManager = Mockito.mock(HelixManager.class);
+    when(mockHelixManager.getClusterManagmentTool()).thenReturn(mockHelixAdmin);
+    MockHelixManagerFactory.overrideGetHelixManager = true;
+    MockHelixParticipant.mockHelixFactory = new MockHelixManagerFactory(mockConfigSource, mockHelixManager);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(config);
+    HelixParticipantMetrics participantMetrics = mockHelixParticipant.getHelixParticipantMetrics();
+
+    String resourceName = "0";
+    String partitionName = "1";
+    String newResourceName = "10";
+    Message mockMessage = Mockito.mock(Message.class);
+    when(mockMessage.getPartitionName()).thenReturn(partitionName);
+    when(mockMessage.getResourceName()).thenReturn(resourceName);
+
+    Message newMockMessage = Mockito.mock(Message.class);
+    when(newMockMessage.getPartitionName()).thenReturn(partitionName);
+    when(newMockMessage.getResourceName()).thenReturn(newResourceName);
+    ConcurrentMap<String, String> partitionToResource = new ConcurrentHashMap<>();
+    HelixClusterManager clusterManager = mock(HelixClusterManager.class);
+    // The cluster map returns new resource name
+    when(clusterManager.getResourceForPartitionInLocalDc(anyString())).thenReturn(newResourceName);
+
+    AmbryPartitionStateModel stateModel =
+        new AmbryPartitionStateModel(resourceName, partitionName, mockHelixParticipant, config, partitionToResource,
+            clusterManager);
+
+    AmbryPartitionStateModel newStateModel =
+        new AmbryPartitionStateModel(newResourceName, partitionName, mockHelixParticipant, config, partitionToResource,
+            clusterManager);
+
+    // resource move to bootstrap then new resource start transition
+    mockHelixParticipant.setInitialLocalPartitions(new HashSet<>(Collections.singletonList(partitionName)));
+    assertStateCount(Arrays.asList("offline"), Arrays.asList(1), metricRegistry);
+    // resource: OFFLINE -> BOOTSTRAP, should not work, since the cluster map return new resource name for this partition
+    stateModel.onBecomeBootstrapFromOffline(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "bootstrap"), Arrays.asList(1, 0), metricRegistry);
+    // resource: BOOTSTRAP -> STANDBY, should not work
+    stateModel.onBecomeStandbyFromBootstrap(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "bootstrap", "standby"), Arrays.asList(1, 0, 0), metricRegistry);
+    // new resource: OFFLINE -> BOOTSTRAP, should work
+    newStateModel.onBecomeBootstrapFromOffline(newMockMessage, null);
+    assertStateCount(Arrays.asList("offline", "bootstrap", "standby"), Arrays.asList(0, 1, 0), metricRegistry);
+
+    // resource: OFFLINE -> DROPPED, should not work
+    stateModel.onBecomeDroppedFromOffline(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "bootstrap", "standby"), Arrays.asList(0, 1, 0), metricRegistry);
     MockHelixManagerFactory.overrideGetHelixManager = false;
   }
 

@@ -78,7 +78,7 @@ public class AmbryPartitionStateModel extends StateModel {
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
     this.partitionNameToResourceName = partitionNameToResourceName;
-    this.clusterManager = clusterManager;
+    this.clusterManager = Objects.requireNonNull(clusterManager, "Clustermap is missing");
   }
 
   @Transition(to = "BOOTSTRAP", from = "OFFLINE")

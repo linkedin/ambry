@@ -85,7 +85,7 @@ public class AmbryReplicaSyncUpManagerTest {
     mockHelixParticipant.replicaSyncUpService = replicaSyncUpService;
     stateModel =
         new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockHelixParticipant, clusterMapConfig,
-            new ConcurrentHashMap<>());
+            new ConcurrentHashMap<>(), mock(HelixClusterManager.class));
     mockMessage = Mockito.mock(Message.class);
     when(mockMessage.getPartitionName()).thenReturn(partition.toPathString());
     when(mockMessage.getResourceName()).thenReturn(RESOURCE_NAME);
