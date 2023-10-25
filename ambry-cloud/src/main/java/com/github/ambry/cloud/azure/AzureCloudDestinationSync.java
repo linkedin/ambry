@@ -753,6 +753,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
     return numBlobsPurged;
   }
 
+  /**
+   *
+   * @return Returns containers from account-service which are in DELETE_IN_PROGRESS state for N days
+   */
   protected Set<Pair<Short, Short>> getDeletedContainers() {
     Set<Container> deletedContainers = AccountUtils.getDeprecatedContainers(accountService, storeConfig.storeContainerDeletionRetentionDays);
     Set<Pair<Short, Short>> accountContainerPairSet = new HashSet<>();
