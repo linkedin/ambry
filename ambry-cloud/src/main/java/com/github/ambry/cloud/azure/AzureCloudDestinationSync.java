@@ -62,6 +62,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -77,6 +78,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected ClusterMapConfig clusterMapConfig;
   protected ConcurrentHashMap<String, BlobContainerClient> partitionToAzureStore;
   protected VcrMetrics vcrMetrics;
+  protected final AtomicBoolean shutdownCompaction = new AtomicBoolean(false);
   public static final Logger logger = LoggerFactory.getLogger(AzureCloudDestinationSync.class);
 
   /**
@@ -696,6 +698,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
     long now = System.currentTimeMillis();
     long gracePeriod = TimeUnit.DAYS.toMillis(cloudConfig.cloudCompactionGracePeriodDays);
     for (BlobItem blobItem: blobItemList) {
+      if (shutdownCompaction.get()) {
+        logger.info("Shut down compaction for container {}", blobContainerClient.getBlobContainerName());
+        break;
+      }
       Map<String, String> metadata = blobItem.getMetadata();
       boolean eraseBlob = false;
       String eraseReason = "NONE";
@@ -761,6 +767,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
         continuationToken = blobItemPagedResponse.getContinuationToken();
         logger.debug("Acquired continuation-token {} for partition {}", continuationToken, containerName);
         totalNumBlobs += blobItemPagedResponse.getValue().size();
+        if (shutdownCompaction.get()) {
+          logger.info("Shut down compaction for partition {}", containerName);
+          break;
+        }
+
         numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient);
         if (continuationToken == null) {
           logger.trace("Reached end-of-partition {} as Azure blob storage continuationToken is null", containerName);
@@ -864,7 +875,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public void stopCompaction() {
-
+    shutdownCompaction.set(true);
   }
 
   @Override
