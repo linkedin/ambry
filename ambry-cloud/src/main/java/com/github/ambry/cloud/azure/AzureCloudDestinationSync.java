@@ -717,7 +717,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       Pair<Short, Short> shortShortPair = new Pair<>(Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)));
       boolean eraseBlob = false;
-      String eraseReason = "NONE";
+      String eraseReason = null;
 
       if (metadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME)) {
         long deletionTime = Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_DELETION_TIME));
@@ -729,9 +729,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
         eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime, gracePeriod, now);
       } else if (deletedContainers.contains(shortShortPair)) {
         eraseBlob = deletedContainers.contains(shortShortPair);
-        eraseReason = String.format("account = %s, container = %s was deleted", shortShortPair.getFirst(), shortShortPair.getSecond());
+        eraseReason = String.format("account = %s, deleted_container = %s", shortShortPair.getFirst(), shortShortPair.getSecond());
       } else {
         // nothing to do, blob cannot be deleted
+        logger.trace("[COMPACT] No reason to erase blob {} from Azure blob storage", blobItem.getName());
       }
 
       if (eraseBlob) {
@@ -746,7 +747,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
         }
         numBlobsPurged += 1;
       } else {
-        logger.trace("[COMPACT] Cannot erase blob {} from Azure blob storage because condition not met: {}", blobItem.getName(), eraseReason);
+        if (eraseReason != null) {
+          logger.trace("[COMPACT] Cannot erase blob {} from Azure blob storage because condition not met: {}", blobItem.getName(), eraseReason);
+        }
       }
 
     }
