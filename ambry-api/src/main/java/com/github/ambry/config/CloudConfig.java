@@ -278,7 +278,7 @@ public class CloudConfig {
   /*
    * Grace period for erasing blobs
    */
-  public static final String CLOUD_COMPACTION_GRACE_PERIOD_DAYS = "cloudCompactionGracePeriodDays";
+  public static final String CLOUD_COMPACTION_GRACE_PERIOD_DAYS = "cloud.compaction.grace.period.days";
   @Config(CLOUD_COMPACTION_GRACE_PERIOD_DAYS)
   public final int cloudCompactionGracePeriodDays;
 
