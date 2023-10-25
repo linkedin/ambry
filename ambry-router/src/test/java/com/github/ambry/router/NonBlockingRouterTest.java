@@ -3598,7 +3598,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           deletesDoneLatch.countDown();
         }
       };
-      router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
+      NonBlockingRouterMetrics localMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
+      router = new NonBlockingRouter(routerConfig, localMetrics,
           new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
               CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
           cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
@@ -3656,10 +3657,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       // Now, wait AWAIT_TIMEOUT_MS to see if any blob is deleted.
-      // Suppose on-demand replication won't get triggered. So all the blob deletion will fail.
-      Assert.assertFalse("No blob can be deleted." + AWAIT_TIMEOUT_MS, deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      Assert.assertEquals(deletesDoneLatch.getCount(), dataChunkNumber);
-      Assert.assertEquals(blobsThatAreDeleted.entrySet().size(), 0);
+      // Suppose on-demand replication won't get triggered.
+      // The background blob deletion will hit exception. Right now we swallow the background deleter exception and emit metrics.
+      Assert.assertTrue("We swallow background deleter exception." + AWAIT_TIMEOUT_MS,
+          deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      // we should hit background deleter exceptions
+      Assert.assertEquals(localMetrics.backgroundDeleterExceptionCount.getCount(), dataChunkNumber);
+      Assert.assertEquals(deletesDoneLatch.getCount(), 0);
+      Assert.assertEquals(blobsThatAreDeleted.entrySet().size(), dataChunkNumber);
     } finally {
       if (router != null) {
         router.close();
