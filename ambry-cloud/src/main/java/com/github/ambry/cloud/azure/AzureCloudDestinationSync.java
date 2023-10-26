@@ -710,7 +710,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     long gracePeriod = TimeUnit.DAYS.toMillis(cloudConfig.cloudCompactionGracePeriodDays);
     for (BlobItem blobItem: blobItemList) {
       if (shutdownCompaction.get()) {
-        logger.info("[COMPACT] Shut down compaction for container {}", blobContainerClient.getBlobContainerName());
+        logger.info("[COMPACT][2] Shut down compaction for partition {}", blobContainerClient.getBlobContainerName());
         break;
       }
       Map<String, String> metadata = blobItem.getMetadata();
@@ -728,7 +728,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         eraseBlob = (expirationTime + gracePeriod) < now;
         eraseReason = String.format("%s: (%s + %s) < %s", CloudBlobMetadata.FIELD_EXPIRATION_TIME, expirationTime, gracePeriod, now);
       } else if (deletedContainers.contains(shortShortPair)) {
-        eraseBlob = deletedContainers.contains(shortShortPair);
+        eraseBlob = true;
         eraseReason = String.format("account = %s, deleted_container = %s", shortShortPair.getFirst(), shortShortPair.getSecond());
       } else {
         // nothing to do, blob cannot be deleted
@@ -746,10 +746,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
           vcrMetrics.blobCompactionRate.mark();
         }
         numBlobsPurged += 1;
-      } else {
-        if (eraseReason != null) {
-          logger.trace("[COMPACT] Cannot erase blob {} from Azure blob storage because condition not met: {}", blobItem.getName(), eraseReason);
-        }
+      } else if (eraseReason != null) {
+        logger.trace("[COMPACT] Cannot erase blob {} from Azure blob storage because condition not met: {}", blobItem.getName(), eraseReason);
       }
 
     }
@@ -796,7 +794,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     int numBlobsPurged = 0, totalNumBlobs = 0;
     Timer.Context storageTimer = azureMetrics.partitionCompactionLatency.time();
     try {
-      logger.info("[COMPACT] Initiating compaction of partition {} in Azure blob storage", containerName);
+      logger.info("[COMPACT] Compacting partition {} in Azure blob storage", containerName);
       for (PagedResponse<BlobItem> blobItemPagedResponse :
           blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
         if (shutdownCompaction.get()) {
