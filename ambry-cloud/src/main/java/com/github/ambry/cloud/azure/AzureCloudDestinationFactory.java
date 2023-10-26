@@ -49,6 +49,8 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
    * Constructor for {@link AzureCloudDestinationFactory}
    * @param verifiableProperties properties containing configs.
    * @param metricRegistry metric registry.
+   * @param clusterMap Cluster map object
+   * @param accountService Account service client object
    */
   public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       ClusterMap clusterMap, AccountService accountService) {
@@ -68,6 +70,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
    * Constructor for {@link AzureCloudDestinationFactory}
    * @param verifiableProperties properties containing configs.
    * @param metricRegistry metric registry.
+   * @param clusterMap Cluster map object
    */
   public AzureCloudDestinationFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
       ClusterMap clusterMap) {
