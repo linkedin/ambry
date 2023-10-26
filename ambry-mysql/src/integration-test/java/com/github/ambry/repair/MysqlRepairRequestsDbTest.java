@@ -24,6 +24,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.MysqlRepairRequestsDbConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -52,12 +53,13 @@ public class MysqlRepairRequestsDbTest {
   private static final Random random = new Random();
   private MysqlRepairRequestsDb repairRequestsDb = null;
   private final InMemAccountService accountService;
+  private final int accountNumber = 5;
   MockClusterMap clusterMap;
   private final MockTime time = new MockTime();
 
   public MysqlRepairRequestsDbTest() throws Exception {
     accountService = new InMemAccountService(false, false);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < accountNumber; i++) {
       accountService.createAndAddRandomAccount();
     }
     clusterMap = new MockClusterMap();
@@ -83,7 +85,7 @@ public class MysqlRepairRequestsDbTest {
    */
   @Test
   public void testPutGetDeleteSequence() throws Exception {
-    prepareDb(100);
+    prepareDb(1000);
 
     List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     List<Long> partitions = partitionIds.stream().map(p -> p.getId()).collect(Collectors.toList());
@@ -127,8 +129,9 @@ public class MysqlRepairRequestsDbTest {
     // we should run ODR to fix the requests on the nodes except the source replica
     Set<Long> partitionsNeedRepair = repairRequestsDb.getPartitionsNeedRepair(thisNodeName, thisNodePort, partitions);
     for (PartitionId id : partitionIds) {
-      List<RepairRequestRecord> recordFromStore =
-          repairRequestsDb.getRepairRequestsExcludingHost((int) id.getId(), thisNodeName, thisNodePort);
+      Pair<List<RepairRequestRecord>, Long> dbRecords =
+          repairRequestsDb.getRepairRequestsExcludingHost((int) id.getId(), thisNodeName, thisNodePort, 0);
+      List<RepairRequestRecord> recordFromStore = dbRecords.getFirst();
       Set<Long> partitionsNeedRepairUpdated;
       Map<String, RepairRequestRecord> orgRecords = records.get((int) id.getId());
       if (recordFromStore.size() > 0) {
@@ -178,6 +181,108 @@ public class MysqlRepairRequestsDbTest {
     }
 
     records.clear();
+  }
+
+  @Test
+  public void testGetPagination() throws Exception {
+    int pageSize = 9;
+    prepareDb(pageSize);
+
+    List<PartitionId> partitionIds = clusterMap.getWritablePartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
+    int blobsPerContainer = 50;
+
+    String hostName1 = "localhost1";
+    String hostName2 = "localhost2";
+    int hostPort1 = 6024;
+    int hostPort2 = 6025;
+    // simulate the requests which will be sent on this host (thisNodeName, thisNodePort)
+    String thisNodeName = hostName1;
+    int thisNodePort = hostPort1;
+    long totalRecords = 0;
+
+    // Prepare RepairRequests and insert them to the DB.
+    Map<String, RepairRequestRecord> needFixRecords = new HashMap<>();
+    for (Account account : accountService.getAllAccounts()) {
+      totalRecords += account.getContainerCount() * blobsPerContainer;
+      for (Container container : account.getAllContainers()) {
+        for (int i = 0; i < blobsPerContainer; i++) {
+          PartitionId partitionId = partitionIds.get(random.nextInt(partitionIds.size()));
+          String blobId = generateBlobId(account, container, partitionId);
+          RepairRequestRecord.OperationType operationType = i % 2 == 0 ? TtlUpdateRequest : DeleteRequest;
+          long operationTime = System.currentTimeMillis() - random.nextInt(1000);
+          short lifeVersion = -1;
+          long expirationTime =
+              i % 2 == 0 ? Utils.Infinite_Time : System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1);
+          String hostName = random.nextInt(2) == 0 ? hostName1 : hostName2;
+          int hostPort = random.nextInt(2) == 0 ? hostPort1 : hostPort2;
+          RepairRequestRecord record =
+              new RepairRequestRecord(blobId, (int) partitionId.getId(), hostName, hostPort, operationType,
+                  operationTime, lifeVersion, expirationTime);
+          repairRequestsDb.putRepairRequests(record);
+
+          if (!hostName.equals(thisNodeName) || hostPort != thisNodePort) {
+            needFixRecords.put(blobId, record);
+          }
+        }
+      }
+    }
+    // prepared at least two pages
+    assertTrue(totalRecords > needFixRecords.size());
+    assertTrue(needFixRecords.size() > pageSize * 2);
+
+    // on one node with name as thisNodeName and port as thisNodePort,
+    // read the database but exclude all the records which has the source replica as this node.
+    // we should run ODR to fix the requests on the nodes except the source replica
+
+    // don't remove the db record. Simulate the case ODR cannot fix any record.
+    for (PartitionId id : partitionIds) {
+      Long token = (long) 0;
+      do {
+        Pair<List<RepairRequestRecord>, Long> dbRecords =
+            repairRequestsDb.getRepairRequestsExcludingHost((int) id.getId(), thisNodeName, thisNodePort, token);
+        List<RepairRequestRecord> recordFromStore = dbRecords.getFirst();
+        token = dbRecords.getSecond();
+
+        for (RepairRequestRecord record : recordFromStore) {
+          RepairRequestRecord org = needFixRecords.get(record.getBlobId());
+          if (org != null) {
+            assertEquals("Record does not match expectation ", org, record);
+            assertTrue("should exclude this node",
+                !thisNodeName.equals(record.getSourceHostName()) || thisNodePort != record.getSourceHostPort());
+            needFixRecords.remove(record.getBlobId());
+          }
+        }
+      } while (token != 0);
+    }
+    assertEquals(needFixRecords.size(), 0);
+
+    // repeat the same test but remove the records
+    for (PartitionId id : partitionIds) {
+      Long token = (long) 0;
+      do {
+        Pair<List<RepairRequestRecord>, Long> dbRecords =
+            repairRequestsDb.getRepairRequestsExcludingHost((int) id.getId(), thisNodeName, thisNodePort, token);
+        List<RepairRequestRecord> recordFromStore = dbRecords.getFirst();
+        token = dbRecords.getSecond();
+        for (RepairRequestRecord record : recordFromStore) {
+          repairRequestsDb.removeRepairRequests(record.getBlobId(), record.getOperationType());
+        }
+      } while (token != 0);
+    }
+
+    // double check no any repairable record exists
+    for (PartitionId id : partitionIds) {
+      Pair<List<RepairRequestRecord>, Long> dbRecords =
+          repairRequestsDb.getRepairRequestsExcludingHost((int) id.getId(), thisNodeName, thisNodePort, 0);
+      List<RepairRequestRecord> recordFromStore = dbRecords.getFirst();
+      long token = dbRecords.getSecond();
+
+      assertEquals(token, 0);
+      assertEquals(recordFromStore.size(), 0);
+    }
+
+    // cleanup the db
+    cleanup();
   }
 
   /**

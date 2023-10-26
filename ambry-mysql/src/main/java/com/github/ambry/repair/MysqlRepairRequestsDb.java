@@ -18,6 +18,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.MysqlRepairRequestsDbConfig;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.sql.Connection;
@@ -60,7 +61,6 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   private static final String LIFE_VERSION = "lifeVersion";
   private static final String EXPIRATION_TYPE = "expirationTime";
 
-  // LOCAL_CONSISTENCY_TODO continue the Get from one token
   /**
    * Select the records for one partition with the oldest operation time.
    */
@@ -79,17 +79,18 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
 
   /**
    * Select the records for one partition but exclude the record with this source replica(hostname + hostport)
+   * support query pagination
    */
   // @formatter:off
-  private static final String GET_REQUESTS_QUERY_EXCLUDE_SOURCE_REPLICA = String.format(""
+  private static final String GET_REQUESTS_QUERY_EXCLUDE_SOURCE_REPLICA_BY_PAGE = String.format(""
       + "SELECT %s, %s, %s, %s, %s, %s, %s "
       + "FROM %s "
-      + "WHERE %s = ? and (%s != ? or %s != ?) "
+      + "WHERE %s = ? and (%s != ? or %s != ?) and (%s >= ?) "
       + "ORDER BY %s ASC "
       + "LIMIT ?",
       BLOB_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TYPE, OPERATION_TIME, LIFE_VERSION, EXPIRATION_TYPE,
       REPAIR_REQUESTS_TABLE,
-      PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT,
+      PARTITION_ID, SOURCE_HOST_NAME, SOURCE_HOST_PORT, OPERATION_TIME,
       OPERATION_TIME);
   // @formatter:on
 
@@ -238,18 +239,22 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
    * @param partitionId partition id
    * @param sourceHostName the host name of the source replica
    * @param sourceHostPort the host port of the source replica
-   * @return the oldest {@link RepairRequestRecord}s.
+   * @param pageToken the token for the next page
+   * @return pair of the oldest {@link RepairRequestRecord}s and token for the next page
    */
   @Override
-  public List<RepairRequestRecord> getRepairRequestsExcludingHost(long partitionId, String sourceHostName,
-      int sourceHostPort) throws SQLException {
+  public Pair<List<RepairRequestRecord>, Long> getRepairRequestsExcludingHost(long partitionId, String sourceHostName,
+      int sourceHostPort, long pageToken) throws SQLException {
     long startTime = time.milliseconds();
+    Long nextPageToken = (long) 0;
     try (Connection connection = dataSource.getConnection()) {
-      try (PreparedStatement statement = connection.prepareStatement(GET_REQUESTS_QUERY_EXCLUDE_SOURCE_REPLICA)) {
+      try (PreparedStatement statement = connection.prepareStatement(
+          GET_REQUESTS_QUERY_EXCLUDE_SOURCE_REPLICA_BY_PAGE)) {
         statement.setLong(1, partitionId);
         statement.setString(2, sourceHostName);
         statement.setInt(3, sourceHostPort);
-        statement.setInt(4, config.listMaxResults);
+        statement.setTimestamp(4, new Timestamp(pageToken));
+        statement.setInt(5, config.listMaxResults + 1);
         try (ResultSet resultSet = statement.executeQuery()) {
           List<RepairRequestRecord> result = new ArrayList<>();
           while (resultSet.next()) {
@@ -263,10 +268,22 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
             RepairRequestRecord record =
                 new RepairRequestRecord(blobId, partitionId, hostName, hostPort, operationType, operationTime.getTime(),
                     lifeVersion, expirationTime != null ? expirationTime.getTime() : Utils.Infinite_Time);
-            result.add(record);
+            if (result.size() < config.listMaxResults) {
+              result.add(record);
+            }
+            // update the pagination token
+            // LOCAL_CONSISTENCY_TODO
+            // one risk is that all the records has the same operation time and RepairRequest handler fails to fix any of them.
+            // then, the next page won't advance
+            nextPageToken = record.getOperationTimeMs();
           }
           metrics.repairDbGetRequestTimeInMs.update(time.milliseconds() - startTime);
-          return result;
+
+          // restart from the beginning.
+          if (result.size() < config.listMaxResults) {
+            nextPageToken = (long) 0;
+          }
+          return new Pair(result, nextPageToken);
         }
       }
     } catch (SQLException e) {

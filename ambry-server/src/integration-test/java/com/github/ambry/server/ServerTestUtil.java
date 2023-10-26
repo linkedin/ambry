@@ -5144,6 +5144,9 @@ final class ServerTestUtil {
     BlobId expiredId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
         properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
+    BlobId notFoundId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
+        BlobId.BlobDataType.DATACHUNK);
 
     BlobId blobId;
     long operationTime;
@@ -5218,7 +5221,13 @@ final class ServerTestUtil {
       checkDeleteRecord(targetChannel, clusterMap, blobId, operationTime);
       cluster.time.sleep(1000);
 
-      // 4. On the sourceDataNode, the blob is ttlUpdated. On the targetDataNode, it has the blob.
+      // 4. Error case. The repair gets in too late and the blob is compacted already.
+      blobId = notFoundId;
+      addRepairRequestForTtlUpdate(db, sourceDataNode, blobId, operationTime, Utils.Infinite_Time);
+      cluster.time.sleep(1000);
+      // will file to repair. we emit the metrics and repair continues to run for other requests
+
+      // 5. On the sourceDataNode, the blob is ttlUpdated. On the targetDataNode, it has the blob.
       // When the Repair starts, the blob is expired.
       // But ODR inherits the original operation time when it was first called. So BlobStore.updateTtl won't reject it.
       blobId = expiredId;
@@ -5298,6 +5307,7 @@ final class ServerTestUtil {
 
       // although we check the notification. DB update is in the RepairRequestsSender not in the handler threads.
       // wait for some time more.
+      // We should still have one record which is case 4 error case.
       DataSource dataSource = db.getDataSource();
       long numberOfRows = 0;
       String rowQuerySql = "SELECT COUNT(*) as total FROM ambry_repair_requests";
@@ -5311,7 +5321,9 @@ final class ServerTestUtil {
             }
           }
         }
-      } while (numberOfRows != 0);
+      } while (numberOfRows != 1);
+
+      resetRepairRequestsDb(db);
 
       // Test is done.
       // restart the blobs stores
@@ -5360,6 +5372,17 @@ final class ServerTestUtil {
           new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, localDc, time);
       MysqlRepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
 
+      resetRepairRequestsDb(repairRequestsDb);
+      return repairRequestsDb;
+    } catch (SQLException e) {
+      throw e;
+    } catch (IOException e) {
+      throw e;
+    }
+  }
+
+  static MysqlRepairRequestsDb resetRepairRequestsDb(MysqlRepairRequestsDb repairRequestsDb) throws Exception {
+    try {
       // cleanup the database
       DataSource dataSource = repairRequestsDb.getDataSource();
 
@@ -5369,8 +5392,6 @@ final class ServerTestUtil {
 
       return repairRequestsDb;
     } catch (SQLException e) {
-      throw e;
-    } catch (IOException e) {
       throw e;
     }
   }
