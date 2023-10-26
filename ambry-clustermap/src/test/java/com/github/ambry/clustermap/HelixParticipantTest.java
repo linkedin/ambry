@@ -432,7 +432,7 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixClusterAgentsFactory(clusterMapConfig, new MetricRegistry()).getClusterParticipants();
+      new HelixClusterAgentsFactoryWithMockClusterMap(clusterMapConfig, new MetricRegistry()).getClusterParticipants();
       fail("Instantiation should have failed");
     } catch (IOException e) {
       // OK
@@ -457,8 +457,8 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", jsonObject.toString(2));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      List<ClusterParticipant> participants =
-          new HelixClusterAgentsFactory(clusterMapConfig, helixManagerFactory).getClusterParticipants();
+      List<ClusterParticipant> participants = new HelixClusterAgentsFactoryWithMockClusterMap(clusterMapConfig,
+          helixManagerFactory).getClusterParticipants();
       assertEquals("Number of participants is not expected", 2, participants.size());
     } catch (Exception e) {
       throw e;
@@ -511,7 +511,8 @@ public class HelixParticipantTest {
 
     DataNodeConfig.DiskConfig diskConfig = dataNodeConfig.getDiskConfigs().values().iterator().next();
     String existingReplicaName = diskConfig.getReplicaConfigs().keySet().iterator().next();
-    PartitionId correspondingPartition = testPartitionLayout.getPartitionLayout().getPartitions(null)
+    PartitionId correspondingPartition = testPartitionLayout.getPartitionLayout()
+        .getPartitions(null)
         .stream()
         .filter(p -> p.toPathString().equals(existingReplicaName))
         .findFirst()
@@ -1089,5 +1090,20 @@ public class HelixParticipantTest {
   private void listIsExpectedSize(List<String> list, int expectedSize, String listName) {
     assertNotNull(listName + " is null", list);
     assertEquals(listName + " doesn't have the expected size " + expectedSize, expectedSize, list.size());
+  }
+
+  private static class HelixClusterAgentsFactoryWithMockClusterMap extends HelixClusterAgentsFactory {
+    public HelixClusterAgentsFactoryWithMockClusterMap(ClusterMapConfig config, HelixFactory helixFactory) {
+      super(config, helixFactory);
+    }
+
+    public HelixClusterAgentsFactoryWithMockClusterMap(ClusterMapConfig config, MetricRegistry metricRegistry) {
+      super(config, metricRegistry);
+    }
+
+    @Override
+    public HelixClusterManager getClusterMap() throws IOException {
+      return mock(HelixClusterManager.class);
+    }
   }
 }
