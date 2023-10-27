@@ -13,8 +13,15 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.core.http.rest.PagedResponse;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobListDetails;
+import com.azure.storage.blob.models.ListBlobsOptions;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
@@ -59,7 +66,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.MockTime;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -91,7 +97,6 @@ import org.junit.runners.Parameterized;
 import org.mockito.invocation.InvocationOnMock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static org.mockito.Mockito.mockingDetails;
 
 import static com.github.ambry.cloud.CloudTestUtil.*;
 import static com.github.ambry.replication.ReplicationTest.*;
@@ -125,6 +130,8 @@ public class CloudBlobStoreTest {
 
   protected String ambryBackupVersion;
   protected int currentCacheLimit;
+  protected Properties properties;
+  protected boolean compactionDryRun = true;
 
   /**
    * Test parameters
@@ -152,7 +159,7 @@ public class CloudBlobStoreTest {
    */
   private void setupCloudStore(boolean inMemoryDestination, boolean requireEncryption, int cacheLimit, boolean start)
       throws ReflectiveOperationException {
-    Properties properties = new Properties();
+    properties = new Properties();
     // Required clustermap properties
     setBasicProperties(properties);
     // Require encryption for uploading
@@ -174,6 +181,9 @@ public class CloudBlobStoreTest {
       properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
       properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "PARTITION");
       properties.setProperty(CloudConfig.CLOUD_MAX_ATTEMPTS, "1");
+      properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(this.compactionDryRun));
+      properties.setProperty(CloudConfig.CLOUD_COMPACTION_GRACE_PERIOD_DAYS, String.valueOf(0));
+      properties.setProperty(AzureCloudConfig.AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, String.valueOf(1));
       /*
        * snalli@:
        * Just disable the cache. It just adds another layer of complexity and more of a nuisance than any help.
@@ -229,6 +239,174 @@ public class CloudBlobStoreTest {
 
   protected void v1TestOnly() {
     assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1));
+  }
+  protected void v2TestOnly() {
+    assumeTrue(ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && new AzuriteUtils().connectToAzurite());
+  }
+
+  protected void clearContainer(PartitionId testPartitionId, AzureCloudDestinationSync azureCloudDestinationSync, VerifiableProperties verifiableProperties) {
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    AzureBlobLayoutStrategy azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, new AzureCloudConfig(verifiableProperties));
+    String blobContainerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(String.valueOf(testPartitionId.getId()));
+    BlobContainerClient blobContainerClient = azureCloudDestinationSync.getBlobStore(blobContainerName);
+    if (blobContainerClient == null) {
+      logger.info("Blob container {} does not exist", blobContainerName);
+      return;
+    }
+    ListBlobsOptions listBlobsOptions = new ListBlobsOptions().setDetails(new BlobListDetails().setRetrieveMetadata(true));
+    String continuationToken = null;
+    for (PagedResponse<BlobItem> blobItemPagedResponse :
+        blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
+      continuationToken = blobItemPagedResponse.getContinuationToken();
+      for (BlobItem blobItem : blobItemPagedResponse.getValue()) {
+        blobContainerClient.getBlobClient(blobItem.getName()).delete();
+      }
+      if (continuationToken == null) {
+        logger.info("Reached end-of-partition as Azure blob storage continuationToken is null");
+        break;
+      }
+    }
+  }
+
+  @Test
+  public void testCompactionShutdown()
+      throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
+    v2TestOnly();
+    this.compactionDryRun = false;
+    setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    for (int j = 0; j < 10; j++) {
+      // permanent blobs
+      // set isVcr = true so that the lifeVersion is 0
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, Utils.Infinite_Time, refAccountId, refContainerId, false,
+          false, partitionId, System.currentTimeMillis(), isVcr);
+    }
+
+    // Put blobs
+    store.put(messageWriteSet);
+    TimeUnit.SECONDS.sleep(1);
+
+
+    // Try to Compact blobs
+    dest.stopCompaction();
+    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
+    assertEquals(0, dest.compactPartition(String.valueOf(partitionId.getId())));
+    for (MessageInfo messageInfo: messageInfoList) {
+      assertTrue(dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
+    }
+  }
+
+  @Test
+  public void testCompactPermanentBlobs()
+      throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
+    v2TestOnly();
+    this.compactionDryRun = false;
+    setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    for (int j = 0; j < 10; j++) {
+      // permanent blobs
+      // set isVcr = true so that the lifeVersion is 0
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, Utils.Infinite_Time, refAccountId, refContainerId, false,
+          false, partitionId, System.currentTimeMillis(), isVcr);
+    }
+
+    // Put blobs
+    store.put(messageWriteSet);
+    TimeUnit.SECONDS.sleep(1);
+
+
+    // Try to Compact blobs
+    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
+    assertEquals(0, dest.compactPartition(String.valueOf(partitionId.getId())));
+    for (MessageInfo messageInfo: messageInfoList) {
+      assertTrue(dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
+    }
+  }
+
+  @Test
+  public void testCompactDeletedBlobs()
+      throws ReflectiveOperationException, CloudStorageException, InterruptedException, StoreException {
+    testCompactDeletedBlobs(false);
+    testCompactDeletedBlobs(true);
+  }
+
+  protected void testCompactDeletedBlobs(boolean dryRun)
+      throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
+    v2TestOnly();
+    this.compactionDryRun = dryRun;
+    setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    for (int j = 0; j < 10; j++) {
+      // permanent blobs
+      // set isVcr = true so that the lifeVersion is 0
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, Utils.Infinite_Time, refAccountId, refContainerId, false,
+          false, partitionId, System.currentTimeMillis(), isVcr);
+    }
+
+    // Put blobs
+    store.put(messageWriteSet);
+    TimeUnit.SECONDS.sleep(1);
+
+    // Delete blobs
+    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
+    store.delete(messageInfoList);
+
+    // Compact blobs
+    assertEquals(messageInfoList.size(), dest.compactPartition(String.valueOf(partitionId.getId())));
+    for (MessageInfo messageInfo: messageInfoList) {
+      // if dryRun = true, then blob must exist
+      assertEquals(dryRun, dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
+    }
+  }
+
+  @Test
+  public void testCompactExpiredBlobs()
+      throws ReflectiveOperationException, CloudStorageException, InterruptedException, StoreException {
+    testCompactExpiredBlobs(false);
+    testCompactExpiredBlobs(true);
+  }
+  protected void testCompactExpiredBlobs(boolean dryRun)
+      throws ReflectiveOperationException, StoreException, CloudStorageException, InterruptedException {
+    v2TestOnly();
+    this.compactionDryRun = dryRun;
+    setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    long maxExpiry = System.currentTimeMillis();
+    for (int j = 0; j < 10; j++) {
+      // permanent blobs
+      // set isVcr = true so that the lifeVersion is 0
+      long now = System.currentTimeMillis();
+      long expiry = now + 1000;
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, expiry, refAccountId, refContainerId, false,
+          false, partitionId, now, isVcr);
+      maxExpiry = Math.max(expiry, maxExpiry);
+    }
+
+    // Put blobs
+    store.put(messageWriteSet);
+
+    // Wait for blobs to expire
+    long timeToSleep = maxExpiry - System.currentTimeMillis() + 1000; // a buffer period of 1000 to ensure expiry
+    if (timeToSleep > 0) {
+      logger.info("Sleeping for {} milliseconds for blobs to expire", timeToSleep);
+      TimeUnit.MILLISECONDS.sleep(timeToSleep);
+    }
+
+    // Compact blobs
+    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
+    assertEquals(messageInfoList.size(), dest.compactPartition(String.valueOf(partitionId.getId())));
+    for (MessageInfo messageInfo: messageInfoList) {
+      // if dryRun = true, then blob must exist
+      assertEquals(dryRun, dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
+    }
   }
 
   /** Test the CloudBlobStore put method. */

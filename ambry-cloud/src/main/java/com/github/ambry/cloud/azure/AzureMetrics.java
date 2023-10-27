@@ -92,8 +92,12 @@ public class AzureMetrics {
       "DeprecatedContainerCompactionFailureCount";
   public static final String DEPRECATED_CONTAINER_COMPACTION_SUCCESS_COUNT =
       "DeprecatedContainerCompactionSuccessCount";
+  public static final String BLOB_COMPACTION_LATENCY = "BlobCompactionLatency";
+  public static final String PARTITION_COMPACTION_LATENCY = "PartitionCompactionLatency";
 
   // Metrics
+  public final Timer blobCompactionLatency;
+  public final Timer partitionCompactionLatency;
   public final Counter blobUploadRequestCount;
   public final Counter blobUploadSuccessCount;
   public final Meter blobUploadSuccessRate;
@@ -169,6 +173,8 @@ public class AzureMetrics {
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
 
+    blobCompactionLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_COMPACTION_LATENCY));
+    partitionCompactionLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, PARTITION_COMPACTION_LATENCY));
     blobUploadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_REQUEST_COUNT));
     blobUploadSuccessCount =

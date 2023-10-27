@@ -131,6 +131,10 @@ public class CloudConfig {
   @Default("false")
   public final boolean cloudIsVcr;
 
+  public static final String CLOUD_COMPACTION_DRY_RUN_ENABLED = "cloud.compaction.dry.run.enabled";
+  @Config(CLOUD_COMPACTION_DRY_RUN_ENABLED)
+  public final boolean cloudCompactionDryRunEnabled;
+
   /**
    * The cloud destination factory class name.
    */
@@ -270,6 +274,13 @@ public class CloudConfig {
   @Config(CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS)
   @Default("10")
   public final int cloudBlobCompactionShutdownTimeoutSecs;
+
+  /*
+   * Grace period for erasing blobs
+   */
+  public static final String CLOUD_COMPACTION_GRACE_PERIOD_DAYS = "cloud.compaction.grace.period.days";
+  @Config(CLOUD_COMPACTION_GRACE_PERIOD_DAYS)
+  public final int cloudCompactionGracePeriodDays;
 
   /*
    * Max number of days in the past compaction should consider.
@@ -439,6 +450,8 @@ public class CloudConfig {
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
+    cloudCompactionGracePeriodDays = verifiableProperties.getInt(CLOUD_COMPACTION_GRACE_PERIOD_DAYS, 7);
+    cloudCompactionDryRunEnabled = verifiableProperties.getBoolean(CLOUD_COMPACTION_DRY_RUN_ENABLED, true);
     ambryBackupVersion = verifiableProperties.getString(AMBRY_BACKUP_VERSION, DEFAULT_AMBRY_BACKUP_VERSION);
     cloudIsVcr = verifiableProperties.getBoolean(CLOUD_IS_VCR, false);
     cloudDestinationFactoryClass =

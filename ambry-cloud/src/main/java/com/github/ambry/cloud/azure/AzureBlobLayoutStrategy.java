@@ -170,7 +170,7 @@ public class AzureBlobLayoutStrategy {
    * @param inputName the input container name.
    * @return a container name scoped to the cluster.
    */
-  private String getClusterAwareAzureContainerName(String inputName) {
+  public String getClusterAwareAzureContainerName(String inputName) {
     String containerName = clusterName + containerNameSeparator + inputName;
     return containerName.toLowerCase();
   }

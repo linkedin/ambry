@@ -217,6 +217,10 @@ public class AzureCloudConfig {
       return storageAccountInfoList;
   }
 
+  public static final String AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE = "azure.blob.storage.max.results.per.page";
+  @Config(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE)
+  public final int azureBlobStorageMaxResultsPerPage;
+
   /**
    * The Azure Blob Storage connection string.
    */
@@ -416,6 +420,8 @@ public class AzureCloudConfig {
   public double azureStorageClientRefreshFactor;
 
   public AzureCloudConfig(VerifiableProperties verifiableProperties) {
+    // 5000 is the default size of Azure blob storage
+    azureBlobStorageMaxResultsPerPage = verifiableProperties.getInt(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, 5000);
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT, ""); // just add a default "" else instantiation fails
     cosmosDatabase = verifiableProperties.getString(COSMOS_DATABASE, ""); // just add a default "" else instantiation fails
