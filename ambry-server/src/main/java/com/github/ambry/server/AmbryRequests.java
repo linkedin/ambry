@@ -1141,8 +1141,13 @@ public class AmbryRequests implements RequestAPI {
       if (localMessageInfo == null) {
         Pair<ServerErrorCode, GetResponse> remoteGetResult = getBlobFromRemoteReplica(replicateBlobRequest);
         errorCode = remoteGetResult.getFirst();
+        GetResponse getResponse = remoteGetResult.getSecond();
         if (errorCode == ServerErrorCode.No_Error) {
-          errorCode = repairPutBlob(replicateBlobRequest, blobId, remoteGetResult.getSecond());
+          errorCode = repairPutBlob(replicateBlobRequest, blobId, getResponse);
+        }
+        if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
+          // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+          ((NettyByteBufDataInputStream) (getResponse.getInputStream())).getBuffer().release();
         }
       }
       // now repair the TtlUpdate
@@ -1160,13 +1165,18 @@ public class AmbryRequests implements RequestAPI {
         // 2. if source doesn't have the PutBlob, write the tombstone to the local store.
         Pair<ServerErrorCode, GetResponse> remoteGetResult = getBlobFromRemoteReplica(replicateBlobRequest);
         errorCode = remoteGetResult.getFirst();
+        GetResponse getResponse = remoteGetResult.getSecond();
         if (errorCode == ServerErrorCode.No_Error) {
-          errorCode = repairPutBlob(replicateBlobRequest, blobId, remoteGetResult.getSecond());
+          errorCode = repairPutBlob(replicateBlobRequest, blobId, getResponse);
           if (errorCode == ServerErrorCode.No_Error) {
             errorCode = repairDeleteRecordToLocalBlob(replicateBlobRequest, blobId);
           }
         } else if (errorCode == ServerErrorCode.Blob_Deleted || errorCode == ServerErrorCode.Blob_Not_Found) {
           errorCode = repairTombStoneToLocalStore(replicateBlobRequest, blobId);
+        }
+        if (getResponse != null && getResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
+          // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
+          ((NettyByteBufDataInputStream) (getResponse.getInputStream())).getBuffer().release();
         }
       }
     }
@@ -1220,11 +1230,6 @@ public class AmbryRequests implements RequestAPI {
         logger.error("ReplicateBlobRequest unknown exception to replicate {} of {}", convertedBlobId,
             replicateBlobRequest, e);
         errorCode = ErrorMapping.getStoreErrorMapping(e.getErrorCode());
-      }
-    } finally {
-      if (remoteGetResponse != null && remoteGetResponse.getInputStream() instanceof NettyByteBufDataInputStream) {
-        // if the InputStream is NettyByteBufDataInputStream based, it's time to release its buffer.
-        ((NettyByteBufDataInputStream) (remoteGetResponse.getInputStream())).getBuffer().release();
       }
     }
     return errorCode;
