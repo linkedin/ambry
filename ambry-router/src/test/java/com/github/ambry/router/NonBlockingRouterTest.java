@@ -846,9 +846,23 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
 
   /**
    * Test that even when a composite blob put succeeds, the slipped put data chunks are deleted.
+   * Background deleter hits Blob_Not_Found and swallow the error.
    */
   @Test
-  public void testSuccessfulPutDataChunkDelete() throws Exception {
+  public void testSuccessfulPutDataChunkDeleteCase1() throws Exception {
+    testSuccessfulPutDataChunkDelete(ServerErrorCode.Blob_Not_Found);
+  }
+
+  /**
+   * Test that even when a composite blob put succeeds, the slipped put data chunks are deleted.
+   * Background deleter hits Replica_Unavailable and swallow the error.
+   */
+  @Test
+  public void testSuccessfulPutDataChunkDeleteCase2() throws Exception {
+    testSuccessfulPutDataChunkDelete(ServerErrorCode.Replica_Unavailable);
+  }
+
+  public void testSuccessfulPutDataChunkDelete(ServerErrorCode backgroundDeletorError) throws Exception {
     try {
       // This test is somehow probabilistic. Since it is not possible to devise a mocking to enforce the occurrence of
       // slipped puts given we cannot control the order of the hosts requests are sent and not all requests are sent when
@@ -890,10 +904,10 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       for (int i = 0; i < NUM_MAX_ATTEMPTS; i++) {
         serverErrorList.add(ServerErrorCode.Unknown_Error);
         serverErrorList.add(ServerErrorCode.No_Error);
-        deleteErrorList.add(ServerErrorCode.Blob_Not_Found);
+        deleteErrorList.add(backgroundDeletorError);
       }
 
-      // return NOT_FOUND for background deleter. Test router will ignore NOT_FOUND for background deleter.
+      // return error for background deleter. Test router will ignore NOT_FOUND or Unavailable for background deleter.
       DataNodeId healthyLocalNode = null;
       for (DataNodeId dataNodeId : dataNodeIds) {
         MockServer server = mockServerLayout.getMockServer(dataNodeId.getHostname(), dataNodeId.getPort());
@@ -3584,7 +3598,8 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
           deletesDoneLatch.countDown();
         }
       };
-      router = new NonBlockingRouter(routerConfig, new NonBlockingRouterMetrics(mockClusterMap, routerConfig),
+      NonBlockingRouterMetrics localMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
+      router = new NonBlockingRouter(routerConfig, localMetrics,
           new MockNetworkClientFactory(verifiableProperties, mockSelectorState, MAX_PORTS_PLAIN_TEXT, MAX_PORTS_SSL,
               CHECKOUT_TIMEOUT_MS, mockServerLayout, mockTime), deleteTrackingNotificationSystem, mockClusterMap, kms,
           cryptoService, cryptoJobHandler, accountService, mockTime, MockClusterMap.DEFAULT_PARTITION_CLASS, null);
@@ -3642,10 +3657,14 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
       }
 
       // Now, wait AWAIT_TIMEOUT_MS to see if any blob is deleted.
-      // Suppose on-demand replication won't get triggered. So all the blob deletion will fail.
-      Assert.assertFalse("No blob can be deleted." + AWAIT_TIMEOUT_MS, deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
-      Assert.assertEquals(deletesDoneLatch.getCount(), dataChunkNumber);
-      Assert.assertEquals(blobsThatAreDeleted.entrySet().size(), 0);
+      // Suppose on-demand replication won't get triggered.
+      // The background blob deletion will hit exception. Right now we swallow the background deleter exception and emit metrics.
+      Assert.assertTrue("We swallow background deleter exception." + AWAIT_TIMEOUT_MS,
+          deletesDoneLatch.await(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
+      // we should hit background deleter exceptions
+      Assert.assertEquals(localMetrics.backgroundDeleterExceptionCount.getCount(), dataChunkNumber);
+      Assert.assertEquals(deletesDoneLatch.getCount(), 0);
+      Assert.assertEquals(blobsThatAreDeleted.entrySet().size(), dataChunkNumber);
     } finally {
       if (router != null) {
         router.close();
