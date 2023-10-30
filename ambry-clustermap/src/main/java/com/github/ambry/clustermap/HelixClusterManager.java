@@ -1171,34 +1171,76 @@ public class HelixClusterManager implements ClusterMap {
           // We found the replicas from the resource name, just continue to next dc.
           continue;
         }
-        // There is some change made to resources in IDEALSTATES and it's not yet reflected in EXTERNAALVIEW.
-        // Try to search the partition in all resources
-        helixClusterManagerMetrics.resourceNameMismatchCount.inc();
-        String resourceNameInCache =
-            dcToPartitionNameToResourceCache.computeIfAbsent(dc, k -> new ConcurrentHashMap<>())
-                .get(partition.toPathString());
-        if (resourceNameInCache == null) {
-          helixClusterManagerMetrics.resourceNameCacheMissCount.inc();
-          Collection<String> resourcesFromRoutingTable = routingTableSnapshot.getResources();
-          for (String resource : resourcesFromRoutingTable) {
-            getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc, resource, partitionName, state,
-                replicas);
-            if (replicas.size() != replicaSizeBefore) {
-              // We found the partition in this resource, put this resource in the case.
-              dcToPartitionNameToResourceCache.get(dc).putIfAbsent(partitionName, resource);
-              break;
-            }
-          }
-        } else {
-          helixClusterManagerMetrics.resourceNameCacheHitCount.inc();
-          getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc, resourceNameInCache, partitionName,
-              state, replicas);
-        }
+        maybeSearchResourceInExternalView(routingTableSnapshot, dc, partitionName, resourceName, state, replicas);
       }
       logger.debug("Replicas for partition {} with state {} in dc {} are {}. Query time in Ms {}", partitionName,
           state.name(), dcName != null ? dcName : "", replicas, SystemTime.getInstance().milliseconds() - startTime);
       operationTimer.stop();
       return new ArrayList<>(replicas);
+    }
+
+    /**
+     * Can't find the replicas in the given resource at given state, maybe it's because some changes made to IDEALSTATES
+     * haven't been populated to EXTERNALVIEW. This method would try to search the EXTERNALVEIW and see if we can find
+     * partitions in other resources.
+     * @param routingTableSnapshot
+     * @param dcName
+     * @param partitionName
+     * @param resourceNameFromIS
+     * @param state
+     * @param replicas
+     */
+    private void maybeSearchResourceInExternalView(RoutingTableSnapshot routingTableSnapshot, String dcName,
+        String partitionName, String resourceNameFromIS, ReplicaState state, Set<AmbryReplica> replicas) {
+      if (!clusterMapConfig.clustermapSearchResourceForPartitionInExternalView) {
+        return;
+      }
+      // There is some change made to resources in IDEALSTATES and it's not yet reflected in EXTERNAALVIEW.
+      // Try to search the partition in all resources in EXTERNALVIEW
+      String resourceNameInCache =
+          dcToPartitionNameToResourceCache.computeIfAbsent(dcName, k -> new ConcurrentHashMap<>()).get(partitionName);
+      if (resourceNameInCache == null) {
+        Set<String> candidateResourceNames = new HashSet<>();
+        for (ExternalView externalView : routingTableSnapshot.getExternalViews()) {
+          if (externalView.getPartitionSet().contains(partitionName)) {
+            Map<String, String> stateMap = externalView.getStateMap(partitionName);
+            boolean containsInstanceInGivenDC = stateMap.keySet()
+                .stream()
+                .anyMatch(instance -> instanceNameToAmbryDataNode.get(instance).getDatacenterName().equals(dcName));
+            if (containsInstanceInGivenDC) {
+              candidateResourceNames.add(externalView.getResourceName());
+            }
+          }
+        }
+        if (candidateResourceNames.contains(resourceNameFromIS)) {
+          // resourceName from IdealState already has the partitions, set this resource in the case and continue.
+          dcToPartitionNameToResourceCache.get(dcName).putIfAbsent(partitionName, resourceNameFromIS);
+          return;
+        }
+
+        if (!candidateResourceNames.isEmpty()) {
+          helixClusterManagerMetrics.resourceNameMismatchCount.inc();
+          helixClusterManagerMetrics.resourceNameCacheMissCount.inc();
+          // there should be only one resource in the candidate list
+          if (candidateResourceNames.size() != 1) {
+            String message =
+                String.format("More than one resource %s contain partition %s", candidateResourceNames, partitionName);
+            logger.error(message);
+            throw new IllegalStateException(message);
+          }
+          String candidate = candidateResourceNames.iterator().next();
+          dcToPartitionNameToResourceCache.get(dcName).putIfAbsent(partitionName, candidate);
+          getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dcName, candidate, partitionName, state,
+              replicas);
+        } else {
+          // When candidate is empty, we have Partitions in IDEALSTATE, but missing from EXTERNALVIEW. This is a new
+          // partition that are just created.
+        }
+      } else if (!resourceNameInCache.equals(resourceNameFromIS)) {
+        helixClusterManagerMetrics.resourceNameCacheHitCount.inc();
+        getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dcName, resourceNameInCache, partitionName,
+            state, replicas);
+      }
     }
 
     private void getReplicaIdsByStateInRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot, String dc,
