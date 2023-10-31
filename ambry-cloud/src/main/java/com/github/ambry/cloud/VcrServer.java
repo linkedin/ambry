@@ -201,7 +201,7 @@ public class VcrServer {
       logger.info("Ambry backup version = {}", cloudConfig.ambryBackupVersion);
       if (cloudDestinationFactory == null) {
         cloudDestinationFactory =
-            Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap);
+            Utils.getObj(cloudConfig.cloudDestinationFactoryClass, properties, registry, clusterMap, accountService);
       }
       cloudDestination = cloudDestinationFactory.getCloudDestination();
       vcrClusterParticipant =

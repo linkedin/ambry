@@ -14,6 +14,7 @@
 package com.github.ambry.cloud.azure;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -48,7 +49,7 @@ public class AzuriteUtils {
       properties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "localhost");
       properties.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, "localhost");
       properties.setProperty("clustermap.resolve.hostnames", "false");
-      getAzuriteClient(properties, new MetricRegistry(), null);
+      getAzuriteClient(properties, new MetricRegistry(), null, null);
       return true;
     } catch (Exception e) {
       logger.error("Failed to connect to Azurite due to {}", e.toString());
@@ -62,13 +63,25 @@ public class AzuriteUtils {
    * @param clusterMap Cluster map
    * @return Sync client to connect to Azurite
    */
-  public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry, ClusterMap clusterMap)
+  public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry,
+      ClusterMap clusterMap, AccountService accountService)
       throws ReflectiveOperationException {
     // V2 does not use cosmos
     properties.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "does_not_matter");
     properties.setProperty(AzureCloudConfig.COSMOS_DATABASE, "does_not_matter");
     properties.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "does_not_matter");
     properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
-    return new AzureCloudDestinationSync(new VerifiableProperties(properties), metricRegistry,  clusterMap);
+    return new AzureCloudDestinationSync(new VerifiableProperties(properties), metricRegistry,  clusterMap, accountService);
+  }
+
+  /**
+   * Returns a client to connect to Azurite
+   * @param metricRegistry Metrics
+   * @param clusterMap Cluster map
+   * @return Sync client to connect to Azurite
+   */
+  public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry, ClusterMap clusterMap)
+      throws ReflectiveOperationException {
+    return getAzuriteClient(properties, metricRegistry, clusterMap, null);
   }
 }
