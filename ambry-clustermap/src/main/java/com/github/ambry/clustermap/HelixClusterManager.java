@@ -38,7 +38,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.apache.helix.AccessOption;
@@ -1131,9 +1130,6 @@ public class HelixClusterManager implements ClusterMap {
    */
   class HelixClusterManagerQueryHelper
       implements ClusterManagerQueryHelper<AmbryReplica, AmbryDisk, AmbryPartition, AmbryDataNode> {
-    private final ConcurrentHashMap<String, Map<String, String>> dcToPartitionNameToResourceCache =
-        new ConcurrentHashMap<>();
-
     /**
      * Get all replica ids associated with the given {@link AmbryPartition}
      * @param partition the {@link AmbryPartition} for which to get the list of replicas.
@@ -1187,11 +1183,11 @@ public class HelixClusterManager implements ClusterMap {
         }
         Map<String, ExternalView> externalViewMap =
             clusterMapConfig.clusterMapUseAggregatedView ? globalResourceToExternalView
-                : dcToResourceToExternalView.get(dcName);
+                : dcToResourceToExternalView.get(dc);
         // None of resources has instances for the partition, we try the duplicate resource
         if (!resourceNames.stream()
-            .anyMatch(resource -> externalViewHasInstanceForPartition(externalViewMap.get(resource), dcName,
-                partitionName))) {
+            .anyMatch(
+                resource -> externalViewHasInstanceForPartition(externalViewMap.get(resource), dc, partitionName))) {
           helixClusterManagerMetrics.resourceNameMismatchCount.inc();
           getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc,
               partitionToDuplicateResourceNameByDc.get(dc).get(partitionName), partitionName, state, replicas);
@@ -1662,8 +1658,10 @@ public class HelixClusterManager implements ClusterMap {
      */
     public void setRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot) {
       Map<String, ExternalView> externalViewMap = new ConcurrentHashMap<>();
-      for (ExternalView externalView : routingTableSnapshot.getExternalViews()) {
-        externalViewMap.put(externalView.getResourceName(), externalView);
+      if (routingTableSnapshot != null) {
+        for (ExternalView externalView : routingTableSnapshot.getExternalViews()) {
+          externalViewMap.put(externalView.getResourceName(), externalView);
+        }
       }
       if (isAggregatedViewHandler) {
         globalRoutingTableSnapshotRef.getAndSet(routingTableSnapshot);
@@ -1785,28 +1783,6 @@ public class HelixClusterManager implements ClusterMap {
       } else {
         logger.warn("Partition to resource mapping for aggregated cluster view would be built from external view");
       }
-    }
-
-    /**
-     * Return a BiFunction to replace resource name for partition.
-     * @param resourceName The new resource name.
-     * @param <K> The Key of the map.
-     * @return A BiFunction to replace resource name for partition.
-     */
-    private <K> BiFunction<K, String, String> resourceNameReplaceFunc(String resourceName) {
-      return (k, s) -> {
-        if (s == null || s.equals(resourceName)) {
-          return resourceName;
-        }
-        try {
-          int newId = Integer.valueOf(resourceName);
-          int oldId = Integer.valueOf(s);
-          return newId > oldId ? resourceName : s;
-        } catch (Exception e) {
-          logger.error("Failed to parse resource name to an integer", e);
-          throw new IllegalArgumentException("Failed to parse resource name to an integer", e);
-        }
-      };
     }
 
     /**
