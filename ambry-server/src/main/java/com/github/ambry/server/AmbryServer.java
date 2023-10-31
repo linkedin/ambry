@@ -145,8 +145,8 @@ public class AmbryServer {
   private LocalRequestResponseChannel localChannel = null;
   private RequestHandlerPool repairHandlerPool = null;
   private RepairRequestsSender repairRequestsSender = null;
-  Thread repairThread = null;
-  RepairRequestsDb repairRequestsDb = null;
+  private Thread repairThread = null;
+  private RepairRequestsDb repairRequestsDb = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       VcrClusterAgentsFactory vcrClusterAgentsFactory, Time time) throws InstantiationException {
