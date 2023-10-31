@@ -225,21 +225,7 @@ class RepairRequestsSender implements Runnable {
       }
     }
 
-    // shutdown the database
-    shutdownDb();
-  }
-
-  /*
-   * shutdown the database
-   */
-  public void shutdownDb() {
-    if (db instanceof AutoCloseable) {
-      try {
-        ((AutoCloseable) db).close();
-      } catch (Exception e) {
-        logger.error("Failed to close data source: ", e);
-      }
-    }
+    logger.info("RepairRequestsSender thread is closed.");
   }
 
   /**

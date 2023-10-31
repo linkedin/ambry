@@ -145,6 +145,8 @@ public class AmbryServer {
   private LocalRequestResponseChannel localChannel = null;
   private RequestHandlerPool repairHandlerPool = null;
   private RepairRequestsSender repairRequestsSender = null;
+  Thread repairThread = null;
+  RepairRequestsDb repairRequestsDb = null;
 
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       VcrClusterAgentsFactory vcrClusterAgentsFactory, Time time) throws InstantiationException {
@@ -342,7 +344,7 @@ public class AmbryServer {
           RepairRequestsDbFactory factory =
               Utils.getObj(serverConfig.serverRepairRequestsDbFactory, properties, registry, nodeId.getDatacenterName(),
                   time);
-          RepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
+          repairRequestsDb = factory.getRepairRequestsDb();
 
           localChannel = new LocalRequestResponseChannel();
           LocalNetworkClientFactory localClientFactory =
@@ -358,7 +360,7 @@ public class AmbryServer {
           repairRequestsSender =
               new RepairRequestsSender(localChannel, localClientFactory, clusterMap, nodeId, repairRequestsDb,
                   clusterParticipants.get(0), registry, storageManager);
-          Thread repairThread = Utils.daemonThread("Repair-Sender", repairRequestsSender);
+          repairThread = Utils.daemonThread("Repair-Sender", repairRequestsSender);
           repairThread.start();
           logger.info("RepairRequests: open the db and started the handling thread {}.", repairRequestsDb);
         } catch (Exception e) {
@@ -453,6 +455,13 @@ public class AmbryServer {
       if (repairHandlerPool != null) {
         repairHandlerPool.shutdown();
       }
+      if (repairThread != null) {
+        repairThread.join();
+      }
+      if (repairRequestsDb != null) {
+        repairRequestsDb.close();
+      }
+
       if (localChannel != null) {
         localChannel.shutdown();
       }
