@@ -156,7 +156,7 @@ class RepairRequestsSender implements Runnable {
         boolean hasMore = true;
         boolean hasError = false;
         // if some partitions have more requests, continue to handle them.
-        while (hasMore && !hasError) {
+        while (hasMore && !hasError && !shutdown) {
           // Based on the RepairRequest status, control the compaction on each partition.
           partitionCompactionControl();
 
@@ -168,7 +168,7 @@ class RepairRequestsSender implements Runnable {
           // loop all the partitions. For each partition, we handle maxResults number of requests.
           for (long partitionId : partitionIds) {
             if (shutdown) {
-              return;
+              break;
             }
             // get the repair requests for this partition
             List<RequestInfo> requestInfos = getAmbryRequest(partitionId);
@@ -184,8 +184,7 @@ class RepairRequestsSender implements Runnable {
             // send the repair requests to the handler and wait for the responses.
             for (RequestInfo reqInfo : requestInfos) {
               long startTime = System.currentTimeMillis();
-              List<ResponseInfo> responses =
-                  client.sendAndPoll(Collections.singletonList(reqInfo), requestsToDrop, POLL_TIMEOUT_MS);
+              List<ResponseInfo> responses = client.sendAndPoll(Collections.singletonList(reqInfo), requestsToDrop, POLL_TIMEOUT_MS);
               metrics.repairSenderHandleTimeInMs.update(System.currentTimeMillis() - startTime);
               if (responses == null || responses.size() == 0) {
                 metrics.repairSenderErrorHandleCount.inc();
@@ -217,10 +216,28 @@ class RepairRequestsSender implements Runnable {
         }  // loop until all the partitions are clean
 
         // sleep for some time
-        Thread.sleep(SLEEP_TIME_MS);
+        if (!shutdown) {
+          Thread.sleep(SLEEP_TIME_MS);
+        }
       } catch (Throwable e) {
         metrics.repairSenderErrorHandleCount.inc();
         logger.error("RepairRequests Sender: Exception when handling request", e);
+      }
+    }
+
+    // shutdown the database
+    shutdownDb();
+  }
+
+  /*
+   * shutdown the database
+   */
+  public void shutdownDb() {
+    if (db instanceof AutoCloseable) {
+      try {
+        ((AutoCloseable) db).close();
+      } catch (Exception e) {
+        logger.error("Failed to close data source: ", e);
       }
     }
   }
