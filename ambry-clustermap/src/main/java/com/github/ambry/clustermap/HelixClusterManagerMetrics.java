@@ -230,6 +230,10 @@ class HelixClusterManagerMetrics {
       registry.gauge(MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_TotalDiskCapacityUsage"),
           () -> resourceTotalDiskCapacityUsage);
 
+      Gauge<Integer> resourceNumberOfPartitions = () -> helixClusterManager.getNumberOfPartitionsInResource(resource);
+      registry.gauge(MetricRegistry.name(HelixClusterManager.class, "Resource_" + resource + "_NumberOfPartitions"),
+          () -> resourceNumberOfPartitions);
+
       // register replica state metrics
       for (ReplicaState replicaState : EnumSet.complementOf(EnumSet.of(ReplicaState.DROPPED))) {
         Gauge<Integer> stateReplicaCountInResource =

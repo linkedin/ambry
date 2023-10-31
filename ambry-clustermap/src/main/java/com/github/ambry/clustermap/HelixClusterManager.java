@@ -997,7 +997,8 @@ public class HelixClusterManager implements ClusterMap {
   int getLiveInstanceCount(String resource) {
     return (int) (getAllInstancesForResource(resource).stream()
         .map(instanceNameToAmbryDataNode::get)
-        .filter(dn -> dn.getState() == HardwareState.AVAILABLE).count());
+        .filter(dn -> dn.getState() == HardwareState.AVAILABLE)
+        .count());
   }
 
   long getResourceTotalRegisteredHostDiskCapacity(String resource) {
@@ -1005,6 +1006,12 @@ public class HelixClusterManager implements ClusterMap {
         .map(instanceNameToInstanceConfig::get)
         .mapToInt(instanceConfig -> instanceConfig.getInstanceCapacityMap().get(DISK_KEY))
         .sum();
+  }
+
+  int getNumberOfPartitionsInResource(String resource) {
+    String dcName = instanceNameToAmbryDataNode.get(selfInstanceName).getDatacenterName();
+    String tag = dcToResourceNameToTag.get(dcName).get(resource);
+    return dcToTagToResourceProperty.get(dcName).get(tag).numPartitions;
   }
 
   int getReplicaCountForStateInResource(ReplicaState state, String resource) {
@@ -1654,18 +1661,15 @@ public class HelixClusterManager implements ClusterMap {
         for (IdealState state : idealStates) {
           String resourceName = state.getResourceName();
           String tag = state.getInstanceGroupTag();
+          int numPartitions = state.getNumPartitions();
           if (!Strings.isEmpty(tag)) {
             resourceNameToTag.put(resourceName, tag);
+            ResourceProperty resourceProperty =
+                new ResourceProperty(resourceName, numPartitions, state.getRebalanceMode());
+            tagToProperty.put(tag, resourceProperty);
           }
           for (String partitionName : state.getPartitionSet()) {
-            String mappedResourceName =
-                partitionToResourceMap.compute(partitionName, resourceNameReplaceFunc(resourceName));
-            if (mappedResourceName.equals(resourceName)) {
-              ResourceProperty resourceProperty = new ResourceProperty(resourceName, state.getRebalanceMode());
-              if (!Strings.isEmpty(tag)) {
-                tagToProperty.put(tag, resourceProperty);
-              }
-            }
+            partitionToResourceMap.compute(partitionName, resourceNameReplaceFunc(resourceName));
           }
         }
         dcToTagToResourceProperty.put(dcName, tagToProperty);
@@ -2019,9 +2023,11 @@ public class HelixClusterManager implements ClusterMap {
    */
   static class ResourceProperty {
     final String name;
+    final int numPartitions;
     final IdealState.RebalanceMode rebalanceMode;
 
-    ResourceProperty(String name, IdealState.RebalanceMode rebalanceMode) {
+    ResourceProperty(String name, int numPartitions, IdealState.RebalanceMode rebalanceMode) {
+      this.numPartitions = numPartitions;
       this.name = name;
       this.rebalanceMode = rebalanceMode;
     }
