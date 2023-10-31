@@ -396,7 +396,7 @@ public class ClusterChangeHandlerTest {
     }
     // trigger IdealState change and refresh partition-to-resource mapping (bring in the new partition in resource map)
     helixCluster.refreshIdealState();
-    Map<String, String> partitionNameToResource = helixClusterManager.getPartitionToResourceMapByDC().get(localDc);
+    Map<String, Set<String>> partitionNameToResource = helixClusterManager.getPartitionToResourceMapByDC().get(localDc);
     List<PartitionId> partitionIds = testPartitionLayout.getPartitionLayout().getPartitions(null);
     // verify all partitions (including the new added one) are present in partition-to-resource map
     Set<String> partitionNames = partitionIds.stream().map(PartitionId::toPathString).collect(Collectors.toSet());
@@ -405,7 +405,7 @@ public class ClusterChangeHandlerTest {
     // verify all partitions are able to get their resource name
     helixClusterManager.getAllPartitionIds(DEFAULT_PARTITION_CLASS)
         .forEach(partitionId -> assertEquals("Resource name is not expected",
-            partitionNameToResource.get(partitionId.toPathString()), partitionId.getResourceNames().get(0)));
+            partitionNameToResource.get(partitionId.toPathString()), new HashSet<>(partitionId.getResourceNames())));
     helixClusterManager.close();
   }
 
@@ -601,36 +601,27 @@ public class ClusterChangeHandlerTest {
 
     // Local dc's partition's resource should be updated to newResource name
     // But the aggregated external view didn't get updated, so the replicas are still in the old resources
-    Map<String, String> partitionToResourceAfterUpdate =
+    Map<String, Set<String>> partitionToResourceAfterUpdate =
         (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
     long mismatchCount = 0;
-    long cacheMissCount = 0;
+    int iteration = 0;
     for (String partitionName : newPartitions.keySet()) {
-      assertEquals(newResourceName, partitionToResourceAfterUpdate.get(partitionName));
+      assertTrue(partitionToResourceAfterUpdate.get(partitionName).contains(newResourceName));
+      assertFalse(partitionToResourceAfterUpdate.get(partitionName).contains(oldResourceName));
+      // even number, choose standby, odd number, choose error.
+      // error state should return empty from both resource.
+      ReplicaState state = iteration % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.ERROR;
       List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
-          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
-              localDc);
-      assertFalse(replicas.isEmpty());
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), state, localDc);
+      if (state == ReplicaState.ERROR) {
+        assertTrue(replicas.isEmpty());
+      } else {
+        assertFalse(replicas.isEmpty());
+      }
       assertEquals(mismatchCount + 1,
           helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
       mismatchCount = helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount();
-      assertEquals(cacheMissCount + 1,
-          helixClusterManager.helixClusterManagerMetrics.resourceNameCacheMissCount.getCount());
-      cacheMissCount = helixClusterManager.helixClusterManagerMetrics.resourceNameCacheMissCount.getCount();
-    }
-
-    long cacheHitCount = 0;
-    for (String partitionName : newPartitions.keySet()) {
-      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
-          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
-              localDc);
-      assertFalse(replicas.isEmpty());
-      assertEquals(mismatchCount + 1,
-          helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
-      mismatchCount = helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount();
-      assertEquals(cacheHitCount + 1,
-          helixClusterManager.helixClusterManagerMetrics.resourceNameCacheHitCount.getCount());
-      cacheHitCount = helixClusterManager.helixClusterManagerMetrics.resourceNameCacheHitCount.getCount();
+      iteration++;
     }
 
     // Test case 3: new resource are both in ideal state and external view
@@ -673,32 +664,23 @@ public class ClusterChangeHandlerTest {
     newIdealStateInRemote.setPreferenceLists(newPartitionsInRemote);
     // this will only add resource to ideal state
     helixCluster.addNewResource(newResourceName, newIdealStateInRemote, remoteDc);
-    Map<String, String> partitionToResourceAfterUpdateInRemote =
+    Map<String, Set<String>> partitionToResourceAfterUpdateInRemote =
         (helixClusterManager).getPartitionToResourceMapByDC().get(remoteDc);
+    iteration = 0;
     for (String partitionName : newPartitionsInRemote.keySet()) {
-      assertEquals(newResourceName, partitionToResourceAfterUpdateInRemote.get(partitionName));
+      assertTrue(partitionToResourceAfterUpdateInRemote.get(partitionName).contains(newResourceName));
+      assertFalse(partitionToResourceAfterUpdateInRemote.get(partitionName).contains(oldResourceName));
+      ReplicaState state = iteration % 2 == 0 ? ReplicaState.STANDBY : ReplicaState.ERROR;
       List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
-          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
-              remoteDc);
-      assertFalse(replicas.isEmpty());
+          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), state, remoteDc);
+      if (state == ReplicaState.ERROR) {
+        assertTrue(replicas.isEmpty());
+      } else {
+        assertFalse(replicas.isEmpty());
+      }
       assertEquals(mismatchCount + 1,
           helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
       mismatchCount = helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount();
-      assertEquals(cacheMissCount + 1,
-          helixClusterManager.helixClusterManagerMetrics.resourceNameCacheMissCount.getCount());
-      cacheMissCount = helixClusterManager.helixClusterManagerMetrics.resourceNameCacheMissCount.getCount();
-    }
-    for (String partitionName : newPartitionsInRemote.keySet()) {
-      List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
-          .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.STANDBY,
-              remoteDc);
-      assertFalse(replicas.isEmpty());
-      assertEquals(mismatchCount + 1,
-          helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount());
-      mismatchCount = helixClusterManager.helixClusterManagerMetrics.resourceNameMismatchCount.getCount();
-      assertEquals(cacheHitCount + 1,
-          helixClusterManager.helixClusterManagerMetrics.resourceNameCacheHitCount.getCount());
-      cacheHitCount = helixClusterManager.helixClusterManagerMetrics.resourceNameCacheHitCount.getCount();
     }
 
     MockHelixAdmin remoteMockHelixAdmin = helixCluster.getHelixAdminFromDc(remoteDc);

@@ -55,6 +55,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -889,7 +890,7 @@ public class HelixClusterManagerTest {
     helixCluster.addNewResource(resourceName, idealState, localDc);
     verifyInitialClusterChanges(helixClusterManager, helixCluster, new String[]{localDc});
     // localDc should have one more partition compared with remoteDc
-    Map<String, Map<String, String>> partitionToResource = (helixClusterManager).getPartitionToResourceMapByDC();
+    Map<String, Map<String, Set<String>>> partitionToResource = (helixClusterManager).getPartitionToResourceMapByDC();
     assertEquals("localDc should have one more partition", partitionToResource.get(localDc).size(),
         partitionToResource.get(remoteDc).size() + 1);
     assertTrue(partitionToResource.get(localDc).containsKey(partitionName) && !partitionToResource.get(remoteDc)
@@ -906,33 +907,40 @@ public class HelixClusterManagerTest {
     HelixClusterManager helixClusterManager = (HelixClusterManager) clusterManager;
     verifyInitialClusterChanges(helixClusterManager, helixCluster, helixDcs);
 
-    Map<String, Map<String, String>> partitionToResourceByDc = helixClusterManager.getPartitionToResourceMapByDC();
-    Map<String, String> localDCPartitionToResource = partitionToResourceByDc.get(localDc);
+    Map<String, Map<String, Set<String>>> partitionToResourceByDc = helixClusterManager.getPartitionToResourceMapByDC();
+    Map<String, Set<String>> localDCPartitionToResource = partitionToResourceByDc.get(localDc);
 
-    Map.Entry<String, String> randomPartitionAndResource = localDCPartitionToResource.entrySet().iterator().next();
+    Map.Entry<String, Set<String>> randomPartitionAndResource = localDCPartitionToResource.entrySet().iterator().next();
     String partitionName = randomPartitionAndResource.getKey();
-    String resourceName = randomPartitionAndResource.getValue();
+    Assert.assertEquals(1, randomPartitionAndResource.getValue().size());
+    String resourceName = randomPartitionAndResource.getValue().iterator().next();
     String newResourceName = String.valueOf(Integer.valueOf(resourceName) + 1000);
 
     IdealState idealState = new IdealState(newResourceName);
-    idealState.setPreferenceList(partitionName, new ArrayList<>());
+    IdealState oldIdealState = helixCluster.getResourceIdealState(resourceName, localDc);
+    idealState.setPreferenceList(partitionName, oldIdealState.getPreferenceList(partitionName));
     helixCluster.addNewResource(newResourceName, idealState, localDc);
 
     // Local dc's partition's resource should be updated to newResource name
-    Map<String, String> partitionToResourceAfterUpdate =
+    Map<String, Set<String>> partitionToResourceAfterUpdate =
         (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
     assertEquals(localDCPartitionToResource.size(), partitionToResourceAfterUpdate.size());
 
     // Only partitionName changes resource
-    for (Map.Entry<String, String> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
+    for (Map.Entry<String, Set<String>> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
       String pName = partitionAndResource.getKey();
-      String rName = partitionAndResource.getValue();
+      Set<String> rNames = partitionAndResource.getValue();
       if (pName.equals(partitionName)) {
-        assertEquals(newResourceName, rName);
+        assertTrue(rNames.contains(newResourceName));
+        assertFalse(rNames.contains(resourceName));
       } else {
-        assertEquals(localDCPartitionToResource.get(pName), rName);
+        assertEquals(localDCPartitionToResource.get(pName), rNames);
       }
     }
+    Map<String, String> partitionToDuplicateResourceAfterUpdate =
+        (helixClusterManager).getPartitionToDuplicateResourceMapByDC().get(localDc);
+    assertEquals(1, partitionToDuplicateResourceAfterUpdate.size());
+    assertEquals(resourceName, partitionToDuplicateResourceAfterUpdate.get(partitionName));
   }
 
   /**
@@ -954,13 +962,14 @@ public class HelixClusterManagerTest {
     helixCluster.addNewResource(newResourceName, cloneIdealState(idealState, newResourceName), localDc);
 
     // After change, all partitions in the partitionNames should have updated resourceName
-    Map<String, String> partitionToResourceAfterUpdate =
+    Map<String, Set<String>> partitionToResourceAfterUpdate =
         (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
-    for (Map.Entry<String, String> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
+    for (Map.Entry<String, Set<String>> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
       String pName = partitionAndResource.getKey();
-      String rName = partitionAndResource.getValue();
+      Set<String> rNames = partitionAndResource.getValue();
       if (partitionNames.contains(pName)) {
-        assertEquals(newResourceName, rName);
+        assertTrue(rNames.contains(newResourceName));
+        assertFalse(rNames.contains(resourceName));
       }
     }
 
@@ -968,11 +977,13 @@ public class HelixClusterManagerTest {
     String newResourceName2 = String.valueOf(Integer.valueOf(resourceName) + 100);
     helixCluster.addNewResource(newResourceName2, cloneIdealState(idealState, newResourceName2), localDc);
     partitionToResourceAfterUpdate = (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
-    for (Map.Entry<String, String> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
+    for (Map.Entry<String, Set<String>> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
       String pName = partitionAndResource.getKey();
-      String rName = partitionAndResource.getValue();
+      Set<String> rNames = partitionAndResource.getValue();
       if (partitionNames.contains(pName)) {
-        assertEquals(newResourceName, rName); // still equals to the newResourceName, not newResourceName2
+        assertTrue(rNames.contains(newResourceName));
+        assertFalse(rNames.contains(newResourceName2));
+        assertFalse(rNames.contains(resourceName));
       }
     }
 
@@ -980,11 +991,13 @@ public class HelixClusterManagerTest {
     helixCluster.removeResourceIdealState(resourceName, localDc);
     helixCluster.removeResourceIdealState(newResourceName2, localDc);
     partitionToResourceAfterUpdate = (helixClusterManager).getPartitionToResourceMapByDC().get(localDc);
-    for (Map.Entry<String, String> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
+    for (Map.Entry<String, Set<String>> partitionAndResource : partitionToResourceAfterUpdate.entrySet()) {
       String pName = partitionAndResource.getKey();
-      String rName = partitionAndResource.getValue();
+      Set<String> rNames = partitionAndResource.getValue();
       if (partitionNames.contains(pName)) {
-        assertEquals(newResourceName, rName); // still equals to the newResourceName, not newResourceName2
+        assertTrue(rNames.contains(newResourceName));
+        assertFalse(rNames.contains(newResourceName2));
+        assertFalse(rNames.contains(resourceName));
       }
     }
   }
@@ -2120,15 +2133,15 @@ public class HelixClusterManagerTest {
       assertEquals("Mismatch in hosts set", hostsFromHelix, hostsFromClusterManager);
 
       // 2. verify all resources and partitions from Helix are present in cluster manager
-      Map<String, Map<String, String>> partitionToResourceByDc = clusterManager.getPartitionToResourceMapByDC();
-      Map<String, String> partitionToResourceMap = partitionToResourceByDc.get(dc);
+      Map<String, Map<String, Set<String>>> partitionToResourceByDc = clusterManager.getPartitionToResourceMapByDC();
+      Map<String, Set<String>> partitionToResourceMap = partitionToResourceByDc.get(dc);
       MockHelixAdmin helixAdmin = helixCluster.getHelixAdminFromDc(dc);
       List<IdealState> idealStates = helixAdmin.getIdealStates();
       for (IdealState idealState : idealStates) {
         String resourceName = idealState.getResourceName();
         Set<String> partitionSet = idealState.getPartitionSet();
         for (String partitionStr : partitionSet) {
-          assertEquals("Mismatch in resource name", resourceName, partitionToResourceMap.get(partitionStr));
+          assertTrue("Mismatch in resource name", partitionToResourceMap.get(partitionStr).contains(resourceName));
         }
       }
     }

@@ -93,11 +93,16 @@ public class HelixClusterManager implements ClusterMap {
   private final ConcurrentHashMap<AmbryDataNode, ConcurrentHashMap<String, AmbryReplica>> ambryDataNodeToAmbryReplicas =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<AmbryDataNode, Set<AmbryDisk>> ambryDataNodeToAmbryDisks = new ConcurrentHashMap<>();
-  private final Map<String, ConcurrentHashMap<String, String>> partitionToResourceNameByDc = new ConcurrentHashMap<>();
+  private final Map<String, ConcurrentHashMap<String, Set<String>>> partitionToResourceNameByDc =
+      new ConcurrentHashMap<>();
+  private final Map<String, ConcurrentHashMap<String, String>> partitionToDuplicateResourceNameByDc =
+      new ConcurrentHashMap<>();
   private final Map<String, AtomicReference<RoutingTableSnapshot>> dcToRoutingTableSnapshotRef =
       new ConcurrentHashMap<>();
+  private final Map<String, Map<String, ExternalView>> dcToResourceToExternalView = new ConcurrentHashMap<>();
   // Routing table snapshot reference used in aggregated cluster view.
   private final AtomicReference<RoutingTableSnapshot> globalRoutingTableSnapshotRef = new AtomicReference<>();
+  private final Map<String, ExternalView> globalResourceToExternalView = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, AmbryDataNode> instanceNameToAmbryDataNode = new ConcurrentHashMap<>();
   private final AtomicLong errorCount = new AtomicLong(0);
   private final AtomicLong clusterWideRawCapacityBytes = new AtomicLong(0);
@@ -595,8 +600,16 @@ public class HelixClusterManager implements ClusterMap {
    * Exposed for testing
    * @return a map of partition to its corresponding resource grouped by data center
    */
-  Map<String, Map<String, String>> getPartitionToResourceMapByDC() {
+  Map<String, Map<String, Set<String>>> getPartitionToResourceMapByDC() {
     return Collections.unmodifiableMap(partitionToResourceNameByDc);
+  }
+
+  /**
+   * Exposed for testing only.
+   * @return
+   */
+  Map<String, Map<String, String>> getPartitionToDuplicateResourceMapByDC() {
+    return Collections.unmodifiableMap(partitionToDuplicateResourceNameByDc);
   }
 
   /**
@@ -1138,9 +1151,9 @@ public class HelixClusterManager implements ClusterMap {
       //  2. A partition can belong to different resources in different data centers.
       Set<String> resourceNames = new HashSet<>();
       for (String dcName : partitionToResourceNameByDc.keySet()) {
-        String resourceName = partitionToResourceNameByDc.get(dcName).get(partition.toPathString());
-        if (resourceName != null) {
-          resourceNames.add(resourceName);
+        Set<String> resourceNamesInDC = partitionToResourceNameByDc.get(dcName).get(partition.toPathString());
+        if (resourceNamesInDC != null && !resourceNamesInDC.isEmpty()) {
+          resourceNames.addAll(resourceNamesInDC);
         }
       }
       return new ArrayList<>(resourceNames);
@@ -1160,18 +1173,29 @@ public class HelixClusterManager implements ClusterMap {
           : dcToDcInfo.values().stream().map(dcInfo -> dcInfo.dcName).collect(Collectors.toList());
       String partitionName = partition.toPathString();
       for (String dc : dcs) {
-        int replicaSizeBefore = replicas.size();
-        String resourceName = partitionToResourceNameByDc.get(dc).get(partitionName);
+        Set<String> resourceNames = partitionToResourceNameByDc.get(dc).get(partitionName);
         RoutingTableSnapshot routingTableSnapshot =
             clusterMapConfig.clusterMapUseAggregatedView ? globalRoutingTableSnapshotRef.get()
                 : dcToRoutingTableSnapshotRef.get(dc).get();
-        getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc, resourceName, partitionName, state,
-            replicas);
-        if (replicas.size() != replicaSizeBefore) {
-          // We found the replicas from the resource name, just continue to next dc.
+        int replicasBefore = replicas.size();
+        for (String resourceName : resourceNames) {
+          getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc, resourceName, partitionName, state,
+              replicas);
+        }
+        if (replicas.size() != replicasBefore) {
           continue;
         }
-        maybeSearchResourceInExternalView(routingTableSnapshot, dc, partitionName, resourceName, state, replicas);
+        Map<String, ExternalView> externalViewMap =
+            clusterMapConfig.clusterMapUseAggregatedView ? globalResourceToExternalView
+                : dcToResourceToExternalView.get(dcName);
+        // None of resources has instances for the partition, we try the duplicate resource
+        if (!resourceNames.stream()
+            .anyMatch(resource -> externalViewHasInstanceForPartition(externalViewMap.get(resource), dcName,
+                partitionName))) {
+          helixClusterManagerMetrics.resourceNameMismatchCount.inc();
+          getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc,
+              partitionToDuplicateResourceNameByDc.get(dc).get(partitionName), partitionName, state, replicas);
+        }
       }
       logger.debug("Replicas for partition {} with state {} in dc {} are {}. Query time in Ms {}", partitionName,
           state.name(), dcName != null ? dcName : "", replicas, SystemTime.getInstance().milliseconds() - startTime);
@@ -1179,68 +1203,15 @@ public class HelixClusterManager implements ClusterMap {
       return new ArrayList<>(replicas);
     }
 
-    /**
-     * Can't find the replicas in the given resource at given state, maybe it's because some changes made to IDEALSTATES
-     * haven't been populated to EXTERNALVIEW. This method would try to search the EXTERNALVEIW and see if we can find
-     * partitions in other resources.
-     * @param routingTableSnapshot
-     * @param dcName
-     * @param partitionName
-     * @param resourceNameFromIS
-     * @param state
-     * @param replicas
-     */
-    private void maybeSearchResourceInExternalView(RoutingTableSnapshot routingTableSnapshot, String dcName,
-        String partitionName, String resourceNameFromIS, ReplicaState state, Set<AmbryReplica> replicas) {
-      if (!clusterMapConfig.clustermapSearchResourceForPartitionInExternalView) {
-        return;
+    private boolean externalViewHasInstanceForPartition(ExternalView externalView, String dcName,
+        String partitionName) {
+      if (externalView == null) {
+        return false;
       }
-      // There is some change made to resources in IDEALSTATES and it's not yet reflected in EXTERNAALVIEW.
-      // Try to search the partition in all resources in EXTERNALVIEW
-      String resourceNameInCache =
-          dcToPartitionNameToResourceCache.computeIfAbsent(dcName, k -> new ConcurrentHashMap<>()).get(partitionName);
-      if (resourceNameInCache == null) {
-        Set<String> candidateResourceNames = new HashSet<>();
-        for (ExternalView externalView : routingTableSnapshot.getExternalViews()) {
-          if (externalView.getPartitionSet().contains(partitionName)) {
-            Map<String, String> stateMap = externalView.getStateMap(partitionName);
-            boolean containsInstanceInGivenDC = stateMap.keySet()
-                .stream()
-                .anyMatch(instance -> instanceNameToAmbryDataNode.get(instance).getDatacenterName().equals(dcName));
-            if (containsInstanceInGivenDC) {
-              candidateResourceNames.add(externalView.getResourceName());
-            }
-          }
-        }
-        if (candidateResourceNames.contains(resourceNameFromIS)) {
-          // resourceName from IdealState already has the partitions, set this resource in the case and continue.
-          dcToPartitionNameToResourceCache.get(dcName).putIfAbsent(partitionName, resourceNameFromIS);
-          return;
-        }
-
-        if (!candidateResourceNames.isEmpty()) {
-          helixClusterManagerMetrics.resourceNameMismatchCount.inc();
-          helixClusterManagerMetrics.resourceNameCacheMissCount.inc();
-          // there should be only one resource in the candidate list
-          if (candidateResourceNames.size() != 1) {
-            String message =
-                String.format("More than one resource %s contain partition %s", candidateResourceNames, partitionName);
-            logger.error(message);
-            throw new IllegalStateException(message);
-          }
-          String candidate = candidateResourceNames.iterator().next();
-          dcToPartitionNameToResourceCache.get(dcName).putIfAbsent(partitionName, candidate);
-          getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dcName, candidate, partitionName, state,
-              replicas);
-        } else {
-          // When candidate is empty, we have Partitions in IDEALSTATE, but missing from EXTERNALVIEW. This is a new
-          // partition that are just created.
-        }
-      } else if (!resourceNameInCache.equals(resourceNameFromIS)) {
-        helixClusterManagerMetrics.resourceNameCacheHitCount.inc();
-        getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dcName, resourceNameInCache, partitionName,
-            state, replicas);
-      }
+      return externalView.getStateMap(partitionName).values().stream().anyMatch(instance -> {
+        AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instance);
+        return dataNode != null && dataNode.getDatacenterName().equals(dcName);
+      });
     }
 
     private void getReplicaIdsByStateInRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot, String dc,
@@ -1690,11 +1661,18 @@ public class HelixClusterManager implements ClusterMap {
      * @param routingTableSnapshot snapshot of cluster mappings.
      */
     public void setRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot) {
+      Map<String, ExternalView> externalViewMap = new ConcurrentHashMap<>();
+      for (ExternalView externalView : routingTableSnapshot.getExternalViews()) {
+        externalViewMap.put(externalView.getResourceName(), externalView);
+      }
       if (isAggregatedViewHandler) {
         globalRoutingTableSnapshotRef.getAndSet(routingTableSnapshot);
+        globalResourceToExternalView.putAll(externalViewMap);
+        globalResourceToExternalView.keySet().retainAll(externalViewMap.keySet());
       } else {
         dcToRoutingTableSnapshotRef.computeIfAbsent(dcName, k -> new AtomicReference<>())
             .getAndSet(routingTableSnapshot);
+        dcToResourceToExternalView.put(dcName, externalViewMap);
       }
     }
 
@@ -1734,7 +1712,9 @@ public class HelixClusterManager implements ClusterMap {
     private void updatePartitionResourceMappingFromIdealStates(Collection<IdealState> idealStates, String dcName) {
       if (dcName != null) {
         // Rebuild the entire partition-to-resource map in current dc
-        ConcurrentHashMap<String, String> partitionToResourceMap = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> partitionToResourceMap = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, String> partitionToDuplicateResourceMap = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, Set<String>> partitionResourceToInstanceSetMap = new ConcurrentHashMap<>();
         ConcurrentHashMap<String, ResourceProperty> tagToProperty = new ConcurrentHashMap<>();
         ConcurrentHashMap<String, String> resourceNameToTag = new ConcurrentHashMap<>();
         for (IdealState state : idealStates) {
@@ -1747,13 +1727,47 @@ public class HelixClusterManager implements ClusterMap {
                 new ResourceProperty(resourceName, numPartitions, state.getRebalanceMode());
             tagToProperty.put(tag, resourceProperty);
           }
+          // Build the partition to resource, partition to duplicate resource and partition-resource to instance set map
           for (String partitionName : state.getPartitionSet()) {
-            partitionToResourceMap.compute(partitionName, resourceNameReplaceFunc(resourceName));
+            Set<String> instanceSet = state.getInstanceSet(partitionName);
+            Set<String> resources = partitionToResourceMap.computeIfAbsent(partitionName, k -> new HashSet<>());
+            if (resources.isEmpty()) {
+              // there is no resource mapped to partition, just add this partition/resource in the map.
+              resources.add(resourceName);
+              partitionResourceToInstanceSetMap.put(partitionName + "-" + resourceName, instanceSet);
+            } else {
+              boolean foundDuplicate = false;
+              for (String prevResource : resources) {
+                Set<String> instanceSetInMap =
+                    partitionResourceToInstanceSetMap.get(partitionName + "-" + prevResource);
+                if (instanceSet.equals(instanceSetInMap)) {
+                  foundDuplicate = true;
+                  // we found the duplicate resource that has the same instance set, remove the smaller resource id
+                  int currentResourceId = Integer.valueOf(resourceName);
+                  int previousResourceId = Integer.valueOf(prevResource);
+                  if (currentResourceId > previousResourceId) {
+                    resources.remove(prevResource);
+                    resources.add(resourceName);
+                    partitionResourceToInstanceSetMap.remove(partitionName + "-" + prevResource);
+                    partitionResourceToInstanceSetMap.put(partitionName + "-" + resourceName, instanceSet);
+                    partitionToDuplicateResourceMap.put(partitionName, prevResource);
+                  } else {
+                    partitionToDuplicateResourceMap.put(partitionName, resourceName);
+                  }
+                  break;
+                }
+              }
+              if (!foundDuplicate) {
+                resources.add(resourceName);
+                partitionResourceToInstanceSetMap.put(partitionName + "-" + resourceName, instanceSet);
+              }
+            }
           }
         }
         dcToTagToResourceProperty.put(dcName, tagToProperty);
         dcToResourceNameToTag.put(dcName, resourceNameToTag);
         partitionToResourceNameByDc.put(dcName, partitionToResourceMap);
+        partitionToDuplicateResourceNameByDc.put(dcName, partitionToDuplicateResourceMap);
 
         // Ideal state has changed, we need to check if the data node is now on FULL AUTO or not.
         // This call might come from frontend node, make sure we don't register any FULL AUTO metrics in frontend.

@@ -351,16 +351,6 @@ public class ClusterMapConfig {
   @Default("60 * 1000")
   public final long clustermapDistributedLockLeaseTimeoutInMs;
 
-  public static final String SEARCH_RESOURCE_FOR_PARTITION_IN_EXTERNAL_VIEW =
-      "clustermap.search.resource.for.partition.in.external.view";
-  /**
-   * True to search resource in external view for a given partition id when the resource in ideal state doesn't have
-   * the given partition id.
-   */
-  @Config(SEARCH_RESOURCE_FOR_PARTITION_IN_EXTERNAL_VIEW)
-  @Default("false")
-  public final boolean clustermapSearchResourceForPartitionInExternalView;
-
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -439,7 +429,5 @@ public class ClusterMapConfig {
     clustermapDefaultReplicaCapacityInBytes =
         verifiableProperties.getLongInRange("clustermap.default.replica.capacity.in.bytes", 384L * 1024 * 1024 * 1024,
             0, Long.MAX_VALUE);
-    clustermapSearchResourceForPartitionInExternalView =
-        verifiableProperties.getBoolean(SEARCH_RESOURCE_FOR_PARTITION_IN_EXTERNAL_VIEW, false);
   }
 }
