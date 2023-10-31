@@ -331,7 +331,14 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
 
   @Override
   public void close() {
-
+    // close the DataSource
+    if (dataSource instanceof AutoCloseable) {
+      try {
+        ((AutoCloseable) dataSource).close();
+      } catch (Exception e) {
+        logger.error("Failed to close data source: ", e);
+      }
+    }
   }
 
   private static class Metrics {

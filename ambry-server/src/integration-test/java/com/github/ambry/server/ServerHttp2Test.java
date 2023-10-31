@@ -40,6 +40,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static org.junit.Assume.*;
+
 
 @RunWith(Parameterized.class)
 public class ServerHttp2Test {
@@ -144,6 +146,8 @@ public class ServerHttp2Test {
 
   @Test
   public void repairRequestTest() throws Exception {
+    // test not encrypted case is enough. repairRequest is running at high level.
+    assumeTrue(!testEncryption);
     ServerTestUtil.repairRequestTest(http2Cluster, clientSSLConfig1, testEncryption, notificationSystem);
   }
 
