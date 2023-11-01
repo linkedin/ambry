@@ -1181,6 +1181,12 @@ public class HelixClusterManager implements ClusterMap {
         if (replicas.size() != replicasBefore) {
           continue;
         }
+        logger.trace("Can't find any replicas in dc {} for partition {} at resources {} at state {}", dc, partition,
+            resourceNames, state);
+        if (!partitionToDuplicateResourceNameByDc.get(dc).containsKey(partitionName)) {
+          logger.trace("No duplicate resource found for partition {} in dc {}, continue", partitionName, dc);
+          continue;
+        }
         Map<String, ExternalView> externalViewMap =
             clusterMapConfig.clusterMapUseAggregatedView ? globalResourceToExternalView
                 : dcToResourceToExternalView.get(dc);
@@ -1188,9 +1194,12 @@ public class HelixClusterManager implements ClusterMap {
         if (!resourceNames.stream()
             .anyMatch(
                 resource -> externalViewHasInstanceForPartition(externalViewMap.get(resource), dc, partitionName))) {
+          String duplicateResource = partitionToDuplicateResourceNameByDc.get(dc).get(partitionName);
+          logger.trace("Partition {} doesn't exist in resources {} in dc {}, try duplicate resource {}", partitionName,
+              resourceNames, dc, duplicateResource);
           helixClusterManagerMetrics.resourceNameMismatchCount.inc();
-          getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc,
-              partitionToDuplicateResourceNameByDc.get(dc).get(partitionName), partitionName, state, replicas);
+          getReplicaIdsByStateInRoutingTableSnapshot(routingTableSnapshot, dc, duplicateResource, partitionName, state,
+              replicas);
         }
       }
       logger.debug("Replicas for partition {} with state {} in dc {} are {}. Query time in Ms {}", partitionName,
