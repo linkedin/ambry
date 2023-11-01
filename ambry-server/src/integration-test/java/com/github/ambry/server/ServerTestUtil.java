@@ -5136,17 +5136,17 @@ final class ServerTestUtil {
         properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
     BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
+        properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
     BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
+        properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
     BlobId expiredId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
         properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
-    BlobId notFoundId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
-        BlobId.BlobDataType.DATACHUNK);
+    int numOfRecordsCannotFix = 15; // have set query pagination count to 7.
+    int numOfSuccessFix = 27;
+    int randomTestNum = 39;
 
     BlobId blobId;
     long operationTime;
@@ -5221,13 +5221,7 @@ final class ServerTestUtil {
       checkDeleteRecord(targetChannel, clusterMap, blobId, operationTime);
       cluster.time.sleep(1000);
 
-      // 4. Error case. The repair gets in too late and the blob is compacted already.
-      blobId = notFoundId;
-      addRepairRequestForTtlUpdate(db, sourceDataNode, blobId, operationTime, Utils.Infinite_Time);
-      cluster.time.sleep(1000);
-      // will file to repair. we emit the metrics and repair continues to run for other requests
-
-      // 5. On the sourceDataNode, the blob is ttlUpdated. On the targetDataNode, it has the blob.
+      // 4. On the sourceDataNode, the blob is ttlUpdated. On the targetDataNode, it has the blob.
       // When the Repair starts, the blob is expired.
       // But ODR inherits the original operation time when it was first called. So BlobStore.updateTtl won't reject it.
       blobId = expiredId;
@@ -5268,6 +5262,46 @@ final class ServerTestUtil {
       checkTtlUpdateRecord(targetChannel, clusterMap, blobId, operationTime, Utils.Infinite_Time);
       cluster.time.sleep(1000);
 
+      // Test pagination with records which cannot be fixed as well as records can be fixed.
+      // Inject records can not be fixed.
+      for (int i = 0; i < numOfRecordsCannotFix; i++) {
+        blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+            properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
+            BlobId.BlobDataType.DATACHUNK);
+        operationTime = cluster.time.milliseconds();
+        // will fail to repair. we emit the metrics and repair continues to run for other requests
+        addRepairRequestForTtlUpdate(db, sourceDataNode, blobId, operationTime, Utils.Infinite_Time);
+        cluster.time.sleep(1);
+      }
+      // Inject records can be fixed.
+      for (int i = 0; i < numOfSuccessFix; i++) {
+        blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+            properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
+            BlobId.BlobDataType.DATACHUNK);
+        operationTime = cluster.time.milliseconds();
+        putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+            Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+            testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+        putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+        addRepairRequestForDelete(db, sourceDataNode, blobId, operationTime);
+        cluster.time.sleep(1);
+      }
+      // Wait for good records are fixed.
+      DataSource dataSource = db.getDataSource();
+      long numberOfRows = 0;
+      String rowQuerySql = "SELECT COUNT(*) as total FROM ambry_repair_requests";
+      do {
+        try (Connection connection = dataSource.getConnection()) {
+          try (PreparedStatement statement = connection.prepareStatement(rowQuerySql)) {
+            try (ResultSet result = statement.executeQuery()) {
+              while (result.next()) {
+                numberOfRows = result.getLong("total");
+              }
+            }
+          }
+        }
+      } while (numberOfRows != numOfRecordsCannotFix);
+
       /*
        * Stage 2: Start the third data node. Now three data nodes are running.
        * Randomly generate failure requests. Each node will pick up some RepairRequests and fix them.
@@ -5276,7 +5310,7 @@ final class ServerTestUtil {
         controlBlobStore(thirdChannel, id, true);
       }
       List<BlobId> blobIds = new ArrayList<>();
-      for (int i = 0; i < 100; i++) {
+      for (int i = 0; i < randomTestNum; i++) {
         PartitionId partitionId = TestUtils.RANDOM.nextInt(2) == 0 ? partitionId1 : partitionId2;
         blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
             propertiesWithTtl.getAccountId(), propertiesWithTtl.getContainerId(), partitionId, testEncryption,
@@ -5308,9 +5342,6 @@ final class ServerTestUtil {
       // although we check the notification. DB update is in the RepairRequestsSender not in the handler threads.
       // wait for some time more.
       // We should still have one record which is case 4 error case.
-      DataSource dataSource = db.getDataSource();
-      long numberOfRows = 0;
-      String rowQuerySql = "SELECT COUNT(*) as total FROM ambry_repair_requests";
       do {
         try (Connection connection = dataSource.getConnection()) {
           try (PreparedStatement statement = connection.prepareStatement(rowQuerySql)) {
@@ -5321,7 +5352,7 @@ final class ServerTestUtil {
             }
           }
         }
-      } while (numberOfRows != 1);
+      } while (numberOfRows != numOfRecordsCannotFix);
 
       resetRepairRequestsDb(db);
 
