@@ -148,10 +148,7 @@ public class ReplicationManager extends ReplicationEngine {
       for (String mountPath : mountPathToPartitionInfos.keySet()) {
         retrieveReplicaTokensAndPersistIfNecessary(mountPath);
       }
-      if (replicaThreadPoolByDc.size() == 0) {
-        logger.warn("Number of data centers to replicate from is 0, not starting any replica threads");
-        return;
-      }
+
       // valid for replication manager.
       replicationMetrics.trackReplicationDisabledPartitions(replicaThreadPoolByDc);
 
@@ -175,6 +172,14 @@ public class ReplicationManager extends ReplicationEngine {
     } finally {
       startupLatch.countDown();
     }
+  }
+
+  /**
+   * Checks if replication manager started successfully. Only used in tests
+   * @return {@code true} if replication manager started successfully.
+   */
+  boolean isStarted() {
+    return started;
   }
 
   @Override
