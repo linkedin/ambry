@@ -735,7 +735,11 @@ public class ClusterChangeHandlerTest {
     List<String> newInstances = new ArrayList<>();
     Iterator<String> iter = allInstances.iterator();
     for (int i = 0; i < 3; i++) {
-      newInstances.add(iter.next());
+      String instanceName = iter.next();
+      // Don't add self instance, self instance requires partition override
+      if (!instanceName.equals(selfInstanceName)) {
+        newInstances.add(instanceName);
+      }
     }
 
     // create new resource for this partition with different instance set
@@ -766,9 +770,10 @@ public class ClusterChangeHandlerTest {
               replicaId.getPartitionId().getPartitionClass()));
       instanceConfig = converter.convert(datanodeConfig);
       localMockHelixAdmin.setInstanceConfig(clusterNameStatic, instance, instanceConfig);
+      System.out.println(
+          "---------------- adding replica " + replicaId.getPartitionId().getId() + " to instance " + instance);
     }
     helixCluster.triggerInstanceConfigChangeNotification();
-    Thread.sleep(1000);
 
     List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
         .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.LEADER,
