@@ -751,6 +751,25 @@ public class ClusterChangeHandlerTest {
     assertTrue(resources.contains(oldResourceName));
     assertTrue(resources.contains(newResourceName));
 
+    MockHelixAdmin localMockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
+    ReplicaId replicaId = helixClusterManager.getPartitionIdByName(partitionName).getReplicaIds().get(0);
+
+    // Add replica to those hosts
+    InstanceConfigToDataNodeConfigAdapter.Converter converter =
+        new InstanceConfigToDataNodeConfigAdapter.Converter(clusterMapConfig);
+    for (String instance : newInstances) {
+      InstanceConfig instanceConfig = helixCluster.getInstanceConfig(instance);
+      DataNodeConfig datanodeConfig = converter.convert(instanceConfig);
+      DataNodeConfig.DiskConfig diskConfig = datanodeConfig.getDiskConfigs().values().iterator().next();
+      diskConfig.getReplicaConfigs()
+          .put(partitionName, new DataNodeConfig.ReplicaConfig(replicaId.getCapacityInBytes(),
+              replicaId.getPartitionId().getPartitionClass()));
+      instanceConfig = converter.convert(datanodeConfig);
+      localMockHelixAdmin.setInstanceConfig(clusterNameStatic, instance, instanceConfig);
+    }
+    helixCluster.triggerInstanceConfigChangeNotification();
+    Thread.sleep(1000);
+
     List<AmbryReplica> replicas = helixClusterManager.getManagerQueryHelper()
         .getReplicaIdsByState(new AmbryPartition(Long.parseLong(partitionName), null, null), ReplicaState.LEADER,
             localDc);
@@ -763,7 +782,6 @@ public class ClusterChangeHandlerTest {
     assertEquals(new HashSet<>(instances), instancesFromClusterMap);
 
     // Force external view to update
-    MockHelixAdmin localMockHelixAdmin = helixCluster.getHelixAdminFromDc(localDc);
     // Use local mock helix admin to add this resource again so that external view would be updated
     localMockHelixAdmin.addResource(clusterNameStatic, newResourceName, newIdealState);
     localMockHelixAdmin.triggerRoutingTableNotification();
