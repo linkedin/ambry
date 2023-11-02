@@ -2866,6 +2866,9 @@ public class HelixBootstrapUpgradeUtil {
   }
 
   private int numReplicasForIdealState(String dcName, IdealState state) {
+    if (isIdealStateInFullAuto(state)) {
+      return Integer.valueOf(state.getReplicas());
+    }
     int numReplicaToCompare = -1;
     String partitionToCompare = null;
     for (String partition : state.getPartitionSet()) {
