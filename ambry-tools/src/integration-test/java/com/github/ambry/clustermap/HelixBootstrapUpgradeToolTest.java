@@ -934,6 +934,8 @@ public class HelixBootstrapUpgradeToolTest {
     ZKHelixAdmin admin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
     IdealState idealState = admin.getResourceIdealState(clusterName, String.valueOf(resourceId));
     idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+    int replicaCount = idealState.getPreferenceLists().entrySet().iterator().next().getValue().size();
+    idealState.setReplicas(String.valueOf(replicaCount));
     admin.setResourceIdealState(clusterName, String.valueOf(resourceId), idealState);
     admin.close();
   }
