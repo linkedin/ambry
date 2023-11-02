@@ -246,7 +246,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
   public Pair<List<RepairRequestRecord>, Long> getRepairRequestsExcludingHost(long partitionId, String sourceHostName,
       int sourceHostPort, long pageToken) throws SQLException {
     long startTime = time.milliseconds();
-    Long nextPageToken = (long) 0;
+    long nextPageToken = 0;
     try (Connection connection = dataSource.getConnection()) {
       try (PreparedStatement statement = connection.prepareStatement(
           GET_REQUESTS_QUERY_EXCLUDE_SOURCE_REPLICA_BY_PAGE)) {
@@ -281,7 +281,7 @@ public class MysqlRepairRequestsDb implements RepairRequestsDb {
 
           // restart from the beginning.
           if (result.size() < config.listMaxResults) {
-            nextPageToken = (long) 0;
+            nextPageToken = 0;
           }
           return new Pair(result, nextPageToken);
         }
