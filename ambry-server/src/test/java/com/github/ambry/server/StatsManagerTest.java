@@ -522,7 +522,7 @@ public class StatsManagerTest {
     storeKeyConverterFactory.setConversionMap(new HashMap<>());
     MockReplicationManager mockReplicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            currentNode, storeKeyConverterFactory, mockHelixParticipant);
+            currentNode, storeKeyConverterFactory, mockHelixParticipant, null);
     MockStatsManager mockStatsManager =
         new MockStatsManager(storageManager, mockClusterMap, localReplicas, new MetricRegistry(), statsManagerConfig,
             mockHelixParticipant, dataNodeId);

@@ -283,7 +283,8 @@ public class ReplicationTestHelper {
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
             dataNodeId, storeKeyConverterFactory, clusterParticipant, mockNetworkClientFactory,
-            mockNetworkClientFactory.getFindTokenHelper(), BlobIdTransformer.class.getName(), storeKeyFactory, time);
+            mockNetworkClientFactory.getFindTokenHelper(), BlobIdTransformer.class.getName(), storeKeyFactory, time,
+            null);
 
     return new Pair<>(storageManager, replicationManager);
   }

@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledExecutorService;
 
 import static org.mockito.Mockito.*;
 
@@ -57,6 +58,7 @@ public class MockReplicationManager extends ReplicationManager {
   public Map<String, Long> lagOverrides = null;
   CountDownLatch listenerExecutionLatch = null;
   MockReplicationListener replicationListener = new MockReplicationListener();
+  private boolean overrideStart = true;
 
   /**
    * Static construction helper
@@ -75,12 +77,13 @@ public class MockReplicationManager extends ReplicationManager {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     StoreConfig storeConfig = new StoreConfig(verifiableProperties);
     return new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-        dataNodeId, storeKeyConverterFactory, null);
+        dataNodeId, storeKeyConverterFactory, null, null);
   }
 
   public MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
-      StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant)
+      StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant,
+      ScheduledExecutorService scheduler)
       throws ReplicationException {
     this(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap, dataNodeId,
         storeKeyConverterFactory, clusterParticipant, mock(NetworkClientFactory.class), null,
@@ -94,23 +97,31 @@ public class MockReplicationManager extends ReplicationManager {
           public StoreKey getStoreKey(String input) {
             return null;
           }
-        }, SystemTime.getInstance());
+        }, SystemTime.getInstance(), scheduler);
   }
 
   public MockReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StorageManager storageManager, ClusterMap clusterMap, DataNodeId dataNodeId,
       StoreKeyConverterFactory storeKeyConverterFactory, ClusterParticipant clusterParticipant,
       NetworkClientFactory factory, FindTokenHelper findTokenHelper, String transformerClassName,
-      StoreKeyFactory storeKeyFactory, Time time) throws ReplicationException {
-    super(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory, clusterMap, null,
+      StoreKeyFactory storeKeyFactory, Time time, ScheduledExecutorService scheduler) throws ReplicationException {
+    super(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory, clusterMap, scheduler,
         dataNodeId, factory, clusterMap.getMetricRegistry(), null, storeKeyConverterFactory, transformerClassName,
         clusterParticipant, null, findTokenHelper, time);
     reset();
     controlReplicationReturnVal = true;
   }
 
+  public void setOverrideStart(boolean overrideStart) {
+    this.overrideStart = overrideStart;
+  }
+
   @Override
-  public void start() {
+  public void start() throws ReplicationException {
+    if (!overrideStart) {
+      super.start();
+      return;
+    }
     startupLatch.countDown();
     started = true;
   }

@@ -85,6 +85,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -103,7 +104,6 @@ import static com.github.ambry.clustermap.MockClusterMap.*;
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.*;
 
@@ -200,6 +200,102 @@ public class ReplicationTest extends ReplicationTestHelper {
   }
 
   /**
+   * Test {@link ReplicationManager} is started successfully with empty replicas
+   * @throws Exception
+   */
+  @Test
+  public void startTest() throws Exception {
+    MockClusterMap clusterMap = spy(new MockClusterMap());
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    StoreConfig storeConfig = new StoreConfig(verifiableProperties);
+    DataNodeId dataNodeId = clusterMap.getDataNodeIds().get(0);
+    MockStoreKeyConverterFactory storeKeyConverterFactory = new MockStoreKeyConverterFactory(null, null);
+    storeKeyConverterFactory.setConversionMap(new HashMap<>());
+    StorageManager storageManager =
+        new StorageManager(storeConfig, new DiskManagerConfig(verifiableProperties), Utils.newScheduler(1, true),
+            new MetricRegistry(), null, clusterMap, dataNodeId, null, null, new MockTime(), null,
+            new InMemAccountService(false, false));
+    storageManager.start();
+
+    // Return empty list from cluster map so that Replication Manager starts without any replicas
+    when(clusterMap.getReplicaIds(dataNodeId)).thenReturn(Collections.emptyList());
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, "Replica-token-persistor", false);
+    MockReplicationManager replicationManager =
+        new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
+            dataNodeId, storeKeyConverterFactory, null, scheduler);
+    replicationManager.setOverrideStart(false);
+    replicationManager.start();
+
+    // 1. Verify that replication manager is started successfully
+    assertTrue("Replication Manager should have started successfully", replicationManager.isStarted());
+    assertEquals("Replication Manager should not have any replicas assigned", 0,
+        replicationManager.getMountPathToPartitionInfosMap().size());
+
+    // 2. Verify remote replica changes are reflected in replication manager
+
+    // Setup
+    // 2.a Add a replica on current node
+    Mockito.reset(clusterMap);
+    ReplicaId existingReplica = clusterMap.getReplicaIds(dataNodeId).get(0);
+    assertTrue("Adding new replica to replication manager should succeed",
+        replicationManager.addReplica(existingReplica));
+    // 2.b Remove a peer replica
+    PartitionInfo partitionInfo =
+        replicationManager.getPartitionToPartitionInfoMap().get(existingReplica.getPartitionId());
+    ReplicaId peerReplicaToRemove =
+        existingReplica.getPartitionId().getReplicaIds().stream().filter(r -> r != existingReplica).findFirst().get();
+    RemoteReplicaInfo removedPeerReplicaInfo = partitionInfo.getRemoteReplicaInfos()
+        .stream()
+        .filter(info -> info.getReplicaId() == peerReplicaToRemove)
+        .findFirst()
+        .get();
+    ReplicaThread removedPeerReplicaThread = removedPeerReplicaInfo.getReplicaThread();
+    // 2.c Create a peer replica.
+    MockDataNodeId remoteNode = createDataNode(
+        getListOfPorts(PLAIN_TEXT_PORT_START_NUMBER + 10, SSL_PORT_START_NUMBER + 10, HTTP2_PORT_START_NUMBER + 10),
+        clusterMap.getDatacenterName((byte) 0), 3);
+    ReplicaId addedReplica =
+        new MockReplicaId(remoteNode.getPort(), (MockPartitionId) existingReplica.getPartitionId(), remoteNode, 0);
+    // 2.d populate added replica and removed replica lists
+    List<ReplicaId> replicasToAdd = new ArrayList<>(Arrays.asList(existingReplica, addedReplica));
+    List<ReplicaId> replicasToRemove = new ArrayList<>(Arrays.asList(existingReplica, peerReplicaToRemove));
+    assertNotNull("PartitionInfo is not found", partitionInfo);
+    ClusterMapChangeListener clusterMapChangeListener = clusterMap.getClusterMapChangeListener();
+    clusterMapChangeListener.onReplicaAddedOrRemoved(replicasToAdd, replicasToRemove);
+
+    // Verifications
+    // 2.e Verify that peer replica additions and removals are reflected
+    verifyRemoteReplicaInfo(partitionInfo, addedReplica, true);
+    verifyRemoteReplicaInfo(partitionInfo, peerReplicaToRemove, false);
+
+    // 2.f Verify new added replica is assigned to a certain thread
+    ReplicaThread replicaThread =
+        replicationManager.getDataNodeIdToReplicaThreadMap().get(addedReplica.getDataNodeId());
+    assertNotNull("There is no ReplicaThread assocated with new replica", replicaThread);
+    Optional<RemoteReplicaInfo> findResult = replicaThread.getRemoteReplicaInfos()
+        .get(remoteNode)
+        .stream()
+        .filter(info -> info.getReplicaId() == addedReplica)
+        .findAny();
+    assertTrue("New added remote replica info should exist in corresponding thread", findResult.isPresent());
+
+    // 2.g Verify the removed replica info's thread is null
+    assertNull("Thread in removed replica info should be null", removedPeerReplicaInfo.getReplicaThread());
+    findResult = removedPeerReplicaThread.getRemoteReplicaInfos()
+        .get(peerReplicaToRemove.getDataNodeId())
+        .stream()
+        .filter(info -> info.getReplicaId() == peerReplicaToRemove)
+        .findAny();
+    assertFalse("Previous replica thread should not contain RemoteReplicaInfo that is already removed",
+        findResult.isPresent());
+
+    // Clean up
+    scheduler.shutdownNow();
+    storageManager.shutdown();
+    replicationManager.shutdown();
+  }
+
+  /**
    * Test dynamically add/remove replica in {@link ReplicationManager}
    * @throws Exception
    */
@@ -218,7 +314,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            dataNodeId, storeKeyConverterFactory, null);
+            dataNodeId, storeKeyConverterFactory, null, null);
     ReplicaId replicaToTest = clusterMap.getReplicaIds(dataNodeId).get(0);
     // Attempting to add replica that already exists should fail
     assertFalse("Adding an existing replica should fail", replicationManager.addReplica(replicaToTest));
@@ -308,7 +404,7 @@ public class ReplicationTest extends ReplicationTestHelper {
     storageManager.start();
     MockReplicationManager replicationManager =
         new MockReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, clusterMap,
-            currentNode, storeKeyConverterFactory, null);
+            currentNode, storeKeyConverterFactory, null, null);
     ClusterMapChangeListener clusterMapChangeListener = clusterMap.getClusterMapChangeListener();
     // find the special partition (not on current node) and get an irrelevant replica from it
     PartitionId absentPartition = clusterMap.getSpecialPartition();
