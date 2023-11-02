@@ -14,6 +14,7 @@
  */
 package com.github.ambry.repair;
 
+import com.github.ambry.utils.Pair;
 import java.io.Closeable;
 import java.sql.SQLException;
 import java.util.List;
@@ -55,10 +56,11 @@ public interface RepairRequestsDb extends Closeable {
    * @param partitionId partition id
    * @param hostName the host name of the source replica to exclude
    * @param hostPort the port number of the source replica to exclude
-   * @return the oldest {@link RepairRequestRecord}s.
+   * @param token pagination token
+   * @return the pair of oldest {@link RepairRequestRecord}s and token for the next page
    */
-  List<RepairRequestRecord> getRepairRequestsExcludingHost(long partitionId, String hostName, int hostPort)
-      throws Exception;
+  Pair<List<RepairRequestRecord>, Long> getRepairRequestsExcludingHost(long partitionId, String hostName, int hostPort,
+      long token) throws Exception;
 
   Set<Long> getPartitionsNeedRepair(String sourceHostName, int sourceHostPort, List<Long> partitions)
       throws SQLException;

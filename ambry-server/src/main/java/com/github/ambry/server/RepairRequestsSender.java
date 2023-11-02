@@ -35,6 +35,7 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.repair.RepairRequestRecord;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.store.StorageManager;
+import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -58,8 +59,8 @@ class RepairRequestsSender implements Runnable {
   private static final Logger logger = LoggerFactory.getLogger(RepairRequestsSender.class);
   private static final String SERVICE_ID = "RepairRequestsSender";
   // ODR can take some time to execute due to remote call to the peer replica.
-  private static int POLL_TIMEOUT_MS = 10000;
-  private static int SLEEP_TIME_MS = 5000;
+  private static final int POLL_TIMEOUT_MS = 10000;
+  private static final int SLEEP_TIME_MS = 3000;
 
   // the channel to talk to the requests handler
   private final RequestResponseChannel requestChannel;
@@ -81,6 +82,8 @@ class RepairRequestsSender implements Runnable {
   private final StorageManager storageManager;
   // Hashmap from partition id to the replicas
   private final Map<Long, ReplicaId> partition2Replicas;
+  // Map from partition id to RepairRequests DB token
+  private final Map<Long, Long> partition2DbPageToken;
   // generator to generate the correlation ids.
   private final AtomicInteger correlationIdGenerator = new AtomicInteger(0);
   // max result sets it can get from each query
@@ -118,10 +121,12 @@ class RepairRequestsSender implements Runnable {
     // LOCAL_CONSISTENCY_TODO. listen to the clustermap change and make the modification accordingly.
     partitionIds = new ArrayList<>();
     partition2Replicas = new HashMap<>();
+    partition2DbPageToken = new HashMap<>();
     for (ReplicaId replica : clusterMap.getReplicaIds(nodeId)) {
       long partition = replica.getPartitionId().getId();
       partitionIds.add(partition);
       partition2Replicas.put(partition, replica);
+      partition2DbPageToken.put(partition, (long) 0);
     }
   }
 
@@ -171,7 +176,12 @@ class RepairRequestsSender implements Runnable {
               break;
             }
             // get the repair requests for this partition
-            List<RequestInfo> requestInfos = getAmbryRequest(partitionId);
+            long oldToken = partition2DbPageToken.get(partitionId);
+            Pair<List<RequestInfo>, Long> dbReqs = getAmbryRequest(partitionId, oldToken);
+            List<RequestInfo> requestInfos = dbReqs.getFirst();
+            long newToken = dbReqs.getSecond();
+            partition2DbPageToken.put(partitionId, newToken);
+
             if (requestInfos.isEmpty()) {
               continue;
             }
@@ -179,12 +189,15 @@ class RepairRequestsSender implements Runnable {
             if (requestInfos.size() >= maxResults) {
               hasMore = true;
             }
+            logger.info("RepairRequests Sender host {} partition {}, old token {}, new token {} request count {}",
+                nodeId, partitionId, oldToken, newToken, requestInfos.size());
 
             Set<Integer> requestsToDrop = new HashSet<>();
             // send the repair requests to the handler and wait for the responses.
             for (RequestInfo reqInfo : requestInfos) {
               long startTime = System.currentTimeMillis();
-              List<ResponseInfo> responses = client.sendAndPoll(Collections.singletonList(reqInfo), requestsToDrop, POLL_TIMEOUT_MS);
+              List<ResponseInfo> responses =
+                  client.sendAndPoll(Collections.singletonList(reqInfo), requestsToDrop, POLL_TIMEOUT_MS);
               metrics.repairSenderHandleTimeInMs.update(System.currentTimeMillis() - startTime);
               if (responses == null || responses.size() == 0) {
                 metrics.repairSenderErrorHandleCount.inc();
@@ -205,6 +218,12 @@ class RepairRequestsSender implements Runnable {
                 db.removeRepairRequests(req.getBlobId().toString(), type);
                 metrics.repairSenderSuccessHandleCount.inc();
                 logger.info("RepairRequests Sender: Repaired {}", req);
+              } else if ((req.getOperationType() == RequestOrResponseType.TtlUpdateRequest) && (
+                  res.getError() == ServerErrorCode.Blob_Not_Found || res.getError() == ServerErrorCode.Blob_Expired)) {
+                // Ideally we may need create alert if we cannot repair the requests in timely matter.
+                metrics.repairSenderTtlUpdateTooLateCount.inc();
+                logger.error("RepairRequests Sender: it's too late to updateTTL {} response {}", req, res);
+                hasError = true;
               } else {
                 // Ideally we may need create alert if we cannot repair the requests in timely matter.
                 metrics.repairSenderErrorHandleCount.inc();
@@ -231,15 +250,16 @@ class RepairRequestsSender implements Runnable {
   /**
    * Get the {@link RepairRequestRecord} from the database and generate {@link ReplicateBlobRequest}
    * @param partitionId the partition id
-   * @return list of {@link RequestInfo}
+   * @param pageToken token to get the page
+   * @return a pair of list of {@link RequestInfo} and token of the next page
    */
-  private List<RequestInfo> getAmbryRequest(long partitionId) throws Exception {
+  private Pair<List<RequestInfo>, Long> getAmbryRequest(long partitionId, long pageToken) throws Exception {
     List<RequestInfo> requestInfos = new ArrayList<>();
     // get the repair requests for this partition and this node is not the source replica.
-    List<RepairRequestRecord> records =
-        db.getRepairRequestsExcludingHost(partitionId, nodeId.getHostname(), nodeId.getPort());
-
-    for (RepairRequestRecord record : records) {
+    Pair<List<RepairRequestRecord>, Long> records =
+        db.getRepairRequestsExcludingHost(partitionId, nodeId.getHostname(), nodeId.getPort(), pageToken);
+    Long nextPageToken = records.getSecond();
+    for (RepairRequestRecord record : records.getFirst()) {
       BlobId blobId;
       try {
         blobId = new BlobId(record.getBlobId(), clusterMap);
@@ -288,7 +308,7 @@ class RepairRequestsSender implements Runnable {
       requestInfos.add(requestInfo);
     }
 
-    return requestInfos;
+    return new Pair(requestInfos, nextPageToken);
   }
 
   /**
@@ -307,6 +327,7 @@ class RepairRequestsSender implements Runnable {
   private static class Metrics {
     public final Counter repairSenderErrorGenerateReqCount;
     public final Counter repairSenderErrorHandleCount;
+    public final Counter repairSenderTtlUpdateTooLateCount;
     public final Counter repairSenderSuccessHandleCount;
 
     public final Histogram repairSenderHandleTimeInMs;
@@ -319,6 +340,8 @@ class RepairRequestsSender implements Runnable {
           metricRegistry.counter(MetricRegistry.name(RepairRequestsSender.class, "RepairSenderErrorGenerateReqCount"));
       repairSenderErrorHandleCount =
           metricRegistry.counter(MetricRegistry.name(RepairRequestsSender.class, "RepairSenderErrorHandleCount"));
+      repairSenderTtlUpdateTooLateCount =
+          metricRegistry.counter(MetricRegistry.name(RepairRequestsSender.class, "RepairSenderTtlUpdateTooLateCount"));
       repairSenderSuccessHandleCount =
           metricRegistry.counter(MetricRegistry.name(RepairRequestsSender.class, "RepairSenderSuccessHandleCount"));
 

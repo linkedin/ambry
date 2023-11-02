@@ -5136,14 +5136,17 @@ final class ServerTestUtil {
         properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
     BlobId blobId2 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
+        properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
     BlobId blobId3 = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
-        properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
+        properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
     BlobId expiredId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
         properties.getAccountId(), properties.getContainerId(), partitionId2, testEncryption,
         BlobId.BlobDataType.DATACHUNK);
+    int numOfRecordsCannotFix = 15; // have set query pagination count to 7.
+    int numOfSuccessFix = 27;
+    int randomTestNum = 39;
 
     BlobId blobId;
     long operationTime;
@@ -5259,6 +5262,46 @@ final class ServerTestUtil {
       checkTtlUpdateRecord(targetChannel, clusterMap, blobId, operationTime, Utils.Infinite_Time);
       cluster.time.sleep(1000);
 
+      // Test pagination with records which cannot be fixed as well as records can be fixed.
+      // Inject records can not be fixed.
+      for (int i = 0; i < numOfRecordsCannotFix; i++) {
+        blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+            properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
+            BlobId.BlobDataType.DATACHUNK);
+        operationTime = cluster.time.milliseconds();
+        // will fail to repair. we emit the metrics and repair continues to run for other requests
+        addRepairRequestForTtlUpdate(db, sourceDataNode, blobId, operationTime, Utils.Infinite_Time);
+        cluster.time.sleep(1);
+      }
+      // Inject records can be fixed.
+      for (int i = 0; i < numOfSuccessFix; i++) {
+        blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
+            properties.getAccountId(), properties.getContainerId(), partitionId1, testEncryption,
+            BlobId.BlobDataType.DATACHUNK);
+        operationTime = cluster.time.milliseconds();
+        putRequest = new PutRequest(1, "client1", blobId, propertiesWithTtl, ByteBuffer.wrap(userMetadata),
+            Unpooled.wrappedBuffer(data), properties.getBlobSize(), BlobType.DataBlob,
+            testEncryption ? ByteBuffer.wrap(encryptionKey) : null);
+        putBlob(putRequest, targetChannel, ServerErrorCode.No_Error);
+        addRepairRequestForDelete(db, sourceDataNode, blobId, operationTime);
+        cluster.time.sleep(1);
+      }
+      // Wait for good records are fixed.
+      DataSource dataSource = db.getDataSource();
+      long numberOfRows = 0;
+      String rowQuerySql = "SELECT COUNT(*) as total FROM ambry_repair_requests";
+      do {
+        try (Connection connection = dataSource.getConnection()) {
+          try (PreparedStatement statement = connection.prepareStatement(rowQuerySql)) {
+            try (ResultSet result = statement.executeQuery()) {
+              while (result.next()) {
+                numberOfRows = result.getLong("total");
+              }
+            }
+          }
+        }
+      } while (numberOfRows != numOfRecordsCannotFix);
+
       /*
        * Stage 2: Start the third data node. Now three data nodes are running.
        * Randomly generate failure requests. Each node will pick up some RepairRequests and fix them.
@@ -5267,7 +5310,7 @@ final class ServerTestUtil {
         controlBlobStore(thirdChannel, id, true);
       }
       List<BlobId> blobIds = new ArrayList<>();
-      for (int i = 0; i < 100; i++) {
+      for (int i = 0; i < randomTestNum; i++) {
         PartitionId partitionId = TestUtils.RANDOM.nextInt(2) == 0 ? partitionId1 : partitionId2;
         blobId = new BlobId(blobIdVersion, BlobId.BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
             propertiesWithTtl.getAccountId(), propertiesWithTtl.getContainerId(), partitionId, testEncryption,
@@ -5298,9 +5341,7 @@ final class ServerTestUtil {
 
       // although we check the notification. DB update is in the RepairRequestsSender not in the handler threads.
       // wait for some time more.
-      DataSource dataSource = db.getDataSource();
-      long numberOfRows = 0;
-      String rowQuerySql = "SELECT COUNT(*) as total FROM ambry_repair_requests";
+      // We should still have one record which is case 4 error case.
       do {
         try (Connection connection = dataSource.getConnection()) {
           try (PreparedStatement statement = connection.prepareStatement(rowQuerySql)) {
@@ -5311,7 +5352,9 @@ final class ServerTestUtil {
             }
           }
         }
-      } while (numberOfRows != 0);
+      } while (numberOfRows != numOfRecordsCannotFix);
+
+      resetRepairRequestsDb(db);
 
       // Test is done.
       // restart the blobs stores
@@ -5360,6 +5403,17 @@ final class ServerTestUtil {
           new MysqlRepairRequestsDbFactory(verifiableProperties, metrics, localDc, time);
       MysqlRepairRequestsDb repairRequestsDb = factory.getRepairRequestsDb();
 
+      resetRepairRequestsDb(repairRequestsDb);
+      return repairRequestsDb;
+    } catch (SQLException e) {
+      throw e;
+    } catch (IOException e) {
+      throw e;
+    }
+  }
+
+  static MysqlRepairRequestsDb resetRepairRequestsDb(MysqlRepairRequestsDb repairRequestsDb) throws Exception {
+    try {
       // cleanup the database
       DataSource dataSource = repairRequestsDb.getDataSource();
 
@@ -5369,8 +5423,6 @@ final class ServerTestUtil {
 
       return repairRequestsDb;
     } catch (SQLException e) {
-      throw e;
-    } catch (IOException e) {
       throw e;
     }
   }
