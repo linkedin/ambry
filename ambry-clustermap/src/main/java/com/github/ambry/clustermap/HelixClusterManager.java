@@ -671,7 +671,7 @@ public class HelixClusterManager implements ClusterMap {
     return dcToDcInfo.get(clusterMapConfig.clusterMapDatacenterName).dcZkInfo.getZkConnectStrs().get(0);
   }
 
-  public String getResourceForPartitionInLocalDc(String partitionName) {
+  public Set<String> getResourceForPartitionInLocalDc(String partitionName) {
     return partitionToResourceNameByDc.get(clusterMapConfig.clusterMapDatacenterName).get(partitionName);
   }
 

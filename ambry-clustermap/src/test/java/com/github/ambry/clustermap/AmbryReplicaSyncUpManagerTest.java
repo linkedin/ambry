@@ -24,7 +24,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -85,7 +84,7 @@ public class AmbryReplicaSyncUpManagerTest {
     mockHelixParticipant.replicaSyncUpService = replicaSyncUpService;
     stateModel =
         new AmbryPartitionStateModel(RESOURCE_NAME, partition.toPathString(), mockHelixParticipant, clusterMapConfig,
-            new ConcurrentHashMap<>(), mock(HelixClusterManager.class));
+            mock(HelixClusterManager.class));
     mockMessage = Mockito.mock(Message.class);
     when(mockMessage.getPartitionName()).thenReturn(partition.toPathString());
     when(mockMessage.getResourceName()).thenReturn(RESOURCE_NAME);
