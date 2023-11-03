@@ -15,7 +15,6 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentMap;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.Message;
 import org.apache.helix.participant.statemachine.StateModel;
@@ -65,19 +64,17 @@ public class AmbryPartitionStateModel extends StateModel {
   private final String partitionName;
   private final PartitionStateChangeListener partitionStateChangeListener;
   private final ClusterMapConfig clusterMapConfig;
-  private final ConcurrentMap<String, String> partitionNameToResourceName;
   private final HelixClusterManager clusterManager;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
       PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig,
-      ConcurrentMap<String, String> partitionNameToResourceName, HelixClusterManager clusterManager) {
+      HelixClusterManager clusterManager) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
-    this.partitionNameToResourceName = partitionNameToResourceName;
     this.clusterManager = Objects.requireNonNull(clusterManager, "Clustermap is missing");
   }
 
@@ -197,28 +194,14 @@ public class AmbryPartitionStateModel extends StateModel {
     String resourceName = message.getResourceName();
     String partitionName = message.getPartitionName();
     String resourceNameToCompare = clusterManager.getResourceForPartitionInLocalDc(partitionName);
-    if (resourceNameToCompare != null && !resourceNameToCompare.equals(resourceName)) {
-      if (Integer.valueOf(resourceNameToCompare) < Integer.valueOf(resourceName)) {
-        resourceNameToCompare = resourceName;
-      }
-    } else {
-      resourceNameToCompare = resourceName;
+    if (resourceNameToCompare == null) {
+      // this is a new partition, clustermap didn't get the update yet, then just allow transition.
+      return true;
     }
-    final String finalResourceName = resourceNameToCompare;
-    String mappedResourceName = partitionNameToResourceName.compute(partitionName, (k, v) -> {
-      if (v == null || v.equals(finalResourceName)) {
-        return finalResourceName;
-      }
-      try {
-        int oldResourceId = Integer.valueOf(v);
-        int newResourceId = Integer.valueOf(finalResourceName);
-        return newResourceId > oldResourceId ? finalResourceName : v;
-      } catch (Exception e) {
-        logger.error("Failed to parse resource name to an integer", e);
-        throw new StateTransitionException("Failed to parse resource name",
-            StateTransitionException.TransitionErrorCode.InvalidResourceName, e);
-      }
-    });
-    return mappedResourceName.equals(resourceName);
+    // The resource from clustermap is lower than or equals to the resource name in the message,
+    // just allow it.
+    // If the resource from clustermap is greater than the resource name in the message, then this transition message
+    // was fired for the old resources.
+    return Integer.valueOf(resourceNameToCompare) <= Integer.valueOf(resourceName));
   }
 }
