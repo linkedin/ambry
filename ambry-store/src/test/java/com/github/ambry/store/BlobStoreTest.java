@@ -135,6 +135,7 @@ public class BlobStoreTest {
 
   static final int deleteRetentionDay = 1;
   private final Random random = new Random();
+  private StoreMetrics storeMetrics = null;
 
   /**
    * A mock implementation of {@link MessageStoreHardDelete} that can be set to return {@link MessageInfo} for a
@@ -293,6 +294,10 @@ public class BlobStoreTest {
 
   // Indicates whether the log is segmented
   private final boolean isLogSegmented;
+
+  //  Indicates if the index direct memory usage metric is enabled.
+  private boolean enableIndexDirectMemoryUsageMetric;
+
   // Variables that represent the folder where the data resides
   private final File tempDir;
   private final String tempDirStr;
@@ -316,23 +321,27 @@ public class BlobStoreTest {
   private MessageStoreHardDelete hardDelete = new MockMessageStoreHardDelete();
 
   /**
-   * Running for both segmented and non-segmented log.
-   * @return an array with both {@code false} and {@code true}.
+   * Running for both segmented and non-segmented log, as well as direct memory usage metric disabled and enabled.
+   * @return an array with values for both the parameters both {@code false} and {@code true}.
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{false}, {true}});
+    return Arrays.asList(new Object[][]{{false, false}, {false, true}, {true, false}, {true, true}});
   }
 
   /**
    * Creates a temporary directory and sets up some test state.
+   * @param isLogSegmented {@code true} if the log is segmented.
+   * @param enableIndexDirectMemoryUsageMetric {@code true} if the index direct memory usage metric should be enabled.
    * @throws InterruptedException
    * @throws IOException
    * @throws StoreException
    */
-  public BlobStoreTest(boolean isLogSegmented) throws InterruptedException, IOException, StoreException {
+  public BlobStoreTest(boolean isLogSegmented, boolean enableIndexDirectMemoryUsageMetric) throws InterruptedException, IOException, StoreException {
     time.sleep(TimeUnit.DAYS.toMillis(deleteRetentionDay));
     this.isLogSegmented = isLogSegmented;
+    this.enableIndexDirectMemoryUsageMetric = enableIndexDirectMemoryUsageMetric;
+    properties.put("store.enable.index.direct.memory.usage.metric", Boolean.toString(enableIndexDirectMemoryUsageMetric));
     tempDir = StoreTestUtils.createTempDirectory("storeDir-" + storeId);
     tempDirStr = tempDir.getAbsolutePath();
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
@@ -351,7 +360,12 @@ public class BlobStoreTest {
     Utils.shutDownExecutorService(scheduler, 5, TimeUnit.SECONDS);
     Utils.shutDownExecutorService(storeStatsScheduler, 5, TimeUnit.SECONDS);
     if (store.isStarted()) {
+      if (enableIndexDirectMemoryUsageMetric) {
+        assertTrue(storeMetrics.indexes.containsKey(store.getReplicaId().getPartitionId().toString()));
+      }
       store.shutdown();
+      // verify that the index object was removed from the metrics.
+      assertFalse(storeMetrics.indexes.containsKey(store.getReplicaId().getPartitionId().toString()));
     }
     assertTrue(tempDir.getAbsolutePath() + " could not be deleted", StoreTestUtils.cleanDirectory(tempDir, true));
     generatedKeys.clear();
@@ -546,6 +560,10 @@ public class BlobStoreTest {
    */
   @Test
   public void storeStartupTests() throws IOException, StoreException {
+
+    // Since store creation can fail in this test before the metric has initialized, set the memory usage metric to false.
+    properties.put("store.enable.index.direct.memory.usage.metric", "false");
+    enableIndexDirectMemoryUsageMetric = false;
 
     // attempt to start when store is already started fails
     verifyStartupFailure(store, StoreErrorCodes.Store_Already_Started);
@@ -1067,9 +1085,9 @@ public class BlobStoreTest {
     ReplicaId replicaId = getMockReplicaId(tempDirStr);
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry registry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(registry);
+    storeMetrics = new StoreMetrics(registry);
     MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(time);
-    store = new MockBlobStore(replicaId, config, null, metrics, mockBlobStoreStats);
+    store = new MockBlobStore(replicaId, config, null, storeMetrics, mockBlobStoreStats);
     store.start();
 
     MockId id = put(1, PUT_RECORD_SIZE, Utils.Infinite_Time).get(0);
@@ -1867,11 +1885,11 @@ public class BlobStoreTest {
     properties.put("store.index.max.number.of.inmem.elements", "1");
     properties.put("store.io.error.count.to.trigger.shutdown", "3");
     MetricRegistry registry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(registry);
+    storeMetrics = new StoreMetrics(registry);
     StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
-            storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics, mockStoreKeyFactory, recovery,
+            storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, storeMetrics, storeMetrics, mockStoreKeyFactory, recovery,
             hardDelete, Collections.singletonList(mockDelegate), time, new InMemAccountService(false, false), null,
             scheduler);
 
@@ -1970,7 +1988,7 @@ public class BlobStoreTest {
       assertEquals("Mismatch in error code", StoreErrorCodes.IOError, e.getErrorCode());
     }
     // verify error count keeps track of StoreException and shut down store properly
-    assertEquals("Mismatch in triggered shutdown counter", 1, metrics.storeIoErrorTriggeredShutdownCount.getCount());
+    assertEquals("Mismatch in triggered shutdown counter", 1, storeMetrics.storeIoErrorTriggeredShutdownCount.getCount());
     assertFalse("Store should shutdown because error count exceeded threshold", testStore2.isStarted());
 
     reloadStore();
@@ -2090,10 +2108,10 @@ public class BlobStoreTest {
         new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry registry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(registry);
+    storeMetrics = new StoreMetrics(registry);
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
-            diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time,
+            diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time,
             new InMemAccountService(false, false), null, scheduler);
     testStore.start();
     DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
@@ -2204,13 +2222,13 @@ public class BlobStoreTest {
         new DiskSpaceAllocator(true, reserveDir, 0, new StorageManagerMetrics(new MetricRegistry()));
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry registry = new MetricRegistry();
-    StoreMetrics metrics = new StoreMetrics(registry);
+    storeMetrics = new StoreMetrics(registry);
     ClusterParticipant dynamicParticipant = Mockito.mock(ClusterParticipant.class);
     when(dynamicParticipant.supportsStateChanges()).thenReturn(true);
     ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(dynamicParticipant);
     BlobStore testStore =
         new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
-            diskIOScheduler, diskAllocator, metrics, metrics, STORE_KEY_FACTORY, recovery, hardDelete,
+            diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete,
             Collections.singletonList(delegate), time, new InMemAccountService(false, false), null, scheduler);
     testStore.start();
     assertEquals("Store current state should be OFFLINE if dynamic participant is adopted", OFFLINE,
@@ -2231,7 +2249,7 @@ public class BlobStoreTest {
     int storeUnsealPercentage = config.storePartialWriteEnableSizeThresholdPercentage
         - config.storePartialWriteToReadWriteEnableSizeThresholdPercentageDelta;
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
-    StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
+    storeMetrics = new StoreMetrics(new MetricRegistry());
     BlobStore testStore =
         createBlobStore(replicaId, config, Collections.singletonList(mockReplicaStatusDelegate), storeMetrics);
     PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
@@ -2353,7 +2371,7 @@ public class BlobStoreTest {
     StoreTestUtils.MockReplicaId replicaId = getMockReplicaId(tempDirStr);
     List<ReplicaStatusDelegate> replicaStatusDelegates =
         Arrays.asList(mockReplicaStatusDelegate1, mockReplicaStatusDelegate2);
-    StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
+    storeMetrics = new StoreMetrics(new MetricRegistry());
     BlobStore testStore = createBlobStore(replicaId, config, replicaStatusDelegates, storeMetrics);
     PersistentIndex mockPersistentIndex = Mockito.mock(PersistentIndex.class);
     testStore.index = mockPersistentIndex;
@@ -2711,9 +2729,10 @@ public class BlobStoreTest {
   private void catchStoreExceptionAndVerifyErrorCode(StoreMethodCaller methodCaller) throws StoreException {
     properties.put("store.io.error.count.to.trigger.shutdown", "1");
     ReplicaStatusDelegate mockDelegate = mock(ReplicaStatusDelegate.class);
+    storeMetrics = new StoreMetrics(new MetricRegistry());
     MockBlobStore mockBlobStore =
         new MockBlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)),
-            Collections.singletonList(mockDelegate), new StoreMetrics(new MetricRegistry()));
+            Collections.singletonList(mockDelegate), storeMetrics);
     // First, verify that a normal shutdown will create a clean shutdown file in the store directory.
     mockBlobStore.start();
     mockBlobStore.shutdown();
@@ -3821,7 +3840,8 @@ public class BlobStoreTest {
    */
   private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
       List<ReplicaStatusDelegate> replicaStatusDelegates) {
-    return createBlobStore(replicaId, config, replicaStatusDelegates, new StoreMetrics(new MetricRegistry()));
+    storeMetrics = new StoreMetrics(new MetricRegistry());
+    return createBlobStore(replicaId, config, replicaStatusDelegates, storeMetrics);
   }
 
   /**
