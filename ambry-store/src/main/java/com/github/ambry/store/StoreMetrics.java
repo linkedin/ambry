@@ -123,7 +123,7 @@ public class StoreMetrics {
   public final Histogram statsRecentEntryQueueSize;
   public final Histogram statsForwardScanEntryCount;
 
-  private final ConcurrentHashMap<String, PersistentIndex> indexes = new ConcurrentHashMap<>();
+  final ConcurrentHashMap<String, PersistentIndex> indexes = new ConcurrentHashMap<>();
 
   private final MetricRegistry registry;
 
@@ -313,6 +313,7 @@ public class StoreMetrics {
     registry.remove(MetricRegistry.name(Log.class, prefix + "CurrentInvalidDataSize"));
     registry.remove(MetricRegistry.name(Log.class, "ByteBufferForAppendTotalCount"));
     registry.remove(MetricRegistry.name(Log.class, "UnderCompaction" + SEPARATOR + "ByteBufferForAppendTotalCount"));
+    indexes.remove(storeId);
   }
 
   void initializeHardDeleteMetric(String storeId, final HardDeleter hardDeleter, final PersistentIndex index) {
