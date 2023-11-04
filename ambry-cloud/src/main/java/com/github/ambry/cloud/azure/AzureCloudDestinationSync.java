@@ -109,10 +109,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *    azureCloudConfig.azureNameSchemeVersion = 1
      *    azureCloudConfig.azureStorageAccountInfo = null; legacy remnant
      *    cloudConfig.ambryBackupVersion = 2.0
-     *    cloudConfig.cloudContainerCompactionEnabled = false; Container are now Ambry partitions, and we do not delete partitions
      *    cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
      *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, as repl-logic avoids duplicate messages any ways
      *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
+     *
+     *    Compaction Configs
+     *    ==================
+     *
+     *    azureBlobStorageMaxResultsPerPage = 5000; default, max, can change for testing
+     * 	  cloudCompactionGracePeriodDays = 7; default, can change for testing
+     *    cloudBlobCompactionEnabled = true; default
+     *    cloudBlobCompactionIntervalHours ; gap between consecutive compaction cycles
+     *    cloudBlobCompactionShutdownTimeoutSecs = 10; arbitrary timeout
+     *    cloudBlobCompactionStartupDelaySecs = 600; Wait to populate partition set
+     *    cloudCompactionDryRunEnabled = false; default, used for testing
+     *    cloudCompactionNumThreads = 5; default, can change for testing
+     *    cloudContainerCompactionEnabled = false; Azure Containers map to Ambry partitions, we do not delete partitions
+     *    storeContainerDeletionRetentionDays = 14; default, can change for testing
      */
     this.accountService = accountService;
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);

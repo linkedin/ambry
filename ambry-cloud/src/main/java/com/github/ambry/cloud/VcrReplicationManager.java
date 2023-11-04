@@ -40,6 +40,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -118,9 +119,10 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, cloudDestination);
-    this.cloudStorageCompactor =
-        cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
-            partitionToPartitionInfo.keySet(), vcrMetrics) : null;
+    if (cloudConfig.cloudBlobCompactionEnabled) {
+      this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig, partitionToPartitionInfo.keySet(), vcrMetrics);
+      logger.info("[COMPACT] Created CloudStorageCompactor");
+    }
     this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
   }
 
@@ -219,11 +221,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     scheduleTask(persistor, true, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, "replica token persistor");
 
-    // Schedule thread to purge dead blobs for this VCR's partitions
-    // after delay to allow startup to finish.
-    scheduleTask(cloudStorageCompactor, cloudConfig.cloudBlobCompactionEnabled,
-        cloudConfig.cloudBlobCompactionStartupDelaySecs,
-        TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), "cloud blob compaction");
+    if (cloudConfig.cloudBlobCompactionEnabled && cloudStorageCompactor != null) {
+      Utils.daemonThread("cloud-compaction-controller", cloudStorageCompactor).start();
+    }
 
     // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
     // after delay to allow startup to finish.

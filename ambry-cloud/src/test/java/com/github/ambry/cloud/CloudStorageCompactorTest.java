@@ -20,12 +20,18 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.PartitionInfo;
+import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.stubbing.Answer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -33,6 +39,7 @@ import static org.mockito.Mockito.*;
 
 @RunWith(MockitoJUnitRunner.class)
 public class CloudStorageCompactorTest {
+  private static final Logger logger = LoggerFactory.getLogger(CloudStorageCompactorTest.class);
 
   private final CloudDestination mockDest = mock(CloudDestination.class);
   private final CloudStorageCompactor compactor;
@@ -45,6 +52,10 @@ public class CloudStorageCompactorTest {
     properties.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_QUERY_LIMIT, String.valueOf(pageSize));
     properties.setProperty(CloudConfig.CLOUD_COMPACTION_QUERY_BUCKET_DAYS, "7");
     properties.setProperty(CloudConfig.CLOUD_COMPACTION_LOOKBACK_DAYS, "28");
+    properties.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_SHUTDOWN_TIMEOUT_SECS, "1"); // 10-sec default too high
+    properties.setProperty(CloudConfig.CLOUD_COMPACTION_NUM_THREADS, "3");
+    properties.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_INTERVAL_HOURS, "48"); // Set a long sleep between cycles
+    properties.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "true");
     CloudConfig cloudConfig = new CloudConfig(new VerifiableProperties(properties));
     compactor = new CloudStorageCompactor(mockDest, cloudConfig, partitionMap.keySet(), vcrMetrics);
   }
@@ -85,5 +96,81 @@ public class CloudStorageCompactorTest {
     compactor.shutdown();
     assertTrue("Should be shutting down now", compactor.isShutDown());
     // TODO: test shutting down with compaction still in progress (more involved)
+  }
+
+  protected void waitForThreadState(Thread thread, Thread.State state) throws InterruptedException {
+    int waitAttempt = 0, maxWaitAttempt = 10;
+    // 1-second loop
+    while (thread.getState() != state && waitAttempt < maxWaitAttempt) {
+      logger.info("Waiting for {} thread state to change from {} to {}...", thread.getName(), thread.getState(), state);
+      Thread.sleep(100);
+      waitAttempt++;
+    }
+  }
+
+  /**
+   * Tests compaction shutdown
+   * @throws CloudStorageException
+   * @throws InterruptedException
+   */
+  @Test
+  public void testShutdownCompaction() throws CloudStorageException, InterruptedException {
+    addPartitionsToCompact(17);
+    // mockDest is used inside compactor but Mockito cannot infer this.
+    // Use lenient() to avoid UnnecessaryStubbingException.
+    Mockito.lenient().when(mockDest.compactPartition(any())).thenReturn(1479);
+    Thread compactionController = Utils.daemonThread("cloud-compaction-controller", compactor);
+    compactionController.start();
+
+    // Controller thread is sleeping
+    waitForThreadState(compactionController, Thread.State.TIMED_WAITING);
+
+    compactor.shutdown();
+    waitForThreadState(compactionController, Thread.State.TERMINATED);
+
+    assertTrue(compactor.isShutDown());
+  }
+
+  /**
+   * Adds some partitions to compact
+   * @param numPartitions Number of partitions to compact
+   */
+  protected void addPartitionsToCompact(int numPartitions) {
+    String defaultClass = MockClusterMap.DEFAULT_PARTITION_CLASS;
+    for (int i = 0; i < numPartitions; i++) {
+      partitionMap.put(new MockPartitionId(i, defaultClass), null);
+    }
+  }
+
+  /**
+   * Tests compaction shutdown for slow or blocked workers
+   * @throws CloudStorageException
+   * @throws InterruptedException
+   */
+  @Test
+  public void testShutdownCompactionSlowWorkers() throws CloudStorageException, InterruptedException {
+    addPartitionsToCompact(23);
+    // mockDest is used inside compactor but Mockito cannot infer this.
+    // Use lenient() to avoid UnnecessaryStubbingException.
+    Mockito.lenient().when(mockDest.compactPartition(any())).thenAnswer((Answer<Integer>) invocation -> {
+      try {
+        // Emulate slow worker
+        logger.info("Thread {} is sleeping for 24 hours", Thread.currentThread().getName());
+        Thread.sleep(TimeUnit.HOURS.toMillis(24));
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+      return 1358;
+    });
+    Thread compactionController = Utils.daemonThread("cloud-compaction-controller", compactor);
+    compactionController.start();
+
+    // Controller thread is waiting for slow workers
+    waitForThreadState(compactionController, Thread.State.WAITING);
+
+    compactor.shutdown();
+    waitForThreadState(compactionController, Thread.State.TERMINATED);
+
+    assertTrue(compactor.isShutDown());
   }
 }
