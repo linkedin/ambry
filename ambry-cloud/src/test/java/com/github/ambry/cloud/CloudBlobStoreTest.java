@@ -14,6 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.azure.core.http.rest.PagedResponse;
+import com.azure.core.http.rest.Response;
+import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.models.BlobItem;
 import com.azure.storage.blob.models.BlobListDetails;
@@ -93,6 +95,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import org.apache.http.HttpStatus;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -271,6 +275,89 @@ public class CloudBlobStoreTest {
         break;
       }
     }
+  }
+
+  protected BlobContainerClient getTestBlobContainerClient(AzureCloudDestinationSync azureCloudDestinationSync, PartitionId partitionId) {
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(verifiableProperties);
+    AzureBlobLayoutStrategy azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, new AzureCloudConfig(verifiableProperties));
+    String blobContainerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(String.valueOf(partitionId.getId()));
+    return azureCloudDestinationSync.getBlobStore(blobContainerName);
+  }
+
+  /**
+   * Tests that compaction handles failures incl. 404 and other errors
+   * @throws ReflectiveOperationException
+   * @throws StoreException
+   * @throws CloudStorageException
+   */
+  @Test
+  public void testCompactionFailure()
+      throws ReflectiveOperationException, StoreException, CloudStorageException {
+    v2TestOnly();
+    this.compactionDryRun = false;
+    setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    /*
+      Add some permanent blobs.
+      set isVcr = true so that the lifeVersion is 0, else it is -1
+     */
+    int numBlobs = 10;
+    IntStream.range(0,numBlobs).forEach(i -> CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024,
+        Utils.Infinite_Time, refAccountId, refContainerId, false, false, partitionId,
+        System.currentTimeMillis(), isVcr));
+
+    /*
+      Spy on these objects to intercept certain calls. We don't want to mock all of them because we want
+      to execute the real methods by contacting Azurite - storage emulator. However, we want to inject failures at
+      certain points for testing. Besides, mocking would involve a lot of interface change which is just ugly.
+      Might be easier if dependency injection is used.
+
+      Object map:
+      CloudBlobStore -> AzureCloudDestinationSync -> BlobContainerClient -> BlobClient
+     */
+    MetricRegistry metricRegistry = new MetricRegistry();
+    VcrMetrics vcrMetrics = new VcrMetrics(metricRegistry);
+    AzureCloudDestinationSync spyDest = spy(new AzuriteUtils().getAzuriteClient(properties, metricRegistry,
+        clusterMap, accountService));
+    CloudBlobStore spyStore = spy(new CloudBlobStore(new VerifiableProperties(properties), partitionId, spyDest,
+        clusterMap, vcrMetrics));
+    spyStore.start();
+    BlobContainerClient spyContainerClient = spy(getTestBlobContainerClient(spyDest, partitionId));
+    when(spyDest.getBlobStore(any())).thenReturn(spyContainerClient);
+
+    // Put blobs
+    spyStore.put(messageWriteSet);
+
+    // Delete blobs
+    spyStore.delete(messageWriteSet.getMessageSetInfo());
+
+    // Compact blobs, return error
+    BlobClient mockBlobClient = mock(BlobClient.class);
+    Response<Void> mockResponse = mock(Response.class);
+    when(spyContainerClient.getBlobClient(any())).thenReturn(mockBlobClient);
+    when(mockBlobClient.deleteWithResponse(any(), any(), any(), any())).thenReturn(mockResponse);
+    // Return error when compaction tries to delete blobs and check nothing is deleted
+    when(mockResponse.getStatusCode()).thenReturn(HttpStatus.SC_NOT_FOUND);
+    assertEquals(0, spyDest.compactPartition(String.valueOf(partitionId.getId())));
+    assertEquals(0, vcrMetrics.compactionFailureCount.getCount());
+    when(mockResponse.getStatusCode()).thenReturn(HttpStatus.SC_INTERNAL_SERVER_ERROR);
+    assertEquals(0, spyDest.compactPartition(String.valueOf(partitionId.getId())));
+    assertEquals(numBlobs, vcrMetrics.compactionFailureCount.getCount());
+    // Check blob exists
+    assertEquals(0, vcrMetrics.blobCompactionRate.getCount());
+    when(spyContainerClient.getBlobClient(any())).thenCallRealMethod();
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
+        assertTrue(spyDest.doesBlobExist((BlobId) messageInfo.getStoreKey())));
+
+    // Really compact and check blobs are gone
+    when(mockBlobClient.deleteWithResponse(any(), any(), any(), any())).thenCallRealMethod();
+    assertEquals(numBlobs, spyDest.compactPartition(String.valueOf(partitionId.getId())));
+    assertEquals(numBlobs, vcrMetrics.blobCompactionRate.getCount());
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
+        assertFalse(spyDest.doesBlobExist((BlobId) messageInfo.getStoreKey())));
   }
 
   @Test
