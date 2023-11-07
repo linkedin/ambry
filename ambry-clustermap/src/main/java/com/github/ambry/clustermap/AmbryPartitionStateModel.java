@@ -15,7 +15,7 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentMap;
+import java.util.Set;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.model.Message;
 import org.apache.helix.participant.statemachine.StateModel;
@@ -33,19 +33,19 @@ import org.slf4j.LoggerFactory;
  *
  * In doing so, we should inevitably 1. duplicate all the partition ids with a different resource 2. remove the old
  * resources.  The issue is that resource doesn't really matter in Ambry. Resource is a structure required by Helix.
- * Ambry has a flatter structure. This structure starts with a cluster. Under this cluster, it has partitions. If we
+ * Ambry has a flat structure. This structure starts with a cluster. Under this cluster, it has partitions. If we
  * duplicate all the partition ids with different resources, we would force these partitions to go through state
  * transition twice. And by removing the old resource, we would effectively force all the partitions to go through
  * downward transition to DROPPED state. We have to make sure that frontend and server would be able to deal with both
  * situations.
  *
  * Current resource names are all numeric numbers starting from 0. The new resource names will be numeric numbers as
- * well, but it will be starting from a much higher number, like 1000. So we can easily find the new resource by just
+ * well, but it will be starting from a much higher number, like 10000. So we can easily find the new resource by just
  * comparing the resource names.
  *
  * When we eventually remove old resources, all the partition ids under those resourced would have to go through state
  * transition to become DROPPED in the end. A dropped partition means all the data will be removed, we don't want any
- * of the partition to remove data. So in state transition, we have to make sure after we add new resources, the state
+ * partition to remove data. So in state transition, we have to make sure after we add new resources, the state
  * transition messages from the old resources would be ignored and won't take effect anymore.
  *
  * Since in server we honor new resource over the old resource, we have to do the same thing in the clustermap.
@@ -57,6 +57,22 @@ import org.slf4j.LoggerFactory;
  * to be leader in different transition, then we would have multiple leaders. But this is fine, since replication manager
  * use this leader pair information for cross-colo replication. The worst case is that we have more than one replicas doing
  * cross-colo data replication.
+ *
+ * In order to make sure we don't allow state transition messages for old resource to go through, we will leverage clustermap.
+ * When new resources are created, clustermap would receive this update and replace the resource name for all the partitions.
+ * StateModel has to compare the resource name in transition messages with the resource name in clustermap. Here are the
+ * four cases StateModel has to deal with.
+ * 1. New resources are created, but clustermap hasn't updated the resources yet
+ * 2. New resources are created, and clustermap has the up-to-date resources
+ * 3. Old resources are removed
+ * 4. Hosts that were unavailable when old resources were removed, now is waking up and deal with state transition messages
+ *    for both new and old resources.
+ *
+ * For case 1, if the resource name from transition message is greater than the resource name from clustermap, then allow the transition
+ * For case 2, resource name from transition message is included in the clustermap.
+ * For case 3, resource name from transition message should be less than the resource name from clustermap, so don't allow the transition
+ * For case 4. clustermap has the new resource name, and old resource name is less than the new ones, so don't allow the transition
+ *             for old resource names, but allow transition for new resource names.
  */
 @StateModelInfo(initialState = "OFFLINE", states = {"BOOTSTRAP", "LEADER", "STANDBY", "INACTIVE"})
 public class AmbryPartitionStateModel extends StateModel {
@@ -65,18 +81,18 @@ public class AmbryPartitionStateModel extends StateModel {
   private final String partitionName;
   private final PartitionStateChangeListener partitionStateChangeListener;
   private final ClusterMapConfig clusterMapConfig;
-  private final ConcurrentMap<String, String> partitionNameToResourceName;
+  private final HelixClusterManager clusterManager;
 
   AmbryPartitionStateModel(String resourceName, String partitionName,
       PartitionStateChangeListener partitionStateChangeListener, ClusterMapConfig clusterMapConfig,
-      ConcurrentMap<String, String> partitionNameToResourceName) {
+      HelixClusterManager clusterManager) {
     this.resourceName = resourceName;
     this.partitionName = partitionName;
     this.partitionStateChangeListener = Objects.requireNonNull(partitionStateChangeListener);
     this.clusterMapConfig = Objects.requireNonNull(clusterMapConfig);
     StateModelParser parser = new StateModelParser();
     _currentState = parser.getInitialState(AmbryPartitionStateModel.class);
-    this.partitionNameToResourceName = partitionNameToResourceName;
+    this.clusterManager = Objects.requireNonNull(clusterManager, "Clustermap is missing");
   }
 
   @Transition(to = "BOOTSTRAP", from = "OFFLINE")
@@ -194,20 +210,21 @@ public class AmbryPartitionStateModel extends StateModel {
   boolean shouldTransition(Message message) {
     String resourceName = message.getResourceName();
     String partitionName = message.getPartitionName();
-    String mappedResourceName = partitionNameToResourceName.compute(partitionName, (k, v) -> {
-      if (v == null || v.equals(resourceName)) {
-        return resourceName;
+    Set<String> resourceNamesToCompare = clusterManager.getResourceForPartitionInLocalDc(partitionName);
+    if (resourceNamesToCompare == null || resourceNamesToCompare.isEmpty()) {
+      // this is a new partition, clustermap didn't get the update yet, then just allow transition.
+      return true;
+    }
+    if (resourceNamesToCompare.contains(resourceName)) {
+      // Resource name is one of the legit resource in clustermap.
+      return true;
+    }
+    // If the resource name is lower than all the resource names in the clustermap, then don't allow it.
+    for (String resourceNameToCompare : resourceNamesToCompare) {
+      if (Integer.valueOf(resourceNameToCompare) < Integer.valueOf(resourceName)) {
+        return true;
       }
-      try {
-        int oldResourceId = Integer.valueOf(v);
-        int newResourceId = Integer.valueOf(resourceName);
-        return newResourceId > oldResourceId ? resourceName : v;
-      } catch (Exception e) {
-        logger.error("Failed to parse resource name to an integer", e);
-        throw new StateTransitionException("Failed to parse resource name",
-            StateTransitionException.TransitionErrorCode.InvalidResourceName, e);
-      }
-    });
-    return mappedResourceName.equals(resourceName);
+    }
+    return false;
   }
 }

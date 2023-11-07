@@ -14,7 +14,6 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
-import java.util.concurrent.ConcurrentHashMap;
 import org.apache.helix.model.LeaderStandbySMD;
 import org.apache.helix.participant.statemachine.StateModel;
 import org.apache.helix.participant.statemachine.StateModelFactory;
@@ -25,12 +24,14 @@ import org.apache.helix.participant.statemachine.StateModelFactory;
  */
 class AmbryStateModelFactory extends StateModelFactory<StateModel> {
   private final ClusterMapConfig clustermapConfig;
+  private final HelixClusterManager clusterManager;
   private final PartitionStateChangeListener partitionStateChangeListener;
-  private final ConcurrentHashMap<String, String> partitionNameToResourceName = new ConcurrentHashMap<>();
 
-  AmbryStateModelFactory(ClusterMapConfig clusterMapConfig, PartitionStateChangeListener partitionStateChangeListener) {
+  AmbryStateModelFactory(ClusterMapConfig clusterMapConfig, PartitionStateChangeListener partitionStateChangeListener,
+      HelixClusterManager clusterManager) {
     this.clustermapConfig = clusterMapConfig;
     this.partitionStateChangeListener = partitionStateChangeListener;
+    this.clusterManager = clusterManager;
   }
 
   /**
@@ -46,7 +47,7 @@ class AmbryStateModelFactory extends StateModelFactory<StateModel> {
       case AmbryStateModelDefinition.AMBRY_LEADER_STANDBY_MODEL:
         stateModelToReturn =
             new AmbryPartitionStateModel(resourceName, partitionName, partitionStateChangeListener, clustermapConfig,
-                partitionNameToResourceName);
+                clusterManager);
         break;
       case LeaderStandbySMD.name:
         stateModelToReturn = new DefaultLeaderStandbyStateModel();

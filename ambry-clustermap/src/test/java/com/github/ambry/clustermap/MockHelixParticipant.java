@@ -89,7 +89,7 @@ public class MockHelixParticipant extends HelixParticipant {
   }
 
   public MockHelixParticipant(ClusterMapConfig clusterMapConfig, HelixFactory helixFactory) {
-    super(clusterMapConfig, helixFactory, metricRegistry,
+    super(mock(HelixClusterManager.class), clusterMapConfig, helixFactory, metricRegistry,
         parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
             clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
   }

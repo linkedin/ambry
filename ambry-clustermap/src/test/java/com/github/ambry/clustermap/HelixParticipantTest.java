@@ -170,8 +170,9 @@ public class HelixParticipantTest {
     //setup HelixParticipant and dependencies
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     ZKHelixAdmin helixAdmin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
     DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
 
@@ -316,8 +317,9 @@ public class HelixParticipantTest {
     //setup HelixParticipant, HelixParticipantDummy and dependencies
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     ZKHelixAdmin helixAdmin = new ZKHelixAdmin("localhost:" + zkInfo.getPort());
     DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
 
@@ -406,8 +408,8 @@ public class HelixParticipantTest {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT).beBad = true;
     HelixParticipant helixParticipant =
-        new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
-            getDefaultZkConnectStr(clusterMapConfig), true);
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, helixManagerFactory,
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     try {
       helixParticipant.participate(Collections.emptyList(), null, null);
       fail("Participation should have failed");
@@ -419,7 +421,7 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.cluster.name", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
+      new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, helixManagerFactory, new MetricRegistry(),
           getDefaultZkConnectStr(clusterMapConfig), true);
       fail("Instantiation should have failed");
     } catch (IllegalStateException e) {
@@ -430,7 +432,7 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", "");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      new HelixClusterAgentsFactory(clusterMapConfig, new MetricRegistry()).getClusterParticipants();
+      new HelixClusterAgentsFactoryWithMockClusterMap(clusterMapConfig, new MetricRegistry()).getClusterParticipants();
       fail("Instantiation should have failed");
     } catch (IOException e) {
       // OK
@@ -455,8 +457,8 @@ public class HelixParticipantTest {
     props.setProperty("clustermap.dcs.zk.connect.strings", jsonObject.toString(2));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     try {
-      List<ClusterParticipant> participants =
-          new HelixClusterAgentsFactory(clusterMapConfig, helixManagerFactory).getClusterParticipants();
+      List<ClusterParticipant> participants = new HelixClusterAgentsFactoryWithMockClusterMap(clusterMapConfig,
+          helixManagerFactory).getClusterParticipants();
       assertEquals("Number of participants is not expected", 2, participants.size());
     } catch (Exception e) {
       throw e;
@@ -473,8 +475,9 @@ public class HelixParticipantTest {
   @Test
   public void testHelixParticipant() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, helixManagerFactory, new MetricRegistry(),
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant participant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, helixManagerFactory,
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     assertTrue(helixManagerFactory.getHelixManager(InstanceType.SPECTATOR).isConnected());
     assertFalse(helixManagerFactory.getHelixManager(InstanceType.PARTICIPANT).isConnected());
 
@@ -497,8 +500,9 @@ public class HelixParticipantTest {
     // override some props for current test
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant participant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     participant.markDisablePartitionComplete();
     // create InstanceConfig for local node. Also, put existing replica into sealed list
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
@@ -579,8 +583,9 @@ public class HelixParticipantTest {
 
     props.setProperty("clustermap.update.datanode.info", Boolean.toString(true));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    HelixParticipant participant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant participant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     participant.markDisablePartitionComplete();
     // create InstanceConfig for local node. Also, put existing replica into sealed list
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
@@ -656,8 +661,9 @@ public class HelixParticipantTest {
   public void testUpdateDiskCapacity() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
     InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     // By default, there is no disk capacity
@@ -683,8 +689,9 @@ public class HelixParticipantTest {
     assumeTrue(dataNodeConfigSourceType == DataNodeConfigSourceType.PROPERTY_STORE);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), new MetricRegistry(),
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(),
+            new MetricRegistry(), getDefaultZkConnectStr(clusterMapConfig), true);
     HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
     DataNodeConfig dataNodeConfig = getDataNodeConfigInHelix(helixAdmin, instanceName);
     // by default, all disks are available
@@ -754,8 +761,9 @@ public class HelixParticipantTest {
     assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
     // participate
     helixParticipant.participate(Collections.emptyList(), null, null);
     HelixManager manager = helixParticipant.getHelixManager();
@@ -813,8 +821,9 @@ public class HelixParticipantTest {
     assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
 
     // Mock a state change listener to throw an exception
     PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
@@ -867,8 +876,9 @@ public class HelixParticipantTest {
   public void testDistributedLock() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
 
     // By default, helix library would use shared zookeeper connection
     DistributedLock lock1 = helixParticipant.getDistributedLock("TestDistributedLock", "for testing");
@@ -903,10 +913,12 @@ public class HelixParticipantTest {
   public void testMaintenanceMode() throws Exception {
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     MetricRegistry metricRegistry = new MetricRegistry();
-    HelixParticipant helixParticipant = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
-        getDefaultZkConnectStr(clusterMapConfig), true);
-    HelixParticipant helixParticipant2 = new HelixParticipant(clusterMapConfig, new HelixFactory(), metricRegistry,
-        getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
+    HelixParticipant helixParticipant2 =
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig), true);
 
     try {
       helixParticipant.exitMaintenanceMode();
@@ -1078,5 +1090,20 @@ public class HelixParticipantTest {
   private void listIsExpectedSize(List<String> list, int expectedSize, String listName) {
     assertNotNull(listName + " is null", list);
     assertEquals(listName + " doesn't have the expected size " + expectedSize, expectedSize, list.size());
+  }
+
+  private static class HelixClusterAgentsFactoryWithMockClusterMap extends HelixClusterAgentsFactory {
+    public HelixClusterAgentsFactoryWithMockClusterMap(ClusterMapConfig config, HelixFactory helixFactory) {
+      super(config, helixFactory);
+    }
+
+    public HelixClusterAgentsFactoryWithMockClusterMap(ClusterMapConfig config, MetricRegistry metricRegistry) {
+      super(config, metricRegistry);
+    }
+
+    @Override
+    public HelixClusterManager getClusterMap() throws IOException {
+      return mock(HelixClusterManager.class);
+    }
   }
 }
