@@ -61,32 +61,11 @@ public class CloudStorageCompactor extends Thread {
   public void run() {
     this.mainThread = new AtomicReference<>(Thread.currentThread());
     logger.info("[COMPACT] Thread info = {}", Thread.currentThread());
-
-    // Start-up delay waiting to populate partitions
-    long startUpDelaySecs = TimeUnit.SECONDS.toMillis(cloudConfig.cloudBlobCompactionStartupDelaySecs);
-    logger.info("[COMPACT] Waiting {} seconds to populate partitions for compaction", startUpDelaySecs);
-    try {
-      Thread.sleep(startUpDelaySecs);
-    } catch (InterruptedException e) {
-      logger.error("[COMPACT] Thread start-up delay interrupted due to {}", e.getMessage());
-    }
-
-    // Main compaction loop
-    while (true) {
-      logger.info("[COMPACT] Starting cloud compaction");
-      compactPartitions();
-      // This shutdown-check prevents us from falling asleep.
-      if (isShutDown()) {
-        logger.info("[COMPACT] Breaking main loop because compaction executor is shutdown");
-        break;
-      }
-      try {
-        logger.info("[COMPACT] Sleeping for {} hours", this.cloudConfig.cloudBlobCompactionIntervalHours);
-        Thread.sleep(TimeUnit.HOURS.toMillis(this.cloudConfig.cloudBlobCompactionIntervalHours));
-      } catch (InterruptedException e) {
-        logger.error("[COMPACT] Thread sleep interrupted due to {}", e.getMessage());
-      }
-    }
+    long compactionStartTime = System.currentTimeMillis();
+    logger.info("[COMPACT] Starting cloud compaction");
+    int numBlobsErased = compactPartitions();
+    logger.info("[COMPACT] Erased {} blobs in {} minutes",
+        numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
   }
 
   /**
@@ -136,7 +115,6 @@ public class CloudStorageCompactor extends Thread {
    * @return the total number of blobs purged.
    */
   public int compactPartitions() {
-    long compactionStartTime = System.currentTimeMillis();
     int totalBlobsPurged = 0;
     HashMap<String, Future<Integer>> compactionTasks = new HashMap<>();
       /*
@@ -172,9 +150,6 @@ public class CloudStorageCompactor extends Thread {
             partitionIdStr, throwable.getMessage());
       }
     }
-    logger.info("[COMPACT] Erased {} blobs from {} partitions in {} minutes",
-        totalBlobsPurged, compactionTasks.size(),
-        TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
     return totalBlobsPurged;
   }
 }
