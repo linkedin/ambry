@@ -17,12 +17,16 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,8 +67,8 @@ public class CloudStorageCompactor extends Thread {
     logger.info("[COMPACT] Thread info = {}", Thread.currentThread());
     long compactionStartTime = System.currentTimeMillis();
     logger.info("[COMPACT] Starting cloud compaction");
-    int numBlobsErased = compactPartitions();
-    logger.info("[COMPACT] Erased {} blobs in {} minutes",
+    int numBlobsErased = compactPartitions(); // Blocking call
+    logger.info("[COMPACT] Complete cloud compaction and erased {} blobs in {} minutes",
         numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
   }
 
@@ -75,7 +79,7 @@ public class CloudStorageCompactor extends Thread {
 
     /*
       Here is the thread model of this compactor. There are three groups of threads.
-      1. Main thread: This threads submits jobs to worker threads and waits for them to finish. It sleeps between compaction cycles.
+      1. Main thread: This threads submits jobs to worker threads and waits for them to finish.
       2. Worker threads: These threads perform the actual task of compaction.
       3. Shutdown thread: It initiates a graceful shutdown of worker and main threads.
      */
@@ -117,20 +121,26 @@ public class CloudStorageCompactor extends Thread {
   public int compactPartitions() {
     int totalBlobsPurged = 0;
     HashMap<String, Future<Integer>> compactionTasks = new HashMap<>();
-      /*
-        Just submit the jobs and let the executor service handle the assignment and scheduling.
-        Note that partitions can be updated between compaction cycles when a new replica is added or an old one removed.
-        However, I do not know the behavior when a Collection is modified while it is being iterated.
-       */
-    for (PartitionId partitionId: partitions) {
+    /*
+      partitions can be updated between compaction cycles when a new replica is added or an old one removed.
+      To minimize the window of concurrent accesses, just make an exclusive local copy for compaction.
+     */
+    HashSet<String> partitionIdStrSet = new HashSet<>(
+        partitions
+            .stream()
+            .map(partitionId -> partitionId.toPathString())
+            .collect(Collectors.toSet()));
+    /*
+      Just submit the jobs and let the executor service handle the assignment and scheduling.
+     */
+    for (String partitionIdStr: partitionIdStrSet) {
       try {
-        String partitionIdStr = partitionId.toPathString();
         Future<Integer> future = executorService.submit(() -> cloudDestination.compactPartition(partitionIdStr));
         compactionTasks.put(partitionIdStr, future);
       } catch (Throwable throwable) {
         vcrMetrics.compactionFailureCount.inc();
         logger.error("[COMPACT] Failed to submit compaction task for partition-{} due to {}",
-            partitionId.toPathString(), throwable.getMessage());
+            partitionIdStr, throwable.getMessage());
       }
     }
 
