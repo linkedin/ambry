@@ -1304,7 +1304,7 @@ public class StorageManagerTest {
     props.setProperty("clustermap.enable.state.model.listener", "true");
     props.setProperty("clustermap.update.datanode.info", "true");
     props.setProperty(ClusterMapConfig.DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS, "10000");
-    props.setProperty(StoreConfig.storeFailedDiskPercentageToTerminateName, "90");
+    props.setProperty(StoreConfig.storeFailedDiskPercentageToTerminateName, "79");
     clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
     storeConfig = new StoreConfig(new VerifiableProperties(props));
     HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "", dcName, 100,
@@ -1387,7 +1387,6 @@ public class StorageManagerTest {
       assertEquals(failureCountBefore, storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount());
 
       // The case where all replicas on this disk are down
-      long successCount = storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount();
       storageManager.getStore(replicasOnFailedDisk.get(replicasOnFailedDisk.size() - 1).getPartitionId(), false)
           .shutdown();
       verifyDiskFailureSuccess(storageManager, handler, helixAdmin, clusterMap, clusterName, localNode, diskToReplicas,
@@ -1395,7 +1394,7 @@ public class StorageManagerTest {
 
       // The case to run this again, since there is no new failed disk, running the handler again won't change anything.
       failureCountBefore = storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount();
-      successCount = storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount();
+      long successCount = storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount();
       handler.run();
       assertEquals(failureCountBefore, storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount());
       assertEquals(successCount, storageManager.getStoreMainMetrics().handleDiskFailureSuccessCount.getCount());
@@ -1410,6 +1409,18 @@ public class StorageManagerTest {
       }
       verifyDiskFailureSuccess(storageManager, handler, helixAdmin, clusterMap, clusterName, localNode, diskToReplicas,
           diskToFail);
+
+      // The case where a disk is empty
+      // first set the disk back to available
+      helixParticipant.setDisksState(Collections.singletonList(diskToFail), HardwareState.AVAILABLE);
+      Thread.sleep(500);// clustermap will be updated
+      // Add this disk to the disk manager in storage manager, this disk should have no replicas anymore
+      storageManager.addDisk(diskToFail);
+      // Create a new handler so the failed disk in this new handler would be empty
+      handler = storageManager.new DiskFailureHandler();
+      failureCountBefore = storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount();
+      handler.run();
+      assertEquals(failureCountBefore, storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount());
 
       // The case that all the disks are down.
       AtomicBoolean invoked = new AtomicBoolean();

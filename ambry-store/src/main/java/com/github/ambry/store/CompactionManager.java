@@ -314,7 +314,9 @@ class CompactionManager {
                   if (triggers.contains(Trigger.PERIODIC)) {
                     // If compaction is not run on some of stores, wait time should be reduced.
                     // The max time to reduce is waitTimeMs / 2;
-                    long compensation = waitTimeMs / 2 * storesNoCompaction / stores.size();
+                    long compensation =
+                        storesNoCompaction != 0 && stores.size() > 0 ? waitTimeMs / 2 * storesNoCompaction
+                            / stores.size() : 0;
                     long actualWaitTimeMs = expectedNextCheckTime - compensation - time.milliseconds();
                     logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
                     time.await(waitCondition, actualWaitTimeMs);
