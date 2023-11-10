@@ -578,6 +578,19 @@ public class DiskManager {
   }
 
   /**
+   * Check if this disk has any stores on it.
+   * @return
+   */
+  boolean hasAnyStore() {
+    rwLock.readLock().lock();
+    try {
+      return !stores.isEmpty();
+    } finally {
+      rwLock.readLock().unlock();
+    }
+  }
+
+  /**
    * @return unexpected directories on this disk.
    */
   List<String> getUnexpectedDirs() {

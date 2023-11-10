@@ -314,6 +314,16 @@ public class StorageManager implements StoreManager {
     return diskManager != null && !diskManager.areAllStoresDown();
   }
 
+  /**
+   * Check if a certain disk has any store on it.
+   * @param disk The {@link DiskId} to check
+   * @return {@code true} if the disk has any store.
+   */
+  boolean diskHasAnyStore(DiskId disk) {
+    DiskManager diskManager = diskToDiskManager.get(disk);
+    return diskManager != null && diskManager.hasAnyStore();
+  }
+
   @Override
   public boolean scheduleNextForCompaction(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
@@ -358,18 +368,13 @@ public class StorageManager implements StoreManager {
     }
   }
 
-  @Override
-  public boolean addBlobStore(ReplicaId replica) {
-    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
-      logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
-      return false;
-    }
-    DiskManager diskManager = diskToDiskManager.computeIfAbsent(replica.getDiskId(), disk -> {
+  DiskManager addDisk(DiskId diskId) {
+    return diskToDiskManager.computeIfAbsent(diskId, disk -> {
       DiskManager newDiskManager =
           new DiskManager(disk, Collections.emptyList(), storeConfig, diskManagerConfig, scheduler, metrics,
               storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
               stoppedReplicas, time, accountService);
-      logger.info("Creating new DiskManager on {} for new added store", replica.getDiskId().getMountPath());
+      logger.info("Creating new DiskManager on {} for new added store", diskId.getMountPath());
       try {
         newDiskManager.start();
       } catch (Exception e) {
@@ -378,6 +383,15 @@ public class StorageManager implements StoreManager {
       }
       return newDiskManager;
     });
+  }
+
+  @Override
+  public boolean addBlobStore(ReplicaId replica) {
+    if (partitionToDiskManager.containsKey(replica.getPartitionId())) {
+      logger.info("{} already exists in storage manager, rejecting adding store request", replica.getPartitionId());
+      return false;
+    }
+    DiskManager diskManager = addDisk(replica.getDiskId());
     if (diskManager == null || !diskManager.addBlobStore(replica)) {
       logger.error("Failed to add new store into DiskManager");
       return false;
@@ -916,7 +930,7 @@ public class StorageManager implements StoreManager {
       // First, we have to detect if there is a new disk failure
       List<DiskId> newFailedDisks = diskToDiskManager.keySet()
           .stream()
-          .filter(diskId -> !isDiskAvailable(diskId) && !failedDisks.contains(diskId))
+          .filter(diskId -> diskHasAnyStore(diskId) && !isDiskAvailable(diskId) && !failedDisks.contains(diskId))
           .collect(Collectors.toList());
       if (newFailedDisks.isEmpty()) {
         return;
