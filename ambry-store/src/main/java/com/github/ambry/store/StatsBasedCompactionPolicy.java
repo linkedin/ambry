@@ -59,10 +59,9 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
         Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =
             blobStoreStats.getValidDataSizeByLogSegment(
                 new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
+        String sizeLog = "";
         if (validDataSizeByLogSegment != null) {
-          String sizeLog =
-              blobStoreStats.dumpLogSegmentSize(validDataSizeByLogSegment.getSecond(), segmentCapacity, dataDir);
-          logger.info(sizeLog);
+          sizeLog = blobStoreStats.dumpLogSegmentSize(validDataSizeByLogSegment.getSecond(), segmentCapacity, dataDir);
         }
 
         NavigableMap<LogSegmentName, Long> potentialLogSegmentValidSizeMap = validDataSizeByLogSegment.getSecond()
@@ -76,7 +75,8 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
           details =
               new CompactionDetails(validDataSizeByLogSegment.getFirst(), bestCandidateToCompact.getSegmentsToCompact(),
                   bestCandidateToCompact);
-          logger.info("Best candidate to compact {} on {}", bestCandidateToCompact, dataDir);
+          logger.info("[CAPACITY] Generating CompactionDetails {} using StatsBasedCompactionPolicy for {}. Stats {}",
+              bestCandidateToCompact, dataDir, sizeLog);
         } else {
           logger.trace("No best candidate found");
         }

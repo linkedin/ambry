@@ -67,16 +67,16 @@ class CompactAllPolicy implements CompactionPolicy {
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       if (logSegmentsNotInJournal != null) {
         details = new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentsNotInJournal, null);
-        logger.info("Generating CompactionDetails {} using CompactAllPolicy", details);
 
         Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =
             blobStoreStats.getValidDataSizeByLogSegment(
                 new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
+        String sizeLog = "";
         if (validDataSizeByLogSegment != null) {
-          String sizeLog =
-              blobStoreStats.dumpLogSegmentSize(validDataSizeByLogSegment.getSecond(), segmentCapacity, dataDir);
-          logger.info(sizeLog);
+          sizeLog = blobStoreStats.dumpLogSegmentSize(validDataSizeByLogSegment.getSecond(), segmentCapacity, dataDir);
         }
+        logger.info("[CAPACITY] Generating CompactionDetails {} using CompactAllPolicy for {}. Stats {}", details,
+            dataDir, sizeLog);
       }
     }
     return details;

@@ -101,8 +101,9 @@ public class StoreMetrics {
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
-  public final Meter compactionCopyRateInBytes;
-  public final Counter compactionBytesReclaimedCount;
+  public final Meter compactionCopyRateInBytes;       // per host, physical data are copied during compaction
+  public final Counter compactionBytesReclaimedCount; // per host, the real reclaimed log segment size
+  public final Counter compactionIntervalInMin;       // the interval between two compactions on the same partition.
   public final Counter compactionBundleReadBufferNotFitIn;
   public final Counter compactionBundleReadBufferUsed;
   public final Counter compactionBundleReadBufferIoCount;
@@ -228,6 +229,8 @@ public class StoreMetrics {
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
     compactionBytesReclaimedCount =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBytesReclaimedCount"));
+    compactionIntervalInMin =
+        registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionIntervalInMin"));
     compactionBundleReadBufferNotFitIn =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferNotFitIn"));
     compactionBundleReadBufferUsed =
@@ -349,7 +352,7 @@ public class StoreMetrics {
 
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress,
       AtomicReference<CompactionDetails> compactionDetailsAtomicReference, AtomicInteger compactedLogCount,
-      AtomicInteger logSegmentCount) {
+      AtomicInteger logSegmentCount, AtomicInteger partialLogSegmentCount) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
@@ -378,6 +381,9 @@ public class StoreMetrics {
     Gauge<Integer> logSegmentCountGauge = logSegmentCount::get;
     registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "LogSegmentCount"),
         () -> logSegmentCountGauge);
+    Gauge<Integer> partialLogSegmentCountGauge = partialLogSegmentCount::get;
+    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "PartialLogSegmentCount"),
+        () -> partialLogSegmentCountGauge);
   }
 
   /**

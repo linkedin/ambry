@@ -383,6 +383,20 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
+   * Get the count of partially written log segments. It's due to stats based compaction.
+   * @return the count of the partial log segments.
+   */
+  int getPartialLogSegmentCount() {
+    int partialLogSegmentCount = 0;
+    for (LogSegment segment : index.getLogSegments()) {
+      if (segment.getEndOffset() < segment.getCapacityInBytes() * 0.8) {
+        partialLogSegmentCount++;
+      }
+    }
+    return partialLogSegmentCount;
+  }
+
+  /**
    * Dump the log segment size in a human readable way.
    * @param validDataSizeByLogSegment a map from log segment name to valid size
    * @param segmentCapacity Segment capacity of one {@link LogSegment}
@@ -391,11 +405,12 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   String dumpLogSegmentSize(NavigableMap<LogSegmentName, Long> validDataSizeByLogSegment, long segmentCapacity,
       String dataDir) {
-    final StringBuilder sizeLog = new StringBuilder("Valid data size for " + dataDir + " from log segments: ");
+    final StringBuilder sizeLog = new StringBuilder(
+        dataDir + ": partialLogSegmentCount = " + getPartialLogSegmentCount() + " valid data size for log segments: ");
     validDataSizeByLogSegment.forEach((logSegmentName, validDataSize) -> {
-      sizeLog.append(
-          logSegmentName + " " + validDataSize / 1000 / 1000 / 1000.0 + "GB " + validDataSize * 1.0 / segmentCapacity
-              + "%;");
+      String validSize = String.format("%.1f", validDataSize / 1000 / 1000 / 1000.0);
+      String percentage = String.format("%.1f", validDataSize * 1.0 / segmentCapacity * 100);
+      sizeLog.append("f: " + logSegmentName + " " + validSize + "GB " + percentage + "%; ");
     });
     return sizeLog.toString();
   }

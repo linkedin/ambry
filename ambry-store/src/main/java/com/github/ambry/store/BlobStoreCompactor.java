@@ -104,9 +104,12 @@ class BlobStoreCompactor {
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
   private byte[] bundleReadBuffer;
+  private long lastCompactionTimestampInSec = 0;
   private final AtomicReference<CompactionDetails> currentCompactionDetails = new AtomicReference();
   private final AtomicInteger compactedLogCount = new AtomicInteger(0);
   private final AtomicInteger logSegmentCount = new AtomicInteger(0);
+  private final AtomicLong compactionIntervalInMin = new AtomicLong(0);     // interval between two compactions
+  private final AtomicInteger partialLogSegmentCount = new AtomicInteger(0);  // partially written log segments
   private volatile boolean shouldPersistIndexSegmentOffsets = false;
 
   /**
@@ -174,7 +177,7 @@ class BlobStoreCompactor {
     logger.info("Direct IO config: {}, OS: {}, availability: {}", config.storeCompactionEnableDirectIO,
         System.getProperty("os.name"), useDirectIO);
     srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails, compactedLogCount,
-        logSegmentCount);
+        logSegmentCount, partialLogSegmentCount);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
@@ -216,6 +219,10 @@ class BlobStoreCompactor {
     } else if (compactionLog != null) {
       throw new IllegalStateException("There is already a compaction in progress");
     }
+    compactionIntervalInMin.set(
+        lastCompactionTimestampInSec == 0 ? 0 : (time.seconds() - lastCompactionTimestampInSec) / 60);
+    lastCompactionTimestampInSec = time.seconds();
+
     checkSanity(details);
     logger.info("Compaction of {} started with details {}", storeId, details);
     currentCompactionDetails.set(details);
@@ -476,8 +483,8 @@ class BlobStoreCompactor {
       // and before the subsequent commit can take effect)
       long segmentCountDiff =
           compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().size() - numSwapsUsed;
-      long savedBytes = srcLog.getSegmentCapacity() * segmentCountDiff;
-      srcMetrics.compactionBytesReclaimedCount.inc(savedBytes);
+      long savedBytes = srcLog.getSegmentCapacity() * segmentCountDiff; // segment size is 17,176,275,436 = 16 GB
+      srcMetrics.compactionBytesReclaimedCount.inc(savedBytes); // the real reclaimed reserved space
     }
     tgtIndex.close(false);
     tgtLog.close(false);
@@ -1261,9 +1268,7 @@ class BlobStoreCompactor {
           Set<Long> logSegmentPositionsUnderCompaction = new HashSet<>();
           for (CompactionLog.CycleLog clog : compactionLog.cycleLogs) {
             logSegmentPositionsUnderCompaction.addAll(clog.compactionDetails.getLogSegmentsUnderCompaction()
-                .stream()
-                .map(LogSegmentName::getPosition)
-                .collect(Collectors.toSet()));
+                .stream().map(LogSegmentName::getPosition).collect(Collectors.toSet()));
           }
           // If the position under compaction doesn't exist in the set after compaction, then this log segment is compacted
           // eg: log segment under compaction [0_23, 130_16, 144_3]
@@ -1272,6 +1277,8 @@ class BlobStoreCompactor {
           compactedLogCount.set((int) logSegmentPositionsUnderCompaction.stream()
               .filter(p -> !logSegmentPositionsAfterCompaction.contains(p))
               .count());
+
+          partialLogSegmentCount.set(srcLog.getPartialLogSegmentCount());
         }
 
         if (srcIndex != null && srcIndex.hardDeleter != null) {

@@ -263,6 +263,20 @@ class Log implements Write {
   }
 
   /**
+   * @return count of partially written log segments
+   */
+  int getPartialLogSegmentCount() {
+    int partialLogSegmentCount = 0;
+    LogSegment logSegment = getFirstSegment();
+    while (logSegment != null) {
+      if (logSegment.getEndOffset() < logSegment.getCapacityInBytes() * 0.8) {
+        partialLogSegmentCount++;
+      }
+    }
+    return partialLogSegmentCount;
+  }
+
+  /**
    * Returns the {@link LogSegment} that is logically after the given {@code segment}.
    * @param segment the {@link LogSegment} whose "next" segment is required.
    * @return the {@link LogSegment} that is logically after the given {@code segment}.
