@@ -19,6 +19,7 @@ import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -40,6 +41,8 @@ public class CloudStorageCompactor extends Thread {
 
   protected CloudConfig cloudConfig;
   protected AtomicReference<Thread> mainThread;
+  protected AtomicReference<CountDownLatch> startLatch;
+  protected AtomicReference<CountDownLatch> doneLatch;
 
   /**
    * Public constructor.
@@ -54,6 +57,8 @@ public class CloudStorageCompactor extends Thread {
     this.vcrMetrics = vcrMetrics;
     this.cloudConfig = cloudConfig;
     this.mainThread = new AtomicReference<>();
+    this.startLatch = new AtomicReference<>(new CountDownLatch(1));
+    this.doneLatch = new AtomicReference<>(new CountDownLatch(1));
     // Give threads a name, so they can be identified in a thread-dump and set them as daemon or background
     this.executorService = Utils.newScheduler(this.cloudConfig.cloudCompactionNumThreads, "cloud-compaction-worker-", true);
     logger.info("[COMPACT] Created CloudStorageCompactor");
@@ -65,12 +70,34 @@ public class CloudStorageCompactor extends Thread {
     logger.info("[COMPACT] Thread info = {}", this.mainThread.get());
     long compactionStartTime = System.currentTimeMillis();
     logger.info("[COMPACT] Starting cloud compaction");
+    this.startLatch.get().countDown();
     int numBlobsErased = compactPartitions(); // Blocking call
+    this.doneLatch.get().countDown();
     logger.info("[COMPACT] Complete cloud compaction and erased {} blobs in {} minutes",
         numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
   }
 
-  public AtomicReference<Thread> getMainCompactorThread() {
+  /**
+   * For test
+   * @return
+   */
+  public AtomicReference<CountDownLatch> getStartLatchRef() {
+    return startLatch;
+  }
+
+  /**
+   * For test
+   * @return
+   */
+  public AtomicReference<CountDownLatch> getDoneLatchRef() {
+    return doneLatch;
+  }
+
+  /**
+   * For test
+   * @return
+   */
+  public AtomicReference<Thread> getMainCompactorThreadRef() {
     return mainThread;
   }
 
@@ -129,10 +156,17 @@ public class CloudStorageCompactor extends Thread {
 
     // Just submit the jobs and let the executor service handle the assignment and scheduling.
     for (String partitionIdStr: partitionIdStrSet) {
+      /*
+        Just an early exit
+       */
+      if (executorService.isShutdown()) {
+        logger.info("[COMPACT] Skipping submitting compaction tasks due to shutdown");
+        break;
+      }
       try {
         Future<Integer> future = executorService.submit(() -> cloudDestination.compactPartition(partitionIdStr));
         // Since this is a final deletion of a blob, we need to at least have record of what partitions were compacted
-        logger.error("[COMPACT] Submitted cloud-compaction task for partition-{}", partitionIdStr);
+        logger.info("[COMPACT] Submitted cloud-compaction task for partition-{}", partitionIdStr);
         compactionTasks.put(partitionIdStr, future);
       } catch (Throwable throwable) {
         vcrMetrics.compactionFailureCount.inc();
@@ -149,7 +183,7 @@ public class CloudStorageCompactor extends Thread {
         a network call. This shutdown-check short circuits the loop.
        */
       if (executorService.isShutdown()) {
-        logger.info("[COMPACT] Skipping Future.get because of shutdown");
+        logger.info("[COMPACT] Skipping polling on compaction workers due to shutdown");
         break;
       }
       try {
