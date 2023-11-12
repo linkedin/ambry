@@ -15,10 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
-import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
@@ -56,6 +53,7 @@ public class CloudStorageCompactor extends Thread {
     this.partitions = partitions;
     this.vcrMetrics = vcrMetrics;
     this.cloudConfig = cloudConfig;
+    this.mainThread = new AtomicReference<>();
     // Give threads a name, so they can be identified in a thread-dump and set them as daemon or background
     this.executorService = Utils.newScheduler(this.cloudConfig.cloudCompactionNumThreads, "cloud-compaction-worker-", true);
     logger.info("[COMPACT] Created CloudStorageCompactor");
@@ -63,8 +61,8 @@ public class CloudStorageCompactor extends Thread {
 
   @Override
   public void run() {
-    this.mainThread = new AtomicReference<>(Thread.currentThread());
-    logger.info("[COMPACT] Thread info = {}", Thread.currentThread());
+    this.mainThread.set(Thread.currentThread());
+    logger.info("[COMPACT] Thread info = {}", this.mainThread.get());
     long compactionStartTime = System.currentTimeMillis();
     logger.info("[COMPACT] Starting cloud compaction");
     int numBlobsErased = compactPartitions(); // Blocking call
@@ -99,12 +97,6 @@ public class CloudStorageCompactor extends Thread {
     Utils.shutDownExecutorService(executorService,
         cloudConfig.cloudCompactionNumThreads * cloudConfig.cloudBlobCompactionShutdownTimeoutSecs,
         TimeUnit.SECONDS);
-
-    // Interrupt main thread
-    if (mainThread != null) {
-      logger.info("[COMPACT] Interrupting thread {}", mainThread.get().getName());
-      mainThread.get().interrupt();
-    }
   }
 
   /**
@@ -130,12 +122,13 @@ public class CloudStorageCompactor extends Thread {
             .stream()
             .map(partitionId -> partitionId.toPathString())
             .collect(Collectors.toSet()));
-    /*
-      Just submit the jobs and let the executor service handle the assignment and scheduling.
-     */
+
+    // Just submit the jobs and let the executor service handle the assignment and scheduling.
     for (String partitionIdStr: partitionIdStrSet) {
       try {
         Future<Integer> future = executorService.submit(() -> cloudDestination.compactPartition(partitionIdStr));
+        // Since this is a final deletion of a blob, we need to at least have record of what partitions were compacted
+        logger.error("[COMPACT] Submitted cloud-compaction task for partition-{}", partitionIdStr);
         compactionTasks.put(partitionIdStr, future);
       } catch (Throwable throwable) {
         vcrMetrics.compactionFailureCount.inc();
@@ -146,8 +139,11 @@ public class CloudStorageCompactor extends Thread {
 
     // Wait for completion or shutdown, don't use any timeouts
     for (String partitionIdStr : compactionTasks.keySet()) {
-      // Although this is a finite loop, the future.get() is a blocking one, and we can't predict how long that'll be.
-      // This shutdown-check short circuits the loop.
+      /*
+        Although this is a finite loop, the future.get() is a blocking one, and we can't predict how long that'll be.
+        And although the compaction-workers should quit when they see the shutdown flag is set, they may be blocked on
+        a network call. This shutdown-check short circuits the loop.
+       */
       if (executorService.isShutdown()) {
         logger.info("[COMPACT] Skipping Future.get because of shutdown");
         break;
@@ -156,8 +152,7 @@ public class CloudStorageCompactor extends Thread {
         totalBlobsPurged += compactionTasks.get(partitionIdStr).get();
       } catch (Throwable throwable) {
         vcrMetrics.compactionFailureCount.inc();
-        logger.error("[COMPACT] Failed to compact a partition-{} due to {}",
-            partitionIdStr, throwable.getMessage());
+        logger.error("[COMPACT] Failed to compact a partition-{} due to {}", partitionIdStr, throwable.getMessage());
       }
     }
     return totalBlobsPurged;

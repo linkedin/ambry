@@ -354,7 +354,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   public void shutdown() throws ReplicationException {
     if (cloudStorageCompactor != null) {
       cloudStorageCompactor.shutdown();
-      cloudCompactionScheduler.shutdownNow();
+      Utils.shutDownExecutorService(cloudCompactionScheduler, cloudConfig.cloudBlobCompactionShutdownTimeoutSecs,
+          TimeUnit.SECONDS);
     }
     if (cloudContainerCompactor != null) {
       cloudContainerCompactor.shutdown();
