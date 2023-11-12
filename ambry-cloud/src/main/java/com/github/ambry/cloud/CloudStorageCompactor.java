@@ -70,6 +70,10 @@ public class CloudStorageCompactor extends Thread {
         numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
   }
 
+  public AtomicReference<Thread> getMainCompactorThread() {
+    return mainThread;
+  }
+
   /**
    * Shut down the compactor waiting for in progress operations to complete.
    */
