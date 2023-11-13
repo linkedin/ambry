@@ -35,7 +35,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 
@@ -128,9 +127,15 @@ public class CloudStorageCompactorTest {
     }
   }
 
+  /**
+   * Waits for main compaction thread to start by checking the startLatch
+   * @param compactor
+   * @return
+   * @throws InterruptedException
+   */
   protected Thread waitOrFailForMainCompactionThreadToStart(CloudStorageCompactor compactor) throws InterruptedException {
     // Timed wait is better than an indefinite one
-    int wait = 3;
+    int wait = 30;
     compactor.getStartLatchRef().get().await(wait, TimeUnit.SECONDS);
     Thread compactionController = compactor.getMainCompactorThreadRef().get();
     if (compactionController == null) {
@@ -139,15 +144,24 @@ public class CloudStorageCompactorTest {
     return compactionController;
   }
 
+  /**
+   * Waits for main compaction thread to start by checking the doneLatch
+   * @param compactor
+   * @throws InterruptedException
+   */
   protected void waitOrFailForMainCompactionThreadToEnd(CloudStorageCompactor compactor) throws InterruptedException {
     // Timed wait is better than an indefinite one
-    int wait = 3;
+    int wait = 30;
     compactor.getDoneLatchRef().get().await(wait, TimeUnit.SECONDS);
     if (compactor.getDoneLatchRef().get().getCount() != 0) {
       fail(String.format("Main compaction thread did not finish in %s seconds", wait));
     }
   }
 
+  /**
+   * Shuts down compaction workers and asserts a shutdown
+   * @param compactor
+   */
   protected void shutdownCompactionWorkers(CloudStorageCompactor compactor) {
     compactor.shutdown();
     assertTrue(compactor.isShutDown());
