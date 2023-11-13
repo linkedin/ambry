@@ -16,9 +16,12 @@ package com.github.ambry.cloud;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -142,29 +145,39 @@ public class CloudStorageCompactor extends Thread {
    * @return the total number of blobs purged.
    */
   public int compactPartitions() {
-    int totalBlobsPurged = 0;
-    HashMap<String, Future<Integer>> compactionTasks = new HashMap<>();
+
     /*
       partitions can be updated between compaction cycles when a new replica is added or an old one removed.
       To minimize the window of concurrent accesses, just make an exclusive local copy for compaction.
      */
-    HashSet<String> partitionIdStrSet = new HashSet<>(
-        partitions
-            .stream()
-            .map(partitionId -> partitionId.toPathString())
-            .collect(Collectors.toSet()));
+    List<PartitionId> partitionSnapshot = new ArrayList<>(partitions);
+    int totalBlobsPurged = 0;
+    HashMap<String, Future<Integer>> compactionTasks = new HashMap<>();
 
     // Just submit the jobs and let the executor service handle the assignment and scheduling.
-    for (String partitionIdStr: partitionIdStrSet) {
+    for (PartitionId partitionId: partitionSnapshot) {
       /*
         Just an early exit
        */
       if (executorService.isShutdown()) {
         logger.info("[COMPACT] Skipping submitting compaction tasks due to shutdown");
-        break;
+        return totalBlobsPurged;
       }
+
+      String partitionIdStr = partitionId.toPathString();
       try {
-        Future<Integer> future = executorService.submit(() -> cloudDestination.compactPartition(partitionIdStr));
+        Future<Integer> future = executorService.submit(() -> {
+          /*
+            Not all jobs start as soon as they are submitted. The number of executions is limited by the number of workers.
+            For example, if we submit 100 jobs to 5 workers, then only 5 jobs are running and the rest are waiting.
+            Just before starting the job, check if this node still owns the partition.
+           */
+          if (!partitions.contains(partitionId)) {
+            logger.info("[COMPACT] Skipping compaction partition-{} as it is disowned", partitionIdStr);
+            return 0;
+          }
+          return cloudDestination.compactPartition(partitionIdStr);
+        });
         // Since this is a final deletion of a blob, we need to at least have record of what partitions were compacted
         logger.info("[COMPACT] Submitted cloud-compaction task for partition-{}", partitionIdStr);
         compactionTasks.put(partitionIdStr, future);
@@ -178,13 +191,13 @@ public class CloudStorageCompactor extends Thread {
     // Wait for completion or shutdown, don't use any timeouts
     for (String partitionIdStr : compactionTasks.keySet()) {
       /*
-        Although this is a finite loop, the future.get() is a blocking one, and we can't predict how long that'll be.
+        Although this is a finite loop, the future.get() is a blocking call, and we can't predict how long that'll be.
         And although the compaction-workers should quit when they see the shutdown flag is set, they may be blocked on
         a network call. This shutdown-check short circuits the loop.
        */
       if (executorService.isShutdown()) {
         logger.info("[COMPACT] Skipping polling on compaction workers due to shutdown");
-        break;
+        return totalBlobsPurged;
       }
       try {
         totalBlobsPurged += compactionTasks.get(partitionIdStr).get();
