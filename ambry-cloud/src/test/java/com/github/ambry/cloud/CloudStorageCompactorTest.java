@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -63,6 +64,11 @@ public class CloudStorageCompactorTest {
     compactor = new CloudStorageCompactor(mockDest, cloudConfig, partitionMap.keySet(), vcrMetrics);
     cloudCompactionScheduler =
         Utils.newScheduler(1, "cloud-compaction-controller-", true);
+  }
+
+  @Before
+  public void beforeTest() {
+    compactor.clearNumBlobsErased();
   }
 
   /**

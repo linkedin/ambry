@@ -83,6 +83,10 @@ public class CloudStorageCompactor extends Thread {
     return numBlobsErased;
   }
 
+  public void clearNumBlobsErased() {
+    numBlobsErased = 0;
+  }
+
   /**
    * For test
    * @return
