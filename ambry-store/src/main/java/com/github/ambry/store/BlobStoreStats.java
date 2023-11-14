@@ -388,9 +388,11 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   int getPartialLogSegmentCount() {
     int partialLogSegmentCount = 0;
-    for (LogSegment segment : index.getLogSegments()) {
-      if (segment.getEndOffset() < segment.getCapacityInBytes() * 0.8) {
-        partialLogSegmentCount++;
+    if (index != null) {
+      for (LogSegment segment : index.getLogSegments()) {
+        if (segment.getEndOffset() < segment.getCapacityInBytes() * 0.8) {
+          partialLogSegmentCount++;
+        }
       }
     }
     return partialLogSegmentCount;

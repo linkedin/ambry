@@ -103,9 +103,9 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
     String storeId = blobStoreStats.getStoreId();
     // when boots up, give it a chance to try the "middle range compaction"
     if (!blobToLastMiddleRangeCompaction.containsKey(storeId)) {
-      // stagger the initial run cross 2 hours
+      // stagger the initial run cross 24 hours
       long staggerTime =
-          random.nextInt(2 * 60 * 60 * 1000) % storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs;
+          random.nextInt(24 * 60 * 60 * 1000) % storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs;
       blobToLastMiddleRangeCompaction.put(storeId,
           time.milliseconds() - storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs + staggerTime);
     }
@@ -161,12 +161,11 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
     Map.Entry<LogSegmentName, Long> firstEntry = validDataPerLogSegments.firstEntry();
     Map.Entry<LogSegmentName, Long> lastEntry = validDataPerLogSegments.lastEntry();
     CostBenefitInfo bestCandidateToCompact = null;
-    boolean weightOnBenefit = false;
+    boolean weightOnBenefit = storeConfig.storeStatsBasedWeightOnBenefitEnabled;
 
     // weigh more on compaction benefit
     // try to reclaim as many log segments as possible with reasonable cost.
     if (storeConfig.storeStatsBasedMiddleRangeCompactionIntervalInMs != 0) {
-      weightOnBenefit = true;
       bestCandidateToCompact =
           getMiddleRangeToCompact(validDataPerLogSegments, segmentCapacity, segmentHeaderSize, maxBlobSize,
               blobStoreStats);
@@ -239,7 +238,7 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
 
     if (weightOnBenefit) {
       if (totalCost < adjustedTotalCost) {
-        logger.info("getCostBenefitInfo {} cost {} adjusted cost {}",
+        logger.trace("getCostBenefitInfo {} cost {} adjusted cost {}",
             validDataSizePerLogSegment.subMap(firstLogSegmentName, true, lastLogSegmentName, true).keySet(), totalCost,
             adjustedTotalCost);
         totalCost = adjustedTotalCost;

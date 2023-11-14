@@ -157,39 +157,26 @@ public class StatsBasedCompactionPolicyTest {
   }
 
   /**
-   * Test the benefits oriented compaction.
-   * 1. test the middle range compaction
-   * 2. test the stats cost tuning
+   * Test the middle range compaction
    * @throws StoreException, InterruptedException
    */
   @Test
-  public void testGetCompactionDetailsBenefitOriented() throws StoreException, InterruptedException {
+  public void testMiddleRangeCompactionGetCompactionDetails() throws StoreException, InterruptedException {
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
     // the test is designed to use for 10 log segments.
     assertEquals(logSegmentCount, 10);
     long middleRangeCompactionInterval = 60 * 60 * 24 * 1000; // 1 day
-    /**
-     * test the fine tuned stats based compaction which weighs more the benefits
-     */
-    // existing stats base compaction will prefer the compaction group with least IO effort.
-    // the new compaction weights more on the compaction benefits as long as the IO effort is reasonable.
-    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
-    double[] validPercentage = {0.9, 0.8, 0.05, 0.01, 0.01, 0.05, 0.1, 0.2, 0.4, 0.7};
-    // with the existing stats based compaction, we'll compact two log segments.
-    int[] expectedCandidateIndex = {3, 4};
-    verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
-
     Properties benefitBasedCompactionProperties = new Properties();
-    // set the interval to not zero, it enabled both the "middle range compaction" and "tuned stats based compaction"
+    // set the interval to not zero, it enabled the "middle range compaction"
     benefitBasedCompactionProperties.setProperty("store.stats.based.middle.range.compaction.interval.in.ms",
         Long.toString(middleRangeCompactionInterval));
     setupBlobStore(benefitBasedCompactionProperties);
     blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
 
-    // with the tuned stats based compaction, we'll compact four log segment.
-    // by default store.stats.based.compaction.min.cost.in.percentage = 0.06
-    // the log segments which has less than 6% valid data are all picked.
-    expectedCandidateIndex = new int[]{2, 3, 4, 5};
+    // the first run is not middle range compaction since we stagger the first middle range compaction on the same disk.
+    // it's the existing stats based compaction.
+    int[] expectedCandidateIndex = {5, 6};
+    double[] validPercentage = new double[]{0.9, 0.8, 0.5, 0.3, 0.2, 0.1, 0.1, 0.2, 0.4, 0.7};
     verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
 
     /**
@@ -214,6 +201,41 @@ public class StatsBasedCompactionPolicyTest {
     ((MockTime) time).sleep(middleRangeCompactionInterval * 2 + 1);
     validPercentage = new double[]{0.9, 0.8, 0.5, 0.4, 0.6, 0.6, 0.4, 0.5, 0.7, 0.8};
     expectedCandidateIndex = new int[]{3, 4, 5, 6};
+    verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
+  }
+
+  /**
+   * Test the benefits oriented stats cost tuning
+   * @throws StoreException, InterruptedException
+   */
+  @Test
+  public void testWeightOnBenefitStatsBasedCompactionGetCompactionDetails()
+      throws StoreException, InterruptedException {
+    long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
+    // the test is designed to use for 10 log segments.
+    assertEquals(logSegmentCount, 10);
+
+    /**
+     * test the fine tuned stats based compaction which weighs more the benefits
+     */
+    // existing stats base compaction will prefer the compaction group with least IO effort.
+    // the new compaction weights more on the compaction benefits as long as the IO effort is reasonable.
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
+    double[] validPercentage = {0.9, 0.8, 0.05, 0.01, 0.01, 0.05, 0.1, 0.2, 0.4, 0.7};
+    // with the existing stats based compaction, we'll compact two log segments.
+    int[] expectedCandidateIndex = {3, 4};
+    verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
+
+    Properties benefitBasedCompactionProperties = new Properties();
+    // enable the stats based compaction which weights more on the benefit
+    benefitBasedCompactionProperties.setProperty("store.stats.based.weight.on.benefit.enabled", "true");
+    setupBlobStore(benefitBasedCompactionProperties);
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName((int) logSegmentCount);
+
+    // with the tuned stats based compaction, we'll compact four log segment.
+    // by default store.stats.based.compaction.min.cost.in.percentage = 0.06
+    // the log segments which has less than 6% valid data are all picked.
+    expectedCandidateIndex = new int[]{2, 3, 4, 5};
     verifyMiddleRangeCompactionDetails(blobStore.logSegmentsNotInJournal, validPercentage, expectedCandidateIndex);
   }
 
