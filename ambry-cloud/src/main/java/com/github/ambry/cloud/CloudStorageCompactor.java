@@ -73,7 +73,7 @@ public class CloudStorageCompactor extends Thread {
     long compactionStartTime = System.currentTimeMillis();
     logger.info("[COMPACT] Starting cloud compaction");
     this.startLatch.get().countDown();
-    numBlobsErased = compactPartitions(); // Blocking call
+    compactPartitions(); // Blocking call
     this.doneLatch.get().countDown();
     logger.info("[COMPACT] Complete cloud compaction and erased {} blobs in {} minutes",
         numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
