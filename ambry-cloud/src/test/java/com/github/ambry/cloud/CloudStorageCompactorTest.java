@@ -103,6 +103,13 @@ public class CloudStorageCompactorTest {
     // TODO: test shutting down with compaction still in progress (more involved)
   }
 
+  /**
+   * Wait for thread state change
+   * @param thread
+   * @param state
+   * @param assertFinalState
+   * @throws InterruptedException
+   */
   protected void waitForThreadState(Thread thread, Thread.State state, boolean assertFinalState) throws InterruptedException {
     int waitAttempt = 0, maxWaitAttempt = 10;
     // 1-second loop
@@ -214,7 +221,7 @@ public class CloudStorageCompactorTest {
         TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
     Thread compactionController =
         waitOrFailForMainCompactionThreadToStart(compactor);
-    // Controller thread is waiting for slow workers
+    // Wait for main thread to enter WAITING state, otherwise the test exits too soon
     waitForThreadState(compactionController, Thread.State.WAITING, true);
     shutdownCompactionWorkers(compactor);
     cloudCompactionScheduler.shutdownNow();
