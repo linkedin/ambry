@@ -240,6 +240,6 @@ public class CloudStorageCompactorTest {
     addPartitionsToCompact(19);
     CloudStorageCompactor spyCompactor = spy(compactor);
     Mockito.lenient().when(spyCompactor.isPartitionOwned(any())).thenReturn(false);
-    assertEquals(0, compactor.compactPartitions());
+    assertEquals(0, spyCompactor.compactPartitions());
   }
 }
