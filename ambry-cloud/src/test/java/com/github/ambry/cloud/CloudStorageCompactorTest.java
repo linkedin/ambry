@@ -66,11 +66,6 @@ public class CloudStorageCompactorTest {
         Utils.newScheduler(1, "cloud-compaction-controller-", true);
   }
 
-  @Before
-  public void beforeTest() {
-    compactor.clearNumBlobsErased();
-  }
-
   /**
    * Test the compactPartitions method.
    */
