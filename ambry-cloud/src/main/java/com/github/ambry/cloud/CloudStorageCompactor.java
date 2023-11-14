@@ -137,6 +137,9 @@ public class CloudStorageCompactor extends Thread {
     return this.executorService.isShutdown();
   }
 
+  protected boolean isPartitionOwned(PartitionId partitionId) {
+    return partitions.contains(partitionId);
+  }
   /**
    * Purge the inactive blobs in all managed partitions.
    * @return the total number of blobs purged.
@@ -169,7 +172,7 @@ public class CloudStorageCompactor extends Thread {
             For example, if we submit 100 jobs to 5 workers, then only 5 jobs are running and the rest are waiting.
             Just before starting the job, check if this node still owns the partition.
            */
-          if (!partitions.contains(partitionId)) {
+          if (!isPartitionOwned(partitionId)) {
             logger.info("[COMPACT] Skipping compaction partition-{} as it is disowned", partitionIdStr);
             return 0;
           }

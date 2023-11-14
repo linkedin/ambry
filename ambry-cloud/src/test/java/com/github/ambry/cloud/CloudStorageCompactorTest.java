@@ -221,23 +221,25 @@ public class CloudStorageCompactorTest {
   }
 
   /**
-   * Tests compaction shutdown for slow or blocked workers
-   * @throws CloudStorageException
-   * @throws InterruptedException
+   * Tests compaction shutdown before submitting compaction tasks
    */
   @Test
-  public void testShutdownCompactionBeforeSchedulingWorkers() throws CloudStorageException, InterruptedException {
-    addPartitionsToCompact(23);
-    // mockDest is used inside compactor but Mockito cannot infer this.
-    // Use lenient() to avoid UnnecessaryStubbingException.
-    Mockito.lenient().when(mockDest.compactPartition(any())).thenReturn(1570);
+  public void testShutdownCompactionBeforeSchedulingWorkers() {
+    addPartitionsToCompact(29);
     shutdownCompactionWorkers(compactor);
-    cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
-        TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
-    Thread compactionController =
-        waitOrFailForMainCompactionThreadToStart(compactor);
-    waitOrFailForMainCompactionThreadToEnd(compactor);
-    cloudCompactionScheduler.shutdownNow();
-    waitForThreadState(compactionController, Thread.State.TERMINATED, true);
+    assertEquals(0, compactor.compactPartitions());
+    // Just one invocation for shutdown
+    assertEquals(1, Mockito.mockingDetails(mockDest).getInvocations().size());
+  }
+
+  /**
+   * Tests compaction for disowned partitions
+   */
+  @Test
+  public void testCompactionDisownedPartition() {
+    addPartitionsToCompact(19);
+    CloudStorageCompactor spyCompactor = spy(compactor);
+    when(spyCompactor.isPartitionOwned(any())).thenReturn(false);
+    assertEquals(0, compactor.compactPartitions());
   }
 }
