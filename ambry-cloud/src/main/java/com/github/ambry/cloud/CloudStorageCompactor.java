@@ -150,13 +150,6 @@ public class CloudStorageCompactor extends Thread {
     @Override
     public Integer call() throws Exception {
       /*
-        Early exit
-       */
-      if (executorService.isShutdown()) {
-        logger.info("[COMPACT] Skipping compaction partition-{} due to shutdown");
-        return 0;
-      }
-      /*
         Jobs wait for execution until workers become available.
         If 100 jobs are submitted to 5 workers, only 5 jobs run while the rest wait.
         Partitions can be reassigned while jobs are in the queue.
