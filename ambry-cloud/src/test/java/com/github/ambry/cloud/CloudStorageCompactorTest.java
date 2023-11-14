@@ -195,10 +195,12 @@ public class CloudStorageCompactorTest {
    */
   @Test
   public void testShutdownCompactionSlowWorkers() throws CloudStorageException, InterruptedException {
-    addPartitionsToCompact(23);
+    int numPartitions = 23, numBlobsErased = 100;
+    addPartitionsToCompact(numPartitions);
     // mockDest is used inside compactor but Mockito cannot infer this.
     // Use lenient() to avoid UnnecessaryStubbingException.
-    Mockito.lenient().when(mockDest.compactPartition(any())).thenAnswer((Answer<Integer>) invocation -> {
+    Mockito.lenient().when(mockDest.compactPartition(any())).thenReturn(numBlobsErased);
+    Mockito.lenient().when(mockDest.compactPartition(eq("0"))).thenAnswer((Answer<Integer>) invocation -> {
       try {
         // Emulate slow worker
         logger.info("Thread {} is sleeping for 24 hours", Thread.currentThread().getName());
@@ -217,6 +219,7 @@ public class CloudStorageCompactorTest {
     shutdownCompactionWorkers(compactor);
     cloudCompactionScheduler.shutdownNow();
     waitOrFailForMainCompactionThreadToEnd(compactor);
+    assertEquals((numPartitions-1)*numBlobsErased, compactor.getNumBlobsErased());
     waitForThreadState(compactionController, Thread.State.TERMINATED, true);
   }
 
