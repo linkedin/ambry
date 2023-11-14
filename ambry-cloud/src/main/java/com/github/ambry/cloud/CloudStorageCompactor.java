@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -73,7 +74,7 @@ public class CloudStorageCompactor extends Thread {
     long compactionStartTime = System.currentTimeMillis();
     logger.info("[COMPACT] Starting cloud compaction");
     this.startLatch.get().countDown();
-    compactPartitions(); // Blocking call
+    numBlobsErased = compactPartitions(); // Blocking call
     this.doneLatch.get().countDown();
     logger.info("[COMPACT] Complete cloud compaction and erased {} blobs in {} minutes",
         numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
@@ -149,6 +150,10 @@ public class CloudStorageCompactor extends Thread {
   protected class CompactionTask implements Callable<Integer> {
     private final PartitionId partitionId;
     CompactionTask(PartitionId partitionId) {
+      /*
+        Save a reference to partitionId since it's a local variable in the submitting loop
+        and will go out of scope before the task begins.
+       */
       this.partitionId = partitionId;
     }
     @Override
@@ -176,6 +181,16 @@ public class CloudStorageCompactor extends Thread {
     }
   }
 
+  public Integer getFuture(Future<Integer> future) {
+    try {
+      return future.get();
+    } catch (Throwable throwable) {
+      // Swallow all exceptions
+      vcrMetrics.compactionFailureCount.inc();
+      logger.error("[COMPACT] Failed to collect compaction result due to {}", throwable.getMessage());
+    }
+    return 0;
+  }
 
   /**
    * Purge the inactive blobs in all managed partitions.
@@ -187,19 +202,19 @@ public class CloudStorageCompactor extends Thread {
         Create an exclusive local copy of partition set to minimize concurrent accesses.
         Submit jobs and rely on the executor service for assignment and scheduling.
       */
-      List<Future<Integer>> futures = executorService.invokeAll(
-          new HashSet<>(partitions).stream()
+      return executorService.invokeAll(
+          new HashSet<>(partitions)
+              .stream()
               .map(partitionId -> new CompactionTask(partitionId))
-              .collect(Collectors.toSet()));
-      numBlobsErased = 0;
-      for (Future<Integer> future : futures) {
-        numBlobsErased += future.get();
-      }
+              .collect(Collectors.toSet()))
+          .stream()
+          .map(future -> getFuture(future))
+          .reduce(0, Integer::sum);
     } catch (Throwable throwable) {
       vcrMetrics.compactionFailureCount.inc();
       logger.error("[COMPACT] Failed to execute cloud-compaction tasks due to {}",
           throwable.getMessage());
     }
-    return numBlobsErased;
+    return 0;
   }
 }
