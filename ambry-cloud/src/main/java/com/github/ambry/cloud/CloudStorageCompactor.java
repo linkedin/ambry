@@ -16,16 +16,18 @@ package com.github.ambry.cloud;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Utils;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,7 +40,7 @@ public class CloudStorageCompactor extends Thread {
   protected CloudDestination cloudDestination;
   protected Set<PartitionId> partitions;
   protected VcrMetrics vcrMetrics;
-  protected ExecutorService executorService;
+  protected ScheduledExecutorService executorService;
 
   protected CloudConfig cloudConfig;
   protected AtomicReference<Thread> mainThread;
@@ -143,77 +145,66 @@ public class CloudStorageCompactor extends Thread {
   }
 
   protected class CompactionTask implements Callable<Integer> {
-
     private final PartitionId partitionId;
-
     CompactionTask(PartitionId partitionId) {
       this.partitionId = partitionId;
     }
-
     @Override
     public Integer call() throws Exception {
+      /*
+        Early exit
+       */
+      if (executorService.isShutdown()) {
+        logger.info("[COMPACT] Skipping compaction partition-{} due to shutdown");
+        return 0;
+      }
       /*
         Jobs wait for execution until workers become available.
         If 100 jobs are submitted to 5 workers, only 5 jobs run while the rest wait.
         Partitions can be reassigned while jobs are in the queue.
         Verify ownership of the partition before job initiation.
        */
-      String partitionIdStr = partitionId.toPathString();
       if (!isPartitionOwned(partitionId)) {
-        logger.info("[COMPACT] Skipping compaction partition-{} as it is disowned", partitionIdStr);
+        logger.info("[COMPACT] Skipping compaction partition-{} as it is disowned", partitionId.toPathString());
         return 0;
       }
-      return cloudDestination.compactPartition(partitionIdStr);
-    }
-  }
 
-  protected HashMap<String, Future<Integer>> submitCompactionTasks() {
-    /*
-      Create an exclusive local copy of partition set to minimize concurrent accesses.
-      Submit jobs and rely on the executor service for assignment and scheduling.
-    */
-    HashMap<String, Future<Integer>> compactionTasks = new HashMap<>();
-    Iterator<PartitionId> partitionIdIterator = new HashSet<>(partitions).iterator();
-    while (!executorService.isShutdown() && partitionIdIterator.hasNext()) {
-      PartitionId partitionId = partitionIdIterator.next();
       try {
-        compactionTasks.put(partitionId.toPathString(), executorService.submit(new CompactionTask(partitionId)));
-        // Since this is a final deletion of a blob, we need to at least have record of what partitions were compacted
-        logger.info("[COMPACT] Submitted cloud-compaction task for partition-{}", partitionId.toPathString());
+        return cloudDestination.compactPartition(partitionId.toPathString());
       } catch (Throwable throwable) {
+        // Swallow all exceptions
         vcrMetrics.compactionFailureCount.inc();
-        logger.error("[COMPACT] Failed to submit compaction task for partition-{} due to {}",
+        logger.error("[COMPACT] Failed to compact partition-{} due to {}",
             partitionId.toPathString(), throwable.getMessage());
       }
+      return 0;
     }
-    return compactionTasks;
   }
 
-  protected int waitForCompactionTasks(HashMap<String, Future<Integer>> compactionTasks) {
-    int totalBlobsPurged = 0;
-    Iterator<String> compactionTasksIterator = compactionTasks.keySet().iterator();
-    /*
-      In the finite loop, future.get() is blocking, making its duration unpredictable.
-      Shutdown flag setting ensures compaction-workers exit, even if blocked on a network call, short-circuiting the loop.
-     */
-    while (!executorService.isShutdown() && compactionTasksIterator.hasNext()) {
-      String partitionIdStr = compactionTasksIterator.next();
-      try {
-        totalBlobsPurged += compactionTasks.get(partitionIdStr).get();
-      } catch (Throwable throwable) {
-        vcrMetrics.compactionFailureCount.inc();
-        logger.error("[COMPACT] Failed to compact a partition-{} due to {}", partitionIdStr, throwable.getMessage());
-      }
-    }
-    return totalBlobsPurged;
-  }
 
   /**
    * Purge the inactive blobs in all managed partitions.
    * @return the total number of blobs purged.
    */
   public int compactPartitions() {
-    HashMap<String, Future<Integer>> compactionTasks = submitCompactionTasks();
-    return waitForCompactionTasks(compactionTasks);
+    int numBlobsErased = 0;
+    try {
+      /*
+        Create an exclusive local copy of partition set to minimize concurrent accesses.
+        Submit jobs and rely on the executor service for assignment and scheduling.
+      */
+      List<Future<Integer>> futures = executorService.invokeAll(
+          new HashSet<>(partitions).stream()
+              .map(partitionId -> new CompactionTask(partitionId))
+              .collect(Collectors.toSet()));
+      for (Future<Integer> future : futures) {
+        numBlobsErased += future.get();
+      }
+    } catch (Throwable throwable) {
+      vcrMetrics.compactionFailureCount.inc();
+      logger.error("[COMPACT] Failed to execute cloud-compaction tasks due to {}",
+          throwable.getMessage());
+    }
+    return numBlobsErased;
   }
 }
