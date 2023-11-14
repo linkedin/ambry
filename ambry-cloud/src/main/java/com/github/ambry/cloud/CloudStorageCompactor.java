@@ -44,6 +44,7 @@ public class CloudStorageCompactor extends Thread {
   protected AtomicReference<Thread> mainThread;
   protected AtomicReference<CountDownLatch> startLatch;
   protected AtomicReference<CountDownLatch> doneLatch;
+  protected int numBlobsErased;
 
   /**
    * Public constructor.
@@ -72,7 +73,7 @@ public class CloudStorageCompactor extends Thread {
     long compactionStartTime = System.currentTimeMillis();
     logger.info("[COMPACT] Starting cloud compaction");
     this.startLatch.get().countDown();
-    int numBlobsErased = compactPartitions(); // Blocking call
+    numBlobsErased = compactPartitions(); // Blocking call
     this.doneLatch.get().countDown();
     logger.info("[COMPACT] Complete cloud compaction and erased {} blobs in {} minutes",
         numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
@@ -181,7 +182,6 @@ public class CloudStorageCompactor extends Thread {
    * @return the total number of blobs purged.
    */
   public int compactPartitions() {
-    int numBlobsErased = 0;
     try {
       /*
         Create an exclusive local copy of partition set to minimize concurrent accesses.
@@ -191,6 +191,7 @@ public class CloudStorageCompactor extends Thread {
           new HashSet<>(partitions).stream()
               .map(partitionId -> new CompactionTask(partitionId))
               .collect(Collectors.toSet()));
+      numBlobsErased = 0;
       for (Future<Integer> future : futures) {
         numBlobsErased += future.get();
       }
