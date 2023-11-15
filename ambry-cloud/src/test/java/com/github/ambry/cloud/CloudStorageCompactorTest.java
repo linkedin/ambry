@@ -153,7 +153,6 @@ public class CloudStorageCompactorTest {
     assertTrue(compactor.isShutDown());
   }
 
-
   /**
    * Emulate slow worker
    * @return
@@ -196,11 +195,11 @@ public class CloudStorageCompactorTest {
   }
 
   /**
-   * Tests compaction shutdown for slow or blocked workers
+   * Tests compaction shutdown for slow workers
    * @throws InterruptedException
    */
   @Test
-  public void testShutdownCompactionFastSlowWorkers() throws InterruptedException {
+  public void testCompactionFastSlowWorkers() throws InterruptedException {
     int numPartitions = 5000;
     int numSlowWorkers = cloudConfig.cloudCompactionNumThreads - 1; // n-1 slow worker
     addPartitionsToCompact(numPartitions);
@@ -223,14 +222,13 @@ public class CloudStorageCompactorTest {
     assertEquals(numPartitions-numSlowWorkers, getNumBlobsErased(compactor));
   }
 
-
   /**
    * Tests compaction for disowned partitions
    */
   @Test
   public void testCompactionDisownedPartition() throws InterruptedException, CloudStorageException {
     int numPartitions = 5000, errPct = 10; // 10% disowned
-    // The mock isn't effective when there 128 mocks.
+    // The mock isn't effective when there are 128+ mocks.
     // The current method is scalable and effective. Set a common mock, instead of 128 and let it decide.
     int numDisownedPartitions = Math.floorDiv(numPartitions, errPct);
     addPartitionsToCompact(numPartitions);
@@ -248,11 +246,11 @@ public class CloudStorageCompactorTest {
   }
 
   /**
-   * Tests compaction shutdown for error workers
+   * Tests compaction for error workers
    * @throws InterruptedException
    */
   @Test
-  public void testShutdownCompactionErrorWorkers() throws InterruptedException {
+  public void testCompactionErrorWorkers() throws InterruptedException {
     int numPartitions = 5000, errPct = 10; // 10% errors
     int numErrorWorkers = Math.floorDiv(numPartitions, errPct);
     addPartitionsToCompact(numPartitions);
