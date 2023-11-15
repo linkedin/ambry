@@ -57,6 +57,7 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
@@ -366,45 +367,21 @@ public class ReplicaThread implements Runnable {
     exchangeMetadataResponsesInEachCycle = new HashMap<>();
     long oneRoundStartTimeMs = time.milliseconds();
     logger.trace("Thread name: {} Start RemoteReplicaGroup replication", threadName);
-    List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
-    int remoteReplicaGroupId = 0;
 
+    List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
     try {
       // Before each cycle of replication, we clean up the cache in key converter.
       storeKeyConverter.dropCache();
-      Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
-      for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
-        DataNodeId remoteNode = entry.getKey();
-        List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();
-        List<RemoteReplicaInfo> activeReplicasPerNode = new ArrayList<>();
-        List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
-        filterRemoteReplicasToReplicate(replicasToReplicatePerNode, activeReplicasPerNode,
-            standbyReplicasWithNoProgress);
 
-        if (activeReplicasPerNode.size() > 0) {
-          List<List<RemoteReplicaInfo>> activeReplicaSubLists =
-              maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicasPerNode, maxReplicaCountPerRequest)
-                  : Collections.singletonList(activeReplicasPerNode);
-          for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
-            RemoteReplicaGroup group =
-                new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
-            remoteReplicaGroups.add(group);
-          }
-        }
-        if (standbyReplicasWithNoProgress.size() > 0) {
-          List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
-              getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
-          if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
-            RemoteReplicaGroup group =
-                new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
-            remoteReplicaGroups.add(group);
-          }
-        }
-      }
+      // Get remote replicas grouped by node.
+      remoteReplicaGroups = getRemoteReplicaGroups();
+
       // A map from correlation id to RemoteReplicaGroup. This is used to find the group when response comes back.
       Map<Integer, RemoteReplicaGroup> correlationIdToReplicaGroup = new HashMap<>();
+
       // A map from correlation id to RequestInfo. This is used to find timed out RequestInfos.
       Map<Integer, RequestInfo> correlationIdToRequestInfo = new LinkedHashMap<>();
+
       while (remoteReplicaGroups.size() > 0 && !remoteReplicaGroups.stream().allMatch(RemoteReplicaGroup::isDone)) {
         if (!running) {
           break;
@@ -447,6 +424,58 @@ public class ReplicaThread implements Runnable {
           replicatingFromRemoteColo, datacenterName);
     }
     maybeSleepAfterReplication(remoteReplicaGroups.isEmpty());
+  }
+
+  /**
+   * Get groups of remote replicas to replicate from. Each group of replicas belongs to the same data node, so we can
+   * create one ReplicaMetadatRequest to exchange replication metadata and one GetRequest to copy all the missing blobs if
+   * there is any.
+   * @return {@link List} of {@link RemoteReplicaGroup}s to replicate from.
+   */
+  List<RemoteReplicaGroup> getRemoteReplicaGroups() {
+
+    List<RemoteReplicaGroup> remoteReplicaGroups = new ArrayList<>();
+    int remoteReplicaGroupId = 0;
+
+    // Gather list of replicas to replicate from each node and create groups for them.
+    Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
+    for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
+
+      // Remote node to replicate from.
+      DataNodeId remoteNode = entry.getKey();
+
+      // List of replicas on the remote node to replicate from.
+      List<RemoteReplicaInfo> replicas = entry.getValue();
+
+      // Get list of replicas which are up and ones which are not caught up in previous replication cycle
+      Pair<List<RemoteReplicaInfo>, List<RemoteReplicaInfo>> validRemoteReplicas = getActiveRemoteReplicas(replicas);
+      List<RemoteReplicaInfo> activeReplicas = validRemoteReplicas.getFirst();
+      List<RemoteReplicaInfo> standbyReplicasWithNoProgress = validRemoteReplicas.getSecond();
+
+      // Create a group for active replicas
+      if (activeReplicas.size() > 0) {
+        List<List<RemoteReplicaInfo>> activeReplicaSubLists =
+            maxReplicaCountPerRequest > 0 ? Utils.partitionList(activeReplicas, maxReplicaCountPerRequest)
+                : Collections.singletonList(activeReplicas);
+        for (List<RemoteReplicaInfo> replicaSubList : activeReplicaSubLists) {
+          RemoteReplicaGroup group = new RemoteReplicaGroup(replicaSubList, remoteNode, false, remoteReplicaGroupId++);
+          remoteReplicaGroups.add(group);
+        }
+      }
+
+      // Create a group for replicas which didn't make progress in previous replication cycle
+      if (standbyReplicasWithNoProgress.size() > 0) {
+        List<RemoteReplicaInfo> standbyReplicasTimedOutOnNoProgress =
+            getRemoteStandbyReplicasTimedOutOnNoProgress(standbyReplicasWithNoProgress);
+        if (standbyReplicasTimedOutOnNoProgress.size() > 0) {
+          RemoteReplicaGroup group =
+              new RemoteReplicaGroup(standbyReplicasTimedOutOnNoProgress, remoteNode, true, remoteReplicaGroupId++);
+          remoteReplicaGroups.add(group);
+        }
+      }
+    }
+
+    return remoteReplicaGroups;
   }
 
   void setExchangeMetadataListener(ExchangeMetadataListener exchangeMetadataListener) {
@@ -625,15 +654,17 @@ public class ReplicaThread implements Runnable {
    * Filter the remote replicas in the list of {@link RemoteReplicaInfo}s. It will filter out the replicas that are down
    * or in backoff state or is disabled. It will also filter out replicas that tries to replicate from remote datacenter
    * but still have missing blobs from last ReplicaMetadataRequest when the leader based replication is enabled.
-   * @param replicasToReplicatePerNode All the replicas.
-   * @param activeReplicasPerNode A list to store all the active replicas after filtering.
-   * @param standbyReplicasWithNoProgress A list to store all the standby replicas that still have missing blobs from
-   *                                      previous ReplicaMetadataRequest.
+   *
+   * @param remoteReplicaInfos All the replicas
+   * @return lists of active replicas and replicas which didn't make progress in last cycle.
    */
-  void filterRemoteReplicasToReplicate(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      List<RemoteReplicaInfo> activeReplicasPerNode, List<RemoteReplicaInfo> standbyReplicasWithNoProgress) {
+  Pair<List<RemoteReplicaInfo>, List<RemoteReplicaInfo>> getActiveRemoteReplicas(
+      List<RemoteReplicaInfo> remoteReplicaInfos) {
     // Get a list of active replicas that needs be included for this replication cycle
-    for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
+    List<RemoteReplicaInfo> activeReplicas = new ArrayList<>();
+    List<RemoteReplicaInfo> standbyReplicasWithNoProgress = new ArrayList<>();
+
+    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
       ReplicaId replicaId = remoteReplicaInfo.getReplicaId();
       boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
       if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
@@ -657,8 +688,10 @@ public class ReplicaThread implements Runnable {
           continue;
         }
       }
-      activeReplicasPerNode.add(remoteReplicaInfo);
+      activeReplicas.add(remoteReplicaInfo);
     }
+
+    return new Pair<>(activeReplicas, standbyReplicasWithNoProgress);
   }
 
   /**
@@ -1503,6 +1536,40 @@ public class ReplicaThread implements Runnable {
   }
 
   /**
+   * Get replicas infos for leader partitions.
+   * @param remoteReplicaInfos list of remote replica infos.
+   * @return {@link RemoteReplicaInfo} for leader partitions.
+   */
+  List<RemoteReplicaInfo> getLeaderReplicaInfos(List<RemoteReplicaInfo> remoteReplicaInfos) {
+    List<RemoteReplicaInfo> leaderReplicaInfos = new ArrayList<>();
+    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
+      ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
+      ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
+      // Check if local replica and remote replica are leaders for their partition.
+      if (leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)) {
+        leaderReplicaInfos.add(remoteReplicaInfo);
+      }
+    }
+    return leaderReplicaInfos;
+  }
+
+  /**
+   * Get replicas infos for leader less partitions.
+   * @param remoteReplicaInfos list of remote replica infos.
+   * @return {@link RemoteReplicaInfo} for leader less partitions.
+   */
+  List<RemoteReplicaInfo> getLeaderLessReplicaInfos(List<RemoteReplicaInfo> remoteReplicaInfos) {
+    List<RemoteReplicaInfo> leaderLessReplicaInfos = new ArrayList<>();
+    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
+      ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
+      if (leaderBasedReplicationAdmin.isLeaderLessPartition(localReplica.getPartitionId())) {
+        leaderLessReplicaInfos.add(remoteReplicaInfo);
+      }
+    }
+    return leaderLessReplicaInfos;
+  }
+
+  /**
    * Returns list of remote replica infos whose missing blobs in their metadata response haven't arrived within
    * time = replicationConfig.replicationStandbyWaitTimeoutToTriggerCrossColoFetchSeconds.
    * @param remoteReplicaInfos list of remote replica infos
@@ -1981,17 +2048,26 @@ public class ReplicaThread implements Runnable {
         return requestInfo;
       } else if (state == ReplicaGroupReplicationState.REPLICA_METADATA_RESPONSE_HANDLED) {
         // When the state is REPLICA_METADATA_RESPONSE_HANDLED, we will send the GetRequest out if needed.
-        remoteReplicaInfosToSend = remoteReplicaInfos;
-        exchangeMetadataResponseListToProcess = exchangeMetadataResponseList;
         if (!isNonProgressStandbyReplicaGroup && replicatingFromRemoteColo && leaderBasedReplicationAdmin != null) {
           // If this is not standby replicas trying to catch up, and this is cross-colo replication, and we enable
-          // leader based replication, then filter out remote replicas that is not leader to leader.
-          List<RemoteReplicaInfo> leaderReplicaList = new ArrayList<>();
-          List<ExchangeMetadataResponse> exchangeMetadataResponseListForLeaderReplicas = new ArrayList<>();
-          getLeaderReplicaList(remoteReplicaInfos, exchangeMetadataResponseList, leaderReplicaList,
-              exchangeMetadataResponseListForLeaderReplicas);
-          remoteReplicaInfosToSend = leaderReplicaList;
-          exchangeMetadataResponseListToProcess = exchangeMetadataResponseListForLeaderReplicas;
+          // leader based replication, then issue GetRequests only for leader partitions or leader-less partitions.
+          List<RemoteReplicaInfo> leaderReplicaInfos = getLeaderReplicaInfos(remoteReplicaInfos);
+          // In addition, include the list of replicas which are leader-less to avoid slow replication.
+          leaderReplicaInfos.addAll(getLeaderLessReplicaInfos(remoteReplicaInfos));
+          // Dedup in case there is a remote possibility of partition going from leader to leader-less while we are
+          // collecting the list
+          List<RemoteReplicaInfo> deDupedLeaderReplicaInfos =
+              leaderReplicaInfos.stream().distinct().collect(Collectors.toList());
+          // Get corresponding exchange metadata response list.
+          List<ExchangeMetadataResponse> exchangeMetadataResponsesForLeaderReplicas = new ArrayList<>();
+          for (RemoteReplicaInfo remoteReplicaInfo : deDupedLeaderReplicaInfos) {
+            exchangeMetadataResponsesForLeaderReplicas.add(remoteReplicaInfo.getExchangeMetadataResponse());
+          }
+          remoteReplicaInfosToSend = deDupedLeaderReplicaInfos;
+          exchangeMetadataResponseListToProcess = exchangeMetadataResponsesForLeaderReplicas;
+        } else {
+          remoteReplicaInfosToSend = remoteReplicaInfos;
+          exchangeMetadataResponseListToProcess = exchangeMetadataResponseList;
         }
         if (!remoteReplicaInfosToSend.isEmpty()) {
           if (exchangeMetadataResponseListToProcess.size() != remoteReplicaInfosToSend.size()) {
