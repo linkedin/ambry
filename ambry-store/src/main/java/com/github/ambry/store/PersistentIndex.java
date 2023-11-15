@@ -512,6 +512,21 @@ class PersistentIndex {
   }
 
   /**
+   * @return count of partially written log segments
+   */
+  int getPartialLogSegmentCount() {
+    int partialLogSegmentCount = 0;
+    LogSegment segment = log.getFirstSegment();
+    while (segment != null) {
+      if (segment.getEndOffset() < segment.getCapacityInBytes() * 0.8) {
+        partialLogSegmentCount++;
+      }
+      segment = log.getNextSegment(segment);
+    }
+    return partialLogSegmentCount;
+  }
+
+  /**
    * Atomically adds {@code segmentFilesToAdd} to and removes {@code segmentsToRemove} from the map of {@link Offset} to
    * {@link IndexSegment} instances.
    * @param segmentFilesToAdd the backing files of the {@link IndexSegment} instances to add.

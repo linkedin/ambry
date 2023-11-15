@@ -1278,7 +1278,7 @@ class BlobStoreCompactor {
               .filter(p -> !logSegmentPositionsAfterCompaction.contains(p))
               .count());
 
-          partialLogSegmentCount.set(srcLog.getPartialLogSegmentCount());
+          partialLogSegmentCount.set(srcIndex.getPartialLogSegmentCount());
         }
 
         if (srcIndex != null && srcIndex.hardDeleter != null) {
