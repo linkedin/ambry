@@ -160,7 +160,7 @@ public class CloudStorageCompactorTest {
   }
 
   /**
-   * Emulate slow worker
+   * Emulate error worker
    * @return
    */
   protected int errorWorker(int partition) {
