@@ -157,7 +157,8 @@ public class CloudStorageCompactorTest {
    * Emulate slow worker
    * @return
    */
-  protected int slowWorker(String partition, int numSlowWorkers, CountDownLatch fastWorkerLatch, CountDownLatch slowWorkerLatch) {
+  protected int slowWorker(String partition, int numSlowWorkers, CountDownLatch fastWorkerLatch,
+      CountDownLatch slowWorkerLatch) {
     // Partition indexing starts from 1, hence <= and not <.
     if (Integer.valueOf(partition) <= numSlowWorkers) {
       try {
@@ -179,7 +180,8 @@ public class CloudStorageCompactorTest {
   protected int errorWorker(String partition, int errPct) {
     // Every n-th partition throws an error
     if (Math.floorMod(Integer.valueOf(partition), errPct) == 0) {
-      String err = String.format("Thread {} throws error for partition-%s", Thread.currentThread().getName(), partition);
+      String err = String.format("Thread {} throws error for partition-%s",
+          Thread.currentThread().getName(), partition);
       throw new RuntimeException(err);
     }
     return 1; // Just erase one blob for easy debug
@@ -210,7 +212,8 @@ public class CloudStorageCompactorTest {
     CountDownLatch slowWorkerLatch = new CountDownLatch(numSlowWorkers);
     try {
       Mockito.lenient().when(mockDest.compactPartition(any()))
-          .thenAnswer((Answer<Integer>) invocation -> slowWorker(invocation.getArgument(0), numSlowWorkers, fastWorkerLatch, slowWorkerLatch));
+          .thenAnswer((Answer<Integer>) invocation ->
+              slowWorker(invocation.getArgument(0), numSlowWorkers, fastWorkerLatch, slowWorkerLatch));
     } catch (CloudStorageException e) {
       throw new RuntimeException(e);
     }
