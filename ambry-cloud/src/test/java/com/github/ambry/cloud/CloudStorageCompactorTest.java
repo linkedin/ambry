@@ -236,7 +236,7 @@ public class CloudStorageCompactorTest {
   @Test
   public void testCompactionDisownedPartition() throws InterruptedException {
     int numPartitions = 5000, numBlobsErased = 1; // Erase 1 blob for debugging
-    int numDisownedPartitions = 127; // The test breaks for 128 disowned partitions
+    int numDisownedPartitions = 127; // The test breaks for 128 disowned partitions, the mock isn't effective
     addPartitionsToCompact(numPartitions);
     CloudStorageCompactor spyCompactor = spy(compactor);
     // Emulate disowned partition
