@@ -117,8 +117,8 @@ public class CloudStorageCompactorTest {
    * @param numPartitions Number of partitions to compact
    */
   protected void addPartitionsToCompact(int numPartitions) {
-    String defaultClass = MockClusterMap.DEFAULT_PARTITION_CLASS;
-    IntStream.rangeClosed(1, numPartitions).forEach(i -> partitionMap.put(new MockPartitionId(i, defaultClass), null));
+    IntStream.rangeClosed(1, numPartitions)
+        .forEach(i -> partitionMap.put(new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS), null));
   }
 
   /**
