@@ -122,7 +122,7 @@ public class CloudStorageCompactorTest {
   }
 
   /**
-   * Waits for main compaction thread to start by checking the doneLatch
+   * Waits for main compaction thread to end and return num of blob erased
    * @param compactor
    * @throws InterruptedException
    */
@@ -181,7 +181,7 @@ public class CloudStorageCompactorTest {
   }
 
   /**
-   * Emulate fast worker
+   * Mock partition ownership
    * @return
    */
   protected boolean mockIsPartitionOwned(int partition, CountDownLatch workerLatch) {
@@ -220,9 +220,8 @@ public class CloudStorageCompactorTest {
         throw new RuntimeException(e);
       }
     });
-
     cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
-        TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
+        cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
     fastWorkerLatch.await();
     slowWorkerLatch.await();
     shutdownCompactionWorkers(compactor);
@@ -256,8 +255,8 @@ public class CloudStorageCompactorTest {
         throw new RuntimeException(e);
       }
     });
-    cloudCompactionScheduler.scheduleWithFixedDelay(spyCompactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
-        TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
+    cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
+        cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
     fastWorkerLatch.await();
     workerLatch.await();
     shutdownCompactionWorkers(spyCompactor);
@@ -297,7 +296,7 @@ public class CloudStorageCompactorTest {
     });
 
     cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
-        TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
+        cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
     fastWorkerLatch.await();
     errorWorkerLatch.await();
     shutdownCompactionWorkers(compactor);
