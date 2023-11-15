@@ -126,13 +126,14 @@ public class CloudStorageCompactorTest {
    * @param compactor
    * @throws InterruptedException
    */
-  protected void waitOrFailForMainCompactionThreadToEnd(CloudStorageCompactor compactor) throws InterruptedException {
+  protected int getNumBlobsErased(CloudStorageCompactor compactor) throws InterruptedException {
     // Timed wait is better than an indefinite one
     int wait = 30;
     compactor.getDoneLatch().await(wait, TimeUnit.SECONDS);
     if (compactor.getDoneLatch().getCount() != 0) {
       fail(String.format("Main compaction thread did not finish in %s seconds", wait));
     }
+    return compactor.getNumBlobsErased();
   }
 
   /**
@@ -149,8 +150,9 @@ public class CloudStorageCompactorTest {
    * Emulate slow worker
    * @return
    */
-  protected int slowWorker(int partition) {
+  protected int slowWorker(int partition, CountDownLatch slowWorkerLatch) {
     try {
+      slowWorkerLatch.countDown();
       logger.info("Thread {} is sleeping for 24 hours on partition-{}", Thread.currentThread().getName(), partition);
       sleep(TimeUnit.HOURS.toMillis(24));
     } catch (InterruptedException e) {
@@ -163,8 +165,9 @@ public class CloudStorageCompactorTest {
    * Emulate error worker
    * @return
    */
-  protected int errorWorker(int partition) {
-    String err = String.format("Thread {} throws error for partition-{}", Thread.currentThread().getName(), partition);
+  protected int errorWorker(int partition, CountDownLatch errorWorkerLatch) {
+    String err = String.format("Thread {} throws error for partition-%s", Thread.currentThread().getName(), partition);
+    errorWorkerLatch.countDown();
     throw new RuntimeException(err);
   }
 
@@ -173,9 +176,17 @@ public class CloudStorageCompactorTest {
    * @return
    */
   protected int fastWorker(int partition, CountDownLatch fastWorkerLatch) {
-    logger.info("Thread {} is compacting partition-{}", Thread.currentThread().getName(), partition);
     fastWorkerLatch.countDown();
     return 1;
+  }
+
+  /**
+   * Emulate fast worker
+   * @return
+   */
+  protected boolean mockIsPartitionOwned(int partition, CountDownLatch workerLatch) {
+    workerLatch.countDown();
+    return false;
   }
 
   /**
@@ -190,10 +201,11 @@ public class CloudStorageCompactorTest {
     // mockDest is used inside compactor but Mockito cannot infer this.
     // Use lenient() to avoid UnnecessaryStubbingException.
     // Emulate slow worker for some partitions
+    CountDownLatch slowWorkerLatch = new CountDownLatch(numSlowWorkers);
     IntStream.rangeClosed(1, numSlowWorkers).forEach(i -> {
       try {
         Mockito.lenient().when(mockDest.compactPartition(eq(String.valueOf(i))))
-            .thenAnswer((Answer<Integer>) invocation -> slowWorker(i));
+            .thenAnswer((Answer<Integer>) invocation -> slowWorker(i, slowWorkerLatch));
       } catch (CloudStorageException e) {
         throw new RuntimeException(e);
       }
@@ -212,9 +224,9 @@ public class CloudStorageCompactorTest {
     cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
         TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
     fastWorkerLatch.await();
+    slowWorkerLatch.await();
     shutdownCompactionWorkers(compactor);
-    waitOrFailForMainCompactionThreadToEnd(compactor);
-    assertEquals((numPartitions-numSlowWorkers)*numBlobsErased, compactor.getNumBlobsErased());
+    assertEquals((numPartitions-numSlowWorkers)*numBlobsErased, getNumBlobsErased(compactor));
   }
 
 
@@ -222,26 +234,34 @@ public class CloudStorageCompactorTest {
    * Tests compaction for disowned partitions
    */
   @Test
-  public void testCompactionDisownedPartition() {
-    int numPartitions = 5000, numBlobsErased = 1; // Erase 1 blob for debugging
+  public void testCompactionDisownedPartition() throws InterruptedException {
+    int numPartitions = 1000, numBlobsErased = 1; // Erase 1 blob for debugging
     int numDisownedPartitions = Math.floorDiv(numPartitions, 10); // 10% disowned partitions
     addPartitionsToCompact(numPartitions);
     CloudStorageCompactor spyCompactor = spy(compactor);
     // Emulate disowned partition
+    CountDownLatch workerLatch = new CountDownLatch(numDisownedPartitions);
     IntStream.rangeClosed(1, numDisownedPartitions).forEach(i ->
         Mockito.lenient()
             .when(spyCompactor.isPartitionOwned(eq(new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS))))
-            .thenReturn(false));
+            .thenAnswer((Answer<Boolean>) invocation -> mockIsPartitionOwned(i, workerLatch)));
     // Return valid answer for other partitions
+    CountDownLatch fastWorkerLatch = new CountDownLatch(numPartitions - numDisownedPartitions);
     IntStream.rangeClosed(numDisownedPartitions+1, numPartitions).forEach(i -> {
       try {
         // Use eq(), not any(). It messes up mocking for this test. Be specific in mock-args.
-        Mockito.lenient().when(mockDest.compactPartition(eq(String.valueOf(i)))).thenReturn(numBlobsErased);
+        Mockito.lenient().when(mockDest.compactPartition(eq(String.valueOf(i))))
+            .thenAnswer((Answer<Integer>) invocation -> fastWorker(i, fastWorkerLatch));
       } catch (CloudStorageException e) {
         throw new RuntimeException(e);
       }
     });
-    assertEquals((numPartitions-numDisownedPartitions)*numBlobsErased, spyCompactor.compactPartitions());
+    cloudCompactionScheduler.scheduleWithFixedDelay(spyCompactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
+        TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
+    fastWorkerLatch.await();
+    workerLatch.await();
+    shutdownCompactionWorkers(spyCompactor);
+    assertEquals((numPartitions-numDisownedPartitions)*numBlobsErased, getNumBlobsErased(spyCompactor));
   }
 
   /**
@@ -251,22 +271,23 @@ public class CloudStorageCompactorTest {
   @Test
   public void testShutdownCompactionErrorWorkers() throws InterruptedException {
     int numPartitions = 3000, numBlobsErased = 1;
-    int numSlowWorkers = cloudConfig.cloudCompactionNumThreads - 1; // n-1 slow worker
+    int numErrorWorkers = cloudConfig.cloudCompactionNumThreads - 1; // n-1 slow worker
     addPartitionsToCompact(numPartitions);
     // mockDest is used inside compactor but Mockito cannot infer this.
     // Use lenient() to avoid UnnecessaryStubbingException.
     // Emulate error worker for some partitions
-    IntStream.rangeClosed(1, numSlowWorkers).forEach(i -> {
+    CountDownLatch errorWorkerLatch = new CountDownLatch(numErrorWorkers);
+    IntStream.rangeClosed(1, numErrorWorkers).forEach(i -> {
       try {
         Mockito.lenient().when(mockDest.compactPartition(eq(String.valueOf(i))))
-            .thenAnswer((Answer<Integer>) invocation -> errorWorker(i));
+            .thenAnswer((Answer<Integer>) invocation -> errorWorker(i, errorWorkerLatch));
       } catch (CloudStorageException e) {
         throw new RuntimeException(e);
       }
     });
-    CountDownLatch fastWorkerLatch = new CountDownLatch(numPartitions - numSlowWorkers);
+    CountDownLatch fastWorkerLatch = new CountDownLatch(numPartitions - numErrorWorkers);
     // For the remaining partitions, return a valid answer
-    IntStream.rangeClosed(numSlowWorkers+1, numPartitions).forEach(i -> {
+    IntStream.rangeClosed(numErrorWorkers+1, numPartitions).forEach(i -> {
       try {
         Mockito.lenient().when(mockDest.compactPartition(eq(String.valueOf(i))))
             .thenAnswer((Answer<Integer>) invocation -> fastWorker(i, fastWorkerLatch));
@@ -278,8 +299,8 @@ public class CloudStorageCompactorTest {
     cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
         TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
     fastWorkerLatch.await();
+    errorWorkerLatch.await();
     shutdownCompactionWorkers(compactor);
-    waitOrFailForMainCompactionThreadToEnd(compactor);
-    assertEquals((numPartitions-numSlowWorkers)*numBlobsErased, compactor.getNumBlobsErased());
+    assertEquals((numPartitions-numErrorWorkers)*numBlobsErased, getNumBlobsErased(compactor));
   }
 }
