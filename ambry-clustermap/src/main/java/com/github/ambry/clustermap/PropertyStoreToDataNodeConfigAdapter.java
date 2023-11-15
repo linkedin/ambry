@@ -177,7 +177,7 @@ class PropertyStoreToDataNodeConfigAdapter implements DataNodeConfigSource {
 
     private Iterable<DataNodeConfig> lazyIterable(Collection<ZNRecord> records) {
       return records == null || records.isEmpty() ? Collections.emptyList()
-          : () -> records.stream().map(converter::convert).filter(Objects::nonNull).iterator();
+          : () -> records.stream().filter(Objects::nonNull).map(converter::convert).filter(Objects::nonNull).iterator();
     }
 
     /**

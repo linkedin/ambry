@@ -1225,13 +1225,28 @@ public class HelixClusterManager implements ClusterMap {
 
     private void getReplicaIdsByStateInRoutingTableSnapshot(RoutingTableSnapshot routingTableSnapshot, String dc,
         String resourceName, String partitionName, ReplicaState state, Set<AmbryReplica> replicas) {
-      routingTableSnapshot.getInstancesForResource(resourceName, partitionName, state.name())
-          .stream()
-          .map(instanceConfig -> instanceNameToAmbryDataNode.get(instanceConfig.getInstanceName()))
-          .filter(dataNode -> dataNode.getDatacenterName().equals(dc))
-          .map(dataNode -> ambryDataNodeToAmbryReplicas.get(dataNode).get(partitionName))
-          .filter(Objects::nonNull)
-          .forEach(replicas::add);
+      List<InstanceConfig> instanceConfigs =
+          routingTableSnapshot.getInstancesForResource(resourceName, partitionName, state.name());
+      Set<String> missingInstances = new HashSet<>();
+
+      for (InstanceConfig instanceConfig : instanceConfigs) {
+        String instanceName = instanceConfig.getInstanceName();
+        if (!instanceNameToAmbryDataNode.containsKey(instanceName)) {
+          missingInstances.add(instanceName);
+          continue;
+        }
+        AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instanceName);
+        if (dataNode.getDatacenterName().equals(dc)) {
+          AmbryReplica replica = ambryDataNodeToAmbryReplicas.get(dataNode).get(partitionName);
+          if (replica != null) {
+            replicas.add(replica);
+          }
+        }
+      }
+
+      if (!missingInstances.isEmpty()) {
+        logger.error("Instances are present in external view but missing in data node configs {}", missingInstances);
+      }
     }
 
     @Override
