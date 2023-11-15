@@ -183,8 +183,7 @@ public class CloudStorageCompactorTest {
     return 1;
   }
 
-  protected int fastWorker(String partition, CountDownLatch fastWorkerLatch) {
-    fastWorkerLatch.countDown();
+  protected int fastWorker(String partition) {
     return 1;
   }
 
@@ -252,10 +251,7 @@ public class CloudStorageCompactorTest {
     Mockito.lenient()
         .when(spyCompactor.isPartitionOwned(any()))
         .thenAnswer((Answer<Boolean>) invocation -> mockIsPartitionOwned(invocation.getArgument(0)));
-    // Return valid answer for other partitions
-    CountDownLatch fastWorkerLatch = new CountDownLatch(numPartitions - numDisownedPartitions);
-    Mockito.lenient().when(mockDest.compactPartition(any()))
-        .thenAnswer((Answer<Integer>) invocation -> fastWorker(invocation.getArgument(0), fastWorkerLatch));
+    Mockito.lenient().when(mockDest.compactPartition(any())).thenReturn(numBlobsErased);
     cloudCompactionScheduler.scheduleWithFixedDelay(spyCompactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
         cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
     assertEquals((numPartitions-numDisownedPartitions)*numBlobsErased, getNumBlobsErased(spyCompactor));
