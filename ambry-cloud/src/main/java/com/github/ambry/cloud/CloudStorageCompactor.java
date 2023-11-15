@@ -156,7 +156,7 @@ public class CloudStorageCompactor extends Thread {
     }
   }
 
-  public Integer getFuture(Future<Integer> future) {
+  public Integer getResult(Future<Integer> future) {
     try {
       return future.get();
     } catch (Throwable throwable) {
@@ -183,7 +183,7 @@ public class CloudStorageCompactor extends Thread {
               .map(partitionId -> new CompactionTask(partitionId))
               .collect(Collectors.toSet()))
           .stream()
-          .map(future -> getFuture(future))
+          .map(future -> getResult(future))
           .reduce(0, Integer::sum);
     } catch (Throwable throwable) {
       vcrMetrics.compactionFailureCount.inc();
