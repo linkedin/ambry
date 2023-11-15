@@ -163,8 +163,10 @@ public class CloudStorageCompactorTest {
     if (Integer.valueOf(partition) <= numSlowWorkers) {
       try {
         slowWorkerLatch.countDown();
-        logger.info("Thread {} is sleeping for 24 hours on partition-{}", Thread.currentThread().getName(), partition);
-        sleep(TimeUnit.HOURS.toMillis(24));
+        int sleep = 24;
+        logger.info("Thread {} is sleeping for {} hours on partition-{}", Thread.currentThread().getName(),
+            sleep, partition);
+        sleep(TimeUnit.HOURS.toMillis(sleep));
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
