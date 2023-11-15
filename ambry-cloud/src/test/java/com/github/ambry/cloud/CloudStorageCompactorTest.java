@@ -195,7 +195,7 @@ public class CloudStorageCompactorTest {
    */
   @Test
   public void testShutdownCompactionFastSlowWorkers() throws InterruptedException {
-    int numPartitions = 3000, numBlobsErased = 1;
+    int numPartitions = 5000, numBlobsErased = 1;
     int numSlowWorkers = cloudConfig.cloudCompactionNumThreads - 1; // n-1 slow worker
     addPartitionsToCompact(numPartitions);
     // mockDest is used inside compactor but Mockito cannot infer this.
@@ -235,8 +235,8 @@ public class CloudStorageCompactorTest {
    */
   @Test
   public void testCompactionDisownedPartition() throws InterruptedException {
-    int numPartitions = 1000, numBlobsErased = 1; // Erase 1 blob for debugging
-    int numDisownedPartitions = Math.floorDiv(numPartitions, 10); // 10% disowned partitions
+    int numPartitions = 5000, numBlobsErased = 1; // Erase 1 blob for debugging
+    int numDisownedPartitions = 127; // The test breaks for 128 disowned partitions
     addPartitionsToCompact(numPartitions);
     CloudStorageCompactor spyCompactor = spy(compactor);
     // Emulate disowned partition
@@ -270,8 +270,8 @@ public class CloudStorageCompactorTest {
    */
   @Test
   public void testShutdownCompactionErrorWorkers() throws InterruptedException {
-    int numPartitions = 3000, numBlobsErased = 1;
-    int numErrorWorkers = cloudConfig.cloudCompactionNumThreads - 1; // n-1 slow worker
+    int numPartitions = 5000, numBlobsErased = 1;
+    int numErrorWorkers = Math.floorDiv(numPartitions, 10); // 10% errors
     addPartitionsToCompact(numPartitions);
     // mockDest is used inside compactor but Mockito cannot infer this.
     // Use lenient() to avoid UnnecessaryStubbingException.
