@@ -245,7 +245,7 @@ public class CloudStorageCompactorTest {
   }
 
   /**
-   * Tests compaction shutdown for slow or blocked workers
+   * Tests compaction shutdown for error workers
    * @throws InterruptedException
    */
   @Test
