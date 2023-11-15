@@ -180,13 +180,18 @@ public class CloudStorageCompactorTest {
     return 1;
   }
 
+  protected int fastWorker(String partition, CountDownLatch fastWorkerLatch) {
+    fastWorkerLatch.countDown();
+    return 1;
+  }
+
   /**
    * Mock partition ownership
    * @return
    */
-  protected boolean mockIsPartitionOwned(int partition, CountDownLatch workerLatch) {
-    workerLatch.countDown();
-    return false;
+  protected boolean mockIsPartitionOwned(PartitionId partitionId) {
+    // Skip every 5-th partition
+    return Math.floorMod(partitionId.getId(), 5) != 0;
   }
 
   /**
@@ -233,33 +238,23 @@ public class CloudStorageCompactorTest {
    * Tests compaction for disowned partitions
    */
   @Test
-  public void testCompactionDisownedPartition() throws InterruptedException {
+  public void testCompactionDisownedPartition() throws InterruptedException, CloudStorageException {
     int numPartitions = 5000, numBlobsErased = 1; // Erase 1 blob for debugging
-    int numDisownedPartitions = 127; // The test breaks for 128 disowned partitions, the mock isn't effective
+    // The test breaks for 128 disowned partitions, the mock isn't effective when there 128 mocks.
+    // The current method is scalable and effective. Set a common mock, instead of 128 and let it decide.
+    int numDisownedPartitions = Math.floorDiv(numPartitions, 5);
     addPartitionsToCompact(numPartitions);
     CloudStorageCompactor spyCompactor = spy(compactor);
     // Emulate disowned partition
-    CountDownLatch workerLatch = new CountDownLatch(numDisownedPartitions);
-    IntStream.rangeClosed(1, numDisownedPartitions).forEach(i ->
-        Mockito.lenient()
-            .when(spyCompactor.isPartitionOwned(eq(new MockPartitionId(i, MockClusterMap.DEFAULT_PARTITION_CLASS))))
-            .thenAnswer((Answer<Boolean>) invocation -> mockIsPartitionOwned(i, workerLatch)));
+    Mockito.lenient()
+        .when(spyCompactor.isPartitionOwned(any()))
+        .thenAnswer((Answer<Boolean>) invocation -> mockIsPartitionOwned(invocation.getArgument(0)));
     // Return valid answer for other partitions
     CountDownLatch fastWorkerLatch = new CountDownLatch(numPartitions - numDisownedPartitions);
-    IntStream.rangeClosed(numDisownedPartitions+1, numPartitions).forEach(i -> {
-      try {
-        // Use eq(), not any(). It messes up mocking for this test. Be specific in mock-args.
-        Mockito.lenient().when(mockDest.compactPartition(eq(String.valueOf(i))))
-            .thenAnswer((Answer<Integer>) invocation -> fastWorker(i, fastWorkerLatch));
-      } catch (CloudStorageException e) {
-        throw new RuntimeException(e);
-      }
-    });
-    cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
+    Mockito.lenient().when(mockDest.compactPartition(any()))
+        .thenAnswer((Answer<Integer>) invocation -> fastWorker(invocation.getArgument(0), fastWorkerLatch));
+    cloudCompactionScheduler.scheduleWithFixedDelay(spyCompactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
         cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
-    fastWorkerLatch.await();
-    workerLatch.await();
-    shutdownCompactionWorkers(spyCompactor);
     assertEquals((numPartitions-numDisownedPartitions)*numBlobsErased, getNumBlobsErased(spyCompactor));
   }
 
