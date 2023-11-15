@@ -165,10 +165,13 @@ public class CloudStorageCompactorTest {
    * Emulate error worker
    * @return
    */
-  protected int errorWorker(int partition, CountDownLatch errorWorkerLatch) {
-    String err = String.format("Thread {} throws error for partition-%s", Thread.currentThread().getName(), partition);
-    errorWorkerLatch.countDown();
-    throw new RuntimeException(err);
+  protected int errorWorker(String partition) {
+    // Every 5-th partition throws an error
+    if (Math.floorMod(Integer.valueOf(partition), 10) == 0) {
+      String err = String.format("Thread {} throws error for partition-%s", Thread.currentThread().getName(), partition);
+      throw new RuntimeException(err);
+    }
+    return 1;
   }
 
   /**
@@ -270,31 +273,14 @@ public class CloudStorageCompactorTest {
     // mockDest is used inside compactor but Mockito cannot infer this.
     // Use lenient() to avoid UnnecessaryStubbingException.
     // Emulate error worker for some partitions
-    CountDownLatch errorWorkerLatch = new CountDownLatch(numErrorWorkers);
-    IntStream.rangeClosed(1, numErrorWorkers).forEach(i -> {
-      try {
-        Mockito.lenient().when(mockDest.compactPartition(eq(String.valueOf(i))))
-            .thenAnswer((Answer<Integer>) invocation -> errorWorker(i, errorWorkerLatch));
-      } catch (CloudStorageException e) {
-        throw new RuntimeException(e);
-      }
-    });
-    CountDownLatch fastWorkerLatch = new CountDownLatch(numPartitions - numErrorWorkers);
-    // For the remaining partitions, return a valid answer
-    IntStream.rangeClosed(numErrorWorkers+1, numPartitions).forEach(i -> {
-      try {
-        Mockito.lenient().when(mockDest.compactPartition(eq(String.valueOf(i))))
-            .thenAnswer((Answer<Integer>) invocation -> fastWorker(i, fastWorkerLatch));
-      } catch (CloudStorageException e) {
-        throw new RuntimeException(e);
-      }
-    });
-
+    try {
+      Mockito.lenient().when(mockDest.compactPartition(any()))
+          .thenAnswer((Answer<Integer>) invocation -> errorWorker(invocation.getArgument(0)));
+    } catch (CloudStorageException e) {
+      throw new RuntimeException(e);
+    }
     cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
         cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
-    fastWorkerLatch.await();
-    errorWorkerLatch.await();
-    shutdownCompactionWorkers(compactor);
     assertEquals((numPartitions-numErrorWorkers)*numBlobsErased, getNumBlobsErased(compactor));
   }
 }
