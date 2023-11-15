@@ -100,10 +100,8 @@ public class CloudStorageCompactor extends Thread {
 
     /*
       Shutdown executor.
-      The arbitrary wait period is proportional to the number of worker threads, instead of a fixed timeout.
-      It returns if all workers end before the timeout.
-      This wait is merely an attempt to allow the worker threads to gracefully exit. We will force a shutdown later.
-      All workers are daemons and JVM _will_ exit when only daemons remain.
+      This arbitrary wait is merely an attempt to allow the worker threads to gracefully exit.
+      We will force a shutdown later. All workers are daemons and JVM _will_ exit when only daemons remain.
       Any data inconsistencies must be resolved separately, but not by trying to predict the right shutdown timeout.
       cloudBlobCompactionShutdownTimeoutSecs is useful for reducing test shutdown times.
     */
