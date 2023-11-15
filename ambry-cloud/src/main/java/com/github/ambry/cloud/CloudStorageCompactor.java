@@ -42,10 +42,8 @@ public class CloudStorageCompactor extends Thread {
   protected ScheduledExecutorService executorService;
 
   protected CloudConfig cloudConfig;
-  protected AtomicReference<Thread> mainThread;
-  protected AtomicReference<CountDownLatch> startLatch;
-  protected AtomicReference<CountDownLatch> doneLatch;
-  protected int numBlobsErased;
+  protected CountDownLatch doneLatch;
+  protected Integer numBlobsErased;
 
   /**
    * Public constructor.
@@ -59,9 +57,7 @@ public class CloudStorageCompactor extends Thread {
     this.partitions = partitions;
     this.vcrMetrics = vcrMetrics;
     this.cloudConfig = cloudConfig;
-    this.mainThread = new AtomicReference<>();
-    this.startLatch = new AtomicReference<>(new CountDownLatch(1));
-    this.doneLatch = new AtomicReference<>(new CountDownLatch(1));
+    this.doneLatch = new CountDownLatch(1);
     // Give threads a name, so they can be identified in a thread-dump and set them as daemon or background
     this.executorService = Utils.newScheduler(this.cloudConfig.cloudCompactionNumThreads, "cloud-compaction-worker-", true);
     logger.info("[COMPACT] Created CloudStorageCompactor");
@@ -69,14 +65,11 @@ public class CloudStorageCompactor extends Thread {
 
   @Override
   public void run() {
-    this.mainThread.set(Thread.currentThread());
-    logger.info("[COMPACT] Thread info = {}", this.mainThread.get());
     long compactionStartTime = System.currentTimeMillis();
-    logger.info("[COMPACT] Starting cloud compaction");
-    this.startLatch.get().countDown();
-    numBlobsErased = compactPartitions(); // Blocking call
-    this.doneLatch.get().countDown();
-    logger.info("[COMPACT] Complete cloud compaction and erased {} blobs in {} minutes",
+    logger.info("[COMPACT] Starting cloud compaction for {} partitions", partitions.size());
+    this.numBlobsErased = compactPartitions(); // Blocking call
+    this.doneLatch.countDown();
+    logger.info("[COMPACT] Completed cloud compaction and erased {} blobs in {} minutes",
         numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
   }
 
@@ -88,25 +81,10 @@ public class CloudStorageCompactor extends Thread {
    * For test
    * @return
    */
-  public AtomicReference<CountDownLatch> getStartLatchRef() {
-    return startLatch;
-  }
-
-  /**
-   * For test
-   * @return
-   */
-  public AtomicReference<CountDownLatch> getDoneLatchRef() {
+  public CountDownLatch getDoneLatch() {
     return doneLatch;
   }
 
-  /**
-   * For test
-   * @return
-   */
-  public AtomicReference<Thread> getMainCompactorThreadRef() {
-    return mainThread;
-  }
 
   /**
    * Shut down the compactor waiting for in progress operations to complete.
