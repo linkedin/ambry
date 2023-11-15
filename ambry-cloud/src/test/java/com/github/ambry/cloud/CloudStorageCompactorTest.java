@@ -240,7 +240,7 @@ public class CloudStorageCompactorTest {
   @Test
   public void testCompactionDisownedPartition() throws InterruptedException, CloudStorageException {
     int numPartitions = 5000, numBlobsErased = 1; // Erase 1 blob for debugging
-    // The test breaks for 128 disowned partitions, the mock isn't effective when there 128 mocks.
+    // The mock isn't effective when there 128 mocks.
     // The current method is scalable and effective. Set a common mock, instead of 128 and let it decide.
     int numDisownedPartitions = Math.floorDiv(numPartitions, 5);
     addPartitionsToCompact(numPartitions);
