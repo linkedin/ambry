@@ -444,6 +444,11 @@ class AzureCloudDestination implements CloudDestination {
     azureStorageCompactor.shutdown();
   }
 
+  @Override
+  public boolean isCompactionStopped() {
+    return azureStorageCompactor.isShuttingDown();
+  }
+
   /**
    * Get metadata for specified list of blobs asynchronously.
    * @param blobIds {@link List} of {@link BlobId}s to get metadata of.

@@ -476,6 +476,11 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
+  public boolean isCompactionStopped() {
+    return false;
+  }
+
+  @Override
   public void deprecateContainers(Collection<Container> deletedContainers) {
     this.deprecatedContainers.addAll(deletedContainers.stream()
         .map(container -> CosmosContainerDeletionEntry.fromContainer(container,

@@ -947,6 +947,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
+  public boolean isCompactionStopped() {
+    return shutdownCompaction.get();
+  }
+
+  @Override
   public void deprecateContainers(Collection<Container> deprecatedContainers) throws CloudStorageException {
 
   }

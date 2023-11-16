@@ -205,6 +205,7 @@ public interface CloudDestination extends Closeable {
    * Halt any compactions in progress.
    */
   void stopCompaction();
+  boolean isCompactionStopped();
 
   /**
    * Deprecate the specified {@link Container}s in cloud.

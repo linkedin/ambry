@@ -16,12 +16,15 @@ package com.github.ambry.cloud;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -36,7 +39,7 @@ public class CloudStorageCompactor extends Thread {
   protected CloudDestination cloudDestination;
   protected Set<PartitionId> partitions;
   protected VcrMetrics vcrMetrics;
-  protected ScheduledExecutorService executorService;
+  protected ScheduledThreadPoolExecutor executorService;
 
   protected CloudConfig cloudConfig;
   protected CountDownLatch doneLatch;
@@ -56,7 +59,8 @@ public class CloudStorageCompactor extends Thread {
     this.cloudConfig = cloudConfig;
     this.doneLatch = new CountDownLatch(1);
     // Give threads a name, so they can be identified in a thread-dump and set them as daemon or background
-    this.executorService = Utils.newScheduler(this.cloudConfig.cloudCompactionNumThreads, "cloud-compaction-worker-", true);
+    this.executorService = (ScheduledThreadPoolExecutor) Utils.newScheduler(this.cloudConfig.cloudCompactionNumThreads,
+        "cloud-compaction-worker-", true);
     logger.info("[COMPACT] Created CloudStorageCompactor");
   }
 
@@ -82,7 +86,6 @@ public class CloudStorageCompactor extends Thread {
     return doneLatch;
   }
 
-
   /**
    * Shut down the compactor waiting for in progress operations to complete.
    */
@@ -95,8 +98,18 @@ public class CloudStorageCompactor extends Thread {
       3. Shutdown thread: It initiates a graceful shutdown of worker and main threads.
      */
 
-    // Shutdown worker threads, though this may not have an effect if workers are blocked on network calls
+    /*
+       Shutdown worker threads, though this may not have an effect if workers are blocked on network calls.
+       Drain the task queue and wait for all active worker threads to quit.
+     */
+    List<Runnable> list = new ArrayList<>();
+    logger.info("[COMPACT] Dequeued {} tasks on shutdown and stopping {} active worker threads",
+        executorService.getQueue().drainTo(list), executorService.getActiveCount());
     cloudDestination.stopCompaction();
+    long endWaitTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(
+        cloudConfig.cloudBlobCompactionShutdownTimeoutSecs);
+    while (executorService.getActiveCount() > 0 && System.currentTimeMillis() < endWaitTime) { yield();}
+    logger.info("[COMPACT] Number of active worker threads after stop attempt = {}", executorService.getActiveCount());
 
     /*
       Shutdown executor.
@@ -105,6 +118,7 @@ public class CloudStorageCompactor extends Thread {
       Any data inconsistencies must be resolved separately, but not by trying to predict the right shutdown timeout.
       cloudBlobCompactionShutdownTimeoutSecs is useful for reducing test shutdown times.
     */
+    logger.info("[COMPACT] Shutting down worker thread scheduler");
     Utils.shutDownExecutorService(executorService, cloudConfig.cloudBlobCompactionShutdownTimeoutSecs,
         TimeUnit.SECONDS);
   }
@@ -142,6 +156,11 @@ public class CloudStorageCompactor extends Thread {
         return 0;
       }
 
+      if (cloudDestination.isCompactionStopped()) {
+        logger.info("[COMPACT] Skipping compaction partition-{} due to shut dowm", partitionId.toPathString());
+        return 0;
+      }
+
       try {
         return cloudDestination.compactPartition(partitionId.toPathString());
       } catch (Throwable throwable) {
@@ -154,7 +173,7 @@ public class CloudStorageCompactor extends Thread {
     }
   }
 
-  public Integer getResult(Future<Integer> future) {
+  protected Integer getResult(Future<Integer> future) {
     try {
       return future.get();
     } catch (Throwable throwable) {
