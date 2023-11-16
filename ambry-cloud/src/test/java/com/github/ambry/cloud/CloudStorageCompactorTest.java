@@ -137,8 +137,7 @@ public class CloudStorageCompactorTest {
   protected int getNumBlobsErased(CloudStorageCompactor compactor) throws InterruptedException {
     // Timed wait is better than an indefinite one
     int wait = 30;
-    compactor.getDoneLatch().await(wait, TimeUnit.SECONDS);
-    if (compactor.getDoneLatch().getCount() != 0) {
+    if (!compactor.isCompactionDone(wait)) {
       fail(String.format("Main compaction thread did not finish in %s seconds", wait));
     }
     return compactor.getNumBlobsErased();

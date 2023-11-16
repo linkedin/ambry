@@ -23,7 +23,6 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -43,7 +42,7 @@ public class CloudStorageCompactor extends Thread {
 
   protected CloudConfig cloudConfig;
   protected CountDownLatch doneLatch;
-  protected Integer numBlobsErased;
+  protected int numBlobsErased;
 
   /**
    * Public constructor.
@@ -58,6 +57,7 @@ public class CloudStorageCompactor extends Thread {
     this.vcrMetrics = vcrMetrics;
     this.cloudConfig = cloudConfig;
     this.doneLatch = new CountDownLatch(1);
+    this.numBlobsErased = -1;
     // Give threads a name, so they can be identified in a thread-dump and set them as daemon or background
     this.executorService = (ScheduledThreadPoolExecutor) Utils.newScheduler(this.cloudConfig.cloudCompactionNumThreads,
         "cloud-compaction-worker-", true);
@@ -79,11 +79,12 @@ public class CloudStorageCompactor extends Thread {
   }
 
   /**
-   * For test
-   * @return
+   * Returns compaction progress
+   * @return True if compaction is complete
    */
-  public CountDownLatch getDoneLatch() {
-    return doneLatch;
+  public boolean isCompactionDone(int waitSec) throws InterruptedException {
+    this.doneLatch.await(waitSec, TimeUnit.SECONDS);
+    return this.doneLatch.getCount() == 0;
   }
 
   /**
