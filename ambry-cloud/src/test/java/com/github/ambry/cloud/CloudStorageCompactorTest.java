@@ -272,4 +272,21 @@ public class CloudStorageCompactorTest {
         cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
     assertEquals(numPartitions-numErrorWorkers, getNumBlobsErased(compactor));
   }
+
+  /**
+   * Tests compaction when during shutdown
+   * @throws InterruptedException
+   */
+  @Test
+  public void testCompactionDuringShutdown() throws InterruptedException {
+    int numPartitions = 5000;
+    addPartitionsToCompact(numPartitions);
+    // mockDest is used inside compactor but Mockito cannot infer this.
+    // Use lenient() to avoid UnnecessaryStubbingException.
+    // Emulate shutdown worker for some partitions
+    Mockito.lenient().when(mockDest.isCompactionStopped()).thenReturn(true);
+    cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
+        cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
+    assertEquals(0, getNumBlobsErased(compactor));
+  }
 }
