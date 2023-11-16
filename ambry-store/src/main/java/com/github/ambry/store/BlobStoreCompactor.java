@@ -110,6 +110,7 @@ class BlobStoreCompactor {
   private final AtomicInteger logSegmentCount = new AtomicInteger(0);
   private final AtomicLong compactionIntervalInMin = new AtomicLong(0);     // interval between two compactions
   private final AtomicInteger partialLogSegmentCount = new AtomicInteger(0);  // partially written log segments
+  private final AtomicLong wastedLogSegmentSpace = new AtomicLong(0);         // wasted log segment space
   private volatile boolean shouldPersistIndexSegmentOffsets = false;
 
   /**
@@ -177,7 +178,7 @@ class BlobStoreCompactor {
     logger.info("Direct IO config: {}, OS: {}, availability: {}", config.storeCompactionEnableDirectIO,
         System.getProperty("os.name"), useDirectIO);
     srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails, compactedLogCount,
-        logSegmentCount, partialLogSegmentCount);
+        logSegmentCount, partialLogSegmentCount, wastedLogSegmentSpace);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
@@ -1268,7 +1269,9 @@ class BlobStoreCompactor {
           Set<Long> logSegmentPositionsUnderCompaction = new HashSet<>();
           for (CompactionLog.CycleLog clog : compactionLog.cycleLogs) {
             logSegmentPositionsUnderCompaction.addAll(clog.compactionDetails.getLogSegmentsUnderCompaction()
-                .stream().map(LogSegmentName::getPosition).collect(Collectors.toSet()));
+                .stream()
+                .map(LogSegmentName::getPosition)
+                .collect(Collectors.toSet()));
           }
           // If the position under compaction doesn't exist in the set after compaction, then this log segment is compacted
           // eg: log segment under compaction [0_23, 130_16, 144_3]
@@ -1278,7 +1281,9 @@ class BlobStoreCompactor {
               .filter(p -> !logSegmentPositionsAfterCompaction.contains(p))
               .count());
 
-          partialLogSegmentCount.set(srcIndex.getPartialLogSegmentCount());
+          Pair<Integer, Long> partialInfo = srcIndex.getPartialLogSegmentInfo();
+          partialLogSegmentCount.set(partialInfo.getFirst());
+          wastedLogSegmentSpace.set(partialInfo.getSecond());
         }
 
         if (srcIndex != null && srcIndex.hardDeleter != null) {

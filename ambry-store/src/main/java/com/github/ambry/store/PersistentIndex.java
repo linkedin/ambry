@@ -17,6 +17,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -512,18 +513,29 @@ class PersistentIndex {
   }
 
   /**
-   * @return count of partially written log segments
+   * @return a pair: first entry is the count of partially written log segments.
+   * the second entry is the total wasted log segment space
    */
-  int getPartialLogSegmentCount() {
+  Pair<Integer, Long> getPartialLogSegmentInfo() {
     int partialLogSegmentCount = 0;
+    long wastedLogSegmentSpace = 0;
     LogSegment segment = log.getFirstSegment();
+    LogSegmentName journalName = null;
+    if (journal.getCurrentNumberOfEntries() != 0) {
+      journalName = journal.getFirstOffset().getName();
+    }
     while (segment != null) {
+      // exclude journal
+      if (journalName != null && segment.getName().equals(journalName)) {
+        break;
+      }
       if (segment.getEndOffset() < segment.getCapacityInBytes() * 0.8) {
         partialLogSegmentCount++;
       }
+      wastedLogSegmentSpace += segment.getCapacityInBytes() - segment.getEndOffset();
       segment = log.getNextSegment(segment);
     }
-    return partialLogSegmentCount;
+    return new Pair(partialLogSegmentCount, wastedLogSegmentSpace);
   }
 
   /**

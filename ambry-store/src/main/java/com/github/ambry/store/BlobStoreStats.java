@@ -391,9 +391,12 @@ class BlobStoreStats implements StoreStats, Closeable {
    */
   String dumpLogSegmentSize(NavigableMap<LogSegmentName, Long> validDataSizeByLogSegment, long segmentCapacity,
       String dataDir) {
-    int partialLogSegmentCount = index != null ? index.getPartialLogSegmentCount() : -1;
+    Pair<Integer, Long> partialLogInfo = index != null ? index.getPartialLogSegmentInfo() : null;
+    int partialLogSegmentCount = partialLogInfo != null ? partialLogInfo.getFirst() : -1;
+    long wastedLogSegmentSpace = partialLogInfo != null ? partialLogInfo.getSecond() : -1;
     final StringBuilder sizeLog = new StringBuilder(
-        dataDir + ": partialLogSegmentCount = " + partialLogSegmentCount + " valid data size for log segments: ");
+        dataDir + ": partialLog count= " + partialLogSegmentCount + " wasted " + wastedLogSegmentSpace
+            + " valid data size for log segments: ");
     validDataSizeByLogSegment.forEach((logSegmentName, validDataSize) -> {
       String validSize = String.format("%.1f", validDataSize / 1000 / 1000 / 1000.0);
       String percentage = String.format("%.1f", validDataSize * 1.0 / segmentCapacity * 100);

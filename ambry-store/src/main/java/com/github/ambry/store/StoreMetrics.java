@@ -23,6 +23,7 @@ import com.codahale.metrics.Timer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -352,7 +353,7 @@ public class StoreMetrics {
 
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress,
       AtomicReference<CompactionDetails> compactionDetailsAtomicReference, AtomicInteger compactedLogCount,
-      AtomicInteger logSegmentCount, AtomicInteger partialLogSegmentCount) {
+      AtomicInteger logSegmentCount, AtomicInteger partialLogSegmentCount, AtomicLong wastedLogSegmentSpace) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
@@ -384,6 +385,9 @@ public class StoreMetrics {
     Gauge<Integer> partialLogSegmentCountGauge = partialLogSegmentCount::get;
     registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "PartialLogSegmentCount"),
         () -> partialLogSegmentCountGauge);
+    Gauge<Long> wastedLogSegmentSpaceGauge = wastedLogSegmentSpace::get;
+    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "WastedLogSegmentSpace"),
+        () -> wastedLogSegmentSpaceGauge);
   }
 
   /**
