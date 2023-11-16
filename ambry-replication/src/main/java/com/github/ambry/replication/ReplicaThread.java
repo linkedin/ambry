@@ -2053,17 +2053,21 @@ public class ReplicaThread implements Runnable {
           // leader based replication, then issue GetRequests only for leader partitions or leader-less partitions.
           List<RemoteReplicaInfo> leaderReplicaInfos = getLeaderReplicaInfos(remoteReplicaInfos);
           // In addition, include the list of replicas which are leader-less to avoid slow replication.
-          leaderReplicaInfos.addAll(getLeaderLessReplicaInfos(remoteReplicaInfos));
-          // Dedup in case there is a remote possibility of partition going from leader to leader-less while we are
-          // collecting the list
-          List<RemoteReplicaInfo> deDupedLeaderReplicaInfos =
-              leaderReplicaInfos.stream().distinct().collect(Collectors.toList());
+          List<RemoteReplicaInfo> leaderLessReplicaInfos = getLeaderLessReplicaInfos(remoteReplicaInfos);
+          if (!leaderLessReplicaInfos.isEmpty()) {
+            logger.trace("Issuing GET request for leader less replicas {}",
+                leaderLessReplicaInfos.stream().map(RemoteReplicaInfo::getLocalReplicaId).collect(Collectors.toSet()));
+            leaderReplicaInfos.addAll(leaderLessReplicaInfos);
+            // Dedup in case there is a remote possibility of partition going from leader to leader-less while we are
+            // collecting the list
+            leaderReplicaInfos = leaderReplicaInfos.stream().distinct().collect(Collectors.toList());
+          }
           // Get corresponding exchange metadata response list.
           List<ExchangeMetadataResponse> exchangeMetadataResponsesForLeaderReplicas = new ArrayList<>();
-          for (RemoteReplicaInfo remoteReplicaInfo : deDupedLeaderReplicaInfos) {
+          for (RemoteReplicaInfo remoteReplicaInfo : leaderReplicaInfos) {
             exchangeMetadataResponsesForLeaderReplicas.add(remoteReplicaInfo.getExchangeMetadataResponse());
           }
-          remoteReplicaInfosToSend = deDupedLeaderReplicaInfos;
+          remoteReplicaInfosToSend = leaderReplicaInfos;
           exchangeMetadataResponseListToProcess = exchangeMetadataResponsesForLeaderReplicas;
         } else {
           remoteReplicaInfosToSend = remoteReplicaInfos;
