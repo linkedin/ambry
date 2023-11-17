@@ -847,15 +847,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
         }
       }
       logger.info("[COMPACT] Erased {} blobs out of {} from partition {} in Azure blob storage", numBlobsPurged, totalNumBlobs, partitionPath);
-      return numBlobsPurged;
     } catch (Throwable t) {
       vcrMetrics.compactionFailureCount.inc();
       String error = String.format("[COMPACT] Failed to compact partition %s due to %s", partitionPath, t.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, t, null);
+      // Swallow error & return partial result. We want to be as close as possible to the real number of blobs deleted.
     } finally {
       storageTimer.stop();
     }
+    return numBlobsPurged;
   }
 
   // Azure naming rules: https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata
