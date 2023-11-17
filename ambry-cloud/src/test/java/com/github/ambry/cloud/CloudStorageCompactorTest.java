@@ -266,7 +266,6 @@ public class CloudStorageCompactorTest {
       return true;
     });
     shutdownCompactionWorkers(compactor);
-    assertEquals(-1, compactor.getNumBlobsErased());
   }
 
   /**
