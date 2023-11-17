@@ -227,6 +227,34 @@ public class CloudStorageCompactorTest {
   }
 
   /**
+   * Tests compaction shutdown for slow workers
+   * @throws InterruptedException
+   */
+  @Test
+  public void testCompactionAllSlowWorkers() throws InterruptedException {
+    int numPartitions = 5000;
+    int numSlowWorkers = cloudConfig.cloudCompactionNumThreads; // all slow workers
+    addPartitionsToCompact(numPartitions);
+    // mockDest is used inside compactor but Mockito cannot infer this.
+    // Use lenient() to avoid UnnecessaryStubbingException.
+    // Emulate slow worker for some partitions
+    CountDownLatch fastWorkerLatch = new CountDownLatch(0);
+    CountDownLatch slowWorkerLatch = new CountDownLatch(numSlowWorkers);
+    try {
+      Mockito.lenient().when(mockDest.compactPartition(any()))
+          .thenAnswer((Answer<Integer>) invocation ->
+              slowWorker(invocation.getArgument(0), numSlowWorkers, fastWorkerLatch, slowWorkerLatch));
+    } catch (CloudStorageException e) {
+      throw new RuntimeException(e);
+    }
+    cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
+        cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
+    fastWorkerLatch.await(); // Not sure why, but removing this fails the test
+    slowWorkerLatch.await();
+    shutdownCompactionWorkers(compactor);
+  }
+
+  /**
    * Tests compaction for disowned partitions
    */
   @Test
