@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.FutureUtils;
 import com.github.ambry.replication.FindToken;
 import java.io.Closeable;
 import java.io.InputStream;
@@ -174,8 +173,9 @@ public interface CloudDestination extends Closeable {
       throws CloudStorageException;
 
   /**
-   * Compact the specified partition, removing blobs that have been deleted or expired for at least the
-   * configured retention period.
+   * Compact the specified partition, removing blobs that have been deleted or expired for at least the configured
+   * retention period.
+   *
    * @param partitionPath the path of the partitions to compact.
    * @throws CloudStorageException
    */
@@ -207,7 +207,7 @@ public interface CloudDestination extends Closeable {
    * the real method for some reason, which just fails if it is a uninitialized.
    */
   boolean stopCompaction();
-  boolean isCompactionStopped();
+  boolean isCompactionStopped(String partition, CloudStorageCompactor compactor);
 
   /**
    * Deprecate the specified {@link Container}s in cloud.

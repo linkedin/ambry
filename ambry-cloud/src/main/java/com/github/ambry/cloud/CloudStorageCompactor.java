@@ -176,18 +176,21 @@ public class CloudStorageCompactor extends Thread {
     return this.executorService.isShutdown();
   }
 
-  protected boolean isPartitionOwned(PartitionId partitionId) {
+  public boolean isPartitionOwned(PartitionId partitionId) {
     return partitions.contains(partitionId);
   }
 
   protected class CompactionTask implements Callable<Integer> {
     private final PartitionId partitionId;
-    CompactionTask(PartitionId partitionId) {
+    private final CloudStorageCompactor compactor;
+
+    CompactionTask(PartitionId partitionId, CloudStorageCompactor compactor) {
       /*
         Save a reference to partitionId since it's a local variable in the submitting loop
         and will go out of scope before the task begins.
        */
       this.partitionId = partitionId;
+      this.compactor = compactor;
     }
     @Override
     public Integer call() throws Exception {
@@ -196,14 +199,16 @@ public class CloudStorageCompactor extends Thread {
         If 100 jobs are submitted to 5 workers, only 5 jobs run while the rest wait.
         Partitions can be reassigned while jobs are in the queue.
         Verify ownership of the partition before job initiation.
+        For backward compatibility with previous impl of cloudDestination
        */
       if (!isPartitionOwned(partitionId)) {
         logger.info("[COMPACT] Skipping compaction partition-{} as it is disowned", partitionId.toPathString());
         return 0;
       }
 
-      if (cloudDestination.isCompactionStopped()) {
-        logger.info("[COMPACT] Skipping compaction partition-{} due to shut dowm", partitionId.toPathString());
+      // For backward compatibility with previous impl of cloudDestination
+      if (cloudDestination.isCompactionStopped(partitionId.toPathString(), compactor)) {
+        logger.info("[COMPACT] Skipping compaction partition-{} due to shutdowm", partitionId.toPathString());
         return 0;
       }
 
@@ -250,7 +255,7 @@ public class CloudStorageCompactor extends Thread {
       return executorService.invokeAll(
           new HashSet<>(partitions)
               .stream()
-              .map(partitionId -> new CompactionTask(partitionId))
+              .map(partitionId -> new CompactionTask(partitionId, this))
               .collect(Collectors.toSet()))
           .stream()
           .map(future -> getResult(future))

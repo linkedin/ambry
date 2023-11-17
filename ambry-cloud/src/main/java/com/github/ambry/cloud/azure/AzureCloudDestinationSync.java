@@ -41,6 +41,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
@@ -73,6 +74,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.http.HttpStatus;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -722,12 +724,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param blobContainerClient BlobContainer client
    * @return The number of blobs erased
    */
-  protected int eraseBlobs(List<BlobItem> blobItemList, BlobContainerClient blobContainerClient, Set<Pair<Short, Short>> deletedContainers) {
+  protected int eraseBlobs(List<BlobItem> blobItemList, BlobContainerClient blobContainerClient,
+      Set<Pair<Short, Short>> deletedContainers, Supplier<Boolean> stopCompaction) {
     int numBlobsPurged = 0;
     long now = System.currentTimeMillis();
     long gracePeriod = TimeUnit.DAYS.toMillis(cloudConfig.cloudCompactionGracePeriodDays);
     Iterator<BlobItem> blobItemIterator = blobItemList.iterator();
-    while (!isCompactionStopped() && blobItemIterator.hasNext()) {
+    while (!stopCompaction.get() && blobItemIterator.hasNext()) {
       BlobItem blobItem = blobItemIterator.next();
       Map<String, String> metadata = blobItem.getMetadata();
       Pair<Short, Short> accountContainerIds = new Pair<>(Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
@@ -798,12 +801,22 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   /**
    * Compacts a partition
-   * @param partitionPath the path of the partitions to compact.
+   * Stub for backward compatibility
    * @return the number of blobs erased from cloud
    * @throws CloudStorageException
    */
   @Override
-  public int compactPartition(String partitionPath) throws CloudStorageException {
+  public int compactPartition(String partitionPath, CloudStorageCompactor compactor) throws CloudStorageException {
+    return compactPartition(partitionPath, null);
+  }
+
+  /**
+   * Compacts a partition
+   * @param partitionPath the path of the partitions to compact.
+   * @return the number of blobs erased from cloud
+   * @throws CloudStorageException
+   */
+  public int compactPartition(String partitionPath, CloudStorageCompactor compactor) throws CloudStorageException {
     /*
       BlobContainerStrategy must be PARTITION, otherwise compaction will not work because it cannot find the container in ABS.
       For BlobContainerStrategy to be CONTAINER, we need a blobId to extract accountId and containerId and we don't have that here.
@@ -824,22 +837,21 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.partitionCompactionLatency.time();
     try {
       logger.info("[COMPACT] Compacting partition {} in Azure blob storage", containerName);
-      for (PagedResponse<BlobItem> blobItemPagedResponse :
-          blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
-        if (isCompactionStopped()) {
-          logger.info("[COMPACT] Shut down compaction for partition {}", containerName);
-          break;
-        }
+      Supplier<Boolean> stopCompaction = () -> isCompactionStopped(partitionPath, compactor);
+      while (!stopCompaction.get()) {
+        PagedResponse<BlobItem> blobItemPagedResponse =
+            blobContainerClient.listBlobs(listBlobsOptions, null)
+                .iterableByPage(continuationToken).iterator().next();
         continuationToken = blobItemPagedResponse.getContinuationToken();
         logger.debug("[COMPACT] Acquired continuation-token {} for partition {}", continuationToken, containerName);
-        totalNumBlobs += blobItemPagedResponse.getValue().size();
-        numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient, deletedContainers);
+        List<BlobItem> blobItemList = blobItemPagedResponse.getValue();
+        totalNumBlobs += blobItemList.size();
+        numBlobsPurged += eraseBlobs(blobItemList, blobContainerClient, deletedContainers, stopCompaction);
         if (continuationToken == null) {
           logger.trace("[COMPACT] Reached end-of-partition {} as Azure blob storage continuationToken is null", containerName);
           break;
         }
       }
-      logger.info("[COMPACT] Erased {} blobs out of {} from partition {} in Azure blob storage", numBlobsPurged, totalNumBlobs, partitionPath);
     } catch (Throwable t) {
       vcrMetrics.compactionFailureCount.inc();
       String error = String.format("[COMPACT] Failed to compact partition %s due to %s", partitionPath, t.getMessage());
@@ -848,6 +860,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     } finally {
       storageTimer.stop();
     }
+    logger.info("[COMPACT] Erased {} blobs out of {} from partition {} in Azure blob storage",
+        numBlobsPurged, totalNumBlobs, partitionPath);
     return numBlobsPurged;
   }
 
@@ -940,8 +954,16 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public boolean isCompactionStopped() {
-    return shutdownCompaction.get();
+  public boolean isCompactionStopped(String partition, CloudStorageCompactor compactor) {
+    if (shutdownCompaction.get()) {
+      logger.info("[COMPACT] Shutting down compaction for partition {}", partition);
+      return true;
+    }
+    if (compactor != null && !compactor.isPartitionOwned(clusterMap.getPartitionIdByName(partition))) {
+      logger.info("[COMPACT] Stopping compaction as {} is disowned", partition);
+      return true;
+    }
+    return false;
   }
 
   @Override

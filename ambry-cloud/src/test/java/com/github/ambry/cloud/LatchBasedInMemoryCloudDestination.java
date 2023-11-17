@@ -477,7 +477,7 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public boolean isCompactionStopped() {
+  public boolean isCompactionStopped(String unused, CloudStorageCompactor unused2) {
     return false;
   }
 
