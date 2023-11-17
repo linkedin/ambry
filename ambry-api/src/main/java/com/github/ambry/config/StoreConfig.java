@@ -254,6 +254,12 @@ public class StoreConfig {
   public final long storeStatsBasedMiddleRangeCompactionIntervalInMs;
 
   /**
+   * if true, stats based compaction weights more on benefit instead of IO cost.
+   */
+  @Config("store.stats.based.weight.on.benefit.enabled")
+  public final boolean storeStatsBasedWeightOnBenefitEnabled;
+
+  /**
    * The number of buckets for stats bucketing, a value of 0 will disable bucketing.
    */
   @Config("store.stats.bucket.count")
@@ -639,6 +645,8 @@ public class StoreConfig {
     storeStatsBasedMiddleRangeCompactionIntervalInMs =
         verifiableProperties.getLongInRange("store.stats.based.middle.range.compaction.interval.in.ms", 0, 0,
             Long.MAX_VALUE);
+    storeStatsBasedWeightOnBenefitEnabled =
+        verifiableProperties.getBoolean("store.stats.based.weight.on.benefit.enabled", false);
     storeMaxLogSegmentValidDataPercentageToQualifyCompaction =
         verifiableProperties.getDoubleInRange("store.max.log.segment.valid.data.percentage.to.qualify.compaction", 0.30,
             0.0, 1.0);

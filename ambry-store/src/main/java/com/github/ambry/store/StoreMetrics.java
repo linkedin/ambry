@@ -23,6 +23,7 @@ import com.codahale.metrics.Timer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,8 +102,9 @@ public class StoreMetrics {
 
   // Compaction related metrics
   public final Counter compactionFixStateCount;
-  public final Meter compactionCopyRateInBytes;
-  public final Counter compactionBytesReclaimedCount;
+  public final Meter compactionCopyRateInBytes;       // per host, physical data are copied during compaction
+  public final Counter compactionBytesReclaimedCount; // per host, the real reclaimed log segment size
+  public final Meter compactionIntervalInMin;         // the interval between two compactions on the same partition.
   public final Counter compactionBundleReadBufferNotFitIn;
   public final Counter compactionBundleReadBufferUsed;
   public final Counter compactionBundleReadBufferIoCount;
@@ -126,6 +128,7 @@ public class StoreMetrics {
   final ConcurrentHashMap<String, PersistentIndex> indexes = new ConcurrentHashMap<>();
 
   private final MetricRegistry registry;
+  private final String hostMetricPrefix;
 
   public StoreMetrics(MetricRegistry registry) {
     this("", registry);
@@ -138,6 +141,7 @@ public class StoreMetrics {
   public StoreMetrics(String prefix, MetricRegistry registry) {
     this.registry = registry;
     String name = !prefix.isEmpty() ? prefix + SEPARATOR : "";
+    hostMetricPrefix = name;
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreDeleteResponse"));
@@ -228,6 +232,8 @@ public class StoreMetrics {
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
     compactionBytesReclaimedCount =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBytesReclaimedCount"));
+    compactionIntervalInMin =
+        registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionIntervalInMin"));
     compactionBundleReadBufferNotFitIn =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferNotFitIn"));
     compactionBundleReadBufferUsed =
@@ -378,6 +384,17 @@ public class StoreMetrics {
     Gauge<Integer> logSegmentCountGauge = logSegmentCount::get;
     registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "LogSegmentCount"),
         () -> logSegmentCountGauge);
+
+    // per host metrics
+    prefix = hostMetricPrefix;
+    Gauge<Integer> compactionPartialLogSegmentCountGauge =
+        () -> indexes.values().stream().mapToInt(PersistentIndex::getPartialLogSegmentCount).sum();
+    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionPartialLogSegmentCount"),
+        () -> compactionPartialLogSegmentCountGauge);
+    Gauge<Long> compactionWastedLogSegmentSpaceGauge =
+        () -> indexes.values().stream().mapToLong(PersistentIndex::getWastedLogSegmentSpace).sum();
+    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionWastedLogSegmentSpace"),
+        () -> compactionWastedLogSegmentSpaceGauge);
   }
 
   /**

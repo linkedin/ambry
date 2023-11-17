@@ -17,6 +17,7 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -47,6 +48,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -130,6 +132,9 @@ class PersistentIndex {
   private final ScheduledFuture<?> persistorTask;
   // When undelete is enabled, DELETE is not the final state of the blob, since a DELETEd blob can be UNDELTEd.
   private final boolean isDeleteFinalStateOfBlob;
+
+  private final AtomicInteger partialLogSegmentCount = new AtomicInteger(0);
+  private final AtomicLong wastedLogSegmentSpace = new AtomicLong(0);
 
   // ReadWriteLock to make sure index values are always pointing to valid log segments.
   // In compaction's final steps, persistent index and log will update their internal maps to reflect the result of
@@ -509,6 +514,32 @@ class PersistentIndex {
       segment = log.getNextSegment(segment);
     }
     return result;
+  }
+
+  /**
+   * Update the partial log segment info including the partialLogSegmentCount and wastedLogSegmentSpace
+   */
+  void updatePartialLogSegmentInfo() {
+    int partialCount = 0;
+    long wastedSpace = 0;
+    LogSegment segment = log.getFirstSegment();
+    LogSegmentName journalName = null;
+    if (journal.getCurrentNumberOfEntries() != 0) {
+      journalName = journal.getFirstOffset().getName();
+    }
+    while (segment != null) {
+      // exclude journal
+      if (journalName != null && segment.getName().equals(journalName)) {
+        break;
+      }
+      if (segment.getEndOffset() < segment.getCapacityInBytes() * 0.8) {
+        partialCount++;
+      }
+      wastedSpace += segment.getCapacityInBytes() - segment.getEndOffset();
+      segment = log.getNextSegment(segment);
+    }
+    partialLogSegmentCount.set(partialCount);
+    wastedLogSegmentSpace.set(wastedSpace);
   }
 
   /**
@@ -1733,6 +1764,20 @@ class PersistentIndex {
    */
   long getAbsolutePositionInLogForOffset(Offset offset) {
     return getAbsolutePositionInLogForOffset(offset, validIndexSegments);
+  }
+
+  /**
+   * @return the partial log segment count
+   */
+  int getPartialLogSegmentCount() {
+    return partialLogSegmentCount.get();
+  }
+
+  /**
+   * @return the wasted log segment space
+   */
+  long getWastedLogSegmentSpace() {
+    return wastedLogSegmentSpace.get();
   }
 
   /**

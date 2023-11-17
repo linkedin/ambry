@@ -1232,9 +1232,10 @@ public class BlobStore implements Store {
           logger.warn("Could not set the partition as read-only status on {}", replicaId);
           replicaSealStatus.set(oldReplicaSealStatus);
         } else {
+          // From the sealDoneCount metric, we can identify the hosts which frequently seal and unseal partitions.
           metrics.sealDoneCount.inc();
           logger.info(
-              "Store is successfully sealed for partition : {} because current used capacity : {} bytes exceeds ReadOnly threshold : (low : {}, high : {}) bytes",
+              "[CAPACITY] Store is successfully sealed for partition : {} because current used capacity : {} bytes exceeds ReadOnly threshold : (low : {}, high : {}) bytes",
               replicaId.getPartitionId(), index.getLogUsedCapacity(), sealThresholdBytesLow, sealThresholdBytesHigh);
         }
       }
@@ -1267,7 +1268,7 @@ public class BlobStore implements Store {
         } else {
           metrics.unsealDoneCount.inc();
           logger.info(
-              "Store is successfully unsealed for partition : {} because current used capacity : {} bytes is below Read Write threshold : {} bytes",
+              "[CAPACITY] Store is successfully unsealed for partition : {} because current used capacity : {} bytes is below Read Write threshold : {} bytes",
               replicaId.getPartitionId(), index.getLogUsedCapacity(), partialSealThresholdBytesHigh);
         }
       }

@@ -282,7 +282,7 @@ class CompactionManager {
               boolean compactionStarted = false;
               try {
                 if (store.isStarted() && !storesToSkip.contains(store) && !storesDisabledCompaction.contains(store)) {
-                  logger.info("{} is started and is being checked for compaction eligibility", store);
+                  logger.info("[CAPACITY] {} is started and is being checked for compaction eligibility", store);
                   CompactionDetails details = getCompactionDetails(store);
                   if (details != null) {
                     logger.trace("Generated {} as details for {}", details, store);
@@ -291,7 +291,7 @@ class CompactionManager {
                     store.compact(details, bundleReadBuffer);
                   } else {
                     storesNoCompaction++;
-                    logger.info("{} is not eligible for compaction due to empty compaction details", store);
+                    logger.info("[CAPACITY] {} is not eligible for compaction due to empty compaction details", store);
                   }
                   if (storeConfig.storeAutoCloseLastLogSegmentEnabled && store.getReplicaId().isSealed()) {
                     store.closeLastLogSegmentIfQualified();
@@ -299,7 +299,7 @@ class CompactionManager {
                 }
               } catch (Exception e) {
                 metrics.compactionErrorCount.inc();
-                logger.error("Compaction of store {} failed. Continuing with the next store", store, e);
+                logger.error("[CAPACITY] Compaction of store {} failed. Continuing with the next store", store, e);
                 storesToSkip.add(store);
               } finally {
                 if (compactionStarted) {

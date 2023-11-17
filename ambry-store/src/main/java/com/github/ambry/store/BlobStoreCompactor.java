@@ -104,6 +104,7 @@ class BlobStoreCompactor {
   private CompactionLog compactionLog;
   private volatile CountDownLatch runningLatch = new CountDownLatch(0);
   private byte[] bundleReadBuffer;
+  private long lastCompactionTimestampInSec = 0;
   private final AtomicReference<CompactionDetails> currentCompactionDetails = new AtomicReference();
   private final AtomicInteger compactedLogCount = new AtomicInteger(0);
   private final AtomicInteger logSegmentCount = new AtomicInteger(0);
@@ -216,6 +217,10 @@ class BlobStoreCompactor {
     } else if (compactionLog != null) {
       throw new IllegalStateException("There is already a compaction in progress");
     }
+    srcMetrics.compactionIntervalInMin.mark(
+        lastCompactionTimestampInSec == 0 ? 0 : (time.seconds() - lastCompactionTimestampInSec) / 60);
+    lastCompactionTimestampInSec = time.seconds();
+
     checkSanity(details);
     logger.info("Compaction of {} started with details {}", storeId, details);
     currentCompactionDetails.set(details);
@@ -476,8 +481,8 @@ class BlobStoreCompactor {
       // and before the subsequent commit can take effect)
       long segmentCountDiff =
           compactionLog.getCompactionDetails().getLogSegmentsUnderCompaction().size() - numSwapsUsed;
-      long savedBytes = srcLog.getSegmentCapacity() * segmentCountDiff;
-      srcMetrics.compactionBytesReclaimedCount.inc(savedBytes);
+      long savedBytes = srcLog.getSegmentCapacity() * segmentCountDiff; // segment size is 17,176,275,436 = 16 GB
+      srcMetrics.compactionBytesReclaimedCount.inc(savedBytes); // the real reclaimed reserved space
     }
     tgtIndex.close(false);
     tgtLog.close(false);
@@ -1272,6 +1277,8 @@ class BlobStoreCompactor {
           compactedLogCount.set((int) logSegmentPositionsUnderCompaction.stream()
               .filter(p -> !logSegmentPositionsAfterCompaction.contains(p))
               .count());
+
+          srcIndex.updatePartialLogSegmentInfo();
         }
 
         if (srcIndex != null && srcIndex.hardDeleter != null) {
