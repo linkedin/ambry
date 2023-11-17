@@ -117,7 +117,6 @@ public class CloudStorageCompactorTest {
     assertFalse("Should not be shutting down yet", compactor.isShutDown());
     compactor.shutdown();
     assertTrue("Should be shutting down now", compactor.isShutDown());
-    // TODO: test shutting down with compaction still in progress (more involved)
   }
 
   /**
