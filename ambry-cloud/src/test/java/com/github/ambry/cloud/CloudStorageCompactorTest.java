@@ -252,6 +252,7 @@ public class CloudStorageCompactorTest {
     fastWorkerLatch.await(); // Not sure why, but removing this fails the test
     slowWorkerLatch.await();
     shutdownCompactionWorkers(compactor);
+    assertEquals(-1, compactor.getNumBlobsErased());
   }
 
   /**
