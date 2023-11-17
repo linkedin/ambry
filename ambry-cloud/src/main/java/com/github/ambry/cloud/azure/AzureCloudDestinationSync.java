@@ -806,7 +806,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @throws CloudStorageException
    */
   @Override
-  public int compactPartition(String partitionPath, CloudStorageCompactor compactor) throws CloudStorageException {
+  public int compactPartition(String partitionPath) throws CloudStorageException {
     return compactPartition(partitionPath, null);
   }
 
