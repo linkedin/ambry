@@ -239,6 +239,7 @@ public class CloudStorageCompactor extends Thread {
         Create an exclusive local copy of partition set to minimize concurrent accesses.
         Submit jobs and rely on the executor service for assignment and scheduling.
       */
+      numBlobsErased.set(0); // Reset counter
       return executorService.invokeAll(
           new HashSet<>(partitions)
               .stream()
@@ -246,7 +247,7 @@ public class CloudStorageCompactor extends Thread {
               .collect(Collectors.toSet()))
           .stream()
           .map(future -> getResult(future))
-          .reduce(0, Integer::sum);
+          .max(Integer::compare).get();
     } catch (Throwable throwable) {
       vcrMetrics.compactionFailureCount.inc();
       logger.error("[COMPACT] Failed to execute cloud-compaction tasks due to",
