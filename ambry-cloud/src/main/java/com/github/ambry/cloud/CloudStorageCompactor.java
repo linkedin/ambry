@@ -254,7 +254,8 @@ public class CloudStorageCompactor extends Thread {
               .collect(Collectors.toSet()))
           .stream()
           .map(future -> getResult(future))
-          .max(Integer::compare).get();
+          .max(Integer::compare)
+          .orElse(0);
     } catch (Throwable throwable) {
       vcrMetrics.compactionFailureCount.inc();
       logger.error("[COMPACT] Failed to execute cloud-compaction tasks due to",

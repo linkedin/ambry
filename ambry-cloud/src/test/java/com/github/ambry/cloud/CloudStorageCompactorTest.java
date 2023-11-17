@@ -90,7 +90,6 @@ public class CloudStorageCompactorTest {
   public void testCompactPartitions() throws Exception {
     // start with empty map
     assertEquals(0, compactor.compactPartitions());
-    assertEquals(1, vcrMetrics.compactionFailureCount.getCount());
 
     int numPartitions = 40;
     // add partitions to map
@@ -101,22 +100,25 @@ public class CloudStorageCompactorTest {
     }
 
     assertEquals(pageSize * numPartitions, compactor.compactPartitions());
+    assertEquals(0, vcrMetrics.compactionFailureCount.getCount());
 
     // remove a partition from map
     partitionMap.remove(new MockPartitionId(0, defaultClass));
     assertEquals(pageSize * (numPartitions - 1), compactor.compactPartitions());
+    assertEquals(0, vcrMetrics.compactionFailureCount.getCount());
 
     // Make compaction fail for some partitions
     CloudStorageException csex = new CloudStorageException("failure", new RuntimeException("Don't hurt me!"));
     when(mockDest.compactPartition(eq("2"))).thenThrow(csex);
     when(mockDest.compactPartition(eq("20"))).thenThrow(csex);
     assertEquals(pageSize * (numPartitions - 3), compactor.compactPartitions());
-    assertEquals(3, vcrMetrics.compactionFailureCount.getCount());
+    assertEquals(2, vcrMetrics.compactionFailureCount.getCount());
 
     // Test shutdown
     assertFalse("Should not be shutting down yet", compactor.isShutDown());
     compactor.shutdown();
     assertTrue("Should be shutting down now", compactor.isShutDown());
+    // TODO: test shutting down with compaction still in progress (more involved)
   }
 
   /**
