@@ -102,8 +102,8 @@ public class AzureStorageCompactor {
   /**
    * Shut down the compactor waiting for in progress operations to complete.
    */
-  public void shutdown() {
-    shuttingDown.set(true);
+  public boolean shutdown() {
+    return shuttingDown.compareAndSet(false, true);
   }
 
   /**

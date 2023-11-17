@@ -74,6 +74,10 @@ public class CloudStorageCompactor extends Thread {
         numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
   }
 
+  /**
+   * Returns the number of blobs erased
+   * @return Number of blobs erased
+   */
   public int getNumBlobsErased() {
     return numBlobsErased;
   }
@@ -85,6 +89,14 @@ public class CloudStorageCompactor extends Thread {
   public boolean isCompactionDone(int waitSec) throws InterruptedException {
     this.doneLatch.await(waitSec, TimeUnit.SECONDS);
     return this.doneLatch.getCount() == 0;
+  }
+
+  /**
+   * Returns the number of active compaction tasks
+   * @return Number of active compaction tasks
+   */
+  public int getNumActiveCompactionTasks() {
+    return executorService.getActiveCount();
   }
 
   /**

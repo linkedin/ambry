@@ -440,8 +440,8 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void stopCompaction() {
-    azureStorageCompactor.shutdown();
+  public boolean stopCompaction() {
+    return azureStorageCompactor.shutdown();
   }
 
   @Override

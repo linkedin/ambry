@@ -77,6 +77,7 @@ public class CloudStorageCompactorTest {
 
   @After
   public void afterTest() {
+    reset(mockDest);
     compactor.shutdown();
     Utils.shutDownExecutorService(cloudCompactionScheduler, cloudConfig.cloudBlobCompactionShutdownTimeoutSecs,
         TimeUnit.SECONDS);
@@ -222,6 +223,11 @@ public class CloudStorageCompactorTest {
         cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
     fastWorkerLatch.await(); // Not sure why, but removing this fails the test
     slowWorkerLatch.await();
+    Mockito.lenient().when(mockDest.stopCompaction()).thenAnswer(invocation -> {
+      logger.info("[TEST] Number of active tasks = {}", compactor.getNumActiveCompactionTasks());
+      assertEquals(numSlowWorkers, compactor.getNumActiveCompactionTasks());
+      return true;
+    });
     shutdownCompactionWorkers(compactor);
     assertEquals(numPartitions-numSlowWorkers, getNumBlobsErased(compactor));
   }
@@ -249,8 +255,12 @@ public class CloudStorageCompactorTest {
     }
     cloudCompactionScheduler.scheduleWithFixedDelay(compactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
         cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
-    fastWorkerLatch.await(); // Not sure why, but removing this fails the test
     slowWorkerLatch.await();
+    Mockito.lenient().when(mockDest.stopCompaction()).thenAnswer(invocation -> {
+      logger.info("[TEST] Number of active tasks = {}", compactor.getNumActiveCompactionTasks());
+      assertEquals(numSlowWorkers, compactor.getNumActiveCompactionTasks());
+      return true;
+    });
     shutdownCompactionWorkers(compactor);
     assertEquals(-1, compactor.getNumBlobsErased());
   }

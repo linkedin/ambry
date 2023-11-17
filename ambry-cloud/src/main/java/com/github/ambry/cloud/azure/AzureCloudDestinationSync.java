@@ -942,8 +942,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public void stopCompaction() {
-    shutdownCompaction.set(true);
+  public boolean stopCompaction() {
+    return shutdownCompaction.compareAndSet(false, true);
   }
 
   @Override

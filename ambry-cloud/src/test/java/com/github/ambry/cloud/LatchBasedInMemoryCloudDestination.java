@@ -472,7 +472,8 @@ public class LatchBasedInMemoryCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void stopCompaction() {
+  public boolean stopCompaction() {
+    return true;
   }
 
   @Override
