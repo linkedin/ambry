@@ -104,13 +104,13 @@ public class CloudStorageCompactor extends Thread {
        Drain the task queue and wait for all active worker threads to quit.
      */
     List<Runnable> list = new ArrayList<>();
-    logger.info("[COMPACT] Dequeued {} tasks on shutdown and stopping {} active worker threads",
+    logger.info("[COMPACT] Dequeued {} tasks on shutdown and stopping {} active tasks",
         executorService.getQueue().drainTo(list), executorService.getActiveCount());
     cloudDestination.stopCompaction();
     long endWaitTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(
         cloudConfig.cloudBlobCompactionShutdownTimeoutSecs);
     while (executorService.getActiveCount() > 0 && System.currentTimeMillis() < endWaitTime) { yield();}
-    logger.info("[COMPACT] Number of active worker threads after stop attempt = {}", executorService.getActiveCount());
+    logger.info("[COMPACT] Number of active tasks after stop attempt = {}", executorService.getActiveCount());
 
     /*
       Shutdown executor.
@@ -119,7 +119,7 @@ public class CloudStorageCompactor extends Thread {
       Any data inconsistencies must be resolved separately, but not by trying to predict the right shutdown timeout.
       cloudBlobCompactionShutdownTimeoutSecs is useful for reducing test shutdown times.
     */
-    logger.info("[COMPACT] Shutting down worker thread scheduler");
+    logger.info("[COMPACT] Shutting down task scheduler");
     Utils.shutDownExecutorService(executorService, cloudConfig.cloudBlobCompactionShutdownTimeoutSecs,
         TimeUnit.SECONDS);
   }
