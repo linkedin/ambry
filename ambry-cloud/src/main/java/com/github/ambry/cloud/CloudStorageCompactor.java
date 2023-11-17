@@ -160,7 +160,7 @@ public class CloudStorageCompactor extends Thread {
       Any data inconsistencies must be resolved separately, but not by trying to predict the right shutdown timeout.
       cloudBlobCompactionShutdownTimeoutSecs is useful for reducing test shutdown times.
     */
-    logger.info("[COMPACT] Shutting down task scheduler");
+    logger.info("[COMPACT] Forcibly shutting down task scheduler");
     Utils.shutDownExecutorService(executorService, cloudConfig.cloudBlobCompactionShutdownTimeoutSecs,
         TimeUnit.SECONDS);
   }
