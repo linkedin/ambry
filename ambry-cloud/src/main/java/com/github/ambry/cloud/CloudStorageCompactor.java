@@ -87,8 +87,12 @@ public class CloudStorageCompactor extends Thread {
    * Returns compaction progress
    * @return True if compaction is complete
    */
-  public boolean isCompactionDone(int waitSec) throws InterruptedException {
-    this.doneLatch.await(waitSec, TimeUnit.SECONDS);
+  public boolean isCompactionDone(int waitSec) {
+    try {
+      this.doneLatch.await(waitSec, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      logger.error("[COMPACT] Error = {}", e);
+    }
     return this.doneLatch.getCount() == 0;
   }
 
@@ -145,10 +149,9 @@ public class CloudStorageCompactor extends Thread {
     logger.info("[COMPACT] Dequeued {} tasks on shutdown and stopping {} active tasks",
         executorService.getQueue().drainTo(list), executorService.getActiveCount());
     cloudDestination.stopCompaction();
-    long endWaitTime = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(
-        cloudConfig.cloudBlobCompactionShutdownTimeoutSecs);
-    while (executorService.getActiveCount() > 0 && System.currentTimeMillis() < endWaitTime) { yield();}
-    logger.info("[COMPACT] Number of active tasks after stop attempt = {}", executorService.getActiveCount());
+    if (!isCompactionDone(cloudConfig.cloudBlobCompactionShutdownTimeoutSecs)) {
+      logger.info("[COMPACT] Number of active tasks after stop attempt = {}", executorService.getActiveCount());
+    }
 
     /*
       Shutdown executor.
