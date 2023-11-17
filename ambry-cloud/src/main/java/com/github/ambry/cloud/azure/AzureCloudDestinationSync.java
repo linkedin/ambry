@@ -64,6 +64,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -725,11 +726,9 @@ public class AzureCloudDestinationSync implements CloudDestination {
     int numBlobsPurged = 0;
     long now = System.currentTimeMillis();
     long gracePeriod = TimeUnit.DAYS.toMillis(cloudConfig.cloudCompactionGracePeriodDays);
-    for (BlobItem blobItem: blobItemList) {
-      if (shutdownCompaction.get()) {
-        logger.info("[COMPACT][2] Shut down compaction for partition {}", blobContainerClient.getBlobContainerName());
-        break;
-      }
+    Iterator<BlobItem> blobItemIterator = blobItemList.iterator();
+    while (!isCompactionStopped() && blobItemIterator.hasNext()) {
+      BlobItem blobItem = blobItemIterator.next();
       Map<String, String> metadata = blobItem.getMetadata();
       Pair<Short, Short> accountContainerIds = new Pair<>(Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)));
@@ -827,19 +826,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.info("[COMPACT] Compacting partition {} in Azure blob storage", containerName);
       for (PagedResponse<BlobItem> blobItemPagedResponse :
           blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
-        if (shutdownCompaction.get()) {
+        if (isCompactionStopped()) {
           logger.info("Shut down compaction for partition {}", containerName);
           break;
         }
-
         continuationToken = blobItemPagedResponse.getContinuationToken();
         logger.debug("[COMPACT] Acquired continuation-token {} for partition {}", continuationToken, containerName);
         totalNumBlobs += blobItemPagedResponse.getValue().size();
-        if (shutdownCompaction.get()) {
-          logger.info("[COMPACT] Shut down compaction for partition {}", containerName);
-          break;
-        }
-
         numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient, deletedContainers);
         if (continuationToken == null) {
           logger.trace("[COMPACT] Reached end-of-partition {} as Azure blob storage continuationToken is null", containerName);
