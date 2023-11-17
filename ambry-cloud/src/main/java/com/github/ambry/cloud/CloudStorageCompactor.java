@@ -25,6 +25,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +43,7 @@ public class CloudStorageCompactor extends Thread {
 
   protected CloudConfig cloudConfig;
   protected CountDownLatch doneLatch;
-  protected int numBlobsErased;
+  protected AtomicInteger numBlobsErased;
 
   /**
    * Public constructor.
@@ -57,7 +58,7 @@ public class CloudStorageCompactor extends Thread {
     this.vcrMetrics = vcrMetrics;
     this.cloudConfig = cloudConfig;
     this.doneLatch = new CountDownLatch(1);
-    this.numBlobsErased = -1;
+    this.numBlobsErased = new AtomicInteger();
     // Give threads a name, so they can be identified in a thread-dump and set them as daemon or background
     this.executorService = (ScheduledThreadPoolExecutor) Utils.newScheduler(this.cloudConfig.cloudCompactionNumThreads,
         "cloud-compaction-worker-", true);
@@ -68,10 +69,10 @@ public class CloudStorageCompactor extends Thread {
   public void run() {
     long compactionStartTime = System.currentTimeMillis();
     logger.info("[COMPACT] Starting cloud compaction for {} partitions", partitions.size());
-    this.numBlobsErased = compactPartitions(); // Blocking call
+    compactPartitions(); // Blocking call
     this.doneLatch.countDown();
     logger.info("[COMPACT] Completed cloud compaction and erased {} blobs in {} minutes",
-        numBlobsErased, TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
+        numBlobsErased.get(), TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
   }
 
   /**
@@ -79,7 +80,7 @@ public class CloudStorageCompactor extends Thread {
    * @return Number of blobs erased
    */
   public int getNumBlobsErased() {
-    return numBlobsErased;
+    return numBlobsErased.get();
   }
 
   /**
@@ -200,7 +201,13 @@ public class CloudStorageCompactor extends Thread {
       }
 
       try {
-        return cloudDestination.compactPartition(partitionId.toPathString());
+        /*
+          Atomically increment the num blobs erased. Do not rely on the higher loop to collect all Futures.
+          A single slow worker can prevent the higher loop from gathering results from completed Futures.
+          If the higher loop is interrupted, then it throws an exc and we eventually return 0 as num blobs erased,
+          which is not accurate. However, return the result for backward compatibility.
+         */
+        return numBlobsErased.addAndGet(cloudDestination.compactPartition(partitionId.toPathString()));
       } catch (Throwable throwable) {
         // Swallow all exceptions
         vcrMetrics.compactionFailureCount.inc();
@@ -242,7 +249,7 @@ public class CloudStorageCompactor extends Thread {
           .reduce(0, Integer::sum);
     } catch (Throwable throwable) {
       vcrMetrics.compactionFailureCount.inc();
-      logger.error("[COMPACT] Failed to execute cloud-compaction tasks due to {}",
+      logger.error("[COMPACT] Failed to execute cloud-compaction tasks due to",
           throwable);
     }
     return 0;
