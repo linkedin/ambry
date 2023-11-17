@@ -95,7 +95,7 @@ public class CloudStorageCompactor extends Thread {
     try {
       this.doneLatch.await(waitSec, TimeUnit.SECONDS);
     } catch (InterruptedException e) {
-      logger.error("[COMPACT] Error = {}", e);
+      logger.error("[COMPACT] Error waiting for compaction to end {}", e);
     }
     return this.doneLatch.getCount() == 0;
   }
