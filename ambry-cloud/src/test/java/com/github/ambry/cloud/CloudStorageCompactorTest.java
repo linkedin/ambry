@@ -329,4 +329,18 @@ public class CloudStorageCompactorTest {
         cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
     assertEquals(0, getNumBlobsErased(compactor));
   }
+
+  /**
+   * Tests consecutive compactions ahd shows scheduler stats are cumulative
+   */
+  @Test
+  public void testConsecutiveCompactions() throws CloudStorageException {
+    int numPartitions = 5000, numRuns = 10;
+    addPartitionsToCompact(numPartitions);
+    // Use lenient() to avoid UnnecessaryStubbingException.
+    Mockito.lenient().when(mockDest.compactPartition(any())).thenReturn(1);
+    IntStream.rangeClosed(1,numRuns).forEach(i -> compactor.run());
+    assertEquals(numPartitions * numRuns, compactor.getNumCompletedCompactionTasks());
+    assertEquals(numPartitions * numRuns, compactor.getNumAllCompactionTasks());
+  }
 }
