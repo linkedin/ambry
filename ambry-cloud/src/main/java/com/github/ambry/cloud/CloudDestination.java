@@ -203,8 +203,8 @@ public interface CloudDestination extends Closeable {
 
   /**
    * Halt any compactions in progress.
-   * Mocking is void is really painful. Do not use void return val. The mockito syntax is different, and it calls
-   * the real method which just fails because it is a mock.
+   * Mocking a void fn is really painful. Do not use void return val. The mockito syntax is different, and it calls
+   * the real method for some reason, which just fails because it is a mock.
    */
   boolean stopCompaction();
   boolean isCompactionStopped();
