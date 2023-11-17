@@ -96,7 +96,7 @@ public class CloudStorageCompactorTest {
     String defaultClass = MockClusterMap.DEFAULT_PARTITION_CLASS;
     for (int i = 0; i < numPartitions; i++) {
       partitionMap.put(new MockPartitionId(i, defaultClass), null);
-      when(mockDest.compactPartition(eq(Integer.toString(i)))).thenReturn(pageSize);
+      when(mockDest.compactPartition(eq(Integer.toString(i)), any())).thenReturn(pageSize);
     }
 
     assertEquals(pageSize * numPartitions, compactor.compactPartitions());
@@ -109,8 +109,8 @@ public class CloudStorageCompactorTest {
 
     // Make compaction fail for some partitions
     CloudStorageException csex = new CloudStorageException("failure", new RuntimeException("Don't hurt me!"));
-    when(mockDest.compactPartition(eq("2"))).thenThrow(csex);
-    when(mockDest.compactPartition(eq("20"))).thenThrow(csex);
+    when(mockDest.compactPartition(eq("2"), any())).thenThrow(csex);
+    when(mockDest.compactPartition(eq("20"), any())).thenThrow(csex);
     assertEquals(pageSize * (numPartitions - 3), compactor.compactPartitions());
     assertEquals(2, vcrMetrics.compactionFailureCount.getCount());
 
@@ -212,7 +212,7 @@ public class CloudStorageCompactorTest {
     CountDownLatch fastWorkerLatch = new CountDownLatch(numPartitions - numSlowWorkers);
     CountDownLatch slowWorkerLatch = new CountDownLatch(numSlowWorkers);
     try {
-      Mockito.lenient().when(mockDest.compactPartition(any()))
+      Mockito.lenient().when(mockDest.compactPartition(any(), any()))
           .thenAnswer((Answer<Integer>) invocation ->
               slowWorker(invocation.getArgument(0), numSlowWorkers, fastWorkerLatch, slowWorkerLatch));
     } catch (CloudStorageException e) {
@@ -246,7 +246,7 @@ public class CloudStorageCompactorTest {
     CountDownLatch fastWorkerLatch = new CountDownLatch(0);
     CountDownLatch slowWorkerLatch = new CountDownLatch(numSlowWorkers);
     try {
-      Mockito.lenient().when(mockDest.compactPartition(any()))
+      Mockito.lenient().when(mockDest.compactPartition(any(), any()))
           .thenAnswer((Answer<Integer>) invocation ->
               slowWorker(invocation.getArgument(0), numSlowWorkers, fastWorkerLatch, slowWorkerLatch));
     } catch (CloudStorageException e) {
@@ -284,7 +284,7 @@ public class CloudStorageCompactorTest {
     Mockito.lenient()
         .when(spyCompactor.isPartitionOwned(any()))
         .thenAnswer((Answer<Boolean>) invocation -> mockIsPartitionOwned(invocation.getArgument(0), errPct));
-    Mockito.lenient().when(mockDest.compactPartition(any())).thenReturn(1);
+    Mockito.lenient().when(mockDest.compactPartition(any(), any())).thenReturn(1);
     cloudCompactionScheduler.scheduleWithFixedDelay(spyCompactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
         cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
     assertEquals(numPartitions-numDisownedPartitions, getNumBlobsErased(spyCompactor));
@@ -302,7 +302,7 @@ public class CloudStorageCompactorTest {
     // Use lenient() to avoid UnnecessaryStubbingException.
     // Emulate error worker for some partitions
     try {
-      Mockito.lenient().when(mockDest.compactPartition(any()))
+      Mockito.lenient().when(mockDest.compactPartition(any(), any()))
           .thenAnswer((Answer<Integer>) invocation -> errorWorker(invocation.getArgument(0), errPct));
     } catch (CloudStorageException e) {
       throw new RuntimeException(e);
@@ -336,7 +336,7 @@ public class CloudStorageCompactorTest {
     int numPartitions = 5000, numRuns = 10;
     addPartitionsToCompact(numPartitions);
     // Use lenient() to avoid UnnecessaryStubbingException.
-    Mockito.lenient().when(mockDest.compactPartition(any())).thenReturn(1);
+    Mockito.lenient().when(mockDest.compactPartition(any(), any())).thenReturn(1);
     IntStream.rangeClosed(1,numRuns).forEach(i -> compactor.run());
     assertEquals(numPartitions * numRuns, compactor.getNumCompletedCompactionTasks());
     assertEquals(numPartitions * numRuns, compactor.getNumAllCompactionTasks());

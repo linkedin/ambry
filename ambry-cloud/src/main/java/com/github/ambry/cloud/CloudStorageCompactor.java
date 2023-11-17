@@ -219,7 +219,7 @@ public class CloudStorageCompactor extends Thread {
           If the higher loop is interrupted, then it throws an exc and we eventually return 0 as num blobs erased,
           which is not accurate. However, return the result for backward compatibility.
          */
-        return numBlobsErased.addAndGet(cloudDestination.compactPartition(partitionId.toPathString()));
+        return numBlobsErased.addAndGet(cloudDestination.compactPartition(partitionId.toPathString(), compactor));
       } catch (Throwable throwable) {
         // Swallow all exceptions
         vcrMetrics.compactionFailureCount.inc();

@@ -180,6 +180,10 @@ public interface CloudDestination extends Closeable {
    * @throws CloudStorageException
    */
   int compactPartition(String partitionPath) throws CloudStorageException;
+  default int compactPartition(String partitionPath, CloudStorageCompactor compactor) throws CloudStorageException {
+    // For backward compatibility with tests
+    return compactPartition(partitionPath);
+  }
 
   /**
    * Upload and persist the replica tokens for the specified Ambry partition in cloud storage.
