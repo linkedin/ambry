@@ -131,9 +131,8 @@ public class CloudStorageCompactorTest {
   /**
    * Waits for main compaction thread to end and return num of blob erased
    * @param compactor
-   * @throws InterruptedException
    */
-  protected int getNumBlobsErased(CloudStorageCompactor compactor) throws InterruptedException {
+  protected int getNumBlobsErased(CloudStorageCompactor compactor) {
     // Timed wait is better than an indefinite one
     int wait = 30;
     if (!compactor.isCompactionDone(wait)) {
@@ -270,7 +269,7 @@ public class CloudStorageCompactorTest {
    * Tests compaction for disowned partitions
    */
   @Test
-  public void testCompactionDisownedPartition() throws InterruptedException, CloudStorageException {
+  public void testCompactionDisownedPartition() throws CloudStorageException {
     int numPartitions = 5000, errPct = 10; // 10% disowned
     // The mock isn't effective when there are 128+ mocks.
     // The current method is scalable and effective. Set a common mock, instead of 128 and let it decide.
