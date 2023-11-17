@@ -36,6 +36,8 @@ import org.slf4j.LoggerFactory;
  */
 public class CloudStorageCompactor extends Thread {
   private static final Logger logger = LoggerFactory.getLogger(CloudStorageCompactor.class);
+  protected long numAllCompactionTasks;
+  protected long numCompletedCompactionTasks;
   protected CloudDestination cloudDestination;
   protected Set<PartitionId> partitions;
   protected VcrMetrics vcrMetrics;
@@ -68,12 +70,15 @@ public class CloudStorageCompactor extends Thread {
   @Override
   public void run() {
     long compactionStartTime = System.currentTimeMillis();
-    int numPartitions = partitions.size();
-    logger.info("[COMPACT] Starting cloud compaction for {} partitions", numPartitions);
+    logger.info("[COMPACT] Starting cloud compaction for {} partitions", partitions.size());
     compactPartitions(); // Blocking call
     logger.info("[COMPACT] Completed cloud compaction and erased {} blobs from {} out of {} partitions in {} minutes",
-        numBlobsErased.get(), getNumCompletedCompactionTasks(), getNumAllCompactionTasks(),
+        numBlobsErased.get(), getNumCompletedCompactionTasks() - numCompletedCompactionTasks,
+        getNumAllCompactionTasks() - numAllCompactionTasks,
         TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - compactionStartTime));
+    // These are cumulative in scheduler
+    numCompletedCompactionTasks = getNumCompletedCompactionTasks();
+    numAllCompactionTasks = getNumAllCompactionTasks();
     this.doneLatch.countDown();
   }
 
