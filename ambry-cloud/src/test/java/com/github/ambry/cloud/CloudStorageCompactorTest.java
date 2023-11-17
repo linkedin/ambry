@@ -290,10 +290,9 @@ public class CloudStorageCompactorTest {
 
   /**
    * Tests compaction for error workers
-   * @throws InterruptedException
    */
   @Test
-  public void testCompactionErrorWorkers() throws InterruptedException {
+  public void testCompactionErrorWorkers() {
     int numPartitions = 5000, errPct = 10; // 10% errors
     int numErrorWorkers = Math.floorDiv(numPartitions, errPct);
     addPartitionsToCompact(numPartitions);
@@ -313,10 +312,9 @@ public class CloudStorageCompactorTest {
 
   /**
    * Tests compaction when during shutdown
-   * @throws InterruptedException
    */
   @Test
-  public void testCompactionDuringShutdown() throws InterruptedException {
+  public void testCompactionDuringShutdown() {
     int numPartitions = 5000;
     addPartitionsToCompact(numPartitions);
     // mockDest is used inside compactor but Mockito cannot infer this.
