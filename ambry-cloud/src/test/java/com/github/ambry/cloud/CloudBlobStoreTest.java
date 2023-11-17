@@ -342,10 +342,10 @@ public class CloudBlobStoreTest {
     // Return error when compaction tries to delete blobs and check nothing is deleted
     when(mockResponse.getStatusCode()).thenReturn(HttpStatus.SC_NOT_FOUND);
     assertEquals(0, spyDest.compactPartition(String.valueOf(partitionId.getId())));
-    assertEquals(0, vcrMetrics.compactionFailureCount.getCount());
+    assertEquals(numBlobs, vcrMetrics.compactionFailureCount.getCount());
     when(mockResponse.getStatusCode()).thenReturn(HttpStatus.SC_INTERNAL_SERVER_ERROR);
     assertEquals(0, spyDest.compactPartition(String.valueOf(partitionId.getId())));
-    assertEquals(numBlobs, vcrMetrics.compactionFailureCount.getCount());
+    assertEquals(numBlobs * 2, vcrMetrics.compactionFailureCount.getCount());
     // Check blob exists
     assertEquals(0, vcrMetrics.blobCompactionRate.getCount());
     when(spyContainerClient.getBlobClient(any())).thenCallRealMethod();
