@@ -827,7 +827,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       for (PagedResponse<BlobItem> blobItemPagedResponse :
           blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
         if (isCompactionStopped()) {
-          logger.info("Shut down compaction for partition {}", containerName);
+          logger.info("[COMPACT] Shut down compaction for partition {}", containerName);
           break;
         }
         continuationToken = blobItemPagedResponse.getContinuationToken();
