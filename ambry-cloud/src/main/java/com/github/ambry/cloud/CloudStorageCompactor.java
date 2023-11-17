@@ -205,7 +205,7 @@ public class CloudStorageCompactor extends Thread {
         // Swallow all exceptions
         vcrMetrics.compactionFailureCount.inc();
         logger.error("[COMPACT] Failed to compact partition-{} due to {}",
-            partitionId.toPathString(), throwable.getMessage());
+            partitionId.toPathString(), throwable);
       }
       return 0;
     }
@@ -217,7 +217,7 @@ public class CloudStorageCompactor extends Thread {
     } catch (Throwable throwable) {
       // Swallow all exceptions
       vcrMetrics.compactionFailureCount.inc();
-      logger.error("[COMPACT] Failed to collect compaction result due to {}", throwable.getMessage());
+      logger.error("[COMPACT] Failed to collect compaction result due to {}", throwable);
     }
     return 0;
   }
@@ -243,7 +243,7 @@ public class CloudStorageCompactor extends Thread {
     } catch (Throwable throwable) {
       vcrMetrics.compactionFailureCount.inc();
       logger.error("[COMPACT] Failed to execute cloud-compaction tasks due to {}",
-          throwable.getMessage());
+          throwable);
     }
     return 0;
   }
