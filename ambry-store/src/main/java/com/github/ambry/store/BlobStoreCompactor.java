@@ -108,9 +108,6 @@ class BlobStoreCompactor {
   private final AtomicReference<CompactionDetails> currentCompactionDetails = new AtomicReference();
   private final AtomicInteger compactedLogCount = new AtomicInteger(0);
   private final AtomicInteger logSegmentCount = new AtomicInteger(0);
-  private final AtomicLong compactionIntervalInMin = new AtomicLong(0);     // interval between two compactions
-  private final AtomicInteger partialLogSegmentCount = new AtomicInteger(0);  // partially written log segments
-  private final AtomicLong wastedLogSegmentSpace = new AtomicLong(0);         // wasted log segment space
   private volatile boolean shouldPersistIndexSegmentOffsets = false;
 
   /**
@@ -178,7 +175,7 @@ class BlobStoreCompactor {
     logger.info("Direct IO config: {}, OS: {}, availability: {}", config.storeCompactionEnableDirectIO,
         System.getProperty("os.name"), useDirectIO);
     srcMetrics.initializeCompactorGauges(storeId, compactionInProgress, currentCompactionDetails, compactedLogCount,
-        logSegmentCount, partialLogSegmentCount, wastedLogSegmentSpace);
+        logSegmentCount);
     logger.trace("Initialized BlobStoreCompactor for {}", storeId);
   }
 
@@ -220,7 +217,7 @@ class BlobStoreCompactor {
     } else if (compactionLog != null) {
       throw new IllegalStateException("There is already a compaction in progress");
     }
-    compactionIntervalInMin.set(
+    srcMetrics.compactionIntervalInMin.mark(
         lastCompactionTimestampInSec == 0 ? 0 : (time.seconds() - lastCompactionTimestampInSec) / 60);
     lastCompactionTimestampInSec = time.seconds();
 
@@ -1281,9 +1278,7 @@ class BlobStoreCompactor {
               .filter(p -> !logSegmentPositionsAfterCompaction.contains(p))
               .count());
 
-          Pair<Integer, Long> partialInfo = srcIndex.getPartialLogSegmentInfo();
-          partialLogSegmentCount.set(partialInfo.getFirst());
-          wastedLogSegmentSpace.set(partialInfo.getSecond());
+          srcIndex.updatePartialLogSegmentInfo();
         }
 
         if (srcIndex != null && srcIndex.hardDeleter != null) {

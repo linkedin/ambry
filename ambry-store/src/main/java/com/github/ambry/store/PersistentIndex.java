@@ -48,6 +48,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -131,6 +132,9 @@ class PersistentIndex {
   private final ScheduledFuture<?> persistorTask;
   // When undelete is enabled, DELETE is not the final state of the blob, since a DELETEd blob can be UNDELTEd.
   private final boolean isDeleteFinalStateOfBlob;
+
+  private final AtomicInteger partialLogSegmentCount = new AtomicInteger(0);
+  private final AtomicLong wastedLogSegmentSpace = new AtomicLong(0);
 
   // ReadWriteLock to make sure index values are always pointing to valid log segments.
   // In compaction's final steps, persistent index and log will update their internal maps to reflect the result of
@@ -513,12 +517,11 @@ class PersistentIndex {
   }
 
   /**
-   * @return a pair: first entry is the count of partially written log segments.
-   * the second entry is the total wasted log segment space
+   * Update the partial log segment info including the partialLogSegmentCount and wastedLogSegmentSpace
    */
-  Pair<Integer, Long> getPartialLogSegmentInfo() {
-    int partialLogSegmentCount = 0;
-    long wastedLogSegmentSpace = 0;
+  void updatePartialLogSegmentInfo() {
+    int partialCount = 0;
+    long wastedSpace = 0;
     LogSegment segment = log.getFirstSegment();
     LogSegmentName journalName = null;
     if (journal.getCurrentNumberOfEntries() != 0) {
@@ -530,12 +533,13 @@ class PersistentIndex {
         break;
       }
       if (segment.getEndOffset() < segment.getCapacityInBytes() * 0.8) {
-        partialLogSegmentCount++;
+        partialCount++;
       }
-      wastedLogSegmentSpace += segment.getCapacityInBytes() - segment.getEndOffset();
+      partialCount += segment.getCapacityInBytes() - segment.getEndOffset();
       segment = log.getNextSegment(segment);
     }
-    return new Pair(partialLogSegmentCount, wastedLogSegmentSpace);
+    partialLogSegmentCount.set(partialCount);
+    wastedLogSegmentSpace.set(wastedSpace);
   }
 
   /**
@@ -1760,6 +1764,20 @@ class PersistentIndex {
    */
   long getAbsolutePositionInLogForOffset(Offset offset) {
     return getAbsolutePositionInLogForOffset(offset, validIndexSegments);
+  }
+
+  /**
+   * @return the partial log segment count
+   */
+  int getPartialLogSegmentCount() {
+    return partialLogSegmentCount.get();
+  }
+
+  /**
+   * @return the wasted log segment space
+   */
+  long getWastedLogSegmentSpace() {
+    return wastedLogSegmentSpace.get();
   }
 
   /**

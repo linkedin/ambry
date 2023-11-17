@@ -104,7 +104,7 @@ public class StoreMetrics {
   public final Counter compactionFixStateCount;
   public final Meter compactionCopyRateInBytes;       // per host, physical data are copied during compaction
   public final Counter compactionBytesReclaimedCount; // per host, the real reclaimed log segment size
-  public final Counter compactionIntervalInMin;       // the interval between two compactions on the same partition.
+  public final Meter compactionIntervalInMin;         // the interval between two compactions on the same partition.
   public final Counter compactionBundleReadBufferNotFitIn;
   public final Counter compactionBundleReadBufferUsed;
   public final Counter compactionBundleReadBufferIoCount;
@@ -128,6 +128,7 @@ public class StoreMetrics {
   final ConcurrentHashMap<String, PersistentIndex> indexes = new ConcurrentHashMap<>();
 
   private final MetricRegistry registry;
+  private final String hostMetricPrefix;
 
   public StoreMetrics(MetricRegistry registry) {
     this("", registry);
@@ -140,6 +141,7 @@ public class StoreMetrics {
   public StoreMetrics(String prefix, MetricRegistry registry) {
     this.registry = registry;
     String name = !prefix.isEmpty() ? prefix + SEPARATOR : "";
+    hostMetricPrefix = name;
     getResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreGetResponse"));
     putResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StorePutResponse"));
     deleteResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreDeleteResponse"));
@@ -231,7 +233,7 @@ public class StoreMetrics {
     compactionBytesReclaimedCount =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBytesReclaimedCount"));
     compactionIntervalInMin =
-        registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionIntervalInMin"));
+        registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionIntervalInMin"));
     compactionBundleReadBufferNotFitIn =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferNotFitIn"));
     compactionBundleReadBufferUsed =
@@ -353,7 +355,7 @@ public class StoreMetrics {
 
   void initializeCompactorGauges(String storeId, final AtomicBoolean compactionInProgress,
       AtomicReference<CompactionDetails> compactionDetailsAtomicReference, AtomicInteger compactedLogCount,
-      AtomicInteger logSegmentCount, AtomicInteger partialLogSegmentCount, AtomicLong wastedLogSegmentSpace) {
+      AtomicInteger logSegmentCount) {
     String prefix = storeId + SEPARATOR;
     Gauge<Long> compactionInProgressGauge = () -> compactionInProgress.get() ? 1L : 0L;
     registry.register(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionInProgress"),
@@ -382,12 +384,17 @@ public class StoreMetrics {
     Gauge<Integer> logSegmentCountGauge = logSegmentCount::get;
     registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "LogSegmentCount"),
         () -> logSegmentCountGauge);
-    Gauge<Integer> partialLogSegmentCountGauge = partialLogSegmentCount::get;
-    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "PartialLogSegmentCount"),
-        () -> partialLogSegmentCountGauge);
-    Gauge<Long> wastedLogSegmentSpaceGauge = wastedLogSegmentSpace::get;
-    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "WastedLogSegmentSpace"),
-        () -> wastedLogSegmentSpaceGauge);
+
+    // per host metrics
+    prefix = hostMetricPrefix;
+    Gauge<Integer> compactionPartialLogSegmentCountGauge =
+        () -> indexes.values().stream().mapToInt(PersistentIndex::getPartialLogSegmentCount).sum();
+    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionPartialLogSegmentCount"),
+        () -> compactionPartialLogSegmentCountGauge);
+    Gauge<Long> compactionWastedLogSegmentSpaceGauge =
+        () -> indexes.values().stream().mapToLong(PersistentIndex::getWastedLogSegmentSpace).sum();
+    registry.gauge(MetricRegistry.name(BlobStoreCompactor.class, prefix + "CompactionWastedLogSegmentSpace"),
+        () -> compactionWastedLogSegmentSpaceGauge);
   }
 
   /**
