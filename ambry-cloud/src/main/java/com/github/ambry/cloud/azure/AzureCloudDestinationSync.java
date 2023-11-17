@@ -756,9 +756,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
               vcrMetrics.blobCompactionRate.mark();
               break;
             case HttpStatus.SC_NOT_FOUND:
-              logger.trace("[COMPACT] Tried to erase blob {} not found in Azure blob storage, reason = {}, status {}", blobItem.getName(),
-                  eraseReason, response.getStatusCode());
-              break;
             default:
               // Just increment a counter and set an alert on it. No need to throw an error and fail the thread.
               vcrMetrics.compactionFailureCount.inc();
