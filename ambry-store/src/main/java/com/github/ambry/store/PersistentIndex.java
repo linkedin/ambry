@@ -535,7 +535,7 @@ class PersistentIndex {
       if (segment.getEndOffset() < segment.getCapacityInBytes() * 0.8) {
         partialCount++;
       }
-      partialCount += segment.getCapacityInBytes() - segment.getEndOffset();
+      wastedSpace += segment.getCapacityInBytes() - segment.getEndOffset();
       segment = log.getNextSegment(segment);
     }
     partialLogSegmentCount.set(partialCount);
