@@ -100,6 +100,31 @@ public class CloudStorageCompactor extends Thread {
   }
 
   /**
+   * Returns the number of completed compaction tasks
+   * @return Number of completed compaction tasks
+   */
+  public long getNumCompletedCompactionTasks() {
+    return executorService.getCompletedTaskCount();
+  }
+
+
+  /**
+   * Returns the number of all compaction tasks
+   * @return Number of all compaction tasks
+   */
+  public long getNumAllCompactionTasks() {
+    return executorService.getTaskCount();
+  }
+
+  /**
+   * Returns the number of waiting compaction tasks
+   * @return Number of waiting compaction tasks
+   */
+  public long getNumWaitingCompactionTasks() {
+    return executorService.getQueue().size();
+  }
+
+  /**
    * Shut down the compactor waiting for in progress operations to complete.
    */
   public void shutdown() {

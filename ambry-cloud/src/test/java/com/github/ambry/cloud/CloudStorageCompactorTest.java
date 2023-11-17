@@ -258,7 +258,11 @@ public class CloudStorageCompactorTest {
     slowWorkerLatch.await();
     Mockito.lenient().when(mockDest.stopCompaction()).thenAnswer(invocation -> {
       logger.info("[TEST] Number of active tasks = {}", compactor.getNumActiveCompactionTasks());
+      logger.info("[TEST] Number of waiting tasks = {}", compactor.getNumWaitingCompactionTasks());
+      logger.info("[TEST] Number of completed tasks = {}", compactor.getNumCompletedCompactionTasks());
+      logger.info("[TEST] Number of all tasks = {}", compactor.getNumAllCompactionTasks());
       assertEquals(numSlowWorkers, compactor.getNumActiveCompactionTasks());
+      assertEquals(0, compactor.getNumWaitingCompactionTasks()); // The queue has been drained by now
       return true;
     });
     shutdownCompactionWorkers(compactor);
