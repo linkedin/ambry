@@ -731,8 +731,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     long gracePeriod = TimeUnit.DAYS.toMillis(cloudConfig.cloudCompactionGracePeriodDays);
     Iterator<BlobItem> blobItemIterator = blobItemList.iterator();
     /*
-        while (blobItemIterator.hasNext() && !stopCompaction.get()) invokes stopCompaction twice per blob.
-        while (!stopCompaction.get() && blobItemIterator.hasNext()) invokes stopCompaction thrice per blob.
+        while (blobItemIterator.hasNext() && !stopCompaction.get()) invokes stopCompaction once per blob.
+        while (!stopCompaction.get() && blobItemIterator.hasNext()) invokes stopCompaction twice per blob.
         Useful to know for testCompactPartitionDisown.
      */
     while (blobItemIterator.hasNext() && !stopCompaction.get()) {
