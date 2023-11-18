@@ -30,6 +30,7 @@ import com.azure.storage.blob.models.BlobProperties;
 import com.azure.storage.blob.models.BlobRequestConditions;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.blob.models.BlockBlobItem;
+import com.azure.storage.blob.models.DeleteSnapshotsOptionType;
 import com.azure.storage.blob.models.ListBlobsOptions;
 import com.azure.storage.blob.options.BlobParallelUploadOptions;
 import com.codahale.metrics.MetricRegistry;
@@ -59,6 +60,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -69,6 +71,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -739,14 +742,27 @@ public class AzureCloudDestinationSync implements CloudDestination {
       if (eraseBlob) {
         if (cloudConfig.cloudCompactionDryRunEnabled) {
           logger.trace("[DRY-RUN][COMPACT] Can erase blob {} from Azure blob storage because {}", blobItem.getName(), eraseReason);
+          numBlobsPurged += 1;
         } else {
           Timer.Context storageTimer = azureMetrics.blobCompactionLatency.time();
-          logger.trace("[COMPACT] Erasing blob {} from Azure blob storage because {}", blobItem.getName(), eraseReason);
-          blobContainerClient.getBlobClient(blobItem.getName()).delete();
+          Response<Void> response = blobContainerClient.getBlobClient(blobItem.getName())
+              .deleteWithResponse(DeleteSnapshotsOptionType.INCLUDE, null, null, null);
           storageTimer.stop();
-          vcrMetrics.blobCompactionRate.mark();
+          switch (response.getStatusCode()) {
+            case HttpStatus.SC_ACCEPTED:
+              logger.trace("[COMPACT] Erased blob {} from Azure blob storage, reason = {}, status = {}", blobItem.getName(),
+                  eraseReason, response.getStatusCode());
+              numBlobsPurged += 1;
+              vcrMetrics.blobCompactionRate.mark();
+              break;
+            case HttpStatus.SC_NOT_FOUND:
+            default:
+              // Just increment a counter and set an alert on it. No need to throw an error and fail the thread.
+              vcrMetrics.compactionFailureCount.inc();
+              logger.error("[COMPACT] Failed to erase blob {} from Azure blob storage with status {}", blobItem.getName(),
+                  response.getStatusCode());
+          }
         }
-        numBlobsPurged += 1;
       } else {
         logger.trace("[COMPACT] Cannot erase blob {} from Azure blob storage because condition not met: {}", blobItem.getName(), eraseReason);
       }
