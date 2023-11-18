@@ -961,11 +961,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
   @Override
   public boolean isCompactionStopped(String partition, CloudStorageCompactor compactor) {
     if (shutdownCompaction.get()) {
-      logger.info("[COMPACT] Shutting down compaction for partition {}", partition);
+      logger.info("[COMPACT] Stopping compaction for partition {} due to shutdown", partition);
       return true;
     }
     if (compactor != null && !compactor.isPartitionOwned(clusterMap.getPartitionIdByName(partition))) {
-      logger.info("[COMPACT] Stopping compaction as {} is disowned", partition);
+      logger.info("[COMPACT] Stopping compaction for partition {} due to loss of partition ownership", partition);
       return true;
     }
     return false;
