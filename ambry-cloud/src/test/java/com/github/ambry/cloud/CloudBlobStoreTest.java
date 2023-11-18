@@ -101,6 +101,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -501,6 +502,48 @@ public class CloudBlobStoreTest {
       // if dryRun = true, then blob must exist
       assertEquals(dryRun, dest.doesBlobExist((BlobId) messageInfo.getStoreKey()));
     }
+  }
+
+  /**
+   * Tests that compaction stops when partition ownership is removed from host
+   * @throws ReflectiveOperationException
+   * @throws StoreException
+   * @throws InterruptedException
+   * @throws CloudStorageException
+   */
+  @Test
+  public void testCompactPartitionDisown()
+      throws ReflectiveOperationException, StoreException, InterruptedException, CloudStorageException {
+    v2TestOnly();
+    this.compactionDryRun = false;
+    setupCloudStore(false, false, 0, true);
+    clearContainer(partitionId, (AzureCloudDestinationSync) dest, new VerifiableProperties(properties));
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    for (int j = 0; j < 10; j++) {
+      // permanent blobs
+      // set isVcr = true so that the lifeVersion is 0
+      CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024, Utils.Infinite_Time, refAccountId, refContainerId, false,
+          false, partitionId, System.currentTimeMillis(), isVcr);
+    }
+
+    // Put blobs
+    store.put(messageWriteSet);
+    TimeUnit.SECONDS.sleep(1);
+
+    // Delete blobs
+    List<MessageInfo> messageInfoList = messageWriteSet.getMessageSetInfo();
+    store.delete(messageInfoList);
+
+    // Compact blobs
+    CloudDestination spyDest = spy(dest);
+    AtomicInteger numInvoc = new AtomicInteger(0);
+    // The number of results per page from ABS is 1.
+    // isCompactionStopped() is invoked twice - once to prior to getting the page and once prior to deleting the blob.
+    // If we have 10 blobs, by the 5-th blob we have 10 invocations of isCompactionStopped.
+    // We want to delete first 5 blobs and retain the last 5.
+    Mockito.lenient().when(spyDest.isCompactionStopped(any(), any())).thenAnswer(invocation -> numInvoc.incrementAndGet() > messageInfoList.size());
+    assertEquals(Math.floorDiv(messageInfoList.size(), 2), spyDest.compactPartition(String.valueOf(partitionId.getId())));
   }
 
   @Test

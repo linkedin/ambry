@@ -41,6 +41,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
@@ -64,6 +65,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,6 +74,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.http.HttpStatus;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -109,10 +112,23 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *    azureCloudConfig.azureNameSchemeVersion = 1
      *    azureCloudConfig.azureStorageAccountInfo = null; legacy remnant
      *    cloudConfig.ambryBackupVersion = 2.0
-     *    cloudConfig.cloudContainerCompactionEnabled = false; Container are now Ambry partitions, and we do not delete partitions
      *    cloudConfig.cloudMaxAttempts = 1; retries are handled by azure-sdk
      *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, as repl-logic avoids duplicate messages any ways
      *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
+     *
+     *    Compaction Configs
+     *    ==================
+     *
+     *    azureBlobStorageMaxResultsPerPage = 5000; default, max, can change for testing
+     * 	  cloudCompactionGracePeriodDays = 7; default, can change for testing
+     *    cloudBlobCompactionEnabled = true; default
+     *    cloudBlobCompactionIntervalHours ; gap between consecutive compaction cycles
+     *    cloudBlobCompactionShutdownTimeoutSecs = 10; arbitrary timeout
+     *    cloudBlobCompactionStartupDelaySecs = 600; Wait to populate partition set
+     *    cloudCompactionDryRunEnabled = false; default, used for testing
+     *    cloudCompactionNumThreads = 5; default, can change for testing
+     *    cloudContainerCompactionEnabled = false; Azure Containers map to Ambry partitions, we do not delete partitions
+     *    storeContainerDeletionRetentionDays = 14; default, can change for testing
      */
     this.accountService = accountService;
     this.azureCloudConfig = new AzureCloudConfig(verifiableProperties);
@@ -708,15 +724,19 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param blobContainerClient BlobContainer client
    * @return The number of blobs erased
    */
-  protected int eraseBlobs(List<BlobItem> blobItemList, BlobContainerClient blobContainerClient, Set<Pair<Short, Short>> deletedContainers) {
+  protected int eraseBlobs(List<BlobItem> blobItemList, BlobContainerClient blobContainerClient,
+      Set<Pair<Short, Short>> deletedContainers, Supplier<Boolean> stopCompaction) {
     int numBlobsPurged = 0;
     long now = System.currentTimeMillis();
     long gracePeriod = TimeUnit.DAYS.toMillis(cloudConfig.cloudCompactionGracePeriodDays);
-    for (BlobItem blobItem: blobItemList) {
-      if (shutdownCompaction.get()) {
-        logger.info("[COMPACT][2] Shut down compaction for partition {}", blobContainerClient.getBlobContainerName());
-        break;
-      }
+    Iterator<BlobItem> blobItemIterator = blobItemList.iterator();
+    /*
+        while (blobItemIterator.hasNext() && !stopCompaction.get()) invokes stopCompaction once per blob.
+        while (!stopCompaction.get() && blobItemIterator.hasNext()) invokes stopCompaction twice per blob.
+        Useful to know for testCompactPartitionDisown.
+     */
+    while (blobItemIterator.hasNext() && !stopCompaction.get()) {
+      BlobItem blobItem = blobItemIterator.next();
       Map<String, String> metadata = blobItem.getMetadata();
       Pair<Short, Short> accountContainerIds = new Pair<>(Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)));
@@ -786,12 +806,22 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   /**
    * Compacts a partition
-   * @param partitionPath the path of the partitions to compact.
+   * Stub for backward compatibility
    * @return the number of blobs erased from cloud
    * @throws CloudStorageException
    */
   @Override
   public int compactPartition(String partitionPath) throws CloudStorageException {
+    return compactPartition(partitionPath, null);
+  }
+
+  /**
+   * Compacts a partition
+   * @param partitionPath the path of the partitions to compact.
+   * @return the number of blobs erased from cloud
+   * @throws CloudStorageException
+   */
+  public int compactPartition(String partitionPath, CloudStorageCompactor compactor) throws CloudStorageException {
     /*
       BlobContainerStrategy must be PARTITION, otherwise compaction will not work because it cannot find the container in ABS.
       For BlobContainerStrategy to be CONTAINER, we need a blobId to extract accountId and containerId and we don't have that here.
@@ -812,37 +842,32 @@ public class AzureCloudDestinationSync implements CloudDestination {
     Timer.Context storageTimer = azureMetrics.partitionCompactionLatency.time();
     try {
       logger.info("[COMPACT] Compacting partition {} in Azure blob storage", containerName);
-      for (PagedResponse<BlobItem> blobItemPagedResponse :
-          blobContainerClient.listBlobs(listBlobsOptions, null).iterableByPage(continuationToken)) {
-        if (shutdownCompaction.get()) {
-          logger.info("Shut down compaction for partition {}", containerName);
-          break;
-        }
-
+      Supplier<Boolean> stopCompaction = () -> isCompactionStopped(partitionPath, compactor);
+      while (!stopCompaction.get()) {
+        PagedResponse<BlobItem> blobItemPagedResponse =
+            blobContainerClient.listBlobs(listBlobsOptions, null)
+                .iterableByPage(continuationToken).iterator().next();
         continuationToken = blobItemPagedResponse.getContinuationToken();
         logger.debug("[COMPACT] Acquired continuation-token {} for partition {}", continuationToken, containerName);
-        totalNumBlobs += blobItemPagedResponse.getValue().size();
-        if (shutdownCompaction.get()) {
-          logger.info("[COMPACT] Shut down compaction for partition {}", containerName);
-          break;
-        }
-
-        numBlobsPurged += eraseBlobs(blobItemPagedResponse.getValue(), blobContainerClient, deletedContainers);
+        List<BlobItem> blobItemList = blobItemPagedResponse.getValue();
+        totalNumBlobs += blobItemList.size();
+        numBlobsPurged += eraseBlobs(blobItemList, blobContainerClient, deletedContainers, stopCompaction);
         if (continuationToken == null) {
           logger.trace("[COMPACT] Reached end-of-partition {} as Azure blob storage continuationToken is null", containerName);
           break;
         }
       }
-      logger.info("[COMPACT] Erased {} blobs out of {} from partition {} in Azure blob storage", numBlobsPurged, totalNumBlobs, partitionPath);
-      return numBlobsPurged;
     } catch (Throwable t) {
       vcrMetrics.compactionFailureCount.inc();
       String error = String.format("[COMPACT] Failed to compact partition %s due to %s", partitionPath, t.getMessage());
       logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, t, null);
+      // Swallow error & return partial result. We want to be as close as possible to the real number of blobs deleted.
     } finally {
       storageTimer.stop();
     }
+    logger.info("[COMPACT] Erased {} blobs out of {} from partition {} in Azure blob storage",
+        numBlobsPurged, totalNumBlobs, partitionPath);
+    return numBlobsPurged;
   }
 
   // Azure naming rules: https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata
@@ -929,8 +954,21 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public void stopCompaction() {
-    shutdownCompaction.set(true);
+  public boolean stopCompaction() {
+    return shutdownCompaction.compareAndSet(false, true);
+  }
+
+  @Override
+  public boolean isCompactionStopped(String partition, CloudStorageCompactor compactor) {
+    if (shutdownCompaction.get()) {
+      logger.info("[COMPACT] Stopping compaction for partition {} due to shutdown", partition);
+      return true;
+    }
+    if (compactor != null && !compactor.isPartitionOwned(clusterMap.getPartitionIdByName(partition))) {
+      logger.info("[COMPACT] Stopping compaction for partition {} due to loss of partition ownership", partition);
+      return true;
+    }
+    return false;
   }
 
   @Override

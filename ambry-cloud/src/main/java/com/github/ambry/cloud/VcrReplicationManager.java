@@ -40,6 +40,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -67,6 +68,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
   private CloudStorageCompactor cloudStorageCompactor;
+  protected ScheduledExecutorService cloudCompactionScheduler;
+
   private CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
   private final boolean trackPerDatacenterLagInMetric;
@@ -118,9 +121,19 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, cloudDestination);
-    this.cloudStorageCompactor =
-        cloudConfig.cloudBlobCompactionEnabled ? new CloudStorageCompactor(cloudDestination, cloudConfig,
-            partitionToPartitionInfo.keySet(), vcrMetrics) : null;
+    if (cloudConfig.cloudBlobCompactionEnabled) {
+      this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig, partitionToPartitionInfo.keySet(), vcrMetrics);
+      /*
+        Create a new scheduler and schedule 1 daemon for compaction. No need to config this.
+        The existing scheduling framework schedules tasks at a fixed rate, not a fixed delay and does not use daemons.
+        This is does not suit compaction. We cannot determine the time it takes for a single run of cloud-compaction to finish.
+        With fixed-rate scheduling, a second compaction can start immediately after the previous run without any delay.
+        A better approach is to let compaction take its time and introduce a delay between consecutive cycles to not waste resources.
+        Daemon threads ensure the server exits on a shutdown, because JVM _will_ exit when only daemons remain at the end.
+       */
+      this.cloudCompactionScheduler = Utils.newScheduler(1, "cloud-compaction-controller-",true);
+      logger.info("[COMPACT] Created CloudStorageCompactor and compactionScheduler");
+    }
     this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
   }
 
@@ -219,11 +232,11 @@ public class VcrReplicationManager extends ReplicationEngine {
     scheduleTask(persistor, true, replicationConfig.replicationTokenFlushDelaySeconds,
         replicationConfig.replicationTokenFlushIntervalSeconds, "replica token persistor");
 
-    // Schedule thread to purge dead blobs for this VCR's partitions
-    // after delay to allow startup to finish.
-    scheduleTask(cloudStorageCompactor, cloudConfig.cloudBlobCompactionEnabled,
-        cloudConfig.cloudBlobCompactionStartupDelaySecs,
-        TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), "cloud blob compaction");
+    if (cloudConfig.cloudBlobCompactionEnabled && cloudStorageCompactor != null) {
+      logger.info("[COMPACT] Waiting {} seconds to populate partitions for compaction", cloudConfig.cloudBlobCompactionStartupDelaySecs);
+      cloudCompactionScheduler.scheduleWithFixedDelay(cloudStorageCompactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
+          cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
+    }
 
     // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
     // after delay to allow startup to finish.
@@ -339,9 +352,10 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   @Override
   public void shutdown() throws ReplicationException {
-    // TODO: can do these in parallel
     if (cloudStorageCompactor != null) {
       cloudStorageCompactor.shutdown();
+      Utils.shutDownExecutorService(cloudCompactionScheduler, cloudConfig.cloudBlobCompactionShutdownTimeoutSecs,
+          TimeUnit.SECONDS);
     }
     if (cloudContainerCompactor != null) {
       cloudContainerCompactor.shutdown();

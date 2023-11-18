@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.FutureUtils;
 import com.github.ambry.replication.FindToken;
 import java.io.Closeable;
 import java.io.InputStream;
@@ -174,12 +173,17 @@ public interface CloudDestination extends Closeable {
       throws CloudStorageException;
 
   /**
-   * Compact the specified partition, removing blobs that have been deleted or expired for at least the
-   * configured retention period.
+   * Compact the specified partition, removing blobs that have been deleted or expired for at least the configured
+   * retention period.
+   *
    * @param partitionPath the path of the partitions to compact.
    * @throws CloudStorageException
    */
   int compactPartition(String partitionPath) throws CloudStorageException;
+  default int compactPartition(String partitionPath, CloudStorageCompactor compactor) throws CloudStorageException {
+    // For backward compatibility with tests
+    return compactPartition(partitionPath);
+  }
 
   /**
    * Upload and persist the replica tokens for the specified Ambry partition in cloud storage.
@@ -203,8 +207,11 @@ public interface CloudDestination extends Closeable {
 
   /**
    * Halt any compactions in progress.
+   * Mocking a void fn is really painful. Do not use void return val. The mockito syntax is different, and it calls
+   * the real method for some reason, which just fails if it is a uninitialized.
    */
-  void stopCompaction();
+  boolean stopCompaction();
+  boolean isCompactionStopped(String partition, CloudStorageCompactor compactor);
 
   /**
    * Deprecate the specified {@link Container}s in cloud.

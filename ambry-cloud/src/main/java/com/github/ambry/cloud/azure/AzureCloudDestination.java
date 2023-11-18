@@ -28,6 +28,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudContainerCompactor;
 import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
@@ -440,8 +441,13 @@ class AzureCloudDestination implements CloudDestination {
   }
 
   @Override
-  public void stopCompaction() {
-    azureStorageCompactor.shutdown();
+  public boolean stopCompaction() {
+    return azureStorageCompactor.shutdown();
+  }
+
+  @Override
+  public boolean isCompactionStopped(String unused, CloudStorageCompactor unused2) {
+    return azureStorageCompactor.isShuttingDown();
   }
 
   /**
