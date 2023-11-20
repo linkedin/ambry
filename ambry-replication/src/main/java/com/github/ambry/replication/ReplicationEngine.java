@@ -14,7 +14,6 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -696,14 +695,6 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       } finally {
         rwLockForLeaderReplicaUpdates.readLock().unlock();
       }
-    }
-
-    /**
-     * @param partition partition id
-     * @return true if this partition doesn't have any leader in local data center.
-     */
-    public boolean isLeaderLessPartition(PartitionId partition) {
-      return partition.getReplicaIdsByState(ReplicaState.LEADER, dataNodeId.getDatacenterName()).isEmpty();
     }
 
     /**
