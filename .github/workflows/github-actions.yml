@@ -42,6 +42,11 @@ jobs:
           mysql -e 'GRANT ALL PRIVILEGES ON * . * TO 'travis'@'localhost';' -uroot -proot
           mysql -e 'FLUSH PRIVILEGES;' -uroot -proot
 
+      - name: Install and run Azurite
+        run: |
+          npm install -g azurite
+          azurite --silent &
+
       - uses: burrunan/gradle-cache-action@v1
         name: Run unit tests excluding ambry-store
         with:
@@ -51,11 +56,6 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v1
-
-      - name: Install and run Azurite
-        run: |
-          npm install -g azurite
-          azurite --silent &
 
   store-test:
 
