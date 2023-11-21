@@ -38,6 +38,8 @@ public class RouterConfig {
   // This is a theoretical maximum value. Configured value may be much smaller since we might need to respond back to
   // client with either success or failure much sooner.
   public static final int MAX_OVERALL_TIMEOUT_VALUE_FOR_A_REQUEST_IN_MS = 60 * 60 * 1000;
+  // By default a get request should prioritize remote replicas only if there are no local replicas available.
+  public static final int DEFAULT_ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL = 0;
 
   // config keys
   public static final String ROUTER_SCALING_UNIT_COUNT = "router.scaling.unit.count";
@@ -146,6 +148,10 @@ public class RouterConfig {
   public static final String RESERVED_METADATA_ENABLED = "router.reserved.metadata.enabled";
   public static final String ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS =
       "router.get.operation.deprioritize.bootstrap.replicas";
+
+  // minimum number of local replicas that should be live for a get request so that local replicas are prioritized.
+  public static final String ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL =
+      "router.get.operation.min.local.replica.count.to.prioritize.local";
 
   /**
    * Number of independent scaling units for the router.
@@ -754,6 +760,10 @@ public class RouterConfig {
   @Config(ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS)
   public final boolean routerGetOperationDeprioritizeBootstrapReplicas;
 
+  @Config(ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL)
+  @Default("0")
+  public final int routerGetOperationMinLocalReplicaCountToPrioritizeLocal;
+
   /**
    * Create a RouterConfig instance.
    * @param verifiableProperties the properties map to refer to.
@@ -921,6 +931,8 @@ public class RouterConfig {
     routerReservedMetadataEnabled = verifiableProperties.getBoolean(RESERVED_METADATA_ENABLED, false);
     routerGetOperationDeprioritizeBootstrapReplicas =
         verifiableProperties.getBoolean(ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS, false);
+    routerGetOperationMinLocalReplicaCountToPrioritizeLocal =
+        verifiableProperties.getInt(ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL, DEFAULT_ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL);
   }
 
   /**

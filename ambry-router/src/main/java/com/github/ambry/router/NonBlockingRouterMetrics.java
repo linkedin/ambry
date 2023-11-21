@@ -292,6 +292,10 @@ public class NonBlockingRouterMetrics {
   public final Counter requestExpiryOnNetworkTimeoutCount;
   // Number of requests timed out due to not being able to sent to network
   public final Counter requestExpiryOnFinalTimeoutCount;
+  // Number of Get requests to server for which remote replicas were prioritized due to few local replicas.
+  public final Counter remoteReplicaPrioritizedForGetDueToFewLocalReplicas;
+  // Number of Get requests to server for which local replicas were shuffled remote replicas due to few local replicas.
+  public final Counter shuffledWithRemoteReplicasForGetDueToFewLocalReplicas;
 
   // Map that stores dataNode-level metrics.
   private final Map<DataNodeId, NodeLevelMetrics> dataNodeToMetrics;
@@ -673,6 +677,12 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RequestExpiryOnNetworkTimeoutCount"));
     requestExpiryOnFinalTimeoutCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "RequestExpiryOnFinalTimeoutCount"));
+    remoteReplicaPrioritizedForGetDueToFewLocalReplicas =
+        metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class,
+            "RemoteReplicaPrioritizedForGetDueToFewLocalReplicas"));
+    shuffledWithRemoteReplicasForGetDueToFewLocalReplicas =
+        metricRegistry.counter(MetricRegistry.name(SimpleOperationTracker.class,
+            "ShuffledWithRemoteReplicasForGetDueToFewLocalReplicas"));
   }
 
   /**

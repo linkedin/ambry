@@ -299,6 +299,7 @@ class SimpleOperationTracker implements OperationTracker {
     List<ReplicaId> examinedReplicas = new ArrayList<>();
     originatingDcName = originatingDcName == null ? reassignedOriginDc : originatingDcName;
     int numLocalAndLiveReplicas = 0;
+    int numRemoteOriginatingDcAndLiveReplicas = 0;
     for (ReplicaId replicaId : replicas) {
       examinedReplicas.add(replicaId);
       String replicaDcName = replicaId.getDataNodeId().getDatacenterName();
@@ -310,6 +311,7 @@ class SimpleOperationTracker implements OperationTracker {
           numLocalAndLiveReplicas++;
           addToBeginningOfPool(replicaId);
         } else if (crossColoEnabled && isOriginatingDcReplica) {
+          numRemoteOriginatingDcAndLiveReplicas++;
           addToEndOfPool(replicaId);
         } else if (crossColoEnabled) {
           backupReplicas.addFirst(replicaId);
@@ -349,6 +351,7 @@ class SimpleOperationTracker implements OperationTracker {
     }
 
     maybeDeprioritizeLocalBootstrapReplicas(numLocalAndLiveReplicas);
+    maybeShuffleWithRemoteReplicas(numLocalAndLiveReplicas, numRemoteOriginatingDcAndLiveReplicas);
     totalReplicaCount = replicaPool.size();
 
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
@@ -610,6 +613,39 @@ class SimpleOperationTracker implements OperationTracker {
       for (ReplicaId replicaId : localAndLiveReplicas) {
         iter.next();
         iter.set(replicaId);
+      }
+    }
+  }
+
+  /**
+   * For get operations, if there are very few local replicas, then shuffle the pool with remote replicas so that the
+   * few (or one) remaining local replicas don't get all the traffic. The threshold for minimum number of local replicas
+   * is defined in {@link RouterConfig#routerGetOperationMinLocalReplicaCountToPrioritizeLocal}.
+   * @param numLocalAndLiveReplicas the number of local and live replicas.
+   * @param numRemoteOriginatingDcAndLiveReplicas the number of remote originating DC and live replicas.
+   */
+  void maybeShuffleWithRemoteReplicas(int numLocalAndLiveReplicas, int numRemoteOriginatingDcAndLiveReplicas) {
+    if (isGetOperation() && numLocalAndLiveReplicas > 0
+        && numLocalAndLiveReplicas <= routerConfig.routerGetOperationMinLocalReplicaCountToPrioritizeLocal) {
+      logger.debug("Shuffling replicas for {} because there are only {} local and live replicas for {}",
+          routerOperation, numLocalAndLiveReplicas, partitionId);
+      routerMetrics.shuffledWithRemoteReplicasForGetDueToFewLocalReplicas.inc();
+      List<ReplicaId> replicasToReshuffle = new ArrayList<>();
+      if (numRemoteOriginatingDcAndLiveReplicas > 0) {
+        // If the local DC is not the originating DC, we shuffle only with originating DC replicas.
+        replicasToReshuffle.addAll(
+            replicaPool.subList(0, numLocalAndLiveReplicas + numRemoteOriginatingDcAndLiveReplicas));
+      } else {
+        replicasToReshuffle.addAll(replicaPool);
+      }
+      Collections.shuffle(replicasToReshuffle);
+      ListIterator<ReplicaId> iter = replicaPool.listIterator();
+      for (ReplicaId replicaId : replicasToReshuffle) {
+        iter.next();
+        iter.set(replicaId);
+      }
+      if (!replicaPool.get(0).getDataNodeId().getDatacenterName().equals(datacenterName)) {
+        routerMetrics.remoteReplicaPrioritizedForGetDueToFewLocalReplicas.inc();
       }
     }
   }
