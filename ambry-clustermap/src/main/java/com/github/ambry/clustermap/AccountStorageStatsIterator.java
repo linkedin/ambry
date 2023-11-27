@@ -10,6 +10,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+/**
+ * This is an iterator for account storage stats fetched from MySQL
+ */
 public class AccountStorageStatsIterator implements Iterator<Pair<String, HostAccountStorageStatsWrapper>> {
 
   private static final Logger logger = LoggerFactory.getLogger(AccountStorageStatsIterator.class);

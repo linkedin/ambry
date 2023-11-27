@@ -11,7 +11,9 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+/**
+ * This is an iterator for partition storage stats fetched from MySQL
+ */
 public class PartitionClassStorageStatsIterator implements
                                                 Iterator<Pair<String, HostPartitionClassStorageStatsWrapper>> {
 
@@ -47,5 +49,4 @@ public class PartitionClassStorageStatsIterator implements
       throw new RuntimeException(e);
     }
   }
-
 }
