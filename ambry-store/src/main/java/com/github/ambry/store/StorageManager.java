@@ -376,6 +376,10 @@ public class StorageManager implements StoreManager {
         logger.error("Error while starting the new DiskManager for {}", disk.getMountPath(), e);
         return null;
       }
+
+      if (clusterMap.isDataNodeInFullAutoMode(currentNode) && storeConfig.storeRemoveUnexpectedDirsInFullAuto) {
+        newDiskManager.tryRemoveAllUnexpectedDirs();
+      }
       return newDiskManager;
     });
   }
@@ -488,6 +492,15 @@ public class StorageManager implements StoreManager {
     File bootstrapFile = new File(replica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
     if (!bootstrapFile.exists()) {
       bootstrapFile.createNewFile();
+    }
+  }
+
+  /**
+   * Delete all unexpected directories in all disks
+   */
+  private void maybeDeleteUnexpectedDirectories() {
+    if (clusterMap.isDataNodeInFullAutoMode(currentNode) && storeConfig.storeRemoveUnexpectedDirsInFullAuto) {
+      diskToDiskManager.values().forEach(disk -> disk.tryRemoveAllUnexpectedDirs());
     }
   }
 

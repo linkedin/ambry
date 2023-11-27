@@ -620,6 +620,26 @@ public class DiskManager {
     }
   }
 
+  /**
+   * Try to remove all unexpected directories.
+   */
+  void tryRemoveAllUnexpectedDirs() {
+    for (String unexpectedDir : unexpectedDirs) {
+      String[] segments = unexpectedDir.split(File.separator);
+      if (segments.length > 1) {
+        String partitionName = segments[segments.length - 1];
+        try {
+          File dirToDelete = new File(unexpectedDir);
+          Utils.deleteFileOrDirectory(dirToDelete);
+          logger.info("Removed directory {}", unexpectedDir);
+          diskSpaceAllocator.deleteAllSegmentsForStoreIds(Collections.singletonList(partitionName));
+        } catch (Exception e) {
+          logger.error("Failed to delete directory for partition {}", partitionName, e);
+        }
+      }
+    }
+  }
+
   public DiskHealthStatus getDiskHealthStatus() {
     return diskHealthStatus;
   }
@@ -722,7 +742,8 @@ public class DiskManager {
         }
       } catch (Exception e) {
         diskHealthStatus = DiskHealthStatus.CREATE_EXCEPTION;
-        logger.error("Exception occurred when creating a file/directory for disk healthcheck {}", disk.getMountPath(), e);
+        logger.error("Exception occurred when creating a file/directory for disk healthcheck {}", disk.getMountPath(),
+            e);
       }
       return null;
     }

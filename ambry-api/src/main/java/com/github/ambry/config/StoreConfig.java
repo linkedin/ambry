@@ -582,8 +582,14 @@ public class StoreConfig {
   public final int storeDiskCapacityReportingPercentage;
   public static final String storeDiskCapacityReportingPercentageName = "store.disk.capacity.reporting.percentage";
 
-  public StoreConfig(VerifiableProperties verifiableProperties) {
+  /**
+   * True to remove all the unexpected directories when the current node is in FULL AUTO.
+   */
+  @Config(storeRemoveUnexpectedDirsInFullAutoName)
+  public final boolean storeRemoveUnexpectedDirsInFullAuto;
+  public static final String storeRemoveUnexpectedDirsInFullAutoName = "store.remove.unexpected.dirs.in.full.auto";
 
+  public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);
@@ -734,9 +740,12 @@ public class StoreConfig {
             Integer.MAX_VALUE);
     if (storeDiskFailureHandlerRetryLockBackoffTimeInSeconds > storeDiskFailureHandlerTaskIntervalInSeconds) {
       throw new IllegalStateException("Retry lock backoff time should be shorter than task interval: "
-          + storeDiskFailureHandlerRetryLockBackoffTimeInSeconds + " < " + storeDiskFailureHandlerTaskIntervalInSeconds);
+          + storeDiskFailureHandlerRetryLockBackoffTimeInSeconds + " < "
+          + storeDiskFailureHandlerTaskIntervalInSeconds);
     }
     storeDiskCapacityReportingPercentage =
         verifiableProperties.getIntInRange(storeDiskCapacityReportingPercentageName, 95, 0, 100);
+    storeRemoveUnexpectedDirsInFullAuto =
+        verifiableProperties.getBoolean(storeRemoveUnexpectedDirsInFullAutoName, false);
   }
 }
