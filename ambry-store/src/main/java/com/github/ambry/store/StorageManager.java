@@ -87,7 +87,6 @@ public class StorageManager implements StoreManager {
   private static final Logger logger = LoggerFactory.getLogger(StorageManager.class);
   private final AccountService accountService;
   private DiskFailureHandler diskFailureHandler;
-  private Runnable terminateCallback = null;
 
   /**
    * Constructs a {@link StorageManager}
@@ -254,10 +253,6 @@ public class StorageManager implements StoreManager {
    */
   boolean isReplicaOnFailedDisk(ReplicaId replicaId) {
     return !isDiskAvailable(replicaId.getDiskId());
-  }
-
-  void setTerminateCallback(Runnable cb) {
-    terminateCallback = cb;
   }
 
   @Override
@@ -899,17 +894,15 @@ public class StorageManager implements StoreManager {
   class DiskFailureHandler implements Runnable {
     // All the failed unavailable disks are the failed disks, if the state is unavailable for disk, there shouldn't be
     // any replicas on these disks.
-    private final List<DiskId> allDisks = new ArrayList<>(diskToDiskManager.keySet());
     private final List<DiskId> failedDisks = diskToDiskManager.keySet()
         .stream()
         .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
         .collect(Collectors.toList());
     private final long acquireLockBackoffTime = storeConfig.storeDiskFailureHandlerRetryLockBackoffTimeInSeconds * 1000;
     private final int capacityReportingPercentage = storeConfig.storeDiskCapacityReportingPercentage;
-    private final int terminatePercentage = storeConfig.storeFailedDiskPercentageToTerminate;
 
     List<DiskId> getAllDisks() {
-      return new ArrayList<>(allDisks);
+      return new ArrayList<>(diskToDiskManager.keySet());
     }
 
     List<DiskId> getFailedDisks() {
@@ -926,7 +919,6 @@ public class StorageManager implements StoreManager {
         return;
       }
       logger.info("Current Node is in FULL_AUTO, try to detect disk failure.");
-      maybeTerminateProcess();
       // First, we have to detect if there is a new disk failure
       List<DiskId> newFailedDisks = diskToDiskManager.keySet()
           .stream()
@@ -958,8 +950,6 @@ public class StorageManager implements StoreManager {
       // messages, then when we reset the partitions, replica list in the StorageManager would be obsolete. Fortunately
       // all the replicas in the failed disks are already stopped, we just have to remove the disk from disk maps.
       failedDisks.addAll(newFailedDisks);
-      // check again to see if we want to terminate the process
-      maybeTerminateProcess();
       long healthyDiskCapacity = diskToDiskManager.keySet()
           .stream()
           .filter(((Predicate<DiskId>) failedDisks::contains).negate())
@@ -1004,6 +994,10 @@ public class StorageManager implements StoreManager {
       } catch (Exception e) {
         storeMainMetrics.handleDiskFailureErrorCount.inc();
       } finally {
+        if (!success) {
+          // Remove the new failed disk from the list, so we can try to perform this logic later
+          failedDisks.removeAll(newFailedDisks);
+        }
         // 8. exist maintenance mode
         if (inMaintenanceMode) {
           if (primaryClusterParticipant.exitMaintenanceMode()) {
@@ -1030,6 +1024,11 @@ public class StorageManager implements StoreManager {
     }
 
     private void removeReplicasFromCluster(List<ReplicaId> replicaIds) {
+      if (replicaIds.isEmpty()) {
+        logger.info(
+            "Skip removing partitions from DataNodeConfig when handling disk failure since is there no partition");
+        return;
+      }
       if (!primaryClusterParticipant.removeReplicasFromDataNode(replicaIds)) {
         throw new IllegalStateException(
             "Failed to remote replicas " + replicaIds + " from cluster when handling disk failure");
@@ -1038,6 +1037,9 @@ public class StorageManager implements StoreManager {
     }
 
     private void removeReplicasFromReplicationAndStatsManager(List<ReplicaId> replicaIds) {
+      if (replicaIds.isEmpty()) {
+        return;
+      }
       Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners =
           primaryClusterParticipant == null ? new HashMap<>()
               : primaryClusterParticipant.getPartitionStateChangeListeners();
@@ -1064,6 +1066,10 @@ public class StorageManager implements StoreManager {
     }
 
     private void resetPartitions(List<ReplicaId> replicasOnFailedDisks) {
+      if (replicasOnFailedDisks.isEmpty()) {
+        logger.info("Skip replica reset when handling disk failure since there is no replica", replicasOnFailedDisks);
+        return;
+      }
       boolean resetSuccessfully = primaryClusterParticipant.resetPartitionState(replicasOnFailedDisks.stream()
           .map(ReplicaId::getPartitionId)
           .map(PartitionId::toPathString)
@@ -1103,18 +1109,6 @@ public class StorageManager implements StoreManager {
       try {
         Thread.sleep(acquireLockBackoffTime);
       } catch (Exception e) {
-      }
-    }
-
-    private void maybeTerminateProcess() {
-      if (((double) failedDisks.size()) / allDisks.size() > terminatePercentage / 100.0) {
-        logger.error("We have {} failed sizes, this is already more than {}% of all disks {}, terminate",
-            failedDisks.size(), terminatePercentage, allDisks.size());
-        if (terminateCallback == null) {
-          System.exit(1);
-        } else {
-          terminateCallback.run();
-        }
       }
     }
   }
