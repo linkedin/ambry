@@ -33,6 +33,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -123,24 +124,18 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
     try {
       List<String> instanceNames = manager.getClusterManagmentTool().getInstancesInCluster(manager.getClusterName());
       if (statsReportType == StatsReportType.ACCOUNT_REPORT) {
-        Map<String, HostAccountStorageStatsWrapper> accountStatsWrappers =
-            fetchAccountStorageStatsWrapperForInstances(instanceNames);
-        fetchTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        logger.info("Aggregating stats from " + accountStatsWrappers.size() + " hosts");
+        logger.info("Aggregating stats from " + instanceNames.size() + " hosts");
         Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> results =
-            clusterAggregator.aggregateHostAccountStorageStatsWrappers(accountStatsWrappers);
+            clusterAggregator.aggregateHostAccountStorageStatsWrappers(new AccountStorageStatsIterator(instanceNames, accountStatsStore, clusterMapConfig));
         if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
           removeInvalidAggregatedAccountAndContainerStats(results.getSecond());
         }
         accountStatsStore.storeAggregatedAccountStorageStats(results.getSecond());
         aggregatedAccountStorageStats = results.getFirst();
       } else if (statsReportType == StatsReportType.PARTITION_CLASS_REPORT) {
-        Map<String, HostPartitionClassStorageStatsWrapper> statsWrappers =
-            fetchPartitionClassStorageStatsWrapperForInstances(instanceNames);
-        fetchTimeMs.update(System.currentTimeMillis() - startTimeMs);
-        logger.info("Aggregating stats from " + statsWrappers.size() + " hosts");
+        logger.info("Aggregating stats from " + instanceNames.size() + " hosts");
         Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> results =
-            clusterAggregator.aggregateHostPartitionClassStorageStatsWrappers(statsWrappers);
+            clusterAggregator.aggregateHostPartitionClassStorageStatsWrappers(new PartitionClassStorageStatsIterator(instanceNames, accountStatsStore, clusterMapConfig));
         if (clusterMapConfig.clustermapEnableDeleteInvalidDataInMysqlAggregationTask) {
           removeInvalidAggregatedPartitionClassStats(results.getSecond());
         }

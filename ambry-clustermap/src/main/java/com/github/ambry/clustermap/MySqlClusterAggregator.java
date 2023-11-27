@@ -24,6 +24,7 @@ import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -44,6 +45,57 @@ public class MySqlClusterAggregator {
    */
   MySqlClusterAggregator(long relevantTimePeriodInMinutes) {
     relevantTimePeriodInMs = TimeUnit.MINUTES.toMillis(relevantTimePeriodInMinutes);
+  }
+
+  /**
+   * Aggregate all {@link HostAccountStorageStatsWrapper} to generate two {@link AggregatedAccountStorageStats}s.
+   * First {@link AggregatedAccountStorageStats} is the sum of all {@link HostAccountStorageStatsWrapper}s.
+   * The second {@link AggregatedAccountStorageStats} is an aggregated storage stats for all replicas of each partition.
+   * @param accountStorageStatsIterator An iterator for AccountStorageStatsIterator
+   * @return A {@link Pair} of {@link AggregatedAccountStorageStats}.
+   * @throws IOException
+   */
+  Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregateHostAccountStorageStatsWrappers(
+      Iterator accountStorageStatsIterator) throws IOException {
+
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> combinedHostAccountStorageStatsMap = new HashMap<>();
+    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> selectedHostAccountStorageStatsMap = new HashMap<>();
+    Map<Long, Long> partitionTimestampMap = new HashMap<>();
+    Map<Long, Long> partitionPhysicalStorageMap = new HashMap<>();
+
+    while (accountStorageStatsIterator.hasNext()) {
+      Pair<String, HostAccountStorageStatsWrapper> statsWrapperEntry =
+          (Pair<String, HostAccountStorageStatsWrapper>) accountStorageStatsIterator.next();
+      if (statsWrapperEntry.getSecond() == null) {
+        continue;
+      }
+      String instanceName = statsWrapperEntry.getFirst();
+      HostAccountStorageStatsWrapper hostAccountStorageStatsWrapper = statsWrapperEntry.getSecond();
+      HostAccountStorageStats hostAccountStorageStats = hostAccountStorageStatsWrapper.getStats();
+      HostAccountStorageStats hostAccountStorageStatsCopy1 = new HostAccountStorageStats(hostAccountStorageStats);
+      HostAccountStorageStats hostAccountStorageStatsCopy2 = new HostAccountStorageStats(hostAccountStorageStats);
+      combineRawHostAccountStorageStatsMap(combinedHostAccountStorageStatsMap,
+          hostAccountStorageStatsCopy1.getStorageStats());
+      selectRawHostAccountStorageStatsMap(selectedHostAccountStorageStatsMap,
+          hostAccountStorageStatsCopy2.getStorageStats(), partitionTimestampMap, partitionPhysicalStorageMap,
+          hostAccountStorageStatsWrapper.getHeader().getTimestamp(), instanceName);
+    }
+    if (logger.isTraceEnabled()) {
+      logger.trace("Combined raw HostAccountStorageStats {}",
+          mapper.writeValueAsString(combinedHostAccountStorageStatsMap));
+      logger.trace("Selected raw HostAccountStorageStats {}",
+          mapper.writeValueAsString(selectedHostAccountStorageStatsMap));
+    }
+
+    AggregatedAccountStorageStats combinedAggregated =
+        new AggregatedAccountStorageStats(aggregateHostAccountStorageStats(combinedHostAccountStorageStatsMap));
+    AggregatedAccountStorageStats selectedAggregated =
+        new AggregatedAccountStorageStats(aggregateHostAccountStorageStats(selectedHostAccountStorageStatsMap));
+    if (logger.isTraceEnabled()) {
+      logger.trace("Aggregated combined {}", mapper.writeValueAsString(combinedAggregated));
+      logger.trace("Aggregated selected {}", mapper.writeValueAsString(selectedAggregated));
+    }
+    return new Pair<>(combinedAggregated, selectedAggregated);
   }
 
   /**
@@ -87,6 +139,61 @@ public class MySqlClusterAggregator {
         new AggregatedAccountStorageStats(aggregateHostAccountStorageStats(combinedHostAccountStorageStatsMap));
     AggregatedAccountStorageStats selectedAggregated =
         new AggregatedAccountStorageStats(aggregateHostAccountStorageStats(selectedHostAccountStorageStatsMap));
+    if (logger.isTraceEnabled()) {
+      logger.trace("Aggregated combined {}", mapper.writeValueAsString(combinedAggregated));
+      logger.trace("Aggregated selected {}", mapper.writeValueAsString(selectedAggregated));
+    }
+    return new Pair<>(combinedAggregated, selectedAggregated);
+  }
+
+  /**
+   * Aggregate all {@link HostPartitionClassStorageStatsWrapper} to generate two {@link AggregatedPartitionClassStorageStats}s.
+   * First {@link AggregatedPartitionClassStorageStats} is the sum of all {@link HostPartitionClassStorageStatsWrapper}s.
+   * Second {@link AggregatedPartitionClassStorageStats} is an aggregated storage stats for all replicas of each partition.
+   * @param partitionClassStorageStatsIterator An iterator for PartitionClassStorageStatsIterator
+   * @return A {@link Pair} of {@link AggregatedPartitionClassStorageStats}.
+   * @throws IOException
+   */
+  Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> aggregateHostPartitionClassStorageStatsWrappers(
+      Iterator partitionClassStorageStatsIterator) throws IOException {
+    Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> combinedHostPartitionClassStorageStatsMap =
+        new HashMap<>();
+    Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> selectedHostPartitionClassStorageStatsMap =
+        new HashMap<>();
+    Map<Long, Long> partitionTimestampMap = new HashMap<>();
+    Map<Long, Long> partitionPhysicalStorageMap = new HashMap<>();
+
+    while (partitionClassStorageStatsIterator.hasNext()) {
+      Pair<String, HostPartitionClassStorageStatsWrapper> statsWrapperEntry =
+          (Pair<String, HostPartitionClassStorageStatsWrapper>) partitionClassStorageStatsIterator.next();
+      if (statsWrapperEntry.getSecond() == null) {
+        continue;
+      }
+      String hostname = statsWrapperEntry.getFirst();
+      HostPartitionClassStorageStatsWrapper hostPartitionClassStorageStatsWrapper = statsWrapperEntry.getSecond();
+      HostPartitionClassStorageStats hostPartitionClassStorageStats = hostPartitionClassStorageStatsWrapper.getStats();
+      HostPartitionClassStorageStats hostPartitionClassStorageStatsCopy1 =
+          new HostPartitionClassStorageStats(hostPartitionClassStorageStats);
+      HostPartitionClassStorageStats hostPartitionClassStorageStatsCopy2 =
+          new HostPartitionClassStorageStats(hostPartitionClassStorageStats);
+      combineRawHostPartitionClassStorageStatsMap(combinedHostPartitionClassStorageStatsMap,
+          hostPartitionClassStorageStatsCopy1.getStorageStats());
+      selectRawHostPartitionClassStorageStatsMap(selectedHostPartitionClassStorageStatsMap,
+          hostPartitionClassStorageStatsCopy2.getStorageStats(), partitionTimestampMap, partitionPhysicalStorageMap,
+          hostPartitionClassStorageStatsWrapper.getHeader().getTimestamp(), hostname);
+    }
+
+    if (logger.isTraceEnabled()) {
+      logger.trace("Combined raw HostPartitionClassStorageStats {}",
+          mapper.writeValueAsString(combinedHostPartitionClassStorageStatsMap));
+      logger.trace("Selected raw HostPartitionClassStorageStats {}",
+          mapper.writeValueAsString(selectedHostPartitionClassStorageStatsMap));
+    }
+
+    AggregatedPartitionClassStorageStats combinedAggregated = new AggregatedPartitionClassStorageStats(
+        aggregateHostPartitionClassStorageStats(combinedHostPartitionClassStorageStatsMap));
+    AggregatedPartitionClassStorageStats selectedAggregated = new AggregatedPartitionClassStorageStats(
+        aggregateHostPartitionClassStorageStats(selectedHostPartitionClassStorageStatsMap));
     if (logger.isTraceEnabled()) {
       logger.trace("Aggregated combined {}", mapper.writeValueAsString(combinedAggregated));
       logger.trace("Aggregated selected {}", mapper.writeValueAsString(selectedAggregated));

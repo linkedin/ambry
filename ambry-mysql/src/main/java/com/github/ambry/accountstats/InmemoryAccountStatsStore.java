@@ -13,12 +13,17 @@
  */
 package com.github.ambry.accountstats;
 
+import com.github.ambry.clustermap.TaskUtils;
 import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import org.apache.helix.task.TaskUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -27,6 +32,9 @@ import java.util.Set;
 public class InmemoryAccountStatsStore implements AccountStatsStore {
   private final String clusterName;
   private final String hostname;
+  protected Map<String, HostAccountStorageStatsWrapper> accountStatsMap = new HashMap<>();
+  protected Map<String, HostPartitionClassStorageStatsWrapper> partitionStatsMap = new HashMap<>();
+  private static final Logger logger = LoggerFactory.getLogger(InmemoryAccountStatsStore.class);
 
   private HostAccountStorageStatsWrapper currentHostStatsWrapper = null;
   private AggregatedAccountStorageStats aggregatedAccountStats = null;
@@ -43,6 +51,19 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   public InmemoryAccountStatsStore(String clusterName, String hostname) {
     this.clusterName = clusterName;
     this.hostname = hostname;
+  }
+
+  /**
+   * Constructor to instantiate an {@link InmemoryAccountStatsStore}.
+   * @param clusterName the clusterName
+   * @param hostname the hostname
+   */
+  public InmemoryAccountStatsStore(String clusterName, String hostname,
+      Map<String, HostAccountStorageStatsWrapper> accountStatsMap, Map<String, HostPartitionClassStorageStatsWrapper> partitionStatsMap) {
+    this.clusterName = clusterName;
+    this.hostname = hostname;
+    this.accountStatsMap = accountStatsMap;
+    this.partitionStatsMap = partitionStatsMap;
   }
 
   @Override
@@ -68,11 +89,11 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
   }
 
   @Override
-  public HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHost(String hostname, int port) throws Exception {
+  public HostAccountStorageStatsWrapper queryHostAccountStorageStatsByHost(String hostname, int port) {
     if (hostname.equals(this.hostname)) {
       return currentHostStatsWrapper;
     } else {
-      return null;
+      return accountStatsMap.get(hostname + "_" + port);
     }
   }
 
@@ -124,8 +145,8 @@ public class InmemoryAccountStatsStore implements AccountStatsStore {
 
   @Override
   public HostPartitionClassStorageStatsWrapper queryHostPartitionClassStorageStatsByHost(String hostname, int port,
-      Map<String, Set<Integer>> partitionNameAndIds) throws Exception {
-    return null;
+      Map<String, Set<Integer>> partitionNameAndIds) {
+    return partitionStatsMap.get(hostname + "_" + port);
   }
 
   @Override
