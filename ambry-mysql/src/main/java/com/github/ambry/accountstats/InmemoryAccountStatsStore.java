@@ -13,7 +13,6 @@
  */
 package com.github.ambry.accountstats;
 
-import com.github.ambry.clustermap.TaskUtils;
 import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
@@ -21,7 +20,6 @@ import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import org.apache.helix.task.TaskUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
