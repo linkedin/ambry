@@ -98,54 +98,6 @@ public class MySqlClusterAggregator {
   }
 
   /**
-   * Aggregate all {@link HostAccountStorageStatsWrapper} to generate two {@link AggregatedAccountStorageStats}s. First
-   * {@link AggregatedAccountStorageStats} is the sum of all {@link HostAccountStorageStatsWrapper}s. The second {@link AggregatedAccountStorageStats}
-   * is the valid aggregated storage stats for all replicas of each partition.
-   * @param statsWrappers A map from instance name to {@link HostAccountStorageStatsWrapper}.
-   * @return A {@link Pair} of {@link AggregatedAccountStorageStats}.
-   * @throws IOException
-   */
-  Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregateHostAccountStorageStatsWrappers(
-      Map<String, HostAccountStorageStatsWrapper> statsWrappers) throws IOException {
-
-    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> combinedHostAccountStorageStatsMap = new HashMap<>();
-    Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> selectedHostAccountStorageStatsMap = new HashMap<>();
-    Map<Long, Long> partitionTimestampMap = new HashMap<>();
-    Map<Long, Long> partitionPhysicalStorageMap = new HashMap<>();
-    for (Map.Entry<String, HostAccountStorageStatsWrapper> statsWrapperEntry : statsWrappers.entrySet()) {
-      if (statsWrapperEntry.getValue() == null) {
-        continue;
-      }
-      String instanceName = statsWrapperEntry.getKey();
-      HostAccountStorageStatsWrapper hostAccountStorageStatsWrapper = statsWrapperEntry.getValue();
-      HostAccountStorageStats hostAccountStorageStats = hostAccountStorageStatsWrapper.getStats();
-      HostAccountStorageStats hostAccountStorageStatsCopy1 = new HostAccountStorageStats(hostAccountStorageStats);
-      HostAccountStorageStats hostAccountStorageStatsCopy2 = new HostAccountStorageStats(hostAccountStorageStats);
-      combineRawHostAccountStorageStatsMap(combinedHostAccountStorageStatsMap,
-          hostAccountStorageStatsCopy1.getStorageStats());
-      selectRawHostAccountStorageStatsMap(selectedHostAccountStorageStatsMap,
-          hostAccountStorageStatsCopy2.getStorageStats(), partitionTimestampMap, partitionPhysicalStorageMap,
-          hostAccountStorageStatsWrapper.getHeader().getTimestamp(), instanceName);
-    }
-    if (logger.isTraceEnabled()) {
-      logger.trace("Combined raw HostAccountStorageStats {}",
-          mapper.writeValueAsString(combinedHostAccountStorageStatsMap));
-      logger.trace("Selected raw HostAccountStorageStats {}",
-          mapper.writeValueAsString(selectedHostAccountStorageStatsMap));
-    }
-
-    AggregatedAccountStorageStats combinedAggregated =
-        new AggregatedAccountStorageStats(aggregateHostAccountStorageStats(combinedHostAccountStorageStatsMap));
-    AggregatedAccountStorageStats selectedAggregated =
-        new AggregatedAccountStorageStats(aggregateHostAccountStorageStats(selectedHostAccountStorageStatsMap));
-    if (logger.isTraceEnabled()) {
-      logger.trace("Aggregated combined {}", mapper.writeValueAsString(combinedAggregated));
-      logger.trace("Aggregated selected {}", mapper.writeValueAsString(selectedAggregated));
-    }
-    return new Pair<>(combinedAggregated, selectedAggregated);
-  }
-
-  /**
    * Aggregate all {@link HostPartitionClassStorageStatsWrapper} to generate two {@link AggregatedPartitionClassStorageStats}s.
    * First {@link AggregatedPartitionClassStorageStats} is the sum of all {@link HostPartitionClassStorageStatsWrapper}s.
    * Second {@link AggregatedPartitionClassStorageStats} is an aggregated storage stats for all replicas of each partition.
@@ -179,59 +131,6 @@ public class MySqlClusterAggregator {
       selectRawHostPartitionClassStorageStatsMap(selectedHostPartitionClassStorageStatsMap,
           hostPartitionClassStorageStatsCopy2.getStorageStats(), partitionTimestampMap, partitionPhysicalStorageMap,
           hostPartitionClassStorageStatsWrapper.getHeader().getTimestamp(), hostname);
-    }
-
-    if (logger.isTraceEnabled()) {
-      logger.trace("Combined raw HostPartitionClassStorageStats {}",
-          mapper.writeValueAsString(combinedHostPartitionClassStorageStatsMap));
-      logger.trace("Selected raw HostPartitionClassStorageStats {}",
-          mapper.writeValueAsString(selectedHostPartitionClassStorageStatsMap));
-    }
-
-    AggregatedPartitionClassStorageStats combinedAggregated = new AggregatedPartitionClassStorageStats(
-        aggregateHostPartitionClassStorageStats(combinedHostPartitionClassStorageStatsMap));
-    AggregatedPartitionClassStorageStats selectedAggregated = new AggregatedPartitionClassStorageStats(
-        aggregateHostPartitionClassStorageStats(selectedHostPartitionClassStorageStatsMap));
-    if (logger.isTraceEnabled()) {
-      logger.trace("Aggregated combined {}", mapper.writeValueAsString(combinedAggregated));
-      logger.trace("Aggregated selected {}", mapper.writeValueAsString(selectedAggregated));
-    }
-    return new Pair<>(combinedAggregated, selectedAggregated);
-  }
-
-  /**
-   * Aggregate all {@link HostPartitionClassStorageStatsWrapper} to generate two {@link AggregatedPartitionClassStorageStats}s. First
-   * {@link AggregatedPartitionClassStorageStats} is the sum of all {@link HostPartitionClassStorageStatsWrapper}s. The second
-   * {@link AggregatedPartitionClassStorageStats} is the valid aggregated storage stats for all replicas of each partition.
-   * @param statsWrappers A map from instance name to {@link HostPartitionClassStorageStatsWrapper}.
-   * @return A {@link Pair} of {@link AggregatedPartitionClassStorageStats}.
-   * @throws IOException
-   */
-  Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> aggregateHostPartitionClassStorageStatsWrappers(
-      Map<String, HostPartitionClassStorageStatsWrapper> statsWrappers) throws IOException {
-    Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> combinedHostPartitionClassStorageStatsMap =
-        new HashMap<>();
-    Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> selectedHostPartitionClassStorageStatsMap =
-        new HashMap<>();
-    Map<Long, Long> partitionTimestampMap = new HashMap<>();
-    Map<Long, Long> partitionPhysicalStorageMap = new HashMap<>();
-
-    for (Map.Entry<String, HostPartitionClassStorageStatsWrapper> statsWrapperEntry : statsWrappers.entrySet()) {
-      if (statsWrapperEntry.getValue() == null) {
-        continue;
-      }
-      String instanceName = statsWrapperEntry.getKey();
-      HostPartitionClassStorageStatsWrapper hostPartitionClassStorageStatsWrapper = statsWrapperEntry.getValue();
-      HostPartitionClassStorageStats hostPartitionClassStorageStats = hostPartitionClassStorageStatsWrapper.getStats();
-      HostPartitionClassStorageStats hostPartitionClassStorageStatsCopy1 =
-          new HostPartitionClassStorageStats(hostPartitionClassStorageStats);
-      HostPartitionClassStorageStats hostPartitionClassStorageStatsCopy2 =
-          new HostPartitionClassStorageStats(hostPartitionClassStorageStats);
-      combineRawHostPartitionClassStorageStatsMap(combinedHostPartitionClassStorageStatsMap,
-          hostPartitionClassStorageStatsCopy1.getStorageStats());
-      selectRawHostPartitionClassStorageStatsMap(selectedHostPartitionClassStorageStatsMap,
-          hostPartitionClassStorageStatsCopy2.getStorageStats(), partitionTimestampMap, partitionPhysicalStorageMap,
-          hostPartitionClassStorageStatsWrapper.getHeader().getTimestamp(), instanceName);
     }
 
     if (logger.isTraceEnabled()) {
