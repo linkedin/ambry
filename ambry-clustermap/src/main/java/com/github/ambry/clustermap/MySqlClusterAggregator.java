@@ -68,7 +68,7 @@ public class MySqlClusterAggregator {
       if (statsWrapperEntry.getSecond() == null) {
         continue;
       }
-      String instanceName = statsWrapperEntry.getFirst();
+      String hostname = statsWrapperEntry.getFirst();
       HostAccountStorageStatsWrapper hostAccountStorageStatsWrapper = statsWrapperEntry.getSecond();
       HostAccountStorageStats hostAccountStorageStats = hostAccountStorageStatsWrapper.getStats();
       HostAccountStorageStats hostAccountStorageStatsCopy1 = new HostAccountStorageStats(hostAccountStorageStats);
@@ -77,7 +77,7 @@ public class MySqlClusterAggregator {
           hostAccountStorageStatsCopy1.getStorageStats());
       selectRawHostAccountStorageStatsMap(selectedHostAccountStorageStatsMap,
           hostAccountStorageStatsCopy2.getStorageStats(), partitionTimestampMap, partitionPhysicalStorageMap,
-          hostAccountStorageStatsWrapper.getHeader().getTimestamp(), instanceName);
+          hostAccountStorageStatsWrapper.getHeader().getTimestamp(), hostname);
     }
     if (logger.isTraceEnabled()) {
       logger.trace("Combined raw HostAccountStorageStats {}",
