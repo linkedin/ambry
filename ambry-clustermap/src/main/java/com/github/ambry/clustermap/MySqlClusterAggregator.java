@@ -56,7 +56,7 @@ public class MySqlClusterAggregator {
    * @throws IOException
    */
   Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregateHostAccountStorageStatsWrappers(
-      Iterator accountStorageStatsIterator) throws IOException {
+      AccountStorageStatsIterator accountStorageStatsIterator) throws IOException {
 
     Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> combinedHostAccountStorageStatsMap = new HashMap<>();
     Map<Long, Map<Short, Map<Short, ContainerStorageStats>>> selectedHostAccountStorageStatsMap = new HashMap<>();
@@ -64,8 +64,7 @@ public class MySqlClusterAggregator {
     Map<Long, Long> partitionPhysicalStorageMap = new HashMap<>();
 
     while (accountStorageStatsIterator.hasNext()) {
-      Pair<String, HostAccountStorageStatsWrapper> statsWrapperEntry =
-          (Pair<String, HostAccountStorageStatsWrapper>) accountStorageStatsIterator.next();
+      Pair<String, HostAccountStorageStatsWrapper> statsWrapperEntry = accountStorageStatsIterator.next();
       if (statsWrapperEntry.getSecond() == null) {
         continue;
       }
@@ -155,7 +154,7 @@ public class MySqlClusterAggregator {
    * @throws IOException
    */
   Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> aggregateHostPartitionClassStorageStatsWrappers(
-      Iterator partitionClassStorageStatsIterator) throws IOException {
+      PartitionClassStorageStatsIterator partitionClassStorageStatsIterator) throws IOException {
     Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> combinedHostPartitionClassStorageStatsMap =
         new HashMap<>();
     Map<String, Map<Long, Map<Short, Map<Short, ContainerStorageStats>>>> selectedHostPartitionClassStorageStatsMap =
@@ -164,8 +163,7 @@ public class MySqlClusterAggregator {
     Map<Long, Long> partitionPhysicalStorageMap = new HashMap<>();
 
     while (partitionClassStorageStatsIterator.hasNext()) {
-      Pair<String, HostPartitionClassStorageStatsWrapper> statsWrapperEntry =
-          (Pair<String, HostPartitionClassStorageStatsWrapper>) partitionClassStorageStatsIterator.next();
+      Pair<String, HostPartitionClassStorageStatsWrapper> statsWrapperEntry = partitionClassStorageStatsIterator.next();
       if (statsWrapperEntry.getSecond() == null) {
         continue;
       }
