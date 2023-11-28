@@ -16,6 +16,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.DiskId;
+import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
@@ -215,6 +216,12 @@ public class DiskManager {
     } catch (StoreException e) {
       logger.error("Error while starting the DiskManager for {} ; no stores will be accessible on this disk.",
           disk.getMountPath(), e);
+      // Set the state of the disk to UNAVAILABLE. This will prevent new replicas to be bootstrapped on this disk.
+      // TODO: We might need to use DiskFailureHandler to immediately reset existing replicas on this disk and reduce
+      //  instance capacity so that existing replicas are reassigned to new hosts and Helix doesn't assign more replicas
+      //  than the host can handle.
+      logger.error("Setting disk {} as UNAVAILABLE locally", disk.getMountPath());
+      disk.setState(HardwareState.UNAVAILABLE);
     } finally {
       if (!running) {
         metrics.totalStoreStartFailures.inc(stores.size());
