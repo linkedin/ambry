@@ -24,7 +24,6 @@ import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;

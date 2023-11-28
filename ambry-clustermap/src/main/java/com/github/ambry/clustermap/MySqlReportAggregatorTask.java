@@ -18,8 +18,6 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.server.HostAccountStorageStatsWrapper;
-import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.StatsReportType;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
 import com.github.ambry.server.storagestats.AggregatedPartitionClassStorageStats;
@@ -32,11 +30,8 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.apache.helix.HelixManager;
 import org.apache.helix.task.Task;
 import org.apache.helix.task.TaskResult;
@@ -220,61 +215,6 @@ public class MySqlReportAggregatorTask extends UserContentStore implements Task 
       accountStatsStore.deleteAggregatedPartitionClassStatsForAccountContainer(pair.getFirst(),
           accountContainerId.getFirst(), accountContainerId.getSecond());
     }
-  }
-
-  /**
-   * Fetch account storage stats report for each instance in {@code instanceNames}. Each instance name is probably a fully qualified
-   * hostname with port number like this [hostname_portnumber]. It returns a map whose key is the instanceName and the value
-   * is the {@link HostAccountStorageStatsWrapper} for each instance.
-   * @param instanceNames The list of instance names to fetch account StatsWrapper.
-   * @return A map of {@link HostAccountStorageStatsWrapper} for each instance name.
-   * @throws Exception
-   */
-  private Map<String, HostAccountStorageStatsWrapper> fetchAccountStorageStatsWrapperForInstances(
-      List<String> instanceNames) throws Exception {
-    Map<String, HostAccountStorageStatsWrapper> statsWrappers = new HashMap<>();
-    for (String instanceName : instanceNames) {
-      Pair<String, Integer> pair = getHostNameAndPort(instanceName);
-      statsWrappers.put(instanceName,
-          accountStatsStore.queryHostAccountStorageStatsByHost(pair.getFirst(), pair.getSecond()));
-    }
-    return statsWrappers;
-  }
-
-  /**
-   * Fetch partition class storage stats report for each instance in {@code instanceNames}. Each instance name is probably a fully qualified
-   * hostname with port number like this [hostname_portnumber]. It returns a map whose key is the instanceName and the value
-   * is the {@link HostPartitionClassStorageStatsWrapper} for each instance.
-   * @param instanceNames The list of instance names to fetch partition class StatsWrapper.
-   * @return A map of {@link HostPartitionClassStorageStatsWrapper} for each instance name.
-   * @throws Exception
-   */
-  private Map<String, HostPartitionClassStorageStatsWrapper> fetchPartitionClassStorageStatsWrapperForInstances(
-      List<String> instanceNames) throws Exception {
-    Map<String, HostPartitionClassStorageStatsWrapper> statsWrappers = new HashMap<>();
-    Map<String, Set<Integer>> partitionNameAndIds = accountStatsStore.queryPartitionNameAndIds();
-    for (String instanceName : instanceNames) {
-      Pair<String, Integer> pair = getHostNameAndPort(instanceName);
-      statsWrappers.put(instanceName,
-          accountStatsStore.queryHostPartitionClassStorageStatsByHost(pair.getFirst(), pair.getSecond(),
-              partitionNameAndIds));
-    }
-    return statsWrappers;
-  }
-
-  private Pair<String, Integer> getHostNameAndPort(String instanceName) {
-    String hostname = instanceName;
-    int port = clusterMapConfig.clusterMapPort;
-    int ind = instanceName.lastIndexOf("_");
-    if (ind != -1) {
-      try {
-        port = Short.valueOf(instanceName.substring(ind + 1));
-        hostname = instanceName.substring(0, ind);
-      } catch (NumberFormatException e) {
-        // String after "_" is not a port number, then the hostname should be the instanceName
-      }
-    }
-    return new Pair<>(hostname, port);
   }
 
   @Override
