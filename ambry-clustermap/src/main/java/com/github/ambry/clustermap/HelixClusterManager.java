@@ -1012,13 +1012,21 @@ public class HelixClusterManager implements ClusterMap {
 
   int getLiveInstanceCount(String resource) {
     return (int) (getAllInstancesForResource(resource).stream()
-        .map(instanceNameToAmbryDataNode::get)
-        .filter(dn -> dn.getState() == HardwareState.AVAILABLE)
-        .count());
+        .map(instanceNameToAmbryDataNode::get).filter(dn -> dn.getState() == HardwareState.AVAILABLE).count());
   }
 
   long getResourceTotalRegisteredHostDiskCapacity(String resource) {
     return getAllInstancesForResource(resource).stream()
+        .map(instanceNameToInstanceConfig::get)
+        .mapToInt(instanceConfig -> instanceConfig.getInstanceCapacityMap().get(DISK_KEY))
+        .sum();
+  }
+
+  long getResourceAvailableRegisteredHostDiskCapacity(String resource) {
+    return getAllInstancesForResource(resource).stream()
+        .map(instanceNameToAmbryDataNode::get)
+        .filter(dn -> dn.getState() == HardwareState.AVAILABLE)
+        .map(ClusterMapUtils::getInstanceName)
         .map(instanceNameToInstanceConfig::get)
         .mapToInt(instanceConfig -> instanceConfig.getInstanceCapacityMap().get(DISK_KEY))
         .sum();
