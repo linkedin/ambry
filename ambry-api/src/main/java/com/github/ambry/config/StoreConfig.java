@@ -582,15 +582,6 @@ public class StoreConfig {
   public final int storeDiskCapacityReportingPercentage;
   public static final String storeDiskCapacityReportingPercentageName = "store.disk.capacity.reporting.percentage";
 
-  /**
-   * This value should be range from 1 to 100. It's the percentage of failed disks to all disks. If the failed disks
-   * to all disks ratio is larger than this value, then terminate the entire process. For instance, if this value is 50,
-   * and we have 10 disks on host, and they are 5 disk failed, then we would terminate the server process.
-   */
-  @Config(storeFailedDiskPercentageToTerminateName)
-  public final int storeFailedDiskPercentageToTerminate;
-  public static final String storeFailedDiskPercentageToTerminateName = "store.failed.disk.percentage.to.terminate";
-
   public StoreConfig(VerifiableProperties verifiableProperties) {
 
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -747,8 +738,5 @@ public class StoreConfig {
     }
     storeDiskCapacityReportingPercentage =
         verifiableProperties.getIntInRange(storeDiskCapacityReportingPercentageName, 95, 0, 100);
-    // by default, unless all the disks fail, we don't terminate this storage node
-    storeFailedDiskPercentageToTerminate =
-        verifiableProperties.getIntInRange(storeFailedDiskPercentageToTerminateName, 100, 0, 100);
   }
 }
