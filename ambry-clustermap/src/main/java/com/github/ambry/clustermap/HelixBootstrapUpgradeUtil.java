@@ -2154,7 +2154,7 @@ public class HelixBootstrapUpgradeUtil {
     HelixAdmin dcAdmin = adminForDc.get(dcName);
     List<String> instancesWithDisabledPartition = new ArrayList<>();
     HelixPropertyStore<ZNRecord> helixPropertyStore =
-        helixAdminOperation == HelixAdminOperation.DisablePartition ? createHelixPropertyStore(dcName,
+        helixAdminOperation == HelixAdminOperation.DisablePartition ? createHelixPropertyStore(this.clusterName,
             dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0)) : null;
     TreeMap<Integer, Set<String>> resourceIdToInstances = dcToResourceIdToInstances.get(dcName);
     Map<String, Set<Integer>> instanceNameToResources = dcToInstanceToResourceIds.get(dcName);
