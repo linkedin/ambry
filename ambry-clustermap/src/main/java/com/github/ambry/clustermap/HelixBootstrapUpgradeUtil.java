@@ -185,6 +185,7 @@ public class HelixBootstrapUpgradeUtil {
   // Allow a host to be filled upto 95%
   static final int INSTANCE_MAX_CAPACITY_PERCENTAGE = 95;
   static final int PARTITION_BUFFER_CAPACITY_FOR_INDEX_FILES_IN_GB = 2;
+  static final String DEFAULT_REPLICA_CAPACITY_STR = "defaultReplicaCapacityInBytes";
 
   public enum HelixAdminOperation {
     BootstrapCluster,
@@ -954,12 +955,6 @@ public class HelixBootstrapUpgradeUtil {
       String commaSeparatedResources, WagedHelixConfig wagedHelixConfig, boolean setPreferenceList,
       int maxInstancesInOneResourceForFullAuto, boolean dryRun, boolean addConfigs) {
     try {
-      // 0. Check if all resources in the cluster are full-auto compatible
-      boolean resourcesAreFullAutoCompatible =
-          maybeVerifyResourcesAreFullAutoCompatible(dc, clusterName, admin, maxInstancesInOneResourceForFullAuto);
-      if (!resourcesAreFullAutoCompatible) {
-        throw new IllegalStateException("Resources are not full auto compatible");
-      }
       ClusterMapConfig config = getClusterMapConfig(clusterName, dc, null);
       try (PropertyStoreToDataNodeConfigAdapter propertyStoreAdapter = new PropertyStoreToDataNodeConfigAdapter(
           zkConnectStr, config)) {
@@ -1491,7 +1486,8 @@ public class HelixBootstrapUpgradeUtil {
           } else {
             try {
               boolean resourcesAreFullAutoCompatible =
-                  maybeVerifyResourcesAreFullAutoCompatible(dc.getName(), clusterName);
+                  maybeVerifyResourcesAreFullAutoCompatible(dc.getName(), clusterName, adminForDc.get(dc.getName()),
+                      maxInstancesInOneResourceForFullAuto);
               if (resourcesAreFullAutoCompatible) {
                 verifyPartitionPlacementIsFullAutoCompatibleInStatic(dc.getName());
               }
@@ -2158,7 +2154,8 @@ public class HelixBootstrapUpgradeUtil {
     HelixAdmin dcAdmin = adminForDc.get(dcName);
     List<String> instancesWithDisabledPartition = new ArrayList<>();
     HelixPropertyStore<ZNRecord> helixPropertyStore =
-        helixAdminOperation == HelixAdminOperation.DisablePartition ? createHelixPropertyStore(dcName) : null;
+        helixAdminOperation == HelixAdminOperation.DisablePartition ? createHelixPropertyStore(dcName,
+            dataCenterToZkAddress.get(dcName).getZkConnectStrs().get(0)) : null;
     TreeMap<Integer, Set<String>> resourceIdToInstances = dcToResourceIdToInstances.get(dcName);
     Map<String, Set<Integer>> instanceNameToResources = dcToInstanceToResourceIds.get(dcName);
     Map<Integer, IdealState> resourceIdToIdealState = dcToResourceIdToIdealState.get(dcName);
@@ -2814,7 +2811,8 @@ public class HelixBootstrapUpgradeUtil {
             verifyDataNodeAndDiskEquivalencyInDc(dc, clusterName, partitionLayout);
             // Remove dc from dcToResourceIdToIdealState, so we fetch all the data from helix again.
             dcToResourceIdToIdealState.remove(dc.getName());
-            maybeVerifyResourcesAreFullAutoCompatible(dc.getName(), clusterName);
+            maybeVerifyResourcesAreFullAutoCompatible(dc.getName(), clusterName, admin,
+                maxInstancesInOneResourceForFullAuto);
           }
         } catch (Throwable t) {
           logger.error("[{}] error message: {}", dc.getName().toUpperCase(), t.getMessage());
@@ -3060,8 +3058,8 @@ public class HelixBootstrapUpgradeUtil {
    * @param dcName the datacenter whose information is to be verified.
    * @param clusterName the cluster to be verified.
    */
-  private static boolean maybeVerifyResourcesAreFullAutoCompatible(String dcName, String clusterName,
-      HelixAdmin helixAdmin, int maxInstancesInOneResourceForFullAuto) {
+  private boolean maybeVerifyResourcesAreFullAutoCompatible(String dcName, String clusterName, HelixAdmin helixAdmin,
+      int maxInstancesInOneResourceForFullAuto) {
     List<String> resourceNames = helixAdmin.getResourcesInCluster(clusterName);
     if (resourceNames == null || resourceNames.isEmpty()) {
       info(
