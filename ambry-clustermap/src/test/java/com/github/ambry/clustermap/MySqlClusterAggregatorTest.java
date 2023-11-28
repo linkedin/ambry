@@ -15,6 +15,9 @@ package com.github.ambry.clustermap;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.accountstats.InmemoryAccountStatsStore;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.HostAccountStorageStatsWrapper;
 import com.github.ambry.server.HostPartitionClassStorageStatsWrapper;
 import com.github.ambry.server.StatsHeader;
@@ -29,9 +32,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.junit.Assert;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -42,6 +49,7 @@ public class MySqlClusterAggregatorTest {
   private static final long DEFAULT_TIMESTAMP = 1000;
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private final MySqlClusterAggregator clusterAggregator;
+  private static final Logger logger = LoggerFactory.getLogger(MySqlClusterAggregatorTest.class);
 
   public MySqlClusterAggregatorTest() {
     clusterAggregator = new MySqlClusterAggregator(RELEVANT_PERIOD_IN_MINUTES);
@@ -185,11 +193,14 @@ public class MySqlClusterAggregatorTest {
     }
     instanceToStatsMap.put("Instance_" + nodeCount, emptyStats);
 
-    Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedRawAndValidStats =
-        clusterAggregator.aggregateHostAccountStorageStatsWrappers(instanceToStatsMap);
     Map<Short, Map<Short, ContainerStorageStats>> expectedAggregatedStorageStatsMap =
         clusterAggregator.aggregateHostAccountStorageStats(storageStatsMap);
-
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig();
+    InmemoryAccountStatsStore accountStatsStore = new InmemoryAccountStatsStore(
+        "unused_clustername", "unused_hostname", instanceToStatsMap, null);
+    Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedRawAndValidStats =
+        clusterAggregator.aggregateHostAccountStorageStatsWrappers(new AccountStorageStatsIterator(
+            instanceToStatsMap.keySet().stream().collect(Collectors.toList()), accountStatsStore, clusterMapConfig));
     Assert.assertEquals(expectedAggregatedStorageStatsMap, aggregatedRawAndValidStats.getSecond().getStorageStats());
     assertAggregatedRawStatsForAccountStorageStats(aggregatedRawAndValidStats.getFirst().getStorageStats(),
         expectedAggregatedStorageStatsMap, nodeCount);
@@ -231,11 +242,14 @@ public class MySqlClusterAggregatorTest {
     }
     instanceToStatsMap.put("Instance_" + nodeCount, emptyStats);
 
-    Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> aggregatedRawAndValidStats =
-        clusterAggregator.aggregateHostPartitionClassStorageStatsWrappers(instanceToStatsMap);
     Map<String, Map<Short, Map<Short, ContainerStorageStats>>> expectedAggregatedStorageStatsMap =
         clusterAggregator.aggregateHostPartitionClassStorageStats(storageStatsMap);
-
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig();
+    InmemoryAccountStatsStore accountStatsStore = new InmemoryAccountStatsStore(
+        "unused_clustername", "unused_hostname", null, instanceToStatsMap);
+    Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> aggregatedRawAndValidStats =
+        clusterAggregator.aggregateHostPartitionClassStorageStatsWrappers(new PartitionClassStorageStatsIterator(
+            instanceToStatsMap.keySet().stream().collect(Collectors.toList()), accountStatsStore, clusterMapConfig));
     Assert.assertEquals(expectedAggregatedStorageStatsMap, aggregatedRawAndValidStats.getSecond().getStorageStats());
     assertAggregatedRawStatsForPartitionClassStorageStats(aggregatedRawAndValidStats.getFirst().getStorageStats(),
         expectedAggregatedStorageStatsMap, nodeCount);
@@ -286,10 +300,23 @@ public class MySqlClusterAggregatorTest {
     instanceStatsMap.put("Instance_1", nodeStats1);
     instanceStatsMap.put("Instance_2", nodeStats2);
 
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig();
+    InmemoryAccountStatsStore accountStatsStore = new InmemoryAccountStatsStore(
+        "unused_clustername", "unused_hostname", instanceStatsMap, null);
     Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedRawAndValidStats =
-        clusterAggregator.aggregateHostAccountStorageStatsWrappers(instanceStatsMap);
+        clusterAggregator.aggregateHostAccountStorageStatsWrappers(new AccountStorageStatsIterator(
+            instanceStatsMap.keySet().stream().collect(Collectors.toList()), accountStatsStore, clusterMapConfig));
     Assert.assertEquals(expectedRaw, aggregatedRawAndValidStats.getFirst().getStorageStats());
     Assert.assertEquals(expectedValid, aggregatedRawAndValidStats.getSecond().getStorageStats());
+  }
+
+  protected ClusterMapConfig getClusterMapConfig() {
+    Properties properties = new Properties();
+    properties.setProperty(ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME, "dev");
+    properties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "local");
+    properties.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    properties.setProperty(ClusterMapConfig.CLUSTERMAP_PORT, String.valueOf(3183));
+    return new ClusterMapConfig(new VerifiableProperties(properties));
   }
 
   /**
@@ -323,11 +350,14 @@ public class MySqlClusterAggregatorTest {
     instanceToStatsMap.put("Instance_1", outdatedNodeStats);
     instanceToStatsMap.put("Instance_2", emptyNodeStats);
 
-    Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedRawAndValidStats =
-        clusterAggregator.aggregateHostAccountStorageStatsWrappers(instanceToStatsMap);
-
     Map<Short, Map<Short, ContainerStorageStats>> expectedValid =
         clusterAggregator.aggregateHostAccountStorageStats(upToDateStorageStatsMap);
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig();
+    InmemoryAccountStatsStore accountStatsStore = new InmemoryAccountStatsStore(
+        "unused_clustername", "unused_hostname", instanceToStatsMap, null);
+    Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedRawAndValidStats =
+        clusterAggregator.aggregateHostAccountStorageStatsWrappers(new AccountStorageStatsIterator(
+            instanceToStatsMap.keySet().stream().collect(Collectors.toList()), accountStatsStore, clusterMapConfig));
     Assert.assertEquals(expectedValid, aggregatedRawAndValidStats.getSecond().getStorageStats());
   }
 
@@ -364,11 +394,14 @@ public class MySqlClusterAggregatorTest {
     instanceToStatsMap.put("Instance_1", outdatedNodeStats);
     instanceToStatsMap.put("Instance_2", emptyNodeStats);
 
-    Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> aggregatedRawAndValidStats =
-        clusterAggregator.aggregateHostPartitionClassStorageStatsWrappers(instanceToStatsMap);
-
     Map<String, Map<Short, Map<Short, ContainerStorageStats>>> expectedValid =
         clusterAggregator.aggregateHostPartitionClassStorageStats(upToDateStorageStatsMap);
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig();
+    InmemoryAccountStatsStore accountStatsStore = new InmemoryAccountStatsStore(
+        "unused_clustername", "unused_hostname", null, instanceToStatsMap);
+    Pair<AggregatedPartitionClassStorageStats, AggregatedPartitionClassStorageStats> aggregatedRawAndValidStats =
+        clusterAggregator.aggregateHostPartitionClassStorageStatsWrappers(new PartitionClassStorageStatsIterator(
+            instanceToStatsMap.keySet().stream().collect(Collectors.toList()), accountStatsStore, clusterMapConfig));
     Assert.assertEquals(expectedValid, aggregatedRawAndValidStats.getSecond().getStorageStats());
   }
 
@@ -399,11 +432,14 @@ public class MySqlClusterAggregatorTest {
     instanceToStatsMap.put("Instance_0", upToDateNodeStats);
     instanceToStatsMap.put("Instance_1", earlyNodeStats);
 
-    Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedRawAndValidStats =
-        clusterAggregator.aggregateHostAccountStorageStatsWrappers(instanceToStatsMap);
-
     Map<Short, Map<Short, ContainerStorageStats>> expectedValid =
         clusterAggregator.aggregateHostAccountStorageStats(earlyStorageStatsMap);
+    ClusterMapConfig clusterMapConfig = getClusterMapConfig();
+    InmemoryAccountStatsStore accountStatsStore = new InmemoryAccountStatsStore(
+        "unused_clustername", "unused_hostname", instanceToStatsMap, null);
+    Pair<AggregatedAccountStorageStats, AggregatedAccountStorageStats> aggregatedRawAndValidStats =
+        clusterAggregator.aggregateHostAccountStorageStatsWrappers(new AccountStorageStatsIterator(
+            instanceToStatsMap.keySet().stream().collect(Collectors.toList()), accountStatsStore, clusterMapConfig));
     Assert.assertEquals(expectedValid, aggregatedRawAndValidStats.getSecond().getStorageStats());
   }
 
