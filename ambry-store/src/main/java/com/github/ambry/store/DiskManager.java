@@ -220,7 +220,7 @@ public class DiskManager {
       // TODO: We might need to use DiskFailureHandler to immediately reset existing replicas on this disk and reduce
       //  instance capacity so that existing replicas are reassigned to new hosts and Helix doesn't assign more replicas
       //  than the host can handle.
-      logger.error("Setting disk {} as UNAVAILABLE locally", disk.getMountPath());
+      logger.info("Setting disk {} as UNAVAILABLE locally", disk.getMountPath());
       disk.setState(HardwareState.UNAVAILABLE);
     } finally {
       if (!running) {
