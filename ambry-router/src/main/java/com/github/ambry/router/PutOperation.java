@@ -1054,6 +1054,13 @@ class PutOperation {
   }
 
   /**
+   * @return MetadataPutChunk associated with this operation.
+   */
+  MetadataPutChunk getMetadataPutChunk() {
+    return metadataPutChunk;
+  }
+
+  /**
    * Gets the precedence level for a {@link RouterErrorCode}. A precedence level is a relative priority assigned
    * to a {@link RouterErrorCode}. If a {@link RouterErrorCode} has not been assigned a precedence level, a
    * {@code Integer.MIN_VALUE} will be returned.
@@ -1262,6 +1269,13 @@ class PutOperation {
     }
 
     /**
+     * @return the partition id of the current chunk.
+     */
+    PartitionId getPartitionId() {
+      return partitionId;
+    }
+
+    /**
      * Prepare this chunk for building, that is, for being filled with data from the channel.
      * @param chunkIndex the position in the overall blob that this chunk is going to  be in.
      */
@@ -1277,18 +1291,20 @@ class PutOperation {
       try {
         BlobDataType blobDataType =
             isMetadataChunk() ? BlobDataType.METADATA : isSimpleBlob ? BlobDataType.SIMPLE : BlobDataType.DATACHUNK;
-        partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
-        // To ensure previously attempted partitions are not retried for this PUT after a failure.
-        attemptedPartitionIds.add(partitionId);
 
         if (shouldUseReservedMetadataId()) {
+          partitionId = metadataPutChunk.reservedMetadataChunkId.getPartition();
           chunkBlobId = metadataPutChunk.reservedMetadataChunkId;
         } else {
+          partitionId = getPartitionForPut(partitionClass, attemptedPartitionIds);
           chunkBlobId =
               new BlobId(routerConfig.routerBlobidCurrentVersion, BlobIdType.NATIVE, clusterMap.getLocalDatacenterId(),
                   passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(), partitionId,
                   passedInBlobProperties.isEncrypted(), blobDataType);
         }
+
+        // To ensure previously attempted partitions are not retried for this PUT after a failure.
+        attemptedPartitionIds.add(partitionId);
 
         chunkBlobProperties = new BlobProperties(chunkBlobSize, passedInBlobProperties.getServiceId(),
             passedInBlobProperties.getOwnerId(), passedInBlobProperties.getContentType(),

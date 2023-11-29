@@ -557,7 +557,7 @@ public class PutOperationTest {
       // if stitched blob and chunks don't have reserved metadata chunk, then metadata chunk id should not be reserved.
       List<ChunkInfo> chunksToStitch =
           RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
-              LongStream.of(10, 10, 11));
+              LongStream.of(10, 10, 10));
       PutOperation op =
           PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
               new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
@@ -575,7 +575,7 @@ public class PutOperationTest {
       // if stitched blob and chunks have reserved metadata chunk, then the metadata chunk id should be reserved.
       chunksToStitch =
           RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
-              LongStream.of(10, 10, 11), reservedMetadataId.getID());
+              LongStream.of(10, 10, 10), reservedMetadataId.getID());
       op = PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, chunksToStitch, future, null,
           new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
           MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
@@ -588,12 +588,20 @@ public class PutOperationTest {
           reservedMetadataIdMetrics.stitchedBlobMetadataIdMismatchCount.getCount());
       Assert.assertEquals(reservedMetadataPassedInForNonChunkedUploadBaseCount,
           reservedMetadataIdMetrics.reservedMetadataPassedInForNonChunkedUploadCount.getCount());
+      if (routerConfig.routerReservedMetadataEnabled) {
+        // If the reserved metadata is enabled check that the operation's metadata partition id is set to the reserved
+        // metadata partition id.
+        op.startOperation();
+        op.poll(requestRegistrationCallback);
+        Assert.assertEquals(((PutOperation.PutChunk) op.getMetadataPutChunk()).getPartitionId(), reservedMetadataId.getPartition());
+        Assert.assertEquals(((PutOperation.PutChunk) op.getMetadataPutChunk()).chunkBlobId, reservedMetadataId);
+      }
 
       // if stitched blob and chunks have reserved metadata chunk, but the reserved chunk has mismatch, then the metadata
       // chunk id should not be reserved.
       chunksToStitch =
           RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
-              LongStream.of(10, 10, 11), reservedMetadataId.getID());
+              LongStream.of(10, 10, 10), reservedMetadataId.getID());
       ChunkInfo chunkInfo = new ChunkInfo(chunksToStitch.get(1).getBlobId(), chunksToStitch.get(1).getChunkSizeInBytes(),
           chunksToStitch.get(1).getExpirationTimeInMs(), altReservedMetadataId.getID());
       chunksToStitch.set(1, chunkInfo);
@@ -612,7 +620,7 @@ public class PutOperationTest {
 
       chunksToStitch =
           RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
-              LongStream.of(10, 10, 11), reservedMetadataId.getID());
+              LongStream.of(10, 10, 10), reservedMetadataId.getID());
       chunkInfo = new ChunkInfo(chunksToStitch.get(1).getBlobId(), chunksToStitch.get(1).getChunkSizeInBytes(),
           chunksToStitch.get(1).getExpirationTimeInMs(), null);
       chunksToStitch.set(1, chunkInfo);
@@ -631,7 +639,7 @@ public class PutOperationTest {
 
       chunksToStitch =
           RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
-              LongStream.of(10, 10, 11), reservedMetadataId.getID());
+              LongStream.of(10, 10, 10), reservedMetadataId.getID());
       chunkInfo = new ChunkInfo(chunksToStitch.get(0).getBlobId(), chunksToStitch.get(0).getChunkSizeInBytes(),
           chunksToStitch.get(0).getExpirationTimeInMs(), null);
       chunksToStitch.set(0, chunkInfo);
@@ -685,7 +693,7 @@ public class PutOperationTest {
       // if stitched upload and blob properties has invalid reserved metadata chunk then metadata id should be null.
       List<ChunkInfo> invalidChunksToStitch =
           RouterTestHelpers.buildChunkList(mockClusterMap, BlobId.BlobDataType.DATACHUNK, Utils.Infinite_Time,
-              LongStream.of(10, 10, 11), "test");
+              LongStream.of(10, 10, 10), "test");
       op = PutOperation.forStitching(routerConfig, routerMetrics, mockClusterMap, new LoggingNotificationSystem(), new InMemAccountService(true, false), userMetadata, invalidChunksToStitch, future, null,
           new RouterCallback(mockNetworkClient, new ArrayList<>()), null, null, null, time, blobProperties,
           MockClusterMap.DEFAULT_PARTITION_CLASS, quotaChargeCallback, compressionService);
