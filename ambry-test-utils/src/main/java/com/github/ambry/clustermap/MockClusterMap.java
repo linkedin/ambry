@@ -372,7 +372,7 @@ public class MockClusterMap implements ClusterMap {
    * @param mountPathIndexToUse the mount path index to use when creating new partition
    * @return new {@link PartitionId}
    */
-  PartitionId createNewPartition(List<MockDataNodeId> dataNodes, int mountPathIndexToUse) {
+  public PartitionId createNewPartition(List<MockDataNodeId> dataNodes, int mountPathIndexToUse) {
     MockPartitionId partitionId =
         new MockPartitionId(partitions.size(), DEFAULT_PARTITION_CLASS, dataNodes, mountPathIndexToUse);
     partitions.put((long) partitions.size(), partitionId);

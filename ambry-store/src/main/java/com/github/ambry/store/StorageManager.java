@@ -578,29 +578,43 @@ public class StorageManager implements StoreManager {
     public void onPartitionBecomeBootstrapFromOffline(String partitionName) {
       // check if partition exists on current node
       ReplicaId replica = partitionNameToReplicaId.get(partitionName);
-      Store store = null;
+      Store store;
       if (replica == null) {
-        // there can be two scenarios:
-        // 1. this is the first time to add new replica onto current node;
-        // 2. last replica addition failed at some point before updating InstanceConfig in Helix
-        // In either case, we should add replica to current node by calling "addBlobStore(ReplicaId replica)"
-        ReplicaId replicaToAdd = clusterMap.getBootstrapReplica(partitionName, currentNode);
-        if (replicaToAdd == null) {
-          logger.error("No new replica found for partition {} in cluster map", partitionName);
-          throw new StateTransitionException(
-              "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
-        }
-        // Attempt to add store into storage manager. If store already exists on disk (but not in clustermap), make
-        // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
-        // at some point). Then a brand new store associated with this replica should be created and started.
-        if (!addBlobStore(replicaToAdd)) {
-          // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
-          // back since addition of store failed.
-          replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
-          logger.error("Failed to add store {} into storage manager", partitionName);
-          throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
-              ReplicaOperationFailure);
-        }
+
+        ReplicaId replicaToAdd;
+        boolean replicaAdded = false;
+        do {
+          // there can be two scenarios:
+          // 1. this is the first time to add new replica onto current node;
+          // 2. last replica addition failed at some point before updating InstanceConfig in Helix
+          // In either case, we should add replica to current node by calling "addBlobStore(ReplicaId replica)"
+          replicaToAdd = clusterMap.getBootstrapReplica(partitionName, currentNode);
+          if (replicaToAdd == null) {
+            logger.error("No new replica found for partition {} in cluster map", partitionName);
+            throw new StateTransitionException(
+                "New replica " + partitionName + " is not found in clustermap for " + currentNode, ReplicaNotFound);
+          }
+          // Attempt to add store into storage manager. If store already exists on disk (but not in clustermap), make
+          // sure old store of this replica is deleted (this store may be created in previous replica addition but failed
+          // at some point). Then a brand new store associated with this replica should be created and started.
+          if (!addBlobStore(replicaToAdd)) {
+            // We have decreased the available disk space in HelixClusterManager#getDiskForBootstrapReplica. Increase it
+            // back since addition of store failed.
+            replicaToAdd.getDiskId().increaseAvailableSpaceInBytes(replicaToAdd.getCapacityInBytes());
+            if (!clusterMap.isDataNodeInFullAutoMode(currentNode)) {
+              logger.error("Failed to add store {} into storage manager", partitionName);
+              throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
+                  ReplicaOperationFailure);
+            } else {
+              // TODO: Delete any files added in store and reserve directory
+              logger.info("Failed to add store {} at location {}. Retrying bootstrapping replica at different location",
+                  partitionName, replicaToAdd.getReplicaPath());
+            }
+          } else {
+            replicaAdded = true;
+          }
+        } while (!replicaAdded);
+
         if (primaryClusterParticipant != null) {
           // update InstanceConfig in Helix
           try {
