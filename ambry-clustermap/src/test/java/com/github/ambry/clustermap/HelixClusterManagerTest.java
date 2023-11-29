@@ -744,6 +744,7 @@ public class HelixClusterManagerTest {
         disk.setDiskAvailableSpace(replicaCapacity);
       }
     }
+    helixClusterManager.clearBootstrapDiskSelectionMap();
     ReplicaId bootstrapReplica = helixClusterManager.getBootstrapReplica(partition.toPathString(), ambryDataNode);
     assertEquals("Mismatch in disk used", expectedDisk, bootstrapReplica.getDiskId());
 

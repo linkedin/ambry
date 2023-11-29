@@ -649,6 +649,13 @@ public class HelixClusterManager implements ClusterMap {
 
   /**
    * Exposed for testing
+   */
+  void clearBootstrapDiskSelectionMap() {
+    disksAttemptedForBootstrap.clear();
+  }
+
+  /**
+   * Exposed for testing
    * @param dcName data center name
    * @return {@link HelixClusterChangeHandler} that handles cluster changes for a given data center. If aggregated view
    * is enabled, same handler is used for all data centers.
