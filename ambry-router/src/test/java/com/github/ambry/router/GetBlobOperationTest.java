@@ -436,6 +436,7 @@ public class GetBlobOperationTest {
       if (!quotaChargeCallback.getQuotaConfig().bandwidthThrottlingFeatureEnabled) {
         Assert.assertEquals(i + 1, quotaChargeCallback.numCheckAndChargeCalls);
       }
+      assertEquals(0, routerMetrics.shuffledWithRemoteReplicasForGetDueToFewLocalReplicas.getCount());
     }
   }
 
@@ -455,6 +456,7 @@ public class GetBlobOperationTest {
       GetBlobOperation op = createOperationAndComplete(null);
       Assert.assertEquals(IllegalStateException.class, op.getOperationException().getClass());
     }
+    assertEquals(0, routerMetrics.shuffledWithRemoteReplicasForGetDueToFewLocalReplicas.getCount());
   }
 
   /**
@@ -502,6 +504,7 @@ public class GetBlobOperationTest {
       } else {
         // Only supported for encrypted blobs now
       }
+      assertEquals(0, routerMetrics.shuffledWithRemoteReplicasForGetDueToFewLocalReplicas.getCount());
     }
   }
 
@@ -578,6 +581,7 @@ public class GetBlobOperationTest {
       }
       getAndAssertSuccess(false, false, lifeVersion);
     }
+    assertEquals(0, routerMetrics.shuffledWithRemoteReplicasForGetDueToFewLocalReplicas.getCount());
   }
 
   /**
@@ -895,6 +899,38 @@ public class GetBlobOperationTest {
     serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
 
     getErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
+  }
+
+  /**
+   * Test that if local DC has less than {@code RouterConfig#routerGetOperationMinLocalReplicaCountToPrioritizeLocal}
+   * replicas available, then we will prioritize remote DC.
+   * @throws Exception
+   */
+  @Test
+  public void testGetGoesToRemoteIfLocalDcHasFewAvailableReplicas() throws Exception {
+    blobSize = maxChunkSize;
+    doPut();
+    Properties props = getDefaultNonBlockingRouterProperties(true);
+    props.setProperty(RouterConfig.ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED, "true");
+    props.setProperty(RouterConfig.ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL, "1");
+    RouterConfig oldRouterConfig = routerConfig;
+    routerConfig = new RouterConfig(new VerifiableProperties(props));
+
+    try {
+      // For originating DC, let's bring down two replicas
+      MockPartitionId partitionId = (MockPartitionId) blobId.getPartition();
+      List<ReplicaId> localReplicas = partitionId.replicaIds.stream()
+          .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(localDcName))
+          .collect(Collectors.toList());
+      partitionId.setReplicaState(localReplicas.get(0), ReplicaState.LEADER);
+      partitionId.setReplicaState(localReplicas.get(1), ReplicaState.OFFLINE);
+      partitionId.setReplicaState(localReplicas.get(2), ReplicaState.OFFLINE);
+
+      getAndAssertSuccess();
+      assertEquals(1, routerMetrics.shuffledWithRemoteReplicasForGetDueToFewLocalReplicas.getCount());
+    } finally {
+      routerConfig = oldRouterConfig;
+    }
   }
 
   /**
