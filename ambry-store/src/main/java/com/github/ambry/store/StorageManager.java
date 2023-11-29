@@ -194,7 +194,8 @@ public class StorageManager implements StoreManager {
       for (final DiskManager diskManager : diskToDiskManager.values()) {
         Thread thread = Utils.newThread("disk-manager-startup-" + diskManager.getDisk(), () -> {
           try {
-            diskManager.start();
+            diskManager.start(
+                storeConfig.storeRemoveUnexpectedDirsInFullAuto && clusterMap.isDataNodeInFullAutoMode(currentNode));
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             logger.error("Disk manager startup thread interrupted for disk {}", diskManager.getDisk(), e);
@@ -371,14 +372,11 @@ public class StorageManager implements StoreManager {
               stoppedReplicas, time, accountService);
       logger.info("Creating new DiskManager on {} for new added store", diskId.getMountPath());
       try {
-        newDiskManager.start();
+        newDiskManager.start(
+            storeConfig.storeRemoveUnexpectedDirsInFullAuto && clusterMap.isDataNodeInFullAutoMode(currentNode));
       } catch (Exception e) {
         logger.error("Error while starting the new DiskManager for {}", disk.getMountPath(), e);
         return null;
-      }
-
-      if (clusterMap.isDataNodeInFullAutoMode(currentNode) && storeConfig.storeRemoveUnexpectedDirsInFullAuto) {
-        newDiskManager.tryRemoveAllUnexpectedDirs();
       }
       return newDiskManager;
     });
@@ -492,15 +490,6 @@ public class StorageManager implements StoreManager {
     File bootstrapFile = new File(replica.getReplicaPath(), BlobStore.BOOTSTRAP_FILE_NAME);
     if (!bootstrapFile.exists()) {
       bootstrapFile.createNewFile();
-    }
-  }
-
-  /**
-   * Delete all unexpected directories in all disks
-   */
-  private void maybeDeleteUnexpectedDirectories() {
-    if (clusterMap.isDataNodeInFullAutoMode(currentNode) && storeConfig.storeRemoveUnexpectedDirsInFullAuto) {
-      diskToDiskManager.values().forEach(disk -> disk.tryRemoveAllUnexpectedDirs());
     }
   }
 
