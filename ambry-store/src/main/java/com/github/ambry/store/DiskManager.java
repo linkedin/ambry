@@ -161,12 +161,21 @@ public class DiskManager {
    * Starts all the stores on this disk.
    * @throws InterruptedException
    */
-  void start() throws InterruptedException {
+  void start(boolean shouldRemoveUnexpectedDirs) throws InterruptedException {
     long startTimeMs = time.milliseconds();
     final AtomicInteger numStoreFailures = new AtomicInteger(0);
     rwLock.readLock().lock();
     try {
       checkMountPathAccessible();
+      // Report unrecognized directories before trying to satisfy disk space requirements.
+      reportUnrecognizedDirs();
+      if (shouldRemoveUnexpectedDirs) {
+        // Try to remove all the unexpected directories before starting any blob store.
+        // If the disk is near full because of the unexpected directoires, then blob store
+        // might not be able to start since each blob store would request at least one log
+        // segment.
+        tryRemoveAllUnexpectedDirs();
+      }
 
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
@@ -205,7 +214,6 @@ public class DiskManager {
       }
       diskSpaceAllocator.initializePool(requirementsList);
       compactionManager.enable();
-      reportUnrecognizedDirs();
       running = true;
       if (diskHealthCheck.isEnabled()) {
         logger.info("Starting Disk Healthchecker");
@@ -620,6 +628,27 @@ public class DiskManager {
     }
   }
 
+  /**
+   * Try to remove all unexpected directories.
+   */
+  void tryRemoveAllUnexpectedDirs() {
+    logger.info("Removing unexpected directories: {}", unexpectedDirs);
+    for (String unexpectedDir : unexpectedDirs) {
+      String[] segments = unexpectedDir.split(File.separator);
+      if (segments.length > 1) {
+        String partitionName = segments[segments.length - 1];
+        try {
+          File dirToDelete = new File(unexpectedDir);
+          Utils.deleteFileOrDirectory(dirToDelete);
+          logger.info("Removed directory {}", unexpectedDir);
+          diskSpaceAllocator.deleteAllSegmentsForStoreIds(Collections.singletonList(partitionName));
+        } catch (Exception e) {
+          logger.error("Failed to delete directory for partition {}", partitionName, e);
+        }
+      }
+    }
+  }
+
   public DiskHealthStatus getDiskHealthStatus() {
     return diskHealthStatus;
   }
@@ -722,7 +751,8 @@ public class DiskManager {
         }
       } catch (Exception e) {
         diskHealthStatus = DiskHealthStatus.CREATE_EXCEPTION;
-        logger.error("Exception occurred when creating a file/directory for disk healthcheck {}", disk.getMountPath(), e);
+        logger.error("Exception occurred when creating a file/directory for disk healthcheck {}", disk.getMountPath(),
+            e);
       }
       return null;
     }

@@ -58,6 +58,7 @@ import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1212,22 +1213,97 @@ public class StorageManagerTest {
   public void unrecognizedDirsOnDiskTest() throws Exception {
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
-    int extraDirsCount = 0;
     Set<String> createdMountPaths = new HashSet<>();
+    Set<File> extraDirs = new HashSet<>();
     for (ReplicaId replicaId : replicas) {
       if (createdMountPaths.add(replicaId.getMountPath())) {
         int count = TestUtils.RANDOM.nextInt(6) + 5;
-        createFilesAndDirsAtPath(new File(replicaId.getDiskId().getMountPath()), count - 1, count);
+        Pair<List<File>, List<File>> filesAndDirectories =
+            createFilesAndDirsAtPath(new File(replicaId.getDiskId().getMountPath()), count - 1, count);
         //  the extra files should not get reported
-        extraDirsCount += count;
+        extraDirs.addAll(filesAndDirectories.getSecond());
       }
     }
     StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
-    assertEquals("There should be some unexpected partitions reported", extraDirsCount,
+    assertEquals("There should be some unexpected partitions reported", extraDirs.size(),
         getNumUnrecognizedPartitionsReported());
     checkStoreAccessibility(replicas, null, storageManager);
+    for (File extraDir : extraDirs) {
+      Assert.assertTrue("Directory" + extraDir.getAbsolutePath() + " shouldn't be deleted", extraDir.exists());
+    }
     shutdownAndAssertStoresInaccessible(storageManager, replicas);
+  }
+
+  /**
+   * @throws Exception
+   */
+  @Test
+  public void unrecognizedDirsRemovalTest() throws Exception {
+    generateConfigs(true, false, true);
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    try {
+      Set<File> extraDirs = new HashSet<>();
+      Set<File> extraReservedDirs = new HashSet<>();
+      List<String> mountPaths = dataNode.getMountPaths();
+      // Use a huge partition id, so it doesn't overlap with existing partition ids
+      int extraPartitionId = 10000;
+      for (String mountPath : mountPaths) {
+        // Create two extra partitions
+        for (int i = 0; i < 2; i++) {
+          String partitionName = String.valueOf(extraPartitionId);
+
+          File partitionDir = new File(mountPath, partitionName);
+          assertTrue("Could not create " + partitionDir + " now", partitionDir.mkdir());
+          partitionDir.deleteOnExit();
+          extraDirs.add(partitionDir);
+
+          File reservedDir = Paths.get(mountPath, diskManagerConfig.diskManagerReserveFileDirName,
+              DiskSpaceAllocator.STORE_DIR_PREFIX + partitionName).toFile();
+          assertTrue("Could not create " + reservedDir + " now", reservedDir.mkdirs());
+          System.out.println("Created reversed directory " + reservedDir.getAbsolutePath());
+          reservedDir.deleteOnExit();
+          extraReservedDirs.add(reservedDir);
+
+          extraPartitionId++;
+        }
+      }
+      clusterMap.shouldDataNodeBeInFullAuto(false);
+      // First make sure we don't delete directories when the current node is not in FULL AUTO
+      StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+      storageManager.start();
+      assertEquals("There should be some unexpected partitions reported", extraDirs.size(),
+          getNumUnrecognizedPartitionsReported());
+      checkStoreAccessibility(replicas, null, storageManager);
+      for (File extraDir : extraDirs) {
+        Assert.assertTrue("Directory" + extraDir.getAbsolutePath() + " shouldn't be deleted", extraDir.exists());
+      }
+      // reserved directories would be removed anyway
+      for (File extraReservedDir : extraReservedDirs) {
+        Assert.assertFalse("Directory" + extraReservedDir.getAbsolutePath() + " should be deleted",
+            extraReservedDir.exists());
+      }
+      storageManager.shutdown();
+
+      // Second, make sure we delete directories when the current node is in FULL AUTO
+      clusterMap.shouldDataNodeBeInFullAuto(true);
+      storageManager = createStorageManager(dataNode, metricRegistry, null);
+      storageManager.start();
+      assertEquals("There should be some unexpected partitions reported", extraDirs.size(),
+          getNumUnrecognizedPartitionsReported());
+      checkStoreAccessibility(replicas, null, storageManager);
+      for (File extraDir : extraDirs) {
+        Assert.assertFalse("Directory" + extraDir.getAbsolutePath() + " should be deleted", extraDir.exists());
+      }
+      for (File extraReservedDir : extraReservedDirs) {
+        Assert.assertFalse("Directory" + extraReservedDir.getAbsolutePath() + " should be deleted",
+            extraReservedDir.exists());
+      }
+      shutdownAndAssertStoresInaccessible(storageManager, replicas);
+    } finally {
+      clusterMap.shouldDataNodeBeInFullAuto(false);
+    }
   }
 
   /**
@@ -1775,8 +1851,9 @@ public class StorageManagerTest {
    * Generates {@link StoreConfig} and {@link DiskManagerConfig} for use in tests.
    * @param segmentedLog {@code true} to set a segment capacity lower than total store capacity
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
+   * @param removeUnexpectedDirs {@code true} to remove unexpectedd directories when current node is in FULL AUTO
    */
-  private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) {
+  private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig, boolean removeUnexpectedDirs) {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -1785,6 +1862,7 @@ public class StorageManagerTest {
     properties.put("store.compaction.triggers", "Periodic,Admin");
     properties.put("store.replica.status.delegate.enable", "true");
     properties.put("store.set.local.partition.state.enabled", "true");
+    properties.setProperty(StoreConfig.storeRemoveUnexpectedDirsInFullAutoName, String.valueOf(removeUnexpectedDirs));
     properties.setProperty("clustermap.host.name", "localhost");
     properties.setProperty("clustermap.port", "2200");
     properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
@@ -1799,6 +1877,15 @@ public class StorageManagerTest {
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
     clusterMapConfig = new ClusterMapConfig(vProps);
+  }
+
+  /**
+   * Generates {@link StoreConfig} and {@link DiskManagerConfig} for use in tests.
+   * @param segmentedLog {@code true} to set a segment capacity lower than total store capacity
+   * @param updateInstanceConfig whether to update InstanceConfig in Helix
+   */
+  private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) {
+    generateConfigs(segmentedLog, updateInstanceConfig, false);
   }
 
   // unrecognizedDirsOnDiskTest() helpers
