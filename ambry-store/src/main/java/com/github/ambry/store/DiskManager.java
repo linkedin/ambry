@@ -16,6 +16,7 @@ package com.github.ambry.store;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.DiskId;
+import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;

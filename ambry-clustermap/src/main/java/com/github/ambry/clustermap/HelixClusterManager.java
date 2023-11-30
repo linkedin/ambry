@@ -113,6 +113,7 @@ public class HelixClusterManager implements ClusterMap {
   private final PartitionSelectionHelper partitionSelectionHelper;
   private final Map<String, Map<String, String>> partitionOverrideInfoMap = new HashMap<>();
   private final Map<String, ReplicaId> bootstrapReplicas = new ConcurrentHashMap<>();
+  private final Map<String, Set<DiskId>> disksAttemptedForBootstrap = new ConcurrentHashMap<>();
   private ZkHelixPropertyStore<ZNRecord> helixPropertyStoreInLocalDc = null;
   private HelixAdmin localHelixAdmin = null;
   // The current xid currently does not change after instantiation. This can change in the future, allowing the cluster
@@ -446,6 +447,9 @@ public class HelixClusterManager implements ClusterMap {
       if (bootstrapReplica != null && instanceName.equals(selfInstanceName)) {
         // Note that this method might be called by several state transition threads concurrently.
         bootstrapReplicas.put(partitionIdStr, bootstrapReplica);
+        // Add the selected disk so that it is not picked
+        disksAttemptedForBootstrap.computeIfAbsent(partitionIdStr, k -> new HashSet<>())
+            .add(bootstrapReplica.getDiskId());
       }
       return bootstrapReplica;
     } catch (Exception e) {
@@ -645,6 +649,13 @@ public class HelixClusterManager implements ClusterMap {
 
   /**
    * Exposed for testing
+   */
+  void clearBootstrapDiskSelectionMap() {
+    disksAttemptedForBootstrap.clear();
+  }
+
+  /**
+   * Exposed for testing
    * @param dcName data center name
    * @return {@link HelixClusterChangeHandler} that handles cluster changes for a given data center. If aggregated view
    * is enabled, same handler is used for all data centers.
@@ -743,6 +754,8 @@ public class HelixClusterManager implements ClusterMap {
    * @return bootstrap replica or {@code null} if not found.
    */
   private AmbryReplica fetchBootstrapReplica(String partitionName) {
+    // Clear disks tried for bootstrapping this replica
+    disksAttemptedForBootstrap.remove(partitionName);
     return (AmbryReplica) bootstrapReplicas.remove(partitionName);
   }
 
@@ -860,7 +873,7 @@ public class HelixClusterManager implements ClusterMap {
     }
 
     try {
-      AmbryDisk disk = getDiskForBootstrapReplica((AmbryDataNode) dataNodeId, replicaCapacity);
+      AmbryDisk disk = getDiskForBootstrapReplica((AmbryDataNode) dataNodeId, replicaCapacity, partitionIdStr);
       if (disk == null) {
         logger.error("Failed to create bootstrap replica for partition {} due to insufficient disk space",
             partitionIdStr);
@@ -947,10 +960,11 @@ public class HelixClusterManager implements ClusterMap {
    * since it can be queried concurrently when multiple replicas are bootstrapped.
    * @param dataNode        the {@link DataNodeId} on which disk is needed
    * @param replicaCapacity the capacity of the replica in bytes
+   * @param partitionName partition name
    * @return {@link AmbryDisk} which has maximum available or free capacity. If none of the disks have free space,
    * returns null.
    */
-  private AmbryDisk getDiskForBootstrapReplica(AmbryDataNode dataNode, long replicaCapacity) {
+  private AmbryDisk getDiskForBootstrapReplica(AmbryDataNode dataNode, long replicaCapacity, String partitionName) {
     Set<AmbryDisk> disks = ambryDataNodeToAmbryDisks.get(dataNode);
     List<AmbryDisk> potentialDisks = new ArrayList<>();
     long maxAvailableDiskSpace = 0;
@@ -962,6 +976,12 @@ public class HelixClusterManager implements ClusterMap {
         logger.info(
             "Disk {} doesn't have space to host new replica. Disk space left {}, replica capacity {}. Checking another disk",
             disk, disk.getAvailableSpaceInBytes(), replicaCapacity);
+        continue;
+      }
+      if (disksAttemptedForBootstrap.containsKey(partitionName) && disksAttemptedForBootstrap.get(partitionName)
+          .contains(disk)) {
+        logger.info("Disk {} has already been tried before for this partition {}. Checking another disk", disk,
+            partitionName);
         continue;
       }
       if (disk.getAvailableSpaceInBytes() == maxAvailableDiskSpace) {

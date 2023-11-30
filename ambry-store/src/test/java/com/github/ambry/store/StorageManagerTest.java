@@ -1344,6 +1344,50 @@ public class StorageManagerTest {
   }
 
   /**
+   * Test bootstrap retries in Full auto mode
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromOfflineToBootstrapFailureRetryTest() throws Exception {
+    generateConfigs(true, false);
+    MockClusterMap spyClusterMap = spy(clusterMap);
+    MockDataNodeId localNode = spyClusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = spyClusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+            new MockIdFactory(), spyClusterMap, localNode, new DummyMessageStoreHardDelete(),
+            Collections.singletonList(mockHelixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+            new InMemAccountService(false, false));
+    storageManager.start();
+
+    // 0. Mock the cluster to be in Full auto
+    doReturn(true).when(spyClusterMap).isDataNodeInFullAutoMode(any());
+
+    // 1. Create "newReplica1" and shutdown its disk
+    PartitionId newPartition1 = spyClusterMap.createNewPartition(Collections.singletonList(localNode), 0);
+    ReplicaId newReplica1 = newPartition1.getReplicaIds().get(0);
+    ReplicaId replicaOnSameDisk =
+        localReplicas.stream().filter(r -> r.getDiskId().equals(newReplica1.getDiskId())).findFirst().get();
+    storageManager.getDiskManager(replicaOnSameDisk.getPartitionId()).shutdown();
+
+    // 2. Create "newReplica2" which has disk running
+    PartitionId newPartition2 = spyClusterMap.createNewPartition(Collections.singletonList(localNode), 1);
+    ReplicaId newReplica2 = newPartition2.getReplicaIds().get(0);
+
+    // 3. Return "newReplica1" on 1st attempt and "newReplica2" on 2nd attempt
+    doReturn(newReplica1, newReplica2).when(spyClusterMap).getBootstrapReplica(any(), any());
+
+    // 4. Invoke bootstrap ST. It should pass on 2nd attempt.
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition1.toPathString());
+
+    // 5. Verify getBootstrap replica is called 2 times
+    verify(spyClusterMap, times(2)).getBootstrapReplica(anyString(), any());
+
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
    * Test disk failure handler with real helix clustermap and helix participant.
    */
   @Test
