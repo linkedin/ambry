@@ -1473,6 +1473,9 @@ public class ReplicaThread implements Runnable {
    * remote replica is a leader of the partition of remote data center. This list is used for leader-based cross colo
    * replication to exchange missing blobs between only leader replicas. For non-leader replica pairs (leader <->
    * standby, standby <-> leader, standby <-> standby), we will wait the missing blobs to come from their leader interactions.
+   *
+   * In addition, also include replicas which doesn't have any leaders in local data center.
+   *
    * @param remoteReplicaInfos list of all remote replicas
    * @param exchangeMetadataResponseList list of metadata responses received from the remote replicas
    * @param leaderReplicaInfosOutput output list of leader replicas. It will populated in this method.
@@ -1494,8 +1497,13 @@ public class ReplicaThread implements Runnable {
       RemoteReplicaInfo remoteReplicaInfo = remoteReplicaInfos.get(i);
       ReplicaId localReplica = remoteReplicaInfo.getLocalReplicaId();
       ReplicaId remoteReplica = remoteReplicaInfo.getReplicaId();
-      // Check if local replica and remote replica are leaders for their partition.
+      // Check if 'local replica and remote replica are leaders' or if 'local replica doesn't have any leader'.
       if (leaderBasedReplicationAdmin.isLeaderPair(localReplica, remoteReplica)) {
+        logger.trace("Sending GET request for leader replica pair {}, {}", localReplica, remoteReplica);
+        leaderReplicaInfosOutput.add(remoteReplicaInfo);
+        exchangeMetadataResponseListForLeaderReplicaInfosOutput.add(exchangeMetadataResponseList.get(i));
+      } else if (leaderBasedReplicationAdmin.isLeaderLessPartition(localReplica.getPartitionId())) {
+        logger.trace("Sending GET request for leaderless replica {}", localReplica);
         leaderReplicaInfosOutput.add(remoteReplicaInfo);
         exchangeMetadataResponseListForLeaderReplicaInfosOutput.add(exchangeMetadataResponseList.get(i));
       }
