@@ -34,12 +34,17 @@ class AzureUtils {
    * @param azureCloudConfig the configs.
    */
   static void validateAzureIdentityConfigs(AzureCloudConfig azureCloudConfig) {
-    if (azureCloudConfig.azureIdentityTenantId.isEmpty() || azureCloudConfig.azureIdentityClientId.isEmpty()
-        || azureCloudConfig.azureIdentitySecret.isEmpty()) {
+    if (azureCloudConfig.azureIdentityTenantId == null || azureCloudConfig.azureIdentityTenantId.isEmpty()) {
       throw new IllegalArgumentException(
-          String.format("One of the required configs for using ClientSecretCredential (%s, %s, %s) is missing",
-              AzureCloudConfig.AZURE_IDENTITY_TENANT_ID, AzureCloudConfig.AZURE_IDENTITY_CLIENT_ID,
-              AzureCloudConfig.AZURE_IDENTITY_SECRET));
+          String.format("%s is null or empty", AzureCloudConfig.AZURE_IDENTITY_TENANT_ID));
+    }
+    if (azureCloudConfig.azureIdentityClientId == null || azureCloudConfig.azureIdentityClientId.isEmpty()) {
+      throw new IllegalArgumentException(
+          String.format("%s is null or empty", AzureCloudConfig.AZURE_IDENTITY_CLIENT_ID));
+    }
+    if (azureCloudConfig.azureIdentitySecret == null || azureCloudConfig.azureIdentitySecret.isEmpty()) {
+      throw new IllegalArgumentException(
+          String.format("%s is null or empty", AzureCloudConfig.AZURE_IDENTITY_SECRET));
     }
   }
 
@@ -49,10 +54,13 @@ class AzureUtils {
    */
   static ClientSecretCredential getClientSecretCredential(AzureCloudConfig azureCloudConfig) {
     ClientSecretCredentialBuilder builder =
-        new ClientSecretCredentialBuilder().tenantId(azureCloudConfig.azureIdentityTenantId)
+        new ClientSecretCredentialBuilder()
+            .tenantId(azureCloudConfig.azureIdentityTenantId)
             .clientId(azureCloudConfig.azureIdentityClientId)
             .clientSecret(azureCloudConfig.azureIdentitySecret);
-    if (!azureCloudConfig.azureIdentityProxyHost.isEmpty()) {
+    if (azureCloudConfig.azureIdentityProxyHost == null || azureCloudConfig.azureIdentityProxyHost.isEmpty()) {
+      logger.info("Not using proxy for ClientSecretCredential as it is null or an empty string");
+    } else {
       logger.info("Using proxy for ClientSecretCredential: {}:{}", azureCloudConfig.azureIdentityProxyHost,
           azureCloudConfig.azureIdentityProxyPort);
       ProxyOptions proxyOptions = new ProxyOptions(ProxyOptions.Type.HTTP,

@@ -116,6 +116,24 @@ public class AzureCloudDestinationSync implements CloudDestination {
      *    cloudConfig.cloudRecentBlobCacheLimit = 0; unnecessary, as repl-logic avoids duplicate messages any ways
      *    cloudConfig.vcrMinTtlDays = Infinite; Just upload each blob, don't complicate it.
      *
+     *    Client configs
+     *    ==============
+     *    azureStorageClientClass = com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient
+     *    azureStorageConnectionString = <must be a valid string if using ConnectionStringBasedStorageClient>
+     *
+     *    OR,
+     *
+     *    azureStorageClientClass = com.github.ambry.cloud.azure.ClientSecretCredentialStorageClient
+     *    azureIdentityTenantId = <must be a valid string if using ClientSecretCredentialStorageClient>
+     *    azureIdentityClientId = <must be a valid string if using ClientSecretCredentialStorageClient>
+     *    azureIdentitySecret   = <must be a valid string if using ClientSecretCredentialStorageClient>
+     *    azureIdentityProxyHost = null
+     *    azureIdentityProxyPort = null
+     *
+     *    azureStorageEndpoint = https://<account name>.blob.core.windows.net
+     *    vcrProxyHost = null
+     *    vcrProxyPort = null
+     *
      *    Compaction Configs
      *    ==================
      *
