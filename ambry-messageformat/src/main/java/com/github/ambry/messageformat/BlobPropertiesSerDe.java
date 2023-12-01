@@ -38,7 +38,7 @@ public class BlobPropertiesSerDe {
   private static final int CREATION_TIME_FIELD_SIZE_IN_BYTES = Long.BYTES;
   private static final int BLOB_SIZE_FIELD_SIZE_IN_BYTES = Long.BYTES;
   private static final int ENCRYPTED_FIELD_SIZE_IN_BYTES = Byte.BYTES;
-  public static short CURRENT_VERSION = VERSION_4;
+  public static short CURRENT_VERSION = VERSION_5;
 
   public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
     int size = VERSION_FIELD_SIZE_IN_BYTES + TTL_FIELD_SIZE_IN_BYTES + PRIVATE_FIELD_SIZE_IN_BYTES
