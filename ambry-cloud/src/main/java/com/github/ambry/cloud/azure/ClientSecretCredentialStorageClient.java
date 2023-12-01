@@ -88,4 +88,23 @@ public class ClientSecretCredentialStorageClient extends StorageClient {
     // no need to request a retry on 403 since the credential impl handles token refresh internally.
     return false;
   }
+
+  /**
+   * Creates a synchronous client that uses a secret and a token to authenticate and contact Azure Blob Storage.
+   * @param httpClient {@link HttpClient} object.
+   * @param configuration {@link Configuration} object.
+   * @param retryOptions {@link RequestRetryOptions} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @return
+   */
+  protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
+    return new BlobServiceClientBuilder()
+        .credential(AzureUtils.getClientSecretCredential(azureCloudConfig))
+        .endpoint(azureCloudConfig.azureStorageEndpoint)
+        .httpClient(httpClient)
+        .retryOptions(retryOptions)
+        .configuration(configuration)
+        .buildClient();
+  }
 }
