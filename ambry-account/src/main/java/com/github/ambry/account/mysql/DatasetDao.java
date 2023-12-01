@@ -186,7 +186,7 @@ public class DatasetDao {
         DATASET_VERSION_STATE, CREATION_TIME, DELETED_TS);
     //this is to update the dataset version to permanent.
     updateDatasetVersionTtlSql = String.format(
-        "update %1$s set %2$s = NULL and %8$s = NULL where %3$s = ? and %4$s = ? and %5$s = ? and %6$s = ? and "
+        "update %1$s set %2$s = NULL, %8$s = NULL where %3$s = ? and %4$s = ? and %5$s = ? and %6$s = ? and "
             + "(COALESCE(%2$s, %8$s) is NULL or COALESCE(%2$s, %8$s) > now(3)) and %7$s = ?", DATASET_VERSION_TABLE,
         DELETE_TS, ACCOUNT_ID, CONTAINER_ID, DATASET_NAME, VERSION, DATASET_VERSION_STATE, DELETED_TS);
     //get the dataset version.
