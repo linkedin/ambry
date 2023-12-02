@@ -33,6 +33,17 @@ import com.github.ambry.config.CloudConfig;
 public class ClientSecretCredentialStorageClient extends StorageClient {
 
   /**
+   * Constructor for {@link ClientSecretCredentialStorageClient}.
+   * @param cloudConfig {@link CloudConfig} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @param azureMetrics {@link AzureMetrics} object.
+   */
+  public ClientSecretCredentialStorageClient(CloudConfig cloudConfig, AzureCloudConfig azureCloudConfig,
+      AzureMetrics azureMetrics) {
+    super(cloudConfig, azureCloudConfig, azureMetrics);
+  }
+
+  /**
    * Constructor for {@link ClientSecretCredentialStorageClient} object.
    * @param cloudConfig {@link CloudConfig} object.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
