@@ -21,6 +21,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -68,12 +69,19 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
       logger.debug("Completed writing replica tokens to file {}", actual.getAbsolutePath());
     } catch (IOException e) {
       logger.error("IO error while persisting tokens to disk {}", temp.getAbsoluteFile());
-      PartitionInfo partitionInfo = partitionGroupedByMountPath.get(mountPath).iterator().next();
-      // check disk state in storeManager. If checkLocalPartitionStatus returns Disk_Unavailable, it means all stores on
-      // this disk are unreachable due to hardware issues. In this case, persistor should skip the bad disk next time.
-      if (storeManager.checkLocalPartitionStatus(partitionInfo.getPartitionId(), partitionInfo.getLocalReplicaId())
-          == ServerErrorCode.Disk_Unavailable) {
+      Iterator<PartitionInfo> partitioninfoIterator = partitionGroupedByMountPath.get(mountPath).iterator();
+      if (!partitioninfoIterator.hasNext()) {
+        // If no partition exists but we had experienced an IO exception, this mount path should still be skipped
         mountPathsToSkip.add(mountPath);
+        logger.error("No partition information found for mount path {}", mountPath);
+      } else {
+        PartitionInfo partitionInfo = partitioninfoIterator.next();
+        if (storeManager.checkLocalPartitionStatus(partitionInfo.getPartitionId(), partitionInfo.getLocalReplicaId())
+            == ServerErrorCode.Disk_Unavailable) {
+          // check disk state in storeManager. If checkLocalPartitionStatus returns Disk_Unavailable, it means all stores on
+          // this disk are unreachable due to hardware issues. In this case, persistor should skip the bad disk next time.
+          mountPathsToSkip.add(mountPath);
+        }
       }
       throw e;
     }
