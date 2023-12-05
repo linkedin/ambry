@@ -23,6 +23,7 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
@@ -93,6 +94,7 @@ public class CloudBlobStore implements Store {
   private final boolean isVcr;
   private boolean started;
   private volatile ReplicaState currentState = ReplicaState.OFFLINE;
+  private CloudConfig cloudConfig;
 
   /**
    * Constructor for CloudBlobStore
@@ -105,7 +107,7 @@ public class CloudBlobStore implements Store {
    */
   CloudBlobStore(VerifiableProperties properties, PartitionId partitionId, CloudDestination cloudDestination,
       ClusterMap clusterMap, VcrMetrics vcrMetrics) throws IllegalStateException {
-    CloudConfig cloudConfig = new CloudConfig(properties);
+    this.cloudConfig = new CloudConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
     this.clusterMap = clusterMap;
     this.storeConfig = new StoreConfig(properties);
@@ -116,13 +118,13 @@ public class CloudBlobStore implements Store {
     minTtlMillis = TimeUnit.DAYS.toMillis(cloudConfig.vcrMinTtlDays);
     requireEncryption = cloudConfig.vcrRequireEncryption;
     isVcr = cloudConfig.cloudIsVcr;
-    if (isVcr) {
+    if (isVcr && cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
       logger.info("Creating cloud blob store for partition {} with cache size {}", partitionId.toPathString(),
           cloudConfig.recentBlobCacheLimit);
       recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
     } else {
-      logger.info("Creating cloud blob store for partition {} with no cache", partitionId.toPathString());
-      recentBlobCache = Collections.emptyMap();
+      logger.info("Not creating recentBlobCache");
+      recentBlobCache = null;
     }
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
 
@@ -371,13 +373,24 @@ public class CloudBlobStore implements Store {
    */
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
+
+    if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && !cloudConfig.vcrRequireEncryption) {
+      // If no encryption is needed, then just pass the input stream to the client and upload the blob.
+      // Otherwise, the code below in CloudWriteChannel creates an in-memory copy unnecessarily - legacy remnant.
+      try {
+        cloudDestination.uploadBlobs((MessageFormatWriteSet) messageSetToWrite);
+      } catch (CloudStorageException e) {
+        throw new RuntimeException(e);
+      }
+      return;
+    }
+
     // TODO: Remove the duplicate code by calling putAsync() method and wait on it once we verify that upload works correctly.
     checkStarted();
     if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
       throw new IllegalArgumentException("Message write set cannot be empty");
     }
     checkDuplicates(messageSetToWrite.getMessageSetInfo());
-
     // Write the blobs in the message set
     CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
     messageSetToWrite.writeTo(cloudWriter);
@@ -1160,6 +1173,9 @@ public class CloudBlobStore implements Store {
    * version, otherwise false.
    */
   private boolean checkCacheState(String blobKey, short lifeVersion, BlobState... desiredStates) {
+    if (recentBlobCache == null) {
+      return false;
+    }
     // If the request is coming from frontend, and the desired states being checked are deleted/created (undelete),
     // then cache might not help. Operations like ttl update and put are once in lifetime of a blob. So a cache hit in
     // those cases definitely helps. A cache miss for ttl update or put, doesn't necessarily mean that we never saw
@@ -1203,6 +1219,9 @@ public class CloudBlobStore implements Store {
    */
   // Visible for test.
   void addToCache(String blobKey, short lifeVersion, BlobState blobState) {
+    if (recentBlobCache == null) {
+      return;
+    }
     if (isVcr) {
       if (blobState == BlobState.TTL_UPDATED) {
         // In case of ttl update we update the ttl without taking into account the life version.
@@ -1221,6 +1240,9 @@ public class CloudBlobStore implements Store {
    */
   // Visible for test.
   void removeFromCache(String blobKey) {
+    if (recentBlobCache == null) {
+      return;
+    }
     if (isVcr) {
       logger.debug("Removing key {} from cache", blobKey);
       recentBlobCache.remove(blobKey);
@@ -1266,6 +1288,13 @@ public class CloudBlobStore implements Store {
   @Override
   public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
     checkStarted();
+
+    if (recentBlobCache == null) {
+      return keys.stream()
+          .filter(key -> !cloudDestination.doesBlobExist((BlobId) key))
+          .collect(Collectors.toSet());
+    }
+
     // Check existence of keys in cloud metadata
     // Note that it is ok to refer cache here, because all we are doing is eliminating blobs that were seen before and
     // we don't care about the state of the blob.
@@ -1377,7 +1406,9 @@ public class CloudBlobStore implements Store {
 
   @Override
   public void shutdown() {
-    recentBlobCache.clear();
+    if (recentBlobCache != null) {
+      recentBlobCache.clear();
+    }
     currentState = ReplicaState.OFFLINE;
     started = false;
     logger.info("Stopped store: {}", this.toString());

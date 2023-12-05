@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.replication.FindToken;
 import java.io.Closeable;
 import java.io.InputStream;
@@ -41,6 +42,9 @@ public interface CloudDestination extends Closeable {
    */
   boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata, InputStream blobInputStream)
       throws CloudStorageException;
+  default boolean uploadBlobs(MessageFormatWriteSet messageSetToWrite) throws CloudStorageException {
+    throw new UnsupportedOperationException("uploadBlobs is not be implemented");
+  }
 
   /**
    * Upload blob to the cloud destination asynchronously.

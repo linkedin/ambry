@@ -51,6 +51,7 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -58,6 +59,7 @@ import org.apache.helix.lock.DistributedLock;
 import org.apache.helix.lock.LockScope;
 import org.apache.helix.lock.helix.HelixLockScope;
 import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
+import org.checkerframework.checker.units.qual.A;
 
 
 /**
@@ -82,6 +84,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
   private DistributedLock vcrUpdateDistributedLock = null;
 
+  private AtomicInteger numPartitionsAssigned;
+
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
@@ -92,6 +96,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(), networkClientFactory,
         vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
         storeManager, null, true);
+    this.numPartitionsAssigned = new AtomicInteger(0);
     this.cloudConfig = cloudConfig;
     this.vcrClusterParticipant = vcrClusterParticipant;
     this.vcrMetrics = vcrMetrics;
@@ -272,6 +277,12 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (partitionToPartitionInfo.containsKey(partitionId)) {
       throw new ReplicationException("Partition " + partitionId + " already exists on " + dataNodeId);
     }
+    int numPartitions = numPartitionsAssigned.incrementAndGet();
+    if (numPartitions > 1600) {
+      logger.info("|snkt| Not backing up partition-{} #{}", partitionId.getId(), numPartitions);
+      return;
+    }
+    logger.info("|snkt| Backing up partition-{} #{}", partitionId.getId(), numPartitions);
     ReplicaId cloudReplica = new CloudReplica(partitionId, vcrClusterParticipant.getCurrentDataNodeId());
     if (!storeManager.addBlobStore(cloudReplica)) {
       logger.error("Can't start cloudstore for replica {}", cloudReplica);

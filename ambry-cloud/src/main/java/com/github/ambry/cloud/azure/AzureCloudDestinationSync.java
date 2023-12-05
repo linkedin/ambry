@@ -52,7 +52,11 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Pair;
@@ -67,6 +71,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -264,6 +269,32 @@ public class AzureCloudDestinationSync implements CloudDestination {
     }
     return metadata;
   }
+
+  /**
+   * Uploads a stream of blobs to Azure cloud
+   * @param messageSetToWrite Messages replicated from servr
+   * @return Unused boolean
+   * @throws CloudStorageException
+   */
+  public boolean uploadBlobs(MessageFormatWriteSet messageSetToWrite) throws CloudStorageException {
+    // Each input stream is a blob
+    ListIterator<InputStream> messageStreamListIter =
+        ((MessageSievingInputStream) messageSetToWrite
+            .getStreamToWrite())
+            .getValidMessageStreamList()
+            .listIterator();
+    boolean unused_ret = true;
+    for (MessageInfo messageInfo: messageSetToWrite.getMessageSetInfo()) {
+      BlobId blobId = (BlobId) messageInfo.getStoreKey();
+      CloudBlobMetadata cloudBlobMetadata =
+          new CloudBlobMetadata(blobId, messageInfo.getOperationTimeMs(), messageInfo.getExpirationTimeInMs(),
+              messageInfo.getSize(), CloudBlobMetadata.EncryptionOrigin.NONE, messageInfo.getLifeVersion());
+      unused_ret &= uploadBlob(blobId, messageInfo.getSize(), cloudBlobMetadata, messageStreamListIter.next());
+    }
+    // Unused return value
+    return unused_ret;
+  }
+
 
   @Override
   public boolean uploadBlob(BlobId blobId, long inputLength, CloudBlobMetadata cloudBlobMetadata,
@@ -578,7 +609,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   /**
-   * For testing, ironic that its used for testing and not for prod
+   * Returns true if a blob exists in Azure storage, false otherwise.
    * @param blobId
    * @return
    */
@@ -948,8 +979,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
       // Download token from Azure blob storage
-      blobContainerClient.getBlobClient(azureTokenFileName)
-          .download(outputStream);
+      blobContainerClient.getBlobClient(azureTokenFileName).downloadStream(outputStream);
       return true;
     } catch (BlobStorageException e) {
       azureMetrics.absTokenRetrieveFailureCount.inc();
