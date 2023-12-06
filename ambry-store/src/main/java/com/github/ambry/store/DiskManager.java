@@ -16,7 +16,6 @@ package com.github.ambry.store;
 
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.DiskId;
-import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
@@ -647,6 +646,24 @@ public class DiskManager {
           logger.error("Failed to delete directory for partition {}", partitionName, e);
         }
       }
+    }
+  }
+
+  /**
+   * Try to clean up the remaining files and directories for a failed bootstrap replica.
+   * @param replica The failed bootstrap {@link ReplicaId}.
+   */
+  void tryRemoveFailedBootstrapBlobStore(ReplicaId replica) {
+    // replica would most likely fail due to disk space requirement, here we have to remove this replica like it's
+    // an unexpected directory
+    String partitionName = replica.getPartitionId().toPathString();
+    try {
+      String replicaPath = replica.getReplicaPath();
+      logger.info("Removing replica path {}", replicaPath);
+      Utils.deleteFileOrDirectory(new File(replicaPath));
+      diskSpaceAllocator.deleteAllSegmentsForStoreIds(Collections.singletonList(partitionName));
+    } catch (Exception e) {
+      logger.error("Failed to delete directories for failed blob store {}", partitionName, e);
     }
   }
 

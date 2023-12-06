@@ -569,7 +569,7 @@ class DiskSpaceAllocator {
    * @return the created file.
    * @throws IOException if the file could not be created, or if an error occurred during the fallocate call.
    */
-  private File createReserveFile(long sizeInBytes, File dir) throws IOException {
+  File createReserveFile(long sizeInBytes, File dir) throws IOException {
     File fileSizeDir = prepareDirectory(new File(dir, FILE_SIZE_DIR_PREFIX + sizeInBytes));
     File reserveFile;
     do {

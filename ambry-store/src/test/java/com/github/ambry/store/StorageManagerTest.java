@@ -57,6 +57,7 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -71,6 +72,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
@@ -1240,7 +1242,7 @@ public class StorageManagerTest {
    */
   @Test
   public void unrecognizedDirsRemovalTest() throws Exception {
-    generateConfigs(true, false, true);
+    generateConfigs(true, false, true, 2);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     try {
@@ -1383,6 +1385,85 @@ public class StorageManagerTest {
 
     // 5. Verify getBootstrap replica is called 2 times
     verify(spyClusterMap, times(2)).getBootstrapReplica(anyString(), any());
+
+    shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
+  }
+
+  /**
+   * Test when a bootstrap replica can't be added to a disk, storage manager would clean up all the temporary files
+   * @throws Exception
+   */
+  @Test
+  public void replicaFromOfflineToBootstrapFailureRetryWithDiskSpaceRequirementTest() throws Exception {
+    generateConfigs(true, false, false, 4);
+    MockClusterMap spyClusterMap = spy(clusterMap);
+    MockDataNodeId localNode = spyClusterMap.getDataNodes().get(0);
+    List<ReplicaId> localReplicas = spyClusterMap.getReplicaIds(localNode);
+    MockClusterParticipant mockHelixParticipant = new MockClusterParticipant();
+    StorageManager storageManager =
+        new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+            new MockIdFactory(), spyClusterMap, localNode, new DummyMessageStoreHardDelete(),
+            Collections.singletonList(mockHelixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+            new InMemAccountService(false, false));
+    storageManager.start();
+
+    // 0. Mock the cluster to be in Full auto
+    doReturn(true).when(spyClusterMap).isDataNodeInFullAutoMode(any());
+
+    // 1. Create "newReplica1" and shutdown its disk
+    PartitionId newPartition1 = spyClusterMap.createNewPartition(Collections.singletonList(localNode), 0);
+    ReplicaId newReplica1 = newPartition1.getReplicaIds().get(0);
+    ReplicaId replicaOnSameDisk =
+        localReplicas.stream().filter(r -> r.getDiskId().equals(newReplica1.getDiskId())).findFirst().get();
+    DiskManager diskManager = storageManager.getDiskManager(replicaOnSameDisk.getPartitionId());
+    Field field = DiskManager.class.getDeclaredField("diskSpaceAllocator");
+    field.setAccessible(true);
+    DiskSpaceAllocator diskSpaceAllocator = (DiskSpaceAllocator) field.get(diskManager);
+    DiskSpaceAllocator spyDiskSpaceAllocator = spy(diskSpaceAllocator);
+    field.set(diskManager, spyDiskSpaceAllocator);
+
+    // 2. Create "newReplica2" which has disk running
+    PartitionId newPartition2 = spyClusterMap.createNewPartition(Collections.singletonList(localNode), 1);
+    ReplicaId newReplica2 = newPartition2.getReplicaIds().get(0);
+
+    // 3. Return "newReplica1" on 1st attempt and "newReplica2" on 2nd attempt
+    doReturn(newReplica1, newReplica2).when(spyClusterMap).getBootstrapReplica(any(), any());
+
+    // 4. It should fail when disk space allocator is allocating multiple reserved files. We will let the first reserved
+    // file be created, but fail the second one
+    AtomicBoolean isFirstReservedFile = new AtomicBoolean(true);
+    doAnswer(invocation -> {
+      long fileSize = invocation.getArgument(0);
+      File dir = invocation.getArgument(1, File.class);
+      if (isFirstReservedFile.get()) {
+        isFirstReservedFile.set(false);
+        return diskSpaceAllocator.createReserveFile(fileSize, dir);
+      } else {
+        throw new IOException("Fail creation of file in test");
+      }
+    }).when(spyDiskSpaceAllocator).createReserveFile(anyLong(), any());
+
+    // 5. Invoke bootstrap ST. It should pass on 2nd attempt.
+    mockHelixParticipant.onPartitionBecomeBootstrapFromOffline(newPartition1.toPathString());
+
+    // 6. Verify getBootstrap replica is called 2 times
+    verify(spyClusterMap, times(2)).getBootstrapReplica(anyString(), any());
+
+    // 7. the directories should be cleaned up
+    assertFalse("File " + newReplica1.getReplicaPath() + " shouldn't exist",
+        new File(newReplica1.getReplicaPath()).exists());
+
+    File reservedDir =
+        Paths.get(newReplica1.getDiskId().getMountPath(), diskManagerConfig.diskManagerReserveFileDirName,
+            DiskSpaceAllocator.STORE_DIR_PREFIX + newReplica1.getPartitionId().toPathString()).toFile();
+    Assert.assertFalse("Directory" + reservedDir.getAbsolutePath() + " should be deleted", reservedDir.exists());
+
+    assertTrue("File " + newReplica2.getReplicaPath() + " should exist",
+        new File(newReplica2.getReplicaPath()).exists());
+
+    reservedDir = Paths.get(newReplica2.getDiskId().getMountPath(), diskManagerConfig.diskManagerReserveFileDirName,
+        DiskSpaceAllocator.STORE_DIR_PREFIX + newReplica2.getPartitionId().toPathString()).toFile();
+    Assert.assertTrue("Directory" + reservedDir.getAbsolutePath() + " should exist", reservedDir.exists());
 
     shutdownAndAssertStoresInaccessible(storageManager, localReplicas);
   }
@@ -1896,8 +1977,10 @@ public class StorageManagerTest {
    * @param segmentedLog {@code true} to set a segment capacity lower than total store capacity
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
    * @param removeUnexpectedDirs {@code true} to remove unexpectedd directories when current node is in FULL AUTO
+   * @param numSegment the number of log segment files to create
    */
-  private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig, boolean removeUnexpectedDirs) {
+  private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig, boolean removeUnexpectedDirs,
+      int numSegment) {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -1915,7 +1998,7 @@ public class StorageManagerTest {
     properties.setProperty("clustermap.update.datanode.info", Boolean.toString(updateInstanceConfig));
     if (segmentedLog) {
       long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
-      properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / 2L));
+      properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / numSegment));
     }
     VerifiableProperties vProps = new VerifiableProperties(properties);
     diskManagerConfig = new DiskManagerConfig(vProps);
@@ -1929,7 +2012,7 @@ public class StorageManagerTest {
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) {
-    generateConfigs(segmentedLog, updateInstanceConfig, false);
+    generateConfigs(segmentedLog, updateInstanceConfig, false, 2);
   }
 
   // unrecognizedDirsOnDiskTest() helpers

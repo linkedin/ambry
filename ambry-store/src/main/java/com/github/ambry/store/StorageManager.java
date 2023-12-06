@@ -399,6 +399,17 @@ public class StorageManager implements StoreManager {
     return true;
   }
 
+  /**
+   * If a bootstrap replica fails, try to remove all the files and directories associated with it.
+   * @param replica The failed bootstrap {@link ReplicaId}.
+   */
+  private void tryRemoveFailedBootstrapBlobStore(ReplicaId replica) {
+    DiskManager diskManager = diskToDiskManager.get(replica.getDiskId());
+    if (diskManager != null) {
+      diskManager.tryRemoveFailedBootstrapBlobStore(replica);
+    }
+  }
+
   @Override
   public boolean startBlobStore(PartitionId id) {
     DiskManager diskManager = partitionToDiskManager.get(id);
@@ -603,9 +614,9 @@ public class StorageManager implements StoreManager {
               throw new StateTransitionException("Failed to add store " + partitionName + " into storage manager",
                   ReplicaOperationFailure);
             } else {
-              // TODO: Delete any files added in store and reserve directory
               logger.info("Failed to add store {} at location {}. Retrying bootstrapping replica at different location",
                   partitionName, replicaToAdd.getReplicaPath());
+              tryRemoveFailedBootstrapBlobStore(replicaToAdd);
             }
           } else {
             replicaAdded = true;
