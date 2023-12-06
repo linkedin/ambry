@@ -256,6 +256,10 @@ class AmbrySecurityService implements SecurityService {
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                   setUserMetadataHeaders(blobInfo.getUserMetadata(), responseChannel, container.getUserMetadataKeysToNotPrefixInResponse());
                   responseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
+                  if (blobInfo.getBlobProperties().getReservedMetadataBlobId() != null) {
+                    responseChannel.setHeader(
+                        Headers.RESERVED_METADATA_ID, blobInfo.getBlobProperties().getReservedMetadataBlobId());
+                  }
                 }
                 setCacheHeaders(restRequest, responseChannel);
               } else {
@@ -264,6 +268,10 @@ class AmbrySecurityService implements SecurityService {
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
                   setAccountAndContainerHeaders(restRequest, responseChannel);
                   responseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
+                  if (blobInfo.getBlobProperties().getReservedMetadataBlobId() != null) {
+                    responseChannel.setHeader(
+                        Headers.RESERVED_METADATA_ID, blobInfo.getBlobProperties().getReservedMetadataBlobId());
+                  }
                 } else if (subResource.equals(SubResource.Segment)) {
                   setGetBlobResponseHeaders(blobInfo, options, responseChannel);
                   setBlobPropertiesHeaders(blobInfo.getBlobProperties(), responseChannel);
@@ -352,6 +360,10 @@ class AmbrySecurityService implements SecurityService {
     setBlobPropertiesHeaders(blobProperties, restResponseChannel);
     setAccountAndContainerHeaders(restRequest, restResponseChannel);
     restResponseChannel.setHeader(RestUtils.Headers.LIFE_VERSION, blobInfo.getLifeVersion());
+    if (blobInfo.getBlobProperties().getReservedMetadataBlobId() != null) {
+      restResponseChannel.setHeader(
+          Headers.RESERVED_METADATA_ID, blobInfo.getBlobProperties().getReservedMetadataBlobId());
+    }
   }
 
   /**
