@@ -509,6 +509,18 @@ project(':ambry-cloud') {
     }
 }
 
+project(':ambry-vcr') {
+    dependencies {
+        compile project(':ambry-server'),
+            project(':ambry-cloud')
+
+        testCompile project(':ambry-commons')
+        testCompile project(':ambry-test-utils')
+        testCompile project(':ambry-utils')
+        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+    }
+}
+
 project(':ambry-named-mysql') {
     dependencies {
         compile project(':ambry-api')
