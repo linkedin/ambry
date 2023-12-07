@@ -90,6 +90,7 @@ public class AmbrySecurityServiceTest {
   private static final String SERVICE_ID = "AmbrySecurityService";
   private static final String OWNER_ID = SERVICE_ID;
   private static final String CLUSTER_NAME = "ambry-test";
+  private static final String DEFAULT_RESERVED_METADATAID = "AAYIAgBnAAIAAQAAAAAAAA6x5AIyURP3SIGTZIAZFxI85g";
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
   private static final HostLevelThrottler hostLevelThrottler = new HostLevelThrottler(HOST_THROTTLE_CONFIG);
@@ -100,6 +101,7 @@ public class AmbrySecurityServiceTest {
   private static final Map<String, Object> USER_METADATA = new HashMap<>();
   private static final BlobInfo DEFAULT_INFO;
   private static final BlobInfo LIFEVERSION_INFO;
+  private static final BlobInfo RESERVED_METADATA_INFO;
   private static final BlobInfo RANDOM_INFO;
   private static final short DEFAULT_LIFEVERSION = 3;
   private static final Charset CHARSET = StandardCharsets.UTF_8;
@@ -149,6 +151,10 @@ public class AmbrySecurityServiceTest {
       LIFEVERSION_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
               false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null),
+          RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
+      RESERVED_METADATA_INFO = new BlobInfo(
+          new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
+              false, Utils.Infinite_Time, REF_ACCOUNT.getId(), REF_CONTAINER.getId(), false, null, null, null, DEFAULT_RESERVED_METADATAID),
           RestUtils.buildUserMetadata(USER_METADATA), DEFAULT_LIFEVERSION);
       RANDOM_INFO = new BlobInfo(
           new BlobProperties(Utils.getRandomLong(TestUtils.RANDOM, 1000) + 100, SERVICE_ID, OWNER_ID, "image/gif",
@@ -377,6 +383,7 @@ public class AmbrySecurityServiceTest {
     testGetBlobWithVariousRanges(DEFAULT_INFO);
     testGetBlobWithVariousRanges(RANDOM_INFO);
     testGetBlobWithVariousRanges(LIFEVERSION_INFO);
+    testGetBlobWithReservedMetadataId(RESERVED_METADATA_INFO);
     // less than chunk threshold size
     blobInfo = new BlobInfo(
         new BlobProperties(FRONTEND_CONFIG.chunkedGetResponseThresholdInBytes - 1, SERVICE_ID, OWNER_ID, "image/gif",
@@ -567,6 +574,17 @@ public class AmbrySecurityServiceTest {
 
   /**
    * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Get blob
+   * with the passed in {@link BlobInfo} and reserved metadata blob id.
+   * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}s
+   * @throws Exception
+   */
+  private void testGetBlobWithReservedMetadataId(BlobInfo blobInfo) throws Exception {
+    RestResponseChannel responseChannel = testGetBlob(blobInfo, null);
+    Assert.assertEquals("Reserved metadata id mismatch", blobInfo.getBlobProperties().getReservedMetadataBlobId(),
+        responseChannel.getHeader(RestUtils.Headers.RESERVED_METADATA_ID));
+  }
+  /**
+   * Tests {@link SecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for a Get blob
    * with the passed in {@link BlobInfo} and various range settings, including no set range (entire blob).
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}s
    * @throws Exception
@@ -596,9 +614,10 @@ public class AmbrySecurityServiceTest {
    * with the passed in {@link BlobInfo} and {@link ByteRange}
    * @param blobInfo the {@link BlobInfo} to be used for the {@link RestRequest}
    * @param range the {@link ByteRange} for the {@link RestRequest}
+   * @return RestResponseChannel the response channel for the request
    * @throws Exception
    */
-  private void testGetBlob(BlobInfo blobInfo, ByteRange range) throws Exception {
+  private RestResponseChannel testGetBlob(BlobInfo blobInfo, ByteRange range) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
@@ -609,6 +628,7 @@ public class AmbrySecurityServiceTest {
     Assert.assertEquals("ProcessResponse status should have been set",
         range == null ? ResponseStatus.Ok : ResponseStatus.PartialContent, restResponseChannel.getStatus());
     verifyHeadersForGetBlob(restRequest, blobInfo, accountAndContainer, range, restResponseChannel);
+    return restResponseChannel;
   }
 
   /**
@@ -650,6 +670,7 @@ public class AmbrySecurityServiceTest {
   private void testHeadBlobWithVariousRanges(BlobInfo blobInfo) throws Exception {
     long blobSize = blobInfo.getBlobProperties().getBlobSize();
     testHeadBlob(blobInfo, null);
+    testHeadBlobWithReservedMetadataId(RESERVED_METADATA_INFO);
 
     testHeadBlob(blobInfo, ByteRanges.fromLastNBytes(0));
     if (blobSize > 0) {
@@ -670,12 +691,25 @@ public class AmbrySecurityServiceTest {
 
   /**
    * Tests {@link AmbrySecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
+   * {@link RestMethod#HEAD} and reserved metadata blob id.
+   * @param blobInfo the {@link BlobInfo} of the blob for which {@link RestMethod#HEAD} is required.
+   * @throws Exception
+   */
+  private void testHeadBlobWithReservedMetadataId(BlobInfo blobInfo) throws Exception {
+    RestResponseChannel responseChannel = testHeadBlob(blobInfo, null);
+    Assert.assertEquals("Reserved metadata id mismatch", blobInfo.getBlobProperties().getReservedMetadataBlobId(),
+        responseChannel.getHeader(RestUtils.Headers.RESERVED_METADATA_ID));
+  }
+
+  /**
+   * Tests {@link AmbrySecurityService#processResponse(RestRequest, RestResponseChannel, BlobInfo, Callback)} for
    * {@link RestMethod#HEAD}.
    * @param blobInfo the {@link BlobInfo} of the blob for which {@link RestMethod#HEAD} is required.
    * @param range the {@link ByteRange} used for a range request, or {@code null} for non-ranged requests.
+   * @return RestResponseChannel the rest response channel for the request.
    * @throws Exception
    */
-  private void testHeadBlob(BlobInfo blobInfo, ByteRange range) throws Exception {
+  private RestResponseChannel testHeadBlob(BlobInfo blobInfo, ByteRange range) throws Exception {
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     JSONObject headers =
         range != null ? new JSONObject().put(RestUtils.Headers.RANGE, RestTestUtils.getRangeHeaderString(range)) : null;
@@ -690,6 +724,7 @@ public class AmbrySecurityServiceTest {
         accountAndContainer.getSecond());
     Assert.assertEquals("LifeVersion mismatch", Short.toString(blobInfo.getLifeVersion()),
         restResponseChannel.getHeader(RestUtils.Headers.LIFE_VERSION));
+    return restResponseChannel;
   }
 
   /**
