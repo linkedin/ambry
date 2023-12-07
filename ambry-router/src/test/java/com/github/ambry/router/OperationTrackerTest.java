@@ -678,8 +678,7 @@ public class OperationTrackerTest {
       inflightReplica = inflightReplicas.poll();
       assertEquals("The request should be sent to dc-1 with most replicas", "dc-1",
           inflightReplica.getDataNodeId().getDatacenterName());
-      // we deliberately make all replicas in dc-1 return Not_Found to verify that operation won't terminate on not found
-      ot.onResponse(inflightReplica, TrackedRequestFinalState.NOT_FOUND);
+      ot.onResponse(inflightReplica, i != 2 ? TrackedRequestFinalState.NOT_FOUND : TrackedRequestFinalState.FAILURE);
       assertFalse("Operation should not be done yet", ot.isDone());
     }
     // the last request should go to dc-2 and this time we make it succeed
@@ -1080,7 +1079,7 @@ public class OperationTrackerTest {
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
     assertFalse("Operation should not succeed", ot.hasSucceeded());
-    assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should fail on NOT_FOUND since all replicas return NOT_FOUND", ot.hasFailedOnNotFound());
     assertTrue("Operation should have some unavailability", ot.hasSomeUnavailability());
     assertTrue("Operation should be done", ot.isDone());
 
@@ -1160,7 +1159,7 @@ public class OperationTrackerTest {
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
     ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
     assertFalse("Operation should not succeed", ot.hasSucceeded());
-    assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should fail on NOT_FOUND since all replicas return NOT_FOUND", ot.hasFailedOnNotFound());
     assertTrue("Operation should have some unavailability", ot.hasSomeUnavailability());
     assertTrue("Operation should be done", ot.isDone());
   }

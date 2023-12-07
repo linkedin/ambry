@@ -120,7 +120,6 @@ public class RouterConfig {
       "router.cross.colo.request.to.dc.with.most.replicas";
   public static final String ROUTER_BACKGROUND_DELETER_MAX_CONCURRENT_OPERATIONS =
       "router.background.deleter.max.concurrent.operations";
-  public static final String ROUTER_PUT_REQUEST_USE_JAVA_NATIVE_CRC32 = "router.put.request.use.java.native.crc32";
   public static final String OPERATION_CONTROLLER = "router.operation.controller";
   public static final String ROUTER_REQUEST_HANDLER_NUM_OF_THREADS = "router.request.handler.num.of.threads";
   public static final String ROUTER_STORE_KEY_CONVERTER_FACTORY = "router.store.key.converter.factory";
@@ -136,7 +135,6 @@ public class RouterConfig {
   // repair the blob with the on-demand replication on deletion
   public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ON_DELETE_ENABLED =
       "router.repair.with.replicate.blob.on.delete.enabled";
-  public static final String ROUTER_REPAIR_WITH_REPLICATE_BLOB_ENABLED = "router.repair.with.replicate.blob.enabled";
   // offline repair partially failed ttl update
   public static final String ROUTER_TTLUPDATE_OFFLINE_REPAIR_ENABLED = "router.ttlupdate.offline.repair.enabled";
   // offline repair partially failed delete request
@@ -559,22 +557,6 @@ public class RouterConfig {
   public final boolean routerPutUseDynamicSuccessTarget;
 
   /**
-   * The minimum number of successful responses required for a cloud operation of any type. Currently, cloud requests
-   * for any type of operation (get, put, delete, ttl update) will have the same success target and parallelism. This
-   * may change in the future with new operations introduced (such as undelete).
-   */
-  @Config(ROUTER_CLOUD_SUCCESS_TARGET)
-  @Default("1")
-  public final int routerCloudSuccessTarget;
-
-  /**
-   * The maximum number of parallel requests allowed when sending requests to cloud replicas.
-   */
-  @Config(ROUTER_CLOUD_REQUEST_PARALLELISM)
-  @Default("1")
-  public final int routerCloudRequestParallelism;
-
-  /**
    * Whether or not to use HTTP/2 network client
    */
   @Config(ROUTER_ENABLE_HTTP2_NETWORK_CLIENT)
@@ -606,37 +588,6 @@ public class RouterConfig {
   public final String operationController;
 
   /**
-   * Implementation class for StoreKeyConverterFactory
-   * This config is specific to the embedded AmbryRequests in cloud router only
-   */
-  @Config(ROUTER_STORE_KEY_CONVERTER_FACTORY)
-  @Default("com.github.ambry.store.StoreKeyConverterFactoryImpl")
-  public final String routerStoreKeyConverterFactory;
-
-  /**
-   * The number of request handler threads used by the server to process requests
-   * This config is specific to the embedded AmbryRequests in cloud router only
-   */
-  @Config(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS)
-  @Default("7")
-  public final int routerRequestHandlerNumOfThreads;
-
-  /**
-   * If {@code true} the router will check if offline replicas could be the cause of failure before throwing not found
-   * error. If offline replicas could be the cause of failure, then router should return unavailable error.
-   */
-  @Config(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS)
-  @Default("false")
-  public final boolean routerUnavailableDueToOfflineReplicas;
-
-  /**
-   * If true the simple operation tracker will check if there's one replica return success, router will return unavailable error.
-   */
-  @Config(ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE)
-  @Default("true")
-  public final boolean routerUnavailableDueToSuccessCountIsNonZeroForDelete;
-
-  /**
    * Expiration time for Blob IDs stored in not-found cache. Default value is 15 seconds.
    * Setting it to 0 would disable the cache and avoid storing any blob IDs.
    * TODO: With PR https://github.com/linkedin/ambry/pull/2072, when operation tracker fails due to blob-not-found and
@@ -658,11 +609,6 @@ public class RouterConfig {
   public static final String ROUTER_BLOB_METADATA_CACHE_ENABLED = "router.blob.metadata.cache.enabled";
   @Config(ROUTER_BLOB_METADATA_CACHE_ENABLED)
   public final boolean routerBlobMetadataCacheEnabled;
-
-  public static final String ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES = "router.blob.metadata.cache.max.size.bytes";
-  @Config(ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES)
-  public final long routerBlobMetadataCacheMaxSizeBytes;
-  public static final long NUM_BYTES_IN_ONE_MB = (long) Math.pow(1024, 2);
 
   public static final String ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE = "router.smallest.blob.for.metadata.cache";
   @Config(ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE)
@@ -737,7 +683,7 @@ public class RouterConfig {
   public static final String ROUTER_GET_BLOB_RETRY_LIMIT_COUNT = "router.get.blob.retry.limit.count";
   public static final int ROUTER_GET_BLOB_RETRY_LIMIT_COUNT_MAX = 100;
 
-  /*
+  /**
    * If this config is set to {@code true} the operation tracker would make sure all replicas in originating data center
    * are up and respond with BLOB_NOT_FOUND before concluding that blob is not present. Else, it would check in
    * total_originating_dc_replicas - put_success_target + 1 replicas.
@@ -745,6 +691,12 @@ public class RouterConfig {
   @Config(ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND)
   @Default("true")
   public final boolean routerOperationTrackerCheckAllOriginatingReplicasForNotFound;
+
+  @Config(ROUTER_OPERATION_TRACKER_REQUIRE_TWO_NOT_FOUND)
+  @Default("false")
+  public final boolean routerOperationTrackerRequireTwoNotFound;
+  public static final String ROUTER_OPERATION_TRACKER_REQUIRE_TWO_NOT_FOUND =
+      "router.operation.tracker.require.two.not.found";
 
   // Group compression-related configs in the CompressConfig class.
   private final CompressionConfig compressionConfig;
@@ -774,8 +726,6 @@ public class RouterConfig {
     routerMaxNumMetadataCacheEntries =
         verifiableProperties.getInt(ROUTER_MAX_NUM_METADATA_CACHE_ENTRIES, MAX_NUM_METADATA_CACHE_ENTRIES_DEFAULT);
     routerBlobMetadataCacheEnabled = verifiableProperties.getBoolean(ROUTER_BLOB_METADATA_CACHE_ENABLED, false);
-    routerBlobMetadataCacheMaxSizeBytes =
-        verifiableProperties.getLong(ROUTER_BLOB_METADATA_CACHE_MAX_SIZE_BYTES, 64 * NUM_BYTES_IN_ONE_MB);
     routerSmallestBlobForMetadataCache =
         verifiableProperties.getLong(ROUTER_SMALLEST_BLOB_FOR_METADATA_CACHE, NUM_BYTES_IN_ONE_TB);
     routerScalingUnitCount = verifiableProperties.getIntInRange(ROUTER_SCALING_UNIT_COUNT, 1, 1, Integer.MAX_VALUE);
@@ -887,9 +837,6 @@ public class RouterConfig {
     routerGetEligibleReplicasByStateEnabled =
         verifiableProperties.getBoolean(ROUTER_GET_ELIGIBLE_REPLICAS_BY_STATE_ENABLED, false);
     routerPutUseDynamicSuccessTarget = verifiableProperties.getBoolean(ROUTER_PUT_USE_DYNAMIC_SUCCESS_TARGET, false);
-    routerCloudSuccessTarget = verifiableProperties.getIntInRange(ROUTER_CLOUD_SUCCESS_TARGET, 1, 1, Integer.MAX_VALUE);
-    routerCloudRequestParallelism =
-        verifiableProperties.getIntInRange(ROUTER_CLOUD_REQUEST_PARALLELISM, 1, 1, Integer.MAX_VALUE);
     routerEnableHttp2NetworkClient = verifiableProperties.getBoolean(ROUTER_ENABLE_HTTP2_NETWORK_CLIENT, false);
     routerCrossColoRequestToDcWithMostReplicas =
         verifiableProperties.getBoolean(ROUTER_CROSS_COLO_REQUEST_TO_DC_WITH_MOST_REPLICAS, false);
@@ -898,13 +845,6 @@ public class RouterConfig {
             Integer.MAX_VALUE);
     operationController =
         verifiableProperties.getString(OPERATION_CONTROLLER, "com.github.ambry.router.OperationController");
-    routerRequestHandlerNumOfThreads = verifiableProperties.getInt(ROUTER_REQUEST_HANDLER_NUM_OF_THREADS, 7);
-    routerStoreKeyConverterFactory = verifiableProperties.getString(ROUTER_STORE_KEY_CONVERTER_FACTORY,
-        "com.github.ambry.store.StoreKeyConverterFactoryImpl");
-    routerUnavailableDueToOfflineReplicas =
-        verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS, false);
-    routerUnavailableDueToSuccessCountIsNonZeroForDelete =
-        verifiableProperties.getBoolean(ROUTER_UNAVAILABLE_DUE_TO_SUCCESS_COUNT_IS_NON_ZERO_FOR_DELETE, true);
     routerNotFoundCacheTtlInMs = verifiableProperties.getLongInRange(ROUTER_NOT_FOUND_CACHE_TTL_IN_MS, 15 * 1000L, 0,
         ROUTER_NOT_FOUND_CACHE_MAX_TTL_IN_MS);
     routerUpdateOpMetadataRelianceTimestampInMs =
@@ -928,11 +868,14 @@ public class RouterConfig {
     compressionConfig = new CompressionConfig(verifiableProperties);
     routerOperationTrackerCheckAllOriginatingReplicasForNotFound =
         verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND, true);
+    routerOperationTrackerRequireTwoNotFound =
+        verifiableProperties.getBoolean(ROUTER_OPERATION_TRACKER_REQUIRE_TWO_NOT_FOUND, false);
     routerReservedMetadataEnabled = verifiableProperties.getBoolean(RESERVED_METADATA_ENABLED, false);
     routerGetOperationDeprioritizeBootstrapReplicas =
         verifiableProperties.getBoolean(ROUTER_GET_OPERATION_DEPRIORITIZE_BOOTSTRAP_REPLICAS, false);
     routerGetOperationMinLocalReplicaCountToPrioritizeLocal =
-        verifiableProperties.getInt(ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL, DEFAULT_ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL);
+        verifiableProperties.getInt(ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL,
+            DEFAULT_ROUTER_GET_OPERATION_MIN_LOCAL_REPLICA_COUNT_TO_PRIORITIZE_LOCAL);
   }
 
   /**

@@ -71,13 +71,12 @@ import org.slf4j.LoggerFactory;
  */
 class SimpleOperationTracker implements OperationTracker {
   private static final Logger logger = LoggerFactory.getLogger(SimpleOperationTracker.class);
-  private static final int NOT_FOUND_THRESHOLD_INVALID_VALUE = -1;
   protected final String datacenterName;
   protected final String originatingDcName;
   protected final int replicaSuccessTarget;
   protected final int replicaParallelism;
   // How many NotFound responses from originating dc will terminate the operation.
-  protected int originatingDcNotFoundFailureThreshold = NOT_FOUND_THRESHOLD_INVALID_VALUE;
+  protected final int originatingDcNotFoundFailureThreshold;
   protected final int totalReplicaCount;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
   protected final NonBlockingRouterMetrics routerMetrics;
@@ -181,7 +180,6 @@ class SimpleOperationTracker implements OperationTracker {
     // populate tracker parameters based on operation type
     this.routerConfig = routerConfig;
     this.routerOperation = routerOperation;
-    this.originatingDcName = originatingDcName;
     this.partitionId = partitionId;
     this.routerMetrics = routerMetrics;
     this.blobId = blobId;
@@ -268,11 +266,56 @@ class SimpleOperationTracker implements OperationTracker {
     List<? extends ReplicaId> replicas = routerConfig.routerGetEligibleReplicasByStateEnabled ? eligibleReplicas
         : new ArrayList<>(partitionId.getReplicaIds());
 
-    // In a case where a certain dc is decommissioned and blobs previously uploaded to this dc now have a unrecognizable
-    // dc id. Current clustermap code will treat originating dc as null if dc id is not identifiable. To improve success
-    // rate of cross-colo requests(GET/DELETE/TTLUpdate), operation tracker should be allowed to try remote dc with most
-    // replicas first. This is useful in cluster with "unbalanced" replica distribution (i.e. 3 replicas in local dc and
-    // 1 replica per remote dc)
+    String reassignedOriginDc = maybeReassignOriginatingDC(originatingDcName, replicas);
+    originatingDcName = originatingDcName == null ? reassignedOriginDc : originatingDcName;
+    this.originatingDcName = originatingDcName;
+
+    addReplicasToPool(replicas, offlineReplicas, shuffleReplicas, crossColoEnabled);
+    this.totalReplicaCount = replicaPool.size();
+
+    originatingDcTotalReplicaCount = (int) allReplicas.stream()
+        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(this.originatingDcName))
+        .count();
+    originatingDcLeaderOrStandbyReplicas = new HashSet<>(
+        getEligibleReplicas(this.originatingDcName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)));
+    int dynamicNotFoundFailureThreshold = routerConfig.routerOperationTrackerRequireTwoNotFound ? 2
+        : Math.max(originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1, 0);
+    originatingDcNotFoundFailureThreshold =
+        routerConfig.routerOperationTrackerCheckAllOriginatingReplicasForNotFound ? originatingDcTotalReplicaCount
+            : dynamicNotFoundFailureThreshold;
+
+    this.otIterator = new OpTrackerIterator();
+    logger.debug(
+        "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}, originatingDC = {}",
+        routerOperation, replicaSuccessTarget, replicaParallelism, originatingDcNotFoundFailureThreshold, replicaPool,
+        originatingDcName);
+  }
+
+  /**
+   * @param eligibleReplicaCount eligible replicas to send Requests.
+   * @return true if it's possible to run offline repair for the Delete or TtlUpdate
+   */
+  public boolean possibleRunOfflineRepair(int eligibleReplicaCount) {
+    // @formatter:off
+    return (eligibleReplicaCount >= 1
+        && (
+              (routerOperation == RouterOperation.TtlUpdateOperation && routerConfig.routerTtlUpdateOfflineRepairEnabled)
+              || (routerOperation == RouterOperation.DeleteOperation && routerConfig.routerDeleteOfflineRepairEnabled)
+           ));
+    // @formatter:on
+  }
+
+  /**
+   * In a case where a certain dc is decommissioned and blobs previously uploaded to this dc now have an unrecognizable
+   * dc id. Current clustermap code will treat originating dc as null if dc id is not identifiable. To improve success
+   * rate of cross-colo requests(GET/DELETE/TTLUpdate), operation tracker should be allowed to try remote dc with most
+   * replicas first. This is useful in cluster with "unbalanced" replica distribution (i.e. 3 replicas in local dc and
+   * 1 replica per remote dc)
+   * @param originatingDcName The originating Dc name
+   * @param replicas The list of replicas
+   * @return The reassigned originating dc name.
+   */
+  private String maybeReassignOriginatingDC(String originatingDcName, List<? extends ReplicaId> replicas) {
     String reassignedOriginDc = null;
     if (originatingDcName == null && routerConfig.routerCrossColoRequestToDcWithMostReplicas) {
       Map<String, Long> dcToReplicaCnt = replicas.stream()
@@ -286,7 +329,11 @@ class SimpleOperationTracker implements OperationTracker {
       reassignedOriginDc = entryList.get(entryList.size() - 1).getKey();
       logger.debug("Originating dc name is null and has been re-assigned to {}", reassignedOriginDc);
     }
+    return reassignedOriginDc;
+  }
 
+  private void addReplicasToPool(List<? extends ReplicaId> replicas, List<? extends ReplicaId> offlineReplicas,
+      boolean shuffleReplicas, boolean crossColoEnabled) {
     LinkedList<ReplicaId> backupReplicas = new LinkedList<>();
     LinkedList<ReplicaId> downReplicas = new LinkedList<>();
     if (shuffleReplicas) {
@@ -297,7 +344,6 @@ class SimpleOperationTracker implements OperationTracker {
     // To improve read-after-write performance across DC, we prefer to take local and originating replicas only,
     // which can be done by setting includeNonOriginatingDcReplicas False.
     List<ReplicaId> examinedReplicas = new ArrayList<>();
-    originatingDcName = originatingDcName == null ? reassignedOriginDc : originatingDcName;
     int numLocalAndLiveReplicas = 0;
     int numRemoteOriginatingDcAndLiveReplicas = 0;
     for (ReplicaId replicaId : replicas) {
@@ -352,15 +398,14 @@ class SimpleOperationTracker implements OperationTracker {
 
     maybeDeprioritizeLocalBootstrapReplicas(numLocalAndLiveReplicas);
     maybeShuffleWithRemoteReplicas(numLocalAndLiveReplicas, numRemoteOriginatingDcAndLiveReplicas);
-    totalReplicaCount = replicaPool.size();
-
+    int replicaPoolSize = replicaPool.size();
     // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
     // Please report the test failure if you run into this exception.
     Supplier<IllegalArgumentException> notEnoughReplicasException = () -> new IllegalArgumentException(
         generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck,
             routerOperation));
-    possibleRunOfflineRepair = possibleRunOfflineRepair(totalReplicaCount);
-    if (totalReplicaCount < getSuccessTarget()) {
+    possibleRunOfflineRepair = possibleRunOfflineRepair(replicaPoolSize);
+    if (replicaPoolSize < getSuccessTarget()) {
       if (possibleRunOfflineRepair) {
         logger.info("RepairRequest: Not enough quorum for delete but give it a try since offline repair is enabled {}",
             blobId);
@@ -368,35 +413,6 @@ class SimpleOperationTracker implements OperationTracker {
         throw notEnoughReplicasException.get();
       }
     }
-
-    originatingDcTotalReplicaCount = (int) allReplicas.stream()
-        .filter(replicaId -> replicaId.getDataNodeId().getDatacenterName().equals(this.originatingDcName))
-        .count();
-    originatingDcLeaderOrStandbyReplicas = new HashSet<>(
-        getEligibleReplicas(this.originatingDcName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER)));
-    originatingDcNotFoundFailureThreshold =
-        routerConfig.routerOperationTrackerCheckAllOriginatingReplicasForNotFound ? originatingDcTotalReplicaCount
-            : Math.max(originatingDcTotalReplicaCount - routerConfig.routerPutSuccessTarget + 1, 0);
-
-    this.otIterator = new OpTrackerIterator();
-    logger.debug(
-        "Router operation type: {}, successTarget = {}, parallelism = {}, originatingDcNotFoundFailureThreshold = {}, replicaPool = {}, originatingDC = {}",
-        routerOperation, replicaSuccessTarget, replicaParallelism, originatingDcNotFoundFailureThreshold, replicaPool,
-        originatingDcName);
-  }
-
-  /**
-   * @param eligibleReplicaCount eligible replicas to send Requests.
-   * @return true if it's possible to run offline repair for the Delete or TtlUpdate
-   */
-  public boolean possibleRunOfflineRepair(int eligibleReplicaCount) {
-    // @formatter:off
-    return (eligibleReplicaCount >= 1
-        && (
-              (routerOperation == RouterOperation.TtlUpdateOperation && routerConfig.routerTtlUpdateOfflineRepairEnabled)
-              || (routerOperation == RouterOperation.DeleteOperation && routerConfig.routerDeleteOfflineRepairEnabled)
-           ));
-    // @formatter:on
   }
 
   /**
@@ -435,14 +451,20 @@ class SimpleOperationTracker implements OperationTracker {
       return false;
     }
 
-    if (originatingDcNotFoundFailureThreshold > 0
-        && originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold) {
+    if (originatingDcNotFoundCount >= originatingDcNotFoundFailureThreshold) {
       // If we get sufficient not found responses in originating DC, we can confirm that blob is not present in Ambry.
       logger.info("Terminating {} on {} due to Not_Found failure in originating DC {}, "
               + "NotFoundCount: {}, FailureThreshold: {}, TotalReplicaCount: {}, LeaderStandbyCount: {}, {}",
           routerOperation.name(), partitionId, originatingDcName, originatingDcNotFoundCount,
           originatingDcNotFoundFailureThreshold, originatingDcTotalReplicaCount,
           originatingDcLeaderOrStandbyReplicas.size(), getBlobIdLog());
+      routerMetrics.failedOnTotalNotFoundCount.inc();
+      return true;
+    }
+    if (totalNotFoundCount == partitionId.getReplicaIds().size()) {
+      // If all possible replicas(including non-eligible ones) are returning NOT_FOUND, then it has to be NOT_FOUND.
+      logger.trace("All replicas of {} return NOT_FOUND for {}, NotFoundCount: {}, partition: {}",
+          routerOperation.name(), getBlobIdLog(), totalNotFoundCount, partitionId);
       routerMetrics.failedOnTotalNotFoundCount.inc();
       return true;
     }
@@ -592,8 +614,7 @@ class SimpleOperationTracker implements OperationTracker {
     // we know local and live replicas are going to be put in frontend of the pool
     if (isGetOperation() && numLocalAndLiveReplicas > 1
         && routerConfig.routerGetOperationDeprioritizeBootstrapReplicas) {
-      List<ReplicaId> localAndLiveReplicas = new ArrayList<>();
-      localAndLiveReplicas.addAll(replicaPool.subList(0, numLocalAndLiveReplicas));
+      List<ReplicaId> localAndLiveReplicas = new ArrayList<>(replicaPool.subList(0, numLocalAndLiveReplicas));
       // Sort local and live replicas based on the replica state, bootstrap replicas
       // are going to be pushed back
       localAndLiveReplicas.sort((r1, r2) -> {
@@ -741,8 +762,8 @@ class SimpleOperationTracker implements OperationTracker {
    * Returns string to for logging {@code BlobId}, if the blob id if not {@code null}.
    * @return string to for logging {@code BlobId}. Returns empty string if the blob id is {@code null}.
    */
-  private final String getBlobIdLog() {
-    return (blobId == null) ? "" : String.format(", BlobId: %s", blobId.toString());
+  private String getBlobIdLog() {
+    return (blobId == null) ? "" : String.format(", BlobId: %s", blobId);
   }
 
   /**
