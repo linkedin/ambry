@@ -72,7 +72,6 @@ public class OperationTrackerTest {
 
   private final String operationTrackerType;
   private final boolean replicasStateEnabled;
-  private final boolean routerUnavailableDueToOfflineReplicas;
   private final LinkedList<ReplicaId> inflightReplicas = new LinkedList<>();
   private final Set<ReplicaId> repetitionTracker = new HashSet<>();
   // for AdaptiveOperationTracker
@@ -88,11 +87,9 @@ public class OperationTrackerTest {
   /**
    * @param operationTrackerType the type of {@link OperationTracker} that needs to be used in tests
    */
-  public OperationTrackerTest(String operationTrackerType, boolean replicasStateEnabled,
-      boolean routerUnavailableDueToOfflineReplicas) {
+  public OperationTrackerTest(String operationTrackerType, boolean replicasStateEnabled) {
     this.operationTrackerType = operationTrackerType;
     this.replicasStateEnabled = replicasStateEnabled;
-    this.routerUnavailableDueToOfflineReplicas = routerUnavailableDueToOfflineReplicas;
   }
 
   /**
@@ -101,9 +98,14 @@ public class OperationTrackerTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{SIMPLE_OP_TRACKER, false, false}, {SIMPLE_OP_TRACKER, false, true},
-        {ADAPTIVE_OP_TRACKER, false, false}, {ADAPTIVE_OP_TRACKER, false, true}, {SIMPLE_OP_TRACKER, true, false},
-        {SIMPLE_OP_TRACKER, true, true}, {ADAPTIVE_OP_TRACKER, true, false}, {ADAPTIVE_OP_TRACKER, true, true}});
+    //@formatter:off
+    return Arrays.asList(
+        new Object[][]{
+            {SIMPLE_OP_TRACKER, false},
+            {SIMPLE_OP_TRACKER, true},
+            {ADAPTIVE_OP_TRACKER, false},
+            {ADAPTIVE_OP_TRACKER, true}});
+    //@formatter:on
   }
 
   /**
@@ -438,7 +440,6 @@ public class OperationTrackerTest {
   @Test
   public void getOperationFailDueToNotFoundWithOriginatingTwoDown() {
     assumeTrue(replicasStateEnabled);
-    assumeTrue(routerUnavailableDueToOfflineReplicas);
 
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
     List<String> mountPaths = Collections.singletonList("mockMountPath");
@@ -493,7 +494,6 @@ public class OperationTrackerTest {
   @Ignore
   public void getOperationFailDueToNotFoundWithOriginatingTwoOnline() {
     assumeTrue(replicasStateEnabled);
-    assumeTrue(routerUnavailableDueToOfflineReplicas);
 
     List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
     List<String> mountPaths = Collections.singletonList("mockMountPath");
@@ -1165,6 +1165,61 @@ public class OperationTrackerTest {
   }
 
   /**
+   * Test hasFailedOnNotFound() case when we 1 replicas in originating DC is in bootstrap and 1 replica is not in externalview
+   */
+  @Test
+  public void originatingDcNotFoundWithOneBootstrapAndOneERROR() {
+    assumeTrue(replicasStateEnabled);
+    List<Port> portList = Collections.singletonList(new Port(PORT, PortType.PLAINTEXT));
+    List<String> mountPaths = Collections.singletonList("mockMountPath");
+    datanodes = Collections.singletonList(new MockDataNodeId(portList, mountPaths, "dc-0"));
+    mockPartition = new MockPartitionId();
+    populateReplicaList(1, ReplicaState.LEADER);
+    populateReplicaList(1, ReplicaState.STANDBY);
+    populateReplicaList(1, ReplicaState.BOOTSTRAP);
+    // use error to simulate the replica that is not in external view
+    populateReplicaList(1, ReplicaState.ERROR);
+    localDcName = datanodes.get(0).getDatacenterName();
+    mockClusterMap = new MockClusterMap(false, datanodes, 1, Collections.singletonList(mockPartition), localDcName);
+    originatingDcName = localDcName;
+    Properties props = new Properties();
+
+    // Case 1. Only tolerate 1 failure
+    props.setProperty(RouterConfig.ROUTER_GET_SUCCESS_TARGET, Integer.toString(1));
+    props.setProperty(RouterConfig.ROUTER_GET_REQUEST_PARALLELISM, Integer.toString(3));
+    props.setProperty(RouterConfig.ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND,
+        Boolean.toString(false));
+    OperationTracker ot = getOperationTracker(props, true, 3, RouterOperation.GetBlobOperation, true, true);
+    sendRequests(ot, 3, false);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not succeed", ot.hasSucceeded());
+    assertFalse("Operation should not fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should have some unavailability", ot.hasSomeUnavailability());
+    assertTrue("Operation should be done", ot.isDone());
+
+    // Case 2. Only require two NOT_FOUND
+    repetitionTracker.clear();
+    inflightReplicas.clear();
+    props = new Properties();
+    props.setProperty(RouterConfig.ROUTER_GET_SUCCESS_TARGET, Integer.toString(1));
+    props.setProperty(RouterConfig.ROUTER_GET_REQUEST_PARALLELISM, Integer.toString(3));
+    props.setProperty(RouterConfig.ROUTER_OPERATION_TRACKER_CHECK_ALL_ORIGINATING_REPLICAS_FOR_NOT_FOUND,
+        Boolean.toString(false));
+    props.setProperty(RouterConfig.ROUTER_OPERATION_TRACKER_REQUIRE_TWO_NOT_FOUND, "true");
+    ot = getOperationTracker(props, true, 3, RouterOperation.GetBlobOperation, true, true);
+    sendRequests(ot, 3, false);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    ot.onResponse(inflightReplicas.poll(), TrackedRequestFinalState.NOT_FOUND);
+    assertFalse("Operation should not succeed", ot.hasSucceeded());
+    assertTrue("Operation should fail on NOT_FOUND", ot.hasFailedOnNotFound());
+    assertTrue("Operation should have some unavailability", ot.hasSomeUnavailability());
+    assertTrue("Operation should be done", ot.isDone());
+  }
+
+  /**
    * Test the case when NotFound Error triggered.
    */
   @Test
@@ -1817,17 +1872,9 @@ public class OperationTrackerTest {
             assertFalse(
                 String.format("Operation should have failed for notfoundcount: %d, offlinecount: %d, foundcount: %s",
                     notFoundCount, offlineCount, foundCount), ot.hasSucceeded());
-            if (routerUnavailableDueToOfflineReplicas) {
-              if (replicaCount - notFoundCount < successTarget) {
-                assertTrue(String.format(
-                    "Operation should have failed on not found for notfoundcount: %d, offlinecount: %d, foundcount: %s",
-                    notFoundCount, offlineCount, foundCount), ot.hasFailedOnNotFound());
-              }
-            } else {
-              assertTrue(String.format(
-                  "Operation should have failed on not found for notfoundcount: %d, offlinecount: %d, foundcount: %s",
-                  notFoundCount, offlineCount, foundCount), ot.hasFailedOnNotFound());
-            }
+            assertTrue(String.format(
+                "Operation should have failed on not found for notfoundcount: %d, offlinecount: %d, foundcount: %s",
+                notFoundCount, offlineCount, foundCount), ot.hasFailedOnNotFound());
           }
         }
       }
@@ -1967,8 +2014,6 @@ public class OperationTrackerTest {
         Boolean.toString(chooseDcWithMostReplicas));
     props.setProperty(RouterConfig.ROUTER_OPERATION_TRACKER_INCLUDE_DOWN_REPLICAS,
         Boolean.toString(includeDownReplicas));
-    props.setProperty(RouterConfig.ROUTER_UNAVAILABLE_DUE_TO_OFFLINE_REPLICAS,
-        Boolean.toString(routerUnavailableDueToOfflineReplicas));
     RouterConfig routerConfig = new RouterConfig(new VerifiableProperties(props));
     NonBlockingRouterMetrics routerMetrics = new NonBlockingRouterMetrics(mockClusterMap, routerConfig);
     OperationTracker tracker;

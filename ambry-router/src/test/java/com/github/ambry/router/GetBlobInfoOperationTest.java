@@ -502,11 +502,11 @@ public class GetBlobInfoOperationTest {
   }
 
   /**
-   * Test the case when some of the replicas in originating DC are unavailable, we should return AmbryUnavailable.
+   * Test the case when all replicas in originating DC return NOT_FOUND, we should return BlobDoesNotExist.
    * @throws Exception
    */
   @Test
-  public void testOrigDcUnavailability() throws Exception {
+  public void testOrigDcNotExist() throws Exception {
     correlationIdToGetOperation.clear();
 
     // Default all replicas to return not found.
@@ -539,9 +539,9 @@ public class GetBlobInfoOperationTest {
     requestRegistrationCallback.setRequestsToSend(new ArrayList<>());
     completeOp(op);
 
-    // error code should be Unavailability
+    // error code should be NOT_FOUND, since all replicas return NOT_FOUND
     RouterException routerException = (RouterException) op.getOperationException();
-    Assert.assertEquals(RouterErrorCode.AmbryUnavailable, routerException.getErrorCode());
+    Assert.assertEquals(RouterErrorCode.BlobDoesNotExist, routerException.getErrorCode());
   }
 
   /**
