@@ -868,11 +868,11 @@ public class GetBlobOperationTest {
   }
 
   /**
-   * Test the case when some of the replicas in originating DC are unavailable, we should return AmbryUnavailable.
+   * Test the case when all replicas in originating DC return NOT_FOUND, we should return BlobDoesNotExist.
    * @throws Exception
    */
   @Test
-  public void testOrigDcUnavailability() throws Exception {
+  public void testOrigDcNotExist() throws Exception {
     doPut();
 
     // Default all replicas to return not found.
@@ -898,7 +898,7 @@ public class GetBlobOperationTest {
     serversInLocalDc.get(1).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
     serversInLocalDc.get(2).setServerErrorForAllRequests(ServerErrorCode.Blob_Not_Found);
 
-    getErrorCodeChecker.testAndAssert(RouterErrorCode.AmbryUnavailable);
+    getErrorCodeChecker.testAndAssert(RouterErrorCode.BlobDoesNotExist);
   }
 
   /**
