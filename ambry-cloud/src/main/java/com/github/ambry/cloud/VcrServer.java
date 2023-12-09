@@ -264,10 +264,8 @@ public class VcrServer {
         nettyHttp2Server.start();
       }
 
-      if (nettyInternalMetrics != null) {
-        nettyInternalMetrics.start();
-        logger.info("NettyInternalMetric starts");
-      }
+      nettyInternalMetrics.start();
+      logger.info("NettyInternalMetric starts");
 
       long processingTime = SystemTime.getInstance().milliseconds() - startTime;
       logger.info("VCR startup time in Ms {}", processingTime);
@@ -322,9 +320,7 @@ public class VcrServer {
       if (cloudDestination != null) {
         cloudDestination.close();
       }
-      if (nettyInternalMetrics != null) {
-        nettyInternalMetrics.stop();
-      }
+      nettyInternalMetrics.stop();
       logger.info("VCR shutdown completed");
     } catch (Exception e) {
       logger.error("Error while shutting down VCR", e);
