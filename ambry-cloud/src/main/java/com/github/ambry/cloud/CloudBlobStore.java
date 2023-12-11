@@ -385,7 +385,7 @@ public class CloudBlobStore implements Store {
       try {
         cloudDestination.uploadBlobs((MessageFormatWriteSet) messageSetToWrite);
       } catch (CloudStorageException e) {
-        throw new RuntimeException(e);
+        throw new StoreException(e, StoreErrorCodes.IOError);
       }
       return;
     }
