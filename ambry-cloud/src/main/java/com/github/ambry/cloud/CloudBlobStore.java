@@ -373,6 +373,11 @@ public class CloudBlobStore implements Store {
    */
   @Override
   public void put(MessageWriteSet messageSetToWrite) throws StoreException {
+    checkStarted();
+    if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
+      throw new IllegalArgumentException("Message write set cannot be empty");
+    }
+    checkDuplicates(messageSetToWrite.getMessageSetInfo());
 
     if (cloudConfig.ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2) && !cloudConfig.vcrRequireEncryption) {
       // If no encryption is needed, then just pass the input stream to the client and upload the blob.
@@ -385,12 +390,6 @@ public class CloudBlobStore implements Store {
       return;
     }
 
-    // TODO: Remove the duplicate code by calling putAsync() method and wait on it once we verify that upload works correctly.
-    checkStarted();
-    if (messageSetToWrite.getMessageSetInfo().isEmpty()) {
-      throw new IllegalArgumentException("Message write set cannot be empty");
-    }
-    checkDuplicates(messageSetToWrite.getMessageSetInfo());
     // Write the blobs in the message set
     CloudWriteChannel cloudWriter = new CloudWriteChannel(this, messageSetToWrite.getMessageSetInfo());
     messageSetToWrite.writeTo(cloudWriter);
