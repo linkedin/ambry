@@ -85,8 +85,6 @@ class FrontendRestRequestService implements RestRequestService {
   private GetPeersHandler getPeersHandler;
   private GetSignedUrlHandler getSignedUrlHandler;
   private NamedBlobListHandler namedBlobListHandler;
-  //private NamedBlobGetHandler namedBlobGetHandler;
-  //private NamedBlobDeleteHandler namedBlobDeleteHandler;
   private NamedBlobPutHandler namedBlobPutHandler;
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
