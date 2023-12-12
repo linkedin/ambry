@@ -23,6 +23,9 @@ public class ContainerBlobsResource implements AclService.Resource {
   private static final String SEPARATOR = "_";
 
   private final String resourceId;
+  private final short accountId;
+  private final String accountName;
+  private final String containerName;
 
   /**
    * Construct the resource from a container.
@@ -30,6 +33,21 @@ public class ContainerBlobsResource implements AclService.Resource {
    */
   public ContainerBlobsResource(Container container) {
     resourceId = container.getParentAccountId() + SEPARATOR + container.getId();
+    accountId = container.getParentAccountId();
+    accountName = null;
+    containerName = container.getName();
+  }
+
+  /**
+   * Construct the resource from an Account and a Container. Account will provide account name in detail
+   * @param account The {@link Account}.
+   * @param container The {@link Container}.
+   */
+  public ContainerBlobsResource(Account account, Container container) {
+    resourceId = container.getParentAccountId() + SEPARATOR + container.getId();
+    accountId = container.getParentAccountId();
+    accountName = account.getName();
+    containerName = container.getName();
   }
 
   /**
@@ -48,6 +66,13 @@ public class ContainerBlobsResource implements AclService.Resource {
   @Override
   public String getResourceId() {
     return resourceId;
+  }
+
+  @Override
+  public String getResourceDetail() {
+    String detail = (accountName == null ? "AccountId:" + accountId : "AccountName:" + accountName) + "|ContainerName:"
+        + containerName;
+    return RESOURCE_TYPE + ":" + detail;
   }
 
   @Override
