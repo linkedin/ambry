@@ -133,7 +133,9 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
             MessageFormatRecord.deserializeBlobAll(new NettyByteBufDataInputStream(messageData), storeKeyFactory);
           } catch (Exception e) {
             metrics.messageFormatExceptionCount.inc();
-            logger.error("Failed to deserialize the BlobAll from message format send for StoreKey {}.", storeKey, e);
+            logger.error(
+                "Failed to deserialize the BlobAll from message format send for StoreKey {}. The data source for this key is {}",
+                storeKey, readSet.getDataSource(i), e);
           }
 
           if (flag == MessageFormatFlags.All) {

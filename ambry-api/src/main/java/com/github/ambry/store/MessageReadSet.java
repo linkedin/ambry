@@ -13,8 +13,8 @@
  */
 package com.github.ambry.store;
 
-import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.router.AsyncWritableChannel;
 import io.netty.buffer.ByteBuf;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
@@ -81,4 +81,13 @@ public interface MessageReadSet {
    * @return The prefetched data.
    */
   ByteBuf getPrefetchedData(int index);
+
+  /**
+   * Return the data source for this message read set.
+   * @param index The index into the message set.
+   * @return The data source for the data identified by the given index.
+   */
+  default String getDataSource(int index) {
+    return "DataSourceUnknown";
+  }
 }

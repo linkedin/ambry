@@ -291,6 +291,11 @@ class StoreMessageReadSet implements MessageReadSet {
     return readOptions.get(index).getPrefetchedData();
   }
 
+  @Override
+  public String getDataSource(int index) {
+    return readOptions.get(index).getFile().getAbsolutePath();
+  }
+
   /**
    * Interface to call after dealing with IO operation in the {@link StoreMessageReadSet}.
    */
