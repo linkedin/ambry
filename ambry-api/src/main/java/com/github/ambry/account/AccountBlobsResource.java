@@ -16,6 +16,7 @@ package com.github.ambry.account;
 public class AccountBlobsResource implements AclService.Resource {
   public static final String RESOURCE_TYPE = "AccountBlobs";
   private final String resourceId;
+  private final String accountName;
 
   /**
    * Construct the resource from an account.
@@ -23,6 +24,7 @@ public class AccountBlobsResource implements AclService.Resource {
    */
   public AccountBlobsResource(Account account) {
     resourceId = String.valueOf(account.getId());
+    accountName = account.getName();
   }
 
   /**
@@ -41,6 +43,14 @@ public class AccountBlobsResource implements AclService.Resource {
   @Override
   public String getResourceId() {
     return resourceId;
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
+  public String getResourceDetail() {
+    return RESOURCE_TYPE + ":AccountName:" + accountName;
   }
 
   @Override

@@ -94,5 +94,12 @@ public interface AclService<P> extends Closeable {
      * implementing {@link AclService}.
      */
     String getResourceId();
+
+    /**
+     * @return A detailed string for this specific resource. The returned string is not safe for URL.
+     */
+    default String getResourceDetail() {
+      return this.toString();
+    }
   }
 }
