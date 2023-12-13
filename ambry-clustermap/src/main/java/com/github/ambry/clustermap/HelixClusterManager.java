@@ -834,6 +834,11 @@ public class HelixClusterManager implements ClusterMap {
         bootstrapReplica = new AmbryServerReplica(clusterMapConfig, currentPartition, targetDisk, true, replicaCapacity,
             ReplicaSealStatus.NOT_SEALED);
         logger.info("Created bootstrap replica {} for Partition {}", bootstrapReplica, partitionIdStr);
+        Thread currentThread = Thread.currentThread();
+        // TODO: Remove this code after figuring out why ReplicaThread is calling this method.
+        if (currentThread.getName().contains("ReplicaThread")) {
+          logger.error("Method invocation in wrong thread {}", currentThread.getName(), new Exception(""));
+        }
       } catch (Exception e) {
         logger.error("Failed to create bootstrap replica for partition {} on {} due to exception: ", partitionIdStr,
             instanceName, e);
