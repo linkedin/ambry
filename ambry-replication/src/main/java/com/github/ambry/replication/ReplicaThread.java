@@ -1290,7 +1290,7 @@ public class ReplicaThread implements Runnable {
                     remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
               } else {
                 if (validMessageDetectionInputStream.hasInvalidMessages()) {
-                  replicationMetrics.replicationNumBlobsSkippedAfterRetry.update(
+                  replicationMetrics.replicationNumBlobsSkippedAfterRetry.inc(
                       validMessageDetectionInputStream.getNumInvalidMessages());
                   logger.error(
                       "Unable to replicate {} corrupted messages. thread={}, replicationRetryCount={}, token={}, lagInBytes={}, partition={}, replicaId={}",
