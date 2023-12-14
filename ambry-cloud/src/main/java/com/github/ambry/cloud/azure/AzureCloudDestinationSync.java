@@ -224,6 +224,11 @@ public class AzureCloudDestinationSync implements CloudDestination {
     return tableClient;
   }
 
+  /**
+   * Inserts a row in Azure Table
+   * @param tableName Name of the table in Azure Table Service
+   * @param tableEntity Table row to insert
+   */
   public void createTableEntity(String tableName, TableEntity tableEntity) {
     try {
       createOrGetTableClient(tableName).createEntity(tableEntity);
