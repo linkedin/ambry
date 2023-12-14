@@ -213,7 +213,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
           key -> azureTableServiceClient.createTableIfNotExists(tableName));
       return tableClientMap.computeIfAbsent(tableName,
           key -> azureTableServiceClient.getTableClient(tableName));
-    } catch (Exception e) {
+    } catch (Throwable e) {
       azureMetrics.azureTableCreateErrorCount.inc();
       logger.error("Failed to create or get table {} in Azure Table Service due to {}", tableName, e);
       throw e;
@@ -227,6 +227,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param tableEntity Table row to insert
    */
   public void createTableEntity(String tableName, TableEntity tableEntity) {
+    Throwable throwable = null;
     try {
       getTableClient(tableName).createEntity(tableEntity);
     } catch (TableServiceException tse) {
@@ -234,13 +235,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
         // do nothing
         return;
       }
-      azureMetrics.azureTableEntityCreateErrorCount.inc();
-      logger.error("Failed to insert table entity {}/{} in {} due to {}",
-          tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, tse);
-    } catch (Exception e) {
-      azureMetrics.azureTableEntityCreateErrorCount.inc();
-      logger.error("Failed to insert table entity {}/{} in {} due to {}",
-          tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, e);
+      throwable = tse;
+    } catch (Throwable e) {
+      throwable = e;
+    } finally {
+      if (throwable != null) {
+        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        logger.error("Failed to insert table entity {}/{} in {} due to {}",
+            tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
+      }
     }
   }
 
