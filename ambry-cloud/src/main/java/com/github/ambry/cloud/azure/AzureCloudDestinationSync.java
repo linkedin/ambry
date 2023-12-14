@@ -190,13 +190,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.info("Azure blob storage container = {}", blobContainerItem.getName());
       break;
     }
+    logger.info("Successful connection to Azure Storage");
     // Test connection to Table Service
     PagedIterable<TableItem>  tableItemPagedIterable = azureTableServiceClient.listTables();
     for (TableItem tableItem : tableItemPagedIterable) {
+      // List one item to populate lazy iterable and confirm
       logger.info("Azure Table = {}", tableItem.getName());
       break;
     }
-    logger.info("Successful connection to Azure Storage");
+    logger.info("Successful connection to Azure Table Service");
   }
 
 
