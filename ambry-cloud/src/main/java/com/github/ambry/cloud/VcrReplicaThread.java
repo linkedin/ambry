@@ -74,8 +74,8 @@ public class VcrReplicaThread extends ReplicaThread {
   protected void logToExternalTable(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo) {
     for (MessageInfo messageInfo: messageInfoList) {
       TableEntity tableEntity = new TableEntity(messageInfo.getStoreKey().getID(),
-          remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname());
-      tableEntity.addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath());
+          remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname())
+          .addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath());
       cloudDestination.createTableEntity(azureCloudConfig.azureTableNameCorruptBlobs, tableEntity);
     }
   }
