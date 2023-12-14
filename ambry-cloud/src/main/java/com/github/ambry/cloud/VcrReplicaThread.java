@@ -65,13 +65,18 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureCloudConfig = new AzureCloudConfig(properties);
   }
 
+  /**
+   * Inserts a row in Azure Table
+   * @param messageInfoList List of replicated messages
+   * @param remoteReplicaInfo Remote host info
+   */
   @Override
   protected void logToExternalTable(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo) {
     for (MessageInfo messageInfo: messageInfoList) {
       TableEntity tableEntity = new TableEntity(messageInfo.getStoreKey().getID(),
           remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname());
       tableEntity.addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath());
-      cloudDestination.createTableEntity(azureCloudConfig.azureInvalidBlobTableName, tableEntity);
+      cloudDestination.createTableEntity(azureCloudConfig.azureTableNameCorruptBlobs, tableEntity);
     }
   }
 }

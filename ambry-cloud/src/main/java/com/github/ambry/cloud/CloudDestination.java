@@ -25,7 +25,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import org.apache.zookeeper.KeeperException;
 
 
 /**
@@ -238,7 +237,12 @@ public interface CloudDestination extends Closeable {
    */
   default boolean doesBlobExist(BlobId id) {return false;};
 
-  default void createTableEntity(String azureInvalidBlobTableName, TableEntity tableEntity) {
+  /**
+   * Inserts an entry into a Azure Table
+   * @param tableName Name of the table in Azure Table Service
+   * @param tableEntity Table row to insert
+   */
+  default void createTableEntity(String tableName, TableEntity tableEntity) {
     throw new UnsupportedOperationException("createTableEntity is not implemented");
   }
 }

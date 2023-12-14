@@ -1352,6 +1352,11 @@ public class ReplicaThread implements Runnable {
         remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
   }
 
+  /**
+   * Logs a record to any external store.
+   * @param messageInfoList List of replicated messages
+   * @param remoteReplicaInfo Remote host info
+   */
   protected void logToExternalTable(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo) {
     // no-op. Inheritor can override.
   }

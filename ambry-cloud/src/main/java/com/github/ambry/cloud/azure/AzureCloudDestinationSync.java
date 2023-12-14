@@ -64,7 +64,6 @@ import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
-import com.mysql.cj.xdevapi.Table;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -81,8 +80,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.apache.http.HttpStatus;
 import java.util.function.Supplier;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -222,7 +221,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.error(errMsg);
       throw new RuntimeException(errMsg);
     }
-    tableClient.createEntity();
     return tableClient;
   }
 
