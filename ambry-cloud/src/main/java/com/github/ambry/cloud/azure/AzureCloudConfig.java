@@ -236,7 +236,7 @@ public class AzureCloudConfig {
   public final String azureTableConnectionString;
 
   /**
-   * The Azure Table connection string.
+   * The Azure Table name for corrupt blobs.
    */
   public static final String AZURE_TABLE_NAME_CORRUPT_BLOBS = "azure.table.name.corrupt.blobs";
   public static final String DEFAULT_AZURE_TABLE_NAME_CORRUPT_BLOBS = "corruptBlobIdsDefaultTableName";
