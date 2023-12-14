@@ -1651,6 +1651,7 @@ public class CloudBlobStoreTest {
 
     // Add some rows to the table
     for (MessageInfo messageInfo: messageWriteSet.getMessageSetInfo()) {
+      // TableEntity(partition-key, row-key)
       TableEntity tableEntity = new TableEntity(messageInfo.getStoreKey().getID(), ROW_KEY)
           .addProperty(PROPERTY, VALUE);
       // Add several times to assert row is added only once
@@ -1662,7 +1663,7 @@ public class CloudBlobStoreTest {
 
     // Check rows are as expected
     for (MessageInfo messageInfo: messageWriteSet.getMessageSetInfo()) {
-      TableEntity tableEntity = tableClient.getEntity(messageInfo.getStoreKey().getID(), "localhost");
+      TableEntity tableEntity = tableClient.getEntity(messageInfo.getStoreKey().getID(), ROW_KEY);
       assertEquals(VALUE, tableEntity.getProperties().get(PROPERTY));
     }
 

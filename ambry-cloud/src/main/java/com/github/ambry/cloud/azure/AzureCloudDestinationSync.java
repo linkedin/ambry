@@ -220,6 +220,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   /**
    * Inserts a row in Azure Table
+   * An Azure Table Entity is a row with paritionKey and rowKey
    * @param tableName Name of the table in Azure Table Service
    * @param tableEntity Table row to insert
    */
