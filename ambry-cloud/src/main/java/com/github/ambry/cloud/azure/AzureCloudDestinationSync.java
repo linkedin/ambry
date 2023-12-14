@@ -18,6 +18,10 @@ import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Context;
+import com.azure.data.tables.TableClient;
+import com.azure.data.tables.TableServiceClient;
+import com.azure.data.tables.models.TableEntity;
+import com.azure.data.tables.models.TableItem;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -56,16 +60,15 @@ import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import com.mysql.cj.xdevapi.Table;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -90,10 +93,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected AzureCloudConfig azureCloudConfig;
   protected AzureMetrics azureMetrics;
   protected BlobServiceClient azureStorageClient;
+  protected TableServiceClient azureTableServiceClient;
   protected CloudConfig cloudConfig;
   protected ClusterMap clusterMap;
   protected ClusterMapConfig clusterMapConfig;
   protected ConcurrentHashMap<String, BlobContainerClient> partitionToAzureStore;
+  protected ConcurrentHashMap<String, TableClient> tableClientMap;
   protected VcrMetrics vcrMetrics;
   protected final AtomicBoolean shutdownCompaction = new AtomicBoolean(false);
   protected AccountService accountService;
@@ -161,11 +166,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
     this.clusterMap = clusterMap;
     this.clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.partitionToAzureStore = new ConcurrentHashMap<>();
+    this.tableClientMap = new ConcurrentHashMap<>();
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig);
     logger.info("azureCloudConfig.azureStorageClientClass = {}", azureCloudConfig.azureStorageClientClass);
-    this.azureStorageClient =
-        ((StorageClient) Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics)).getStorageSyncClient();
+    StorageClient storageClient =
+        Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics);
+    this.azureStorageClient = storageClient.getStorageSyncClient();
+    this.azureTableServiceClient = storageClient.getTableServiceClient();
     testAzureStorageConnectivity();
     logger.info("Created AzureCloudDestinationSync");
   }
@@ -175,12 +183,56 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   protected void testAzureStorageConnectivity() {
     logger.info("Testing Azure Storage connectivity");
+    // Test connection to Blob Service
     PagedIterable<BlobContainerItem> blobContainerItemPagedIterable = azureStorageClient.listBlobContainers();
     for (BlobContainerItem blobContainerItem : blobContainerItemPagedIterable) {
       logger.info("Azure blob storage container = {}", blobContainerItem.getName());
       break;
     }
+    // Test connection to Table Service
+    PagedIterable<TableItem>  tableItemPagedIterable = azureTableServiceClient.listTables();
+    for (TableItem tableItem : tableItemPagedIterable) {
+      logger.info("Azure Table = {}", tableItem.getName());
+      break;
+    }
     logger.info("Successful connection to Azure Storage");
+  }
+
+
+  /**
+   * Gets an table client to Azure Data Table Service
+   * @param tableName Table Name
+   * @return {@link TableClient}
+   */
+  protected TableClient createOrGetTableClient(String tableName) {
+    TableClient tableClient;
+    String errMsg = String.format("Failed to create or get table {} in Azure Table Service", tableName);
+    try {
+      tableClient = tableClientMap.computeIfAbsent(tableName,
+          key -> azureTableServiceClient.createTableIfNotExists(tableName));
+    } catch (Exception e) {
+      logger.error(errMsg);
+      // TODO: metric
+      throw e;
+    }
+
+    // If it is still null, throw the error and emit a metric
+    if (tableClient == null) {
+      // TODO: metric
+      logger.error(errMsg);
+      throw new RuntimeException(errMsg);
+    }
+    tableClient.createEntity();
+    return tableClient;
+  }
+
+  public void createTableEntity(String tableName, TableEntity tableEntity) {
+    try {
+      createOrGetTableClient(tableName).createEntity(tableEntity);
+    } catch (Exception e) {
+      logger.error("Failed to insert table entity {}/{} in {} due to {}",
+          tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, e);
+    }
   }
 
   /**

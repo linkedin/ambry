@@ -13,33 +13,48 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
+import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.HelixVcrUtil;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterParticipantListener;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.ServerConfig;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -51,8 +66,10 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.helix.lock.DistributedLock;
 import org.apache.helix.lock.LockScope;
@@ -67,6 +84,9 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudConfig cloudConfig;
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
+  protected VerifiableProperties properties;
+  protected  MetricRegistry registry;
+  protected CloudDestination cloudDestination;
   private CloudStorageCompactor cloudStorageCompactor;
   protected ScheduledExecutorService cloudCompactionScheduler;
 
@@ -109,15 +129,17 @@ public class VcrReplicationManager extends ReplicationEngine {
     vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
   }
 
-  public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
-      ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
+  public VcrReplicationManager(VerifiableProperties properties, MetricRegistry registry, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
       CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
-      VcrMetrics vcrMetrics, NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName) throws ReplicationException, IllegalStateException {
-    this(cloudConfig, replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory, clusterMap,
-        vcrClusterParticipant, scheduler, networkClientFactory, vcrMetrics, requestNotification,
-        storeKeyConverterFactory, transformerClassName);
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
+      throws ReplicationException, IllegalStateException {
+    this(new CloudConfig(properties), new ReplicationConfig(properties), new ClusterMapConfig(properties),
+        new StoreConfig(properties), storeManager, storeKeyFactory, clusterMap,
+        vcrClusterParticipant, scheduler, networkClientFactory, new VcrMetrics(registry), requestNotification,
+        storeKeyConverterFactory, new ServerConfig(properties).serverMessageTransformer);
+    this.properties = properties;
+    this.registry = registry;
     this.persistor =
         new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
             tokenHelper, cloudDestination);
@@ -135,6 +157,24 @@ public class VcrReplicationManager extends ReplicationEngine {
       logger.info("[COMPACT] Created CloudStorageCompactor and compactionScheduler");
     }
     this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
+    this.cloudDestination = cloudDestination;
+  }
+
+  /**
+   * Returns {@link VcrReplicaThread}
+   */
+  @Override
+  protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
+      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+    return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+        leaderBasedReplicationAdmin, this.persistor, cloudDestination, properties);
   }
 
   @Override

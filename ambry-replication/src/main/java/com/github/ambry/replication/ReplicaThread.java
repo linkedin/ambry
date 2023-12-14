@@ -1298,6 +1298,7 @@ public class ReplicaThread implements Runnable {
                       remoteReplicaInfo.getReplicationRetryCount(), remoteReplicaInfo.getToken(),
                       remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
                       remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
+                  logToExternalTable(validMessageDetectionInputStream.getInvalidMessages(), remoteReplicaInfo);
                 }
                 // If there are no invalid messages, or we have maxed out the retries, then advance token
                 advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
@@ -1349,6 +1350,10 @@ public class ReplicaThread implements Runnable {
     logger.trace("Thread name: {}, updating token {} and lag {} for partition {} for Remote replica {}", threadName,
         remoteReplicaInfo.getToken(), remoteReplicaInfo.getLocalLagFromRemoteInBytes(),
         remoteReplicaInfo.getReplicaId().getPartitionId().toString(), remoteReplicaInfo.getReplicaId());
+  }
+
+  protected void logToExternalTable(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo) {
+    // no-op. Inheritor can override.
   }
 
   /**

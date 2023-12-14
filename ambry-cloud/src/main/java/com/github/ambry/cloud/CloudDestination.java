@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.data.tables.models.TableEntity;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
@@ -24,6 +25,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import org.apache.zookeeper.KeeperException;
 
 
 /**
@@ -235,4 +237,8 @@ public interface CloudDestination extends Closeable {
    * @return
    */
   default boolean doesBlobExist(BlobId id) {return false;};
+
+  default void createTableEntity(String azureInvalidBlobTableName, TableEntity tableEntity) {
+    throw new UnsupportedOperationException("createTableEntity is not implemented");
+  }
 }

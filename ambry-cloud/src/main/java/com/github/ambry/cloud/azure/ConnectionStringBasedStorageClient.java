@@ -14,7 +14,12 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.HttpClient;
+import com.azure.core.http.policy.RetryOptions;
 import com.azure.core.util.Configuration;
+import com.azure.data.tables.TableClient;
+import com.azure.data.tables.TableClientBuilder;
+import com.azure.data.tables.TableServiceClient;
+import com.azure.data.tables.TableServiceClientBuilder;
 import com.azure.storage.blob.BlobServiceAsyncClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
@@ -84,6 +89,16 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
   protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
     return new BlobServiceClientBuilder().connectionString(azureCloudConfig.azureStorageConnectionString)
+        .httpClient(httpClient)
+        .retryOptions(retryOptions)
+        .configuration(configuration)
+        .buildClient();
+  }
+
+  @Override
+  protected TableServiceClient buildTableServiceClient(HttpClient httpClient, Configuration configuration,
+      RetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
+    return new TableServiceClientBuilder().connectionString(azureCloudConfig.azureTableConnectionString)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)

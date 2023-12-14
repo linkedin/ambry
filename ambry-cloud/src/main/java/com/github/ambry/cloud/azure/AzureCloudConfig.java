@@ -229,6 +229,22 @@ public class AzureCloudConfig {
   public final String azureStorageConnectionString;
 
   /**
+   * The Azure Table connection string.
+   */
+  public static final String AZURE_TABLE_CONNECTION_STRING = "azure.table.connection.string";
+  @Config(AZURE_TABLE_CONNECTION_STRING)
+  @Default("")
+  public final String azureTableConnectionString;
+
+  /**
+   * The Azure Table connection string.
+   */
+  public static final String AZURE_INVALID_BLOB_TABLE_NAME = "azure.invalid.blob.table.name";
+  @Config(AZURE_INVALID_BLOB_TABLE_NAME)
+  @Default("")
+  public final String azureInvalidBlobTableName;
+
+  /**
    * The Cosmos DB endpoint.
    */
   @Config(COSMOS_ENDPOINT)
@@ -423,6 +439,8 @@ public class AzureCloudConfig {
     // 5000 is the default size of Azure blob storage
     azureBlobStorageMaxResultsPerPage = verifiableProperties.getInt(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, 5000);
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
+    azureTableConnectionString = verifiableProperties.getString(AZURE_TABLE_CONNECTION_STRING, "");
+    azureInvalidBlobTableName = verifiableProperties.getString(AZURE_INVALID_BLOB_TABLE_NAME, "");
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT, ""); // just add a default "" else instantiation fails
     cosmosDatabase = verifiableProperties.getString(COSMOS_DATABASE, ""); // just add a default "" else instantiation fails
     cosmosCollection = verifiableProperties.getString(COSMOS_COLLECTION, ""); // just add a default "" else instantiation fails
