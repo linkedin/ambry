@@ -1653,6 +1653,13 @@ public class CloudBlobStoreTest {
 
     // Add some rows to the table
     // TableEntity = (partition-key, row-key) + more columns
+    // Table entity = Table row
+    // =========================================
+    // | partition-key | row-key | replicaPath |
+    // =========================================
+    // | blob-id-1     | host1   | replica1    |
+    // | blob-id-1     | host2   | replica2    |
+    // =========================================
     // Add several times to assert row is added only once
     messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
         IntStream.range(0,3).forEach(i ->
