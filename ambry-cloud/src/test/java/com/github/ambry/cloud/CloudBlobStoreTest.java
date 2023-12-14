@@ -1659,6 +1659,7 @@ public class CloudBlobStoreTest {
             dest.createTableEntity(TABLE_NAME,
                 new TableEntity(messageInfo.getStoreKey().getID(), ROW_KEY).addProperty(PROPERTY, VALUE))));
     assertEquals(NUM_BLOBS, tableClient.listEntities().stream().count());
+    // Simulate same corrupted blob from a different host
     messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
         IntStream.range(0,3).forEach(i ->
             dest.createTableEntity(TABLE_NAME,
