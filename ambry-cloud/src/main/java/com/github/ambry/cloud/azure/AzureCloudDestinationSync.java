@@ -203,7 +203,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
 
   /**
-   * Gets an table client to Azure Data Table Service
+   * Gets a table client to Azure Data Table Service
    * @param tableName Table Name
    * @return {@link TableClient}
    */
