@@ -66,12 +66,19 @@ public class VcrReplicaThread extends ReplicaThread {
   }
 
   /**
-   * Inserts a row in Azure Table
+   * Inserts a row in Azure Table for each message
    * @param messageInfoList List of replicated messages
    * @param remoteReplicaInfo Remote host info
    */
   @Override
   protected void logToExternalTable(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo) {
+    // Table entity = Table row
+    // =========================================
+    // | partition-key | row-key | replicaPath |
+    // =========================================
+    // | blob-id-1     | host1   | replica1    |
+    // | blob-id-1     | host2   | replica2    |
+    // =========================================
     messageInfoList.forEach(messageInfo ->
         cloudDestination.createTableEntity(azureCloudConfig.azureTableNameCorruptBlobs,
             new TableEntity(messageInfo.getStoreKey().getID(), remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname())
