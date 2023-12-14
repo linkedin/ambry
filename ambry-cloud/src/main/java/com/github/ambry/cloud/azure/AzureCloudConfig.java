@@ -233,15 +233,14 @@ public class AzureCloudConfig {
    */
   public static final String AZURE_TABLE_CONNECTION_STRING = "azure.table.connection.string";
   @Config(AZURE_TABLE_CONNECTION_STRING)
-  @Default("")
   public final String azureTableConnectionString;
 
   /**
    * The Azure Table connection string.
    */
   public static final String AZURE_TABLE_NAME_CORRUPT_BLOBS = "azure.table.name.corrupt.blobs";
+  public static final String DEFAULT_AZURE_TABLE_NAME_CORRUPT_BLOBS = "corruptBlobIdsDefaultTableName";
   @Config(AZURE_TABLE_NAME_CORRUPT_BLOBS)
-  @Default("")
   public final String azureTableNameCorruptBlobs;
 
   /**
@@ -440,7 +439,7 @@ public class AzureCloudConfig {
     azureBlobStorageMaxResultsPerPage = verifiableProperties.getInt(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE, 5000);
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     azureTableConnectionString = verifiableProperties.getString(AZURE_TABLE_CONNECTION_STRING, "");
-    azureTableNameCorruptBlobs = verifiableProperties.getString(AZURE_TABLE_NAME_CORRUPT_BLOBS, "");
+    azureTableNameCorruptBlobs = verifiableProperties.getString(AZURE_TABLE_NAME_CORRUPT_BLOBS, DEFAULT_AZURE_TABLE_NAME_CORRUPT_BLOBS);
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT, ""); // just add a default "" else instantiation fails
     cosmosDatabase = verifiableProperties.getString(COSMOS_DATABASE, ""); // just add a default "" else instantiation fails
     cosmosCollection = verifiableProperties.getString(COSMOS_COLLECTION, ""); // just add a default "" else instantiation fails
