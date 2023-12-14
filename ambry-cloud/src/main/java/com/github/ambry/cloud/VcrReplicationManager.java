@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
@@ -158,6 +159,8 @@ public class VcrReplicationManager extends ReplicationEngine {
     }
     this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
     this.cloudDestination = cloudDestination;
+    // Create the table at the start so that we can catch issues in creation, and the table is ready for threads to log
+    this.cloudDestination.getTableClient(new AzureCloudConfig(properties).azureTableNameCorruptBlobs);
   }
 
   /**
