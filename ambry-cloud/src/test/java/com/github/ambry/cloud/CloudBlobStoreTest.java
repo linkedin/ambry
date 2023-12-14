@@ -1644,7 +1644,7 @@ public class CloudBlobStoreTest {
 
     // Clear table
     TableClient tableClient = ((AzureCloudDestinationSync) dest).getTableClient(CORRUPT_BLOB_IDS);
-    // Don't delete the table, because the prev getTableClient populates the cache with tableClient.
+    // Don't delete the table, because getTableClient populates its cache with tableClient.
     // If we delete the table, then the cached ref is dangling.
     tableClient.listEntities().forEach(tableEntity -> tableClient.deleteEntity(tableEntity));
     assertEquals(0, tableClient.listEntities().stream().count());
