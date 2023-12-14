@@ -113,7 +113,7 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
     if (azureCloudConfig.azureTableConnectionString == null ||
         azureCloudConfig.azureTableConnectionString.isEmpty()) {
       throw new IllegalArgumentException(
-          "Missing Azure Table connection string config Missing Azure Table connection string config " + AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING);
+          "Missing Azure Table connection string config " + AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING);
     }
   }
 

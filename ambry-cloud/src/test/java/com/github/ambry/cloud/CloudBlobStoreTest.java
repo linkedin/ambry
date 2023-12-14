@@ -1630,14 +1630,16 @@ public class CloudBlobStoreTest {
     Properties properties = new Properties();
     setBasicProperties(properties);
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    // Set conn str to null
     properties.setProperty(AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING, "");
     ConnectionStringBasedStorageClient connectionStringBasedStorageClient =
         new ConnectionStringBasedStorageClient(cloudConfig, new AzureCloudConfig(verifiableProperties),
             new AzureMetrics(new MetricRegistry()));
     try {
       connectionStringBasedStorageClient.getTableServiceClient();
+      fail("IllegalArgumentException expected");
     } catch (IllegalArgumentException e) {
-      assertEquals("Missing Azure Table connection string config Missing Azure Table connection string config " + AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING,
+      assertEquals("Missing Azure Table connection string config " + AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING,
           e.getMessage());
     }
   }
