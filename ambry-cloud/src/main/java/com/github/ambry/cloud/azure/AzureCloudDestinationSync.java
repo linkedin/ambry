@@ -211,13 +211,13 @@ public class AzureCloudDestinationSync implements CloudDestination {
           key -> azureTableServiceClient.createTableIfNotExists(tableName));
     } catch (Exception e) {
       logger.error(errMsg);
-      // TODO: metric
+      azureMetrics.azureTableCreateErrorCount.inc();
       throw e;
     }
 
     // If it is still null, throw the error and emit a metric
     if (tableClient == null) {
-      // TODO: metric
+      azureMetrics.azureTableCreateErrorCount.inc();
       logger.error(errMsg);
       throw new RuntimeException(errMsg);
     }
@@ -233,6 +233,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       createOrGetTableClient(tableName).createEntity(tableEntity);
     } catch (Exception e) {
+      azureMetrics.azureTableEntityCreateErrorCount.inc();
       logger.error("Failed to insert table entity {}/{} in {} due to {}",
           tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, e);
     }
