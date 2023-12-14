@@ -1650,21 +1650,18 @@ public class CloudBlobStoreTest {
     assertEquals(0, tableClient.listEntities().stream().count());
 
     // Add some rows to the table
-    for (MessageInfo messageInfo: messageWriteSet.getMessageSetInfo()) {
-      // TableEntity(partition-key, row-key)
-      TableEntity tableEntity = new TableEntity(messageInfo.getStoreKey().getID(), ROW_KEY)
-          .addProperty(PROPERTY, VALUE);
-      // Add several times to assert row is added only once
-      dest.createTableEntity(CORRUPT_BLOB_IDS, tableEntity);
-      dest.createTableEntity(CORRUPT_BLOB_IDS, tableEntity);
-      dest.createTableEntity(CORRUPT_BLOB_IDS, tableEntity);
-    }
+    // TableEntity = (partition-key, row-key)
+    // Add several times to assert row is added only once
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
+        IntStream.range(0,3).forEach(i ->
+            dest.createTableEntity(CORRUPT_BLOB_IDS,
+                new TableEntity(messageInfo.getStoreKey().getID(), ROW_KEY).addProperty(PROPERTY, VALUE))));
     assertEquals(numBlobs, tableClient.listEntities().stream().count());
 
     // Check rows are as expected
     messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
-        assertEquals(VALUE, tableClient.getEntity(messageInfo.getStoreKey().getID(), ROW_KEY)
-            .getProperties().get(PROPERTY)));
+        assertEquals(VALUE,
+            tableClient.getEntity(messageInfo.getStoreKey().getID(), ROW_KEY).getProperties().get(PROPERTY)));
 
     // Can delete table now
     tableClient.deleteTable();

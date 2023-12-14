@@ -231,9 +231,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       getTableClient(tableName).createEntity(tableEntity);
     } catch (TableServiceException tse) {
-      if (tse.getValue().getErrorCode() != TableErrorCode.ENTITY_ALREADY_EXISTS) {
-        throwable = tse;
-      }
+      throwable = (tse.getValue().getErrorCode() != TableErrorCode.ENTITY_ALREADY_EXISTS) ? tse : null;
     } catch (Throwable e) {
       throwable = e;
     } finally {
