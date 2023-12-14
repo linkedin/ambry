@@ -29,7 +29,9 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.cloud.azure.AzuriteUtils;
+import com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -99,6 +101,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.apache.http.HttpStatus;
+import org.checkerframework.checker.units.qual.A;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -144,6 +147,7 @@ public class CloudBlobStoreTest {
   protected boolean compactionDryRun = true;
 
   protected AccountService accountService = mock(AccountService.class);
+  protected MetricRegistry metricRegistry;
 
   /**
    * Test parameters
@@ -181,7 +185,7 @@ public class CloudBlobStoreTest {
         TestCloudBlobCryptoAgentFactory.class.getName());
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     cloudConfig = new CloudConfig(verifiableProperties);
-    MetricRegistry metricRegistry = new MetricRegistry();
+    metricRegistry = new MetricRegistry();
     vcrMetrics = new VcrMetrics(metricRegistry);
     if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
       currentCacheLimit = cacheLimit;
@@ -1622,6 +1626,23 @@ public class CloudBlobStoreTest {
   }
 
   @Test
+  public void testInvalidAzureConfigs() {
+    Properties properties = new Properties();
+    setBasicProperties(properties);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    properties.setProperty(AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING, "");
+    ConnectionStringBasedStorageClient connectionStringBasedStorageClient =
+        new ConnectionStringBasedStorageClient(cloudConfig, new AzureCloudConfig(verifiableProperties),
+            new AzureMetrics(new MetricRegistry()));
+    try {
+      connectionStringBasedStorageClient.getTableServiceClient();
+    } catch (IllegalArgumentException e) {
+      assertEquals("Missing Azure Table connection string config Missing Azure Table connection string config " + AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING,
+          e.getMessage());
+    }
+  }
+
+  @Test
   public void testCreateTableEntity() throws ReflectiveOperationException {
     v2TestOnly();
     setupCloudStore(false, false, 0, true);
@@ -1645,7 +1666,7 @@ public class CloudBlobStoreTest {
     final String REPLICA_2 = "/mnt/disk/5678";
 
     // Clear table
-    TableClient tableClient = ((AzureCloudDestinationSync) dest).getTableClient(TABLE_NAME);
+    TableClient tableClient = dest.getTableClient(TABLE_NAME);
     // Don't delete the table, because getTableClient populates its cache with tableClient ref.
     // If we delete the table, then the cached ref is dangling.
     tableClient.listEntities().forEach(tableEntity -> tableClient.deleteEntity(tableEntity));

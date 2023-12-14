@@ -109,6 +109,18 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
    * Validate that all the required configs for connection string based authentication are present.
    * @param azureCloudConfig {@link AzureCloudConfig} object.
    */
+  protected void validateTableServiceConfigs(AzureCloudConfig azureCloudConfig) {
+    if (azureCloudConfig.azureTableConnectionString == null ||
+        azureCloudConfig.azureTableConnectionString.isEmpty()) {
+      throw new IllegalArgumentException(
+          "Missing Azure Table connection string config Missing Azure Table connection string config " + AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING);
+    }
+  }
+
+  /**
+   * Validate that all the required configs for connection string based authentication are present.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   */
   protected void validateABSAuthConfigs(AzureCloudConfig azureCloudConfig) {
     if (storageAccountInfo() != null) {
       if (storageAccountInfo().getStorageConnectionString().isEmpty()) {

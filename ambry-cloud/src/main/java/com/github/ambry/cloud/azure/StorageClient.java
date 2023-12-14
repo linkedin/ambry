@@ -74,7 +74,7 @@ import org.slf4j.LoggerFactory;
 public abstract class StorageClient implements AzureStorageClient {
   Logger logger = LoggerFactory.getLogger(StorageClient.class);
   private final AtomicReference<BlobServiceAsyncClient> storageAsyncClientRef;
-  protected final AtomicReference<BlobServiceClient> storageSyncClientRef;
+  protected AtomicReference<BlobServiceClient> storageSyncClientRef;
   private final AtomicReference<BlobBatchAsyncClient> blobBatchAsyncClientRef;
   private final CloudConfig cloudConfig;
   protected final AzureCloudConfig azureCloudConfig;
@@ -102,7 +102,7 @@ public abstract class StorageClient implements AzureStorageClient {
     this.blobLayoutStrategy = null;
     this.azureMetrics = azureMetrics;
     storageAsyncClientRef = null;
-    storageSyncClientRef = new AtomicReference<>(createBlobStorageSyncClient());
+    storageSyncClientRef = null;
     blobBatchAsyncClientRef = null;
   }
 
@@ -164,6 +164,9 @@ public abstract class StorageClient implements AzureStorageClient {
    * @return the underlying {@link BlobServiceAsyncClient}.
    */
   public BlobServiceClient getStorageSyncClient() {
+    if (storageSyncClientRef == null) {
+      storageSyncClientRef = new AtomicReference<>(createBlobStorageSyncClient());
+    }
     return storageSyncClientRef.get();
   }
 
@@ -447,8 +450,8 @@ public abstract class StorageClient implements AzureStorageClient {
     }
   }
 
-  protected TableServiceClient getTableServiceClient() {
-    validateABSAuthConfigs(azureCloudConfig);
+  public TableServiceClient getTableServiceClient() {
+    validateTableServiceConfigs(azureCloudConfig);
     ProxyOptions proxyOptions = null;
     if (cloudConfig.vcrProxyHost != null && !cloudConfig.vcrProxyHost.isEmpty()) {
       logger.info("Using vcrProxyHost:vcrProxyPort {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
@@ -479,6 +482,12 @@ public abstract class StorageClient implements AzureStorageClient {
     storageAsyncClientRef.set(blobServiceAsyncClient);
     blobBatchAsyncClientRef.set(new BlobBatchClientBuilder(storageAsyncClientRef.get()).buildAsyncClient());
   }
+
+  /**
+   * Validate that all the required configs for Azure Table Service authentication are present.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   */
+  protected void validateTableServiceConfigs(AzureCloudConfig azureCloudConfig) {}
 
   /**
    * Validate that all the required configs for ABS authentication are present.
