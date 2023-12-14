@@ -1631,32 +1631,32 @@ public class CloudBlobStoreTest {
       Add some permanent blobs.
       set isVcr = true so that the lifeVersion is 0, else it is -1
      */
-    int numBlobs = 10;
-    IntStream.range(0,numBlobs).forEach(i -> CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024,
+    final int NUM_BLOBS = 10;
+    IntStream.range(0,NUM_BLOBS).forEach(i -> CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024,
         Utils.Infinite_Time, refAccountId, refContainerId, false, false, partitionId,
         System.currentTimeMillis(), isVcr));
 
     // Test constants
-    final String CORRUPT_BLOB_IDS = "corruptBlobIds";
+    final String TABLE_NAME = "corruptBlobIds";
     final String ROW_KEY = "localhost";
     final String PROPERTY = "replicaPath";
     final String VALUE = "/mnt/disk/1234";
 
     // Clear table
-    TableClient tableClient = ((AzureCloudDestinationSync) dest).getTableClient(CORRUPT_BLOB_IDS);
+    TableClient tableClient = ((AzureCloudDestinationSync) dest).getTableClient(TABLE_NAME);
     // Don't delete the table, because getTableClient populates its cache with tableClient.
     // If we delete the table, then the cached ref is dangling.
     tableClient.listEntities().forEach(tableEntity -> tableClient.deleteEntity(tableEntity));
     assertEquals(0, tableClient.listEntities().stream().count());
 
     // Add some rows to the table
-    // TableEntity = (partition-key, row-key)
+    // TableEntity = (partition-key, row-key) + more columns
     // Add several times to assert row is added only once
     messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
         IntStream.range(0,3).forEach(i ->
-            dest.createTableEntity(CORRUPT_BLOB_IDS,
+            dest.createTableEntity(TABLE_NAME,
                 new TableEntity(messageInfo.getStoreKey().getID(), ROW_KEY).addProperty(PROPERTY, VALUE))));
-    assertEquals(numBlobs, tableClient.listEntities().stream().count());
+    assertEquals(NUM_BLOBS, tableClient.listEntities().stream().count());
 
     // Check rows are as expected
     messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
