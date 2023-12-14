@@ -1662,10 +1662,9 @@ public class CloudBlobStoreTest {
     assertEquals(numBlobs, tableClient.listEntities().stream().count());
 
     // Check rows are as expected
-    for (MessageInfo messageInfo: messageWriteSet.getMessageSetInfo()) {
-      TableEntity tableEntity = tableClient.getEntity(messageInfo.getStoreKey().getID(), ROW_KEY);
-      assertEquals(VALUE, tableEntity.getProperties().get(PROPERTY));
-    }
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
+        assertEquals(VALUE, tableClient.getEntity(messageInfo.getStoreKey().getID(), ROW_KEY)
+            .getProperties().get(PROPERTY)));
 
     // Can delete table now
     tableClient.deleteTable();
