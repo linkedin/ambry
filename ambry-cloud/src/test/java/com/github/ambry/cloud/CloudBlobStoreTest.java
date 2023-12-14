@@ -15,6 +15,8 @@ package com.github.ambry.cloud;
 
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
+import com.azure.data.tables.TableClient;
+import com.azure.data.tables.models.TableEntity;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.models.BlobItem;
@@ -1617,6 +1619,55 @@ public class CloudBlobStoreTest {
       assertEquals("Blob ttl should be infinite now.", Utils.Infinite_Time,
           map.get(blobId.toString()).getExpirationTime());
     }
+  }
+
+  @Test
+  public void testCreateTableEntity() throws ReflectiveOperationException {
+    v2TestOnly();
+    setupCloudStore(false, false, 0, true);
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    /*
+      Add some permanent blobs.
+      set isVcr = true so that the lifeVersion is 0, else it is -1
+     */
+    int numBlobs = 10;
+    IntStream.range(0,numBlobs).forEach(i -> CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024,
+        Utils.Infinite_Time, refAccountId, refContainerId, false, false, partitionId,
+        System.currentTimeMillis(), isVcr));
+
+    // Test constants
+    final String CORRUPT_BLOB_IDS = "corruptBlobIds";
+    final String ROW_KEY = "localhost";
+    final String PROPERTY = "replicaPath";
+    final String VALUE = "/mnt/disk/1234";
+
+    // Clear table
+    TableClient tableClient = ((AzureCloudDestinationSync) dest).getTableClient(CORRUPT_BLOB_IDS);
+    // Don't delete the table, because the prev getTableClient populates the cache with tableClient.
+    // If we delete the table, then the cached ref is dangling.
+    tableClient.listEntities().forEach(tableEntity -> tableClient.deleteEntity(tableEntity));
+    assertEquals(0, tableClient.listEntities().stream().count());
+
+    // Add some rows to the table
+    for (MessageInfo messageInfo: messageWriteSet.getMessageSetInfo()) {
+      TableEntity tableEntity = new TableEntity(messageInfo.getStoreKey().getID(), ROW_KEY)
+          .addProperty(PROPERTY, VALUE);
+      // Add several times to assert row is added only once
+      dest.createTableEntity(CORRUPT_BLOB_IDS, tableEntity);
+      dest.createTableEntity(CORRUPT_BLOB_IDS, tableEntity);
+      dest.createTableEntity(CORRUPT_BLOB_IDS, tableEntity);
+    }
+    assertEquals(numBlobs, tableClient.listEntities().stream().count());
+
+    // Check rows are as expected
+    for (MessageInfo messageInfo: messageWriteSet.getMessageSetInfo()) {
+      TableEntity tableEntity = tableClient.getEntity(messageInfo.getStoreKey().getID(), "localhost");
+      assertEquals(VALUE, tableEntity.getProperties().get(PROPERTY));
+    }
+
+    // Can delete table now
+    tableClient.deleteTable();
   }
 
   /**

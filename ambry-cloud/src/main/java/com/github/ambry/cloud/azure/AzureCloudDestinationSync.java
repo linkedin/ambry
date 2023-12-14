@@ -21,7 +21,9 @@ import com.azure.core.util.Context;
 import com.azure.data.tables.TableClient;
 import com.azure.data.tables.TableServiceClient;
 import com.azure.data.tables.models.TableEntity;
+import com.azure.data.tables.models.TableErrorCode;
 import com.azure.data.tables.models.TableItem;
+import com.azure.data.tables.models.TableServiceException;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -203,25 +205,17 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param tableName Table Name
    * @return {@link TableClient}
    */
-  protected TableClient createOrGetTableClient(String tableName) {
-    TableClient tableClient;
-    String errMsg = String.format("Failed to create or get table {} in Azure Table Service", tableName);
+  public TableClient getTableClient(String tableName) {
     try {
-      tableClient = tableClientMap.computeIfAbsent(tableName,
+      tableClientMap.computeIfAbsent(tableName,
           key -> azureTableServiceClient.createTableIfNotExists(tableName));
+      return tableClientMap.computeIfAbsent(tableName,
+          key -> azureTableServiceClient.getTableClient(tableName));
     } catch (Exception e) {
-      logger.error(errMsg);
       azureMetrics.azureTableCreateErrorCount.inc();
+      logger.error("Failed to create or get table {} in Azure Table Service due to {}", tableName, e);
       throw e;
     }
-
-    // If it is still null, throw the error and emit a metric
-    if (tableClient == null) {
-      azureMetrics.azureTableCreateErrorCount.inc();
-      logger.error(errMsg);
-      throw new RuntimeException(errMsg);
-    }
-    return tableClient;
   }
 
   /**
@@ -231,7 +225,15 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   public void createTableEntity(String tableName, TableEntity tableEntity) {
     try {
-      createOrGetTableClient(tableName).createEntity(tableEntity);
+      getTableClient(tableName).createEntity(tableEntity);
+    } catch (TableServiceException tse) {
+      if (tse.getValue().getErrorCode() == TableErrorCode.ENTITY_ALREADY_EXISTS) {
+        // do nothing
+        return;
+      }
+      azureMetrics.azureTableEntityCreateErrorCount.inc();
+      logger.error("Failed to insert table entity {}/{} in {} due to {}",
+          tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, tse);
     } catch (Exception e) {
       azureMetrics.azureTableEntityCreateErrorCount.inc();
       logger.error("Failed to insert table entity {}/{} in {} due to {}",

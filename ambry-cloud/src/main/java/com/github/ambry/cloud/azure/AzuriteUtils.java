@@ -30,7 +30,9 @@ public class AzuriteUtils {
   public static final String AZURITE_CONNECTION_STRING =  "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;" +
       "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;" +
       "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;";
-
+  public static final String AZURITE_TABLE_CONNECTION_STRING =  "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;" +
+      "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;" +
+      "TableEndpoint=http://127.0.0.1:10002/devstoreaccount1;";
   /**
    * Checks connection to Azurite
    * @return True if successful, else false
@@ -71,6 +73,7 @@ public class AzuriteUtils {
     properties.setProperty(AzureCloudConfig.COSMOS_DATABASE, "does_not_matter");
     properties.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "does_not_matter");
     properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
+    properties.setProperty(AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING, AzuriteUtils.AZURITE_TABLE_CONNECTION_STRING);
     return new AzureCloudDestinationSync(new VerifiableProperties(properties), metricRegistry,  clusterMap, accountService);
   }
 
