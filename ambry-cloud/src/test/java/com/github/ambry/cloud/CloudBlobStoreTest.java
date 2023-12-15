@@ -15,6 +15,8 @@ package com.github.ambry.cloud;
 
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
+import com.azure.data.tables.TableClient;
+import com.azure.data.tables.models.TableEntity;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.models.BlobItem;
@@ -27,7 +29,9 @@ import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.cloud.azure.AzuriteUtils;
+import com.github.ambry.cloud.azure.ConnectionStringBasedStorageClient;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -97,6 +101,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.apache.http.HttpStatus;
+import org.checkerframework.checker.units.qual.A;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -142,6 +147,7 @@ public class CloudBlobStoreTest {
   protected boolean compactionDryRun = true;
 
   protected AccountService accountService = mock(AccountService.class);
+  protected MetricRegistry metricRegistry;
 
   /**
    * Test parameters
@@ -179,7 +185,7 @@ public class CloudBlobStoreTest {
         TestCloudBlobCryptoAgentFactory.class.getName());
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     cloudConfig = new CloudConfig(verifiableProperties);
-    MetricRegistry metricRegistry = new MetricRegistry();
+    metricRegistry = new MetricRegistry();
     vcrMetrics = new VcrMetrics(metricRegistry);
     if (ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1)) {
       currentCacheLimit = cacheLimit;
@@ -1617,6 +1623,86 @@ public class CloudBlobStoreTest {
       assertEquals("Blob ttl should be infinite now.", Utils.Infinite_Time,
           map.get(blobId.toString()).getExpirationTime());
     }
+  }
+
+  @Test
+  public void testInvalidAzureConfigs() {
+    Properties properties = new Properties();
+    setBasicProperties(properties);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    // Set conn str to null
+    properties.setProperty(AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING, "");
+    ConnectionStringBasedStorageClient connectionStringBasedStorageClient =
+        new ConnectionStringBasedStorageClient(cloudConfig, new AzureCloudConfig(verifiableProperties),
+            new AzureMetrics(new MetricRegistry()));
+    try {
+      connectionStringBasedStorageClient.getTableServiceClient();
+      fail("IllegalArgumentException expected");
+    } catch (IllegalArgumentException e) {
+      assertEquals("Missing Azure Table connection string config " + AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING,
+          e.getMessage());
+    }
+  }
+
+  @Test
+  public void testCreateTableEntity() throws ReflectiveOperationException {
+    v2TestOnly();
+    setupCloudStore(false, false, 0, true);
+    MockMessageWriteSet messageWriteSet = new MockMessageWriteSet();
+
+    /*
+      Add some permanent blobs.
+      set isVcr = true so that the lifeVersion is 0, else it is -1
+     */
+    final int NUM_BLOBS = 10;
+    IntStream.range(0,NUM_BLOBS).forEach(i -> CloudTestUtil.addBlobToMessageSet(messageWriteSet, 1024,
+        Utils.Infinite_Time, refAccountId, refContainerId, false, false, partitionId,
+        System.currentTimeMillis(), isVcr));
+
+    // Test constants
+    final String TABLE_NAME = "corruptBlobIds";
+    final String HOST_1 = "localhost";
+    final String HOST_2 = "localhost2";
+    final String REPLICA_COLUMN = "replicaPath";
+    final String REPLICA_1 = "/mnt/disk/1234";
+    final String REPLICA_2 = "/mnt/disk/5678";
+
+    // Clear table
+    TableClient tableClient = dest.getTableClient(TABLE_NAME);
+    // Don't delete the table, because getTableClient populates its cache with tableClient ref.
+    // If we delete the table, then the cached ref is dangling.
+    tableClient.listEntities().forEach(tableEntity -> tableClient.deleteEntity(tableEntity));
+    assertEquals(0, tableClient.listEntities().stream().count());
+
+    // Add some rows to the table
+    // TableEntity = (partition-key, row-key) + more columns
+    // Table entity = Table row
+    // =========================================
+    // | partition-key | row-key | replicaPath |
+    // =========================================
+    // | blob-id-1     | host1   | replica1    |
+    // | blob-id-1     | host2   | replica2    |
+    // =========================================
+    // Add several times to assert row is added only once
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
+        IntStream.range(0,3).forEach(i ->
+            dest.createTableEntity(TABLE_NAME,
+                new TableEntity(messageInfo.getStoreKey().getID(), HOST_1).addProperty(REPLICA_COLUMN, REPLICA_1))));
+    assertEquals(NUM_BLOBS, tableClient.listEntities().stream().count());
+    // Simulate same corrupted blob from a different host
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
+        IntStream.range(0,3).forEach(i ->
+            dest.createTableEntity(TABLE_NAME,
+                new TableEntity(messageInfo.getStoreKey().getID(), HOST_2).addProperty(REPLICA_COLUMN, REPLICA_2))));
+    assertEquals(NUM_BLOBS*2, tableClient.listEntities().stream().count());
+
+    // Check rows are as expected
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
+        assertEquals(REPLICA_1,
+            tableClient.getEntity(messageInfo.getStoreKey().getID(), HOST_1).getProperties().get(REPLICA_COLUMN)));
+    messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
+        assertEquals(REPLICA_2,
+            tableClient.getEntity(messageInfo.getStoreKey().getID(), HOST_2).getProperties().get(REPLICA_COLUMN)));
   }
 
   /**

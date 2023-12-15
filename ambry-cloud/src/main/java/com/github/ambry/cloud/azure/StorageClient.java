@@ -16,11 +16,14 @@ package com.github.ambry.cloud.azure;
 import com.azure.core.http.HttpClient;
 import com.azure.core.http.ProxyOptions;
 import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
+import com.azure.core.http.policy.FixedDelayOptions;
+import com.azure.core.http.policy.RetryOptions;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Configuration;
 import com.azure.core.util.ConfigurationBuilder;
 import com.azure.core.util.Context;
 import com.azure.core.util.FluxUtil;
+import com.azure.data.tables.TableServiceClient;
 import com.azure.storage.blob.BlobContainerAsyncClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceAsyncClient;
@@ -49,6 +52,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +74,7 @@ import org.slf4j.LoggerFactory;
 public abstract class StorageClient implements AzureStorageClient {
   Logger logger = LoggerFactory.getLogger(StorageClient.class);
   private final AtomicReference<BlobServiceAsyncClient> storageAsyncClientRef;
-  protected final AtomicReference<BlobServiceClient> storageSyncClientRef;
+  protected AtomicReference<BlobServiceClient> storageSyncClientRef;
   private final AtomicReference<BlobBatchAsyncClient> blobBatchAsyncClientRef;
   private final CloudConfig cloudConfig;
   protected final AzureCloudConfig azureCloudConfig;
@@ -98,7 +102,7 @@ public abstract class StorageClient implements AzureStorageClient {
     this.blobLayoutStrategy = null;
     this.azureMetrics = azureMetrics;
     storageAsyncClientRef = null;
-    storageSyncClientRef = new AtomicReference<>(createBlobStorageSyncClient());
+    storageSyncClientRef = null;
     blobBatchAsyncClientRef = null;
   }
 
@@ -160,6 +164,9 @@ public abstract class StorageClient implements AzureStorageClient {
    * @return the underlying {@link BlobServiceAsyncClient}.
    */
   public BlobServiceClient getStorageSyncClient() {
+    if (storageSyncClientRef == null) {
+      storageSyncClientRef = new AtomicReference<>(createBlobStorageSyncClient());
+    }
     return storageSyncClientRef.get();
   }
 
@@ -443,6 +450,29 @@ public abstract class StorageClient implements AzureStorageClient {
     }
   }
 
+  public TableServiceClient getTableServiceClient() {
+    validateTableServiceConfigs(azureCloudConfig);
+    ProxyOptions proxyOptions = null;
+    if (cloudConfig.vcrProxyHost != null && !cloudConfig.vcrProxyHost.isEmpty()) {
+      logger.info("Using vcrProxyHost:vcrProxyPort {}:{}", cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort);
+      proxyOptions = new ProxyOptions(ProxyOptions.Type.HTTP,
+          new InetSocketAddress(cloudConfig.vcrProxyHost, cloudConfig.vcrProxyPort));
+    } else {
+      logger.info("No vcrProxyHost provided");
+    }
+    HttpClient client = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
+    Integer tryTimeoutInSeconds =
+        Math.toIntExact(Math.max(1, TimeUnit.MILLISECONDS.toSeconds(cloudConfig.cloudRequestTimeout)));
+    RetryOptions retryOptions =
+        new RetryOptions(new FixedDelayOptions(cloudConfig.cloudMaxAttempts, Duration.ofSeconds(tryTimeoutInSeconds)));
+    try {
+      return buildTableServiceClient(client, new ConfigurationBuilder().build(), retryOptions, azureCloudConfig);
+    } catch (Exception e) {
+      logger.error("Error building Azure Table Service client: {}", e.getMessage());
+      throw e;
+    }
+  }
+
   /**
    * Set the references for storage and blob async clients atomically. Note this method is not thread safe and must always be
    * called within a thread safe context.
@@ -452,6 +482,12 @@ public abstract class StorageClient implements AzureStorageClient {
     storageAsyncClientRef.set(blobServiceAsyncClient);
     blobBatchAsyncClientRef.set(new BlobBatchClientBuilder(storageAsyncClientRef.get()).buildAsyncClient());
   }
+
+  /**
+   * Validate that all the required configs for Azure Table Service authentication are present.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   */
+  protected void validateTableServiceConfigs(AzureCloudConfig azureCloudConfig) {}
 
   /**
    * Validate that all the required configs for ABS authentication are present.
@@ -482,6 +518,19 @@ public abstract class StorageClient implements AzureStorageClient {
   protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
       throws MalformedURLException, InterruptedException, ExecutionException {
+    return null;
+  }
+
+  /**
+   * Build {@link TableServiceClient}.
+   * @param httpClient {@link HttpClient} object.
+   * @param configuration {@link Configuration} object.
+   * @param retryOptions {@link RetryOptions} object.
+   * @param azureCloudConfig {@link AzureCloudConfig} object.
+   * @return {@link BlobServiceAsyncClient} object.
+   */
+  protected TableServiceClient buildTableServiceClient(HttpClient httpClient, Configuration configuration,
+      RetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
     return null;
   }
 

@@ -14,12 +14,15 @@
 
 package com.github.ambry.cloud;
 
+import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;
@@ -32,8 +35,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
-import java.io.IOException;
-import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
@@ -43,7 +45,9 @@ import java.util.function.Predicate;
  */
 public class VcrReplicaThread extends ReplicaThread {
 
-  private final CloudTokenPersistorV2 tokenWriter;
+  protected AzureCloudConfig azureCloudConfig;
+  protected VerifiableProperties properties;
+  protected CloudDestination cloudDestination;
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -51,25 +55,33 @@ public class VcrReplicaThread extends ReplicaThread {
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, ReplicaTokenPersistor tokenWriter) {
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, ReplicaTokenPersistor tokenWriter,
+      CloudDestination cloudDestination, VerifiableProperties properties) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-    this.tokenWriter = (CloudTokenPersistorV2) tokenWriter;
+    this.cloudDestination = cloudDestination;
+    this.properties = properties;
+    this.azureCloudConfig = new AzureCloudConfig(properties);
   }
 
   /**
-   * Advances token to make progress on replication and stores it in Azure
-   * @param remoteReplicaInfo Remote replica info object
-   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   * Inserts a row in Azure Table for each message
+   * @param messageInfoList List of replicated messages
+   * @param remoteReplicaInfo Remote host info
    */
   @Override
-  protected void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse) {
-    super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
-    try {
-      tokenWriter.persist(null, Collections.singletonList(new RemoteReplicaInfo.ReplicaTokenInfo(remoteReplicaInfo)));
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
+  protected void logToExternalTable(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo) {
+    // Table entity = Table row
+    // =========================================
+    // | partition-key | row-key | replicaPath |
+    // =========================================
+    // | blob-id-1     | host1   | replica1    |
+    // | blob-id-1     | host2   | replica2    |
+    // =========================================
+    messageInfoList.forEach(messageInfo ->
+        cloudDestination.createTableEntity(azureCloudConfig.azureTableNameCorruptBlobs,
+            new TableEntity(messageInfo.getStoreKey().getID(), remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname())
+                .addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath())));
   }
 }

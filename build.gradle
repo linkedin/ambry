@@ -490,6 +490,7 @@ project(':ambry-cloud') {
         // https://mvnrepository.com/artifact/com.azure/azure-sdk-bom
         compile platform("com.azure:azure-sdk-bom:$azureSdkBom")
         compile "com.azure:azure-cosmos"
+        compile "com.azure:azure-data-tables"
         compile "com.azure:azure-identity"
         compile "com.azure:azure-security-keyvault-secrets"
         compile "com.azure:azure-storage-blob"

@@ -170,9 +170,17 @@ public class AzureMetrics {
   private final MetricRegistry metricRegistry;
   Gauge<Long> lastContainerDeletionTimestamp;
 
+  public static final String AZURE_TABLE_CREATE_ERROR_COUNT = "azureTableCreateErrorCount";
+  public static final String AZURE_TABLE_ENTITY_CREATE_ERROR_COUNT = "azureTableEntityCreateErrorCount";
+  public final Counter azureTableCreateErrorCount;
+  public final Counter azureTableEntityCreateErrorCount;
+
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
-
+    azureTableCreateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class,
+        AZURE_TABLE_CREATE_ERROR_COUNT));
+    azureTableEntityCreateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class,
+        AZURE_TABLE_ENTITY_CREATE_ERROR_COUNT));
     blobCompactionLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_COMPACTION_LATENCY));
     partitionCompactionLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, PARTITION_COMPACTION_LATENCY));
     blobUploadRequestCount =

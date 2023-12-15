@@ -18,6 +18,12 @@ import com.azure.core.http.rest.PagedIterable;
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Context;
+import com.azure.data.tables.TableClient;
+import com.azure.data.tables.TableServiceClient;
+import com.azure.data.tables.models.TableEntity;
+import com.azure.data.tables.models.TableErrorCode;
+import com.azure.data.tables.models.TableItem;
+import com.azure.data.tables.models.TableServiceException;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -56,7 +62,6 @@ import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Pair;
@@ -65,7 +70,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -78,8 +82,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.apache.http.HttpStatus;
 import java.util.function.Supplier;
+import org.apache.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,10 +94,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected AzureCloudConfig azureCloudConfig;
   protected AzureMetrics azureMetrics;
   protected BlobServiceClient azureStorageClient;
+  protected TableServiceClient azureTableServiceClient;
   protected CloudConfig cloudConfig;
   protected ClusterMap clusterMap;
   protected ClusterMapConfig clusterMapConfig;
   protected ConcurrentHashMap<String, BlobContainerClient> partitionToAzureStore;
+  protected ConcurrentHashMap<String, TableClient> tableClientMap;
   protected VcrMetrics vcrMetrics;
   protected final AtomicBoolean shutdownCompaction = new AtomicBoolean(false);
   protected AccountService accountService;
@@ -161,11 +167,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
     this.clusterMap = clusterMap;
     this.clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.partitionToAzureStore = new ConcurrentHashMap<>();
+    this.tableClientMap = new ConcurrentHashMap<>();
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig);
     logger.info("azureCloudConfig.azureStorageClientClass = {}", azureCloudConfig.azureStorageClientClass);
-    this.azureStorageClient =
-        ((StorageClient) Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics)).getStorageSyncClient();
+    StorageClient storageClient =
+        Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics);
+    this.azureStorageClient = storageClient.getStorageSyncClient();
+    this.azureTableServiceClient = storageClient.getTableServiceClient();
     testAzureStorageConnectivity();
     logger.info("Created AzureCloudDestinationSync");
   }
@@ -175,12 +184,63 @@ public class AzureCloudDestinationSync implements CloudDestination {
    */
   protected void testAzureStorageConnectivity() {
     logger.info("Testing Azure Storage connectivity");
+    // Test connection to Blob Service
     PagedIterable<BlobContainerItem> blobContainerItemPagedIterable = azureStorageClient.listBlobContainers();
     for (BlobContainerItem blobContainerItem : blobContainerItemPagedIterable) {
       logger.info("Azure blob storage container = {}", blobContainerItem.getName());
       break;
     }
     logger.info("Successful connection to Azure Storage");
+    // Test connection to Table Service
+    PagedIterable<TableItem>  tableItemPagedIterable = azureTableServiceClient.listTables();
+    for (TableItem tableItem : tableItemPagedIterable) {
+      // List one item to populate lazy iterable and confirm
+      logger.info("Azure Table = {}", tableItem.getName());
+      break;
+    }
+    logger.info("Successful connection to Azure Table Service");
+  }
+
+
+  /**
+   * Gets a table client to Azure Data Table Service
+   * @param tableName Table Name
+   * @return {@link TableClient}
+   */
+  public TableClient getTableClient(String tableName) {
+    try {
+      tableClientMap.computeIfAbsent(tableName,
+          key -> azureTableServiceClient.createTableIfNotExists(tableName));
+      return tableClientMap.computeIfAbsent(tableName,
+          key -> azureTableServiceClient.getTableClient(tableName));
+    } catch (Throwable e) {
+      azureMetrics.azureTableCreateErrorCount.inc();
+      logger.error("Failed to create or get table {} in Azure Table Service due to {}", tableName, e);
+      throw e;
+    }
+  }
+
+  /**
+   * Inserts a row in Azure Table
+   * An Azure Table Entity is a row with paritionKey and rowKey
+   * @param tableName Name of the table in Azure Table Service
+   * @param tableEntity Table row to insert
+   */
+  public void createTableEntity(String tableName, TableEntity tableEntity) {
+    Throwable throwable = null;
+    try {
+      getTableClient(tableName).createEntity(tableEntity);
+    } catch (TableServiceException tse) {
+      throwable = (tse.getValue().getErrorCode() != TableErrorCode.ENTITY_ALREADY_EXISTS) ? tse : null;
+    } catch (Throwable e) {
+      throwable = e;
+    } finally {
+      if (throwable != null) {
+        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        logger.error("Failed to insert table entity {}/{} in {} due to {}",
+            tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
+      }
+    }
   }
 
   /**

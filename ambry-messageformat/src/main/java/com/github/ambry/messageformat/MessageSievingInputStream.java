@@ -29,6 +29,7 @@ import java.io.SequenceInputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import org.slf4j.Logger;
@@ -43,6 +44,7 @@ public class MessageSievingInputStream extends InputStream {
   private static final Logger logger = LoggerFactory.getLogger(MessageSievingInputStream.class);
   private final InputStream sievedStream;
   private int numInvalidMessages;
+  protected List<MessageInfo> invalidMessages;
   private boolean hasDeprecatedMessages;
   private final List<InputStream> msgStreamList;
   private final List<MessageInfo> sievedMessageInfoList;
@@ -84,6 +86,7 @@ public class MessageSievingInputStream extends InputStream {
     hasDeprecatedMessages = false;
     sievedMessageInfoList = new ArrayList<>();
     msgStreamList = new ArrayList<>();
+    invalidMessages = new ArrayList<>();
 
     // check for empty list
     if (messageInfoList.size() == 0) {
@@ -287,6 +290,7 @@ public class MessageSievingInputStream extends InputStream {
               msgOffset, inMsg.getMessageInfo(), output.getException());
           numInvalidMessages += 1;
           messageSievingCorruptMessagesDiscardedCount.inc();
+          invalidMessages.add(inMsg.getMessageInfo());
         } else {
           throw new IOException("Encountered exception during transformation", output.getException());
         }
@@ -305,5 +309,10 @@ public class MessageSievingInputStream extends InputStream {
       singleMessageSieveTime.update(SystemTime.getInstance().milliseconds() - sieveStartTime);
     }
   }
+
+  public List<MessageInfo> getInvalidMessages() {
+    return invalidMessages;
+  }
+
 }
 

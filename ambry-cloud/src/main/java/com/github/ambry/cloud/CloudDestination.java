@@ -13,6 +13,8 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.data.tables.TableClient;
+import com.azure.data.tables.models.TableEntity;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
@@ -235,4 +237,19 @@ public interface CloudDestination extends Closeable {
    * @return
    */
   default boolean doesBlobExist(BlobId id) {return false;};
+
+  /**
+   * Creates a table in Azure Table or gets a ref to it if it exists
+   * @param tableName Table Name
+   * @return TableClient
+   */
+  default TableClient getTableClient(String tableName) { return null; }
+
+  /**
+   * Inserts an entry into a Azure Table.
+   * An Azure Table Entity is a row with paritionKey and rowKey
+   * @param tableName Name of the table in Azure Table Service
+   * @param tableEntity Table row to insert
+   */
+  default void createTableEntity(String tableName, TableEntity tableEntity) {}
 }
