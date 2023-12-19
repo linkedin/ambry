@@ -94,6 +94,7 @@ class FrontendRestRequestService implements RestRequestService {
   private HeadBlobHandler headBlobHandler;
   private UndeleteHandler undeleteHandler;
   private GetClusterMapSnapshotHandler getClusterMapSnapshotHandler;
+  private GetResourceInfoHandler getResourceInfoHandler;
   private GetAccountsHandler getAccountsHandler;
   private GetDatasetsHandler getDatasetsHandler;
   private ListDatasetsHandler listDatasetsHandler;
@@ -202,6 +203,7 @@ class FrontendRestRequestService implements RestRequestService {
             frontendConfig, frontendMetrics, clusterName, quotaManager, accountService, deleteBlobHandler);
 
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
+    getResourceInfoHandler = new GetResourceInfoHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
     getDatasetsHandler = new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     listDatasetsHandler = new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
@@ -269,6 +271,9 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.GET_CLUSTER_MAP_SNAPSHOT)) {
         getClusterMapSnapshotHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (requestPath.matchesOperation(Operations.RESOURCE_INFO)) {
+        getResourceInfoHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.GET_SIGNED_URL)) {
         getSignedUrlHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
@@ -291,7 +296,7 @@ class FrontendRestRequestService implements RestRequestService {
         namedBlobListHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (RestUtils.getBooleanHeader(restRequest.getArgs(), ENABLE_DATASET_VERSION_LISTING, false)
-          && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getVersion() == null){
+          && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getVersion() == null) {
         listDatasetVersionHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {

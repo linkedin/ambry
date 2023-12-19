@@ -318,6 +318,16 @@ public class RestUtils {
      * Request header to carry {@link StatsReportType} for GetStatsReport request.
      */
     public final static String GET_STATS_REPORT_TYPE = "x-ambry-stats-type";
+
+    /**
+     * Request header to carry partition name.
+     */
+    public final static String PARTITION = "x-ambry-partition";
+
+    /**
+     * Request header to carry resource name;
+     */
+    public final static String RESOURCE = "x-ambry-resource";
   }
 
   public static final class TrackingHeaders {

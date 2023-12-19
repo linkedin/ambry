@@ -14,17 +14,24 @@
 
 package com.github.ambry.frontend;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.HelixClusterManager;
+import com.github.ambry.clustermap.ResourceInfo;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +44,9 @@ public class GetResourceInfoHandler {
   private final FrontendMetrics frontendMetrics;
   private final ClusterMap clustermap;
   private final boolean isHelixClusterMap;
+
+  public static final String RESOURCES_KEY = "resources";
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   /**
    * Constructs a handle for handling requests for getting resource info.
@@ -82,7 +92,7 @@ public class GetResourceInfoHandler {
      */
     private void start() {
       RestRequestMetrics requestMetrics =
-          frontendMetrics.getAccountsMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
+          frontendMetrics.getResourceInfoMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
       // Start the callback chain by performing request security processing.
       securityService.processRequest(restRequest, securityProcessRequestCallback());
@@ -94,7 +104,7 @@ public class GetResourceInfoHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
      */
     private Callback<Void> securityProcessRequestCallback() {
-      return buildCallback(frontendMetrics.getAccountsSecurityProcessRequestMetrics,
+      return buildCallback(frontendMetrics.getResourceInfoSecurityProcessRequestMetrics,
           securityCheckResult -> securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback()),
           uri, LOGGER, finalCallback);
     }
@@ -105,14 +115,42 @@ public class GetResourceInfoHandler {
      * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
      */
     private Callback<Void> securityPostProcessRequestCallback() {
-      return buildCallback(frontendMetrics.getAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        byte[] serialized;
-        ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(serialized));
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
-        finalCallback.onCompletion(channel, null);
+      return buildCallback(frontendMetrics.getResourceInfoSecurityPostProcessRequestMetrics, securityCheckResult -> {
+        if (!isHelixClusterMap) {
+          finalCallback.onCompletion(null,
+              new RestServiceException("Method is only supported when the cluster map is a helix based cluster map",
+                  RestServiceErrorCode.NotAllowed));
+        } else {
+          Map<String, List<ResourceInfo>> resultObj = new HashMap<>();
+          resultObj.put(RESOURCES_KEY, queryResourceInfo());
+          byte[] serialized = objectMapper.writeValueAsBytes(resultObj);
+          ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(serialized));
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
+          finalCallback.onCompletion(channel, null);
+        }
       }, uri, LOGGER, finalCallback);
+    }
+
+    private List<ResourceInfo> queryResourceInfo() throws RestServiceException {
+      String partitionName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.PARTITION, false);
+      String resourceName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.RESOURCE, false);
+      HelixClusterManager.ResourceIdentifier resourceIdentifier;
+      if (partitionName != null) {
+        resourceIdentifier = HelixClusterManager.withPartitionName(partitionName);
+      } else if (resourceName != null) {
+        resourceIdentifier = HelixClusterManager.withResourceName(resourceName);
+      } else {
+        resourceIdentifier = HelixClusterManager.withAll();
+      }
+      try {
+        return ((HelixClusterManager) clustermap).queryResourceInfos(resourceIdentifier);
+      } catch (IllegalArgumentException e) {
+        throw new RestServiceException(e.getMessage(), e, RestServiceErrorCode.BadRequest);
+      } catch (Exception e) {
+        throw new RestServiceException(e.getMessage(), e, RestServiceErrorCode.InternalServerError);
+      }
     }
   }
 }
