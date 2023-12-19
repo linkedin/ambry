@@ -138,11 +138,11 @@ public class GetResourceInfoHandler {
       String resourceName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.RESOURCE, false);
       HelixClusterManager.ResourceIdentifier resourceIdentifier;
       if (partitionName != null) {
-        resourceIdentifier = HelixClusterManager.withPartitionName(partitionName);
+        resourceIdentifier = new HelixClusterManager.PartitionIdIdentifier(partitionName);
       } else if (resourceName != null) {
-        resourceIdentifier = HelixClusterManager.withResourceName(resourceName);
+        resourceIdentifier = new HelixClusterManager.ResourceNameIdentifier(resourceName);
       } else {
-        resourceIdentifier = HelixClusterManager.withAll();
+        resourceIdentifier = new HelixClusterManager.AllResourceIdentifier();
       }
       try {
         return ((HelixClusterManager) clustermap).queryResourceInfos(resourceIdentifier);

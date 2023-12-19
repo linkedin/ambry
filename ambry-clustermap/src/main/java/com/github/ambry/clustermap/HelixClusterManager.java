@@ -2178,17 +2178,38 @@ public class HelixClusterManager implements ClusterMap {
     }
   }
 
+  /**
+   * Interfaces and classes for returning the resource information to client.
+   */
+
+  /**
+   * An identifier interface to return a list of resource names.
+   */
   public interface ResourceIdentifier {
     List<String> identifyResources(HelixClusterManager helixClusterManager);
   }
 
-  static class PartitionIdIdentifier implements ResourceIdentifier {
+  /**
+   * An implementation of {@link ResourceIdentifier} to return a single resource name based
+   * on the partition name.
+   */
+  public static class PartitionIdIdentifier implements ResourceIdentifier {
     private String partitionName;
 
+    /**
+     * Constructor to create a {@link PartitionIdIdentifier}.
+     * @param partitionName
+     */
     public PartitionIdIdentifier(String partitionName) {
       this.partitionName = partitionName;
     }
 
+    /**
+     * Return the resource name that the given partition belongs to.
+     * @param helixClusterManager
+     * @return
+     */
+    @Override
     public List<String> identifyResources(HelixClusterManager helixClusterManager) {
       Map<String, Set<String>> partitionToResourceMap =
           helixClusterManager.partitionToResourceNameByDc.get(helixClusterManager.clusterMapConfig);
@@ -2199,13 +2220,26 @@ public class HelixClusterManager implements ClusterMap {
     }
   }
 
-  static class ResourceNameIdentifier implements ResourceIdentifier {
+  /**
+   * An implementation of {@link ResourceIdentifier} to return the resource name given by the client.
+   */
+  public static class ResourceNameIdentifier implements ResourceIdentifier {
     private String resourceName;
 
+    /**
+     * Constructor to create a {@link ResourceNameIdentifier}.
+     * @param resourceName
+     */
     public ResourceNameIdentifier(String resourceName) {
       this.resourceName = resourceName;
     }
 
+    /**
+     * Check if the given resource is valid, and then return it back.
+     * @param helixClusterManager
+     * @return
+     */
+    @Override
     public List<String> identifyResources(HelixClusterManager helixClusterManager) {
       if (!helixClusterManager.dcToResourceNameToTag.get(helixClusterManager.clusterMapConfig).contains(resourceName)) {
         throw new IllegalArgumentException("Resource " + resourceName + " doesn't exist");
@@ -2214,27 +2248,29 @@ public class HelixClusterManager implements ClusterMap {
     }
   }
 
-  static class AllResourceIdentifier implements ResourceIdentifier {
+  /**
+   * An implementation to return all the resource this cluster map has.
+   */
+  public static class AllResourceIdentifier implements ResourceIdentifier {
     public static final AllResourceIdentifier DEFAULT = new AllResourceIdentifier();
 
+    /**
+     * Return all the resource names this cluster map has.
+     * @param helixClusterManager
+     * @return
+     */
+    @Override
     public List<String> identifyResources(HelixClusterManager helixClusterManager) {
       return new ArrayList<>(
           helixClusterManager.dcToResourceNameToTag.get(helixClusterManager.clusterMapConfig).keySet());
     }
   }
 
-  public static ResourceIdentifier withPartitionName(String partitionName) {
-    return new PartitionIdIdentifier(partitionName);
-  }
-
-  public static ResourceIdentifier withResourceName(String resourceName) {
-    return new ResourceNameIdentifier(resourceName);
-  }
-
-  public static ResourceIdentifier withAll() {
-    return AllResourceIdentifier.DEFAULT;
-  }
-
+  /**
+   * Query the list of the resource names identified by the {@link ResourceIdentifier} and return a list of {@link ResourceInfo}.
+   * @param identifier
+   * @return
+   */
   public List<ResourceInfo> queryResourceInfos(ResourceIdentifier identifier) {
     List<String> resourceNames = identifier.identifyResources(this);
     return resourceNames.stream().map(this::getResourceInfo).collect(Collectors.toList());

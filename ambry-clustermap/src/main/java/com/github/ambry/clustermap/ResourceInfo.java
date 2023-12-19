@@ -18,6 +18,9 @@ import java.util.Map;
 import java.util.Set;
 
 
+/**
+ * Data class to represent the information of a resource.
+ */
 public class ResourceInfo {
   private final List<String> liveInstances;
   private final List<String> unavailableInstances;
@@ -31,6 +34,19 @@ public class ResourceInfo {
   private final int currentTotalReplicaWeight;
   private final Map<String, Set<String>> failedDisks;
 
+  /**
+   * Constructor to create a {@link ResourceInfo}.
+   * @param liveInstances
+   * @param unavailableInstances
+   * @param liveCapacity
+   * @param unavailableCapacity
+   * @param numPartitions
+   * @param numExpectedReplicas
+   * @param numCurrentReplicas
+   * @param expectedTotalReplicaWeight
+   * @param currentTotalReplicaWeight
+   * @param failedDisks
+   */
   public ResourceInfo(List<String> liveInstances, List<String> unavailableInstances, long liveCapacity,
       long unavailableCapacity, int numPartitions, int numExpectedReplicas, int numCurrentReplicas,
       int expectedTotalReplicaWeight, int currentTotalReplicaWeight, Map<String, Set<String>> failedDisks) {
