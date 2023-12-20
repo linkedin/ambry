@@ -2211,8 +2211,8 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public List<String> identifyResources(HelixClusterManager helixClusterManager) {
-      Map<String, Set<String>> partitionToResourceMap =
-          helixClusterManager.partitionToResourceNameByDc.get(helixClusterManager.clusterMapConfig);
+      String dcName = helixClusterManager.clusterMapConfig.clusterMapDatacenterName;
+      Map<String, Set<String>> partitionToResourceMap = helixClusterManager.partitionToResourceNameByDc.get(dcName);
       if (!partitionToResourceMap.containsKey(partitionName)) {
         throw new IllegalArgumentException("Partition " + partitionName + " doesn't exist");
       }
@@ -2241,7 +2241,8 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public List<String> identifyResources(HelixClusterManager helixClusterManager) {
-      if (!helixClusterManager.dcToResourceNameToTag.get(helixClusterManager.clusterMapConfig).contains(resourceName)) {
+      String dcName = helixClusterManager.clusterMapConfig.clusterMapDatacenterName;
+      if (!helixClusterManager.dcToResourceNameToTag.get(dcName).contains(resourceName)) {
         throw new IllegalArgumentException("Resource " + resourceName + " doesn't exist");
       }
       return Collections.singletonList(resourceName);
@@ -2261,8 +2262,8 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public List<String> identifyResources(HelixClusterManager helixClusterManager) {
-      return new ArrayList<>(
-          helixClusterManager.dcToResourceNameToTag.get(helixClusterManager.clusterMapConfig).keySet());
+      String dcName = helixClusterManager.clusterMapConfig.clusterMapDatacenterName;
+      return new ArrayList<>(helixClusterManager.dcToResourceNameToTag.get(dcName).keySet());
     }
   }
 
