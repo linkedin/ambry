@@ -42,6 +42,7 @@ public class FrontendMetrics {
   public final RestRequestMetricsGroup getBlobChunkIdsMetricsGroup;
   public final RestRequestMetricsGroup getSignedUrlMetricsGroup;
   public final RestRequestMetricsGroup getClusterMapSnapshotMetricsGroup;
+  public final RestRequestMetricsGroup getResourceInfoMetricsGroup;
   public final RestRequestMetricsGroup getAccountsMetricsGroup;
   public final RestRequestMetricsGroup getDatasetsMetricsGroup;
   public final RestRequestMetricsGroup listDatasetsMetricsGroup;
@@ -116,6 +117,9 @@ public class FrontendMetrics {
 
   public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getClusterMapSnapshotSecurityPostProcessRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics getResourceInfoSecurityProcessRequestMetrics;
+  public final AsyncOperationTracker.Metrics getResourceInfoSecurityPostProcessRequestMetrics;
 
   public final AsyncOperationTracker.Metrics getAccountsSecurityProcessRequestMetrics;
   public final AsyncOperationTracker.Metrics getAccountsSecurityPostProcessRequestMetrics;
@@ -317,6 +321,8 @@ public class FrontendMetrics {
     getClusterMapSnapshotMetricsGroup =
         new RestRequestMetricsGroup(GetClusterMapSnapshotHandler.class, "GetClusterMapSnapshot", false, metricRegistry,
             frontendConfig);
+    getResourceInfoMetricsGroup =
+        new RestRequestMetricsGroup(GetAccountsHandler.class, "GetResourceInfo", false, metricRegistry, frontendConfig);
     getAccountsMetricsGroup =
         new RestRequestMetricsGroup(GetAccountsHandler.class, "GetAccounts", false, metricRegistry, frontendConfig);
     getDatasetsMetricsGroup =
@@ -444,6 +450,11 @@ public class FrontendMetrics {
     getClusterMapSnapshotSecurityPostProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetClusterMapSnapshotHandler.class, "SecurityPostProcessRequest",
             metricRegistry);
+
+    getResourceInfoSecurityProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetResourceInfoHandler.class, "SecurityProcessRequest", metricRegistry);
+    getResourceInfoSecurityPostProcessRequestMetrics =
+        new AsyncOperationTracker.Metrics(GetResourceInfoHandler.class, "SecurityPostProcessRequest", metricRegistry);
 
     getAccountsSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetAccountsHandler.class, "SecurityProcessRequest", metricRegistry);
