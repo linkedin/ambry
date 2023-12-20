@@ -214,10 +214,9 @@ public class VcrServer {
               clusterMapConfig, clusterMap, accountService, storeConfig, cloudDestination,
               registry)).getVcrClusterParticipant();
       cloudStorageManager = new CloudStorageManager(properties, vcrMetrics, cloudDestination, clusterMap);
-      vcrReplicationManager = new VcrReplicationManager(cloudConfig, replicationConfig, clusterMapConfig, storeConfig,
+      vcrReplicationManager = new VcrReplicationManager(properties, registry,
           cloudStorageManager, storeKeyFactory, clusterMap, vcrClusterParticipant, cloudDestination, scheduler,
-          networkClientFactory, vcrMetrics, notificationSystem, storeKeyConverterFactory,
-          serverConfig.serverMessageTransformer);
+          networkClientFactory, notificationSystem, storeKeyConverterFactory);
       vcrReplicationManager.start();
 
       DataNodeId currentNode = vcrClusterParticipant.getCurrentDataNodeId();
