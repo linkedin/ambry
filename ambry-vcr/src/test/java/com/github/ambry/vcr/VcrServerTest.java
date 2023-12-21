@@ -73,8 +73,8 @@ public class VcrServerTest {
   @Test
   public void testVCRServerWithStaticCluster() throws Exception {
     VerifiableProperties verifiableProperties = getStaticClusterVcrProps();
-    com.github.ambry.cloud.VcrServer
-        vcrServer = new com.github.ambry.cloud.VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, null);
+    VcrServer
+        vcrServer = new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, null);
     vcrServer.startup();
     Assert.assertNull("Expected null compactor", vcrServer.getVcrReplicationManager().getCloudStorageCompactor());
     vcrServer.shutdown();
@@ -91,8 +91,8 @@ public class VcrServerTest {
     ObjectNameFactory spyObjectNameFactory = spy(new DefaultObjectNameFactory());
     Function<MetricRegistry, JmxReporter> reporterFactory =
         reporter -> JmxReporter.forRegistry(reporter).createsObjectNamesWith(spyObjectNameFactory).build();
-    com.github.ambry.cloud.VcrServer vcrServer =
-        new com.github.ambry.cloud.VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, reporterFactory);
+    VcrServer vcrServer =
+        new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, reporterFactory);
     vcrServer.startup();
     // check that the custom ObjectNameFactory specified in reporterFactory was used.
     verify(spyObjectNameFactory, atLeastOnce()).createName(anyString(), anyString(), anyString());
@@ -120,7 +120,7 @@ public class VcrServerTest {
     CloudDestinationFactory cloudDestinationFactory = new LatchBasedInMemoryCloudDestinationFactory(
         new LatchBasedInMemoryCloudDestination(Collections.emptyList(), mockClusterMap));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
-    com.github.ambry.cloud.VcrServer vcrServer =
+    VcrServer vcrServer =
         new VcrServer(verifiableProperties, mockClusterAgentsFactory, notificationSystem, cloudDestinationFactory,
             null);
     vcrServer.startup();
