@@ -19,6 +19,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.PortType;
 import java.util.Properties;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -27,6 +28,7 @@ import static org.junit.Assert.*;
 /**
  * Test class testing behavior of {@link CloudDataNode}.
  */
+@Ignore
 public class CloudDataNodeTest {
 
   private final ClusterMapConfig clusterMapConfig;

@@ -29,5 +29,6 @@ include 'ambry-api',
         'ambry-all',
         'ambry-quota',
         'ambry-mysql',
-        'ambry-filesystem'
+        'ambry-filesystem',
+        'ambry-vcr'
 

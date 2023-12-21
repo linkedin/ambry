@@ -105,7 +105,7 @@ public class CloudBlobStore implements Store {
    * @param vcrMetrics the {@link VcrMetrics} to use.
    * @throws IllegalStateException if construction failed.
    */
-  CloudBlobStore(VerifiableProperties properties, PartitionId partitionId, CloudDestination cloudDestination,
+  public CloudBlobStore(VerifiableProperties properties, PartitionId partitionId, CloudDestination cloudDestination,
       ClusterMap clusterMap, VcrMetrics vcrMetrics) throws IllegalStateException {
     this.cloudConfig = new CloudConfig(properties);
     ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
@@ -278,7 +278,7 @@ public class CloudBlobStore implements Store {
    * @param outputStream {@code OutputStream} of the downloaded blob.
    * @throws StoreException if there is an error in downloading the blob.
    */
-  void downloadBlob(CloudBlobMetadata cloudBlobMetadata, BlobId blobId, OutputStream outputStream)
+  public void downloadBlob(CloudBlobMetadata cloudBlobMetadata, BlobId blobId, OutputStream outputStream)
       throws StoreException {
     try {
       // TODO: for GET ops, avoid extra trip to fetch metadata unless config flag is set
@@ -1217,7 +1217,7 @@ public class CloudBlobStore implements Store {
    * @param blobState the state of the blob.
    */
   // Visible for test.
-  void addToCache(String blobKey, short lifeVersion, BlobState blobState) {
+  public void addToCache(String blobKey, short lifeVersion, BlobState blobState) {
     if (recentBlobCache == null) {
       return;
     }
@@ -1238,7 +1238,7 @@ public class CloudBlobStore implements Store {
    * @param blobKey the blob key to remove.
    */
   // Visible for test.
-  void removeFromCache(String blobKey) {
+  public void removeFromCache(String blobKey) {
     if (recentBlobCache == null) {
       return;
     }
@@ -1465,7 +1465,7 @@ public class CloudBlobStore implements Store {
   }
 
   /** The state of a blob. */
-  enum BlobState {CREATED, TTL_UPDATED, DELETED}
+  public enum BlobState {CREATED, TTL_UPDATED, DELETED}
 
   /** The lifecycle state of a recently seen blob. */
   static class BlobLifeState {

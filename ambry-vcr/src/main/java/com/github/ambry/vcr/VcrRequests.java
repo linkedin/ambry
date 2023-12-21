@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.vcr;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
@@ -21,10 +21,10 @@ import com.github.ambry.commons.ServerMetrics;
 import com.github.ambry.network.NetworkRequest;
 import com.github.ambry.network.RequestResponseChannel;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.server.AmbryRequests;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationEngine;
+import com.github.ambry.server.AmbryRequests;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.Store;

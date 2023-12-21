@@ -411,7 +411,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   /** For testing only */
-  CloudStorageCompactor getCloudStorageCompactor() {
+  public CloudStorageCompactor getCloudStorageCompactor() {
     return cloudStorageCompactor;
   }
 

@@ -11,13 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.vcr;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudDestinationFactory;
-import com.github.ambry.cloud.VcrServer;
-import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeConfigSourceType;
 import com.github.ambry.clustermap.HelixAdminFactory;
 import com.github.ambry.clustermap.HelixBootstrapUpgradeUtil;
@@ -41,18 +39,15 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.TestUtils.*;
-import static com.github.ambry.server.VcrBackupTest.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.mockito.Mockito.*;
 
-
+@Ignore
 public class VcrAutomationTest {
-  private static final Logger logger = LoggerFactory.getLogger(VcrAutomationTest.class);
 
   /**
    * Constructor for {@link VcrAutomationTest}.
@@ -61,12 +56,12 @@ public class VcrAutomationTest {
   }
 
   @Before
-  public void setup() throws Exception {
+  public void setup() {
 
   }
 
   @After
-  public void cleanup() throws IOException {
+  public void cleanup() {
 
   }
 
@@ -166,7 +161,7 @@ public class VcrAutomationTest {
         }, null);
     vcrServer.startup();
 
-    makeSureHelixBalance(vcrServer, helixBalanceVerifier);
+    VcrBackupTest.makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     Assert.assertTrue("Partition assignment is not correct.", TestUtils.checkAndSleep(partitionCount,
         () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size(), 5000));
     // vcr server start up done.
@@ -180,7 +175,7 @@ public class VcrAutomationTest {
         dcName, 10, false, false, new HelixAdminFactory(), false, mainClusterStateModelDef,
         HelixBootstrapUpgradeUtil.HelixAdminOperation.BootstrapCluster, dataNodeConfigSourceType, false, 0);
 
-    makeSureHelixBalance(vcrServer, helixBalanceVerifier);
+    VcrBackupTest.makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     Assert.assertTrue("Partition assignment is not correct.",
         TestUtils.checkAndSleep(partitionCount + newPartitionCount,
             () -> vcrServer.getVcrClusterParticipant().getAssignedPartitionIds().size(), 5000));

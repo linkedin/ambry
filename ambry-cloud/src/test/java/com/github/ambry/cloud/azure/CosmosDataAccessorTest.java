@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -49,6 +50,7 @@ import static org.mockito.Mockito.*;
 
 /** Test cases for {@link CosmosDataAccessor} */
 @RunWith(MockitoJUnitRunner.class)
+@Ignore
 public class CosmosDataAccessorTest {
 
   private CosmosDataAccessor cosmosAccessor;

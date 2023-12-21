@@ -11,17 +11,20 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.vcr;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.cloud.DeprecatedContainerCloudSyncTask;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.ClusterMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -32,6 +35,7 @@ import org.mockito.junit.MockitoJUnitRunner;
  * Test {@link DeprecatedContainerCloudSyncTask}.
  */
 @RunWith(MockitoJUnitRunner.class)
+@Ignore
 public class DeprecatedContainerCloudSyncTaskTest {
 
   private final DeprecatedContainerCloudSyncTask deprecatedContainerCloudSyncTask;

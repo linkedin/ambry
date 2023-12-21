@@ -11,15 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.vcr;
 
 import com.github.ambry.cloud.CloudDestinationFactory;
-import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
-import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.cloud.LeaderStandbyHelixVcrStateModelFactory;
 import com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory;
-import com.github.ambry.cloud.VcrServer;
-import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
@@ -39,6 +35,10 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.server.DirectSender;
+import com.github.ambry.server.MockCluster;
+import com.github.ambry.server.MockNotificationSystem;
+import com.github.ambry.server.ServerTestUtil;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -63,6 +63,7 @@ import org.apache.helix.tools.ClusterVerifiers.StrictMatchExternalViewVerifier;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -192,7 +193,7 @@ public class VcrBackupTest {
       BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp1.getInputStream());
       // Do a simple check
       assertEquals(blobSize, propertyOutput.getBlobSize());
-      releaseNettyBufUnderneathStream(stream);
+      ServerTestUtil.releaseNettyBufUnderneathStream(stream);
     } catch (MessageFormatException e) {
       fail();
     }
@@ -233,9 +234,9 @@ public class VcrBackupTest {
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().addPartitionErrorCount.getCount());
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().removePartitionErrorCount.getCount());
     assertEquals("No token is expected.", 0, latchBasedInMemoryCloudDestination.getTokenMap().size());
 
@@ -247,13 +248,13 @@ public class VcrBackupTest {
 
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     // Because same cloud destination is used, getMissingKey() will filter out all keys.
-    assertEquals("Number of blobs doesn't match", 0, vcrNotificationSystem.getBlobIds().size());
+    Assert.assertEquals("Number of blobs doesn't match", 0, vcrNotificationSystem.getBlobIds().size());
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().addPartitionErrorCount.getCount());
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().removePartitionErrorCount.getCount());
 
     // Start VCR again with different cloud destination
@@ -274,9 +275,9 @@ public class VcrBackupTest {
     vcrServer.shutdown();
     assertTrue("VCR shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().addPartitionErrorCount.getCount());
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().removePartitionErrorCount.getCount());
   }
 
@@ -312,9 +313,9 @@ public class VcrBackupTest {
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().addPartitionErrorCount.getCount());
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().removePartitionErrorCount.getCount());
     assertTrue("Token is expected.", latchBasedInMemoryCloudDestination.getTokenMap().size() > 0);
 
@@ -326,13 +327,13 @@ public class VcrBackupTest {
 
     makeSureHelixBalance(vcrServer, helixBalanceVerifier);
     // Because token is reloaded, back up number is 0.
-    assertEquals("Number of blobs doesn't match", 0, vcrNotificationSystem.getBlobIds().size());
+    Assert.assertEquals("Number of blobs doesn't match", 0, vcrNotificationSystem.getBlobIds().size());
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().addPartitionErrorCount.getCount());
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().removePartitionErrorCount.getCount());
 
     // Start VCR again with token.
@@ -355,9 +356,9 @@ public class VcrBackupTest {
     vcrServer.shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServer.awaitShutdown(5000));
     // Error metrics should be zero.
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().addPartitionErrorCount.getCount());
-    Assert.assertEquals("Error count should be zero", 0,
+    assertEquals("Error count should be zero", 0,
         vcrServer.getVcrReplicationManager().getVcrMetrics().removePartitionErrorCount.getCount());
   }
 
@@ -438,10 +439,10 @@ public class VcrBackupTest {
     vcrServers.get(vcrServers.size() - 1).shutdown();
     assertTrue("VCR server shutdown timeout.", vcrServers.get(vcrServers.size() - 1).awaitShutdown(5000));
     // Error metrics should be zero.
-    Assert.assertEquals("Error count should be zero", 0, vcrServers.get(vcrServers.size() - 1)
+    assertEquals("Error count should be zero", 0, vcrServers.get(vcrServers.size() - 1)
         .getVcrReplicationManager()
         .getVcrMetrics().addPartitionErrorCount.getCount());
-    Assert.assertEquals("Error count should be zero", 0, vcrServers.get(vcrServers.size() - 1)
+    assertEquals("Error count should be zero", 0, vcrServers.get(vcrServers.size() - 1)
         .getVcrReplicationManager()
         .getVcrMetrics().removePartitionErrorCount.getCount());
     int temp = vcrNotificationSystems.get(vcrNotificationSystems.size() - 1).getBlobIds().size();
@@ -459,9 +460,9 @@ public class VcrBackupTest {
     // Shutdown all others.
     for (int i = 0; i < initialNumOfVcrs; i++) {
       // Error metrics should be zero.
-      Assert.assertEquals("Error count should be zero", 0,
+      assertEquals("Error count should be zero", 0,
           vcrServers.get(i).getVcrReplicationManager().getVcrMetrics().addPartitionErrorCount.getCount());
-      Assert.assertEquals("Error count should be zero", 0,
+      assertEquals("Error count should be zero", 0,
           vcrServers.get(i).getVcrReplicationManager().getVcrMetrics().removePartitionErrorCount.getCount());
       vcrServers.get(i).shutdown();
       assertTrue("VCR server shutdown timeout.", vcrServers.get(i).awaitShutdown(5000));

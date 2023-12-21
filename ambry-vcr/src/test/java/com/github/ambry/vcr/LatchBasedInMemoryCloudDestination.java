@@ -11,9 +11,17 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.vcr;
 
 import com.github.ambry.account.Container;
+import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudBlobStore;
+import com.github.ambry.cloud.CloudContainerCompactor;
+import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudStorageCompactor;
+import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.CloudUpdateValidator;
+import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.azure.AzureReplicationFeed;
 import com.github.ambry.cloud.azure.CosmosChangeFeedFindToken;
 import com.github.ambry.cloud.azure.CosmosContainerDeletionEntry;

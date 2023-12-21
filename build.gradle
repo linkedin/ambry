@@ -209,6 +209,10 @@ project(':ambry-test-utils') {
         compile project(":ambry-utils")
         compile project(":ambry-commons")
         compile project(":ambry-clustermap")
+        compile project(":ambry-network")
+        compile project(":ambry-router")
+        compile project(":ambry-server")
+        compile project(":ambry-store")
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
     }
 }
@@ -483,8 +487,7 @@ project(':ambry-cloud') {
             project(':ambry-commons'),
             project(':ambry-account'),
             project(':ambry-replication'),
-            project(':ambry-rest'),
-            project(':ambry-server')
+            project(':ambry-rest')
 
         // use compile to include these jars during compile-time and make it avlb for ambry-tools
         // https://mvnrepository.com/artifact/com.azure/azure-sdk-bom
@@ -506,6 +509,20 @@ project(':ambry-cloud') {
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile project(path: ':ambry-store', configuration: 'testArchives')
         testCompile project(path: ':ambry-replication', configuration: 'testArchives')
+    }
+}
+
+project(':ambry-vcr') {
+    dependencies {
+        compile project(':ambry-server'),
+            project(':ambry-cloud')
+
+        testCompile project(':ambry-commons')
+        testCompile project(':ambry-server')
+        testCompile project(':ambry-test-utils')
+        testCompile project(':ambry-utils')
+        testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
+        testCompile project(path: ':ambry-cloud', configuration: 'testArchives')
     }
 }
 

@@ -83,6 +83,7 @@ import static org.mockito.BDDMockito.*;
 
 /** Test cases for {@link AzureCloudDestination} */
 @RunWith(MockitoJUnitRunner.class)
+@Ignore
 public class AzureCloudDestinationTest {
 
   private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());

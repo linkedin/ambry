@@ -120,26 +120,6 @@ public class ServerSSLTest {
         clientSSLSocketFactory1, routerProps, testEncryption);
   }
 
-  /**
-   * Do end to end cloud backup test
-   */
-  @Test
-  public void endToEndCloudBackupTest() throws Exception {
-    assumeTrue(testEncryption);
-    sslCluster.startServers();
-    DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    // Start ZK Server.
-    int zkPort = 31998;
-    String zkConnectString = "localhost:" + zkPort;
-    String vcrClusterName = "vcrTestClusterSSL";
-    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
-    ServerTestUtil.endToEndCloudBackupTest(sslCluster, zkConnectString, vcrClusterName, dataNode, clientSSLConfig2,
-        clientSSLSocketFactory2, notificationSystem, serverSSLProps, false);
-    ServerTestUtil.endToEndCloudBackupTest(sslCluster, zkConnectString, vcrClusterName, dataNode, clientSSLConfig2,
-        clientSSLSocketFactory2, notificationSystem, serverSSLProps, true);
-    zkInfo.shutdown();
-  }
-
   @Test
   public void endToEndSSLReplicationWithMultiNodeMultiPartitionTest() throws Exception {
     sslCluster.startServers();

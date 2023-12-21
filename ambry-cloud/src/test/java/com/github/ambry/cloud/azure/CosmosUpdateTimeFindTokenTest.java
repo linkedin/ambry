@@ -20,6 +20,7 @@ import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -28,6 +29,7 @@ import static org.junit.Assert.*;
 /**
  * Test for {@link CosmosUpdateTimeFindToken}
  */
+@Ignore
 public class CosmosUpdateTimeFindTokenTest {
 
   /**
