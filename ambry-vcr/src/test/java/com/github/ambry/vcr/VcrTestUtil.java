@@ -11,12 +11,16 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.vcr;
 
+import com.github.ambry.cloud.CloudDestinationFactory;
+import com.github.ambry.cloud.HelixVcrClusterAgentsFactory;
+import com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.HelixControllerManager;
@@ -25,6 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.SSLSocketFactory;
 import org.apache.helix.ConfigAccessor;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.controller.rebalancer.DelayedAutoRebalancer;
@@ -54,7 +59,7 @@ public class VcrTestUtil {
   private static final int NUM_REPLICAS = 1;
 
   /**
-   * Create a {@link VcrServer}.
+   * Create a {@link com.github.ambry.vcr.VcrServer}.
    * @param properties the config properties to use.
    * @param clusterAgentsFactory the {@link ClusterAgentsFactory} to use.
    * @param notificationSystem the {@link NotificationSystem} to use.
@@ -193,4 +198,91 @@ public class VcrTestUtil {
     props.setProperty("clustermap.enable.http2.replication", Boolean.toString(enableHttp2Replication));
     return props;
   }
+
+  /**
+   * Tests blobs put to dataNode can be backed up by {@link com.github.ambry.cloud.VcrReplicationManager}.
+   * @param cluster the {@link MockCluster} of dataNodes.
+   * @param zkConnectString ZK endpoint to establish VCR cluster
+   * @param vcrClusterName the name of VCR cluster
+   * @param dataNode the datanode where blobs are originally put.
+   * @param clientSSLConfig the {@link SSLConfig}.
+   * @param clientSSLSocketFactory the {@link SSLSocketFactory}.
+   * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
+   * @param vcrSSLProps SSL related properties for VCR. Can be {@code null}.
+   * @param doTtlUpdate Do ttlUpdate request if {@code true}.
+  static void endToEndCloudBackupTest(MockCluster cluster, String zkConnectString, String vcrClusterName,
+      DataNodeId dataNode, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory,
+      MockNotificationSystem notificationSystem, Properties vcrSSLProps, boolean doTtlUpdate) throws Exception {
+    int blobBackupCount = 10;
+    int blobSize = 100;
+    int userMetaDataSize = 100;
+    ClusterAgentsFactory clusterAgentsFactory = cluster.getClusterAgentsFactory();
+    // Send blobs to DataNode
+    byte[] userMetadata = new byte[userMetaDataSize];
+    byte[] data = new byte[blobSize];
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    long ttl = doTtlUpdate ? TimeUnit.DAYS.toMillis(1) : Utils.Infinite_Time;
+    BlobProperties properties =
+        new BlobProperties(blobSize, "serviceid1", null, null, false, ttl, cluster.time.milliseconds(), accountId,
+            containerId, false, null, null, null, null);
+    TestUtils.RANDOM.nextBytes(userMetadata);
+    TestUtils.RANDOM.nextBytes(data);
+
+    Port port;
+    if (clientSSLConfig == null) {
+      port = new Port(dataNode.getPort(), PortType.PLAINTEXT);
+    } else {
+      port = new Port(dataNode.getSSLPort(), PortType.SSL);
+    }
+    ConnectedChannel channel =
+        getBlockingChannelBasedOnPortType(port, "localhost", clientSSLSocketFactory, clientSSLConfig);
+    channel.connect();
+    CountDownLatch latch = new CountDownLatch(1);
+    DirectSender runnable =
+        new DirectSender(cluster, channel, blobBackupCount, data, userMetadata, properties, null, latch);
+    Thread threadToRun = new Thread(runnable);
+    threadToRun.start();
+    assertTrue("Did not put all blobs in 2 minutes", latch.await(2, TimeUnit.MINUTES));
+    // TODO: remove this temp fix after fixing race condition in MockCluster/MockNotificationSystem
+    Thread.sleep(3000);
+    List<BlobId> blobIds = runnable.getBlobIds();
+    for (BlobId blobId : blobIds) {
+      notificationSystem.awaitBlobCreations(blobId.getID());
+      if (doTtlUpdate) {
+        updateBlobTtl(channel, blobId, cluster.time.milliseconds());
+      }
+    }
+    HelixControllerManager helixControllerManager =
+        VcrTestUtil.populateZkInfoAndStartController(zkConnectString, vcrClusterName, cluster.getClusterMap());
+    // Start the VCR and CloudBackupManager
+    Properties props =
+        VcrTestUtil.createVcrProperties(dataNode.getDatacenterName(), vcrClusterName, zkConnectString, 12310, 12410,
+            12510, vcrSSLProps);
+    LatchBasedInMemoryCloudDestination latchBasedInMemoryCloudDestination =
+        new LatchBasedInMemoryCloudDestination(blobIds, clusterAgentsFactory.getClusterMap());
+    CloudDestinationFactory cloudDestinationFactory =
+        new LatchBasedInMemoryCloudDestinationFactory(latchBasedInMemoryCloudDestination);
+
+    VcrServer vcrServer =
+        VcrTestUtil.createVcrServer(new VerifiableProperties(props), clusterAgentsFactory, notificationSystem,
+            cloudDestinationFactory);
+    vcrServer.startup();
+
+    // Waiting for backup done
+    assertTrue("Did not backup all blobs in 2 minutes",
+        latchBasedInMemoryCloudDestination.awaitUpload(2, TimeUnit.MINUTES));
+    Map<String, CloudBlobMetadata> cloudBlobMetadataMap = latchBasedInMemoryCloudDestination.getBlobMetadata(blobIds);
+    for (BlobId blobId : blobIds) {
+      CloudBlobMetadata cloudBlobMetadata = cloudBlobMetadataMap.get(blobId.toString());
+      assertNotNull("cloudBlobMetadata should not be null", cloudBlobMetadata);
+      assertEquals("AccountId mismatch", accountId, cloudBlobMetadata.getAccountId());
+      assertEquals("ContainerId mismatch", containerId, cloudBlobMetadata.getContainerId());
+      assertEquals("Expiration time mismatch", Utils.Infinite_Time, cloudBlobMetadata.getExpirationTime());
+      // TODO: verify other metadata and blob data
+    }
+    vcrServer.shutdown();
+    helixControllerManager.syncStop();
+  }
+   */
 }

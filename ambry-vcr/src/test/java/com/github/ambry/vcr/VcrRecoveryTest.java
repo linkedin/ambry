@@ -11,14 +11,10 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.server;
+package com.github.ambry.vcr;
 
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
-import com.github.ambry.cloud.LatchBasedInMemoryCloudDestination;
-import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
-import com.github.ambry.cloud.VcrServer;
-import com.github.ambry.cloud.VcrTestUtil;
 import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
@@ -38,6 +34,7 @@ import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
@@ -52,6 +49,7 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -187,7 +185,7 @@ public class VcrRecoveryTest {
         GetResponse.readFrom(channel.receive().getInputStream(), recoveryCluster.getClusterMap());
 
     for (PartitionResponseInfo partitionResponseInfo : getResponse.getPartitionResponseInfoList()) {
-      assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
+      Assert.assertEquals("Error in getting the recovered blobs", ServerErrorCode.No_Error,
           partitionResponseInfo.getErrorCode());
       int cloudStoreSizeDifference;
       if (BlobPropertiesSerDe.CURRENT_VERSION <= BlobPropertiesSerDe.VERSION_4) {

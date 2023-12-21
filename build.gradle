@@ -515,6 +515,7 @@ project(':ambry-vcr') {
             project(':ambry-cloud')
 
         testCompile project(':ambry-commons')
+        testCompile project(':ambry-server')
         testCompile project(':ambry-test-utils')
         testCompile project(':ambry-utils')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')

@@ -11,10 +11,12 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.vcr;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
+import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.VerifiableProperties;
 import java.util.Collections;

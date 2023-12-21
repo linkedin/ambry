@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.vcr;
 
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
@@ -26,6 +26,15 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
+import com.github.ambry.cloud.CloudBlobMetadata;
+import com.github.ambry.cloud.CloudBlobStore;
+import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudStorageException;
+import com.github.ambry.cloud.CloudTestUtil;
+import com.github.ambry.cloud.CloudUpdateValidator;
+import com.github.ambry.cloud.FindResult;
+import com.github.ambry.cloud.TestCloudBlobCryptoAgentFactory;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
@@ -101,7 +110,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.apache.http.HttpStatus;
-import org.checkerframework.checker.units.qual.A;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;

@@ -46,8 +46,8 @@ public class CloudTestUtil {
    * @param operationTime the operation time.
    * @param isVcr is the test running as vcr.
    */
-  static void addBlobToMessageSet(MockMessageWriteSet messageWriteSet, BlobId blobId, long size, long expiresAtMs,
-      long operationTime, boolean isVcr) {
+  public static void addBlobToMessageSet(MockMessageWriteSet messageWriteSet, BlobId blobId, long size,
+      long expiresAtMs, long operationTime, boolean isVcr) {
     long crc = new Random().nextLong();
     MessageInfo info =
         new MessageInfo(blobId, size, false, true, false, expiresAtMs, crc, (short) 50, (short) 100, operationTime,
@@ -70,9 +70,9 @@ public class CloudTestUtil {
    * @param isVcr flag to indicate if running as vcr.
    * @return the generated {@link BlobId}.
    */
-  static BlobId addBlobToMessageSet(MockMessageWriteSet messageWriteSet, long size, long expiresAtMs, short accountId,
-      short containerId, boolean encrypted, boolean deleted, PartitionId partitionId, long operationTime,
-      boolean isVcr) {
+  public static BlobId addBlobToMessageSet(MockMessageWriteSet messageWriteSet, long size, long expiresAtMs,
+      short accountId, short containerId, boolean encrypted, boolean deleted, PartitionId partitionId,
+      long operationTime, boolean isVcr) {
     BlobId id = getUniqueId(accountId, containerId, encrypted, partitionId);
     long crc = new Random().nextLong();
     MessageInfo info =
@@ -112,7 +112,7 @@ public class CloudTestUtil {
    * @param encrypted the encrypted bit.
    * @return the generated {@link BlobId}.
    */
-  static BlobId getUniqueId(short accountId, short containerId, boolean encrypted, PartitionId partitionId) {
+  public static BlobId getUniqueId(short accountId, short containerId, boolean encrypted, PartitionId partitionId) {
     byte dataCenterId = 66;
     return new BlobId(BLOB_ID_V6, BlobIdType.NATIVE, dataCenterId, accountId, containerId, partitionId, encrypted,
         BlobDataType.DATACHUNK);

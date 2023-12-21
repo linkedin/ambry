@@ -11,9 +11,11 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.vcr;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudTokenPersistor;
 import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.CloudDataNode;
@@ -36,7 +38,6 @@ import com.github.ambry.store.StoreFindTokenFactory;
 import com.github.ambry.utils.SystemTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;

@@ -11,9 +11,13 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.cloud;
+package com.github.ambry.vcr;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.CloudBlobStore;
+import com.github.ambry.cloud.CloudDestination;
+import com.github.ambry.cloud.CloudStorageManager;
+import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
@@ -42,7 +46,7 @@ import org.junit.Test;
 
 
 /**
- * Test for {@link VcrRequests}
+ * Test for {@link com.github.ambry.vcr.VcrRequests}
  */
 public class VcrRequestsTest {
   private final VcrRequests vcrRequests;
