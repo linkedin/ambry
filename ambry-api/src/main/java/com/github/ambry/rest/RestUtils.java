@@ -452,6 +452,21 @@ public class RestUtils {
      * The version for the NamedBlob record in MySQL DB
      */
     public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
+
+    /**
+     * Boolean field set to "true" if this is a S3 request.
+     */
+    public static final String S3_REQUEST = KEY_PREFIX + "is-s3-request";
+
+    /**
+     * Stores the S3 bucket-name, i.e. Ambry account name.
+     */
+    public static final String S3_BUCKET = KEY_PREFIX + "s3-bucket";
+
+    /**
+     * Stores the file name.
+     */
+    public static final String S3_KEY = KEY_PREFIX + "s3-key";
   }
 
   /**
@@ -541,7 +556,7 @@ public class RestUtils {
    * @throws RestServiceException if required arguments aren't present or if they aren't in the format expected.
    */
   public static long getTtlFromRequestHeader(Map<String, Object> args) throws RestServiceException {
-    long ttl = Utils.Infinite_Time;
+    long ttl = 86400;
     Long ttlFromHeader = getLongHeader(args, Headers.TTL, false);
     if (ttlFromHeader != null) {
       if (ttlFromHeader < -1) {

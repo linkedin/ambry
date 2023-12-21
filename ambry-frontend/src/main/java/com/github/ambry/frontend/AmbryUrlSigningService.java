@@ -180,7 +180,9 @@ public class AmbryUrlSigningService implements UrlSigningService {
           argsForUrl.put(RestUtils.Headers.RESERVED_METADATA_ID, reservedMetadataBlobId);
         }
       }
-      argsForUrl.put(RestUtils.Headers.MAX_UPLOAD_SIZE, maxUploadSize);
+      // Commenting this for allowing multipart uploads with 5 MB. But if ambry "router.max.put.chunk.size.bytes" is
+      // changed to 5 MB, we don't need to comment this.
+      //argsForUrl.put(RestUtils.Headers.MAX_UPLOAD_SIZE, maxUploadSize);
     }
     argsForUrl.put(LINK_EXPIRY_TIME, time.seconds() + urlTtlSecs);
 

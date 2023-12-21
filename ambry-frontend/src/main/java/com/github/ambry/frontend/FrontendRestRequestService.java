@@ -88,6 +88,7 @@ class FrontendRestRequestService implements RestRequestService {
   //private NamedBlobGetHandler namedBlobGetHandler;
   //private NamedBlobDeleteHandler namedBlobDeleteHandler;
   private NamedBlobPutHandler namedBlobPutHandler;
+  private NamedBlobPostHandler namedBlobPostHandler;
   private GetBlobHandler getBlobHandler;
   private PostBlobHandler postBlobHandler;
   private TtlUpdateHandler ttlUpdateHandler;
@@ -189,24 +190,32 @@ class FrontendRestRequestService implements RestRequestService {
         new DeleteBlobHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager, accountService);
     deleteDatasetHandler =
-        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector, deleteBlobHandler);
+        new DeleteDatasetHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector,
+            deleteBlobHandler);
     headBlobHandler =
         new HeadBlobHandler(frontendConfig, router, securityService, idConverter, accountAndContainerInjector,
-            frontendMetrics, clusterMap, quotaManager);
+            frontendMetrics, clusterMap, quotaManager, accountService);
     undeleteHandler =
         new UndeleteHandler(router, securityService, idConverter, accountAndContainerInjector, frontendMetrics,
             clusterMap, quotaManager);
 
     namedBlobListHandler =
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
-    namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName, quotaManager, accountService, deleteBlobHandler);
+    namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
+        accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager, accountService,
+        deleteBlobHandler);
+
+    // Adding named blob post handler to handle S3 POST requests during multipart uploads
+    namedBlobPostHandler = new NamedBlobPostHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
+        accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager, accountService,
+        deleteBlobHandler, urlSigningService);
 
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
-    getDatasetsHandler = new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
-    listDatasetsHandler = new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    getDatasetsHandler =
+        new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    listDatasetsHandler =
+        new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     listDatasetVersionHandler =
         new ListDatasetVersionHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
@@ -288,12 +297,22 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.STATS_REPORT)) {
         getStatsReportHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB) && restRequest.getArgs().containsKey("uploadId")) {
+        // If GET with ?uploadId is present, this is a request from s3 to list all chunks of multipart upload.
+        // Eg URL:- GET /s3/named-blob-sandbox/checkpoints/246cd68fa3480b2b0f9e6524fa473bca/shared/
+        // 28774e7f-f490-4c25-9fb6-90eacbb3645f
+        // ?uploadId=http%3A%2F%2Flocalhost%3A1174%2F%3Fx-ambry-ttl%3D2419200%26x-ambry-service-id%
+        // 3DFlink-S3-Client%26x-ambry-content-type%3Dapplication%252Foctet-stream%26x-ambry-chunk-upload%
+        // 3Dtrue%26x-ambry-url-type%3DPOST%26x-ambry-session%3Da7a8586f-91a3-4f0b-a8cd-5a03813d6969%26et%3D1703187666
+        // &part-number-marker=0 HTTP/1.1
+        namedBlobListHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
         namedBlobListHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (RestUtils.getBooleanHeader(restRequest.getArgs(), ENABLE_DATASET_VERSION_LISTING, false)
-          && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getVersion() == null){
+          && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getVersion() == null) {
         listDatasetVersionHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
@@ -314,6 +333,11 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         postAccountsHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (requestPath.matchesOperation(NAMED_BLOB)) {
+        // S3 sends POST for multipart uploads. Eg url:-
+        // POST /s3/named-blob-sandbox/checkpoints/246cd68fa3480b2b0f9e6524fa473bca/shared/28774e7f-f490-4c25-9fb6-90eacbb3645f?uploads HTTP/1.1
+        namedBlobPostHandler.handle(restRequest, restResponseChannel,
+            (r, e) -> submitResponse(restRequest, restResponseChannel, r, e));
       } else {
         postBlobHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, null, exception));
@@ -373,10 +397,18 @@ class FrontendRestRequestService implements RestRequestService {
       RestRequestMetrics requestMetrics =
           frontendMetrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-
-      headBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-        submitResponse(restRequest, restResponseChannel, null, e);
-      });
+      if (requestPath.matchesOperation(Operations.NAMED_BLOB)
+          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
+        // S3 could send HEAD requests on accounts. Eg url: HEAD /s3/named-blob-sandbox
+        logger.info("Handling head request for named blob account");
+        headBlobHandler.handleAccounts(restRequest, restResponseChannel, (r, e) -> {
+          submitResponse(restRequest, restResponseChannel, r, e);
+        });
+      } else {
+        headBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+          submitResponse(restRequest, restResponseChannel, null, e);
+        });
+      }
     };
     preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.headPreProcessingMetrics,
         routingAction);
@@ -481,6 +513,7 @@ class FrontendRestRequestService implements RestRequestService {
       checkAvailable();
       securityService.preProcessRequest(restRequest, FrontendUtils.buildCallback(preProcessingMetrics, r -> {
         RequestPath requestPath = RequestPath.parse(restRequest, frontendConfig.pathPrefixesToRemove, clusterName);
+        logger.info("FrontendRestRequestService | PreProcessAndRouteRequest. Request path is {}", requestPath);
         restRequest.setArg(REQUEST_PATH, requestPath);
         routingAction.accept(requestPath);
       }, restRequest.getUri(), logger, errorCallback));

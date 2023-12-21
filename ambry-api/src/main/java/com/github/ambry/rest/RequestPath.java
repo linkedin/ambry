@@ -19,8 +19,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.GetBlobOptions.*;
 
 
@@ -35,6 +38,7 @@ public class RequestPath {
   private static final char PATH_SEPARATOR_CHAR = '/';
   private static final String PATH_SEPARATOR_STRING = String.valueOf(PATH_SEPARATOR_CHAR);
   private static final String SEGMENT = SubResource.Segment.toString();
+  private static final Logger logger = LoggerFactory.getLogger(RequestPath.class);
 
   /**
    * Parse the request path (and additional headers in some cases). The path will match the following regex-like
@@ -74,6 +78,34 @@ public class RequestPath {
     } catch (IllegalArgumentException e) {
       throw new RestServiceException("Invalid URI path", e, RestServiceErrorCode.BadRequest);
     }
+
+    // S3 requests to Ambry are in the form "PUT /s3/named-blob-sandbox/checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata"
+    // where "named-blob-sandbox" is the account name (no container name is added) and
+    // "checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata" is the key name.
+
+    // We convert it to named blob request in the form  "/named/named-blob-sandbox/container-a/checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata"
+    // i.e. we hardcode container name to 'container-a'
+
+    logger.info("S3 API | Input path: {}", path);
+    if (path.startsWith("/s3")) {
+      // Convert to named blob request internally
+      int accountStart = "/s3/".length();
+      int accountEnd = path.indexOf("/", accountStart);
+      if (accountEnd == -1) {
+        accountEnd = path.length();
+      }
+      String accountName = path.substring(accountStart, accountEnd);
+      String containerName = "container-a";
+      String remainingPath = path.substring(accountEnd);
+      String namedPath =
+          "/named/" + accountName + "/" + containerName + (remainingPath.length() > 0 ? remainingPath : "");
+      logger.info("S3 API | Converting S3 path to Named path. S3 path: {}, Named path: {}", path, namedPath);
+      path = namedPath; // Store the converted path
+      restRequest.setArg(S3_REQUEST, "true"); // signifies this is a s3 request
+      restRequest.setArg(S3_BUCKET, accountName); // store the bucket name
+      restRequest.setArg(S3_KEY, remainingPath); // store the key name
+    }
+
     return parse(path, restRequest.getArgs(), prefixesToRemove, clusterName);
   }
 
@@ -93,6 +125,10 @@ public class RequestPath {
   public static RequestPath parse(String path, Map<String, Object> args, List<String> prefixesToRemove,
       String clusterName) throws RestServiceException {
     int offset = 0;
+
+    for (String arg : args.keySet()) {
+      System.out.println(arg + "=" + args.get(arg));
+    }
 
     // remove prefix.
     String prefixFound = "";

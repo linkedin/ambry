@@ -13,22 +13,33 @@
  */
 package com.github.ambry.frontend;
 
+import com.github.ambry.account.AccountCollectionSerde;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.account.AccountServiceException;
+import com.github.ambry.account.Container;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.router.GetBlobOptionsBuilder;
 import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
+import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.GregorianCalendar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,10 +62,11 @@ public class HeadBlobHandler {
   private final FrontendMetrics metrics;
   private final ClusterMap clusterMap;
   private final QuotaManager quotaManager;
+  private final AccountService accountService;
 
   HeadBlobHandler(FrontendConfig frontendConfig, Router router, SecurityService securityService,
       IdConverter idConverter, AccountAndContainerInjector accountAndContainerInjector, FrontendMetrics metrics,
-      ClusterMap clusterMap, QuotaManager quotaManager) {
+      ClusterMap clusterMap, QuotaManager quotaManager, AccountService accountService) {
     this.frontendConfig = frontendConfig;
     this.router = router;
     this.securityService = securityService;
@@ -63,6 +75,7 @@ public class HeadBlobHandler {
     this.metrics = metrics;
     this.clusterMap = clusterMap;
     this.quotaManager = quotaManager;
+    this.accountService = accountService;
   }
 
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
@@ -74,10 +87,22 @@ public class HeadBlobHandler {
     new CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
+  // Add method to handle HEAD /account-name from S3
+  void handleAccounts(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) throws RestServiceException {
+    // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
+    if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
+      accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metrics.headBlobMetricsGroup);
+    }
+    new CallbackChain(restRequest, restResponseChannel, callback, false).start();
+  }
+
   private class CallbackChain {
     private final RestRequest restRequest;
     private final RestResponseChannel restResponseChannel;
     private final Callback<Void> finalCallback;
+    private final Callback<ReadableStreamChannel> finalReadableStreamChannelCallback;
+    private boolean isAccountRequest = false;
 
     /**
      * @param restRequest the {@link RestRequest}.
@@ -89,6 +114,21 @@ public class HeadBlobHandler {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.finalCallback = finalCallback;
+      this.finalReadableStreamChannelCallback = null;
+    }
+
+    /**
+     * @param restRequest the {@link RestRequest}.
+     * @param restResponseChannel the {@link RestResponseChannel}.
+     * @param finalCallback the {@link Callback} to call on completion.
+     */
+    private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
+        Callback<ReadableStreamChannel> finalCallback, boolean unused) {
+      this.restRequest = restRequest;
+      this.restResponseChannel = restResponseChannel;
+      this.finalReadableStreamChannelCallback = finalCallback;
+      this.finalCallback = null;
+      this.isAccountRequest = true;
     }
 
     /**
@@ -106,8 +146,12 @@ public class HeadBlobHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(metrics.headBlobSecurityProcessRequestMetrics, result -> {
-        String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
-        idConverter.convert(restRequest, blobIdStr, idConverterCallback());
+        if (!isAccountRequest) {
+          String blobIdStr = getRequestPath(restRequest).getOperationOrBlobId(false);
+          idConverter.convert(restRequest, blobIdStr, idConverterCallback());
+        } else {
+          securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback());
+        }
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
 
@@ -176,6 +220,52 @@ public class HeadBlobHandler {
     private Callback<Void> securityProcessResponseCallback() {
       return buildCallback(metrics.headBlobSecurityProcessResponseMetrics,
           securityCheckResult -> finalCallback.onCompletion(null, null), restRequest.getUri(), LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link SecurityService#postProcessRequest} finishes, call the final callback with the response body to
+     * sen
+     * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
+     */
+    private Callback<Void> securityPostProcessRequestCallback() {
+      return buildCallback(metrics.getAccountsSecurityPostProcessRequestMetrics, securityCheckResult -> {
+        byte[] serialized;
+        RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
+        restRequest.setArg(Headers.TARGET_ACCOUNT_NAME, namedBlobPath.getAccountName());
+        restRequest.setArg(Headers.TARGET_CONTAINER_NAME, namedBlobPath.getContainerName());
+        LOGGER.debug("Received head request for named blob account and container: {}",
+            restRequest.getArgs().get(REQUEST_PATH));
+        Container container = getContainer();
+        serialized = AccountCollectionSerde.serializeContainersInJson(Collections.singletonList(container));
+        restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_ID, container.getParentAccountId());
+        ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(serialized));
+        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, RestUtils.JSON_CONTENT_TYPE);
+        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
+        finalReadableStreamChannelCallback.onCompletion(channel, null);
+      }, restRequest.getUri(), LOGGER, finalReadableStreamChannelCallback);
+    }
+
+    /**
+     * @return requested container.
+     * @throws RestServiceException
+     */
+    private Container getContainer() throws RestServiceException {
+      String accountName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_ACCOUNT_NAME, true);
+      String containerName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.TARGET_CONTAINER_NAME, true);
+      Container container;
+      try {
+        container = accountService.getContainerByName(accountName, containerName);
+      } catch (AccountServiceException e) {
+        throw new RestServiceException("Failed to get container " + containerName + " from account " + accountName,
+            RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
+      }
+      if (container == null) {
+        throw new RestServiceException("Container " + containerName + " in account " + accountName + " is not found.",
+            RestServiceErrorCode.NotFound);
+      }
+      return container;
     }
   }
 }

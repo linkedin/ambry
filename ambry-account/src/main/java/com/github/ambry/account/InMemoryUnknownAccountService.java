@@ -31,14 +31,18 @@ class InMemoryUnknownAccountService implements AccountService {
           Account.ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
           Arrays.asList(Container.UNKNOWN_CONTAINER, Container.DEFAULT_PUBLIC_CONTAINER,
               Container.DEFAULT_PRIVATE_CONTAINER), Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
+  // Create a hardcoded Account "named-blob-account" which will be used for s3 prototype tests
+  static final Account NAMED_BLOB_ACCOUNT = new Account((short) 101, "named-blob-sandbox", Account.AccountStatus.ACTIVE,
+      Account.ACL_INHERITED_BY_CONTAINER_DEFAULT_VALUE, Account.SNAPSHOT_VERSION_DEFAULT_VALUE,
+      Collections.singletonList(Container.NAMED_BLOB_CONTAINER), Account.QUOTA_RESOURCE_TYPE_DEFAULT_VALUE);
   private static final Collection<Account> accounts =
-      Collections.unmodifiableCollection(Collections.singletonList(UNKNOWN_ACCOUNT));
+      Collections.unmodifiableCollection(Collections.singletonList(NAMED_BLOB_ACCOUNT));
   private volatile boolean isOpen = true;
 
   @Override
   public Account getAccountById(short accountId) {
     checkOpen();
-    return accountId == Account.UNKNOWN_ACCOUNT_ID ? UNKNOWN_ACCOUNT : null;
+    return NAMED_BLOB_ACCOUNT;
   }
 
   @Override
@@ -59,7 +63,7 @@ class InMemoryUnknownAccountService implements AccountService {
   public Account getAccountByName(String accountName) {
     checkOpen();
     Objects.requireNonNull(accountName, "accountName cannot be null.");
-    return UNKNOWN_ACCOUNT;
+    return NAMED_BLOB_ACCOUNT;
   }
 
   @Override

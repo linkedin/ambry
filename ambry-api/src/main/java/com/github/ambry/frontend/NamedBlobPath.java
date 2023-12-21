@@ -21,6 +21,8 @@ import com.github.ambry.rest.RestUtils;
 import java.util.Map;
 import java.util.Objects;
 
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+
 
 /**
  * Represents the blob url parsing results for named blob.
@@ -51,23 +53,31 @@ public class NamedBlobPath {
     String[] splitPath = path.split("/", 4);
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
     boolean isListRequest = blobNamePrefix != null;
+    // S3 can issue "HEAD /s3/named-blob-sandbox" on the bucket-name.
+    // The converted named blob would be /named/named-blob-sandbox/container-a. So, don't check for number of expected
+    // segments for S3 as of now
+    /*
     int expectedSegments = isListRequest ? 3 : 4;
     if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
       throw new RestServiceException(String.format(
           "Path must have format '/named/<account_name>/<container_name>%s.  Received path='%s', blobNamePrefix='%s'",
           isListRequest ? "" : "/<blob_name>'", path, blobNamePrefix), RestServiceErrorCode.BadRequest);
     }
+    */
     String accountName = splitPath[1];
     String containerName = splitPath[2];
     if (isListRequest) {
       String pageToken = RestUtils.getHeader(args, PAGE_PARAM, false);
       return new NamedBlobPath(accountName, containerName, null, blobNamePrefix, pageToken);
     } else {
-      String blobName = splitPath[3];
-      if (blobName.length() > MAX_BLOB_NAME_LENGTH) {
-        throw new RestServiceException(
-            String.format("Blob name maximum length should be less than %s", MAX_BLOB_NAME_LENGTH),
-            RestServiceErrorCode.BadRequest);
+      String blobName = null;
+      if (splitPath.length == 4) {
+        blobName = splitPath[3];
+        if (blobName.length() > MAX_BLOB_NAME_LENGTH) {
+          throw new RestServiceException(
+              String.format("Blob name maximum length should be less than %s", MAX_BLOB_NAME_LENGTH),
+              RestServiceErrorCode.BadRequest);
+        }
       }
       return new NamedBlobPath(accountName, containerName, blobName, null, null);
     }

@@ -360,9 +360,13 @@ class PutOperation {
     Exception exception = null;
     try {
       if (options.isChunkUpload() && options.getMaxUploadSize() > routerConfig.routerMaxPutChunkSizeBytes) {
-        exception = new RouterException("Invalid max upload size for chunk upload: " + options.getMaxUploadSize(),
-            RouterErrorCode.InvalidPutArgument);
-      } else if (isStitchOperation()) {
+        logger.info("Chunk upload has size {} greater than 4 MB", options.getMaxUploadSize());
+        // If going with "router.max.put.chunk.size.bytes" = 5 MB, we can uncomment below
+        //exception = new RouterException("Invalid max upload size for chunk upload: " + options.getMaxUploadSize(),
+        //    RouterErrorCode.InvalidPutArgument);
+      }
+
+      if (isStitchOperation()) {
         processChunksToStitch();
       } else {
         startReadingFromChannel();
@@ -670,6 +674,7 @@ class PutOperation {
       if (chunkFillingCompletedSuccessfully) {
         // If the blob size is less than 4MB or the last chunk size is less than 4MB, than this lastChunk will be
         // the chunk above.
+        logger.info("Put operation | Chunk filling completed successfully. Building last chunk");
         PutChunk lastChunk = getChunkInState(ChunkState.Building);
 
         // The last chunk could be the second chunk, if the blob size is less than 8MB. We need to check if any chunk is
@@ -1522,6 +1527,7 @@ class PutOperation {
           // If first put chunk is full, but not yet prepared then mark it awaiting resolution instead of completing it.
           // This chunk will be prepared as soon as either more bytes are read from the channel, or the chunk filling
           // is complete. At that point we will have enough information to mark this blob as simple or composite blob.
+          logger.info("Put operation | Finished reading first 4 MB from channel. Awaiting blob type resolution");
           state = ChunkState.AwaitingBlobTypeResolution;
         } else {
           onFillComplete(true);

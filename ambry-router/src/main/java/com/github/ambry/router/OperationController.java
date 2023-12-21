@@ -16,6 +16,7 @@ package com.github.ambry.router;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.RouterConfig;
@@ -30,6 +31,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -41,12 +43,15 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.commons.BlobId.BlobDataType.*;
 
 
 /**
@@ -68,6 +73,7 @@ public class OperationController implements Runnable {
   final ReplicateBlobManager replicateBlobManager;
   private final NetworkClient networkClient;
   private final ResponseHandler responseHandler;
+  private final ClusterMap clusterMap;
   private final RouterConfig routerConfig;
   private final Thread requestResponseHandlerThread;
   private final CountDownLatch shutDownLatch = new CountDownLatch(1);
@@ -103,6 +109,7 @@ public class OperationController implements Runnable {
       KeyManagementService kms, CryptoService cryptoService, CryptoJobHandler cryptoJobHandler, Time time,
       NonBlockingRouter nonBlockingRouter) throws IOException {
     networkClient = networkClientFactory.getNetworkClient();
+    this.clusterMap = clusterMap;
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.responseHandler = responseHandler;
@@ -214,10 +221,62 @@ public class OperationController implements Runnable {
     if (!putManager.isOpen()) {
       handlePutManagerClosed(blobProperties, true, futureResult, callback);
     } else {
-      putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunksToStitch, futureResult, callback,
-          quotaChargeCallback);
-      routerCallback.onPollReady();
+      try {
+        // We don't need this change if we go with changing router.max.put.chunk.size.bytes to 5 MB
+        List<ChunkInfo> chunkInfos = flattenChunkIds(chunksToStitch, quotaChargeCallback);
+        putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunkInfos, futureResult, callback,
+            quotaChargeCallback);
+        routerCallback.onPollReady();
+      } catch (Exception e) {
+        nonBlockingRouter.completeOperation(futureResult, callback, null, e);
+      }
     }
+  }
+
+  private List<ChunkInfo> flattenChunkIds(List<ChunkInfo> chunksToStitch, QuotaChargeCallback quotaChargeCallback)
+      throws RouterException, ExecutionException, InterruptedException {
+
+    List<ChunkInfo> chunkInfos = new ArrayList<>();
+    logger.info("Operation controller | Flattening chunk ids. Received chunks to stitch {}", chunksToStitch);
+    for (ChunkInfo chunkInfo : chunksToStitch) {
+      BlobId blobId = RouterUtils.getBlobIdFromString(chunkInfo.getBlobId(), clusterMap);
+      logger.info("Operation controller | Flattening chunk ids. Blob id {}, Blob data type {}", blobId,
+          blobId.getBlobDataType());
+      if (blobId.getBlobDataType() == METADATA) {
+        final FutureResult<GetBlobResult> futureResult = new FutureResult<>();
+        GetBlobOptions options = new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.All).build();
+        GetBlobOptionsInternal optionsInternal = new GetBlobOptionsInternal(options, true, routerMetrics.ageAtGet);
+        getBlob(chunkInfo.getBlobId(), optionsInternal, (futureResult::done), quotaChargeCallback);
+        GetBlobResult getBlobResult = futureResult.get();
+        logger.info("Operation controller | Flattening chunk ids. Received list of chunk ids for composite blob {}, {}",
+            blobId, getBlobResult.getBlobChunkIds());
+        for (StoreKey blobChunkId : getBlobResult.getBlobChunkIds()) {
+          // Get blob Info
+          logger.info("Operation controller | Flattening chunk ids. Getting blob info for nested chunk id {}",
+              blobChunkId);
+          final FutureResult<GetBlobResult> futureResultBlobInfo = new FutureResult<>();
+          GetBlobOptions optionsBlobInfo =
+              new GetBlobOptionsBuilder().operationType(GetBlobOptions.OperationType.BlobInfo).build();
+          GetBlobOptionsInternal optionsInternalBlobInfo =
+              new GetBlobOptionsInternal(optionsBlobInfo, false, routerMetrics.ageAtGet);
+          getBlob(blobChunkId.getID(), optionsInternalBlobInfo, (futureResultBlobInfo::done), quotaChargeCallback);
+          GetBlobResult blobInfo = futureResultBlobInfo.get();
+          logger.info("Operation controller | Flattening chunk ids. Got blob info for nested chunk id {}. Blob size {}",
+              blobChunkId, blobInfo.getBlobInfo().getBlobProperties().getBlobSize());
+          ChunkInfo subChunkInfo =
+              new ChunkInfo(blobChunkId.getID(), blobInfo.getBlobInfo().getBlobProperties().getBlobSize(),
+                  chunkInfo.getExpirationTimeInMs(), chunkInfo.getReservedMetadataId());
+          logger.info("Operation controller | Flattening chunk ids. Adding individual chunk id {} for stitching",
+              subChunkInfo);
+          chunkInfos.add(subChunkInfo);
+        }
+      } else {
+        logger.info("Operation controller | Flattening chunk ids. Adding simple blob id {} directly", blobId);
+        chunkInfos.add(chunkInfo);
+      }
+    }
+
+    return chunkInfos;
   }
 
   /**

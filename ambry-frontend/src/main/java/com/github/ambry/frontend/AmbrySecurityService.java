@@ -284,7 +284,12 @@ class AmbrySecurityService implements SecurityService {
           case OPTIONS:
           case PUT:
             if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-              responseChannel.setStatus(ResponseStatus.Created);
+              if (restRequest.getArgs().containsKey("uploadId")) {
+                // If PUT + ?uploadId is present, this is a s3 multipart upload for chunk. Return 200 instead of 201
+                responseChannel.setStatus(ResponseStatus.Ok);
+              } else {
+                responseChannel.setStatus(ResponseStatus.Created);
+              }
               responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
               responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
                   new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
