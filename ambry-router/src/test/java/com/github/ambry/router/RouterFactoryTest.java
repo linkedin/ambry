@@ -14,10 +14,8 @@
 package com.github.ambry.router;
 
 import com.github.ambry.account.InMemAccountService;
-import com.github.ambry.cloud.LatchBasedInMemoryCloudDestinationFactory;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.LoggingNotificationSystem;
-import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
@@ -58,7 +56,6 @@ public class RouterFactoryTest {
     properties.setProperty("clustermap.port", "1666");
     properties.setProperty("clustermap.resolve.hostnames", "false");
     properties.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
-    properties.setProperty(CloudConfig.CLOUD_DESTINATION_FACTORY_CLASS, LatchBasedInMemoryCloudDestinationFactory.class.getName());
     return new VerifiableProperties(properties);
   }
 
