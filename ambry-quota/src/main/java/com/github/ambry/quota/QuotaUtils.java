@@ -43,7 +43,7 @@ public class QuotaUtils {
     return !(restRequest.getRestMethod() == RestMethod.OPTIONS || requestPath.matchesOperation(Operations.GET_PEERS)
         || requestPath.matchesOperation(Operations.GET_CLUSTER_MAP_SNAPSHOT) || requestPath.matchesOperation(
         Operations.ACCOUNTS) || requestPath.matchesOperation(Operations.STATS_REPORT) || requestPath.matchesOperation(
-        Operations.ACCOUNTS_CONTAINERS));
+        Operations.ACCOUNTS_CONTAINERS) || requestPath.matchesOperation(Operations.RESOURCE_INFO));
   }
 
   /**
