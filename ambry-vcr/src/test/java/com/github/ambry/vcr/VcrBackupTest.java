@@ -75,7 +75,6 @@ import static org.junit.Assert.*;
 
 
 @RunWith(Parameterized.class)
-@Ignore
 public class VcrBackupTest {
   private static final Logger logger = LoggerFactory.getLogger(VcrBackupTest.class);
   private static TestUtils.ZkInfo zkInfo;
