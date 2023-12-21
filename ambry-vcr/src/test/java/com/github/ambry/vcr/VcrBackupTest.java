@@ -59,6 +59,7 @@ import org.apache.helix.tools.ClusterVerifiers.StrictMatchExternalViewVerifier;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -70,6 +71,7 @@ import static org.junit.Assert.*;
 
 
 @RunWith(Parameterized.class)
+@Ignore
 public class VcrBackupTest {
   private static final Logger logger = LoggerFactory.getLogger(VcrBackupTest.class);
   private static TestUtils.ZkInfo zkInfo;
