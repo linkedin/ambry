@@ -73,7 +73,7 @@ public class MockCluster {
   private final Properties sslProps;
   private final boolean enableHardDeletes;
   private NotificationSystem notificationSystem;
-  final Time time;
+  public final Time time;
 
   public MockCluster(Properties serverSslProps, boolean enableHardDeletes, Time time) throws IOException {
     this(serverSslProps, enableHardDeletes, time, 9, 3, 3);

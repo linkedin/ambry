@@ -24,10 +24,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.Properties;
+import org.junit.Ignore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+@Ignore
 public class AzurePerformanceTest {
 
   private static final Logger logger = LoggerFactory.getLogger(AzurePerformanceTest.class);

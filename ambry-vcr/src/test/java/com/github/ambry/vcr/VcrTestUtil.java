@@ -13,6 +13,7 @@
  */
 package com.github.ambry.vcr;
 
+import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.CloudDestinationFactory;
 import com.github.ambry.cloud.HelixVcrClusterAgentsFactory;
 import com.github.ambry.cloud.OnlineOfflineHelixVcrStateModelFactory;
@@ -20,15 +21,27 @@ import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.server.DirectSender;
+import com.github.ambry.server.MockCluster;
+import com.github.ambry.server.MockNotificationSystem;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.TestUtils;
+import com.github.ambry.utils.Utils;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLSocketFactory;
 import org.apache.helix.ConfigAccessor;
@@ -49,6 +62,8 @@ import org.apache.helix.zookeeper.api.client.HelixZkClient;
 import org.apache.helix.zookeeper.impl.factory.DedicatedZkClientFactory;
 import org.junit.Test;
 
+import static com.github.ambry.server.ServerTestUtil.*;
+import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
 
@@ -214,6 +229,7 @@ public class VcrTestUtil {
    * @param notificationSystem the {@link MockNotificationSystem} to track blobs event in {@link MockCluster}.
    * @param vcrSSLProps SSL related properties for VCR. Can be {@code null}.
    * @param doTtlUpdate Do ttlUpdate request if {@code true}.
+   */
   static void endToEndCloudBackupTest(MockCluster cluster, String zkConnectString, String vcrClusterName,
       DataNodeId dataNode, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory,
       MockNotificationSystem notificationSystem, Properties vcrSSLProps, boolean doTtlUpdate) throws Exception {
@@ -289,6 +305,7 @@ public class VcrTestUtil {
     helixControllerManager.syncStop();
   }
 
+  /**
   @Test
   public void endToEndCloudBackupTest() throws Exception {
     assumeTrue(testEncryption);
@@ -305,7 +322,7 @@ public class VcrTestUtil {
         clientSSLSocketFactory2, notificationSystem, serverSSLProps, true);
     zkInfo.shutdown();
   }
-   
+
   @Test
   public void endToEndCloudBackupTest() throws Exception {
     assumeTrue(testEncryption);

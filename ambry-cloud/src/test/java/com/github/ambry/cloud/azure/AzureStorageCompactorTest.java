@@ -53,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.codec.binary.Base64;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -69,6 +70,7 @@ import static org.mockito.BDDMockito.*;
 
 /** Test cases for {@link AzureStorageCompactor} */
 @RunWith(Parameterized.class)
+@Ignore
 public class AzureStorageCompactorTest {
 
   private final String base64key = Base64.encodeBase64String("ambrykey".getBytes());

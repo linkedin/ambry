@@ -4621,7 +4621,7 @@ public final class ServerTestUtil {
     Assert.assertEquals("Unexpected ServerErrorCode for TtlUpdateRequest", expectedError, ttlUpdateResponse.getError());
   }
 
-  static void updateBlobTtl(ConnectedChannel channel, BlobId blobId, long ts) throws IOException {
+  public static void updateBlobTtl(ConnectedChannel channel, BlobId blobId, long ts) throws IOException {
     updateBlobTtl(channel, blobId, ts, ServerErrorCode.No_Error);
   }
 

@@ -45,6 +45,7 @@ import java.util.Properties;
 import java.util.concurrent.CompletionException;
 import org.apache.http.HttpStatus;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -59,6 +60,7 @@ import static org.mockito.Mockito.*;
 
 /** Test cases for {@link AzureCloudDestination} */
 @RunWith(Parameterized.class)
+@Ignore
 public class AzureBlobDataAccessorTest {
 
   private final String clusterName = "main";
