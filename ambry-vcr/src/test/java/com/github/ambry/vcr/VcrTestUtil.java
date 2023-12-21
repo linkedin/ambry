@@ -230,7 +230,7 @@ public class VcrTestUtil {
    * @param vcrSSLProps SSL related properties for VCR. Can be {@code null}.
    * @param doTtlUpdate Do ttlUpdate request if {@code true}.
    */
-  static void endToEndCloudBackupTest(MockCluster cluster, String zkConnectString, String vcrClusterName,
+  public static void endToEndCloudBackupTest(MockCluster cluster, String zkConnectString, String vcrClusterName,
       DataNodeId dataNode, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory,
       MockNotificationSystem notificationSystem, Properties vcrSSLProps, boolean doTtlUpdate) throws Exception {
     int blobBackupCount = 10;
@@ -304,40 +304,4 @@ public class VcrTestUtil {
     vcrServer.shutdown();
     helixControllerManager.syncStop();
   }
-
-  /**
-  @Test
-  public void endToEndCloudBackupTest() throws Exception {
-    assumeTrue(testEncryption);
-    sslCluster.startServers();
-    DataNodeId dataNode = sslCluster.getClusterMap().getDataNodeIds().get(0);
-    // Start ZK Server.
-    int zkPort = 31998;
-    String zkConnectString = "localhost:" + zkPort;
-    String vcrClusterName = "vcrTestClusterSSL";
-    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
-    ServerTestUtil.endToEndCloudBackupTest(sslCluster, zkConnectString, vcrClusterName, dataNode, clientSSLConfig2,
-        clientSSLSocketFactory2, notificationSystem, serverSSLProps, false);
-    ServerTestUtil.endToEndCloudBackupTest(sslCluster, zkConnectString, vcrClusterName, dataNode, clientSSLConfig2,
-        clientSSLSocketFactory2, notificationSystem, serverSSLProps, true);
-    zkInfo.shutdown();
-  }
-
-  @Test
-  public void endToEndCloudBackupTest() throws Exception {
-    assumeTrue(testEncryption);
-    plaintextCluster.startServers();
-    DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    // Start Helix Controller and ZK Server.
-    int zkPort = 31999;
-    String zkConnectString = "localhost:" + zkPort;
-    String vcrClusterName = "vcrTestClusterPlainText";
-    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
-        notificationSystem, null, false);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
-        notificationSystem, null, true);
-    zkInfo.shutdown();
-  }
-   */
 }
