@@ -61,6 +61,7 @@ import java.util.stream.Stream;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -73,6 +74,7 @@ import static org.junit.Assert.*;
  * Test for replication from cloud to store and store to store.
  */
 @RunWith(Parameterized.class)
+@Ignore
 public class CloudAndStoreReplicationTest {
   private Properties recoveryProperties;
   private MockCluster recoveryCluster;

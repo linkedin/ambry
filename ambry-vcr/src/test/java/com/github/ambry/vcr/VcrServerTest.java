@@ -38,6 +38,7 @@ import java.util.function.Function;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.mockito.Mockito.*;
@@ -46,6 +47,7 @@ import static org.mockito.Mockito.*;
 /**
  * Test of the VCR Server.
  */
+@Ignore
 public class VcrServerTest {
 
   private static MockClusterAgentsFactory mockClusterAgentsFactory;

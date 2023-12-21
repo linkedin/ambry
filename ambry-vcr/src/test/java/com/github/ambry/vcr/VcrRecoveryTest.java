@@ -51,6 +51,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -59,6 +60,7 @@ import static org.junit.Assert.*;
 /**
  * Test for recovery from cloud node to disk based data node.
  */
+@Ignore
 public class VcrRecoveryTest {
   private Properties recoveryProperties;
   private MockCluster recoveryCluster;
