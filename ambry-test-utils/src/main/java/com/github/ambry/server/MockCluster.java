@@ -647,7 +647,7 @@ class EventTracker {
  * A mock notification system that helps to identify when blobs
  * get replicated. This class is not thread safe
  */
-class MockNotificationSystem implements NotificationSystem {
+public class MockNotificationSystem implements NotificationSystem {
 
   private final ConcurrentHashMap<String, EventTracker> objectTracker = new ConcurrentHashMap<String, EventTracker>();
   private final ClusterMap clusterMap;
@@ -729,7 +729,7 @@ class MockNotificationSystem implements NotificationSystem {
     // ignore
   }
 
-  List<String> getBlobIds() {
+  public List<String> getBlobIds() {
     return new ArrayList<>(objectTracker.keySet());
   }
 
@@ -737,7 +737,7 @@ class MockNotificationSystem implements NotificationSystem {
    * Waits for blob creations on all replicas for {@code blobId}
    * @param blobId the ID of the blob
    */
-  void awaitBlobCreations(String blobId) {
+  public void awaitBlobCreations(String blobId) {
     try {
       waitForTracker(blobId);
       if (!objectTracker.get(blobId).awaitBlobCreations()) {

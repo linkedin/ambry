@@ -39,7 +39,11 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.server.AmbryServer;
+import com.github.ambry.server.DirectSender;
+import com.github.ambry.server.MockCluster;
+import com.github.ambry.server.MockNotificationSystem;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.server.ServerTestUtil;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.HelixControllerManager;
 import com.github.ambry.utils.SystemTime;
@@ -356,7 +360,7 @@ public class CloudAndStoreReplicationTest {
 
     Port port = new Port(dataNode.getPort(), PortType.PLAINTEXT);
     ConnectedChannel channel =
-        ServerTestUtil.getBlockingChannelBasedOnPortType(port, dataNode.getHostname(), null, null);
+        getBlockingChannelBasedOnPortType(port, dataNode.getHostname(), null, null);
     channel.connect();
     CountDownLatch latch = new CountDownLatch(1);
     DirectSender runnable = new DirectSender(channel, serverBlobIds, data, userMetadata, properties, null, latch);

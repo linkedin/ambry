@@ -37,7 +37,7 @@ import org.junit.Assert;
 /**
  * Sender for put messages directly to server nodes.
  */
-class DirectSender implements Runnable {
+public class DirectSender implements Runnable {
 
   ConnectedChannel channel;
   List<BlobId> blobIds;
@@ -128,7 +128,7 @@ class DirectSender implements Runnable {
    * Get {@link List} of {@link BlobId}s.
    * @return {@link List} of {@link BlobId}s.
    */
-  List<BlobId> getBlobIds() {
+  public List<BlobId> getBlobIds() {
     return blobIds;
   }
 }
