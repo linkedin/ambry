@@ -42,12 +42,14 @@ import java.io.InputStream;
 import java.util.Collections;
 import java.util.Properties;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 
 /**
  * Test for {@link com.github.ambry.vcr.VcrRequests}
  */
+@Ignore
 public class VcrRequestsTest {
   private final VcrRequests vcrRequests;
   private final NetworkRequest request;

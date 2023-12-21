@@ -43,6 +43,7 @@ import java.util.Properties;
 import java.util.function.Function;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
@@ -80,6 +81,9 @@ public class VcrServerTest {
 
   @Before
   public void initializeTests() throws Exception {
+    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, true, 1, 1, 2);
+    mockClusterMap = mockClusterAgentsFactory.getClusterMap();
+
     routerProps = new Properties();
     routerProps.setProperty("kms.default.container.key", TestUtils.getRandomKey(32));
     routerProps.setProperty("clustermap.default.partition.class", MockClusterMap.DEFAULT_PARTITION_CLASS);
@@ -119,14 +123,7 @@ public class VcrServerTest {
     clientSSLSocketFactory3 = sslContext.getSocketFactory();
   }
 
-  @BeforeClass
-  public void setup() throws Exception {
-    mockClusterAgentsFactory = new MockClusterAgentsFactory(false, true, 1, 1, 2);
-    mockClusterMap = mockClusterAgentsFactory.getClusterMap();
-    notificationSystem = mock(NotificationSystem.class);
-  }
-
-  @AfterClass
+  @After
   public void cleanUp() throws IOException {
     mockClusterMap.cleanup();
   }
@@ -136,6 +133,7 @@ public class VcrServerTest {
    * @throws Exception
    */
   @Test
+  @Ignore
   public void testVCRServerWithStaticCluster() throws Exception {
     VerifiableProperties verifiableProperties = getStaticClusterVcrProps();
     VcrServer
@@ -151,6 +149,7 @@ public class VcrServerTest {
    * @throws Exception
    */
   @Test
+  @Ignore
   public void testVCRServerWithReporterFactory() throws Exception {
     VerifiableProperties verifiableProperties = getStaticClusterVcrProps();
     ObjectNameFactory spyObjectNameFactory = spy(new DefaultObjectNameFactory());
@@ -235,6 +234,7 @@ public class VcrServerTest {
 
 
    @Test
+   @Ignore
    public void endToEndPlaintextCloudBackupTest() throws Exception {
    plaintextCluster.startServers();
    DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);

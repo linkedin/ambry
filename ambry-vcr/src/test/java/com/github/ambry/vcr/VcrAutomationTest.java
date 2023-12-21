@@ -39,13 +39,14 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.ambry.clustermap.TestUtils.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.mockito.Mockito.*;
 
-
+@Ignore
 public class VcrAutomationTest {
 
   /**

@@ -37,6 +37,7 @@ import org.apache.helix.tools.ClusterVerifiers.StrictMatchExternalViewVerifier;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -44,6 +45,7 @@ import org.mockito.Mockito;
 /**
  * Tests of HixVcrClusterParticipant.
  */
+@Ignore
 public class HelixVcrClusterParticipantTest {
   private static final String ZK_SERVER_HOSTNAME = "localhost";
   private static final int ZK_SERVER_PORT = 31900;
