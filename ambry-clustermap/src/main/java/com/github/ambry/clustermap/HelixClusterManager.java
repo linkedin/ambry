@@ -1027,7 +1027,7 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   Set<String> getAllInstancesForResource(String resource) {
-    String dcName = instanceNameToAmbryDataNode.get(selfInstanceName).getDatacenterName();
+    String dcName = clusterMapConfig.clusterMapDatacenterName;
     String tag = dcToResourceNameToTag.get(dcName).get(resource);
     return tagToInstanceNames.get(tag);
   }
@@ -1068,7 +1068,7 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   int getNumberOfPartitionsInResource(String resource) {
-    String dcName = instanceNameToAmbryDataNode.get(selfInstanceName).getDatacenterName();
+    String dcName = clusterMapConfig.clusterMapDatacenterName;
     String tag = dcToResourceNameToTag.get(dcName).get(resource);
     return dcToTagToResourceProperty.get(dcName).get(tag).numPartitions;
   }
@@ -2242,7 +2242,7 @@ public class HelixClusterManager implements ClusterMap {
     @Override
     public List<String> identifyResources(HelixClusterManager helixClusterManager) {
       String dcName = helixClusterManager.clusterMapConfig.clusterMapDatacenterName;
-      if (!helixClusterManager.dcToResourceNameToTag.get(dcName).contains(resourceName)) {
+      if (!helixClusterManager.dcToResourceNameToTag.get(dcName).containsKey(resourceName)) {
         throw new IllegalArgumentException("Resource " + resourceName + " doesn't exist");
       }
       return Collections.singletonList(resourceName);
@@ -2279,8 +2279,17 @@ public class HelixClusterManager implements ClusterMap {
 
   private ResourceInfo getResourceInfo(String resourceName) {
     String dcName = clusterMapConfig.clusterMapDatacenterName;
-    List<String> liveInstances = new ArrayList<>(getLiveInstanceCount(resourceName));
-    List<String> unavailableInstances = new ArrayList<>(getUnavailableInstanceCount(resourceName));
+    List<String> allInstances = new ArrayList<>(getAllInstancesForResource(resourceName));
+    List<String> liveInstances = allInstances.stream()
+        .map(instanceNameToAmbryDataNode::get)
+        .filter(dn -> dn.getState() == HardwareState.AVAILABLE)
+        .map(ClusterMapUtils::getInstanceName)
+        .collect(Collectors.toList());
+    List<String> unavailableInstances = allInstances.stream()
+        .map(instanceNameToAmbryDataNode::get)
+        .filter(dn -> dn.getState() == HardwareState.UNAVAILABLE)
+        .map(ClusterMapUtils::getInstanceName)
+        .collect(Collectors.toList());
     long totalCapacity = getResourceTotalRegisteredHostDiskCapacity(resourceName);
     long liveCapacity = getResourceAvailableRegisteredHostDiskCapacity(resourceName);
     long unavailableCapacity = totalCapacity - liveCapacity;
@@ -2305,7 +2314,8 @@ public class HelixClusterManager implements ClusterMap {
         failedDisks.put(instanceName, failedDiskMountPath);
       }
     }
-    return new ResourceInfo(liveInstances, unavailableInstances, liveCapacity, unavailableCapacity, numPartitions,
-        numExpectedReplicas, numCurrentReplicas, expectedTotalReplicaWeight, currentTotalReplicaWeight, failedDisks);
+    return new ResourceInfo(resourceName, liveInstances, unavailableInstances, liveCapacity, unavailableCapacity,
+        numPartitions, numExpectedReplicas, numCurrentReplicas, expectedTotalReplicaWeight, currentTotalReplicaWeight,
+        failedDisks);
   }
 }

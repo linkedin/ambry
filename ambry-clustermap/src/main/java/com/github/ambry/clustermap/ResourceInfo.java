@@ -19,23 +19,26 @@ import java.util.Set;
 
 
 /**
- * Data class to represent the information of a resource.
+ * Data class to represent the information of a resource. All fields are public so json serializer can serialize
+ * objects of this class.
  */
 public class ResourceInfo {
-  private final List<String> liveInstances;
-  private final List<String> unavailableInstances;
-  private final int totalInstanceCount;
-  private final long liveCapacity;
-  private final long unavailableCapacity;
-  private final int numPartitions;
-  private final int numExpectedReplicas;
-  private final int numCurrentReplicas;
-  private final int expectedTotalReplicaWeight;
-  private final int currentTotalReplicaWeight;
-  private final Map<String, Set<String>> failedDisks;
+  public final String resourceName;
+  public final List<String> liveInstances;
+  public final List<String> unavailableInstances;
+  public final int totalInstanceCount;
+  public final long liveCapacity;
+  public final long unavailableCapacity;
+  public final int numPartitions;
+  public final int numExpectedReplicas;
+  public final int numCurrentReplicas;
+  public final int expectedTotalReplicaWeight;
+  public final int currentTotalReplicaWeight;
+  public final Map<String, Set<String>> failedDisks;
 
   /**
    * Constructor to create a {@link ResourceInfo}.
+   * @param resourceName
    * @param liveInstances
    * @param unavailableInstances
    * @param liveCapacity
@@ -47,9 +50,10 @@ public class ResourceInfo {
    * @param currentTotalReplicaWeight
    * @param failedDisks
    */
-  public ResourceInfo(List<String> liveInstances, List<String> unavailableInstances, long liveCapacity,
-      long unavailableCapacity, int numPartitions, int numExpectedReplicas, int numCurrentReplicas,
+  public ResourceInfo(String resourceName, List<String> liveInstances, List<String> unavailableInstances,
+      long liveCapacity, long unavailableCapacity, int numPartitions, int numExpectedReplicas, int numCurrentReplicas,
       int expectedTotalReplicaWeight, int currentTotalReplicaWeight, Map<String, Set<String>> failedDisks) {
+    this.resourceName = resourceName;
     this.liveInstances = liveInstances;
     this.unavailableInstances = unavailableInstances;
     this.totalInstanceCount = liveInstances.size() + unavailableInstances.size();
