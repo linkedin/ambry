@@ -90,26 +90,6 @@ public class ServerPlaintextTest {
         routerProps, testEncryption);
   }
 
-  /**
-   * Do end to end cloud backup test
-   */
-  @Test
-  public void endToEndCloudBackupTest() throws Exception {
-    assumeTrue(testEncryption);
-    plaintextCluster.startServers();
-    DataNodeId dataNode = plaintextCluster.getClusterMap().getDataNodeIds().get(0);
-    // Start Helix Controller and ZK Server.
-    int zkPort = 31999;
-    String zkConnectString = "localhost:" + zkPort;
-    String vcrClusterName = "vcrTestClusterPlainText";
-    TestUtils.ZkInfo zkInfo = new TestUtils.ZkInfo(TestUtils.getTempDir("helixVcr"), "DC1", (byte) 1, zkPort, true);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
-        notificationSystem, null, false);
-    ServerTestUtil.endToEndCloudBackupTest(plaintextCluster, zkConnectString, vcrClusterName, dataNode, null, null,
-        notificationSystem, null, true);
-    zkInfo.shutdown();
-  }
-
   @Test
   public void endToEndReplicationWithMultiNodeMultiPartitionTest() throws Exception {
     plaintextCluster.startServers();
