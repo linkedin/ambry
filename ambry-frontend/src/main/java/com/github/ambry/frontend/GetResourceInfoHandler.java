@@ -135,10 +135,13 @@ public class GetResourceInfoHandler {
 
     private List<ResourceInfo> queryResourceInfo() throws RestServiceException {
       String partitionName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.PARTITION, false);
+      String hostname = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.HOSTNAME, false);
       String resourceName = RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.RESOURCE, false);
       HelixClusterManager.ResourceIdentifier resourceIdentifier;
       if (partitionName != null) {
         resourceIdentifier = new HelixClusterManager.PartitionIdIdentifier(partitionName);
+      } else if (hostname != null) {
+        resourceIdentifier = new HelixClusterManager.HostnameIdentifier(hostname);
       } else if (resourceName != null) {
         resourceIdentifier = new HelixClusterManager.ResourceNameIdentifier(resourceName);
       } else {
