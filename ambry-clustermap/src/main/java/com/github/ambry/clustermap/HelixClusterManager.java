@@ -77,6 +77,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  */
 public class HelixClusterManager implements ClusterMap {
   private static final Logger logger = LoggerFactory.getLogger(HelixClusterManager.class);
+  private static final int DEFAULT_NUM_REPLICAS = 3;
   private final String clusterName;
   private final String selfInstanceName;
   private final MetricRegistry metricRegistry;
@@ -1793,10 +1794,14 @@ public class HelixClusterManager implements ClusterMap {
           String resourceName = state.getResourceName();
           String tag = state.getInstanceGroupTag();
           int numPartitions = state.getNumPartitions();
+          int replicationFactor = state.getReplicaCount(DEFAULT_NUM_REPLICAS);
+          if (replicationFactor == 0) {
+            replicationFactor = DEFAULT_NUM_REPLICAS;
+          }
           if (!Strings.isEmpty(tag)) {
             resourceNameToTag.put(resourceName, tag);
             ResourceProperty resourceProperty =
-                new ResourceProperty(resourceName, numPartitions, state.getRebalanceMode());
+                new ResourceProperty(resourceName, numPartitions, replicationFactor, state.getRebalanceMode());
             tagToProperty.put(tag, resourceProperty);
           }
           resourceToPartitionMap.put(resourceName, new HashSet<>(state.getPartitionSet()));
@@ -2169,11 +2174,13 @@ public class HelixClusterManager implements ClusterMap {
   static class ResourceProperty {
     final String name;
     final int numPartitions;
+    final int replicationFactor; // number of replicas
     final IdealState.RebalanceMode rebalanceMode;
 
-    ResourceProperty(String name, int numPartitions, IdealState.RebalanceMode rebalanceMode) {
+    ResourceProperty(String name, int numPartitions, int replicationFactor, IdealState.RebalanceMode rebalanceMode) {
       this.numPartitions = numPartitions;
       this.name = name;
+      this.replicationFactor = replicationFactor;
       this.rebalanceMode = rebalanceMode;
     }
   }
@@ -2250,6 +2257,34 @@ public class HelixClusterManager implements ClusterMap {
   }
 
   /**
+   * An implementation of {@link ResourceIdentifier} to return the resource name the given hostname belongs to .
+   */
+  public static class HostnameIdentifier implements ResourceIdentifier {
+    private final String hostname;
+
+    /**
+     * Constructor to create a {@link HostnameIdentifier}.
+     * @param hostname
+     */
+    public HostnameIdentifier(String hostname) {
+      this.hostname = hostname;
+    }
+
+    @Override
+    public List<String> identifyResources(HelixClusterManager helixClusterManager) {
+      String dcName = helixClusterManager.clusterMapConfig.clusterMapDatacenterName;
+      DataNodeId dataNodeId = helixClusterManager.instanceNameToAmbryDataNode.get(hostname);
+      if (dataNodeId == null || !dataNodeId.getDatacenterName().equals(dcName)) {
+        throw new IllegalArgumentException("Host " + hostname + " doesn't exist in this datacenter");
+      }
+      List<String> tags = helixClusterManager.instanceNameToInstanceConfig.get(hostname).getTags();
+      return tags.stream()
+          .map(tag -> helixClusterManager.dcToTagToResourceProperty.get(dataNodeId.getDatacenterName()).get(tag).name)
+          .collect(Collectors.toList());
+    }
+  }
+
+  /**
    * An implementation to return all the resource this cluster map has.
    */
   public static class AllResourceIdentifier implements ResourceIdentifier {
@@ -2283,8 +2318,7 @@ public class HelixClusterManager implements ClusterMap {
     List<String> liveInstances = allInstances.stream()
         .map(instanceNameToAmbryDataNode::get)
         .filter(dn -> dn.getState() == HardwareState.AVAILABLE)
-        .map(ClusterMapUtils::getInstanceName)
-        .collect(Collectors.toList());
+        .map(ClusterMapUtils::getInstanceName).collect(Collectors.toList());
     List<String> unavailableInstances = allInstances.stream()
         .map(instanceNameToAmbryDataNode::get)
         .filter(dn -> dn.getState() == HardwareState.UNAVAILABLE)
@@ -2294,11 +2328,8 @@ public class HelixClusterManager implements ClusterMap {
     long liveCapacity = getResourceAvailableRegisteredHostDiskCapacity(resourceName);
     long unavailableCapacity = totalCapacity - liveCapacity;
     int numPartitions = getNumberOfPartitionsInResource(resourceName);
-    int replicationFactor = 3; // by default it is 3;
-    String numReplicaStr = getResourceConfig(resourceName, dcName).getNumReplica();
-    if (numReplicaStr != null) {
-      replicationFactor = Integer.parseInt(numReplicaStr);
-    }
+    String tag = dcToResourceNameToTag.get(dcName).get(resourceName);
+    int replicationFactor = dcToTagToResourceProperty.get(dcName).get(tag).replicationFactor;
     int numExpectedReplicas = numPartitions * replicationFactor;
     int numCurrentReplicas = getReplicaCountForStateInResource(null, resourceName);
     int expectedTotalReplicaWeight = getResourceExpectedTotalDiskCapacityUsage(resourceName, replicationFactor);
@@ -2306,9 +2337,8 @@ public class HelixClusterManager implements ClusterMap {
     Map<String, Set<String>> failedDisks = new HashMap<>();
     for (String instanceName : getAllInstancesForResource(resourceName)) {
       Set<AmbryDisk> disks = ambryDataNodeToAmbryDisks.get(instanceNameToAmbryDataNode.get(instanceName));
-      Set<String> failedDiskMountPath = disks.stream()
-          .filter(disk -> disk.getState() == HardwareState.UNAVAILABLE)
-          .map(AmbryDisk::getMountPath)
+      Set<String> failedDiskMountPath =
+          disks.stream().filter(disk -> disk.getState() == HardwareState.UNAVAILABLE).map(AmbryDisk::getMountPath)
           .collect(Collectors.toSet());
       if (!failedDiskMountPath.isEmpty()) {
         failedDisks.put(instanceName, failedDiskMountPath);

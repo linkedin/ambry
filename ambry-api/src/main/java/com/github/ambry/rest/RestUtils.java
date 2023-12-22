@@ -328,6 +328,11 @@ public class RestUtils {
      * Request header to carry resource name;
      */
     public final static String RESOURCE = "x-ambry-resource";
+
+    /**
+     * Request header to carry hostname (with port);
+     */
+    public final static String HOSTNAME = "x-ambry-hostname";
   }
 
   public static final class TrackingHeaders {
