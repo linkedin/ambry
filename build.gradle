@@ -575,6 +575,7 @@ project(':ambry-all') {
         compile project(':ambry-named-mysql')
         compile project(':ambry-test-utils')
         compile project(':ambry-quota')
+        compile project(':ambry-vcr')
     }
 }
 
@@ -601,7 +602,7 @@ task allJar(type: Jar, dependsOn: subprojects.assemble) {
 task allJarVcr(type: Jar, dependsOn: subprojects.assemble) {
     manifest {
         attributes 'Implementation-Title': 'Vcr',
-                   'Main-Class': 'com.github.ambry.cloud.VcrMain'
+                   'Main-Class': 'com.github.ambry.vcr.VcrMain'
     }
     zip64 true
     destinationDir = file('target')
