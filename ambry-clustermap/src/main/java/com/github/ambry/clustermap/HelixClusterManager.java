@@ -874,7 +874,14 @@ public class HelixClusterManager implements ClusterMap {
     } else {
       ambryPartition = partitionNameToAmbryPartition.get(partitionIdStr);
       // For existing partitions, we should already have other replicas in the map
-      replicaCapacity = ambryPartition.getReplicaIds().get(0).getCapacityInBytes();
+      // If not, we get the default replica capacity from config
+      try {
+        replicaCapacity = ambryPartition.getReplicaIds().get(0).getCapacityInBytes();
+      } catch (IndexOutOfBoundsException e) {
+        // If there is no other replica, we get the default replica capacity from config
+        replicaCapacity = clusterMapConfig.clustermapDefaultReplicaCapacityInBytes;
+        logger.info("Partition {} has no other replicas, creating first replica with capacity {} ", partitionIdStr);
+      }
       logger.info("Partition {} is already present in cluster map, creating replica with capacity {} ", partitionIdStr,
           replicaCapacity);
     }
