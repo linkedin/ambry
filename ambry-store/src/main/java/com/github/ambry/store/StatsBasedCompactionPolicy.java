@@ -134,13 +134,14 @@ class StatsBasedCompactionPolicy implements CompactionPolicy {
               getCostBenefitInfo(firstEntry.getKey(), lastEntry.getKey(), validDataPerLogSegments, segmentCapacity,
                   segmentHeaderSize, maxBlobSize, true);
           if (costBenefitInfo.getBenefit() > 1) {
-            logger.info("Merging middle log segments which are qualified for compaction {} ", costBenefitInfo);
+            logger.info("[CAPACITY] Merging middle log segments which are qualified for compaction {} ",
+                costBenefitInfo);
             blobToLastMiddleRangeCompaction.put(storeId, time.milliseconds());
             return costBenefitInfo;
           }
         }
       }
-      logger.info("Merging middle log segments, no qualified middle range. ");
+      logger.info("[CAPACITY] Merging middle log segments, no qualified middle range. ");
     }
 
     return null;
