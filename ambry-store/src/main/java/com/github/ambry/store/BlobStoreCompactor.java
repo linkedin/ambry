@@ -1253,7 +1253,7 @@ class BlobStoreCompactor {
   private void endCompaction() throws StoreException {
     if (compactionLog != null) {
       if (compactionLog.getCompactionPhase().equals(CompactionLog.Phase.DONE)) {
-        logger.info("Compaction of {} finished", storeId);
+        logger.info("[CAPACITY] Compaction of {} finished", storeId);
         if (srcIndex != null && !srcIndex.isEmpty() && !compactionLog.cycleLogs.isEmpty()) {
           // The log segment positions after compaction
           Set<Long> logSegmentPositionsAfterCompaction = srcIndex.getLogSegments()

@@ -276,6 +276,7 @@ class CompactionManager {
         while (enabled) {
           try {
             storesNoCompaction = 0;
+            logger.info("[CAPACITY] Going to check compaction on {}", mountPath);
             while (enabled && storesToCheck.peek() != null) {
               BlobStore store = storesToCheck.poll();
               logger.trace("{} being checked for compaction", store);
@@ -318,10 +319,11 @@ class CompactionManager {
                         storesNoCompaction != 0 && stores.size() > 0 ? waitTimeMs / 2 * storesNoCompaction
                             / stores.size() : 0;
                     long actualWaitTimeMs = expectedNextCheckTime - compensation - time.milliseconds();
-                    logger.trace("Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs, mountPath);
+                    logger.trace("[CAPACITY] Going to wait for {} ms in compaction thread at {}", actualWaitTimeMs,
+                        mountPath);
                     time.await(waitCondition, actualWaitTimeMs);
                   } else {
-                    logger.trace("Going to wait until compaction thread at {} is woken up", mountPath);
+                    logger.trace("[CAPACITY] Going to wait until compaction thread at {} is woken up", mountPath);
                     waitCondition.await();
                   }
                 }
