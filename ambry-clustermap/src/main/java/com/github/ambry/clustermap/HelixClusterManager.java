@@ -1187,7 +1187,15 @@ public class HelixClusterManager implements ClusterMap {
      */
     @Override
     public List<AmbryReplica> getReplicaIdsForPartition(AmbryPartition partition) {
-      return new ArrayList<>(ambryPartitionToAmbryReplicas.get(partition));
+      Set<AmbryReplica> replicas = ambryPartitionToAmbryReplicas.get(partition);
+
+      if (replicas == null) {
+        // Returns an empty list if the partition does not exist
+        logger.error("Partition {} has no replicas", partition.getId());
+        return Collections.emptyList();
+      }
+
+      return new ArrayList<>(replicas);
     }
 
     @Override
