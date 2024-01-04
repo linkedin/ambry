@@ -392,8 +392,8 @@ public class DiskManager {
         succeed = true;
       }
     } catch (Exception e) {
-      logger.error("Failed to start new added store {} or add requirements to disk allocator",
-          replica.getPartitionId());
+      logger.error("Failed to start new added store {} or add requirements to disk allocator", replica.getPartitionId(),
+          e);
     } finally {
       rwLock.writeLock().unlock();
     }
