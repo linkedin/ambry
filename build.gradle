@@ -316,7 +316,8 @@ project(':ambry-network') {
 
 project(':ambry-server') {
     dependencies {
-        compile project(':ambry-clustermap'),
+        compile project(':ambry-cloud'),
+                project(':ambry-clustermap'),
                 project(':ambry-messageformat'),
                 project(':ambry-network'),
                 project(':ambry-protocol'),
@@ -333,9 +334,7 @@ project(':ambry-server') {
         runtimeOnly "org.apache.logging.log4j:log4j-api:$log4jVersion"
         runtimeOnly "org.apache.logging.log4j:log4j-slf4j-impl:$log4jVersion"
         testCompile project(':ambry-router')
-        testCompile project(':ambry-cloud')
         testCompile project(':ambry-test-utils')
-        testCompile project(path: ':ambry-cloud', configuration: 'testArchives')
         testCompile project(path: ':ambry-clustermap', configuration: 'testArchives')
         testCompile project(path: ':ambry-api', configuration: 'testArchives')
         testCompile project(path: ':ambry-replication', configuration: 'testArchives')

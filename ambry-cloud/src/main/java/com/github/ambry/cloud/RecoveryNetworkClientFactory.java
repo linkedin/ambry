@@ -29,25 +29,21 @@ public class RecoveryNetworkClientFactory implements NetworkClientFactory {
   private final ClusterMap clustermap;
   private final FindTokenHelper findTokenHelper;
   private final StoreManager storeManager;
-  private final CosmosContainer cosmosContainer;
 
   /**
    * Constructor to create the factory
    * @param clusterMap The {@link ClusterMap} object.
    * @param findTokenHelper The {@link FindTokenHelper} object.
    * @param storeManager The {@link StoreManager} object.
-   * @param cosmosContainer The {@link CosmosContainer} object.
    */
-  public RecoveryNetworkClientFactory(ClusterMap clusterMap, FindTokenHelper findTokenHelper, StoreManager storeManager,
-      CosmosContainer cosmosContainer) {
+  public RecoveryNetworkClientFactory(ClusterMap clusterMap, FindTokenHelper findTokenHelper, StoreManager storeManager) {
     this.clustermap = clusterMap;
     this.findTokenHelper = findTokenHelper;
     this.storeManager = storeManager;
-    this.cosmosContainer = cosmosContainer;
   }
 
   @Override
   public NetworkClient getNetworkClient() throws IOException {
-    return new RecoveryNetworkClient(clustermap, findTokenHelper, storeManager, cosmosContainer);
+    return new RecoveryNetworkClient(clustermap, findTokenHelper, storeManager);
   }
 }

@@ -20,6 +20,7 @@ import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
+import com.github.ambry.cloud.RecoveryNetworkClientFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -242,6 +243,7 @@ public class AmbryServer {
       AccountService accountService = accountServiceFactory.getAccountService();
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+      FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
       // and some components require sole participant, the first one in the list will be primary participant.
       storageManager =
@@ -257,6 +259,11 @@ public class AmbryServer {
         networkClientFactory =
             new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
         connectionPool = new Http2BlockingChannelPool(sslHttp2Factory, http2ClientConfig, http2ClientMetrics);
+      } else if (replicationConfig.replicationEnabledWithVcrCluster) {
+        /**
+         * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
+         */
+        networkClientFactory = new RecoveryNetworkClientFactory(clusterMap, findTokenHelper, storageManager);
       } else {
         SSLFactory sslSocketFactory =
             clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? SSLFactory.getNewInstance(sslConfig) : null;
@@ -277,17 +284,6 @@ public class AmbryServer {
               skipPredicate);
       replicationManager.start();
 
-      if (replicationConfig.replicationEnabledWithVcrCluster) {
-        logger.info("Creating Helix cluster spectator for cloud to store replication.");
-        vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
-        cloudToStoreReplicationManager =
-            new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-                storeKeyFactory, clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
-                storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
-                clusterParticipants.get(0));
-        cloudToStoreReplicationManager.start();
-      }
-
       logger.info("Creating StatsManager to publish stats");
 
       accountStatsMySqlStore =
@@ -304,7 +300,6 @@ public class AmbryServer {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
-      FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
           registry, metrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
           diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0));
