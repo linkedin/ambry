@@ -291,7 +291,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
    * @param partitionId Partition ID
    * @return {@link BlobContainerClient}
    */
-  protected BlobContainerClient createOrGetBlobStore(String partitionId) {
+  public BlobContainerClient createOrGetBlobStore(String partitionId) {
     // Get container ref from local cache
     BlobContainerClient blobContainerClient = partitionToAzureStore.get(partitionId);
 

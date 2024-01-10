@@ -13,40 +13,36 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.cosmos.ConsistencyLevel;
-import com.azure.cosmos.CosmosContainer;
-import com.azure.cosmos.models.CosmosQueryRequestOptions;
-import com.azure.cosmos.models.FeedResponse;
-import com.azure.cosmos.models.PartitionKey;
+import com.azure.core.http.rest.PagedResponse;
+import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobListDetails;
+import com.azure.storage.blob.models.ListBlobsOptions;
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
-import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.Send;
-import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
-import com.github.ambry.protocol.PartitionRequestInfo;
-import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.replication.FindTokenHelper;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -54,9 +50,8 @@ import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,13 +62,24 @@ import org.slf4j.LoggerFactory;
 public class RecoveryNetworkClient implements NetworkClient {
   private final static Logger logger = LoggerFactory.getLogger(RecoveryNetworkClient.class);
   private final ClusterMap clustermap;
-  private final FindTokenHelper findTokenHelper;
   private final StoreManager storeManager;
+  private final AzureBlobLayoutStrategy azureBlobLayoutStrategy;
+  private final ClusterMapConfig clusterMapConfig;
+  private final AzureCloudConfig azureCloudConfig;
+  private final AzureCloudDestinationSync azureSyncClient;
 
-  public RecoveryNetworkClient(ClusterMap clustermap, FindTokenHelper findTokenHelper, StoreManager storeManager) {
-    this.clustermap = clustermap;
-    this.findTokenHelper = findTokenHelper;
+  public RecoveryNetworkClient(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
+      StoreManager storeManager, AccountService accountService) {
+    this.clustermap = clusterMap;
     this.storeManager = storeManager;
+    this.clusterMapConfig = new ClusterMapConfig(properties);
+    this.azureCloudConfig = new AzureCloudConfig(properties);
+    this.azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig);
+    try {
+      this.azureSyncClient = new AzureCloudDestinationSync(properties, registry, clusterMap, accountService);
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @Override
@@ -120,22 +126,60 @@ public class RecoveryNetworkClient implements NetworkClient {
    * @return A {@link ReplicaMetadataResponse}.
    */
   private ReplicaMetadataResponse handleReplicaMetadataRequest(ReplicaMetadataRequest request) {
+    List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
+        new ArrayList<>(request.getReplicaMetadataRequestInfoList().size());
+    for (ReplicaMetadataRequestInfo rinfo : request.getReplicaMetadataRequestInfoList()) {
+      String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(rinfo.getPartitionId().toPathString());
+      ListBlobsOptions listBlobsOptions = new ListBlobsOptions()
+          .setDetails(new BlobListDetails().setRetrieveMetadata(true))
+          .setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
+      PagedResponse<BlobItem> response = azureSyncClient.createOrGetBlobStore(containerName)
+          .listBlobs(listBlobsOptions, null)
+          .iterableByPage(((RecoveryToken) rinfo.getToken()).getToken())
+          .iterator()
+          .next();
+      List<MessageInfo> messageInfoList = new ArrayList<>();
+      long bytesRead = 0;
+      for (BlobItem blobItem: response.getValue()) {
+        MessageInfo messageInfo = getMessageInfo(blobItem);
+        if (messageInfo != null) {
+          messageInfoList.add(messageInfo);
+          bytesRead += messageInfo.getSize();
+        }
+      }
+      replicaMetadataResponseList.add(
+          new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
+              new RecoveryToken(response.getContinuationToken(), bytesRead), messageInfoList,
+              storeManager.getStore(rinfo.getPartitionId()).getSizeInBytes() - bytesRead,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
+    }
     return null;
   }
 
   /**
-   * Create {@link MessageInfo} object from {@link CloudBlobMetadata} object.
-   * @param metadata {@link CloudBlobMetadata} object.
+   * Create {@link MessageInfo} object from {@link BlobItem} object.
+   * @param blobItem {@link BlobItem} object.
    * @return {@link MessageInfo} object.
-   * @throws IOException
    */
-  private MessageInfo getMessageInfoFromMetadata(CloudBlobMetadata metadata) throws IOException {
+  private MessageInfo getMessageInfo(BlobItem blobItem) {
+    Map<String, String> metadata = blobItem.getMetadata();
+    try {
+      // TODO: Add comments for booleans
+      return new MessageInfo(new BlobId(blobItem.getName(), clustermap),
+          Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_SIZE)),
+          metadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME),
+          false,
+          false,
+          Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME)),
+          null,
+          Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
+          Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)),
+          Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_CREATION_TIME)),
+          Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)));
+    } catch (IOException e) {
+      // TODO: log error, don't halt replication
+    }
     return null;
-  }
-
-
-  protected long getRemoteReplicaLag(Store store, long totalBytesRead) {
-    return store.getSizeInBytes() - totalBytesRead;
   }
 
   /**

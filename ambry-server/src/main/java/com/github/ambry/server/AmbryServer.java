@@ -263,7 +263,7 @@ public class AmbryServer {
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
          */
-        networkClientFactory = new RecoveryNetworkClientFactory(clusterMap, findTokenHelper, storageManager);
+        networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService);
       } else {
         SSLFactory sslSocketFactory =
             clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? SSLFactory.getNewInstance(sslConfig) : null;
