@@ -41,6 +41,7 @@ import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.AbstractByteBufHolder;
@@ -126,10 +127,12 @@ public class RecoveryNetworkClient implements NetworkClient {
    * @return A {@link ReplicaMetadataResponse}.
    */
   private ReplicaMetadataResponse handleReplicaMetadataRequest(ReplicaMetadataRequest request) {
-    List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
+    List<ReplicaMetadataResponseInfo> responseList =
         new ArrayList<>(request.getReplicaMetadataRequestInfoList().size());
     for (ReplicaMetadataRequestInfo rinfo : request.getReplicaMetadataRequestInfoList()) {
+      // For each partition
       String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(rinfo.getPartitionId().toPathString());
+      // List blobs with metadata from Azure storage
       ListBlobsOptions listBlobsOptions = new ListBlobsOptions()
           .setDetails(new BlobListDetails().setRetrieveMetadata(true))
           .setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
@@ -138,6 +141,7 @@ public class RecoveryNetworkClient implements NetworkClient {
           .iterableByPage(((RecoveryToken) rinfo.getToken()).getToken())
           .iterator()
           .next();
+      // Extract ambry metadata
       List<MessageInfo> messageInfoList = new ArrayList<>();
       long bytesRead = 0;
       for (BlobItem blobItem: response.getValue()) {
@@ -147,13 +151,15 @@ public class RecoveryNetworkClient implements NetworkClient {
           bytesRead += messageInfo.getSize();
         }
       }
-      replicaMetadataResponseList.add(
+      // Save messageInfo objects
+      responseList.add(
           new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
               new RecoveryToken(response.getContinuationToken(), bytesRead), messageInfoList,
               storeManager.getStore(rinfo.getPartitionId()).getSizeInBytes() - bytesRead,
               ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
     }
-    return null;
+    return new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.No_Error,
+        responseList, ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId()));
   }
 
   /**
