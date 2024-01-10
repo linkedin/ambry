@@ -192,6 +192,7 @@ public class RecoveryNetworkClient implements NetworkClient {
     if (request.getMessageFormatFlag() != MessageFormatFlags.All) {
       throw new IllegalArgumentException("GetRequest should have MessageFormatFlags being ALL");
     }
+    // TODO: Implement in next PR
     return null;
   }
 
