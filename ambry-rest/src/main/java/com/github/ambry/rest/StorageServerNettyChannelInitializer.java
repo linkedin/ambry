@@ -18,7 +18,6 @@ import com.github.ambry.commons.SSLFactory;
 import com.github.ambry.config.Http2ClientConfig;
 import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.network.http2.Http2ServerStreamHandler;
-import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
@@ -33,6 +32,7 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.ssl.SslHandler;
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +49,6 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
   private final ConnectionStatsHandler connectionStatsHandler;
   private final ServerSecurityHandler serverSecurityHandler;
   private final Http2ServerStreamHandler http2ServerStreamHandler;
-  private final CloseOnExceptionHandler closeOnExceptionHandler;
 
   /**
    * Construct a {@link StorageServerNettyChannelInitializer}.
@@ -71,7 +70,6 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
     this.connectionStatsHandler = connectionStatsHandler;
     this.http2ServerStreamHandler = http2ServerStreamHandler;
     this.serverSecurityHandler = serverSecurityHandler;
-    this.closeOnExceptionHandler = new CloseOnExceptionHandler();
   }
 
   @Override
@@ -103,11 +101,11 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
         .frameLogger(new Http2FrameLogger(LogLevel.DEBUG, "server"))
         .build());
     pipeline.addLast("Http2MultiplexHandler", new Http2MultiplexHandler(http2ServerStreamHandler));
-    pipeline.addLast("CloseOnExceptionHandler", closeOnExceptionHandler);
+    pipeline.addLast("CloseOnExceptionHandler", new CloseOnExceptionHandler());
   }
 
-  @ChannelHandler.Sharable
   private final class CloseOnExceptionHandler extends ChannelInboundHandlerAdapter {
+    private final AtomicBoolean closed = new AtomicBoolean(false);
     /**
      * Netty calls this function when channel becomes inactive. The channel becomes inactive AFTER it is closed (either by
      * the local or the remote end). One case is when server shutdown.
@@ -119,9 +117,14 @@ public class StorageServerNettyChannelInitializer extends ChannelInitializer<Soc
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-      http2ServerMetrics.http2ParentExceptionCount.inc();
-      logger.warn("Parent channel {} exception: ", ctx.channel(), cause);
-      ctx.channel().close();
+      // Close the channel would force netty to flush the remaining buffer back to client. If the flush operation
+      // fails due to exceptions, when this method would be invoked again. And we would fall into an infinite loop
+      // of stack trace. So use a boolean value to make sure we only do close once.
+      if (closed.compareAndSet(false, true)) {
+        http2ServerMetrics.http2ParentExceptionCount.inc();
+        logger.warn("Parent channel {} exception: ", ctx.channel(), cause);
+        ctx.channel().close();
+      }
     }
   }
 }
