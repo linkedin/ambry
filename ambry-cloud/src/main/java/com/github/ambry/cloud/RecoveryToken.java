@@ -36,28 +36,28 @@ public class RecoveryToken implements FindToken {
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss_SSS");
 
   private String azureToken = null;
-  private long numBlobs = 0;
-  private long numBlobBytes = 0;
-  private boolean endOfPartition = false;
-  private String recoveryStartTime = DATE_FORMAT.format(System.currentTimeMillis());
   private String recoveryEndTime = null;
+  private String recoveryStartTime = DATE_FORMAT.format(System.currentTimeMillis());
+  private boolean endOfPartition = false;
+  private long numBlobBytes = 0;
+  private long numBlobs = 0;
 
   public RecoveryToken(RecoveryToken recoveryToken, String azureToken, long numBlobsDelta, long numBlobBytesDelta) {
     this.azureToken = azureToken;
-    this.numBlobs = recoveryToken.numBlobs + numBlobsDelta;
-    this.numBlobBytes = recoveryToken.numBlobBytes + numBlobBytesDelta;
     this.endOfPartition = azureToken != null && !azureToken.isEmpty();
-    this.recoveryStartTime = recoveryToken.recoveryStartTime;
+    this.numBlobBytes = recoveryToken.numBlobBytes + numBlobBytesDelta;
+    this.numBlobs = recoveryToken.numBlobs + numBlobsDelta;
     this.recoveryEndTime = recoveryToken.recoveryEndTime;
+    this.recoveryStartTime = recoveryToken.recoveryStartTime;
   }
 
   public RecoveryToken(JSONObject jsonObject) {
     this.azureToken = jsonObject.getString(AZURE_STORAGE_CONTINUATION_TOKEN);
-    this.numBlobs = jsonObject.getLong(NUM_BLOBS);
-    this.numBlobBytes = jsonObject.getLong(NUM_BLOB_BYTES);
     this.endOfPartition = jsonObject.getBoolean(END_OF_PARTITION);
-    this.recoveryStartTime = jsonObject.getString(RECOVERY_BEGIN_TIME);
+    this.numBlobBytes = jsonObject.getLong(NUM_BLOB_BYTES);
+    this.numBlobs = jsonObject.getLong(NUM_BLOBS);
     this.recoveryEndTime = jsonObject.getString(RECOVERY_END_TIME);
+    this.recoveryStartTime = jsonObject.getString(RECOVERY_BEGIN_TIME);
   }
 
   public RecoveryToken() {}
