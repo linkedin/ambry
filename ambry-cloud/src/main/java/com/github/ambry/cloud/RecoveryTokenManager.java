@@ -20,15 +20,20 @@ import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationMetrics;
+import com.github.ambry.utils.Utils;
+import java.io.File;
+import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.json.JSONObject;
 
 
-public class RecoveryTokenWriter extends ReplicaTokenPersistor  {
-
-  public RecoveryTokenWriter(Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
+public class RecoveryTokenManager extends ReplicaTokenPersistor  {
+  static final FilenameFilter TOKEN_FILE_FILTER =
+      (dir, name) -> name.startsWith("recovery_token_");
+  public RecoveryTokenManager(Map<String, Set<PartitionInfo>> partitionGroupedByMountPath,
       ReplicationMetrics replicationMetrics, ClusterMap clusterMap, FindTokenHelper findTokenHelper) {
     super(partitionGroupedByMountPath, replicationMetrics, clusterMap, findTokenHelper);
   }
@@ -40,6 +45,14 @@ public class RecoveryTokenWriter extends ReplicaTokenPersistor  {
 
   @Override
   public List<RemoteReplicaInfo.ReplicaTokenInfo> retrieve(String mountPath) throws ReplicationException {
+    File[] tokenFiles = new File(mountPath).listFiles(TOKEN_FILE_FILTER);
+    for (File file : tokenFiles) {
+      try {
+        RecoveryToken recoveryToken = new RecoveryToken(new JSONObject(Utils.readStringFromFile(file.getAbsolutePath())));
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
     return null;
   }
 }

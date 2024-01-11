@@ -27,6 +27,8 @@ import org.slf4j.LoggerFactory;
 public class RecoveryToken implements FindToken {
   private final Logger logger = LoggerFactory.getLogger(RecoveryToken.class);
   // Maintain alphabetical order of fields for rapid debugging
+  public static final String AMBRY_PARTITION_ID = "ambry_partition_id";
+  public static final String AZURE_STORAGE_CONTAINER_ID = "azure_storage_container_id";
   public static final String AZURE_STORAGE_CONTINUATION_TOKEN = "azure_storage_continuation_token";
   public static final String END_OF_PARTITION = "end_of_partition";
   public static final String NUM_BLOBS = "num_blobs";
