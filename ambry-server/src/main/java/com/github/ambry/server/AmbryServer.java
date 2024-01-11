@@ -253,24 +253,26 @@ public class AmbryServer {
 
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
 
-      if (clusterMapConfig.clusterMapEnableHttp2Replication) {
-        Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
-        Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
-        networkClientFactory =
-            new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
-        connectionPool = new Http2BlockingChannelPool(sslHttp2Factory, http2ClientConfig, http2ClientMetrics);
-      } else if (replicationConfig.replicationEnabledWithVcrCluster) {
+      if (replicationConfig.replicationEnabledWithVcrCluster) {
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
          */
         networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService);
       } else {
-        SSLFactory sslSocketFactory =
-            clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? SSLFactory.getNewInstance(sslConfig) : null;
-        networkClientFactory =
-            new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
-                time);
-        connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+        if (clusterMapConfig.clusterMapEnableHttp2Replication) {
+          Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
+          Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
+          networkClientFactory =
+              new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
+          connectionPool = new Http2BlockingChannelPool(sslHttp2Factory, http2ClientConfig, http2ClientMetrics);
+        } else {
+          SSLFactory sslSocketFactory =
+              clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? SSLFactory.getNewInstance(sslConfig) : null;
+          networkClientFactory =
+              new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
+                  time);
+          connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+        }
       }
 
       StoreKeyConverterFactory storeKeyConverterFactory =

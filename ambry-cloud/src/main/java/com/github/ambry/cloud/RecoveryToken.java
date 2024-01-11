@@ -15,49 +15,88 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.lang.reflect.Field;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.LinkedHashMap;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class RecoveryToken implements FindToken {
-  private final String token;
-  private final long bytesRead;
+  private final Logger logger = LoggerFactory.getLogger(RecoveryToken.class);
+  // Maintain alphabetical order of fields for rapid debugging
+  public static final String AZURE_STORAGE_CONTINUATION_TOKEN = "azure_storage_continuation_token";
+  public static final String END_OF_PARTITION = "end_of_partition";
+  public static final String NUM_BLOBS = "num_blobs";
+  public static final String NUM_BLOB_BYTES = "num_blob_bytes";
+  public static final String RECOVERY_BEGIN_TIME = "recovery_begin_time";
+  public static final String RECOVERY_END_TIME = "recovery_end_time";
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss_SSS");
 
-  private static final int TOKEN_LEN_FIELD_SIZE = 4;
-  private static final int BYTES_READ_FIELD_SIZE = 8;
+  private String azureToken = null;
+  private long numBlobs = 0;
+  private long numBlobBytes = 0;
+  private boolean endOfPartition = false;
+  private String recoveryStartTime = DATE_FORMAT.format(System.currentTimeMillis());
+  private String recoveryEndTime = null;
 
-  public RecoveryToken(String azureStorageContinuationToken, long bytesRead) {
-    this.token = azureStorageContinuationToken;
-    this.bytesRead = bytesRead;
+  public RecoveryToken(RecoveryToken recoveryToken, String azureToken, long numBlobsDelta, long numBlobBytesDelta) {
+    this.azureToken = azureToken;
+    this.numBlobs = recoveryToken.numBlobs + numBlobsDelta;
+    this.numBlobBytes = recoveryToken.numBlobBytes + numBlobBytesDelta;
+    this.endOfPartition = azureToken != null && !azureToken.isEmpty();
+    this.recoveryStartTime = recoveryToken.recoveryStartTime;
+    this.recoveryEndTime = recoveryToken.recoveryEndTime;
+  }
+
+  public RecoveryToken(JSONObject jsonObject) {
+    this.azureToken = jsonObject.getString(AZURE_STORAGE_CONTINUATION_TOKEN);
+    this.numBlobs = jsonObject.getLong(NUM_BLOBS);
+    this.numBlobBytes = jsonObject.getLong(NUM_BLOB_BYTES);
+    this.endOfPartition = jsonObject.getBoolean(END_OF_PARTITION);
+    this.recoveryStartTime = jsonObject.getString(RECOVERY_BEGIN_TIME);
+    this.recoveryEndTime = jsonObject.getString(RECOVERY_END_TIME);
+  }
+
+  public RecoveryToken() {}
+
+  public String toString() {
+    JSONObject jsonObject = new JSONObject();
+    try {
+      // Ensures json fields are printed exactly in the order they are inserted
+      Field changeMap = jsonObject.getClass().getDeclaredField("map");
+      changeMap.setAccessible(true);
+      changeMap.set(jsonObject, new LinkedHashMap<>());
+      changeMap.setAccessible(false);
+    } catch (IllegalAccessException | NoSuchFieldException e) {
+      logger.error(e.getMessage());
+      jsonObject = new JSONObject();
+    }
+    // Maintain alphabetical order of fields for rapid debugging
+    jsonObject.put(AZURE_STORAGE_CONTINUATION_TOKEN, azureToken);
+    jsonObject.put(END_OF_PARTITION, endOfPartition);
+    jsonObject.put(NUM_BLOBS, numBlobs);
+    jsonObject.put(NUM_BLOB_BYTES, numBlobBytes);
+    jsonObject.put(RECOVERY_BEGIN_TIME, recoveryStartTime);
+    jsonObject.put(RECOVERY_END_TIME, recoveryEndTime);
+    // Pretty print with indent for easy viewing
+    return jsonObject.toString(4);
   }
 
   public String getToken() {
-    return token;
-  }
-
-  public static RecoveryToken fromBytes(DataInputStream dataInputStream) throws IOException {
-    long bytesRead = dataInputStream.readLong();
-    int tokenLen = dataInputStream.readInt();
-    String token = dataInputStream.readUTF();
-    return new RecoveryToken(token, bytesRead);
+    return azureToken;
   }
 
   @Override
   public byte[] toBytes() {
-    // Used by token writer
-    int size = BYTES_READ_FIELD_SIZE + TOKEN_LEN_FIELD_SIZE + token.length();
-    byte[] buf = new byte[size];
-    ByteBuffer bufWrap = ByteBuffer.wrap(buf);
-    bufWrap.putLong(bytesRead);
-    bufWrap.putInt(token.length());
-    bufWrap.put(token.getBytes());
-    return buf;
+    return new byte[0];
   }
 
   @Override
   public long getBytesRead() {
-    return bytesRead;
+    return numBlobBytes;
   }
 
   @Override

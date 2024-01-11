@@ -129,35 +129,41 @@ public class RecoveryNetworkClient implements NetworkClient {
   private ReplicaMetadataResponse handleReplicaMetadataRequest(ReplicaMetadataRequest request) {
     List<ReplicaMetadataResponseInfo> responseList =
         new ArrayList<>(request.getReplicaMetadataRequestInfoList().size());
+    // For each partition
     for (ReplicaMetadataRequestInfo rinfo : request.getReplicaMetadataRequestInfoList()) {
-      // For each partition
-      String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(rinfo.getPartitionId().toPathString());
-      // List blobs with metadata from Azure storage
+      RecoveryToken prevToken = (RecoveryToken) rinfo.getToken();
+      String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(
+          rinfo.getPartitionId().toPathString());
+      // List N blobs with metadata from Azure storage
       ListBlobsOptions listBlobsOptions = new ListBlobsOptions()
           .setDetails(new BlobListDetails().setRetrieveMetadata(true))
           .setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
       PagedResponse<BlobItem> response = azureSyncClient.createOrGetBlobStore(containerName)
           .listBlobs(listBlobsOptions, null)
-          .iterableByPage(((RecoveryToken) rinfo.getToken()).getToken())
+          .iterableByPage(prevToken.getToken())
           .iterator()
           .next();
+      String azureToken = response.getContinuationToken();
       // Extract ambry metadata
       List<MessageInfo> messageInfoList = new ArrayList<>();
-      long bytesRead = 0;
+      long bytesRead = 0, blobsRead = 0;
       for (BlobItem blobItem: response.getValue()) {
         MessageInfo messageInfo = getMessageInfo(blobItem);
         if (messageInfo != null) {
           messageInfoList.add(messageInfo);
           bytesRead += messageInfo.getSize();
+          blobsRead += 1;
         }
       }
-      // Save messageInfo objects
+      // Save metadata objects
+      // Lag metric is not useful here since we cannot find out the size of a container in Azure storage using an API
       responseList.add(
           new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
-              new RecoveryToken(response.getContinuationToken(), bytesRead), messageInfoList,
-              storeManager.getStore(rinfo.getPartitionId()).getSizeInBytes() - bytesRead,
+              new RecoveryToken(prevToken, azureToken, blobsRead, bytesRead),
+              messageInfoList, 0,
               ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
     }
+    // return metadata response
     return new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.No_Error,
         responseList, ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId()));
   }

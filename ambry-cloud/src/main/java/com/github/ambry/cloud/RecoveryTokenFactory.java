@@ -22,11 +22,12 @@ import java.io.IOException;
 public class RecoveryTokenFactory implements FindTokenFactory {
   @Override
   public FindToken getFindToken(DataInputStream stream) throws IOException {
-    return RecoveryToken.fromBytes(stream);
+    throw new UnsupportedOperationException("getFindToken is not implemented for RecoveryTokenFactory");
   }
 
   @Override
   public FindToken getNewFindToken() {
-    return new RecoveryToken(null, 0);
+    // Called when a RemoteReplica object is created
+    return new RecoveryToken();
   }
 }
