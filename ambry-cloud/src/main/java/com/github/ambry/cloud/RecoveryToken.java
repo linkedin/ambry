@@ -36,33 +36,48 @@ public class RecoveryToken implements FindToken {
   public static final String RECOVERY_BEGIN_TIME = "recovery_begin_time";
   public static final String RECOVERY_END_TIME = "recovery_end_time";
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss_SSS");
+  private final long ambryPartitionId;
+  private final String azureContainerId;
+  private final String azureToken;
+  private final String recoveryBeginTime;
+  private final String recoveryEndTime;
+  private final boolean endOfPartition;
+  private final long numBlobBytes;
+  private final long numBlobs;
 
-  private String azureToken = null;
-  private String recoveryEndTime = null;
-  private String recoveryStartTime = DATE_FORMAT.format(System.currentTimeMillis());
-  private boolean endOfPartition = false;
-  private long numBlobBytes = 0;
-  private long numBlobs = 0;
-
-  public RecoveryToken(RecoveryToken recoveryToken, String azureToken, long numBlobsDelta, long numBlobBytesDelta) {
+  public RecoveryToken(RecoveryToken recoveryToken, long ambryPartitionId, String azureContainerId, String azureToken,
+      long numBlobsDelta, long numBlobBytesDelta) {
+    this.ambryPartitionId = ambryPartitionId;
+    this.azureContainerId = azureContainerId;
     this.azureToken = azureToken;
     this.endOfPartition = azureToken != null && !azureToken.isEmpty();
     this.numBlobBytes = recoveryToken.numBlobBytes + numBlobBytesDelta;
     this.numBlobs = recoveryToken.numBlobs + numBlobsDelta;
+    this.recoveryBeginTime = recoveryToken.recoveryBeginTime;
     this.recoveryEndTime = recoveryToken.recoveryEndTime;
-    this.recoveryStartTime = recoveryToken.recoveryStartTime;
   }
 
   public RecoveryToken(JSONObject jsonObject) {
+    this.ambryPartitionId = jsonObject.getLong(AMBRY_PARTITION_ID);
+    this.azureContainerId = jsonObject.getString(AZURE_STORAGE_CONTAINER_ID);
     this.azureToken = jsonObject.getString(AZURE_STORAGE_CONTINUATION_TOKEN);
     this.endOfPartition = jsonObject.getBoolean(END_OF_PARTITION);
     this.numBlobBytes = jsonObject.getLong(NUM_BLOB_BYTES);
     this.numBlobs = jsonObject.getLong(NUM_BLOBS);
+    this.recoveryBeginTime = jsonObject.getString(RECOVERY_BEGIN_TIME);
     this.recoveryEndTime = jsonObject.getString(RECOVERY_END_TIME);
-    this.recoveryStartTime = jsonObject.getString(RECOVERY_BEGIN_TIME);
   }
 
-  public RecoveryToken() {}
+  public RecoveryToken() {
+    this.ambryPartitionId = -1;
+    this.azureContainerId = null;
+    this.azureToken = null;
+    this.endOfPartition = false;
+    this.numBlobBytes = 0;
+    this.numBlobs = 0;
+    this.recoveryBeginTime = DATE_FORMAT.format(System.currentTimeMillis());
+    this.recoveryEndTime = null;
+  }
 
   public String toString() {
     JSONObject jsonObject = new JSONObject();
@@ -77,14 +92,24 @@ public class RecoveryToken implements FindToken {
       jsonObject = new JSONObject();
     }
     // Maintain alphabetical order of fields for rapid debugging
+    jsonObject.put(AMBRY_PARTITION_ID, ambryPartitionId);
+    jsonObject.put(AZURE_STORAGE_CONTAINER_ID, azureContainerId);
     jsonObject.put(AZURE_STORAGE_CONTINUATION_TOKEN, azureToken);
     jsonObject.put(END_OF_PARTITION, endOfPartition);
     jsonObject.put(NUM_BLOBS, numBlobs);
     jsonObject.put(NUM_BLOB_BYTES, numBlobBytes);
-    jsonObject.put(RECOVERY_BEGIN_TIME, recoveryStartTime);
+    jsonObject.put(RECOVERY_BEGIN_TIME, recoveryBeginTime);
     jsonObject.put(RECOVERY_END_TIME, recoveryEndTime);
     // Pretty print with indent for easy viewing
     return jsonObject.toString(4);
+  }
+
+  public long getAmbryPartitionId() {
+    return ambryPartitionId;
+  }
+
+  public String getAzureStorageContainerId() {
+    return azureContainerId;
   }
 
   public String getToken() {

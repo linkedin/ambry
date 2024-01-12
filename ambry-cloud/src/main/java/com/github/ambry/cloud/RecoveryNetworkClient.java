@@ -129,12 +129,27 @@ public class RecoveryNetworkClient implements NetworkClient {
   private ReplicaMetadataResponse handleReplicaMetadataRequest(ReplicaMetadataRequest request) {
     List<ReplicaMetadataResponseInfo> responseList =
         new ArrayList<>(request.getReplicaMetadataRequestInfoList().size());
+
     // For each partition
     for (ReplicaMetadataRequestInfo rinfo : request.getReplicaMetadataRequestInfoList()) {
+      // Get previous azure continuation token
       RecoveryToken prevToken = (RecoveryToken) rinfo.getToken();
       String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(
           rinfo.getPartitionId().toPathString());
-      // List N blobs with metadata from Azure storage
+      if (prevToken.getAmbryPartitionId() > -1 && prevToken.getAmbryPartitionId() != rinfo.getPartitionId().getId()) {
+        logger.error("For partition {}, the RecoveryToken.ambryPartitionId must not be {}",
+            rinfo.getPartitionId().getId(), prevToken.getAmbryPartitionId());
+        // TODO: emit metric, don't halt replication
+        continue;
+      }
+      if (prevToken.getAzureStorageContainerId() != null && prevToken.getAzureStorageContainerId() != containerName) {
+        logger.error("For partition {}, the RecoveryToken.azureContainerId must not be {}",
+            rinfo.getPartitionId().getId(), containerName);
+        // TODO: emit metric, don't halt replication
+        continue;
+      }
+
+      // List N blobs with metadata from Azure storage from prev token position
       ListBlobsOptions listBlobsOptions = new ListBlobsOptions()
           .setDetails(new BlobListDetails().setRetrieveMetadata(true))
           .setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
@@ -143,7 +158,7 @@ public class RecoveryNetworkClient implements NetworkClient {
           .iterableByPage(prevToken.getToken())
           .iterator()
           .next();
-      String azureToken = response.getContinuationToken();
+
       // Extract ambry metadata
       List<MessageInfo> messageInfoList = new ArrayList<>();
       long bytesRead = 0, blobsRead = 0;
@@ -155,14 +170,18 @@ public class RecoveryNetworkClient implements NetworkClient {
           blobsRead += 1;
         }
       }
+
       // Save metadata objects
-      // Lag metric is not useful here since we cannot find out the size of a container in Azure storage using an API
       responseList.add(
           new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
-              new RecoveryToken(prevToken, azureToken, blobsRead, bytesRead),
-              messageInfoList, 0,
+              new RecoveryToken(prevToken, rinfo.getPartitionId().getId(), containerName,
+                  response.getContinuationToken(), blobsRead, bytesRead),
+              messageInfoList,
+              // Lag metric is useless here as we can't find out size of a container using Azure APIs
+              0,
               ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
     }
+
     // return metadata response
     return new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.No_Error,
         responseList, ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId()));
@@ -188,7 +207,7 @@ public class RecoveryNetworkClient implements NetworkClient {
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)),
           Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_CREATION_TIME)),
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)));
-    } catch (IOException e) {
+    } catch (Exception e) {
       // TODO: log error, don't halt replication
     }
     return null;
