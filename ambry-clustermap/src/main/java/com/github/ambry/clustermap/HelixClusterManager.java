@@ -1229,6 +1229,10 @@ public class HelixClusterManager implements ClusterMap {
       String partitionName = partition.toPathString();
       for (String dc : dcs) {
         Set<String> resourceNames = partitionToResourceNameByDc.get(dc).get(partitionName);
+        if (resourceNames == null) {
+          // For newly created partitions, we might not able to find resources in other DCs
+          continue;
+        }
         RoutingTableSnapshot routingTableSnapshot =
             clusterMapConfig.clusterMapUseAggregatedView ? globalRoutingTableSnapshotRef.get()
                 : dcToRoutingTableSnapshotRef.get(dc).get();
