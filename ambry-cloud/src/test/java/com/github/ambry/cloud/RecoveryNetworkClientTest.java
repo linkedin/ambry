@@ -85,18 +85,6 @@ public class RecoveryNetworkClientTest {
             new MetricRegistry(),    mockClusterMap, null, null);
   }
 
-  public static void createRequestToPutBlob(MockMessageWriteSet messageWriteSet,
-      short accountId, short containerId, PartitionId partitionId,
-      boolean isEncrypted, boolean isDeleted, boolean isTtlUpdated, boolean isUndeleted,
-      long operationTime, long expiryMs,
-      long size, short lifeVersion) {
-    MessageInfo info = new MessageInfo(CloudTestUtil.getUniqueId(accountId, containerId, isEncrypted, partitionId),
-            size, isDeleted, isTtlUpdated, isUndeleted, expiryMs, new Random().nextLong(),
-            accountId, containerId, operationTime, lifeVersion);
-    ByteBuffer buffer = ByteBuffer.wrap(TestUtils.getRandomBytes((int) size));
-    messageWriteSet.add(info, buffer);
-  }
-
   @Before
   public void before() throws ReflectiveOperationException, CloudStorageException, IOException {
     // Clear Azure partitions and add some blobs
