@@ -46,12 +46,7 @@ public class AzuriteUtils {
      * Run the tests on your desktop.
      */
     try {
-      Properties properties = new Properties();
-      properties.setProperty(ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME, "localhost");
-      properties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "localhost");
-      properties.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, "localhost");
-      properties.setProperty("clustermap.resolve.hostnames", "false");
-      getAzuriteClient(properties, new MetricRegistry(), null, null);
+      getAzuriteClient(getAzuriteConnectionProperties(), new MetricRegistry(), null, null);
       return true;
     } catch (Exception e) {
       logger.error("Failed to connect to Azurite due to {}", e.toString());
@@ -86,5 +81,20 @@ public class AzuriteUtils {
   public AzureCloudDestinationSync getAzuriteClient(Properties properties, MetricRegistry metricRegistry, ClusterMap clusterMap)
       throws ReflectiveOperationException {
     return getAzuriteClient(properties, metricRegistry, clusterMap, null);
+  }
+
+  public Properties getAzuriteConnectionProperties() {
+    Properties properties = new Properties();
+    properties.setProperty(ClusterMapConfig.CLUSTERMAP_CLUSTER_NAME, "localhost");
+    properties.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, "localhost");
+    properties.setProperty(ClusterMapConfig.CLUSTERMAP_HOST_NAME, "localhost");
+    properties.setProperty(ClusterMapConfig.CLUSTERMAP_RESOLVE_HOSTNAMES, String.valueOf(false));
+    properties.setProperty(AzureCloudConfig.COSMOS_ENDPOINT, "does_not_matter");
+    properties.setProperty(AzureCloudConfig.COSMOS_DATABASE, "does_not_matter");
+    properties.setProperty(AzureCloudConfig.COSMOS_COLLECTION, "does_not_matter");
+    properties.setProperty(AzureCloudConfig.AZURE_STORAGE_CONNECTION_STRING, AzuriteUtils.AZURITE_CONNECTION_STRING);
+    properties.setProperty(AzureCloudConfig.AZURE_TABLE_CONNECTION_STRING,
+        AzuriteUtils.AZURITE_TABLE_CONNECTION_STRING);
+    return properties;
   }
 }

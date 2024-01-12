@@ -195,7 +195,8 @@ public class ClusterMapConfig {
    * correct. For example there is no way for Ambry to check if the node config for 'host1.example.com' is actually
    * deployed on a host called 'host1.example.com'.
    */
-  @Config("clustermap.resolve.hostnames")
+  public static final String CLUSTERMAP_RESOLVE_HOSTNAMES = "clustermap.resolve.hostnames";
+  @Config(CLUSTERMAP_RESOLVE_HOSTNAMES)
   @Default("true")
   public final boolean clusterMapResolveHostnames;
 

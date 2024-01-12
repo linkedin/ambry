@@ -378,7 +378,7 @@ public class Container {
    * @param lastModifiedTime created/modified time of this container.
    * @param accessControlAllowOrigin The Access-Control-Allow-Origin header field name of this container.
    */
-  Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
+  public Container(short id, String name, ContainerStatus status, String description, boolean encrypted,
       boolean previouslyEncrypted, boolean cacheable, boolean mediaScanDisabled, String replicationPolicy,
       boolean ttlRequired, boolean securePathRequired, Set<String> contentTypeWhitelistForFilenamesOnDownload,
       boolean backupEnabled, boolean overrideAccountAcl, NamedBlobMode namedBlobMode, short parentAccountId,
