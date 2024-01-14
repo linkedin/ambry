@@ -46,7 +46,7 @@ public class ReplicationConfig {
    * The factory class the replication uses to create cloud token
    */
   @Config(REPLICATION_CLOUD_TOKEN_FACTORY)
-  @Default("com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory")
+  @Default("com.github.ambry.cloud.RecoveryTokenFactory")
   public final String replicationCloudTokenFactory;
 
   /**

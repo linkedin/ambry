@@ -29,7 +29,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  * represent a remote network location. The hostname will just be the datacenter name. For logging purposes, the
  * plaintext port will show as -1.
  */
-class CloudServiceDataNode extends AmbryDataNode {
+public class CloudServiceDataNode extends AmbryDataNode {
 
   /**
    * Instantiate a {@link CloudServiceDataNode}.
@@ -37,7 +37,7 @@ class CloudServiceDataNode extends AmbryDataNode {
    * @param clusterMapConfig the {@link ClusterMapConfig} to use.
    * @throws Exception if there is an exception in instantiating the {@link ResourceStatePolicy}
    */
-  CloudServiceDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig) throws Exception {
+  public CloudServiceDataNode(String dataCenterName, ClusterMapConfig clusterMapConfig) throws Exception {
     super(dataCenterName, clusterMapConfig, dataCenterName, UNKNOWN_PORT, UNKNOWN_PORT, UNKNOWN_PORT);
   }
 

@@ -15,7 +15,13 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.LinkedHashMap;
@@ -26,7 +32,7 @@ import org.slf4j.LoggerFactory;
 
 public class RecoveryToken implements FindToken {
   private final Logger logger = LoggerFactory.getLogger(RecoveryToken.class);
-  // Maintain alphabetical order of fields for rapid debugging
+  // Maintain alphabetical order for convenience
   public static final String AMBRY_PARTITION_ID = "ambry_partition_id";
   public static final String AZURE_STORAGE_CONTAINER_ID = "azure_storage_container_id";
   public static final String AZURE_STORAGE_CONTINUATION_TOKEN = "azure_storage_continuation_token";
@@ -70,13 +76,13 @@ public class RecoveryToken implements FindToken {
 
   public RecoveryToken() {
     this.ambryPartitionId = -1;
-    this.azureContainerId = null;
-    this.azureToken = null;
+    this.azureContainerId = "none";
+    this.azureToken = "none";
     this.endOfPartition = false;
     this.numBlobBytes = 0;
     this.numBlobs = 0;
     this.recoveryBeginTime = DATE_FORMAT.format(System.currentTimeMillis());
-    this.recoveryEndTime = null;
+    this.recoveryEndTime = "none";
   }
 
   public String toString() {
@@ -91,7 +97,7 @@ public class RecoveryToken implements FindToken {
       logger.error(e.getMessage());
       jsonObject = new JSONObject();
     }
-    // Maintain alphabetical order of fields for rapid debugging
+    // Maintain alphabetical order of fields for string match
     jsonObject.put(AMBRY_PARTITION_ID, ambryPartitionId);
     jsonObject.put(AZURE_STORAGE_CONTAINER_ID, azureContainerId);
     jsonObject.put(AZURE_STORAGE_CONTINUATION_TOKEN, azureToken);
@@ -116,9 +122,22 @@ public class RecoveryToken implements FindToken {
     return azureToken;
   }
 
+  public static RecoveryToken fromBytes(DataInputStream stream) throws IOException {
+    byte[] buf = new byte[stream.readInt()];
+    stream.readFully(buf);
+    String tokenString = new String(buf, Charset.defaultCharset());
+    JSONObject jsonObject = new JSONObject(tokenString);
+    return new RecoveryToken(jsonObject);
+  }
+
   @Override
   public byte[] toBytes() {
-    return new byte[0];
+    String json = toString();
+    byte[] buf = new byte[Integer.BYTES + json.length()];
+    ByteBuffer bufWrap = ByteBuffer.wrap(buf);
+    bufWrap.putInt(json.length());
+    bufWrap.put(json.getBytes(Charset.defaultCharset()));
+    return buf;
   }
 
   @Override
@@ -134,5 +153,10 @@ public class RecoveryToken implements FindToken {
   @Override
   public short getVersion() {
     return 0;
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    return this.toString().equals(obj.toString());
   }
 }

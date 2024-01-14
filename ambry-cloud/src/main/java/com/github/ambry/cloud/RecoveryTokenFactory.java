@@ -22,7 +22,7 @@ import java.io.IOException;
 public class RecoveryTokenFactory implements FindTokenFactory {
   @Override
   public FindToken getFindToken(DataInputStream stream) throws IOException {
-    throw new UnsupportedOperationException("getFindToken is not implemented for RecoveryTokenFactory");
+    return RecoveryToken.fromBytes(stream);
   }
 
   @Override
