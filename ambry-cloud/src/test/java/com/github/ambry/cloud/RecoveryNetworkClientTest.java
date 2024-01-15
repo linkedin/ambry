@@ -139,6 +139,7 @@ public class RecoveryNetworkClientTest {
     IntStream.range(0, NUM_BLOBS).forEach(i -> {
       BlobId blobId = CloudTestUtil.getUniqueId(testContainer.getParentAccountId(), testContainer.getId(),
           false, mockPartitionId);
+      // FIXME: We are not uploading CRC irl !!!
       messageInfoMap.put(blobId.getID(), new MessageInfo(blobId,
           BLOB_SIZE, false, false, false, Utils.Infinite_Time, null,
           testContainer.getParentAccountId(), testContainer.getId(), System.currentTimeMillis(), (short) 0));
