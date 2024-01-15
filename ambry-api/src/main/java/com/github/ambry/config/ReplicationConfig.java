@@ -46,6 +46,7 @@ public class ReplicationConfig {
    * The factory class the replication uses to create cloud token
    */
   @Config(REPLICATION_CLOUD_TOKEN_FACTORY)
+  @Default("com.github.ambry.cloud.azure.CosmosUpdateTimeFindTokenFactory")
   public final String replicationCloudTokenFactory;
 
   /**
@@ -324,7 +325,7 @@ public class ReplicationConfig {
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
     replicationCloudTokenFactory = verifiableProperties.getString(REPLICATION_CLOUD_TOKEN_FACTORY,
-        "com.github.ambry.cloud.RecoveryTokenFactory");
+        "com.github.ambry.cloud.azure.CosmosChangeFeedFindTokenFactory");
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =

@@ -257,6 +257,7 @@ public class AmbryServer {
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
          */
+        // TODO: Use cloud to store manager
         networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService);
       } else {
         if (clusterMapConfig.clusterMapEnableHttp2Replication) {

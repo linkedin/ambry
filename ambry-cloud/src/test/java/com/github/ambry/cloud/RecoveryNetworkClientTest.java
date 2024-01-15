@@ -96,6 +96,8 @@ public class RecoveryNetworkClientTest {
     properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "Partition");
     properties.setProperty(AzureCloudConfig.AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE,
         String.valueOf(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE));
+    properties.setProperty(ReplicationConfig.REPLICATION_CLOUD_TOKEN_FACTORY,
+        RecoveryTokenFactory.class.getCanonicalName());
     findTokenHelper = new FindTokenHelper(null,
         new ReplicationConfig(new VerifiableProperties(properties)));
     // Azure container names have to be 3 char long at least
