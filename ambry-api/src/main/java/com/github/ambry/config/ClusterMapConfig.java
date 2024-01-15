@@ -197,7 +197,6 @@ public class ClusterMapConfig {
    */
   public static final String CLUSTERMAP_RESOLVE_HOSTNAMES = "clustermap.resolve.hostnames";
   @Config(CLUSTERMAP_RESOLVE_HOSTNAMES)
-  @Default("true")
   public final boolean clusterMapResolveHostnames;
 
   /**
