@@ -156,6 +156,11 @@ public class RecoveryNetworkClientTest {
     azuriteClient.uploadBlobs(messageWriteSet);
   }
 
+  @After
+  public void after() {
+
+  }
+  
   /**
    * Creates a metadata request to send to Azure storage
    * @param recoveryToken
@@ -178,10 +183,6 @@ public class RecoveryNetworkClientTest {
         new RequestInfo(LOCALHOST, new Port(0, PortType.PLAINTEXT), replicaMetadataRequest, cloudReplica,
             null, System.currentTimeMillis(), 0, 0);
     return Collections.singletonList(requestInfo);
-  }
-  @After
-  public void after() {
-
   }
 
   /**
