@@ -31,7 +31,7 @@ import org.slf4j.LoggerFactory;
 
 
 public class RecoveryToken implements FindToken {
-  private final Logger logger = LoggerFactory.getLogger(RecoveryToken.class);
+  private static final Logger logger = LoggerFactory.getLogger(RecoveryToken.class);
   // Maintain alphabetical order for convenience
   public static final String AMBRY_PARTITION_ID = "ambry_partition_id";
   public static final String AZURE_STORAGE_CONTAINER_ID = "azure_storage_container_id";
@@ -42,6 +42,9 @@ public class RecoveryToken implements FindToken {
   public static final String RECOVERY_BEGIN_TIME = "recovery_begin_time";
   public static final String RECOVERY_END_TIME = "recovery_end_time";
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss_SSS");
+
+  // JSON.put ignores null strings, hence insert a string and change it back to null
+  public static final String NONE = "none";
   private final long ambryPartitionId;
   private final String azureContainerId;
   private final String azureToken;
@@ -56,7 +59,7 @@ public class RecoveryToken implements FindToken {
     this.ambryPartitionId = ambryPartitionId;
     this.azureContainerId = azureContainerId;
     this.azureToken = azureToken;
-    this.endOfPartition = azureToken != null && !azureToken.isEmpty();
+    this.endOfPartition = azureToken == null;
     this.numBlobBytes = recoveryToken.numBlobBytes + numBlobBytesDelta;
     this.numBlobs = recoveryToken.numBlobs + numBlobsDelta;
     this.recoveryBeginTime = recoveryToken.recoveryBeginTime;
@@ -65,24 +68,27 @@ public class RecoveryToken implements FindToken {
 
   public RecoveryToken(JSONObject jsonObject) {
     this.ambryPartitionId = jsonObject.getLong(AMBRY_PARTITION_ID);
-    this.azureContainerId = jsonObject.getString(AZURE_STORAGE_CONTAINER_ID);
-    this.azureToken = jsonObject.getString(AZURE_STORAGE_CONTINUATION_TOKEN);
+    String azureContainerId = jsonObject.getString(AZURE_STORAGE_CONTAINER_ID);
+    this.azureContainerId = azureContainerId.equals(NONE) ? null : azureContainerId;
+    String azureToken = jsonObject.getString(AZURE_STORAGE_CONTINUATION_TOKEN);
+    this.azureToken = azureToken.equals(NONE) ? null : azureToken;
     this.endOfPartition = jsonObject.getBoolean(END_OF_PARTITION);
     this.numBlobBytes = jsonObject.getLong(NUM_BLOB_BYTES);
     this.numBlobs = jsonObject.getLong(NUM_BLOBS);
     this.recoveryBeginTime = jsonObject.getString(RECOVERY_BEGIN_TIME);
-    this.recoveryEndTime = jsonObject.getString(RECOVERY_END_TIME);
+    String recoveryEndTime = jsonObject.getString(RECOVERY_END_TIME);
+    this.recoveryEndTime = recoveryEndTime.equals(NONE) ? null : recoveryEndTime;
   }
 
   public RecoveryToken() {
     this.ambryPartitionId = -1;
-    this.azureContainerId = "none";
-    this.azureToken = "none";
+    this.azureContainerId = null;
+    this.azureToken = null;
     this.endOfPartition = false;
     this.numBlobBytes = 0;
     this.numBlobs = 0;
     this.recoveryBeginTime = DATE_FORMAT.format(System.currentTimeMillis());
-    this.recoveryEndTime = "none";
+    this.recoveryEndTime = null;
   }
 
   public String toString() {
@@ -99,13 +105,13 @@ public class RecoveryToken implements FindToken {
     }
     // Maintain alphabetical order of fields for string match
     jsonObject.put(AMBRY_PARTITION_ID, ambryPartitionId);
-    jsonObject.put(AZURE_STORAGE_CONTAINER_ID, azureContainerId);
-    jsonObject.put(AZURE_STORAGE_CONTINUATION_TOKEN, azureToken);
+    jsonObject.put(AZURE_STORAGE_CONTAINER_ID, azureContainerId == null ? NONE : azureContainerId);
+    jsonObject.put(AZURE_STORAGE_CONTINUATION_TOKEN, azureToken == null ? NONE : azureToken);
     jsonObject.put(END_OF_PARTITION, endOfPartition);
     jsonObject.put(NUM_BLOBS, numBlobs);
     jsonObject.put(NUM_BLOB_BYTES, numBlobBytes);
     jsonObject.put(RECOVERY_BEGIN_TIME, recoveryBeginTime);
-    jsonObject.put(RECOVERY_END_TIME, recoveryEndTime);
+    jsonObject.put(RECOVERY_END_TIME, recoveryEndTime == null ? NONE : recoveryEndTime);
     // Pretty print with indent for easy viewing
     return jsonObject.toString(4);
   }
@@ -126,6 +132,7 @@ public class RecoveryToken implements FindToken {
     byte[] buf = new byte[stream.readInt()];
     stream.readFully(buf);
     String tokenString = new String(buf, Charset.defaultCharset());
+    logger.trace(tokenString);
     JSONObject jsonObject = new JSONObject(tokenString);
     return new RecoveryToken(jsonObject);
   }

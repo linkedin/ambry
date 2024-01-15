@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.CloudReplica;
@@ -23,8 +24,10 @@ import com.github.ambry.clustermap.CloudServiceDataNode;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.ReplicaType;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -34,23 +37,26 @@ import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import io.netty.buffer.ByteBuf;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.After;
 import org.junit.Before;
@@ -66,25 +72,38 @@ import static org.mockito.ArgumentMatchers.*;
 public class RecoveryNetworkClientTest {
 
   private static Logger logger = LoggerFactory.getLogger(RecoveryNetworkClientTest.class);
-  private AzuriteUtils azuriteUtils;
-  private MockClusterMap mockClusterMap;
-  private RecoveryNetworkClient recoveryNetworkClient;
-  private MockPartitionId mockPartitionId;
-  private final short ACCOUNT_ID = 1024, CONTAINER_ID = 2048;
-  private final int NUM_BLOBS = 100;
-  private final long BLOB_SIZE = 1000;
-  private Container testContainer;
+  public static final String LOCALHOST = "localhost";
+  protected Properties properties;
+  protected FindTokenHelper findTokenHelper;
+  protected AzuriteUtils azuriteUtils;
+  protected MockClusterMap mockClusterMap;
+  protected RecoveryNetworkClient recoveryNetworkClient;
+  protected MockPartitionId mockPartitionId;
+  protected final short ACCOUNT_ID = 1024, CONTAINER_ID = 2048;
+  protected final int NUM_BLOBS = 100;
+  protected final long BLOB_SIZE = 1000;
+  protected final int AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE = 3;
+  protected Container testContainer;
+  protected AtomicInteger counter;
+  Map<String, MessageInfo> messageInfoMap;
 
-  private AtomicInteger counter;
-
-  public RecoveryNetworkClientTest() throws IOException {
+  public RecoveryNetworkClientTest() throws IOException, ReflectiveOperationException {
     counter = new AtomicInteger(0);
     azuriteUtils = new AzuriteUtils();
+    properties = azuriteUtils.getAzuriteConnectionProperties();
+    properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(false));
+    properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
+    properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "Partition");
+    properties.setProperty(AzureCloudConfig.AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE,
+        String.valueOf(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE));
+    findTokenHelper = new FindTokenHelper(null,
+        new ReplicationConfig(new VerifiableProperties(properties)));
     // Azure container names have to be 3 char long at least
-    mockPartitionId = new MockPartitionId(123450L, MockClusterMap.DEFAULT_PARTITION_CLASS);
     mockClusterMap = new MockClusterMap(false, true, 1,
         1, 1, true, false,
         "localhost");
+    mockPartitionId =
+        (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     testContainer =
         new Container(CONTAINER_ID, "testContainer", Container.ContainerStatus.ACTIVE,
             "Test Container", false,
@@ -95,52 +114,65 @@ public class RecoveryNetworkClientTest {
             0, 0, "",
             null, Collections.emptySet());
     recoveryNetworkClient =
-        new RecoveryNetworkClient(new VerifiableProperties(azuriteUtils.getAzuriteConnectionProperties()),
+        new RecoveryNetworkClient(new VerifiableProperties(properties),
             new MetricRegistry(),    mockClusterMap, null, null);
   }
 
+  /**
+   * Before the test, deletes all blobs in test container and uploads new ones.
+   * @throws ReflectiveOperationException
+   * @throws CloudStorageException
+   * @throws IOException
+   */
   @Before
   public void before() throws ReflectiveOperationException, CloudStorageException, IOException {
     // Clear Azure partitions and add some blobs
     AccountService accountService = Mockito.mock(AccountService.class);
     Mockito.lenient().when(accountService.getContainersByStatus(any()))
         .thenReturn(Collections.singleton(testContainer));
-    Properties properties = azuriteUtils.getAzuriteConnectionProperties();
-    properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(false));
     // Azurite client
     AzureCloudDestinationSync azuriteClient = azuriteUtils.getAzuriteClient(
         properties, new MetricRegistry(),    null, accountService);
     // For each partition, clear it and add NUM_BLOBS of size BLOB_SIZE
-    List<MessageInfo> messageInfoList = new ArrayList<>();
+    messageInfoMap = new HashMap<>();
     azuriteClient.compactPartition(mockPartitionId.toPathString());
-    IntStream.range(0, NUM_BLOBS).forEach(i -> messageInfoList.add(
-        new MessageInfo(CloudTestUtil.getUniqueId(testContainer.getParentAccountId(), testContainer.getId(),
-            false, mockPartitionId),
-            BLOB_SIZE, false, false, false, Utils.Infinite_Time, new Random().nextLong(),
-            testContainer.getParentAccountId(), testContainer.getId(), System.currentTimeMillis(), (short) 0)));
+    IntStream.range(0, NUM_BLOBS).forEach(i -> {
+      BlobId blobId = CloudTestUtil.getUniqueId(testContainer.getParentAccountId(), testContainer.getId(),
+          false, mockPartitionId);
+      messageInfoMap.put(blobId.getID(), new MessageInfo(blobId,
+          BLOB_SIZE, false, false, false, Utils.Infinite_Time, null,
+          testContainer.getParentAccountId(), testContainer.getId(), System.currentTimeMillis(), (short) 0));
+    });
     // Upload blobs
-    InputStream inputStream = new ByteBufferInputStream(ByteBuffer.wrap(
+    List<MessageInfo> blobIds = new ArrayList<>(messageInfoMap.values());
+    InputStream blobData = new ByteBufferInputStream(ByteBuffer.wrap(
         TestUtils.getRandomBytes((int) (NUM_BLOBS * BLOB_SIZE))));
     MessageFormatWriteSet messageWriteSet = new MessageFormatWriteSet(
-        new MessageSievingInputStream(inputStream, messageInfoList, Collections.emptyList(), new MetricRegistry()),
-        messageInfoList, false);
+        new MessageSievingInputStream(blobData, blobIds, Collections.emptyList(), new MetricRegistry()),
+        blobIds, false);
     azuriteClient.uploadBlobs(messageWriteSet);
   }
 
-  public List<RequestInfo> getRequestInfoList() throws Exception {
-    ClusterMapConfig clusterMapConfig =  new ClusterMapConfig(
-        new VerifiableProperties(azuriteUtils.getAzuriteConnectionProperties()));
-    CloudServiceDataNode cloudServiceDataNode = new CloudServiceDataNode("localhost", clusterMapConfig);
+  /**
+   * Creates a metadata request to send to Azure storage
+   * @param recoveryToken
+   * @return
+   * @throws Exception
+   */
+  public List<RequestInfo> getRequestInfoList(RecoveryToken recoveryToken) throws Exception {
+    ClusterMapConfig clusterMapConfig =  new ClusterMapConfig(new VerifiableProperties(properties));
+    CloudServiceDataNode cloudServiceDataNode = new CloudServiceDataNode(LOCALHOST, clusterMapConfig);
     CloudReplica cloudReplica = new CloudReplica(mockPartitionId, cloudServiceDataNode);
     // requestInfoList -> requestInfo -> replicaMetadataRequest -> replicaMetadataRequestInfoList
-    // -> replicaMetadataRequestInfo
+    // -> replicaMetadataRequestInfo -> why !!!
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =  new ReplicaMetadataRequestInfo(mockPartitionId,
-        new RecoveryToken(), "localhost", "/tmp", ReplicaType.CLOUD_BACKED, (short) 1);
+        recoveryToken, LOCALHOST, "/tmp", ReplicaType.CLOUD_BACKED,
+        ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2);
     ReplicaMetadataRequest replicaMetadataRequest = new ReplicaMetadataRequest(counter.incrementAndGet(),
         "repl-metadata-localhost", Collections.singletonList(replicaMetadataRequestInfo),
-        100, (short) 1);
+        100, ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2);
     RequestInfo requestInfo =
-        new RequestInfo("localhost", new Port(0, PortType.PLAINTEXT), replicaMetadataRequest, cloudReplica,
+        new RequestInfo(LOCALHOST, new Port(0, PortType.PLAINTEXT), replicaMetadataRequest, cloudReplica,
             null, System.currentTimeMillis(), 0, 0);
     return Collections.singletonList(requestInfo);
   }
@@ -149,14 +181,47 @@ public class RecoveryNetworkClientTest {
 
   }
 
-  public void basic() throws Exception {
-    List<ResponseInfo> responseInfoList =
-        recoveryNetworkClient.sendAndPoll(getRequestInfoList(), Collections.emptySet(), 0);
-    ResponseInfo responseInfo = responseInfoList.get(0);
-    responseInfo.content();
-    // ReplicaMetadataResponse response = ReplicaMetadataResponse.readFrom(responseInfo.content(), findTokenHelper, mockClusterMap);
+  /**
+   * Tests that basic recovery of uploaded blobIDs works.
+   * In each iteration, it sends a request to Azure Storage and retrieves M blobs where M < Total number of blobs.
+   * Finally, checks that all blobIDs have been recovered.
+   * @throws Exception
+   */
+  @Test
+  public void testBasicRecoveryOfBlobMetadata() throws Exception {
+    RecoveryToken recoveryToken = new RecoveryToken();
+    List<MessageInfo> messageInfoList = new ArrayList<>();
+    int numIter = (NUM_BLOBS + AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE)/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE;
+    // Iterate N times to retrieve all blobIDs
+    for (Integer ignored : IntStream.rangeClosed(1, numIter).boxed().collect(Collectors.toList())) {
+      // Send metadata request
+      List<ResponseInfo> responseInfoList =
+          recoveryNetworkClient.sendAndPoll(getRequestInfoList(recoveryToken), Collections.emptySet(), 0);
+      // Receive metadata response
+      ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
+          new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
+          .getReplicaMetadataResponseInfoList().get(0);
+      // Extract token
+      recoveryToken = (RecoveryToken) rinfo.getFindToken();
+      // Extract ambry metadata
+      messageInfoList.addAll(rinfo.getMessageInfoList());
+    }
+    // Assert we recovered all blobIds intact
+    assertEquals(null, recoveryToken.getToken());
+    assertEquals(messageInfoMap.size(), messageInfoList.size());
+    for (MessageInfo messageInfo : messageInfoList) {
+      MessageInfo OgMessageInfo = messageInfoMap.get(messageInfo.getStoreKey().getID());
+      if (!OgMessageInfo.equals(messageInfo)) {
+        String err = String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo);
+        fail(err);
+      }
+    }
   }
 
+  /**
+   * Tests that serialization of RecoveryToken works
+   * @throws IOException
+   */
   @Test
   public void testRecoveryTokenSerDe() throws IOException {
     RecoveryToken recoveryToken = new RecoveryToken();

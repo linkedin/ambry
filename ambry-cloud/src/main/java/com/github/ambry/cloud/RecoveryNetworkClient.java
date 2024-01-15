@@ -45,6 +45,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.AbstractByteBufHolder;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
@@ -136,15 +137,16 @@ public class RecoveryNetworkClient implements NetworkClient {
       RecoveryToken prevToken = (RecoveryToken) rinfo.getToken();
       String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(
           rinfo.getPartitionId().toPathString());
+      logger.trace("For container {}, previous RecoveryToken = {}", containerName, prevToken.toString());
       if (prevToken.getAmbryPartitionId() > -1 && prevToken.getAmbryPartitionId() != rinfo.getPartitionId().getId()) {
-        logger.error("For partition {}, the RecoveryToken.ambryPartitionId must not be {}",
-            rinfo.getPartitionId().getId(), prevToken.getAmbryPartitionId());
+        logger.error("For partition {}, expected RecoveryToken.ambryPartitionId to be {} but found {}",
+            rinfo.getPartitionId().getId(), rinfo.getPartitionId().getId(), prevToken.getAmbryPartitionId());
         // TODO: emit metric, don't halt replication
         continue;
       }
-      if (prevToken.getAzureStorageContainerId() != null && prevToken.getAzureStorageContainerId() != containerName) {
-        logger.error("For partition {}, the RecoveryToken.azureContainerId must not be {}",
-            rinfo.getPartitionId().getId(), containerName);
+      if (prevToken.getAzureStorageContainerId() != null && !prevToken.getAzureStorageContainerId().equals(containerName)) {
+        logger.error("For partition {}, expected RecoveryToken.azureContainerId to be {} but found {}",
+            rinfo.getPartitionId().getId(), containerName, prevToken.getAzureStorageContainerId());
         // TODO: emit metric, don't halt replication
         continue;
       }
@@ -160,6 +162,7 @@ public class RecoveryNetworkClient implements NetworkClient {
           .next();
 
       // Extract ambry metadata
+      logger.trace("For container {}, number of blobItems from Azure = {}", containerName, response.getValue().size());
       List<MessageInfo> messageInfoList = new ArrayList<>();
       long bytesRead = 0, blobsRead = 0;
       for (BlobItem blobItem: response.getValue()) {
@@ -172,6 +175,7 @@ public class RecoveryNetworkClient implements NetworkClient {
       }
 
       // Save metadata objects
+      logger.trace("For container {}, number of messageInfo created = {}", containerName, messageInfoList.size());
       responseList.add(
           new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
               new RecoveryToken(prevToken, rinfo.getPartitionId().getId(), containerName,
@@ -201,16 +205,19 @@ public class RecoveryNetworkClient implements NetworkClient {
           metadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME),
           false,
           false,
-          Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME)),
+          Long.parseLong(metadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME) ?
+              metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME) : String.valueOf(Utils.Infinite_Time)),
           null,
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)),
           Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_CREATION_TIME)),
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)));
     } catch (Exception e) {
-      // TODO: log error, don't halt replication
+      // TODO: Emit metric
+      logger.error("Failed to create MessageInfo from azure blob metadata for blob-id {} due to {}",
+          blobItem.getName(), e.toString());
+      throw new RuntimeException(e);
     }
-    return null;
   }
 
   /**
