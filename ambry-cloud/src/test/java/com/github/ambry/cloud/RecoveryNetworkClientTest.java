@@ -160,7 +160,7 @@ public class RecoveryNetworkClientTest {
   public void after() {
 
   }
-  
+
   /**
    * Creates a metadata request to send to Azure storage
    * @param recoveryToken
