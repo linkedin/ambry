@@ -227,6 +227,11 @@ class DataNode implements DataNodeId {
   }
 
   @Override
+  public List<DiskId> getDiskIds() {
+    return new ArrayList<>(disks);
+  }
+
+  @Override
   public JSONObject getSnapshot() {
     JSONObject snapshot = new JSONObject();
     snapshot.put(DATA_NODE_HOSTNAME, getHostname());

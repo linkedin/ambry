@@ -18,6 +18,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
+import java.util.Collections;
 import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -146,6 +147,11 @@ public class CloudDataNode implements DataNodeId {
   @Override
   public long getXid() {
     return 0;
+  }
+
+  @Override
+  public List<DiskId> getDiskIds() {
+    return Collections.EMPTY_LIST;
   }
 
   @Override

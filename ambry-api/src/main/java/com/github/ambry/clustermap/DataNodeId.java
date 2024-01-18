@@ -14,6 +14,7 @@
 package com.github.ambry.clustermap;
 
 import com.github.ambry.network.Port;
+import java.util.List;
 
 
 /**
@@ -104,6 +105,12 @@ public interface DataNodeId extends Resource, Comparable<DataNodeId> {
    * @return the xid associated with this node.
    */
   long getXid();
+
+  /**
+   * Return a list of {@link DiskId}s from this data node.
+   * @return
+   */
+  List<DiskId> getDiskIds();
 
   @Override
   default int compareTo(DataNodeId o) {

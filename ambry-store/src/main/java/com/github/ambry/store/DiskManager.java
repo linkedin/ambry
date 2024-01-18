@@ -84,7 +84,7 @@ public class DiskManager {
   private final List<String> unexpectedDirs = new ArrayList<>();
   private final AccountService accountService;
   private final DiskManagerConfig diskManagerConfig;
-  private boolean running = false;
+  private volatile boolean running = false;
   private DiskHealthStatus diskHealthStatus;
   private final DiskHealthCheck diskHealthCheck;
   // Have a dedicated scheduler for persisting index segments to ensure index segments are always persisted
@@ -282,6 +282,14 @@ public class DiskManager {
       rwLock.readLock().unlock();
       metrics.diskShutdownTimeMs.update(time.milliseconds() - startTimeMs);
     }
+  }
+
+  /**
+   * Return true is the disk manager is running.
+   * @return True when the disk manager is running.
+   */
+  boolean isRunning() {
+    return running;
   }
 
   /**

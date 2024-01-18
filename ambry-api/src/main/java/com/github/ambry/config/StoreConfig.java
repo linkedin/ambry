@@ -583,6 +583,17 @@ public class StoreConfig {
   public static final String storeDiskCapacityReportingPercentageName = "store.disk.capacity.reporting.percentage";
 
   /**
+   * The threshold of disk failures to terminate the process. If we have 10 disks and the threshold is 0.8, then when
+   * there are 9, or 10 disks failed to start, or marked as unavailable, we would fail the initialization of the
+   * storage manager, thus, kill the process. By default, the threshold is 1, which means we don't fail the process even
+   * when all the disks failed.
+   */
+  @Config(storeThresholdOfDiskFailuresToTerminateName)
+  public final float storeThresholdOfDiskFailuresToTerminate;
+  public static final String storeThresholdOfDiskFailuresToTerminateName =
+      "store.threshold.of.disk.failures.to.terminate";
+
+  /**
    * True to remove all the unexpected directories when the current node is in FULL AUTO.
    */
   @Config(storeRemoveUnexpectedDirsInFullAutoName)
@@ -745,6 +756,8 @@ public class StoreConfig {
     }
     storeDiskCapacityReportingPercentage =
         verifiableProperties.getIntInRange(storeDiskCapacityReportingPercentageName, 95, 0, 100);
+    storeThresholdOfDiskFailuresToTerminate =
+        verifiableProperties.getFloatInRange(storeThresholdOfDiskFailuresToTerminateName, 1.0f, 0.0f, 1.0f);
     storeRemoveUnexpectedDirsInFullAuto =
         verifiableProperties.getBoolean(storeRemoveUnexpectedDirsInFullAutoName, false);
   }
