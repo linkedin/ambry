@@ -17,6 +17,8 @@ package com.github.ambry.clustermap;
 
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
+import java.util.Collections;
+import java.util.List;
 import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
@@ -53,6 +55,11 @@ class CloudServiceDataNode extends AmbryDataNode {
   @Override
   public String getRackId() {
     return null;
+  }
+
+  @Override
+  public List<DiskId> getDiskIds() {
+    return Collections.EMPTY_LIST;
   }
 
   @Override

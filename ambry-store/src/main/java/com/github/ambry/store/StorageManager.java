@@ -207,6 +207,8 @@ public class StorageManager implements StoreManager {
       for (Thread startupThread : startupThreads) {
         startupThread.join();
       }
+      // Verify disk health before moving on.
+      verifyDiskHealth();
       metrics.initializeCompactionThreadsTracker(this, diskToDiskManager.size());
       metrics.initializeHostUtilizationTracker(this);
       if (clusterParticipants != null) {
@@ -228,6 +230,32 @@ public class StorageManager implements StoreManager {
       logger.info("Starting storage manager complete");
     } finally {
       metrics.storageManagerStartTimeMs.update(time.milliseconds() - startTimeMs);
+    }
+  }
+
+  /**
+   * Verify that the disks are over all healthy.
+   * @throws StoreException
+   */
+  void verifyDiskHealth() throws StoreException {
+    List<DiskId> allDiskIds = currentNode.getDiskIds();
+    Set<DiskId> failedDiskIds = allDiskIds.stream()
+        .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
+        .collect(Collectors.toSet());
+    for (Map.Entry<DiskId, DiskManager> entry : diskToDiskManager.entrySet()) {
+      if (!entry.getValue().isRunning()) {
+        failedDiskIds.add(entry.getKey());
+      }
+    }
+    int totalDisks = allDiskIds.size();
+    int failedDisks = failedDiskIds.size();
+    // The failed disks has to larger than the threshold. If the threshold is 1, then even if all disks failed, it won't
+    // throw an exception.
+    if (totalDisks != 0 && failedDisks / (1.0f * totalDisks) > storeConfig.storeThresholdOfDiskFailuresToTerminate) {
+      logger.error("There are {} failed disks, and total disk is {}, surpassed the threshold {}", failedDisks,
+          totalDisks, storeConfig.storeThresholdOfDiskFailuresToTerminate);
+      logger.error("Failed disks are {}", failedDisks);
+      throw new StoreException("More than enough disks failed", StoreErrorCodes.Initialization_Error);
     }
   }
 
@@ -921,13 +949,17 @@ public class StorageManager implements StoreManager {
   class DiskFailureHandler implements Runnable {
     // All the failed unavailable disks are the failed disks, if the state is unavailable for disk, there shouldn't be
     // any replicas on these disks.
-    private final List<DiskId> failedDisks = diskToDiskManager.keySet()
+    private final List<DiskId> failedDisks = currentNode.getDiskIds()
         .stream()
         .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
         .collect(Collectors.toList());
     private final long acquireLockBackoffTime = storeConfig.storeDiskFailureHandlerRetryLockBackoffTimeInSeconds * 1000;
     private final int capacityReportingPercentage = storeConfig.storeDiskCapacityReportingPercentage;
 
+    /**
+     * Expose for testing
+     * @return
+     */
     List<DiskId> getAllDisks() {
       return new ArrayList<>(diskToDiskManager.keySet());
     }

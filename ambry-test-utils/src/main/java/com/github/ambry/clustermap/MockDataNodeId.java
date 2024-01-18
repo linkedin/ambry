@@ -166,6 +166,15 @@ public class MockDataNodeId implements DataNodeId {
   }
 
   @Override
+  public List<DiskId> getDiskIds() {
+    List<DiskId> disks = new ArrayList<>();
+    for (String mountPath : mountPaths) {
+      disks.add(new MockDiskId(this, mountPath));
+    }
+    return disks;
+  }
+
+  @Override
   public JSONObject getSnapshot() {
     JSONObject snapshot = new JSONObject();
     snapshot.put(DATA_NODE_HOSTNAME, getHostname());

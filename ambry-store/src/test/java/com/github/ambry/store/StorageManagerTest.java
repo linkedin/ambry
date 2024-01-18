@@ -167,6 +167,26 @@ public class StorageManagerTest {
   }
 
   /**
+   * Test the case where disk failures surpass threshold to fail initialization
+   * @throws Exception
+   */
+  @Test
+  public void initializationErrorDueToDiskHealth() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<String> mountPaths = dataNode.getMountPaths();
+    for (String mountPathToDelete : mountPaths) {
+      Utils.deleteFileOrDirectory(new File(mountPathToDelete));
+    }
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+    try {
+      storageManager.start();
+      fail("Should fail due to disk health");
+    } catch (StoreException e) {
+      assertEquals(StoreErrorCodes.Initialization_Error, e.getErrorCode());
+    }
+  }
+
+  /**
    * Tests that schedule compaction and control compaction in StorageManager
    * @throws Exception
    */
@@ -1996,6 +2016,9 @@ public class StorageManagerTest {
     properties.setProperty("clustermap.datacenter.name", "DC0");
     properties.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     properties.setProperty("clustermap.update.datanode.info", Boolean.toString(updateInstanceConfig));
+    // By default, there are 3 disks(mount paths) created for each data node. In order to surpass 0.9 threshold, all
+    // disks have to fail.
+    properties.setProperty(StoreConfig.storeThresholdOfDiskFailuresToTerminateName, "0.9");
     if (segmentedLog) {
       long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
       properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / numSegment));

@@ -19,6 +19,7 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -82,6 +83,11 @@ class AmbryServerDataNode extends AmbryDataNode {
   @Override
   public long getXid() {
     return xid;
+  }
+
+  @Override
+  public List<DiskId> getDiskIds() {
+    return new ArrayList<>(clusterManagerQueryHelper.getDisks(this));
   }
 
   @Override
