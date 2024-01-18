@@ -215,10 +215,11 @@ public class RecoveryNetworkClient implements NetworkClient {
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)));
     } catch (Exception e) {
       // TODO: Emit metric
-      logger.error("Failed to create MessageInfo from azure blob metadata for blob-id {} due to {}",
-          blobItem.getName(), e.toString());
-      throw new RuntimeException(e);
+      logger.error("Failed to create MessageInfo for blob-id {} from Azure blob metadata due to {}",
+          blobItem.getName(), e);
+      e.printStackTrace();
     }
+    return null;
   }
 
   /**
