@@ -200,7 +200,7 @@ public class DiskManager {
       }
       if (numStoreFailures.get() > 0) {
         logger.error("Could not start {} out of {} stores on the disk {}", numStoreFailures.get(), stores.size(), disk);
-        if (storeConfig.storeWipeAndRestartBlobStore) {
+        if (storeConfig.storeWipeAndRestartBlobStore && numStoreFailures.get() != stores.size()) {
           for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
             BlobStore store = entry.getValue();
             if (store.isStarted()) {
