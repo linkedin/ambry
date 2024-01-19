@@ -72,6 +72,7 @@ public class DiskManager {
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
   private final Set<String> stoppedReplicas;
+  private final DiskMetrics diskMetrics;
   private final List<ReplicaStatusDelegate> replicaStatusDelegates;
   private final Set<String> expectedDirs = new HashSet<>();
   private final StoreConfig storeConfig;
@@ -139,10 +140,10 @@ public class DiskManager {
     this.replicaStatusDelegates = replicaStatusDelegates;
     this.stoppedReplicas = stoppedReplicas;
     expectedDirs.add(reserveFileDir.getAbsolutePath());
+    diskMetrics = new DiskMetrics(storeMainMetrics.getRegistry(), disk.getMountPath(),
+        storeConfig.storeDiskIoReservoirTimeWindowMs);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-        DiskMetrics diskMetrics = new DiskMetrics(storeMainMetrics.getRegistry(), disk.getMountPath(),
-            storeConfig.storeDiskIoReservoirTimeWindowMs);
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
@@ -199,6 +200,30 @@ public class DiskManager {
       }
       if (numStoreFailures.get() > 0) {
         logger.error("Could not start {} out of {} stores on the disk {}", numStoreFailures.get(), stores.size(), disk);
+        if (storeConfig.storeWipeAndRestartBlobStore) {
+          for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
+            BlobStore store = entry.getValue();
+            if (store.isStarted()) {
+              continue;
+            }
+            // 1. wipe out the blob store directory
+            // 2. create another blob store and restart it. since this time the blob store would be empty, we don't
+            // have to use different threads for different blob stores.
+            ReplicaId replica = partitionToReplicaMap.get(entry.getKey());
+            String dataDir = store.getDataDir();
+            try {
+              Utils.deleteFileOrDirectory(new File(dataDir));
+              BlobStore newStore =
+                  new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler,
+                      diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery,
+                      hardDelete, replicaStatusDelegates, time, accountService, diskMetrics, indexPersistScheduler);
+              newStore.start();
+              entry.setValue(newStore);
+            } catch (Exception e) {
+              logger.error("Failed to wipe out and restart the blobstore for {}", dataDir, e);
+            }
+          }
+        }
       }
 
       // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements

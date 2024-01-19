@@ -388,6 +388,10 @@ public class BlobStore implements Store {
     return this.replicaId;
   }
 
+  String getDataDir() {
+    return dataDir;
+  }
+
   /**
    * Checks the state of the messages in the given {@link MessageWriteSet} in the given {@link FileSpan}.
    * @param messageSetToWrite Non-empty set of messages to write to the store.
