@@ -178,6 +178,7 @@ public class DiskManager {
         tryRemoveAllUnexpectedDirs();
       }
 
+      ConcurrentHashMap<PartitionId, Exception> startExceptions = new ConcurrentHashMap<>();
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
         if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
@@ -190,6 +191,7 @@ public class DiskManager {
           } catch (Exception e) {
             numStoreFailures.incrementAndGet();
             logger.error("Exception while starting store for the {}", partitionAndStore.getKey(), e);
+            startExceptions.put(partitionAndStore.getKey(), e);
           }
         }, false);
         thread.start();
@@ -202,10 +204,12 @@ public class DiskManager {
         logger.error("Could not start {} out of {} stores on the disk {}", numStoreFailures.get(), stores.size(), disk);
         if (storeConfig.storeWipeAndRestartBlobStore && numStoreFailures.get() != stores.size()) {
           for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
+            PartitionId partitionId = entry.getKey();
             BlobStore store = entry.getValue();
-            if (store.isStarted() || stoppedReplicas.contains(entry.getKey().toPathString())) {
+            if (!shouldWipeOutDirectory(partitionId, store, startExceptions.get(partitionId))) {
               continue;
             }
+
             // 1. wipe out the blob store directory
             // 2. create another blob store and restart it. since this time the blob store would be empty, we don't
             // have to use different threads for different blob stores.
@@ -258,6 +262,24 @@ public class DiskManager {
       metrics.diskStartTimeMs.update(time.milliseconds() - startTimeMs);
       rwLock.readLock().unlock();
     }
+  }
+
+  /**
+   * Return true when we should wipe out the directory of the given blob store.
+   * @param partitionId The partition id of the blob store.
+   * @param store The blob store
+   * @param startException The exceptions thrown by blobstore.start method.
+   * @return
+   */
+  boolean shouldWipeOutDirectory(PartitionId partitionId, BlobStore store, Exception startException) {
+    if (store.isStarted() || stoppedReplicas.contains(partitionId.toPathString())) {
+      return false;
+    }
+    if (startException == null || !(startException instanceof StoreException)) {
+      return false;
+    }
+    StoreErrorCodes errorCode = ((StoreException) startException).getErrorCode();
+    return errorCode == StoreErrorCodes.Initialization_Error;
   }
 
   /**
