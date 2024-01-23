@@ -1276,7 +1276,12 @@ public class HelixClusterManager implements ClusterMap {
       if (externalView == null) {
         return false;
       }
-      return externalView.getStateMap(partitionName).values().stream().anyMatch(instance -> {
+      Map<String, String> stateMap = externalView.getStateMap(partitionName);
+      if (stateMap == null || stateMap.isEmpty()) {
+        return false;
+      }
+      // state map is a map from instance to state
+      return stateMap.keySet().stream().anyMatch(instance -> {
         AmbryDataNode dataNode = instanceNameToAmbryDataNode.get(instance);
         return dataNode != null && dataNode.getDatacenterName().equals(dcName);
       });
