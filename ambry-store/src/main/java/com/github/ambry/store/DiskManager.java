@@ -203,7 +203,7 @@ public class DiskManager {
         if (storeConfig.storeWipeAndRestartBlobStore && numStoreFailures.get() != stores.size()) {
           for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
             BlobStore store = entry.getValue();
-            if (store.isStarted()) {
+            if (store.isStarted() || stoppedReplicas.contains(entry.getKey().toPathString())) {
               continue;
             }
             // 1. wipe out the blob store directory
