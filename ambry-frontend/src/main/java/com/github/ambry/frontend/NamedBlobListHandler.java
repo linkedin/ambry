@@ -22,6 +22,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobRecord;
+import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestRequestMetrics;
 import com.github.ambry.rest.RestResponseChannel;
@@ -152,14 +153,11 @@ public class NamedBlobListHandler {
      */
     private Callback<Page<NamedBlobRecord>> listBlobsCallback() {
       return buildCallback(frontendMetrics.listDbLookupMetrics, page -> {
-        //ReadableStreamChannel channel =
-        //    serializeJsonToChannel(page.toJson(record -> new NamedBlobListEntry(record).toJson()));
-
-        // S3 expects listing of blobs in xml format.
-
         if (restRequest.getArgs().containsKey("uploadId")) {
-          String bucket = (String) restRequest.getArgs().get(S3_BUCKET);
-          String key = (String) restRequest.getArgs().get(S3_KEY);
+          RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
+          NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
+          String bucket = namedBlobPath.getAccountName();
+          String key = namedBlobPath.getBlobName();
           String uploadId = (String) restRequest.getArgs().get("uploadId");
           LOGGER.info(
               "NamedBlobListHandler | Sending response for list upload parts. Bucket = {}, Key = {}, Upload Id = {}",
@@ -178,41 +176,14 @@ public class NamedBlobListHandler {
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
           finalCallback.onCompletion(channel, null);
         } else {
-          ReadableStreamChannel channel = serializeAsXml(page);
+          ReadableStreamChannel channel =
+              serializeJsonToChannel(page.toJson(record -> new NamedBlobListEntry(record).toJson()));
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/json");
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
           finalCallback.onCompletion(channel, null);
         }
       }, uri, LOGGER, finalCallback);
-    }
-
-    private ReadableStreamChannel serializeAsXml(Page<NamedBlobRecord> namedBlobRecordPage) throws IOException {
-      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-
-      ListBucketResult listBucketResult = new ListBucketResult();
-      listBucketResult.setName(restRequest.getPath());
-      listBucketResult.setPrefix(restRequest.getArgs().get("prefix").toString());
-      listBucketResult.setMaxKeys(1);
-      listBucketResult.setDelimiter("/");
-      listBucketResult.setEncodingType("url");
-
-      List<Contents> contentsList = new ArrayList<>();
-      List<NamedBlobRecord> namedBlobRecords = namedBlobRecordPage.getEntries();
-      for (NamedBlobRecord namedBlobRecord : namedBlobRecords) {
-        Contents contents = new Contents();
-        contents.setKey(namedBlobRecord.getBlobName());
-        String todayDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(Calendar.getInstance().getTime());
-        contents.setLastModified(todayDate);
-        contentsList.add(contents);
-      }
-
-      listBucketResult.setContents(contentsList);
-
-      ObjectMapper objectMapper = new XmlMapper();
-      objectMapper.writeValue(outputStream, listBucketResult);
-
-      return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
     }
   }
 }

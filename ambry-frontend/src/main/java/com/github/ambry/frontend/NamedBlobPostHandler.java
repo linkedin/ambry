@@ -211,8 +211,10 @@ public class NamedBlobPostHandler {
           LOGGER.debug("NamedBlobPostHandler | Generated {} from {}", signedUrl, restRequest);
 
           // Create xml response
-          String bucket = (String) restRequest.getArgs().get(S3_BUCKET);
-          String key = (String) restRequest.getArgs().get(S3_KEY);
+          RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
+          NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
+          String bucket = namedBlobPath.getAccountName();
+          String key = namedBlobPath.getBlobName();
           LOGGER.info(
               "NamedBlobPostHandler | Sending response for Multipart begin upload. Bucket = {}, Key = {}, Upload Id = {}",
               bucket, key, signedUrl);
@@ -346,8 +348,10 @@ public class NamedBlobPostHandler {
       return buildCallback(frontendMetrics.putBlobSecurityProcessResponseMetrics, securityCheckResult -> {
         if (restRequest.getArgs().containsKey("uploadId") && restRequest.getArgs().containsKey(S3_REQUEST)) {
           // Create xml response
-          String bucket = (String) restRequest.getArgs().get(S3_BUCKET);
-          String key = (String) restRequest.getArgs().get(S3_KEY);
+          RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
+          NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
+          String bucket = namedBlobPath.getAccountName();
+          String key = namedBlobPath.getBlobName();
           LOGGER.info(
               "NamedBlobPostHandler | Sending response for Multipart upload complete. Bucket = {}, Key = {}, etag = {}",
               bucket, key, restResponseChannel.getHeader(Headers.LOCATION));

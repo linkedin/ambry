@@ -49,6 +49,8 @@ import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+
 
 /**
  * Common utility functions that will be used across implementations of REST interfaces.
@@ -820,6 +822,15 @@ public class RestUtils {
     } catch (RestServiceException e) {
       return false;
     }
+  }
+
+  /**
+   * Determines if the input is a S3 API request
+   * @param restRequest rest request
+   * @return {@code true} if the request is a S3 API request.
+   */
+  public static boolean isS3Request(RestRequest restRequest) {
+    return restRequest.getArgs().containsKey(S3_REQUEST);
   }
 
   /**
