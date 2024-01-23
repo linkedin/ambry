@@ -13,14 +13,19 @@
  */
 package com.github.ambry.rest;
 
+import com.github.ambry.account.Container;
+import com.github.ambry.frontend.Operations;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.GetBlobOptions.*;
 
 
@@ -35,6 +40,8 @@ public class RequestPath {
   private static final char PATH_SEPARATOR_CHAR = '/';
   private static final String PATH_SEPARATOR_STRING = String.valueOf(PATH_SEPARATOR_CHAR);
   private static final String SEGMENT = SubResource.Segment.toString();
+  private static final Logger logger = LoggerFactory.getLogger(RequestPath.class);
+  private static final String S3_PATH = PATH_SEPARATOR_CHAR + Operations.S3;
 
   /**
    * Parse the request path (and additional headers in some cases). The path will match the following regex-like
@@ -74,6 +81,13 @@ public class RequestPath {
     } catch (IllegalArgumentException e) {
       throw new RestServiceException("Invalid URI path", e, RestServiceErrorCode.BadRequest);
     }
+
+    if (path.startsWith(S3_PATH)) {
+      // Convert to named blob request internally
+      path = getNamedBlobPath(path);
+      restRequest.setArg(S3_REQUEST, "true");
+    }
+
     return parse(path, restRequest.getArgs(), prefixesToRemove, clusterName);
   }
 
@@ -297,5 +311,30 @@ public class RequestPath {
       }
     }
     return nextPathSegmentOffset;
+  }
+
+  /**
+   * Get named blob path from S3 request path
+   * @param path s3 request path
+   * @return named blob request path
+   */
+  private static String getNamedBlobPath(String path) {
+    // S3 requests to Ambry are in the form "/s3/account-name/key-name". We convert it to named blob path
+    // "/named/account-name/container-name/key-name" internally.
+    // For ex: for S3 path, "/s3/named-blob-sandbox/checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata",
+    // the corresponding named blob path is "/named/named-blob-sandbox/container-a/checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata".
+    // Please note that we hardcode container-name to 'container-a'.
+
+    int accountStart = S3_PATH.length() + PATH_SEPARATOR_STRING.length();
+    int accountEnd = path.indexOf(PATH_SEPARATOR_CHAR, accountStart);
+    if (accountEnd == -1) {
+      accountEnd = path.length();
+    }
+    String accountName = path.substring(accountStart, accountEnd);
+    String containerName = Container.DEFAULT_S3_CONTAINER_NAME;
+    String keyName = path.substring(accountEnd);
+    String namedBlobPath = "/named/" + accountName + "/" + containerName + (keyName.length() > 0 ? keyName : "");
+    logger.info("S3 API | Converted S3 request path {} to NamedBlob path {}", path, namedBlobPath);
+    return namedBlobPath;
   }
 }

@@ -49,6 +49,8 @@ import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+
 
 /**
  * Common utility functions that will be used across implementations of REST interfaces.
@@ -467,6 +469,11 @@ public class RestUtils {
      * The version for the NamedBlob record in MySQL DB
      */
     public static final String NAMED_BLOB_VERSION = KEY_PREFIX + "named-blob-version";
+
+    /**
+     * Boolean field set to "true" if this is a S3 request.
+     */
+    public static final String S3_REQUEST = KEY_PREFIX + "is-s3-request";
   }
 
   /**
@@ -898,6 +905,15 @@ public class RestUtils {
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false);
+  }
+
+  /**
+   * Determines if the input is a S3 API request
+   * @param restRequest rest request
+   * @return {@code true} if the request is a S3 API request.
+   */
+  public static boolean isS3Request(RestRequest restRequest) {
+    return restRequest.getArgs().containsKey(S3_REQUEST);
   }
 
   /**

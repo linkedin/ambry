@@ -32,4 +32,8 @@ public class Operations {
    * First path segment for any operation on a named blob.
    */
   public static final String NAMED_BLOB = "named";
+  /**
+   * First path segment for any s3 api operation.
+   */
+  public static final String S3 = "s3";
 }
