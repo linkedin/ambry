@@ -84,7 +84,7 @@ public class RequestPath {
 
     if (path.startsWith(S3_PATH)) {
       // Convert to named blob request internally
-      path = getNamedBlobPath(path);
+      path = convertToNamedBlobPath(path);
       restRequest.setArg(S3_REQUEST, "true");
     }
 
@@ -318,13 +318,12 @@ public class RequestPath {
    * @param path s3 request path
    * @return named blob request path
    */
-  private static String getNamedBlobPath(String path) {
+  private static String convertToNamedBlobPath(String path) {
     // S3 requests to Ambry are in the form "/s3/account-name/key-name". We convert it to named blob path
     // "/named/account-name/container-name/key-name" internally.
     // For ex: for S3 path, "/s3/named-blob-sandbox/checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata",
     // the corresponding named blob path is "/named/named-blob-sandbox/container-a/checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata".
     // Please note that we hardcode container-name to 'container-a'.
-
     int accountStart = S3_PATH.length() + PATH_SEPARATOR_STRING.length();
     int accountEnd = path.indexOf(PATH_SEPARATOR_CHAR, accountStart);
     if (accountEnd == -1) {
@@ -333,7 +332,9 @@ public class RequestPath {
     String accountName = path.substring(accountStart, accountEnd);
     String containerName = Container.DEFAULT_S3_CONTAINER_NAME;
     String keyName = path.substring(accountEnd);
-    String namedBlobPath = "/named/" + accountName + "/" + containerName + (keyName.length() > 0 ? keyName : "");
+    String namedBlobPath =
+        PATH_SEPARATOR_STRING + Operations.NAMED_BLOB + PATH_SEPARATOR_STRING + accountName + PATH_SEPARATOR_STRING
+            + containerName + (keyName.length() > 0 ? keyName : "");
     logger.info("S3 API | Converted S3 request path {} to NamedBlob path {}", path, namedBlobPath);
     return namedBlobPath;
   }

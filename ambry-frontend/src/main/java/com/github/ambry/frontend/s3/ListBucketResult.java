@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 LinkedIn Corp. All rights reserved.
+ * Copyright 2024 LinkedIn Corp. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  *
  */
 
-package com.github.ambry.frontend;
+package com.github.ambry.frontend.s3;
 
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
@@ -30,6 +30,8 @@ public class ListBucketResult {
   private String marker;
   @JacksonXmlProperty(localName = "MaxKeys")
   private int maxKeys;
+  @JacksonXmlProperty(localName = "KeyCount")
+  private int keyCount;
   @JacksonXmlProperty(localName = "Delimiter")
   private String delimiter;
   @JacksonXmlProperty(localName = "IsTruncated")
@@ -102,5 +104,13 @@ public class ListBucketResult {
 
   public void setEncodingType(String encodingType) {
     this.encodingType = encodingType;
+  }
+
+  public int getKeyCount() {
+    return keyCount;
+  }
+
+  public void setKeyCount(int keyCount) {
+    this.keyCount = keyCount;
   }
 }
