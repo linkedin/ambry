@@ -55,7 +55,7 @@ public class S3ListHandler {
   private static final String DELIMITER_PARAM_NAME = "delimiter";
   private static final String ENCODING_TYPE_PARAM_NAME = "encoding-type";
   private static final Charset CHARSET = StandardCharsets.UTF_8;
-  private final ObjectMapper objectMapper = new XmlMapper();
+  private static final ObjectMapper objectMapper = new XmlMapper();
 
   /**
    * Constructs a handler for handling s3 requests for listing blobs.
