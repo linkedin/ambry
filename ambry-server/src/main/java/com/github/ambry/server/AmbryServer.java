@@ -252,13 +252,26 @@ public class AmbryServer {
       storageManager.start();
 
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
-
+      StoreKeyConverterFactory storeKeyConverterFactory =
+          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
       if (replicationConfig.replicationEnabledWithVcrCluster) {
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
+         * We need to use CloudToStorageManager for one reason. It will add one replica for the server to replicate from
+         * which is the Cloud. The regular ReplicationManager will add 3 replicas, and as a result 3 threads will try
+         * to fetch the same data from Azure. Although this can be avoided with a minor change to ReplicationManager,
+         * having a separate CloudtoStorageManager for cloud offers the flexibility to override methods and add more
+         * suited to cloud.
          */
-        // TODO: Use cloud to store manager
-        networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService);
+        networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager,
+            accountService);
+        vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
+        cloudToStoreReplicationManager =
+            new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
+                storeKeyFactory, clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
+                clusterParticipants.get(0));
+        cloudToStoreReplicationManager.start();
       } else {
         if (clusterMapConfig.clusterMapEnableHttp2Replication) {
           Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
@@ -274,18 +287,14 @@ public class AmbryServer {
                   time);
           connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
         }
+        Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
+        replicationManager =
+            new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+                clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, clusterParticipants.get(0),
+                skipPredicate);
+        replicationManager.start();
       }
-
-      StoreKeyConverterFactory storeKeyConverterFactory =
-          Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
-
-      Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
-      replicationManager =
-          new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
-              storeKeyConverterFactory, serverConfig.serverMessageTransformer, clusterParticipants.get(0),
-              skipPredicate);
-      replicationManager.start();
 
       logger.info("Creating StatsManager to publish stats");
 
