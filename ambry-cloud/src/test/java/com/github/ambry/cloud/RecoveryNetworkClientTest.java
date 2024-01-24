@@ -13,8 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.core.http.rest.PagedResponse;
-import com.azure.storage.blob.models.BlobItem;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -76,6 +74,10 @@ public class RecoveryNetworkClientTest {
 
   private static Logger logger = LoggerFactory.getLogger(RecoveryNetworkClientTest.class);
   public static final String LOCALHOST = "localhost";
+  protected RecoveryMetrics recoveryMetrics;
+  protected CloudReplica cloudReplica;
+  protected CloudServiceDataNode cloudServiceDataNode;
+  protected ClusterMapConfig clusterMapConfig;
   protected Properties properties;
   protected FindTokenHelper findTokenHelper;
   protected AzuriteUtils azuriteUtils;
@@ -90,8 +92,9 @@ public class RecoveryNetworkClientTest {
   protected AtomicInteger counter;
   Map<String, MessageInfo> messageInfoMap;
 
-  public RecoveryNetworkClientTest() throws IOException, ReflectiveOperationException {
+  public RecoveryNetworkClientTest() throws Exception {
     counter = new AtomicInteger(0);
+    // Set test properties
     azuriteUtils = new AzuriteUtils();
     properties = azuriteUtils.getAzuriteConnectionProperties();
     properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(false));
@@ -103,12 +106,17 @@ public class RecoveryNetworkClientTest {
         RecoveryTokenFactory.class.getCanonicalName());
     findTokenHelper = new FindTokenHelper(null,
         new ReplicationConfig(new VerifiableProperties(properties)));
-    // Azure container names have to be 3 char long at least
+    // Create a test cluster
+    clusterMapConfig =  new ClusterMapConfig(new VerifiableProperties(properties));
+    cloudServiceDataNode = new CloudServiceDataNode(LOCALHOST, clusterMapConfig);
+    cloudReplica = new CloudReplica(mockPartitionId, cloudServiceDataNode);
     mockClusterMap = new MockClusterMap(false, true, 1,
         1, 1, true, false,
         "localhost");
+    // Create a test partition
     mockPartitionId =
         (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    // Create a test container
     testContainer =
         new Container(CONTAINER_ID, "testContainer", Container.ContainerStatus.ACTIVE,
             "Test Container", false,
@@ -118,9 +126,6 @@ public class RecoveryNetworkClientTest {
             false, false, Container.NamedBlobMode.DISABLED, ACCOUNT_ID, 0,
             0, 0, "",
             null, Collections.emptySet());
-    recoveryNetworkClient =
-        new RecoveryNetworkClient(new VerifiableProperties(properties),
-            new MetricRegistry(),    mockClusterMap, null, null, null);
   }
 
   /**
@@ -131,16 +136,21 @@ public class RecoveryNetworkClientTest {
    */
   @Before
   public void before() throws ReflectiveOperationException, CloudStorageException, IOException {
-    // Clear Azure partitions and add some blobs
+    // Create a test client
+    recoveryNetworkClient =
+        new RecoveryNetworkClient(new VerifiableProperties(properties),
+            new MetricRegistry(),    mockClusterMap, null, null, null);
+    recoveryMetrics = recoveryNetworkClient.getRecoveryMetrics();
+    // Mark test partition for compaction
     AccountService accountService = Mockito.mock(AccountService.class);
     Mockito.lenient().when(accountService.getContainersByStatus(any()))
         .thenReturn(Collections.singleton(testContainer));
-    // Azurite client
+    // Clear the partition
     AzureCloudDestinationSync azuriteClient = azuriteUtils.getAzuriteClient(
         properties, new MetricRegistry(),    null, accountService);
-    // For each partition, clear it and add NUM_BLOBS of size BLOB_SIZE
-    messageInfoMap = new HashMap<>();
     azuriteClient.compactPartition(mockPartitionId.toPathString());
+    // Add NUM_BLOBS of size BLOB_SIZE
+    messageInfoMap = new HashMap<>();
     IntStream.range(0, NUM_BLOBS).forEach(i -> {
       BlobId blobId = CloudTestUtil.getUniqueId(testContainer.getParentAccountId(), testContainer.getId(),
           false, mockPartitionId);
@@ -168,12 +178,8 @@ public class RecoveryNetworkClientTest {
    * Creates a metadata request to send to Azure storage
    * @param recoveryToken
    * @return
-   * @throws Exception
    */
-  public List<RequestInfo> getRequestInfoList(RecoveryToken recoveryToken) throws Exception {
-    ClusterMapConfig clusterMapConfig =  new ClusterMapConfig(new VerifiableProperties(properties));
-    CloudServiceDataNode cloudServiceDataNode = new CloudServiceDataNode(LOCALHOST, clusterMapConfig);
-    CloudReplica cloudReplica = new CloudReplica(mockPartitionId, cloudServiceDataNode);
+  protected List<RequestInfo> createMetadataRequest(RecoveryToken recoveryToken) {
     // requestInfoList -> requestInfo -> replicaMetadataRequest -> replicaMetadataRequestInfoList
     // -> replicaMetadataRequestInfo -> why !!!
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =  new ReplicaMetadataRequestInfo(mockPartitionId,
@@ -204,7 +210,7 @@ public class RecoveryNetworkClientTest {
     for (Integer ignored : IntStream.rangeClosed(1, numPages).boxed().collect(Collectors.toList())) {
       // Send metadata request
       List<ResponseInfo> responseInfoList =
-          recoveryNetworkClient.sendAndPoll(getRequestInfoList(recoveryToken), Collections.emptySet(), 0);
+          recoveryNetworkClient.sendAndPoll(createMetadataRequest(recoveryToken), Collections.emptySet(), 0);
       // Receive metadata response
       ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
           new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
@@ -215,6 +221,7 @@ public class RecoveryNetworkClientTest {
       messageInfoList.addAll(rinfo.getMessageInfoList());
     }
     // Assert we recovered all blobIds intact
+    assertEquals(numPages, recoveryMetrics.listBlobsSuccessRate.getCount());
     assertEquals(null, recoveryToken.getToken());
     assertEquals(messageInfoMap.size(), messageInfoList.size());
     messageInfoList.forEach(messageInfo -> {
@@ -230,10 +237,10 @@ public class RecoveryNetworkClientTest {
    */
   @Test
   public void testRecoveryFailure() throws Exception {
-    final int ERROR_FREQUENCY = 5; // Every 5-th page is bad
+    final int ERROR_FREQUENCY = 5; // Every n-th page is bad
     class ExceptionCallback implements RecoveryNetworkClientCallback {
       int numCalls = 0;
-      public void onListBlobs(ReplicaMetadataRequestInfo request, PagedResponse<BlobItem> response) {
+      public void onListBlobs(ReplicaMetadataRequestInfo request) {
         numCalls += 1;
         // the frequency of err_pages reduces over all iter
         // if there are 34 pages and every 5-th page is bad, then we have 6 bad pages. We need 6 extra calls.
@@ -246,16 +253,18 @@ public class RecoveryNetworkClientTest {
     recoveryNetworkClient =
         new RecoveryNetworkClient(new VerifiableProperties(properties),
             new MetricRegistry(),    mockClusterMap, null, null, new ExceptionCallback());
+    recoveryMetrics = recoveryNetworkClient.getRecoveryMetrics();
     RecoveryToken recoveryToken = new RecoveryToken();
     List<MessageInfo> messageInfoList = new ArrayList<>();
     int numGoodPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
         (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
-    int numIter  = numGoodPages + numGoodPages/ERROR_FREQUENCY;
+    int numBadPages = numGoodPages/ERROR_FREQUENCY;
+    int numIter  = numGoodPages + numBadPages;
     // Iterate N times to retrieve all blobIDs
     for (Integer ignored : IntStream.rangeClosed(1, numIter).boxed().collect(Collectors.toList())) {
       // Send metadata request
       List<ResponseInfo> responseInfoList =
-          recoveryNetworkClient.sendAndPoll(getRequestInfoList(recoveryToken), Collections.emptySet(), 0);
+          recoveryNetworkClient.sendAndPoll(createMetadataRequest(recoveryToken), Collections.emptySet(), 0);
       // Receive metadata response
       ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
               new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
@@ -270,6 +279,7 @@ public class RecoveryNetworkClientTest {
       }
     }
     // Assert we recovered all blobIds intact
+    assertEquals(numBadPages, recoveryMetrics.listBlobsError.getCount());
     assertEquals(null, recoveryToken.getToken());
     assertEquals(messageInfoMap.size(), messageInfoList.size());
     messageInfoList.forEach(messageInfo -> {

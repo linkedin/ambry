@@ -13,10 +13,8 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.core.http.rest.PagedResponse;
-import com.azure.storage.blob.models.BlobItem;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 
 public interface RecoveryNetworkClientCallback {
-  default void onListBlobs(ReplicaMetadataRequestInfo request, PagedResponse<BlobItem> response) {}
+  default void onListBlobs(ReplicaMetadataRequestInfo request) {}
 }
