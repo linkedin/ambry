@@ -227,7 +227,17 @@ public class RecoveryNetworkClient implements NetworkClient {
   private MessageInfo getMessageInfo(BlobItem blobItem) {
     Map<String, String> metadata = blobItem.getMetadata();
     try {
-      // TODO: Add comments for booleans
+      /**
+       * Azure blob metadata contains a field expiryTimeMs.
+       * Presence of this field indicates the blob is temporary. ttlUpdated as false in this case.
+       * Absence of this field means the blob was either permanent to start with or,
+       * transitioned from temporary to permanent through a TTL-UPDATE.
+       * There is no way to know which case happened, so just put ttlUpdated as false.
+       * expiryTimeMs is included however and replication-code can decide necessary course of action.
+       * Same goes for undeleted field and lifeVersion is included for replication-code to decide.
+       *
+       * We don't upload CRC during backups. This is probably an issue.
+       */
       return new MessageInfo(new BlobId(blobItem.getName(), clustermap),
           Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_SIZE)),
           metadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME),
