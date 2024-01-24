@@ -13,6 +13,8 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.core.http.rest.PagedResponse;
+import com.azure.storage.blob.models.BlobItem;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
@@ -40,6 +42,7 @@ import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -117,7 +120,7 @@ public class RecoveryNetworkClientTest {
             null, Collections.emptySet());
     recoveryNetworkClient =
         new RecoveryNetworkClient(new VerifiableProperties(properties),
-            new MetricRegistry(),    mockClusterMap, null, null);
+            new MetricRegistry(),    mockClusterMap, null, null, null);
   }
 
   /**
@@ -195,9 +198,10 @@ public class RecoveryNetworkClientTest {
   public void testBasicRecoveryOfBlobMetadata() throws Exception {
     RecoveryToken recoveryToken = new RecoveryToken();
     List<MessageInfo> messageInfoList = new ArrayList<>();
-    int numIter = (NUM_BLOBS + AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE)/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE;
+    int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
+        (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
     // Iterate N times to retrieve all blobIDs
-    for (Integer ignored : IntStream.rangeClosed(1, numIter).boxed().collect(Collectors.toList())) {
+    for (Integer ignored : IntStream.rangeClosed(1, numPages).boxed().collect(Collectors.toList())) {
       // Send metadata request
       List<ResponseInfo> responseInfoList =
           recoveryNetworkClient.sendAndPoll(getRequestInfoList(recoveryToken), Collections.emptySet(), 0);
@@ -213,13 +217,66 @@ public class RecoveryNetworkClientTest {
     // Assert we recovered all blobIds intact
     assertEquals(null, recoveryToken.getToken());
     assertEquals(messageInfoMap.size(), messageInfoList.size());
-    for (MessageInfo messageInfo : messageInfoList) {
+    messageInfoList.forEach(messageInfo -> {
       MessageInfo OgMessageInfo = messageInfoMap.get(messageInfo.getStoreKey().getID());
-      if (!OgMessageInfo.equals(messageInfo)) {
-        String err = String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo);
-        fail(err);
+      assertEquals(String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo),
+          OgMessageInfo, (messageInfo));
+    });
+  }
+
+  /**
+   * Tests that all blobs are listed in spite of intermittent errors.
+   * @throws Exception
+   */
+  @Test
+  public void testRecoveryFailure() throws Exception {
+    final int ERROR_FREQUENCY = 5; // Every 5-th page is bad
+    class ExceptionCallback implements RecoveryNetworkClientCallback {
+      int numCalls = 0;
+      public void onListBlobs(ReplicaMetadataRequestInfo request, PagedResponse<BlobItem> response) {
+        numCalls += 1;
+        // the frequency of err_pages reduces over all iter
+        // if there are 34 pages and every 5-th page is bad, then we have 6 bad pages. We need 6 extra calls.
+        // if there are 40 calls, then every 6-th call is bad. 34/5 == 40/6;
+        if (numCalls % (ERROR_FREQUENCY + 1) == 0) {
+          throw new RuntimeException("Exception on Azure Storage list-blobs call");
+        }
       }
     }
+    recoveryNetworkClient =
+        new RecoveryNetworkClient(new VerifiableProperties(properties),
+            new MetricRegistry(),    mockClusterMap, null, null, new ExceptionCallback());
+    RecoveryToken recoveryToken = new RecoveryToken();
+    List<MessageInfo> messageInfoList = new ArrayList<>();
+    int numGoodPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
+        (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
+    int numIter  = numGoodPages + numGoodPages/ERROR_FREQUENCY;
+    // Iterate N times to retrieve all blobIDs
+    for (Integer ignored : IntStream.rangeClosed(1, numIter).boxed().collect(Collectors.toList())) {
+      // Send metadata request
+      List<ResponseInfo> responseInfoList =
+          recoveryNetworkClient.sendAndPoll(getRequestInfoList(recoveryToken), Collections.emptySet(), 0);
+      // Receive metadata response
+      ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
+              new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
+          .getReplicaMetadataResponseInfoList().get(0);
+      if (rinfo.getError() == ServerErrorCode.No_Error) {
+        // Extract token
+        recoveryToken = (RecoveryToken) rinfo.getFindToken();
+        // Extract ambry metadata
+        messageInfoList.addAll(rinfo.getMessageInfoList());
+      } else {
+        assertEquals(ServerErrorCode.IO_Error, rinfo.getError());
+      }
+    }
+    // Assert we recovered all blobIds intact
+    assertEquals(null, recoveryToken.getToken());
+    assertEquals(messageInfoMap.size(), messageInfoList.size());
+    messageInfoList.forEach(messageInfo -> {
+      MessageInfo OgMessageInfo = messageInfoMap.get(messageInfo.getStoreKey().getID());
+      assertEquals(String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo),
+          OgMessageInfo, (messageInfo));
+    });
   }
 
   /**

@@ -53,6 +53,6 @@ public class RecoveryNetworkClientFactory implements NetworkClientFactory {
 
   @Override
   public NetworkClient getNetworkClient() throws IOException {
-    return new RecoveryNetworkClient(properties, registry, clustermap, storeManager, accountService);
+    return new RecoveryNetworkClient(properties, registry, clustermap, storeManager, accountService, null);
   }
 }

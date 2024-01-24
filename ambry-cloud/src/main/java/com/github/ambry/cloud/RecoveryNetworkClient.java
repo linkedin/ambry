@@ -25,6 +25,7 @@ import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.Callback;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
@@ -51,6 +52,7 @@ import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -69,9 +71,15 @@ public class RecoveryNetworkClient implements NetworkClient {
   private final ClusterMapConfig clusterMapConfig;
   private final AzureCloudConfig azureCloudConfig;
   private final AzureCloudDestinationSync azureSyncClient;
+  private final RecoveryNetworkClientCallback clientCallback;
+
+  class EmptyRecoveryNetworkClientCallback implements RecoveryNetworkClientCallback {
+    public void onListBlobs(ReplicaMetadataRequestInfo request, PagedResponse<BlobItem> response) {}
+  }
 
   public RecoveryNetworkClient(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
-      StoreManager storeManager, AccountService accountService) {
+      StoreManager storeManager, AccountService accountService, RecoveryNetworkClientCallback clientCallback) {
+    this.clientCallback = clientCallback == null ? new EmptyRecoveryNetworkClientCallback() : clientCallback;
     this.clustermap = clusterMap;
     this.storeManager = storeManager;
     this.clusterMapConfig = new ClusterMapConfig(properties);
@@ -144,7 +152,8 @@ public class RecoveryNetworkClient implements NetworkClient {
         // TODO: emit metric, don't halt replication
         continue;
       }
-      if (prevToken.getAzureStorageContainerId() != null && !prevToken.getAzureStorageContainerId().equals(containerName)) {
+      if (prevToken.getAzureStorageContainerId() != null &&
+          !prevToken.getAzureStorageContainerId().equals(containerName)) {
         logger.error("For partition {}, expected RecoveryToken.azureContainerId to be {} but found {}",
             rinfo.getPartitionId().getId(), containerName, prevToken.getAzureStorageContainerId());
         // TODO: emit metric, don't halt replication
@@ -155,12 +164,25 @@ public class RecoveryNetworkClient implements NetworkClient {
       ListBlobsOptions listBlobsOptions = new ListBlobsOptions()
           .setDetails(new BlobListDetails().setRetrieveMetadata(true))
           .setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
-      // TODO: try-catch
-      PagedResponse<BlobItem> response = azureSyncClient.createOrGetBlobStore(containerName)
-          .listBlobs(listBlobsOptions, null)
-          .iterableByPage(prevToken.getToken())
-          .iterator()
-          .next();
+      PagedResponse<BlobItem> response;
+      try {
+        response = azureSyncClient.createOrGetBlobStore(containerName)
+            .listBlobs(listBlobsOptions, null)
+            .iterableByPage(prevToken.getToken())
+            .iterator()
+            .next();
+        clientCallback.onListBlobs(rinfo, response);
+      } catch (Throwable t) {
+        responseList.add(
+            new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
+                ServerErrorCode.IO_Error,
+                ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
+        logger.error("Failed to list blobs for Ambry partition {} in Azure Storage container {} due to {}",
+            rinfo.getPartitionId().getId(), containerName, t);
+        // TODO: emit metric, don't halt replication
+        continue;
+      }
+
 
       // Extract ambry metadata
       logger.trace("For container {}, number of blobItems from Azure = {}", containerName, response.getValue().size());
