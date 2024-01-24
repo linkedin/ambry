@@ -202,16 +202,17 @@ public class DiskManager {
       }
       if (numStoreFailures.get() > 0) {
         logger.error("Could not start {} out of {} stores on the disk {}", numStoreFailures.get(), stores.size(), disk);
-        if (storeConfig.storeWipeAndRestartBlobStore && numStoreFailures.get() != stores.size()) {
+        if (storeConfig.storeRemoveDirectoryAndRestartBlobStore && numStoreFailures.get() != stores.size()) {
           for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
             PartitionId partitionId = entry.getKey();
             BlobStore store = entry.getValue();
-            if (!shouldWipeOutDirectory(partitionId, store, startExceptions.get(partitionId))) {
+            if (!shouldRemoveDirectory(partitionId, store, startExceptions.get(partitionId))) {
               continue;
             }
+            logger.info("Remove directory for store {} and restart it", partitionId);
 
-            // 1. wipe out the blob store directory
-            // 2. create another blob store and restart it. since this time the blob store would be empty, we don't
+            // 1. Remove the blob store directory
+            // 2. Create another blob store and restart it. since this time the blob store would be empty, we don't
             // have to use different threads for different blob stores.
             ReplicaId replica = partitionToReplicaMap.get(entry.getKey());
             String dataDir = store.getDataDir();
@@ -224,7 +225,7 @@ public class DiskManager {
               newStore.start();
               entry.setValue(newStore);
             } catch (Exception e) {
-              logger.error("Failed to wipe out and restart the blobstore for {}", dataDir, e);
+              logger.error("Failed to remove directory for store {} and restart it", dataDir, e);
             }
           }
         }
@@ -271,7 +272,7 @@ public class DiskManager {
    * @param startException The exceptions thrown by blobstore.start method.
    * @return
    */
-  boolean shouldWipeOutDirectory(PartitionId partitionId, BlobStore store, Exception startException) {
+  boolean shouldRemoveDirectory(PartitionId partitionId, BlobStore store, Exception startException) {
     if (store.isStarted() || stoppedReplicas.contains(partitionId.toPathString())) {
       return false;
     }
