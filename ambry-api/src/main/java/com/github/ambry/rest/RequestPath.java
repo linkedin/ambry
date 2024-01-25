@@ -82,7 +82,7 @@ public class RequestPath {
       throw new RestServiceException("Invalid URI path", e, RestServiceErrorCode.BadRequest);
     }
 
-    if (path.startsWith(S3_PATH)) {
+    if (path.startsWith(S3_PATH) || path.startsWith(Operations.S3)) {
       // Convert to named blob request internally
       path = convertToNamedBlobPath(path);
       restRequest.setArg(S3_REQUEST, "true");
@@ -318,21 +318,26 @@ public class RequestPath {
    * @param path s3 request path
    * @return named blob request path
    */
-  private static String convertToNamedBlobPath(String path) {
+  private static String convertToNamedBlobPath(String path) throws RestServiceException {
     // S3 requests to Ambry are in the form "/s3/account-name/key-name". We convert it to named blob path
-    // "/named/account-name/container-name/key-name" internally.
-    // For ex: for S3 path, "/s3/named-blob-sandbox/checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata",
-    // the corresponding named blob path is "/named/named-blob-sandbox/container-a/checkpoints/87833badf879a3fc7bf151adfe928eac/chk-1/_metadata".
-    // Please note that we hardcode container-name to 'container-a'.
-    int accountStart = S3_PATH.length() + PATH_SEPARATOR_STRING.length();
-    int accountEnd = path.indexOf(PATH_SEPARATOR_CHAR, accountStart);
-    String accountName = accountEnd == -1 ? path.substring(accountStart) : path.substring(accountStart, accountEnd);
+    // "/named/account-name/container-name/key-name" internally. For ex: if S3 path is
+    // "/s3/named-blob-sandbox/directory/file", named blob path is "/named/named-blob-sandbox/container-s3/directory/file".
+    // Please note that we hardcode container-name to 'container-s3'.
+    path = path.startsWith("/") ? path.substring(1) : path;
+    String[] splitPath = path.split("/", 3);
+    if (splitPath.length < 2 || splitPath[1].isEmpty()) {
+      // Account-name must always be present in s3 path.
+      throw new RestServiceException(
+          String.format("S3 Path must have format '/s3/<account_name>/<key-name>.  Received path='%s'", path),
+          RestServiceErrorCode.BadRequest);
+    }
+    String accountName = splitPath[1];
     String containerName = Container.DEFAULT_S3_CONTAINER_NAME;
-    String keyName = accountEnd == -1 ? "" : path.substring(accountEnd + PATH_SEPARATOR_STRING.length());
+    String keyName = splitPath.length > 2 ? splitPath[2] : "";
     String namedBlobPath =
         PATH_SEPARATOR_STRING + Operations.NAMED_BLOB + PATH_SEPARATOR_STRING + accountName + PATH_SEPARATOR_STRING
             + containerName + (keyName.length() > 0 ? PATH_SEPARATOR_STRING + keyName : "");
-    logger.info("S3 API | Converted S3 request path {} to NamedBlob path {}", path, namedBlobPath);
+    logger.debug("S3 API | Converted S3 request path {} to NamedBlob path {}", path, namedBlobPath);
     return namedBlobPath;
   }
 }

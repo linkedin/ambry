@@ -87,7 +87,7 @@ public class S3ListHandler {
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
         callback.onCompletion(readableStreamChannel, null);
       } catch (Exception e) {
-        throw new RuntimeException(e);
+        callback.onCompletion(null, e);
       }
     }));
   }
