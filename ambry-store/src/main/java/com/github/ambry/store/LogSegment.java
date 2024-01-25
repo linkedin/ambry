@@ -129,12 +129,16 @@ class LogSegment implements Read, Write {
             long computedCrc = crcStream.getValue();
             long crcFromFile = stream.readLong();
             if (crcFromFile != computedCrc) {
-              throw new IllegalStateException("CRC from the segment file [" + file.getAbsolutePath() + "] does not match computed CRC of header");
+              throw new StoreException(new IllegalStateException(
+                  "CRC from the segment file [" + file.getAbsolutePath() + "] does not match computed CRC of header"),
+                  StoreErrorCodes.Log_File_Format_Error);
             }
             startOffset = HEADER_SIZE;
             break;
           default:
-            throw new IllegalArgumentException("Unknown version in segment [" + file.getAbsolutePath() + "]");
+            throw new StoreException(
+                new IllegalArgumentException("Unknown version in segment [" + file.getAbsolutePath() + "]"),
+                StoreErrorCodes.Log_File_Format_Error);
         }
       }
       this.file = file;
@@ -148,10 +152,15 @@ class LogSegment implements Read, Write {
         Files.setPosixFilePermissions(this.file.toPath(), config.storeDataFilePermission);
       }
     } catch (FileNotFoundException e) {
-      throw new StoreException("File not found while creating log segment [" + file.getAbsolutePath() + "]", e, StoreErrorCodes.File_Not_Found);
+      throw new StoreException("File not found while creating log segment [" + file.getAbsolutePath() + "]", e,
+          StoreErrorCodes.File_Not_Found);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
-      throw new StoreException(errorCode.toString() + " while creating log segment [" + file.getAbsolutePath() + "]", e, errorCode);
+      throw new StoreException(errorCode.toString() + " while creating log segment [" + file.getAbsolutePath() + "]", e,
+          errorCode);
+    } catch (Exception e) {
+      // Any other exceptions, would be considered as log file format error
+      throw new StoreException(e, StoreErrorCodes.Log_File_Format_Error);
     }
   }
 
@@ -466,8 +475,9 @@ class LogSegment implements Read, Write {
     try {
       long fileSize = sizeInBytes();
       if (endOffset < startOffset || endOffset > fileSize) {
-        throw new IllegalArgumentException(
-            file.getAbsolutePath() + ": EndOffset [" + endOffset + "] outside the file size [" + fileSize + "]");
+        throw new StoreException(new IllegalArgumentException(
+            file.getAbsolutePath() + ": EndOffset [" + endOffset + "] outside the file size [" + fileSize + "]"),
+            StoreErrorCodes.Log_End_Offset_Error);
       }
       fileChannel.position(endOffset);
       this.endOffset.set(endOffset);

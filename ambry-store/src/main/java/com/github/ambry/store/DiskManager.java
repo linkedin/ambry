@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -90,6 +91,9 @@ public class DiskManager {
   private final DiskHealthCheck diskHealthCheck;
   // Have a dedicated scheduler for persisting index segments to ensure index segments are always persisted
   private final ScheduledExecutorService indexPersistScheduler;
+  private final EnumSet<StoreErrorCodes> recoverableStoreErrorCodes =
+      EnumSet.of(StoreErrorCodes.Log_File_Format_Error, StoreErrorCodes.Index_File_Format_Error,
+          StoreErrorCodes.Log_End_Offset_Error, StoreErrorCodes.Index_Recovery_Error);
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -202,33 +206,7 @@ public class DiskManager {
       }
       if (numStoreFailures.get() > 0) {
         logger.error("Could not start {} out of {} stores on the disk {}", numStoreFailures.get(), stores.size(), disk);
-        if (storeConfig.storeRemoveDirectoryAndRestartBlobStore && numStoreFailures.get() != stores.size()) {
-          for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
-            PartitionId partitionId = entry.getKey();
-            BlobStore store = entry.getValue();
-            if (!shouldRemoveDirectory(partitionId, store, startExceptions.get(partitionId))) {
-              continue;
-            }
-            logger.info("Remove directory for store {} and restart it", partitionId);
-
-            // 1. Remove the blob store directory
-            // 2. Create another blob store and restart it. since this time the blob store would be empty, we don't
-            // have to use different threads for different blob stores.
-            ReplicaId replica = partitionToReplicaMap.get(entry.getKey());
-            String dataDir = store.getDataDir();
-            try {
-              Utils.deleteFileOrDirectory(new File(dataDir));
-              BlobStore newStore =
-                  new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler,
-                      diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery,
-                      hardDelete, replicaStatusDelegates, time, accountService, diskMetrics, indexPersistScheduler);
-              newStore.start();
-              entry.setValue(newStore);
-            } catch (Exception e) {
-              logger.error("Failed to remove directory for store {} and restart it", dataDir, e);
-            }
-          }
-        }
+        maybeRecoverBlobStores(numStoreFailures.get(), startExceptions);
       }
 
       // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
@@ -265,6 +243,37 @@ public class DiskManager {
     }
   }
 
+  void maybeRecoverBlobStores(int numStoreFailures, Map<PartitionId, Exception> startExceptions) {
+    if (!storeConfig.storeRemoveDirectoryAndRestartBlobStore || numStoreFailures != stores.size()) {
+      return;
+    }
+    for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
+      PartitionId partitionId = entry.getKey();
+      BlobStore store = entry.getValue();
+      if (!shouldRemoveDirectory(partitionId, store, startExceptions.get(partitionId))) {
+        continue;
+      }
+      logger.info("Remove directory for store {} and restart it", partitionId);
+
+      // 1. Remove the blob store directory
+      // 2. Create another blob store and restart it. since this time the blob store would be empty, we don't
+      // have to use different threads for different blob stores.
+      ReplicaId replica = partitionToReplicaMap.get(entry.getKey());
+      String dataDir = store.getDataDir();
+      try {
+        Utils.deleteFileOrDirectory(new File(dataDir));
+        BlobStore newStore =
+            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
+                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
+                time, accountService, diskMetrics, indexPersistScheduler);
+        newStore.start();
+        entry.setValue(newStore);
+      } catch (Exception e) {
+        logger.error("Failed to remove directory for store {} and restart it", dataDir, e);
+      }
+    }
+  }
+
   /**
    * Return true when we should wipe out the directory of the given blob store.
    * @param partitionId The partition id of the blob store.
@@ -276,11 +285,8 @@ public class DiskManager {
     if (store.isStarted() || stoppedReplicas.contains(partitionId.toPathString())) {
       return false;
     }
-    if (startException == null || !(startException instanceof StoreException)) {
-      return false;
-    }
-    StoreErrorCodes errorCode = ((StoreException) startException).getErrorCode();
-    return errorCode == StoreErrorCodes.Initialization_Error;
+    StoreException storeException = getRootCause(startException, StoreException.class);
+    return storeException != null && recoverableStoreErrorCodes.contains(storeException.getErrorCode());
   }
 
   /**

@@ -17,7 +17,6 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -449,8 +448,9 @@ class PersistentIndex {
             deleteExpectedKeys.add(info.getStoreKey());
           }
         } else if (value != null) {
-          throw new StoreException("Illegal message state during recovery. Duplicate PUT record",
-              StoreErrorCodes.Initialization_Error);
+          throw new StoreException(
+              "Illegal message state during recovery. Duplicate PUT record for " + info.getStoreKey(),
+              StoreErrorCodes.Index_Recovery_Error);
         } else {
           // create a new entry in the index
           IndexValue newValue = new IndexValue(info.getSize(), runningOffset, IndexValue.FLAGS_DEFAULT_VALUE,
@@ -469,7 +469,7 @@ class PersistentIndex {
     }
     if (deleteExpectedKeys.size() > 0) {
       throw new StoreException("Deletes were expected for some keys but were not encountered: " + deleteExpectedKeys,
-          StoreErrorCodes.Initialization_Error);
+          StoreErrorCodes.Index_Recovery_Error);
     }
     if (recoveryOccurred) {
       metrics.nonzeroMessageRecovery.inc();
