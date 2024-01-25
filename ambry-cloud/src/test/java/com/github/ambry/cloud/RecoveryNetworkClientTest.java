@@ -67,6 +67,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 import static org.mockito.ArgumentMatchers.*;
 
 
@@ -136,6 +137,8 @@ public class RecoveryNetworkClientTest {
    */
   @Before
   public void before() throws ReflectiveOperationException, CloudStorageException, IOException {
+    // Assume Azurite is up and running
+    assumeTrue(azuriteUtils.connectToAzurite());
     // Create a test client
     recoveryNetworkClient =
         new RecoveryNetworkClient(new VerifiableProperties(properties),
