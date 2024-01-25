@@ -326,15 +326,12 @@ public class RequestPath {
     // Please note that we hardcode container-name to 'container-a'.
     int accountStart = S3_PATH.length() + PATH_SEPARATOR_STRING.length();
     int accountEnd = path.indexOf(PATH_SEPARATOR_CHAR, accountStart);
-    if (accountEnd == -1) {
-      accountEnd = path.length();
-    }
-    String accountName = path.substring(accountStart, accountEnd);
+    String accountName = accountEnd == -1 ? path.substring(accountStart) : path.substring(accountStart, accountEnd);
     String containerName = Container.DEFAULT_S3_CONTAINER_NAME;
-    String keyName = path.substring(accountEnd);
+    String keyName = accountEnd == -1 ? "" : path.substring(accountEnd + PATH_SEPARATOR_STRING.length());
     String namedBlobPath =
         PATH_SEPARATOR_STRING + Operations.NAMED_BLOB + PATH_SEPARATOR_STRING + accountName + PATH_SEPARATOR_STRING
-            + containerName + (keyName.length() > 0 ? keyName : "");
+            + containerName + (keyName.length() > 0 ? PATH_SEPARATOR_STRING + keyName : "");
     logger.info("S3 API | Converted S3 request path {} to NamedBlob path {}", path, namedBlobPath);
     return namedBlobPath;
   }
