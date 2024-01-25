@@ -20,7 +20,6 @@ import com.github.ambry.frontend.NamedBlobPutHandler;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.router.ReadableStreamChannel;
 
 import static com.github.ambry.rest.RestUtils.*;
 
@@ -34,14 +33,14 @@ public class S3PutHandler {
 
   /**
    * Constructs a handler for uploading s3 requests.
-   * @param namedBlobPutHandler named blob list handler
+   * @param namedBlobPutHandler named blob put handler
    */
   public S3PutHandler(NamedBlobPutHandler namedBlobPutHandler) {
     this.namedBlobPutHandler = namedBlobPutHandler;
   }
 
   /**
-   * Asynchronously get account metadata.
+   * Handles a request for putting a blob.
    * @param restRequest the {@link RestRequest} that contains the request parameters and body.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).

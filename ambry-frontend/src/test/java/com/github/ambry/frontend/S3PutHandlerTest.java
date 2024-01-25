@@ -24,7 +24,6 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.frontend.s3.S3ListHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
@@ -105,7 +104,7 @@ public class S3PutHandlerTest {
   }
 
   /**
-   * Initates a {@link NamedBlobPutHandler} and a {@link S3ListHandler}
+   * Initiates a {@link S3PutHandler}
    */
   private void setup() throws Exception {
     Properties properties = new Properties();
