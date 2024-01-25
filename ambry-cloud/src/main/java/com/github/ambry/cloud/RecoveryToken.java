@@ -128,6 +128,10 @@ public class RecoveryToken implements FindToken {
     return azureToken;
   }
 
+  public boolean isEndOfPartition() {
+    return endOfPartition;
+  }
+
   public static RecoveryToken fromBytes(DataInputStream stream) throws IOException {
     byte[] buf = new byte[stream.readInt()];
     stream.readFully(buf);

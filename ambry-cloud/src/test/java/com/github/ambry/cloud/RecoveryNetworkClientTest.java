@@ -225,7 +225,7 @@ public class RecoveryNetworkClientTest {
     }
     // Assert we recovered all blobIds intact
     assertEquals(numPages, recoveryMetrics.listBlobsSuccessRate.getCount());
-    assertEquals(null, recoveryToken.getToken());
+    assertTrue(recoveryToken.isEndOfPartition());
     assertEquals(messageInfoMap.size(), messageInfoList.size());
     messageInfoList.forEach(messageInfo -> {
       MessageInfo OgMessageInfo = messageInfoMap.get(messageInfo.getStoreKey().getID());
@@ -283,7 +283,7 @@ public class RecoveryNetworkClientTest {
     }
     // Assert we recovered all blobIds intact
     assertEquals(numBadPages, recoveryMetrics.listBlobsError.getCount());
-    assertEquals(null, recoveryToken.getToken());
+    assertTrue(recoveryToken.isEndOfPartition());
     assertEquals(messageInfoMap.size(), messageInfoList.size());
     messageInfoList.forEach(messageInfo -> {
       MessageInfo OgMessageInfo = messageInfoMap.get(messageInfo.getStoreKey().getID());
