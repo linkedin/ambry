@@ -50,7 +50,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 /**
  * Common utility functions that will be used across frontend package
  */
-class FrontendUtils {
+public class FrontendUtils {
   static final String NAMED_BLOB_PREFIX = "/named";
   static final String SLASH = "/";
 
@@ -103,7 +103,7 @@ class FrontendUtils {
    * @throws IOException if closing the {@link InputStream} fails.
    * @throws RestServiceException if JSON parsing fails.
    */
-  static JSONObject readJsonFromChannel(RetainingAsyncWritableChannel channel) throws RestServiceException {
+  public static JSONObject readJsonFromChannel(RetainingAsyncWritableChannel channel) throws RestServiceException {
     try (InputStream inputStream = channel.consumeContentAsInputStream()) {
       return new JSONObject(new JSONTokener(new InputStreamReader(inputStream, StandardCharsets.UTF_8)));
     } catch (Exception e) {

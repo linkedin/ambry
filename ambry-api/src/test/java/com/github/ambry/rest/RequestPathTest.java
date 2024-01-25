@@ -199,6 +199,17 @@ public class RequestPathTest {
         headers);
   }
 
+  /**
+   * Tests that a s3 request is converted to named blob request internally
+   */
+  @Test
+  public void testS3Request() {
+    String path = "/s3/accountName/path/to/key";
+    RequestPath expectedRequestPath = new RequestPath("", "", "/named/accountName/container-s3/path/to/key",
+        "/named/accountName/container-s3/path/to/key", null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
+    parseRequestPathAndVerify(path, Collections.emptyList(), "", expectedRequestPath, new JSONObject());
+  }
+
   @Test
   public void testBlobNameInRequestHeader() {
     String prefixToRemove = "media";

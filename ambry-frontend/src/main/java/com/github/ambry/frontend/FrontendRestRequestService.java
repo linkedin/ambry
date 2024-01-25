@@ -18,6 +18,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.frontend.s3.S3ListHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
@@ -102,6 +103,7 @@ class FrontendRestRequestService implements RestRequestService {
   private PostAccountsHandler postAccountsHandler;
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
+  private S3ListHandler s3ListHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
   private final Random random = new Random();
@@ -213,6 +215,7 @@ class FrontendRestRequestService implements RestRequestService {
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
+    s3ListHandler = new S3ListHandler(namedBlobListHandler);
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
@@ -293,8 +296,13 @@ class FrontendRestRequestService implements RestRequestService {
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
-        namedBlobListHandler.handle(restRequest, restResponseChannel,
-            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        if (isS3Request(restRequest)) {
+          s3ListHandler.handle(restRequest, restResponseChannel,
+              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        } else {
+          namedBlobListHandler.handle(restRequest, restResponseChannel,
+              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        }
       } else if (RestUtils.getBooleanHeader(restRequest.getArgs(), ENABLE_DATASET_VERSION_LISTING, false)
           && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getVersion() == null) {
         listDatasetVersionHandler.handle(restRequest, restResponseChannel,

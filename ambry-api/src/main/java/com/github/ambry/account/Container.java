@@ -126,6 +126,12 @@ public class Container {
   public static final String DEFAULT_PRIVATE_CONTAINER_NAME = "default-private-container";
 
   /**
+   * Default name for the containers associated with S3 APIs. Since, S3 requests on client side only take Account
+   * (i.e. Bucket) name, we use a default name for containers.
+   */
+  public static final String DEFAULT_S3_CONTAINER_NAME = "container-s3";
+
+  /**
    * The status of {@link #UNKNOWN_CONTAINER}.
    */
   public static final ContainerStatus UNKNOWN_CONTAINER_STATUS = ContainerStatus.ACTIVE;

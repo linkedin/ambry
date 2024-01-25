@@ -88,4 +88,11 @@ public class ByteBufferReadableStreamChannel implements ReadableStreamChannel {
   public void close() throws IOException {
     channelOpen.set(false);
   }
+
+  /**
+   * @return the content as {@link ByteBuffer}
+   */
+  public ByteBuffer getContent() {
+    return buffer;
+  }
 }
