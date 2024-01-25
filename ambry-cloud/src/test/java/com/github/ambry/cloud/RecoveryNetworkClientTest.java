@@ -204,7 +204,7 @@ public class RecoveryNetworkClientTest {
    * @throws Exception
    */
   @Test
-  public void testBasicRecoveryOfBlobMetadata() throws Exception {
+  public void testMetadataRecovery() throws Exception {
     RecoveryToken recoveryToken = new RecoveryToken();
     List<MessageInfo> messageInfoList = new ArrayList<>();
     int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
@@ -239,7 +239,7 @@ public class RecoveryNetworkClientTest {
    * @throws Exception
    */
   @Test
-  public void testRecoveryFailure() throws Exception {
+  public void testMetadataRecoveryFailure() throws Exception {
     final int ERROR_FREQUENCY = 5; // Every n-th page is bad
     class ExceptionCallback implements RecoveryNetworkClientCallback {
       int numCalls = 0;
