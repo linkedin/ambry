@@ -28,13 +28,17 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientErrorCode;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.network.Send;
+import com.github.ambry.protocol.CompositeSend;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
@@ -44,6 +48,7 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
@@ -54,6 +59,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,6 +71,7 @@ public class RecoveryNetworkClient implements NetworkClient {
   private final static Logger logger = LoggerFactory.getLogger(RecoveryNetworkClient.class);
   private final ClusterMap clustermap;
   private final StoreManager storeManager;
+  private final ConcurrentHashMap<StoreKey, MessageInfo> messageInfoCache;
   private final AzureBlobLayoutStrategy azureBlobLayoutStrategy;
   private final ClusterMapConfig clusterMapConfig;
   private final AzureCloudConfig azureCloudConfig;
@@ -84,6 +91,7 @@ public class RecoveryNetworkClient implements NetworkClient {
     this.clusterMapConfig = new ClusterMapConfig(properties);
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.recoveryMetrics = new RecoveryMetrics(registry);
+    this.messageInfoCache = new ConcurrentHashMap<>();
     this.azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig);
     try {
       this.azureSyncClient = new AzureCloudDestinationSync(properties, registry, clusterMap, accountService);
@@ -197,6 +205,7 @@ public class RecoveryNetworkClient implements NetworkClient {
         MessageInfo messageInfo = getMessageInfo(blobItem);
         if (messageInfo != null) {
           messageInfoList.add(messageInfo);
+          messageInfoCache.put(messageInfo.getStoreKey(), messageInfo);
           bytesRead += messageInfo.getSize();
           blobsRead += 1;
         }
@@ -269,8 +278,44 @@ public class RecoveryNetworkClient implements NetworkClient {
     if (request.getMessageFormatFlag() != MessageFormatFlags.All) {
       throw new IllegalArgumentException("GetRequest should have MessageFormatFlags being ALL");
     }
-    // TODO: Implement in next PR
-    return null;
+    List<PartitionResponseInfo> partitionResponseInfos = new ArrayList<>();
+    List<Send> blobsToSend = new ArrayList<>();
+    for (PartitionRequestInfo partitionRequestInfo : request.getPartitionInfoList()) {
+      boolean hasError = false;
+      List<MessageInfo> messageInfos = new ArrayList<>();
+      List<MessageMetadata> messageMetadatas = new ArrayList<>();
+      long allMessageInfoSize = 0;
+      for (StoreKey storeKey : partitionRequestInfo.getBlobIds()) {
+        // MessageInfo for the given store key is put in the cache in ReplicaMetadataRequest. All store keys in GetRequest
+        // should already have MessageInfos in the cache. If replication thread retries, it would send the ReplicaMetadataRequest
+        // again before the GetRequest.
+        MessageInfo info = messageInfoCache.remove(storeKey);
+        if (info != null) {
+          messageInfos.add(info);
+          messageMetadatas.add(null);
+          allMessageInfoSize += info.getSize();
+        } else {
+          logger.error("Failed to find MessageInfo for store key {} at partition {}", storeKey,
+              partitionRequestInfo.getPartition());
+          hasError = true;
+          break;
+        }
+      }
+      PartitionResponseInfo partitionResponseInfo;
+      if (!hasError) {
+        partitionResponseInfo =
+            new PartitionResponseInfo(partitionRequestInfo.getPartition(), messageInfos, messageMetadatas);
+      } else {
+        partitionResponseInfo =
+            new PartitionResponseInfo(partitionRequestInfo.getPartition(), ServerErrorCode.Blob_Not_Found);
+      }
+      partitionResponseInfos.add(partitionResponseInfo);
+      logger.trace("Create a AllZeroSend for length {} at partition {}", allMessageInfoSize,
+          partitionRequestInfo.getPartition());
+      blobsToSend.add(new AllZeroSend(allMessageInfoSize));
+    }
+    return new GetResponse(request.getCorrelationId(), request.getClientId(), partitionResponseInfos,
+        new CompositeSend(blobsToSend), ServerErrorCode.No_Error);
   }
 
   @Override
