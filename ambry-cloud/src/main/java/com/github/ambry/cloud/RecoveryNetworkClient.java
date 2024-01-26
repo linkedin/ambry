@@ -66,6 +66,11 @@ import org.slf4j.LoggerFactory;
 
 /**
  * An implementation of {@link NetworkClient} that get the response for each request from Azure cloud.
+ * TODO:
+ * recovery token writer - store as json files
+ * end-of-partition signal - stop repl
+ * fetch data
+ * helix add replica - cloud-to-store mgr
  */
 public class RecoveryNetworkClient implements NetworkClient {
   private final static Logger logger = LoggerFactory.getLogger(RecoveryNetworkClient.class);
