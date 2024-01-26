@@ -379,10 +379,9 @@ public class RecoveryNetworkClientTest {
   public void testBackupRecovery() throws StoreException {
     int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
         (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
-    // Iterate N times to retrieve all blobIDs
-    for (Integer ignored : IntStream.rangeClosed(1, numPages).boxed().collect(Collectors.toList())) {
-      recoveryThread.replicate();
-    }
+    // Iterate N times to retrieve all blobIDs from cloud and store to disk
+    IntStream.rangeClosed(1, numPages).forEach(i -> recoveryThread.replicate());
+    // Get local blobs
     StoreInfo localBlobs = localStore.get(
         azureBlobs.values().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()),
         EnumSet.noneOf(StoreGetOptions.class));
