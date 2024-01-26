@@ -329,9 +329,8 @@ public class RecoveryNetworkClientTest {
     List<MessageInfo> metadataList = fetchPaginatedMetadata(null, numPages);
     // Assert we recovered all blobIds intact
     metadataList.forEach(messageInfo -> {
-      MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
-      assertEquals(String.format("Azure blob metadata does not match that in local disk", OgMessageInfo, messageInfo),
-          OgMessageInfo, messageInfo);
+      assertEquals(String.format("Azure blob metadata does not match that in local disk"),
+          azureBlobs.get(messageInfo.getStoreKey().getID()), messageInfo);
     });
   }
 
@@ -367,9 +366,8 @@ public class RecoveryNetworkClientTest {
         numGoodPages + numBadPages);
     // Assert we recovered all blobIds intact
     metadataList.forEach(messageInfo -> {
-      MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
-      assertEquals(String.format("Azure blob metadata does not match that in local disk", OgMessageInfo, messageInfo),
-          OgMessageInfo, messageInfo);
+      assertEquals(String.format("Azure blob metadata does not match that in local disk"),
+          azureBlobs.get(messageInfo.getStoreKey().getID()), messageInfo);
     });
   }
 
@@ -404,9 +402,8 @@ public class RecoveryNetworkClientTest {
     assertTrue(((RecoveryToken) remoteStore.getToken()).isEndOfPartition());
     assertEquals(azureBlobs.size(), localBlobs.getMessageReadSetInfo().size());
     localBlobs.getMessageReadSetInfo().forEach(messageInfo -> {
-      MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
-      assertEquals(String.format("Azure blob metadata does not match that in local disk", OgMessageInfo, messageInfo),
-          OgMessageInfo, messageInfo);
+      assertEquals(String.format("Azure blob metadata does not match that in local disk"),
+          azureBlobs.get(messageInfo.getStoreKey().getID()), messageInfo);
     });
   }
 }
