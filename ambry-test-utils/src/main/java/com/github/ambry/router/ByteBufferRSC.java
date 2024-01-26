@@ -67,6 +67,10 @@ public class ByteBufferRSC implements ReadableStreamChannel {
     size = buffer.remaining();
   }
 
+  public ByteBuffer getBuffer() {
+    return buffer;
+  }
+
   @Override
   public long getSize() {
     onEventComplete(Event.GetSize);

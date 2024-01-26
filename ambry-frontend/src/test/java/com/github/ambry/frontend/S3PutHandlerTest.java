@@ -20,6 +20,7 @@ import com.github.ambry.account.Account;
 import com.github.ambry.account.Container;
 import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
+import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
@@ -36,8 +37,10 @@ import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
+import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -59,6 +62,7 @@ public class S3PutHandlerTest {
   private FrontendConfig frontendConfig;
   private S3PutHandler s3PutHandler;
   private NamedBlobDb namedBlobDb;
+  private GetBlobHandler getBlobHandler;
 
   public S3PutHandlerTest() throws Exception {
     account = ACCOUNT_SERVICE.createAndAddRandomAccount();
@@ -101,6 +105,18 @@ public class S3PutHandlerTest {
     // 3. Verify blob name exists in named blob DB
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(accountName, containerName, blobName).get();
     assertEquals("Mismatch in blob name to blob id mapping", blobId, namedBlobRecord.getBlobId());
+
+    // 4. Verify that getting a s3 blob should work
+    headers = new JSONObject();
+    request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, uri, headers, null);
+    RequestPath requestPath = RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME);
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH, requestPath);
+    restResponseChannel = new MockRestResponseChannel();
+    FutureResult<ReadableStreamChannel> getResult = new FutureResult<>();
+    getBlobHandler.handle(requestPath, request, restResponseChannel, getResult::done);
+    ReadableStreamChannel readableStreamChannel = getResult.get();
+    assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertArrayEquals("Mismatch in blob content", content, ((ByteBufferRSC) readableStreamChannel).getBuffer().array());
   }
 
   /**
@@ -112,19 +128,24 @@ public class S3PutHandlerTest {
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     frontendConfig = new FrontendConfig(verifiableProperties);
     FrontendMetrics metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
-    InMemoryRouter router = new InMemoryRouter(verifiableProperties, new MockClusterMap());
+    ClusterMap clusterMap = new MockClusterMap();
+    InMemoryRouter router = new InMemoryRouter(verifiableProperties, clusterMap);
     AccountAndContainerInjector injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     IdSigningService idSigningService = new AmbryIdSigningService();
     FrontendTestSecurityServiceFactory securityServiceFactory = new FrontendTestSecurityServiceFactory();
+    SecurityService securityService = securityServiceFactory.getSecurityService();
     NamedBlobDbFactory namedBlobDbFactory =
         new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
     AmbryIdConverterFactory ambryIdConverterFactory =
         new AmbryIdConverterFactory(verifiableProperties, new MetricRegistry(), idSigningService, namedBlobDb);
+    IdConverter idConverter = ambryIdConverterFactory.getIdConverter();
     NamedBlobPutHandler namedBlobPutHandler =
-        new NamedBlobPutHandler(securityServiceFactory.getSecurityService(), namedBlobDb,
-            ambryIdConverterFactory.getIdConverter(), idSigningService, router, injector, frontendConfig, metrics,
-            CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
+        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, injector,
+            frontendConfig, metrics, CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
+    getBlobHandler =
+        new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
+            QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler);
   }
 }
