@@ -305,6 +305,14 @@ public class BlobStore implements Store {
         }
         enableReplicaIfNeeded();
       } catch (Exception e) {
+        if (fileLock != null) {
+          // Release the file lock
+          try {
+            fileLock.unlock();
+          } catch (Exception lockException) {
+            logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
+          }
+        }
         metrics.storeStartFailure.inc();
         throw new StoreException("Error while starting store for dir " + dataDir, e,
             StoreErrorCodes.Initialization_Error);
