@@ -188,7 +188,8 @@ public class RecoveryNetworkClientTest {
       // FIXME: We are not uploading CRC irl !!!
       azureBlobs.put(blobId.getID(), new MessageInfo(blobId,
           BLOB_SIZE, false, false, false, Utils.Infinite_Time, null,
-          testContainer.getParentAccountId(), testContainer.getId(), System.currentTimeMillis(), (short) 0));
+          testContainer.getParentAccountId(), testContainer.getId(),
+          Utils.getTimeInMsToTheNearestSec(System.currentTimeMillis()), (short) 0));
     });
     // Upload blobs
     List<MessageInfo> blobIds = new ArrayList<>(azureBlobs.values());
