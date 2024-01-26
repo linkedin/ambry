@@ -36,6 +36,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -225,8 +226,9 @@ public class LogSegmentTest {
         try {
           segment.setEndOffset(offset);
           fail("Setting log end offset an invalid offset [" + offset + "] should have failed");
-        } catch (IllegalArgumentException e) {
+        } catch (StoreException e) {
           // expected. Nothing to do.
+          Assert.assertEquals(StoreErrorCodes.Log_End_Offset_Error, e.getErrorCode());
         }
       }
     } finally {
@@ -587,8 +589,9 @@ public class LogSegmentTest {
     try {
       new LogSegment(name, file, config, metrics);
       fail("Construction should have failed because version is unknown");
-    } catch (IllegalArgumentException e) {
+    } catch (StoreException e) {
       // expected. Nothing to do.
+      Assert.assertEquals(StoreErrorCodes.Log_File_Format_Error, e.getErrorCode());
     }
 
     // bad CRC
@@ -599,8 +602,9 @@ public class LogSegmentTest {
     try {
       new LogSegment(name, file, config, metrics);
       fail("Construction should have failed because crc check should have failed");
-    } catch (IllegalStateException e) {
+    } catch (StoreException e) {
       // expected. Nothing to do.
+      Assert.assertEquals(StoreErrorCodes.Log_File_Format_Error, e.getErrorCode());
     }
     closeSegmentAndDeleteFile(segment);
   }

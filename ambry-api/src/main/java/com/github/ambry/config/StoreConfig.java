@@ -600,6 +600,14 @@ public class StoreConfig {
   public final boolean storeRemoveUnexpectedDirsInFullAuto;
   public static final String storeRemoveUnexpectedDirsInFullAutoName = "store.remove.unexpected.dirs.in.full.auto";
 
+  /**
+   * True to remove all the files under the partition directory and restart the blob store when blob store fails to start.
+   */
+  @Config(storeRemoveDirectoryAndRestartBlobStoreName)
+  public final boolean storeRemoveDirectoryAndRestartBlobStore;
+  public static final String storeRemoveDirectoryAndRestartBlobStoreName =
+      "store.remove.directory.and.restart.blob.store";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
@@ -760,5 +768,7 @@ public class StoreConfig {
         verifiableProperties.getFloatInRange(storeThresholdOfDiskFailuresToTerminateName, 1.0f, 0.0f, 1.0f);
     storeRemoveUnexpectedDirsInFullAuto =
         verifiableProperties.getBoolean(storeRemoveUnexpectedDirsInFullAutoName, false);
+    storeRemoveDirectoryAndRestartBlobStore =
+        verifiableProperties.getBoolean(storeRemoveDirectoryAndRestartBlobStoreName, false);
   }
 }

@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -72,6 +73,7 @@ public class DiskManager {
   private final DiskSpaceAllocator diskSpaceAllocator;
   private final CompactionManager compactionManager;
   private final Set<String> stoppedReplicas;
+  private final DiskMetrics diskMetrics;
   private final List<ReplicaStatusDelegate> replicaStatusDelegates;
   private final Set<String> expectedDirs = new HashSet<>();
   private final StoreConfig storeConfig;
@@ -89,6 +91,9 @@ public class DiskManager {
   private final DiskHealthCheck diskHealthCheck;
   // Have a dedicated scheduler for persisting index segments to ensure index segments are always persisted
   private final ScheduledExecutorService indexPersistScheduler;
+  private final EnumSet<StoreErrorCodes> recoverableStoreErrorCodes =
+      EnumSet.of(StoreErrorCodes.Log_File_Format_Error, StoreErrorCodes.Index_File_Format_Error,
+          StoreErrorCodes.Log_End_Offset_Error, StoreErrorCodes.Index_Recovery_Error);
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -139,10 +144,10 @@ public class DiskManager {
     this.replicaStatusDelegates = replicaStatusDelegates;
     this.stoppedReplicas = stoppedReplicas;
     expectedDirs.add(reserveFileDir.getAbsolutePath());
+    diskMetrics = new DiskMetrics(storeMainMetrics.getRegistry(), disk.getMountPath(),
+        storeConfig.storeDiskIoReservoirTimeWindowMs);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-        DiskMetrics diskMetrics = new DiskMetrics(storeMainMetrics.getRegistry(), disk.getMountPath(),
-            storeConfig.storeDiskIoReservoirTimeWindowMs);
         BlobStore store =
             new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
                 storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
@@ -177,6 +182,7 @@ public class DiskManager {
         tryRemoveAllUnexpectedDirs();
       }
 
+      ConcurrentHashMap<PartitionId, Exception> startExceptions = new ConcurrentHashMap<>();
       List<Thread> startupThreads = new ArrayList<>();
       for (final Map.Entry<PartitionId, BlobStore> partitionAndStore : stores.entrySet()) {
         if (stoppedReplicas.contains(partitionAndStore.getKey().toPathString())) {
@@ -189,6 +195,7 @@ public class DiskManager {
           } catch (Exception e) {
             numStoreFailures.incrementAndGet();
             logger.error("Exception while starting store for the {}", partitionAndStore.getKey(), e);
+            startExceptions.put(partitionAndStore.getKey(), e);
           }
         }, false);
         thread.start();
@@ -199,6 +206,7 @@ public class DiskManager {
       }
       if (numStoreFailures.get() > 0) {
         logger.error("Could not start {} out of {} stores on the disk {}", numStoreFailures.get(), stores.size(), disk);
+        maybeRecoverBlobStores(numStoreFailures.get(), startExceptions);
       }
 
       // DiskSpaceAllocator startup. This happens after BlobStore startup because it needs disk space requirements
@@ -233,6 +241,60 @@ public class DiskManager {
       metrics.diskStartTimeMs.update(time.milliseconds() - startTimeMs);
       rwLock.readLock().unlock();
     }
+  }
+
+  /**
+   * Maybe recover the blob stores that failed to start. The configuration has to be set to true and the number
+   * of failed blob stores are not the same as the total number on the disk, then we would try to recover each
+   * blob store. We only recover the blob store if the exception thrown in the start method is StoreException and
+   * the store error code is one of the recoverable error codes.
+   * @param numStoreFailures
+   * @param startExceptions
+   */
+  void maybeRecoverBlobStores(int numStoreFailures, Map<PartitionId, Exception> startExceptions) {
+    if (!storeConfig.storeRemoveDirectoryAndRestartBlobStore || numStoreFailures == stores.size()) {
+      return;
+    }
+    for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
+      PartitionId partitionId = entry.getKey();
+      BlobStore store = entry.getValue();
+      if (!shouldRemoveDirectory(partitionId, store, startExceptions.get(partitionId))) {
+        continue;
+      }
+      logger.info("Remove directory for store {} and restart it", partitionId);
+
+      // 1. Remove the blob store directory
+      // 2. Create another blob store and restart it. since this time the blob store would be empty, we don't
+      // have to use different threads for different blob stores.
+      ReplicaId replica = partitionToReplicaMap.get(entry.getKey());
+      String dataDir = store.getDataDir();
+      try {
+        Utils.deleteFileOrDirectory(new File(dataDir));
+        BlobStore newStore =
+            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
+                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
+                time, accountService, diskMetrics, indexPersistScheduler);
+        newStore.start();
+        entry.setValue(newStore);
+      } catch (Exception e) {
+        logger.error("Failed to remove directory for store {} and restart it", dataDir, e);
+      }
+    }
+  }
+
+  /**
+   * Return true when we should wipe out the directory of the given blob store.
+   * @param partitionId The partition id of the blob store.
+   * @param store The blob store
+   * @param startException The exceptions thrown by blobstore.start method.
+   * @return
+   */
+  boolean shouldRemoveDirectory(PartitionId partitionId, BlobStore store, Exception startException) {
+    if (store.isStarted() || stoppedReplicas.contains(partitionId.toPathString())) {
+      return false;
+    }
+    StoreException storeException = getRootCause(startException, StoreException.class);
+    return storeException != null && recoverableStoreErrorCodes.contains(storeException.getErrorCode());
   }
 
   /**

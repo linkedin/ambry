@@ -1192,6 +1192,24 @@ public class Utils {
   }
 
   /**
+   * Find the deepest Throwable in the chain of the throwables of the given class.
+   * @param throwable
+   * @param clazz
+   * @param <T>
+   * @return
+   */
+  public static <T extends Throwable> T getRootCause(Throwable throwable, Class<T> clazz) {
+    T result = null;
+    while (throwable != null) {
+      if (clazz.isInstance(throwable)) {
+        result = (T) throwable;
+      }
+      throwable = throwable.getCause();
+    }
+    return result;
+  }
+
+  /**
    * Convert ms to nearest second(floor) and back to ms to get the approx value in ms if not for
    * {@link Utils#Infinite_Time}.
    * @param timeInMs the time in ms that needs to be converted

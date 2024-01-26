@@ -51,14 +51,17 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1099,6 +1102,139 @@ public class StorageManagerTest {
   }
 
   /**
+   * Test the case where the blob store can't get started and we need to remove the directory and then restart the blobstore.
+   * @throws Exception
+   */
+  @Test
+  public void storeRemoveDirectoryAndRestartTest() throws Exception {
+    // Make sure that we use segmented log files
+    generateConfigs(true, false);
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
+    ReplicaId goodReplica = clusterMap.getReplicaIds(dataNode).get(1);
+    // Just start the storage manager and this will make sure all the replicas' directories are created
+    // and the first log segment file is also created for each replica.
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    // Both replicas should have blobstore returned
+    assertNotNull(storageManager.getStore(replica.getPartitionId(), false));
+    assertNotNull(storageManager.getStore(goodReplica.getPartitionId(), false));
+
+    File file = getFileLogSegment(replica);
+    assertTrue("First log segment file should exist " + file.getAbsolutePath(), file.exists());
+
+    // Now shutdown the storage manager and modify the first log segment by truncating the size to half.
+    // This will break the log segment file header
+    storageManager.shutdown();
+    corruptFirstLogSegment(replica);
+
+    // Now restart the storage manager
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    assertEquals(1,
+        getCounterValue(metricRegistry.getCounters(), DiskManager.class.getName(), "TotalStoreStartFailures"));
+    // bad replica is not started, but the good replica is
+    assertNull(storageManager.getStore(replica.getPartitionId(), false));
+    assertNotNull(storageManager.getStore(goodReplica.getPartitionId(), false));
+
+    storageManager.shutdown();
+
+    // Now enable the feature to remove directory and restart blob store
+    generateConfigs(true, false, false, 2, true);
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+
+    // Getting blob stores for both replicas should both result in not null
+    assertNotNull(storageManager.getStore(replica.getPartitionId(), false));
+    assertNotNull(storageManager.getStore(goodReplica.getPartitionId(), false));
+    storageManager.shutdown();
+  }
+
+  @Test
+  public void storeRemoveDirectoryAndRestartTestWithDiskFailure() throws Exception {
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
+    List<String> mountPaths = dataNode.getMountPaths();
+    String badDiskMountPath = mountPaths.get(RANDOM.nextInt(mountPaths.size()));
+    List<ReplicaId> badReplicas =
+        replicas.stream().filter(r -> r.getMountPath().equals(badDiskMountPath)).collect(Collectors.toList());
+
+    generateConfigs(true, false, false, 2, true);
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    storageManager.shutdown();
+
+    // Now corrupt all the replicas on the disk except for the last one
+    // So we will remove the bad directories and restart blob stores
+    for (ReplicaId replica : badReplicas.subList(0, badReplicas.size() - 1)) {
+      corruptFirstLogSegment(replica);
+    }
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    // All replicas should have its blob store
+    for (ReplicaId replica : badReplicas) {
+      assertNotNull(storageManager.getStore(replica.getPartitionId(), false));
+    }
+    storageManager.shutdown();
+
+    // Now corrupt all the replicas on the disk
+    for (ReplicaId replica : badReplicas) {
+      corruptFirstLogSegment(replica);
+    }
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    // All replicas should not have its blob store
+    for (ReplicaId replica : badReplicas) {
+      assertNull(storageManager.getStore(replica.getPartitionId(), false));
+    }
+    storageManager.shutdown();
+  }
+
+  @Test
+  public void storeRemoveDirectoryAndRestartTestWithStoppedReplica() throws Exception {
+    generateConfigs(true, false, false, 2, true);
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
+
+    // Start a storage manager so the replica's first log segment would be created
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    storageManager.shutdown();
+
+    ClusterParticipant mockParticipant = new MockClusterParticipant();
+    mockParticipant.setReplicaStoppedState(Collections.singletonList(replica), true);
+    // The first log segment is corrupted, but this replica is also in stopped replicas list, it will not be restarted
+    corruptFirstLogSegment(replica);
+    storageManager = createStorageManager(dataNode, metricRegistry, Collections.singletonList(mockParticipant));
+    storageManager.start();
+    assertNull(storageManager.getStore(replica.getPartitionId(), false));
+    storageManager.shutdown();
+  }
+
+  @Test
+  public void storeRemoveDirectoryAndRestartTestWithOtherError() throws Exception {
+    generateConfigs(true, false, false, 2, true);
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
+
+    // Start a storage manager so the replica's first log segment would be created
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    storageManager.shutdown();
+
+    // Now find the lock file in the blob store and lock this file
+    FileLock fileLock = new FileLock(new File(replica.getReplicaPath(), BlobStore.LockFile));
+    Assert.assertTrue(fileLock.tryLock());
+
+    // This file is locked already, replica won't be started
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    assertNull(storageManager.getStore(replica.getPartitionId(), false));
+    storageManager.shutdown();
+    fileLock.destroy();
+  }
+
+  /**
    * Test that stores on a disk are inaccessible if the {@link DiskSpaceAllocator} fails to start.
    * @throws Exception
    */
@@ -1262,7 +1398,7 @@ public class StorageManagerTest {
    */
   @Test
   public void unrecognizedDirsRemovalTest() throws Exception {
-    generateConfigs(true, false, true, 2);
+    generateConfigs(true, false, true, 2, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     try {
@@ -1415,7 +1551,7 @@ public class StorageManagerTest {
    */
   @Test
   public void replicaFromOfflineToBootstrapFailureRetryWithDiskSpaceRequirementTest() throws Exception {
-    generateConfigs(true, false, false, 4);
+    generateConfigs(true, false, false, 4, false);
     MockClusterMap spyClusterMap = spy(clusterMap);
     MockDataNodeId localNode = spyClusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = spyClusterMap.getReplicaIds(localNode);
@@ -1998,9 +2134,10 @@ public class StorageManagerTest {
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
    * @param removeUnexpectedDirs {@code true} to remove unexpectedd directories when current node is in FULL AUTO
    * @param numSegment the number of log segment files to create
+   * @parem removeDirectoryAndRestart {@code true} to remove directory of a blob store and restart it when it failes to start
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig, boolean removeUnexpectedDirs,
-      int numSegment) {
+      int numSegment, boolean removeDirectoryAndRestart) {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -2023,6 +2160,8 @@ public class StorageManagerTest {
       long replicaCapacity = clusterMap.getAllPartitionIds(null).get(0).getReplicaIds().get(0).getCapacityInBytes();
       properties.put("store.segment.size.in.bytes", Long.toString(replicaCapacity / numSegment));
     }
+    properties.setProperty(StoreConfig.storeRemoveDirectoryAndRestartBlobStoreName,
+        String.valueOf(removeDirectoryAndRestart));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
@@ -2035,7 +2174,7 @@ public class StorageManagerTest {
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) {
-    generateConfigs(segmentedLog, updateInstanceConfig, false, 2);
+    generateConfigs(segmentedLog, updateInstanceConfig, false, 2, false);
   }
 
   // unrecognizedDirsOnDiskTest() helpers
@@ -2067,6 +2206,17 @@ public class StorageManagerTest {
       createdDirs.add(createdDir);
     }
     return new Pair<>(createdFiles, createdDirs);
+  }
+
+  private File getFileLogSegment(ReplicaId replica) {
+    return Paths.get(replica.getReplicaPath(), LogSegmentName.fromPositionAndGeneration(0, 0).toFilename()).toFile();
+  }
+
+  private void corruptFirstLogSegment(ReplicaId replica) throws Exception {
+    File file = getFileLogSegment(replica);
+    FileChannel fileChannel = new RandomAccessFile(file, "rw").getChannel();
+    fileChannel.truncate(fileChannel.size() / 2);
+    fileChannel.close();
   }
 
   /**

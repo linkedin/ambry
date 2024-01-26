@@ -64,7 +64,7 @@ public class BlobStore implements Store {
   static final String SEPARATOR = "_";
   static final String BOOTSTRAP_FILE_NAME = "bootstrap_in_progress";
   static final String DECOMMISSION_FILE_NAME = "decommission_in_progress";
-  private final static String LockFile = ".lock";
+  final static String LockFile = ".lock";
 
   private final String storeId;
   private final String dataDir;
@@ -305,6 +305,14 @@ public class BlobStore implements Store {
         }
         enableReplicaIfNeeded();
       } catch (Exception e) {
+        if (fileLock != null) {
+          // Release the file lock
+          try {
+            fileLock.unlock();
+          } catch (Exception lockException) {
+            logger.error("Failed to unlock file lock for dir " + dataDir, lockException);
+          }
+        }
         metrics.storeStartFailure.inc();
         throw new StoreException("Error while starting store for dir " + dataDir, e,
             StoreErrorCodes.Initialization_Error);
@@ -386,6 +394,10 @@ public class BlobStore implements Store {
 
   ReplicaId getReplicaId() {
     return this.replicaId;
+  }
+
+  String getDataDir() {
+    return dataDir;
   }
 
   /**
