@@ -27,7 +27,6 @@ import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
@@ -36,7 +35,6 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
-import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.RequestInfo;
@@ -45,7 +43,6 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
-import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
@@ -56,6 +53,8 @@ import com.github.ambry.store.DiskIOScheduler;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreMetrics;
 import com.github.ambry.store.StoreTestUtils;
@@ -72,6 +71,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -238,7 +238,7 @@ public class RecoveryNetworkClientTest {
     localStore.shutdown();
     String replica = mockPartitionId.getReplicaIds().get(0).getReplicaPath();
     logger.info("Deleting {}", replica);
-    // FileUtils.deleteDirectory(new File(replica));
+    FileUtils.deleteDirectory(new File(replica));
   }
 
   /**
@@ -370,8 +370,23 @@ public class RecoveryNetworkClientTest {
   }
 
   @Test
-  public void testBackupRecovery() {
-    recoveryThread.replicate();
-    logger.info("token = {}", remoteReplicaInfo.getToken().toString());
+  public void testBackupRecovery() throws StoreException {
+    int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
+        (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
+    // Iterate N times to retrieve all blobIDs
+    for (Integer ignored : IntStream.rangeClosed(1, numPages).boxed().collect(Collectors.toList())) {
+      recoveryThread.replicate();
+    }
+    StoreInfo localBlobs = localStore.get(
+        azureBlobs.values().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()),
+        EnumSet.noneOf(StoreGetOptions.class));
+    // Assert we recovered all blobIds intact
+    assertTrue(((RecoveryToken) remoteReplicaInfo.getToken()).isEndOfPartition());
+    assertEquals(azureBlobs.size(), localBlobs.getMessageReadSetInfo().size());
+    localBlobs.getMessageReadSetInfo().forEach(messageInfo -> {
+      MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
+      assertEquals(String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo),
+          OgMessageInfo, (messageInfo));
+    });
   }
 }
