@@ -1081,16 +1081,16 @@ public class IndexTest {
     // recovery info contains a PUT for a key that already exists
     MessageInfo info = new MessageInfo(state.liveKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
-    doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
+    doRecoveryFailureTest(info, StoreErrorCodes.Index_Recovery_Error);
     // recovery info contains a PUT for a key that has been deleted
     info = new MessageInfo(state.deletedKeys.iterator().next(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
-    doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
+    doRecoveryFailureTest(info, StoreErrorCodes.Index_Recovery_Error);
     // recovery info contains a Ttl Update for a key that does not exist and there is no delete info that follows
     MockId nonExistentId = state.getUniqueId();
     info = new MessageInfo(nonExistentId, CuratedLogIndexState.TTL_UPDATE_RECORD_SIZE, false, true,
         nonExistentId.getAccountId(), nonExistentId.getContainerId(), state.time.milliseconds());
-    doRecoveryFailureTest(info, StoreErrorCodes.Initialization_Error);
+    doRecoveryFailureTest(info, StoreErrorCodes.Index_Recovery_Error);
     // recovery info contains a Ttl Update for a key that is already Ttl updated
     MockId updatedId = null;
     for (MockId id : state.ttlUpdatedKeys) {
@@ -1117,7 +1117,7 @@ public class IndexTest {
     // recovery info that contains a PUT beyond the end offset of the log segment
     info = new MessageInfo(state.getUniqueId(), CuratedLogIndexState.PUT_RECORD_SIZE,
         Utils.getRandomShort(TestUtils.RANDOM), Utils.getRandomShort(TestUtils.RANDOM), Utils.Infinite_Time);
-    doRecoveryFailureTest(info, StoreErrorCodes.Index_Creation_Failure);
+    doRecoveryFailureTest(info, StoreErrorCodes.Log_End_Offset_Error);
   }
 
   /**

@@ -244,7 +244,7 @@ public class DiskManager {
   }
 
   void maybeRecoverBlobStores(int numStoreFailures, Map<PartitionId, Exception> startExceptions) {
-    if (!storeConfig.storeRemoveDirectoryAndRestartBlobStore || numStoreFailures != stores.size()) {
+    if (!storeConfig.storeRemoveDirectoryAndRestartBlobStore || numStoreFailures == stores.size()) {
       return;
     }
     for (Map.Entry<PartitionId, BlobStore> entry : stores.entrySet()) {
