@@ -341,22 +341,28 @@ public class RecoveryNetworkClientTest {
    */
   @Test
   public void testMetadataRecoveryClientFailure() throws Exception {
-    final int ERROR_FREQUENCY = 5; // Every n-th page is bad
+    final int NUM_ERRORS = 5; // Every n-th page is bad
     class ExceptionCallback implements RecoveryNetworkClientCallback {
       int numCalls = 0;
       public void onListBlobs(ReplicaMetadataRequestInfo request) {
         numCalls += 1;
-        // the frequency of err_pages reduces over all iter
-        // if there are 34 pages and every 5-th page is bad, then we have 6 bad pages. We need 6 extra calls.
-        // if there are 40 calls, then every 6-th call is bad. 34/5 == 40/6;
-        if (numCalls % (ERROR_FREQUENCY + 1) == 0) {
+        /**
+         * If we want a constant number of errors, then the frequency needs to adjusted based on the num of iterations.
+         * In this test, we have 100 blobs fetched as 34 pages with 3 blobs per page at max.
+         * If every 5-th page is throws a retriable error, then we need 40 iterations to fetch all blobs.
+         *          * 34 + (34/5) = 40
+         * Now, among those 40 iterations, we want 6 (= 34/5) erroneous pages. And that 40/6, hence +1 below.
+         * In other words, for a constant number of errors, the frequency with which they occur changes depending on
+         * the number of calls or iterations.
+         */
+        if (numCalls % (NUM_ERRORS + 1) == 0) {
           throw new RuntimeException("Exception on Azure Storage list-blobs call");
         }
       }
     }
     int numGoodPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
         (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
-    int numBadPages = numGoodPages/ERROR_FREQUENCY;
+    int numBadPages = numGoodPages/NUM_ERRORS;
     List<MessageInfo> metadataList = fetchPaginatedMetadata(new ExceptionCallback(),
         numGoodPages + numBadPages);
     // Assert we recovered all blobIds intact
