@@ -211,7 +211,6 @@ public class RecoveryNetworkClientTest {
         new MessageSievingInputStream(blobData, blobIds, Collections.emptyList(), new MetricRegistry()),
         blobIds, false);
     azuriteClient.uploadBlobs(messageWriteSet);
-
   }
 
   /**
