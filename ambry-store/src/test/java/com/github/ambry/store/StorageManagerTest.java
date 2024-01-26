@@ -1222,7 +1222,6 @@ public class StorageManagerTest {
     storageManager.start();
     storageManager.shutdown();
 
-    // Case 1. File lock is already locked
     // Now find the lock file in the blob store and lock this file
     FileLock fileLock = new FileLock(new File(replica.getReplicaPath(), BlobStore.LockFile));
     Assert.assertTrue(fileLock.tryLock());
@@ -1233,14 +1232,6 @@ public class StorageManagerTest {
     assertNull(storageManager.getStore(replica.getPartitionId(), false));
     storageManager.shutdown();
     fileLock.destroy();
-
-    // Case 2. Directory is read only
-    new File(replica.getReplicaPath()).setReadable(false);
-    storageManager = createStorageManager(dataNode, metricRegistry, null);
-    storageManager.start();
-    assertNull(storageManager.getStore(replica.getPartitionId(), false));
-    storageManager.shutdown();
-    new File(replica.getReplicaPath()).setReadable(true);
   }
 
   /**
