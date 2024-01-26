@@ -71,6 +71,7 @@ import org.slf4j.LoggerFactory;
  * end-of-partition signal - stop repl
  * fetch data
  * helix add replica - cloud-to-store mgr
+ * replica thread transformer header mismatch
  */
 public class RecoveryNetworkClient implements NetworkClient {
   private final static Logger logger = LoggerFactory.getLogger(RecoveryNetworkClient.class);
