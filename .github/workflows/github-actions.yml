@@ -44,6 +44,7 @@ jobs:
 
       - name: Install and run Azurite
         run: |
+	  kill -s SIGKILL `ps -ef | grep azurite | tr -s " " | cut -d " " -f 2 | head -n 1`
           npm install -g azurite
           azurite --silent &
 
