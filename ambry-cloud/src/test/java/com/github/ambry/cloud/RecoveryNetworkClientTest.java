@@ -97,7 +97,7 @@ public class RecoveryNetworkClientTest {
   private static final Logger logger = LoggerFactory.getLogger(RecoveryNetworkClientTest.class);
   protected BlobStore localStore;
   protected Map<String, MessageInfo> azureBlobs;
-  protected RemoteReplicaInfo remoteReplicaInfo;
+  protected RemoteReplicaInfo remoteStore;
   protected final AtomicInteger requestId;
   protected final AzuriteUtils azuriteUtils;
   protected final CloudReplica cloudReplica;
@@ -167,6 +167,23 @@ public class RecoveryNetworkClientTest {
   public void before() throws ReflectiveOperationException, CloudStorageException, IOException, StoreException {
     // Assume Azurite is up and running
     assumeTrue(azuriteUtils.connectToAzurite());
+    // Create local store
+    localStore =
+        new BlobStore(mockPartitionId.getReplicaIds().get(0), new StoreConfig(verifiableProperties),
+            Utils.newScheduler(1, false),
+            Utils.newScheduler(1, false),
+            new DiskIOScheduler(null),
+            StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+            new StoreMetrics(mockClusterMap.getMetricRegistry()),
+            new StoreMetrics("UnderCompaction", mockClusterMap.getMetricRegistry()),
+            null, null, null, Collections.singletonList(mock(ReplicaStatusDelegate.class)),
+            new MockTime(), new InMemAccountService(false, false), null,
+            Utils.newScheduler(1, false));
+    localStore.start();
+    // Create remote-replica info
+    remoteStore =
+        new RemoteReplicaInfo(cloudReplica, mockPartitionId.getReplicaIds().get(0), localStore, new RecoveryToken(),
+            Long.MAX_VALUE, SystemTime.getInstance(), new Port(cloudServiceDataNode.getPort(), PortType.PLAINTEXT));
     // Mark test partition for compaction
     AccountService accountService = Mockito.mock(AccountService.class);
     Mockito.lenient().when(accountService.getContainersByStatus(any()))
@@ -194,23 +211,7 @@ public class RecoveryNetworkClientTest {
         new MessageSievingInputStream(blobData, blobIds, Collections.emptyList(), new MetricRegistry()),
         blobIds, false);
     azuriteClient.uploadBlobs(messageWriteSet);
-    // Create local store
-    localStore =
-        new BlobStore(mockPartitionId.getReplicaIds().get(0), new StoreConfig(verifiableProperties),
-            Utils.newScheduler(1, false),
-            Utils.newScheduler(1, false),
-            new DiskIOScheduler(null),
-            StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-            new StoreMetrics(mockClusterMap.getMetricRegistry()),
-            new StoreMetrics("UnderCompaction", mockClusterMap.getMetricRegistry()),
-            null, null, null, Collections.singletonList(mock(ReplicaStatusDelegate.class)),
-            new MockTime(), new InMemAccountService(false, false), null,
-            Utils.newScheduler(1, false));
-    localStore.start();
-    // Create remote-replica info
-    remoteReplicaInfo =
-        new RemoteReplicaInfo(cloudReplica, mockPartitionId.getReplicaIds().get(0), localStore, new RecoveryToken(),
-            Long.MAX_VALUE, SystemTime.getInstance(), new Port(cloudServiceDataNode.getPort(), PortType.PLAINTEXT));
+
   }
 
   /**
@@ -258,7 +259,7 @@ public class RecoveryNetworkClientTest {
             new ResponseHandler(mockClusterMap), new SystemTime(), null, null,
             null);
     // Add remote-replica-info to replica-thread
-    recoveryThread.addRemoteReplicaInfo(remoteReplicaInfo);
+    recoveryThread.addRemoteReplicaInfo(remoteStore);
     return recoveryThread;
   }
 
@@ -349,9 +350,9 @@ public class RecoveryNetworkClientTest {
         /**
          * If we want a constant number of errors, then the frequency needs to adjusted based on the num of iterations.
          * In this test, we have 100 blobs fetched as 34 pages with 3 blobs per page at max.
-         * If every 5-th page is throws a retriable error, then we need 40 iterations to fetch all blobs.
+         * If every 5-th page throws a retriable error, then we need 40 iterations to fetch all blobs.
          *          * 34 + (34/5) = 40
-         * Now, among those 40 iterations, we want 6 (= 34/5) erroneous pages. And that 40/6, hence +1 below.
+         * Now, among those 40 iterations, we want 5 erroneous pages. And that is 40/6, hence +1 below.
          * In other words, for a constant number of errors, the frequency with which they occur changes depending on
          * the number of calls or iterations.
          */
@@ -401,7 +402,7 @@ public class RecoveryNetworkClientTest {
         azureBlobs.values().stream().map(MessageInfo::getStoreKey).collect(Collectors.toList()),
         EnumSet.noneOf(StoreGetOptions.class));
     // Assert we recovered all blobIds intact
-    assertTrue(((RecoveryToken) remoteReplicaInfo.getToken()).isEndOfPartition());
+    assertTrue(((RecoveryToken) remoteStore.getToken()).isEndOfPartition());
     assertEquals(azureBlobs.size(), localBlobs.getMessageReadSetInfo().size());
     localBlobs.getMessageReadSetInfo().forEach(messageInfo -> {
       MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
