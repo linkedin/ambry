@@ -294,8 +294,8 @@ public class RecoveryNetworkClientTest {
     assertEquals(azureBlobs.size(), messageInfoList.size());
     messageInfoList.forEach(messageInfo -> {
       MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
-      assertEquals(String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo),
-          OgMessageInfo, (messageInfo));
+      assertEquals(String.format("Azure blob metadata does not match that in local disk", OgMessageInfo, messageInfo),
+          OgMessageInfo, messageInfo);
     });
   }
 
@@ -353,8 +353,8 @@ public class RecoveryNetworkClientTest {
     assertEquals(azureBlobs.size(), messageInfoList.size());
     messageInfoList.forEach(messageInfo -> {
       MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
-      assertEquals(String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo),
-          OgMessageInfo, (messageInfo));
+      assertEquals(String.format("Azure blob metadata does not match that in local disk", OgMessageInfo, messageInfo),
+          OgMessageInfo, messageInfo);
     });
   }
 
@@ -390,8 +390,8 @@ public class RecoveryNetworkClientTest {
     assertEquals(azureBlobs.size(), localBlobs.getMessageReadSetInfo().size());
     localBlobs.getMessageReadSetInfo().forEach(messageInfo -> {
       MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
-      assertEquals(String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo),
-          OgMessageInfo, (messageInfo));
+      assertEquals(String.format("Azure blob metadata does not match that in local disk", OgMessageInfo, messageInfo),
+          OgMessageInfo, messageInfo);
     });
   }
 }
