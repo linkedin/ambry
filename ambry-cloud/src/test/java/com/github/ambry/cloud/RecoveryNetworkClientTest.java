@@ -278,7 +278,8 @@ public class RecoveryNetworkClientTest {
     for (Integer ignored : IntStream.rangeClosed(1, numPages).boxed().collect(Collectors.toList())) {
       // Send metadata request
       List<ResponseInfo> responseInfoList =
-          recoveryNetworkClient.sendAndPoll(createMetadataRequest(recoveryToken), Collections.emptySet(), 0);
+          recoveryNetworkClient.sendAndPoll(createMetadataRequest(recoveryToken),
+              Collections.emptySet(), 0);
       // Receive metadata response
       ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
           new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
