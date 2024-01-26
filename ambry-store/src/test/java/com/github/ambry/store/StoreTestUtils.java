@@ -42,8 +42,8 @@ import static org.mockito.Mockito.*;
 /**
  * Utility class for common functions used in tests of store classes.
  */
-class StoreTestUtils {
-  static final DiskSpaceAllocator DEFAULT_DISK_SPACE_ALLOCATOR =
+public class StoreTestUtils {
+  public static final DiskSpaceAllocator DEFAULT_DISK_SPACE_ALLOCATOR =
       new DiskSpaceAllocator(false, null, 0, new StorageManagerMetrics(new MetricRegistry()));
 
   /**

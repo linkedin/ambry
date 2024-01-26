@@ -49,7 +49,7 @@ import org.slf4j.LoggerFactory;
  * NOTE: Segments can be allocated and freed before pool initialization.  This will fall back to preallocating at
  * runtime if the current pool does not include a segment of the correct size.
  */
-class DiskSpaceAllocator {
+public class DiskSpaceAllocator {
   static final String STORE_DIR_PREFIX = "reserve_store_";
   static final String SWAP_DIR_NAME = "reserve_swap";
   static final String FILE_SIZE_DIR_PREFIX = "reserve_size_";

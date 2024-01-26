@@ -188,7 +188,7 @@ public class RemoteReplicaInfo {
     return localLagFromRemoteStore;
   }
 
-  synchronized FindToken getToken() {
+  public synchronized FindToken getToken() {
     return currentToken;
   }
 

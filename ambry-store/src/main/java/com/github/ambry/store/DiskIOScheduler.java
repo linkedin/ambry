@@ -28,14 +28,14 @@ import java.util.Map;
  * The initial implementation simply returns MAX_VALUE for the application and uses the throttler for the other 2.
  * In the future this will have functions to submit feedback so that more intelligent decisions can be made.
  */
-class DiskIOScheduler {
+public class DiskIOScheduler {
   private final Map<String, Throttler> throttlers;
 
   /**
    * Create a {@link DiskIOScheduler}.
    * @param throttlers the {@link Throttler}s to use for each job type.
    */
-  DiskIOScheduler(Map<String, Throttler> throttlers) {
+  public DiskIOScheduler(Map<String, Throttler> throttlers) {
     this.throttlers = throttlers != null ? throttlers : new HashMap<String, Throttler>();
   }
 

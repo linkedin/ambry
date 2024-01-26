@@ -16,6 +16,7 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.AccountService;
 import com.github.ambry.account.Container;
+import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzuriteUtils;
@@ -23,14 +24,19 @@ import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.CloudServiceDataNode;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.ReplicaStatusDelegate;
 import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.BlobIdFactory;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
+import com.github.ambry.messageformat.ValidatingTransformer;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.network.RequestInfo;
@@ -39,14 +45,28 @@ import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaThread;
+import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.BlobStore;
+import com.github.ambry.store.DiskIOScheduler;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MockStoreKeyConverterFactory;
+import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreMetrics;
+import com.github.ambry.store.StoreTestUtils;
 import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -59,6 +79,7 @@ import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -69,32 +90,37 @@ import org.slf4j.LoggerFactory;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 
 public class RecoveryNetworkClientTest {
 
-  private static Logger logger = LoggerFactory.getLogger(RecoveryNetworkClientTest.class);
-  public static final String LOCALHOST = "localhost";
+  private static final Logger logger = LoggerFactory.getLogger(RecoveryNetworkClientTest.class);
+  protected BlobStore localStore;
+  protected Map<String, MessageInfo> azureBlobs;
   protected RecoveryMetrics recoveryMetrics;
-  protected CloudReplica cloudReplica;
-  protected CloudServiceDataNode cloudServiceDataNode;
-  protected ClusterMapConfig clusterMapConfig;
-  protected Properties properties;
-  protected FindTokenHelper findTokenHelper;
-  protected AzuriteUtils azuriteUtils;
-  protected MockClusterMap mockClusterMap;
   protected RecoveryNetworkClient recoveryNetworkClient;
-  protected MockPartitionId mockPartitionId;
-  protected final short ACCOUNT_ID = 1024, CONTAINER_ID = 2048;
+  protected RemoteReplicaInfo remoteReplicaInfo;
+  protected ReplicaThread recoveryThread;
+  protected final AtomicInteger requestId;
+  protected final AzuriteUtils azuriteUtils;
+  protected final CloudReplica cloudReplica;
+  protected final CloudServiceDataNode cloudServiceDataNode;
+  protected final ClusterMapConfig clusterMapConfig;
+  protected final Container testContainer;
+  protected final FindTokenHelper findTokenHelper;
+  protected final MockClusterMap mockClusterMap;
+  protected final MockPartitionId mockPartitionId;
+  protected final Properties properties;
+  protected final VerifiableProperties verifiableProperties;
+  protected final int AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE = 3;
   protected final int NUM_BLOBS = 100;
   protected final long BLOB_SIZE = 1000;
-  protected final int AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE = 3;
-  protected Container testContainer;
-  protected AtomicInteger counter;
-  Map<String, MessageInfo> messageInfoMap;
+  protected final short ACCOUNT_ID = 1024, CONTAINER_ID = 2048;
+  public static final String LOCALHOST = "localhost";
 
   public RecoveryNetworkClientTest() throws Exception {
-    counter = new AtomicInteger(0);
+    requestId = new AtomicInteger(0);
     // Set test properties
     azuriteUtils = new AzuriteUtils();
     properties = azuriteUtils.getAzuriteConnectionProperties();
@@ -105,18 +131,20 @@ public class RecoveryNetworkClientTest {
         String.valueOf(AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE));
     properties.setProperty(ReplicationConfig.REPLICATION_CLOUD_TOKEN_FACTORY,
         RecoveryTokenFactory.class.getCanonicalName());
-    findTokenHelper = new FindTokenHelper(null,
-        new ReplicationConfig(new VerifiableProperties(properties)));
-    // Create a test cluster
-    clusterMapConfig =  new ClusterMapConfig(new VerifiableProperties(properties));
-    cloudServiceDataNode = new CloudServiceDataNode(LOCALHOST, clusterMapConfig);
-    cloudReplica = new CloudReplica(mockPartitionId, cloudServiceDataNode);
+    properties.setProperty("replication.metadata.request.version", "2");
+    verifiableProperties = new VerifiableProperties(properties);
+    findTokenHelper = new FindTokenHelper(null, new ReplicationConfig(verifiableProperties));
+    // Create test cluster
     mockClusterMap = new MockClusterMap(false, true, 1,
         1, 1, true, false,
         "localhost");
     // Create a test partition
     mockPartitionId =
         (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    // Create a cloud replica
+    clusterMapConfig =  new ClusterMapConfig(new VerifiableProperties(properties));
+    cloudServiceDataNode = new CloudServiceDataNode(LOCALHOST, clusterMapConfig);
+    cloudReplica = new CloudReplica(mockPartitionId, cloudServiceDataNode);
     // Create a test container
     testContainer =
         new Container(CONTAINER_ID, "testContainer", Container.ContainerStatus.ACTIVE,
@@ -136,13 +164,13 @@ public class RecoveryNetworkClientTest {
    * @throws IOException
    */
   @Before
-  public void before() throws ReflectiveOperationException, CloudStorageException, IOException {
+  public void before() throws ReflectiveOperationException, CloudStorageException, IOException, StoreException {
     // Assume Azurite is up and running
     assumeTrue(azuriteUtils.connectToAzurite());
-    // Create a test client
+    // Create a test cloud client
     recoveryNetworkClient =
-        new RecoveryNetworkClient(new VerifiableProperties(properties),
-            new MetricRegistry(),    mockClusterMap, null, null, null);
+        new RecoveryNetworkClient(verifiableProperties, mockClusterMap.getMetricRegistry(),
+            mockClusterMap, null, null, null);
     recoveryMetrics = recoveryNetworkClient.getRecoveryMetrics();
     // Mark test partition for compaction
     AccountService accountService = Mockito.mock(AccountService.class);
@@ -150,31 +178,67 @@ public class RecoveryNetworkClientTest {
         .thenReturn(Collections.singleton(testContainer));
     // Clear the partition
     AzureCloudDestinationSync azuriteClient = azuriteUtils.getAzuriteClient(
-        properties, new MetricRegistry(),    null, accountService);
+        properties, mockClusterMap.getMetricRegistry(),    null, accountService);
     azuriteClient.compactPartition(mockPartitionId.toPathString());
     // Add NUM_BLOBS of size BLOB_SIZE
-    messageInfoMap = new HashMap<>();
+    azureBlobs = new HashMap<>();
     IntStream.range(0, NUM_BLOBS).forEach(i -> {
       BlobId blobId = CloudTestUtil.getUniqueId(testContainer.getParentAccountId(), testContainer.getId(),
           false, mockPartitionId);
       // FIXME: We are not uploading CRC irl !!!
-      messageInfoMap.put(blobId.getID(), new MessageInfo(blobId,
+      azureBlobs.put(blobId.getID(), new MessageInfo(blobId,
           BLOB_SIZE, false, false, false, Utils.Infinite_Time, null,
           testContainer.getParentAccountId(), testContainer.getId(), System.currentTimeMillis(), (short) 0));
     });
     // Upload blobs
-    List<MessageInfo> blobIds = new ArrayList<>(messageInfoMap.values());
+    List<MessageInfo> blobIds = new ArrayList<>(azureBlobs.values());
     InputStream blobData = new ByteBufferInputStream(ByteBuffer.wrap(
         TestUtils.getRandomBytes((int) (NUM_BLOBS * BLOB_SIZE))));
     MessageFormatWriteSet messageWriteSet = new MessageFormatWriteSet(
         new MessageSievingInputStream(blobData, blobIds, Collections.emptyList(), new MetricRegistry()),
         blobIds, false);
     azuriteClient.uploadBlobs(messageWriteSet);
+    // Create local store
+    localStore =
+        new BlobStore(mockPartitionId.getReplicaIds().get(0), new StoreConfig(verifiableProperties),
+            Utils.newScheduler(1, false),
+            Utils.newScheduler(1, false),
+            new DiskIOScheduler(null),
+            StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+            new StoreMetrics(mockClusterMap.getMetricRegistry()),
+            new StoreMetrics("UnderCompaction", mockClusterMap.getMetricRegistry()),
+            null, null, null, Collections.singletonList(mock(ReplicaStatusDelegate.class)),
+            new MockTime(), new InMemAccountService(false, false), null,
+            Utils.newScheduler(1, false));
+    localStore.start();
+    // Create remote-replica info
+    remoteReplicaInfo =
+        new RemoteReplicaInfo(cloudReplica, mockPartitionId.getReplicaIds().get(0), localStore, new RecoveryToken(),
+            Long.MAX_VALUE, SystemTime.getInstance(), new Port(cloudServiceDataNode.getPort(), PortType.PLAINTEXT));
+    // Create ReplicaThread
+    MockStoreKeyConverterFactory storeKeyConverterFactory =
+        new MockStoreKeyConverterFactory(null, null)
+            .setConversionMap(new HashMap<>())
+            .setReturnInputIfAbsent(true);
+    StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+    recoveryThread =
+        new ReplicaThread("recovery-thread", findTokenHelper, mockClusterMap, new AtomicInteger(0),
+            cloudServiceDataNode, recoveryNetworkClient, new ReplicationConfig(verifiableProperties),
+            new ReplicationMetrics(mockClusterMap.getMetricRegistry(), Collections.emptyList()), null,
+            storeKeyConverter, null,
+            mockClusterMap.getMetricRegistry(), false, cloudServiceDataNode.getDatacenterName(),
+            new ResponseHandler(mockClusterMap), new SystemTime(), null, null,
+            null);
+    // Add remote-replica-info to replica-thread
+    recoveryThread.addRemoteReplicaInfo(remoteReplicaInfo);
   }
 
   @After
-  public void after() {
-
+  public void after() throws StoreException, IOException {
+    localStore.shutdown();
+    String replica = mockPartitionId.getReplicaIds().get(0).getReplicaPath();
+    logger.info("Deleting {}", replica);
+    // FileUtils.deleteDirectory(new File(replica));
   }
 
   /**
@@ -188,7 +252,7 @@ public class RecoveryNetworkClientTest {
     ReplicaMetadataRequestInfo replicaMetadataRequestInfo =  new ReplicaMetadataRequestInfo(mockPartitionId,
         recoveryToken, LOCALHOST, "/tmp", ReplicaType.CLOUD_BACKED,
         ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2);
-    ReplicaMetadataRequest replicaMetadataRequest = new ReplicaMetadataRequest(counter.incrementAndGet(),
+    ReplicaMetadataRequest replicaMetadataRequest = new ReplicaMetadataRequest(requestId.incrementAndGet(),
         "repl-metadata-localhost", Collections.singletonList(replicaMetadataRequestInfo),
         100, ReplicaMetadataRequest.Replica_Metadata_Request_Version_V2);
     RequestInfo requestInfo =
@@ -226,9 +290,9 @@ public class RecoveryNetworkClientTest {
     // Assert we recovered all blobIds intact
     assertEquals(numPages, recoveryMetrics.listBlobsSuccessRate.getCount());
     assertTrue(recoveryToken.isEndOfPartition());
-    assertEquals(messageInfoMap.size(), messageInfoList.size());
+    assertEquals(azureBlobs.size(), messageInfoList.size());
     messageInfoList.forEach(messageInfo -> {
-      MessageInfo OgMessageInfo = messageInfoMap.get(messageInfo.getStoreKey().getID());
+      MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
       assertEquals(String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo),
           OgMessageInfo, (messageInfo));
     });
@@ -267,7 +331,8 @@ public class RecoveryNetworkClientTest {
     for (Integer ignored : IntStream.rangeClosed(1, numIter).boxed().collect(Collectors.toList())) {
       // Send metadata request
       List<ResponseInfo> responseInfoList =
-          recoveryNetworkClient.sendAndPoll(createMetadataRequest(recoveryToken), Collections.emptySet(), 0);
+          recoveryNetworkClient.sendAndPoll(createMetadataRequest(recoveryToken),
+              Collections.emptySet(), 0);
       // Receive metadata response
       ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
               new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
@@ -284,9 +349,9 @@ public class RecoveryNetworkClientTest {
     // Assert we recovered all blobIds intact
     assertEquals(numBadPages, recoveryMetrics.listBlobsError.getCount());
     assertTrue(recoveryToken.isEndOfPartition());
-    assertEquals(messageInfoMap.size(), messageInfoList.size());
+    assertEquals(azureBlobs.size(), messageInfoList.size());
     messageInfoList.forEach(messageInfo -> {
-      MessageInfo OgMessageInfo = messageInfoMap.get(messageInfo.getStoreKey().getID());
+      MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
       assertEquals(String.format("Expected metadata = %s, Received metadata = %s", OgMessageInfo, messageInfo),
           OgMessageInfo, (messageInfo));
     });
@@ -302,5 +367,11 @@ public class RecoveryNetworkClientTest {
     RecoveryToken newRecoveryToken = RecoveryToken.fromBytes(
         new ByteBufferDataInputStream(ByteBuffer.wrap(recoveryToken.toBytes())));
     assertTrue(recoveryToken.equals(newRecoveryToken));
+  }
+
+  @Test
+  public void testBackupRecovery() {
+    recoveryThread.replicate();
+    logger.info("token = {}", remoteReplicaInfo.getToken().toString());
   }
 }
