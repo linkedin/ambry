@@ -370,6 +370,10 @@ public class RecoveryNetworkClientTest {
     assertTrue(recoveryToken.equals(newRecoveryToken));
   }
 
+  /**
+   * Recovers all blobs from Azure using replicate() and tests replication end-to-end
+   * @throws StoreException
+   */
   @Test
   public void testBackupRecovery() throws StoreException {
     int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
