@@ -564,7 +564,7 @@ public class MockClusterMap implements ClusterMap {
       if (f.isDirectory()) {
         File[] children = f.listFiles();
         if (children == null) {
-          throw new IOException("Error listing files of the directory");
+          throw new IOException("Error listing files of the directory " + f.getAbsolutePath());
         }
         for (File c : children) {
           deleteFileOrDirectory(c);

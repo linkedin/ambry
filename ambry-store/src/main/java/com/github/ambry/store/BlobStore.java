@@ -64,7 +64,7 @@ public class BlobStore implements Store {
   static final String SEPARATOR = "_";
   static final String BOOTSTRAP_FILE_NAME = "bootstrap_in_progress";
   static final String DECOMMISSION_FILE_NAME = "decommission_in_progress";
-  private final static String LockFile = ".lock";
+  final static String LockFile = ".lock";
 
   private final String storeId;
   private final String dataDir;

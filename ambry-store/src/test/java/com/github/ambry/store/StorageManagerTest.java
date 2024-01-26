@@ -51,6 +51,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.server.AmbryStatsReport;
 import com.github.ambry.server.storagestats.AggregatedAccountStorageStats;
+import com.github.ambry.utils.FileLock;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -1208,6 +1209,38 @@ public class StorageManagerTest {
     storageManager.start();
     assertNull(storageManager.getStore(replica.getPartitionId(), false));
     storageManager.shutdown();
+  }
+
+  @Test
+  public void storeRemoveDirectoryAndRestartTestWithOtherError() throws Exception {
+    generateConfigs(true, false, false, 2, true);
+    MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
+    ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
+
+    // Start a storage manager so the replica's first log segment would be created
+    StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    storageManager.shutdown();
+
+    // Case 1. File lock is already locked
+    // Now find the lock file in the blob store and lock this file
+    FileLock fileLock = new FileLock(new File(replica.getReplicaPath(), BlobStore.LockFile));
+    Assert.assertTrue(fileLock.tryLock());
+
+    // This file is locked already, replica won't be started
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    assertNull(storageManager.getStore(replica.getPartitionId(), false));
+    storageManager.shutdown();
+    fileLock.destroy();
+
+    // Case 2. Directory is read only
+    new File(replica.getReplicaPath()).setReadable(false);
+    storageManager = createStorageManager(dataNode, metricRegistry, null);
+    storageManager.start();
+    assertNull(storageManager.getStore(replica.getPartitionId(), false));
+    storageManager.shutdown();
+    new File(replica.getReplicaPath()).setReadable(true);
   }
 
   /**
