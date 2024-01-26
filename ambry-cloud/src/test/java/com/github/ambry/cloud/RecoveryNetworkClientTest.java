@@ -94,14 +94,10 @@ import static org.mockito.Mockito.*;
 
 
 public class RecoveryNetworkClientTest {
-
   private static final Logger logger = LoggerFactory.getLogger(RecoveryNetworkClientTest.class);
   protected BlobStore localStore;
   protected Map<String, MessageInfo> azureBlobs;
-  protected RecoveryMetrics recoveryMetrics;
-  protected RecoveryNetworkClient recoveryNetworkClient;
   protected RemoteReplicaInfo remoteReplicaInfo;
-  protected ReplicaThread recoveryThread;
   protected final AtomicInteger requestId;
   protected final AzuriteUtils azuriteUtils;
   protected final CloudReplica cloudReplica;
@@ -157,8 +153,12 @@ public class RecoveryNetworkClientTest {
             null, Collections.emptySet());
   }
 
+  ////////////////////////////////////////////// HELPERS ///////////////////////////////////////////////////////////
+
   /**
-   * Before the test, deletes all blobs in test container and uploads new ones.
+   * Before the test:
+   * 1. Deletes all blobs in test container in Azurite and uploads new ones,
+   * 2. Creates a local-store to download blobs from Azurite
    * @throws ReflectiveOperationException
    * @throws CloudStorageException
    * @throws IOException
@@ -167,11 +167,6 @@ public class RecoveryNetworkClientTest {
   public void before() throws ReflectiveOperationException, CloudStorageException, IOException, StoreException {
     // Assume Azurite is up and running
     assumeTrue(azuriteUtils.connectToAzurite());
-    // Create a test cloud client
-    recoveryNetworkClient =
-        new RecoveryNetworkClient(verifiableProperties, mockClusterMap.getMetricRegistry(),
-            mockClusterMap, null, null, null);
-    recoveryMetrics = recoveryNetworkClient.getRecoveryMetrics();
     // Mark test partition for compaction
     AccountService accountService = Mockito.mock(AccountService.class);
     Mockito.lenient().when(accountService.getContainersByStatus(any()))
@@ -216,13 +211,45 @@ public class RecoveryNetworkClientTest {
     remoteReplicaInfo =
         new RemoteReplicaInfo(cloudReplica, mockPartitionId.getReplicaIds().get(0), localStore, new RecoveryToken(),
             Long.MAX_VALUE, SystemTime.getInstance(), new Port(cloudServiceDataNode.getPort(), PortType.PLAINTEXT));
+  }
+
+  /**
+   * Deletes local-store after test
+   * @throws StoreException
+   * @throws IOException
+   */
+  @After
+  public void after() throws StoreException, IOException {
+    localStore.shutdown();
+    String replica = mockPartitionId.getReplicaIds().get(0).getReplicaPath();
+    logger.info("Deleting {}", replica);
+    FileUtils.deleteDirectory(new File(replica));
+  }
+
+  /**
+   * Returns a recovery client that connects to Azurite
+   * @param callback
+   * @return
+   */
+  protected RecoveryNetworkClient createRecoveryClient(RecoveryNetworkClientCallback callback) {
+    // Create a test cloud client
+    return new RecoveryNetworkClient(verifiableProperties, mockClusterMap.getMetricRegistry(),
+        mockClusterMap, null, null, callback);
+  }
+
+  /**
+   * Returns a replica thread that replicates from Azurite to local-store
+   * @param recoveryNetworkClient
+   * @return
+   */
+  protected ReplicaThread createRecoveryThread(RecoveryNetworkClient recoveryNetworkClient) {
     // Create ReplicaThread
     MockStoreKeyConverterFactory storeKeyConverterFactory =
         new MockStoreKeyConverterFactory(null, null)
             .setConversionMap(new HashMap<>())
             .setReturnInputIfAbsent(true);
     StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
-    recoveryThread =
+    ReplicaThread recoveryThread =
         new ReplicaThread("recovery-thread", findTokenHelper, mockClusterMap, new AtomicInteger(0),
             cloudServiceDataNode, recoveryNetworkClient, new ReplicationConfig(verifiableProperties),
             new ReplicationMetrics(mockClusterMap.getMetricRegistry(), Collections.emptyList()), null,
@@ -232,14 +259,7 @@ public class RecoveryNetworkClientTest {
             null);
     // Add remote-replica-info to replica-thread
     recoveryThread.addRemoteReplicaInfo(remoteReplicaInfo);
-  }
-
-  @After
-  public void after() throws StoreException, IOException {
-    localStore.shutdown();
-    String replica = mockPartitionId.getReplicaIds().get(0).getReplicaPath();
-    logger.info("Deleting {}", replica);
-    FileUtils.deleteDirectory(new File(replica));
+    return recoveryThread;
   }
 
   /**
@@ -263,17 +283,17 @@ public class RecoveryNetworkClientTest {
   }
 
   /**
-   * Tests that basic recovery of uploaded blobIDs works.
-   * In each iteration, it sends a request to Azure Storage and retrieves M blobs where M < Total number of blobs.
-   * Finally, checks that all blobIDs have been recovered.
+   * Downloads all metadata from Azurite in pages by iterating given number of times
+   * @param callback
+   * @param numPages
+   * @return
    * @throws Exception
    */
-  @Test
-  public void testMetadataRecovery() throws Exception {
+  protected List<MessageInfo> fetchPaginatedMetadata(RecoveryNetworkClientCallback callback, int numPages)
+      throws Exception {
     RecoveryToken recoveryToken = new RecoveryToken();
-    List<MessageInfo> messageInfoList = new ArrayList<>();
-    int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
-        (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
+    List<MessageInfo> metadataList = new ArrayList<>();
+    RecoveryNetworkClient recoveryNetworkClient = createRecoveryClient(callback);
     // Iterate N times to retrieve all blobIDs
     for (Integer ignored : IntStream.rangeClosed(1, numPages).boxed().collect(Collectors.toList())) {
       // Send metadata request
@@ -284,16 +304,31 @@ public class RecoveryNetworkClientTest {
       ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
           new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
           .getReplicaMetadataResponseInfoList().get(0);
-      // Extract token
-      recoveryToken = (RecoveryToken) rinfo.getFindToken();
-      // Extract ambry metadata
-      messageInfoList.addAll(rinfo.getMessageInfoList());
+      if (rinfo.getError() == ServerErrorCode.No_Error) {
+        // Extract token
+        recoveryToken = (RecoveryToken) rinfo.getFindToken();
+        // Extract ambry metadata
+        metadataList.addAll(rinfo.getMessageInfoList());
+      }
     }
-    // Assert we recovered all blobIds intact
-    assertEquals(numPages, recoveryMetrics.listBlobsSuccessRate.getCount());
     assertTrue(recoveryToken.isEndOfPartition());
-    assertEquals(azureBlobs.size(), messageInfoList.size());
-    messageInfoList.forEach(messageInfo -> {
+    assertEquals(azureBlobs.size(), metadataList.size());
+    return metadataList;
+  }
+
+  ////////////////////////////////////////////// TESTS ///////////////////////////////////////////////////////////
+
+  /**
+   * Tests that all blob metadata is downloaded without any error.
+   * @throws Exception
+   */
+  @Test
+  public void testMetadataRecoveryClient() throws Exception {
+    int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
+        (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
+    List<MessageInfo> metadataList = fetchPaginatedMetadata(null, numPages);
+    // Assert we recovered all blobIds intact
+    metadataList.forEach(messageInfo -> {
       MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
       assertEquals(String.format("Azure blob metadata does not match that in local disk", OgMessageInfo, messageInfo),
           OgMessageInfo, messageInfo);
@@ -301,11 +336,11 @@ public class RecoveryNetworkClientTest {
   }
 
   /**
-   * Tests that all blobs are listed in spite of intermittent errors.
+   * Tests that all blob metadata is downloaded in spite of errors.
    * @throws Exception
    */
   @Test
-  public void testMetadataRecoveryFailure() throws Exception {
+  public void testMetadataRecoveryClientFailure() throws Exception {
     final int ERROR_FREQUENCY = 5; // Every n-th page is bad
     class ExceptionCallback implements RecoveryNetworkClientCallback {
       int numCalls = 0;
@@ -319,40 +354,13 @@ public class RecoveryNetworkClientTest {
         }
       }
     }
-    recoveryNetworkClient =
-        new RecoveryNetworkClient(new VerifiableProperties(properties),
-            new MetricRegistry(),    mockClusterMap, null, null, new ExceptionCallback());
-    recoveryMetrics = recoveryNetworkClient.getRecoveryMetrics();
-    RecoveryToken recoveryToken = new RecoveryToken();
-    List<MessageInfo> messageInfoList = new ArrayList<>();
     int numGoodPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
         (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
     int numBadPages = numGoodPages/ERROR_FREQUENCY;
-    int numIter  = numGoodPages + numBadPages;
-    // Iterate N times to retrieve all blobIDs
-    for (Integer ignored : IntStream.rangeClosed(1, numIter).boxed().collect(Collectors.toList())) {
-      // Send metadata request
-      List<ResponseInfo> responseInfoList =
-          recoveryNetworkClient.sendAndPoll(createMetadataRequest(recoveryToken),
-              Collections.emptySet(), 0);
-      // Receive metadata response
-      ReplicaMetadataResponseInfo rinfo = ReplicaMetadataResponse.readFrom(
-              new NettyByteBufDataInputStream(responseInfoList.get(0).content()), findTokenHelper, mockClusterMap)
-          .getReplicaMetadataResponseInfoList().get(0);
-      if (rinfo.getError() == ServerErrorCode.No_Error) {
-        // Extract token
-        recoveryToken = (RecoveryToken) rinfo.getFindToken();
-        // Extract ambry metadata
-        messageInfoList.addAll(rinfo.getMessageInfoList());
-      } else {
-        assertEquals(ServerErrorCode.IO_Error, rinfo.getError());
-      }
-    }
+    List<MessageInfo> metadataList = fetchPaginatedMetadata(new ExceptionCallback(),
+        numGoodPages + numBadPages);
     // Assert we recovered all blobIds intact
-    assertEquals(numBadPages, recoveryMetrics.listBlobsError.getCount());
-    assertTrue(recoveryToken.isEndOfPartition());
-    assertEquals(azureBlobs.size(), messageInfoList.size());
-    messageInfoList.forEach(messageInfo -> {
+    metadataList.forEach(messageInfo -> {
       MessageInfo OgMessageInfo = azureBlobs.get(messageInfo.getStoreKey().getID());
       assertEquals(String.format("Azure blob metadata does not match that in local disk", OgMessageInfo, messageInfo),
           OgMessageInfo, messageInfo);
@@ -360,7 +368,7 @@ public class RecoveryNetworkClientTest {
   }
 
   /**
-   * Tests that serialization of RecoveryToken works
+   * Tests serialization of RecoveryToken
    * @throws IOException
    */
   @Test
@@ -372,13 +380,14 @@ public class RecoveryNetworkClientTest {
   }
 
   /**
-   * Recovers all blobs from Azure using replicate() and tests replication end-to-end
+   * Tests that replication code downloads all blobs from Azurite
    * @throws StoreException
    */
   @Test
-  public void testBackupRecovery() throws StoreException {
+  public void testRecoveryReplication() throws StoreException {
     int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
         (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
+    ReplicaThread recoveryThread = createRecoveryThread(createRecoveryClient(null));
     // Iterate N times to retrieve all blobIDs from cloud and store to disk
     IntStream.rangeClosed(1, numPages).forEach(i -> recoveryThread.replicate());
     // Get local blobs
