@@ -243,6 +243,14 @@ public class DiskManager {
     }
   }
 
+  /**
+   * Maybe recover the blob stores that failed to start. The configuration has to be set to true and the number
+   * of failed blob stores are not the same as the total number on the disk, then we would try to recover each
+   * blob store. We only recover the blob store if the exception thrown in the start method is StoreException and
+   * the store error code is one of the recoverable error codes.
+   * @param numStoreFailures
+   * @param startExceptions
+   */
   void maybeRecoverBlobStores(int numStoreFailures, Map<PartitionId, Exception> startExceptions) {
     if (!storeConfig.storeRemoveDirectoryAndRestartBlobStore || numStoreFailures == stores.size()) {
       return;
