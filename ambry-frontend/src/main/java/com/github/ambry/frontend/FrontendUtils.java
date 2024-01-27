@@ -13,8 +13,6 @@
  */
 package com.github.ambry.frontend;
 
-import com.github.ambry.account.AccountServiceException;
-import com.github.ambry.account.Dataset;
 import com.github.ambry.account.DatasetVersionRecord;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
@@ -38,7 +36,6 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 import org.slf4j.Logger;
@@ -90,8 +87,8 @@ public class FrontendUtils {
    * @param finalCallback the final callback to call once the chain is complete or if it is interrupted
    * @return the {@link Callback} returned by {@link CallbackUtils#chainCallback}.
    */
-  static <T, V> Callback<T> buildCallback(AsyncOperationTracker.Metrics metrics, ThrowingConsumer<T> successAction,
-      String context, Logger logger, Callback<V> finalCallback) {
+  public static <T, V> Callback<T> buildCallback(AsyncOperationTracker.Metrics metrics,
+      ThrowingConsumer<T> successAction, String context, Logger logger, Callback<V> finalCallback) {
     AsyncOperationTracker tracker = new AsyncOperationTracker(context, logger, metrics);
     return CallbackUtils.chainCallback(tracker, finalCallback, successAction);
   }
