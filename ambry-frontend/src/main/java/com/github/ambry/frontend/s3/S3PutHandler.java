@@ -61,6 +61,7 @@ public class S3PutHandler {
       restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
     } catch (RestServiceException e) {
       callback.onCompletion(null, e);
+      return;
     }
 
     // 2. Upload the blob by following named blob PUT path
@@ -74,10 +75,10 @@ public class S3PutHandler {
             restResponseChannel.removeHeader(headerName);
           }
         }
+        callback.onCompletion(result, exception);
       } catch (RestServiceException e) {
         callback.onCompletion(null, e);
       }
-      callback.onCompletion(result, exception);
     });
   }
 }
