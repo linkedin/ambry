@@ -17,6 +17,7 @@ package com.github.ambry.frontend.s3;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.NamedBlobPutHandler;
+import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
@@ -29,6 +30,7 @@ import static com.github.ambry.rest.RestUtils.*;
  * API reference: <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html">...</a>
  */
 public class S3PutHandler {
+  public static final String AMBRY_PARAMETERS_PREFIX = "x-ambry-";
   private final NamedBlobPutHandler namedBlobPutHandler;
 
   /**
@@ -46,19 +48,36 @@ public class S3PutHandler {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
   public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+
+    // 1. Add headers needed that are needed by Ambry
     try {
-      // 1. Add headers needed that are needed by Ambry
       NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
       String accountName = namedBlobPath.getAccountName();
       // Use Account-name as service ID.
       restRequest.setArg(Headers.SERVICE_ID, accountName);
-      // Set x-ambry-content-type to content-type http header
+      // Set x-ambry-content-type from content-type http header
       restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
-
-      // 2. Upload the blob by following named blob put path
-      namedBlobPutHandler.handle(restRequest, restResponseChannel, callback);
+      // Set x-ambry-content-encoding from content-encoding http header
+      restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
     } catch (RestServiceException e) {
       callback.onCompletion(null, e);
     }
+
+    // 2. Upload the blob by following named blob PUT path
+    namedBlobPutHandler.handle(restRequest, restResponseChannel, (result, exception) -> {
+      try {
+        // Set the response status to 200 since Ambry named blob PUT has response as 201.
+        restResponseChannel.setStatus(ResponseStatus.Ok);
+        // Remove any Ambry specific headers in response
+        for (String headerName : restResponseChannel.getHeaders()) {
+          if (headerName.startsWith(AMBRY_PARAMETERS_PREFIX)) {
+            restResponseChannel.removeHeader(headerName);
+          }
+        }
+      } catch (RestServiceException e) {
+        callback.onCompletion(null, e);
+      }
+      callback.onCompletion(result, exception);
+    });
   }
 }

@@ -61,6 +61,7 @@ import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
@@ -1052,6 +1053,16 @@ public class AmbrySecurityServiceTest {
 
     @Override
     public Object getHeader(String headerName) {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public List<String> getHeaders() {
+      throw new IllegalStateException("Not implemented");
+    }
+
+    @Override
+    public void removeHeader(String headerName) {
       throw new IllegalStateException("Not implemented");
     }
   }

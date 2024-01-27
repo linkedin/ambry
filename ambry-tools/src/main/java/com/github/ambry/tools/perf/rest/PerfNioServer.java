@@ -30,8 +30,10 @@ import com.github.ambry.utils.Time;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -432,6 +434,16 @@ class PerfNioServer implements NioServer {
     @Override
     public Object getHeader(String headerName) {
       return headers.get(headerName);
+    }
+
+    @Override
+    public List<String> getHeaders() {
+      return new ArrayList<>(headers.keySet());
+    }
+
+    @Override
+    public void removeHeader(String headerName) {
+      headers.remove(headerName);
     }
   }
 }

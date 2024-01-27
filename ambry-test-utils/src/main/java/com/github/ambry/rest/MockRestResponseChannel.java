@@ -209,6 +209,30 @@ public class MockRestResponseChannel implements RestResponseChannel {
   }
 
   @Override
+  public List<String> getHeaders() {
+    List<String> headers = new ArrayList<>();
+    try {
+      if (responseMetadata.has(RESPONSE_HEADERS_KEY)) {
+        headers.addAll(responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).keySet());
+      }
+    } catch (JSONException e) {
+      throw new IllegalStateException(e);
+    }
+    return headers;
+  }
+
+  @Override
+  public void removeHeader(String headerName) {
+    try {
+      if (responseMetadata.has(RESPONSE_HEADERS_KEY)) {
+        responseMetadata.getJSONObject(RESPONSE_HEADERS_KEY).remove(headerName);
+      }
+    } catch (JSONException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
+  @Override
   public boolean isOpen() {
     boolean isOpen = channelOpen.get();
     onEventComplete(Event.IsOpen);

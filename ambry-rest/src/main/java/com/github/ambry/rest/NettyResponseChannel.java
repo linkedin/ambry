@@ -330,12 +330,38 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   @Override
+  public void removeHeader(String headerName) {
+    if (headerName != null && responseMetadata.headers().contains(headerName)) {
+      responseMetadata.headers().remove(headerName);
+      if (responseMetadataWriteInitiated.get()) {
+        nettyMetrics.deadResponseAccessError.inc();
+        throw new IllegalStateException(
+            "Response metadata changed after it has already been written to the channel. Channel Active: "
+                + ctx.channel().isActive());
+      } else {
+        logger.trace("Header {} removed from channel {}", headerName, ctx.channel());
+      }
+    } else {
+      throw new IllegalArgumentException("Header name [" + headerName + "] null");
+    }
+  }
+
+  @Override
   public Object getHeader(String headerName) {
     HttpResponse response = finalResponseMetadata;
     if (response == null) {
       response = responseMetadata;
     }
     return response.headers().get(headerName);
+  }
+
+  @Override
+  public List<String> getHeaders() {
+    HttpResponse response = finalResponseMetadata;
+    if (response == null) {
+      response = responseMetadata;
+    }
+    return new ArrayList<>(response.headers().names());
   }
 
   /**
