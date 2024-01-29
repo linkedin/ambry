@@ -5,9 +5,11 @@
   },
   "clusterConfigFields": {
     "evenness": 3,
-    "lessMovement": 2,
-    "partitionDiskWeightInGB": 100,
-    "maxPartitionInTransition": 50,
-    "delayRebalanceTimeInMs": 1200000
+    "lessMovement": 4,
+    "partitionDiskWeightInGB": 386,
+    "maxPartitionInTransition": 1500,
+    "delayRebalanceTimeInMs": 86400000,
+    "errorThresholdForLoadBalance": 2000,
+    "maxThreadsForStateTransition": 300
   }
 }
