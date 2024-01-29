@@ -44,7 +44,7 @@ jobs:
 
       - name: Install and run Azurite
         run: |
-          killall azurite
+          killall azurite || true
           npm install -g azurite
           azurite --silent &
 
