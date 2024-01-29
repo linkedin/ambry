@@ -48,14 +48,16 @@ import static org.mockito.Mockito.*;
 public class AmbryStateModelFactoryTest {
   private final ClusterMapConfig config;
   private final String stateModelDef;
+  private final boolean ignoreDownwardStateTransition;
 
   @Parameterized.Parameters
   public static List<Object[]> data() {
     return Arrays.asList(
-        new Object[][]{{ClusterMapConfig.OLD_STATE_MODEL_DEF}, {ClusterMapConfig.AMBRY_STATE_MODEL_DEF}});
+        new Object[][]{{ClusterMapConfig.OLD_STATE_MODEL_DEF, false,}, {ClusterMapConfig.AMBRY_STATE_MODEL_DEF, true},
+            {ClusterMapConfig.AMBRY_STATE_MODEL_DEF, false}});
   }
 
-  public AmbryStateModelFactoryTest(String stateModelDef) throws Exception {
+  public AmbryStateModelFactoryTest(String stateModelDef, boolean ignoreDownward) throws Exception {
     List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new TestUtils.ZkInfo(null, "DC0", (byte) 0, 2299, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -66,8 +68,10 @@ public class AmbryStateModelFactoryTest {
     props.setProperty("clustermap.state.model.definition", stateModelDef);
     props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
     props.setProperty("clustermap.enable.state.model.listener", Boolean.toString(true));
+    props.setProperty(ClusterMapConfig.IGNORE_DOWNWARD_STATE_TRANSITION, Boolean.toString(ignoreDownward));
     config = new ClusterMapConfig(new VerifiableProperties(props));
     this.stateModelDef = stateModelDef;
+    this.ignoreDownwardStateTransition = ignoreDownward;
   }
 
   @Test
@@ -128,7 +132,7 @@ public class AmbryStateModelFactoryTest {
    */
   @Test
   public void testAmbryPartitionStateModel() {
-    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF) && !ignoreDownwardStateTransition);
     MetricRegistry metricRegistry = new MetricRegistry();
     MockHelixParticipant.metricRegistry = metricRegistry;
     DataNodeConfig mockDataNodeConfig = Mockito.mock(DataNodeConfig.class);
@@ -211,7 +215,7 @@ public class AmbryStateModelFactoryTest {
 
   @Test
   public void testAmbryPartitionStateModelWithDuplicatePartitionIds() {
-    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF) && !ignoreDownwardStateTransition);
     MetricRegistry metricRegistry = new MetricRegistry();
     MockHelixParticipant.metricRegistry = metricRegistry;
     DataNodeConfig mockDataNodeConfig = Mockito.mock(DataNodeConfig.class);
@@ -406,7 +410,7 @@ public class AmbryStateModelFactoryTest {
 
   @Test
   public void testMultipleResourceNamesFromClusterMap() {
-    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF));
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF) && !ignoreDownwardStateTransition);
     MetricRegistry metricRegistry = new MetricRegistry();
     MockHelixParticipant.metricRegistry = metricRegistry;
     DataNodeConfig mockDataNodeConfig = Mockito.mock(DataNodeConfig.class);
@@ -472,6 +476,82 @@ public class AmbryStateModelFactoryTest {
     assertStateCount(Arrays.asList("offline", "bootstrap", "standby"), Arrays.asList(0, 0, 0), metricRegistry);
     assertEquals("Dropped count should be updated", 1, participantMetrics.partitionDroppedCount.getCount());
 
+    MockHelixManagerFactory.overrideGetHelixManager = false;
+  }
+
+  @Test
+  public void testAmbryPartitionStateModelWithDownwardStateTransitionConfig() {
+    assumeTrue(stateModelDef.equals(ClusterMapConfig.AMBRY_STATE_MODEL_DEF) && ignoreDownwardStateTransition);
+    MetricRegistry metricRegistry = new MetricRegistry();
+    MockHelixParticipant.metricRegistry = metricRegistry;
+    DataNodeConfig mockDataNodeConfig = Mockito.mock(DataNodeConfig.class);
+    Set<String> disabledPartitionSet = new HashSet<>();
+    Set<String> enabledPartitionSet = new HashSet<>();
+    when(mockDataNodeConfig.getDisabledReplicas()).thenReturn(disabledPartitionSet);
+    DataNodeConfigSource mockConfigSource = Mockito.mock(DataNodeConfigSource.class);
+    when(mockConfigSource.get(anyString())).thenReturn(mockDataNodeConfig);
+    HelixAdmin mockHelixAdmin = Mockito.mock(HelixAdmin.class);
+    InstanceConfig mockInstanceConfig = Mockito.mock(InstanceConfig.class);
+    doAnswer(invocation -> {
+      String partitionName = invocation.getArgument(1);
+      boolean enable = invocation.getArgument(2);
+      if (enable) {
+        enabledPartitionSet.add(partitionName);
+      }
+      return null;
+    }).when(mockInstanceConfig).setInstanceEnabledForPartition(any(), any(), anyBoolean());
+    when(mockHelixAdmin.getInstanceConfig(anyString(), anyString())).thenReturn(mockInstanceConfig);
+    when(mockHelixAdmin.setInstanceConfig(anyString(), anyString(), any())).thenReturn(true);
+    HelixManager mockHelixManager = Mockito.mock(HelixManager.class);
+    when(mockHelixManager.getClusterManagmentTool()).thenReturn(mockHelixAdmin);
+    MockHelixManagerFactory.overrideGetHelixManager = true;
+    MockHelixParticipant.mockHelixFactory = new MockHelixManagerFactory(mockConfigSource, mockHelixManager);
+    MockHelixParticipant mockHelixParticipant = new MockHelixParticipant(config);
+    HelixParticipantMetrics participantMetrics = mockHelixParticipant.getHelixParticipantMetrics();
+    String resourceName = "0";
+    String partitionName = "1";
+    Message mockMessage = Mockito.mock(Message.class);
+    when(mockMessage.getPartitionName()).thenReturn(partitionName);
+    when(mockMessage.getResourceName()).thenReturn(resourceName);
+    HelixClusterManager clusterManager = mock(HelixClusterManager.class);
+    // The cluster map returns resource name
+    when(clusterManager.getResourceForPartitionInLocalDc(anyString())).thenReturn(Collections.singleton(resourceName));
+    AmbryPartitionStateModel stateModel =
+        new AmbryPartitionStateModel(resourceName, partitionName, mockHelixParticipant, config, clusterManager);
+    mockHelixParticipant.setInitialLocalPartitions(new HashSet<>(Collections.singletonList(partitionName)));
+    assertStateCount(Arrays.asList("offline"), Arrays.asList(1), metricRegistry);
+
+    // OFFLINE -> BOOTSTRAP
+    stateModel.onBecomeBootstrapFromOffline(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "bootstrap"), Arrays.asList(0, 1), metricRegistry);
+    // BOOTSTRAP -> STANDBY
+    stateModel.onBecomeStandbyFromBootstrap(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "bootstrap", "standby"), Arrays.asList(0, 0, 1), metricRegistry);
+    // STANDBY -> LEADER
+    stateModel.onBecomeLeaderFromStandby(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "leader", "standby"), Arrays.asList(0, 1, 0), metricRegistry);
+    // LEADER -> STANDBY
+    stateModel.onBecomeStandbyFromLeader(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "leader", "standby"), Arrays.asList(0, 0, 1), metricRegistry);
+    // STANDBY -> INACTIVE, ignored
+    stateModel.onBecomeInactiveFromStandby(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "inactive", "standby", "leader"), Arrays.asList(0, 0, 1, 0),
+        metricRegistry);
+    // INACTIVE -> OFFLINE, ignored
+    stateModel.onBecomeOfflineFromInactive(mockMessage, null);
+    assertStateCount(Arrays.asList("offline", "inactive", "standby", "leader"), Arrays.asList(0, 0, 1, 0),
+        metricRegistry);
+    // OFFLINE -> DROPPED, ignored
+    disabledPartitionSet.add(partitionName);
+    stateModel.onBecomeDroppedFromOffline(mockMessage, null);
+    assertEquals("Dropped count should not be updated", 0, participantMetrics.partitionDroppedCount.getCount());
+
+    // reset method
+    stateModel.reset();
+    assertStateCount(Arrays.asList("offline"), Arrays.asList(1), metricRegistry);
+    // call reset method again to mock the case where same partition is reset multiple times during zk disconnection or shutdown
+    stateModel.reset();
+    assertStateCount(Arrays.asList("offline"), Arrays.asList(1), metricRegistry);
     MockHelixManagerFactory.overrideGetHelixManager = false;
   }
 
