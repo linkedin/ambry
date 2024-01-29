@@ -146,11 +146,15 @@ public class VcrBackupTest {
   }
 
   @After
-  public void cleanup() throws IOException {
-    logger.info("Start to clean up.");
-    mockCluster.cleanup();
-    helixControllerManager.syncStop();
-    zkInfo.shutdown();
+  public void cleanup() {
+    try {
+      logger.info("Start to clean up.");
+      mockCluster.cleanup();
+      helixControllerManager.syncStop();
+      zkInfo.shutdown();
+    } catch (Throwable t) {
+      logger.error("Failed to cleanup due to {}", t);
+    }
   }
 
   /**
