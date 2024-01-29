@@ -143,9 +143,12 @@ public class AmbryPartitionStateModel extends StateModel {
   public void onBecomeInactiveFromStandby(Message message, NotificationContext context) {
     boolean shouldTransition = shouldTransition(message);
     String partitionName = message.getPartitionName();
-    logger.info("Partition {} in resource {} is becoming INACTIVE from STANDBY, Should Transition? {}", partitionName,
-        message.getResourceName(), shouldTransition);
-    if (clusterMapConfig.clustermapEnableStateModelListener && shouldTransition) {
+    logger.info(
+        "Partition {} in resource {} is becoming INACTIVE from STANDBY, Should Transition? {} Ignore downward state transition? {}",
+        partitionName, message.getResourceName(), shouldTransition,
+        clusterMapConfig.clusterMapIgnoreDownwardStateTransition);
+    if (clusterMapConfig.clustermapEnableStateModelListener && shouldTransition
+        && !clusterMapConfig.clusterMapIgnoreDownwardStateTransition) {
       partitionStateChangeListener.onPartitionBecomeInactiveFromStandby(partitionName);
     }
   }
@@ -154,9 +157,12 @@ public class AmbryPartitionStateModel extends StateModel {
   public void onBecomeOfflineFromInactive(Message message, NotificationContext context) {
     boolean shouldTransition = shouldTransition(message);
     String partitionName = message.getPartitionName();
-    logger.info("Partition {} in resource {} is becoming OFFLINE from INACTIVE, Should Transition? {}", partitionName,
-        message.getResourceName(), shouldTransition);
-    if (clusterMapConfig.clustermapEnableStateModelListener && shouldTransition) {
+    logger.info(
+        "Partition {} in resource {} is becoming OFFLINE from INACTIVE, Should Transition? {} Ignore downward state transition? {}",
+        partitionName, message.getResourceName(), shouldTransition,
+        clusterMapConfig.clusterMapIgnoreDownwardStateTransition);
+    if (clusterMapConfig.clustermapEnableStateModelListener && shouldTransition
+        && !clusterMapConfig.clusterMapIgnoreDownwardStateTransition) {
       partitionStateChangeListener.onPartitionBecomeOfflineFromInactive(partitionName);
     }
   }
@@ -165,9 +171,12 @@ public class AmbryPartitionStateModel extends StateModel {
   public void onBecomeDroppedFromOffline(Message message, NotificationContext context) {
     boolean shouldTransition = shouldTransition(message);
     String partitionName = message.getPartitionName();
-    logger.info("Partition {} in resource {} is becoming DROPPED from OFFLINE, Should Transition? {}", partitionName,
-        message.getResourceName(), shouldTransition);
-    if (clusterMapConfig.clustermapEnableStateModelListener && shouldTransition) {
+    logger.info(
+        "Partition {} in resource {} is becoming DROPPED from OFFLINE, Should Transition? {} Ignore downward state transition? {}",
+        partitionName, message.getResourceName(), shouldTransition,
+        clusterMapConfig.clusterMapIgnoreDownwardStateTransition);
+    if (clusterMapConfig.clustermapEnableStateModelListener && shouldTransition
+        && !clusterMapConfig.clusterMapIgnoreDownwardStateTransition) {
       partitionStateChangeListener.onPartitionBecomeDroppedFromOffline(partitionName);
     }
   }

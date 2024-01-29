@@ -351,6 +351,11 @@ public class ClusterMapConfig {
   @Default("60 * 1000")
   public final long clustermapDistributedLockLeaseTimeoutInMs;
 
+  public static final String IGNORE_DOWNWARD_STATE_TRANSITION = "clustermap.ignore.downward.state.transition";
+  @Config(IGNORE_DOWNWARD_STATE_TRANSITION)
+  @Default("false")
+  public final boolean clusterMapIgnoreDownwardStateTransition;
+
   public ClusterMapConfig(VerifiableProperties verifiableProperties) {
     clusterMapFixedTimeoutDatanodeErrorThreshold =
         verifiableProperties.getIntInRange("clustermap.fixedtimeout.datanode.error.threshold", 3, 1, 100);
@@ -429,5 +434,6 @@ public class ClusterMapConfig {
     clustermapDefaultReplicaCapacityInBytes =
         verifiableProperties.getLongInRange("clustermap.default.replica.capacity.in.bytes", 384L * 1024 * 1024 * 1024,
             0, Long.MAX_VALUE);
+    clusterMapIgnoreDownwardStateTransition = verifiableProperties.getBoolean(IGNORE_DOWNWARD_STATE_TRANSITION, false);
   }
 }
