@@ -65,7 +65,7 @@ public class HeadBlobHandler {
     this.quotaManager = quotaManager;
   }
 
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
       throws RestServiceException {
     // named blob requests have their account/container in the URI, so checks can be done prior to ID conversion.
     if (getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {

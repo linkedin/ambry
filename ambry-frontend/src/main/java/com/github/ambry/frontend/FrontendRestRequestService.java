@@ -18,6 +18,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.frontend.s3.S3HeadHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
 import com.github.ambry.named.NamedBlobDb;
@@ -106,6 +107,7 @@ class FrontendRestRequestService implements RestRequestService {
   private GetStatsReportHandler getStatsReportHandler;
   private S3ListHandler s3ListHandler;
   private S3PutHandler s3PutHandler;
+  private S3HeadHandler s3HeadHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
   private final Random random = new Random();
@@ -219,6 +221,7 @@ class FrontendRestRequestService implements RestRequestService {
         accountAndContainerInjector);
     s3ListHandler = new S3ListHandler(namedBlobListHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler);
+    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
@@ -393,9 +396,15 @@ class FrontendRestRequestService implements RestRequestService {
           frontendMetrics.headBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
 
-      headBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-        submitResponse(restRequest, restResponseChannel, null, e);
-      });
+      if (isS3Request(restRequest)) {
+        s3HeadHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+          submitResponse(restRequest, restResponseChannel, null, e);
+        });
+      } else {
+        headBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+          submitResponse(restRequest, restResponseChannel, null, e);
+        });
+      }
     };
     preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.headPreProcessingMetrics,
         routingAction);
