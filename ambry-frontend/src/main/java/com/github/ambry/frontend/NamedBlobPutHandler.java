@@ -144,7 +144,7 @@ public class NamedBlobPutHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
     restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
     new NamedBlobPutHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }

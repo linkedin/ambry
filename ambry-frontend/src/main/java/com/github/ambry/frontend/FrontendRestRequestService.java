@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.frontend.s3.S3ListHandler;
+import com.github.ambry.frontend.s3.S3PutHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.rest.RequestPath;
@@ -104,6 +105,7 @@ class FrontendRestRequestService implements RestRequestService {
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
   private S3ListHandler s3ListHandler;
+  private S3PutHandler s3PutHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
   private final Random random = new Random();
@@ -216,6 +218,7 @@ class FrontendRestRequestService implements RestRequestService {
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
     s3ListHandler = new S3ListHandler(namedBlobListHandler);
+    s3PutHandler = new S3PutHandler(namedBlobPutHandler);
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
@@ -351,8 +354,13 @@ class FrontendRestRequestService implements RestRequestService {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)) {
-        namedBlobPutHandler.handle(restRequest, restResponseChannel,
-            (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
+        if (isS3Request(restRequest)) {
+          s3PutHandler.handle(restRequest, restResponseChannel,
+              (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
+        } else {
+          namedBlobPutHandler.handle(restRequest, restResponseChannel,
+              (r, e) -> submitResponse(restRequest, restResponseChannel, null, e));
+        }
       } else {
         throw new RestServiceException("Unrecognized operation: " + requestPath.getOperationOrBlobId(false),
             RestServiceErrorCode.BadRequest);

@@ -17,6 +17,7 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.commons.Callback;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.concurrent.Future;
 
 
@@ -113,4 +114,16 @@ public interface RestResponseChannel extends AsyncWritableChannel {
    * @return the value of the header with name {@code headerName} if it exists. {@code null} otherwise.
    */
   public Object getHeader(String headerName);
+
+  /**
+   * Get the list of headers
+   * @return the names of headers.
+   */
+  public List<String> getHeaders();
+
+  /**
+   * Removes a header if it is present
+   * @param headerName the name of the header to remove
+   */
+  public void removeHeader(String headerName);
 }
