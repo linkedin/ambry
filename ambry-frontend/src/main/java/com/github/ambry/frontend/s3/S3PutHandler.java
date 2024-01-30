@@ -49,15 +49,12 @@ public class S3PutHandler {
    */
   public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
 
-    // 1. Add headers needed that are needed by Ambry
+    // 1. Add headers required by Ambry. These become the blob properties.
     try {
       NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
       String accountName = namedBlobPath.getAccountName();
-      // Use Account-name as service ID.
       restRequest.setArg(Headers.SERVICE_ID, accountName);
-      // Set x-ambry-content-type from content-type http header
       restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
-      // Set x-ambry-content-encoding from content-encoding http header
       restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
     } catch (RestServiceException e) {
       callback.onCompletion(null, e);
@@ -66,6 +63,10 @@ public class S3PutHandler {
 
     // 2. Upload the blob by following named blob PUT path
     namedBlobPutHandler.handle(restRequest, restResponseChannel, (result, exception) -> {
+      if (exception != null) {
+        callback.onCompletion(result, exception);
+        return;
+      }
       try {
         // Set the response status to 200 since Ambry named blob PUT has response as 201.
         restResponseChannel.setStatus(ResponseStatus.Ok);
