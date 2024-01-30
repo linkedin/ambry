@@ -35,6 +35,11 @@ public enum ResponseStatus {
   Accepted(202),
 
   /**
+   * 204 - No content.
+   */
+  NoContent(204),
+
+  /**
    * 206 - Partial content.
    */
   PartialContent(206),

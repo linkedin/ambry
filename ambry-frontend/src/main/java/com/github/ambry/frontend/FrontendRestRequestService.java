@@ -18,6 +18,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3HeadHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
@@ -105,6 +106,7 @@ class FrontendRestRequestService implements RestRequestService {
   private PostAccountsHandler postAccountsHandler;
   private PostDatasetsHandler postDatasetsHandler;
   private GetStatsReportHandler getStatsReportHandler;
+  private S3DeleteHandler s3DeleteHandler;
   private S3ListHandler s3ListHandler;
   private S3PutHandler s3PutHandler;
   private S3HeadHandler s3HeadHandler;
@@ -219,9 +221,10 @@ class FrontendRestRequestService implements RestRequestService {
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
+    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler);
+    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     s3ListHandler = new S3ListHandler(namedBlobListHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler);
-    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
@@ -380,9 +383,15 @@ class FrontendRestRequestService implements RestRequestService {
           submitResponse(restRequest, restResponseChannel, null, e);
         });
       } else {
-        deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
-          submitResponse(restRequest, restResponseChannel, null, e);
-        });
+        if (isS3Request(restRequest)) {
+          s3DeleteHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+            submitResponse(restRequest, restResponseChannel, null, e);
+          });
+        } else {
+          deleteBlobHandler.handle(restRequest, restResponseChannel, (r, e) -> {
+            submitResponse(restRequest, restResponseChannel, null, e);
+          });
+        }
       }
     };
     preProcessAndRouteRequest(restRequest, restResponseChannel, frontendMetrics.deletePreProcessingMetrics,
