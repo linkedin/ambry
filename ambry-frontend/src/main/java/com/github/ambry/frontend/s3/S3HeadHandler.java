@@ -86,7 +86,7 @@ public class S3HeadHandler {
       callback.onCompletion(result, exception);
     };
 
-    if (path.split("/").length <= 3) {
+    if (isHeadBucketRequest(path)) {
       bucketHandler.handle(restRequest, restResponseChannel, wrappedCallback);
     } else {
       objectHandler.handle(restRequest, restResponseChannel, wrappedCallback);
@@ -108,9 +108,6 @@ public class S3HeadHandler {
 
     private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
         Callback<ReadableStreamChannel> callback) {
-      if (!getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
-        throw new RuntimeException("S3HeadBucketHandler should only handle named blob requests");
-      }
       new CallbackChain(restRequest, restResponseChannel, callback).start();
     }
 
@@ -176,5 +173,9 @@ public class S3HeadHandler {
       headBlobHandler.handle(restRequest, restResponseChannel,
           ((result, exception) -> callback.onCompletion(null, exception)));
     }
+  }
+
+  private boolean isHeadBucketRequest(String path) {
+    return path.split("/").length <= 3;
   }
 }
