@@ -51,14 +51,12 @@ import static org.junit.Assert.*;
 
 public class S3HeadHandlerTest {
   private static final InMemAccountService ACCOUNT_SERVICE = new InMemAccountService(false, true);
-  private static final String SERVICE_ID = "test-app";
   private static final String CONTENT_TYPE = "text/plain";
-  private static final String OWNER_ID = "tester";
   private static final String CLUSTER_NAME = "ambry-test";
-  private static final String NAMED_BLOB_PREFIX = "/named";
-  private static final String S3_PREFIX = "/s3";
-  private static final String PREFIX = "directory-name";
-  private static final String KEY_NAME = String.format("%s/%s", PREFIX, "key_name");
+  private static final String KEY_NAME = "directory-name/key_name";
+  private static final int BLOB_SIZE = 1024;
+  private static final int BEG = 200;
+  private static final int END = 299;
   private final Account account;
   private final Container container;
   private FrontendConfig frontendConfig;
@@ -97,38 +95,35 @@ public class S3HeadHandlerTest {
   @Test
   public void headObjectTest() throws Exception {
     // 1. Head the object with range
-    String uri = String.format("%s/%s/%s", S3_PREFIX, account.getName(), KEY_NAME);
+    String uri = String.format("/s3/%s/%s", account.getName(), KEY_NAME);
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
-    request.setArg(RestUtils.Headers.RANGE, "bytes=200-299");
     s3HeadHandler.handle(request, restResponseChannel, futureResult::done);
 
     // 2. Verify results
     assertNull(futureResult.get());
-    assertEquals("Mismatch on status", ResponseStatus.PartialContent, restResponseChannel.getStatus());
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", "text/plain",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-    assertEquals("Mismatch in content length", 100,
+    assertEquals("Mismatch in content length", BLOB_SIZE,
         Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH).toString()));
     assertEquals("Mismatch in accept range", "bytes",
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
-    assertEquals("Mismatch in content range", "bytes 200-299/1024",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
   }
 
   @Test
   public void headObjectWithRangeTest() throws Exception {
     // 1. Head the object with range
-    String uri = String.format("%s/%s/%s", S3_PREFIX, account.getName(), KEY_NAME);
+    String uri = String.format("/s3/%s/%s", account.getName(), KEY_NAME);
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
-    request.setArg(RestUtils.Headers.RANGE, "bytes=200-299");
+    request.setArg(RestUtils.Headers.RANGE, String.format("bytes=%d-%d", BEG, END));
     s3HeadHandler.handle(request, restResponseChannel, futureResult::done);
 
     // 2. Verify results
@@ -138,9 +133,9 @@ public class S3HeadHandlerTest {
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
     assertEquals("Mismatch in accept range", "bytes",
         restResponseChannel.getHeader(RestUtils.Headers.ACCEPT_RANGES));
-    assertEquals("Mismatch in content length", 100,
+    assertEquals("Mismatch in content length", END - BEG + 1,
         Integer.parseInt(restResponseChannel.getHeader(RestUtils.Headers.CONTENT_LENGTH).toString()));
-    assertEquals("Mismatch in content range", "bytes 200-299/1024",
+    assertEquals("Mismatch in content range", String.format("bytes %d-%d/%d", BEG, END, BLOB_SIZE),
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_RANGE));
   }
 
@@ -172,12 +167,11 @@ public class S3HeadHandlerTest {
   }
 
   private void putABlob() throws Exception {
-    String requestPath = String.format("%s/%s/%s/%s",
-        NAMED_BLOB_PREFIX, account.getName(), container.getName(), KEY_NAME);
+    String requestPath = String.format("/named/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
     JSONObject headers = new JSONObject();
     FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
-        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, null);
-    byte[] content = TestUtils.getRandomBytes(1024);
+        "test-app", CONTENT_TYPE, "tester", null, null, null);
+    byte[] content = TestUtils.getRandomBytes(BLOB_SIZE);
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, requestPath, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,

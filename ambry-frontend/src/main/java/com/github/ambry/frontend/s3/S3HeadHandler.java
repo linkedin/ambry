@@ -62,7 +62,7 @@ public class S3HeadHandler {
 
   /**
    * Process the request and construct the response according to the
-   * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html">HeadOjbect spec</a> and
+   * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html">HeadObject spec</a> and
    * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadBucket.html">BucketObject spec</a>
    *
    * @param restRequest the {@link RestRequest} that contains the request parameters and body.
