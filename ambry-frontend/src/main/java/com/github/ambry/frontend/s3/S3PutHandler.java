@@ -63,18 +63,16 @@ public class S3PutHandler {
 
     // 2. Upload the blob by following named blob PUT path
     namedBlobPutHandler.handle(restRequest, restResponseChannel, (result, exception) -> {
-      if (exception != null) {
-        callback.onCompletion(result, exception);
-        return;
-      }
       try {
-        // Set the response status to 200 since Ambry named blob PUT has response as 201.
-        restResponseChannel.setStatus(ResponseStatus.Ok);
         // Remove any Ambry specific headers in response
         for (String headerName : restResponseChannel.getHeaders()) {
           if (headerName.startsWith(AMBRY_PARAMETERS_PREFIX)) {
             restResponseChannel.removeHeader(headerName);
           }
+        }
+        if (exception == null && restResponseChannel.getStatus() == ResponseStatus.Created) {
+          // Set the response status to 200 since Ambry named blob PUT has response as 201.
+          restResponseChannel.setStatus(ResponseStatus.Ok);
         }
         callback.onCompletion(result, exception);
       } catch (RestServiceException e) {
