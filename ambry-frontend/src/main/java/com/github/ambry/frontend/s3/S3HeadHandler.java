@@ -81,7 +81,7 @@ public class S3HeadHandler {
 
     Callback<ReadableStreamChannel> wrappedCallback = (result, exception) -> {
 
-      // TODO: remove x-ambry- headers
+      // TODO [S3]: remove x-ambry- headers
 
       callback.onCompletion(result, exception);
     };
@@ -168,7 +168,7 @@ public class S3HeadHandler {
     private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
         Callback<ReadableStreamChannel> callback) throws RestServiceException {
 
-      // TODO: implement PartNumber handling
+      // TODO [S3]: implement PartNumber handling
 
       headBlobHandler.handle(restRequest, restResponseChannel,
           ((result, exception) -> callback.onCompletion(null, exception)));
