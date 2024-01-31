@@ -13,8 +13,10 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.cosmos.CosmosContainer;
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
 import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replication.FindTokenHelper;
@@ -27,27 +29,30 @@ import java.io.IOException;
  */
 public class RecoveryNetworkClientFactory implements NetworkClientFactory {
   private final ClusterMap clustermap;
-  private final FindTokenHelper findTokenHelper;
   private final StoreManager storeManager;
-  private final CosmosContainer cosmosContainer;
+  private final VerifiableProperties properties;
+  private final MetricRegistry registry;
+  private final AccountService accountService;
 
   /**
    * Constructor to create the factory
-   * @param clusterMap The {@link ClusterMap} object.
-   * @param findTokenHelper The {@link FindTokenHelper} object.
-   * @param storeManager The {@link StoreManager} object.
-   * @param cosmosContainer The {@link CosmosContainer} object.
+   *
+   * @param registry
+   * @param clusterMap      The {@link ClusterMap} object.
+   * @param storeManager    The {@link StoreManager} object.
+   * @param accountService
    */
-  public RecoveryNetworkClientFactory(ClusterMap clusterMap, FindTokenHelper findTokenHelper, StoreManager storeManager,
-      CosmosContainer cosmosContainer) {
+  public RecoveryNetworkClientFactory(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
+      StoreManager storeManager, AccountService accountService) {
+    this.properties = properties;
+    this.registry = registry;
     this.clustermap = clusterMap;
-    this.findTokenHelper = findTokenHelper;
     this.storeManager = storeManager;
-    this.cosmosContainer = cosmosContainer;
+    this.accountService = accountService;
   }
 
   @Override
   public NetworkClient getNetworkClient() throws IOException {
-    return new RecoveryNetworkClient(clustermap, findTokenHelper, storeManager, cosmosContainer);
+    return new RecoveryNetworkClient(properties, registry, clustermap, storeManager, accountService, null);
   }
 }

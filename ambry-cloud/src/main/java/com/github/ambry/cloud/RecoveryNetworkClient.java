@@ -13,16 +13,20 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.cosmos.ConsistencyLevel;
-import com.azure.cosmos.CosmosContainer;
-import com.azure.cosmos.models.CosmosQueryRequestOptions;
-import com.azure.cosmos.models.FeedResponse;
-import com.azure.cosmos.models.PartitionKey;
+import com.azure.core.http.rest.PagedResponse;
+import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobListDetails;
+import com.azure.storage.blob.models.ListBlobsOptions;
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.account.AccountService;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageMetadata;
 import com.github.ambry.network.NetworkClient;
@@ -41,43 +45,69 @@ import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
-import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.AbstractByteBufHolder;
+import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 /**
  * An implementation of {@link NetworkClient} that get the response for each request from Azure cloud.
+ * TODO:
+ * recovery token writer - store as json files
+ * end-of-partition signal - stop repl
+ * fetch data
+ * helix add replica - cloud-to-store mgr
+ * replica thread transformer header mismatch
  */
 public class RecoveryNetworkClient implements NetworkClient {
   private final static Logger logger = LoggerFactory.getLogger(RecoveryNetworkClient.class);
   private final ClusterMap clustermap;
-  private final FindTokenHelper findTokenHelper;
   private final StoreManager storeManager;
-  private final ConcurrentHashMap<StoreKey, MessageInfo> messageInfoCache = new ConcurrentHashMap<>();
-  protected final CosmosContainer cosmosContainer;
+  private final ConcurrentHashMap<StoreKey, MessageInfo> messageInfoCache;
+  private final AzureBlobLayoutStrategy azureBlobLayoutStrategy;
+  private final ClusterMapConfig clusterMapConfig;
+  private final AzureCloudConfig azureCloudConfig;
+  private final AzureCloudDestinationSync azureSyncClient;
+  private final RecoveryNetworkClientCallback clientCallback;
+  private final RecoveryMetrics recoveryMetrics;
 
-  public RecoveryNetworkClient(ClusterMap clustermap, FindTokenHelper findTokenHelper, StoreManager storeManager,
-      CosmosContainer cosmosContainer) {
-    this.clustermap = clustermap;
-    this.findTokenHelper = findTokenHelper;
+  class EmptyCallback implements RecoveryNetworkClientCallback {
+    public void onListBlobs(ReplicaMetadataRequestInfo request) {}
+  }
+
+  public RecoveryNetworkClient(VerifiableProperties properties, MetricRegistry registry, ClusterMap clusterMap,
+      StoreManager storeManager, AccountService accountService, RecoveryNetworkClientCallback clientCallback) {
+    this.clientCallback = clientCallback == null ? new EmptyCallback() : clientCallback;
+    this.clustermap = clusterMap;
     this.storeManager = storeManager;
-    this.cosmosContainer = cosmosContainer;
+    this.clusterMapConfig = new ClusterMapConfig(properties);
+    this.azureCloudConfig = new AzureCloudConfig(properties);
+    this.recoveryMetrics = new RecoveryMetrics(registry);
+    this.messageInfoCache = new ConcurrentHashMap<>();
+    this.azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig);
+    try {
+      this.azureSyncClient = new AzureCloudDestinationSync(properties, registry, clusterMap, accountService);
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public RecoveryMetrics getRecoveryMetrics() {
+    return recoveryMetrics;
   }
 
   @Override
@@ -102,6 +132,7 @@ public class RecoveryNetworkClient implements NetworkClient {
             throw new IllegalArgumentException("RecoveryNetworkClient doesn't support request: " + type);
         }
       } catch (Exception exception) {
+        recoveryMetrics.recoveryRequestError.inc();
         logger.error("Failed to handle request: type {}", type, exception);
       }
       ResponseInfo responseInfo;
@@ -124,132 +155,123 @@ public class RecoveryNetworkClient implements NetworkClient {
    * @return A {@link ReplicaMetadataResponse}.
    */
   private ReplicaMetadataResponse handleReplicaMetadataRequest(ReplicaMetadataRequest request) {
-    final String COSMOS_QUERY = "select * from c where c.partitionId = \"%s\"";
-    List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
+    List<ReplicaMetadataResponseInfo> responseList =
         new ArrayList<>(request.getReplicaMetadataRequestInfoList().size());
-    short replicaMetadataRequestVersion = ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId());
-    for (ReplicaMetadataRequestInfo replicaMetadataRequestInfo : request.getReplicaMetadataRequestInfoList()) {
-      PartitionId partitionId = replicaMetadataRequestInfo.getPartitionId();
-      ReplicaType replicaType = replicaMetadataRequestInfo.getReplicaType();
-      String partitionPath = String.valueOf(partitionId.getId());
-      Store store = storeManager.getStore(partitionId);
 
-      RecoveryToken currRecoveryToken = (RecoveryToken) replicaMetadataRequestInfo.getToken();
-      logger.trace("Current recovery token is: {}", currRecoveryToken);
-      RecoveryToken nextRecoveryToken = new RecoveryToken();
-      List<MessageInfo> messageEntries = new ArrayList<>();
-      String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
-      CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
-      cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
-      // eventual consistency is cheapest
-      cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.EVENTUAL);
-      long lastQueryTime = System.currentTimeMillis();
-      String queryName = String.join("_", "recovery_query", partitionPath, String.valueOf(lastQueryTime));
-      cosmosQueryRequestOptions.setQueryName(queryName);
-      logger.trace("QueryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
-      try {
-        long startTime = System.currentTimeMillis();
-        int numPages = 0, numItems = 0;
-        double requestCharge = 0;
-        Iterable<FeedResponse<CloudBlobMetadata>> cloudBlobMetadataIter =
-            cosmosContainer.queryItems(cosmosQuery, cosmosQueryRequestOptions, CloudBlobMetadata.class)
-                .iterableByPage(currRecoveryToken.getCosmosContinuationToken());
-
-        String firstBlobId = currRecoveryToken.getEarliestBlob(), lastBlobId = currRecoveryToken.getLatestBlob();
-        long totalBlobBytesRead = 0, backupStartTime = currRecoveryToken.getBackupStartTimeMs(), backupEndTime =
-            currRecoveryToken.getBackupEndTimeMs();
-
-        for (FeedResponse<CloudBlobMetadata> page : cloudBlobMetadataIter) {
-          requestCharge += page.getRequestCharge();
-          for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
-            MessageInfo messageInfo = getMessageInfoFromMetadata(cloudBlobMetadata);
-            // Adding this MessageInfo in the cache, we can later use it in the GetRequest.
-            messageInfoCache.put(messageInfo.getStoreKey(), messageInfo);
-            messageEntries.add(messageInfo);
-            totalBlobBytesRead += cloudBlobMetadata.getSize();
-            if (backupStartTime == -1 || (cloudBlobMetadata.getCreationTime() < backupStartTime)) {
-              backupStartTime = cloudBlobMetadata.getCreationTime();
-              firstBlobId = cloudBlobMetadata.getId();
-            }
-            if (backupEndTime == -1 || (backupEndTime < cloudBlobMetadata.getLastUpdateTime() * 1000)) {
-              backupEndTime = cloudBlobMetadata.getLastUpdateTime() * 1000;
-              lastBlobId = cloudBlobMetadata.getId();
-            }
-            numItems += !(messageInfo.isDeleted() || messageInfo.isExpired()) ? 1 : 0;
-          }
-          //if (numItems != page.getResults().size()) {
-          //  logger.error("Item count mismatch numItems = {}, page.size = {}, prev_token = {}", numItems,
-          //      page.getResults().size(), currRecoveryToken.getCosmosContinuationToken());
-          //}
-          String nextCosmosContinuationToken = getCosmosContinuationToken(page.getContinuationToken());
-          nextRecoveryToken = new RecoveryToken(queryName,
-              nextCosmosContinuationToken == null ? currRecoveryToken.getCosmosContinuationToken()
-                  : page.getContinuationToken(), currRecoveryToken.getRequestUnits() + page.getRequestCharge(),
-              currRecoveryToken.getNumItems() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : numItems),
-              currRecoveryToken.getNumBlobBytes() + (currRecoveryToken.isEndOfPartitionReached() ? 0
-                  : totalBlobBytesRead), nextCosmosContinuationToken == null, currRecoveryToken.getTokenCreateTime(),
-              backupStartTime, backupEndTime, lastQueryTime, firstBlobId, lastBlobId);
-          ++numPages;
-          long resultFetchtime = System.currentTimeMillis() - startTime;
-          logger.trace(
-              "Received cosmos query results page = {}, time = {} ms, RU = {}/s, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
-              queryName, numPages, resultFetchtime, requestCharge, page != null ? page.getResults().size() : "null",
-              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.length() : "null",
-              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.isEmpty() : "null",
-              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.equals(
-                  currRecoveryToken.getCosmosContinuationToken()) : "null");
-
-          break;
-        }
-        replicaMetadataResponseList.add(
-            new ReplicaMetadataResponseInfo(partitionId, replicaType, nextRecoveryToken, messageEntries,
-                getRemoteReplicaLag(store, totalBlobBytesRead), replicaMetadataRequestVersion));
-        // Catching and printing CosmosException does not work. The error is thrown and printed elsewhere.
-      } catch (Exception exception) {
-        logger.error("[{}] Failed due to {}", queryName, exception);
-        // Still sending a response back, but with io error
-        replicaMetadataResponseList.add(
-            new ReplicaMetadataResponseInfo(partitionId, replicaType, ServerErrorCode.IO_Error,
-                replicaMetadataRequestVersion));
+    // For each partition
+    for (ReplicaMetadataRequestInfo rinfo : request.getReplicaMetadataRequestInfoList()) {
+      // Get previous azure continuation token
+      RecoveryToken prevToken = (RecoveryToken) rinfo.getToken();
+      String containerName = azureBlobLayoutStrategy.getClusterAwareAzureContainerName(
+          rinfo.getPartitionId().toPathString());
+      logger.trace("For container {}, previous RecoveryToken = {}", containerName, prevToken.toString());
+      if (prevToken.getAmbryPartitionId() > -1 && prevToken.getAmbryPartitionId() != rinfo.getPartitionId().getId()) {
+        logger.error("For partition {}, expected RecoveryToken.ambryPartitionId to be {} but found {}",
+            rinfo.getPartitionId().getId(), rinfo.getPartitionId().getId(), prevToken.getAmbryPartitionId());
+        recoveryMetrics.recoveryTokenError.inc();
+        continue;
       }
+      if (prevToken.getAzureStorageContainerId() != null &&
+          !prevToken.getAzureStorageContainerId().equals(containerName)) {
+        logger.error("For partition {}, expected RecoveryToken.azureContainerId to be {} but found {}",
+            rinfo.getPartitionId().getId(), containerName, prevToken.getAzureStorageContainerId());
+        recoveryMetrics.recoveryTokenError.inc();
+        continue;
+      }
+
+      // List N blobs with metadata from Azure storage from prev token position
+      ListBlobsOptions listBlobsOptions = new ListBlobsOptions()
+          .setDetails(new BlobListDetails().setRetrieveMetadata(true))
+          .setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
+      PagedResponse<BlobItem> response;
+      try {
+        response = azureSyncClient.createOrGetBlobStore(containerName)
+            .listBlobs(listBlobsOptions, null)
+            .iterableByPage(prevToken.getToken())
+            .iterator()
+            .next();
+        recoveryMetrics.listBlobsSuccessRate.mark();
+        clientCallback.onListBlobs(rinfo);
+      } catch (Throwable t) {
+        responseList.add(
+            new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
+                ServerErrorCode.IO_Error,
+                ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
+        logger.error("Failed to list blobs for Ambry partition {} in Azure Storage container {} due to {}",
+            rinfo.getPartitionId().getId(), containerName, t);
+        recoveryMetrics.listBlobsError.inc();
+        continue;
+      }
+
+      // Extract ambry metadata
+      logger.trace("For container {}, number of blobItems from Azure = {}", containerName, response.getValue().size());
+      List<MessageInfo> messageInfoList = new ArrayList<>();
+      long bytesRead = 0, blobsRead = 0;
+      for (BlobItem blobItem: response.getValue()) {
+        MessageInfo messageInfo = getMessageInfo(blobItem);
+        if (messageInfo != null) {
+          messageInfoList.add(messageInfo);
+          messageInfoCache.put(messageInfo.getStoreKey(), messageInfo);
+          bytesRead += messageInfo.getSize();
+          blobsRead += 1;
+        }
+      }
+
+      // Save metadata objects
+      logger.trace("For container {}, number of messageInfo created = {}", containerName, messageInfoList.size());
+      responseList.add(
+          new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
+              new RecoveryToken(prevToken, rinfo.getPartitionId().getId(), containerName,
+                  response.getContinuationToken(), blobsRead, bytesRead),
+              messageInfoList,
+              // Lag metric is useless here as we can't find out size of a container using Azure APIs
+              0,
+              ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
     }
+
+    // return metadata response
     return new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.No_Error,
-        replicaMetadataResponseList, replicaMetadataRequestVersion);
+        responseList, ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId()));
   }
 
   /**
-   * Create {@link MessageInfo} object from {@link CloudBlobMetadata} object.
-   * @param metadata {@link CloudBlobMetadata} object.
+   * Create {@link MessageInfo} object from {@link BlobItem} object.
+   * @param blobItem {@link BlobItem} object.
    * @return {@link MessageInfo} object.
-   * @throws IOException
    */
-  private MessageInfo getMessageInfoFromMetadata(CloudBlobMetadata metadata) throws IOException {
-    BlobId blobId = new BlobId(metadata.getId(), clustermap);
-    long operationTime = (metadata.getDeletionTime() > 0) ? metadata.getDeletionTime()
-        : (metadata.getCreationTime() > 0) ? metadata.getCreationTime() : metadata.getUploadTime();
-    boolean isDeleted = metadata.getDeletionTime() > 0;
-    boolean isTtlUpdated = false;  // No way to know
-    return new MessageInfo(blobId, metadata.getSize(), isDeleted, isTtlUpdated, metadata.getExpirationTime(),
-        (short) metadata.getAccountId(), (short) metadata.getContainerId(), operationTime);
-  }
-
-  protected String getCosmosContinuationToken(String continuationToken) {
-    if (continuationToken == null || continuationToken.isEmpty()) {
-      return null;
-    }
+  private MessageInfo getMessageInfo(BlobItem blobItem) {
+    Map<String, String> metadata = blobItem.getMetadata();
     try {
-      JSONObject continuationTokenJson = new JSONObject(continuationToken);
-      // compositeToken = continuationTokenJson.getString("token");
-      // compositeToken = compositeToken.substring(compositeToken.indexOf('{'), compositeToken.lastIndexOf('}') + 1).replace('\"', '"');
-      return continuationTokenJson.getString("token");
+      /**
+       * Azure blob metadata contains a field expiryTimeMs.
+       * Presence of this field indicates the blob is temporary. ttlUpdated as false in this case.
+       * Absence of this field means the blob was either permanent to start with or,
+       * transitioned from temporary to permanent through a TTL-UPDATE.
+       * There is no way to know which case happened, so just put ttlUpdated as false.
+       * expiryTimeMs is included however and replication-code can decide necessary course of action.
+       * Same goes for undeleted field and lifeVersion is included for replication-code to decide.
+       *
+       * We don't upload CRC during backups. This is probably an issue.
+       */
+      return new MessageInfo(new BlobId(blobItem.getName(), clustermap),
+          Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_SIZE)),
+          metadata.containsKey(CloudBlobMetadata.FIELD_DELETION_TIME),
+          false,
+          false,
+          Long.parseLong(metadata.containsKey(CloudBlobMetadata.FIELD_EXPIRATION_TIME) ?
+              metadata.get(CloudBlobMetadata.FIELD_EXPIRATION_TIME) : String.valueOf(Utils.Infinite_Time)),
+          null,
+          Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
+          Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)),
+          Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_CREATION_TIME)),
+          Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)));
     } catch (Exception e) {
-      logger.error("ContinuationToken = {} | failed to getToken due to {} ", continuationToken, e.toString());
+      recoveryMetrics.metadataError.inc();
+      logger.error("Failed to create MessageInfo for blob-id {} from Azure blob metadata due to {}",
+          blobItem.getName(), e);
+      e.printStackTrace();
     }
     return null;
-  }
-
-  protected long getRemoteReplicaLag(Store store, long totalBytesRead) {
-    return store.getSizeInBytes() - totalBytesRead;
   }
 
   /**

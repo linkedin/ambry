@@ -92,7 +92,7 @@ public class CloudConfig {
   public static final int DEFAULT_RECENT_BLOB_CACHE_LIMIT = 10000;
   public static final int DEFAULT_MAX_ATTEMPTS = 3;
   public static final int DEFAULT_RETRY_DELAY_VALUE = 50;
-  public static final int DEFAULT_CLOUD_REQUEST_TIMEOUT = 500;
+  public static final int DEFAULT_CLOUD_REQUEST_TIMEOUT = 120000; // ms
   public static final int DEFAULT_UPLOAD_TIMEOUT = 5000;
   public static final int DEFAULT_QUERY_TIMEOUT = 60000;
   public static final int DEFAULT_BATCH_TIMEOUT = 60000;

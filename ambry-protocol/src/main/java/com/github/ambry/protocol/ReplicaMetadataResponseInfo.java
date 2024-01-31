@@ -50,9 +50,17 @@ public class ReplicaMetadataResponseInfo {
 
   public ReplicaMetadataResponseInfo(PartitionId partitionId, ReplicaType replicaType, FindToken findToken,
       List<MessageInfo> messageInfoList, long remoteReplicaLagInBytes, short replicaMetadataResponseVersion) {
-    if (partitionId == null || findToken == null || messageInfoList == null) {
+    if (partitionId == null) {
       throw new IllegalArgumentException(
-          "Invalid partition or token or message info list for ReplicaMetadataResponseInfo");
+          "Invalid partition for ReplicaMetadataResponseInfo");
+    }
+    if (findToken == null) {
+      throw new IllegalArgumentException(
+          "Invalid token for ReplicaMetadataResponseInfo");
+    }
+    if (messageInfoList == null) {
+      throw new IllegalArgumentException(
+          "Invalid message info list for ReplicaMetadataResponseInfo");
     }
     this.partitionId = partitionId;
     this.replicaType = replicaType;

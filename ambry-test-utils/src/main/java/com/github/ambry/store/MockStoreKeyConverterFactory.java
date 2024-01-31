@@ -38,11 +38,13 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
 
   /**
    * Set conversionMap for reference.
-   * @param conversionMap initially used by {@link MockStoreKeyConverter} instances
-   *                      created by the factory.
+   *
+   * @param conversionMap initially used by {@link MockStoreKeyConverter} instances created by the factory.
+   * @return
    */
-  public void setConversionMap(Map<StoreKey, StoreKey> conversionMap) {
+  public MockStoreKeyConverterFactory setConversionMap(Map<StoreKey, StoreKey> conversionMap) {
     this.conversionMap = conversionMap;
+    return this;
   }
 
   /**
@@ -61,13 +63,15 @@ public class MockStoreKeyConverterFactory implements StoreKeyConverterFactory {
   }
 
   /**
-   * Sets whether produced StoreKeyConverters will return the
-   * input key if it is absent from the underlying map. If false,
-   * the StoreKeyConverter will return null for missing inputs
+   * Sets whether produced StoreKeyConverters will return the input key if it is absent from the underlying map. If
+   * false, the StoreKeyConverter will return null for missing inputs
+   *
    * @param returnInputIfAbsent
+   * @return
    */
-  public void setReturnInputIfAbsent(boolean returnInputIfAbsent) {
+  public MockStoreKeyConverterFactory setReturnInputIfAbsent(boolean returnInputIfAbsent) {
     returnKeyIfAbsent = returnInputIfAbsent;
+    return this;
   }
 
   /**

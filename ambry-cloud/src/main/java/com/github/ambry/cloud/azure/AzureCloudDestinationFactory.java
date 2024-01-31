@@ -38,7 +38,6 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
   private final String clusterName;
   private final VcrMetrics vcrMetrics;
   private final AzureMetrics azureMetrics;
-  private final AzureReplicationFeed.FeedType azureReplicationFeedType;
   private final ClusterMap clusterMap;
 
   protected VerifiableProperties verifiableProperties;
@@ -59,7 +58,6 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
     this.clusterName = new ClusterMapConfig(verifiableProperties).clusterMapClusterName;
     vcrMetrics = new VcrMetrics(metricRegistry);
     azureMetrics = new AzureMetrics(metricRegistry);
-    azureReplicationFeedType = getReplicationFeedType(verifiableProperties);
     this.clusterMap = clusterMap;
     this.verifiableProperties = verifiableProperties;
     this.metricRegistry = metricRegistry;
@@ -83,7 +81,7 @@ public class AzureCloudDestinationFactory implements CloudDestinationFactory {
       try {
         AzureCloudDestination dest =
             new AzureCloudDestination(cloudConfig, azureCloudConfig, clusterName, vcrMetrics, azureMetrics,
-                azureReplicationFeedType, clusterMap);
+                getReplicationFeedType(verifiableProperties), clusterMap);
         dest.testAzureConnectivity();
         return dest;
       } catch (Exception e) {

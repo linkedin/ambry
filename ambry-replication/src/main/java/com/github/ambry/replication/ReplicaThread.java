@@ -1229,9 +1229,11 @@ public class ReplicaThread implements Runnable {
                   exchangeMetadataResponse.getMissingStoreKeys(), remoteReplicaInfo.getReplicaId().getPartitionId(),
                   remoteReplicaInfo.getLocalReplicaId().getMountPath());
 
+              List<Transformer> transformers = transformer == null ? Collections.emptyList()
+                  : Collections.singletonList(transformer);
               MessageSievingInputStream validMessageDetectionInputStream =
                   new MessageSievingInputStream(getResponse.getInputStream(), messageInfoList,
-                      Collections.singletonList(transformer), metricRegistry);
+                      transformers, metricRegistry);
               if (validMessageDetectionInputStream.hasInvalidMessages()) {
                 replicationMetrics.incrementInvalidMessageError(partitionResponseInfo.getPartition());
                 logger.error("Out of {} messages, {} invalid messages were found in message stream from {}",

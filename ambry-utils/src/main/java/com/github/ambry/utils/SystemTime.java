@@ -28,7 +28,7 @@ public class SystemTime extends Time {
     return time;
   }
 
-  private SystemTime() {
+  public SystemTime() {
   }
 
   @Override

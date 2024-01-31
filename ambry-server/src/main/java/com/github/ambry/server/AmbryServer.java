@@ -20,6 +20,7 @@ import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
+import com.github.ambry.cloud.RecoveryNetworkClientFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -242,6 +243,7 @@ public class AmbryServer {
       AccountService accountService = accountServiceFactory.getAccountService();
 
       StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+      FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
       // and some components require sole participant, the first one in the list will be primary participant.
       storageManager =
@@ -250,35 +252,19 @@ public class AmbryServer {
       storageManager.start();
 
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
-
-      if (clusterMapConfig.clusterMapEnableHttp2Replication) {
-        Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
-        Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
-        networkClientFactory =
-            new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
-        connectionPool = new Http2BlockingChannelPool(sslHttp2Factory, http2ClientConfig, http2ClientMetrics);
-      } else {
-        SSLFactory sslSocketFactory =
-            clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? SSLFactory.getNewInstance(sslConfig) : null;
-        networkClientFactory =
-            new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
-                time);
-        connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
-      }
-
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
-
-      Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
-      replicationManager =
-          new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
-              storeKeyConverterFactory, serverConfig.serverMessageTransformer, clusterParticipants.get(0),
-              skipPredicate);
-      replicationManager.start();
-
       if (replicationConfig.replicationEnabledWithVcrCluster) {
-        logger.info("Creating Helix cluster spectator for cloud to store replication.");
+        /**
+         * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
+         * We need to use CloudToStorageManager for one reason. It will add one replica for the server to replicate from
+         * which is the Cloud. The regular ReplicationManager will add 3 replicas, and as a result 3 threads will try
+         * to fetch the same data from Azure. Although this can be avoided with a minor change to ReplicationManager,
+         * having a separate CloudtoStorageManager for cloud offers the flexibility to override methods and add more
+         * suited to cloud.
+         */
+        networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager,
+            accountService);
         vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
         cloudToStoreReplicationManager =
             new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
@@ -286,6 +272,28 @@ public class AmbryServer {
                 storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
                 clusterParticipants.get(0));
         cloudToStoreReplicationManager.start();
+      } else {
+        if (clusterMapConfig.clusterMapEnableHttp2Replication) {
+          Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
+          Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
+          networkClientFactory =
+              new Http2NetworkClientFactory(http2ClientMetrics, http2ClientConfig, sslHttp2Factory, time);
+          connectionPool = new Http2BlockingChannelPool(sslHttp2Factory, http2ClientConfig, http2ClientMetrics);
+        } else {
+          SSLFactory sslSocketFactory =
+              clusterMapConfig.clusterMapSslEnabledDatacenters.length() > 0 ? SSLFactory.getNewInstance(sslConfig) : null;
+          networkClientFactory =
+              new SocketNetworkClientFactory(new NetworkMetrics(registry), networkConfig, sslSocketFactory, 20, 20, 50000,
+                  time);
+          connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, registry);
+        }
+        Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
+        replicationManager =
+            new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+                clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, clusterParticipants.get(0),
+                skipPredicate);
+        replicationManager.start();
       }
 
       logger.info("Creating StatsManager to publish stats");
@@ -304,7 +312,6 @@ public class AmbryServer {
         ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
       }
       networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
-      FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
       requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
           registry, metrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
           diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0));
