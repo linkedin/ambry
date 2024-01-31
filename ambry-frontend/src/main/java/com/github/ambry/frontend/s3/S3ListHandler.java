@@ -43,9 +43,8 @@ import org.json.JSONTokener;
  * Handles S3 requests for listing blobs that start with a provided prefix.
  * API reference: <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html">...</a>
  */
-public class S3ListHandler {
+public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final NamedBlobListHandler namedBlobListHandler;
-  private RestRequest restRequest;
   public static final String PREFIX_PARAM_NAME = "prefix";
   public static final String MAXKEYS_PARAM_NAME = "max-keys";
   public static final String DELIMITER_PARAM_NAME = "delimiter";
@@ -66,9 +65,9 @@ public class S3ListHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+  @Override
+  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
-    this.restRequest = restRequest;
     namedBlobListHandler.handle(restRequest, restResponseChannel, ((result, exception) -> {
       if (exception != null) {
         callback.onCompletion(result, exception);
@@ -81,7 +80,7 @@ public class S3ListHandler {
         ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
         JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
         Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
-        ReadableStreamChannel readableStreamChannel = serializeAsXml(page);
+        ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
         restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
@@ -92,7 +91,7 @@ public class S3ListHandler {
     }));
   }
 
-  private ReadableStreamChannel serializeAsXml(Page<NamedBlobListEntry> namedBlobRecordPage)
+  private ReadableStreamChannel serializeAsXml(RestRequest restRequest, Page<NamedBlobListEntry> namedBlobRecordPage)
       throws IOException, RestServiceException {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     ListBucketResult listBucketResult = new ListBucketResult();
