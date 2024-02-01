@@ -254,6 +254,8 @@ public class RestUtils {
      * stitched together.
      */
     public static final String CHUNK_UPLOAD = "x-ambry-chunk-upload";
+
+    public static final String S3_CHUNK_UPLOAD = "x-ambry-chunk-upload-s3";
     /**
      * The reserved blobid for metadata chunk of a stitched upload.
      */
@@ -909,6 +911,16 @@ public class RestUtils {
    */
   public static boolean isChunkUpload(Map<String, Object> args) throws RestServiceException {
     return getBooleanHeader(args, Headers.CHUNK_UPLOAD, false);
+  }
+
+  /**
+   * Determine if this is an chunk upload for S3
+   * @param args
+   * @return
+   * @throws RestServiceException
+   */
+  public static boolean isS3ChunkUpload(Map<String, Object> args) throws RestServiceException {
+    return getBooleanHeader(args, Headers.S3_CHUNK_UPLOAD, false);
   }
 
   /**

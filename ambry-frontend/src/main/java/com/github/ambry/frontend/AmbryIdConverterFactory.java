@@ -111,20 +111,12 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         LOGGER.info("AmbryIdConverter | convert method. Rest request: {}", restRequest);
         if (!isOpen) {
           exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
-        } else if (restRequest.getRestMethod().equals(RestMethod.POST) && !restRequest.getArgs()
-            .containsKey(S3_REQUEST)) {
-          // For S3, POST requests with ?uploadId=<> are used in completion of multipart uploads. For eg,
-          // POST /s3/named-blob-sandbox/checkpoints/246cd68fa3480b2b0f9e6524fa473bca?uploadId=<SignedURL>.
-          // For such use-case, we want to treat it as named blob upload
+        } else if (RestUtils.isChunkUpload(restRequest.getArgs())) {
           convertedId = "/" + signIdIfRequired(restRequest, input);
-        } else if (restRequest.getRestMethod().equals(RestMethod.PUT) && RestUtils.isChunkUpload(restRequest.getArgs())
-            && restRequest.getArgs().containsKey(S3_REQUEST)) {
+        } else if (RestUtils.isS3ChunkUpload(restRequest.getArgs())) {
           // For S3, PUT requests with ?uploadId=<> are used in adding individual part of multipart upload. For eg,
           // PUT /s3_named-blob-sandbox_container-a/checkpoints/42b6b3f29b2f9e0b629ff03dac4e9302/shared/
-          // c29b1701-de55-463d-a129-adaa90c1fc23?uploadId=
-          // http%3A%2F%2Flocalhost%3A1174%2F%3Fx-ambry-ttl%3D2419200%26x-ambry-service-id%3DFlink-S3-Client
-          // %26x-ambry-content-type%3Dapplication%252Foctet-stream%26x-ambry-chunk-upload%3Dtrue%26x-ambry-url-type%3D
-          // POST%26x-ambry-session%3D3a2aeb6f-aeed-4944-881e-19d41a6b7a22%26et%3D1703180930&partNumber=1
+          // c29b1701-de55-463d-a129-adaa90c1fc23?uploadId=D3a2aeb6f-aeed-4944-881e-19d41a6b7a22&partNumber=1
           // For such case, we want to give out chunk ID.
           convertedId = signIdIfRequired(restRequest, input);
           LOGGER.info("chunk upload for S3. Converted id {}", convertedId);
@@ -185,7 +177,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           // on delete requests we can soft delete the record from NamedBlobDb and get the blob ID in one step.
           conversionFuture = getNamedBlobDb().delete(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName()).thenApply(DeleteResult::getBlobId);
-        }  else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+        } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
             .matchesOperation(Operations.UPDATE_TTL)) {
           //If operation == UPDATE_TTL, we will get the version and blobId info from named blob first
           //and do update ttl in routerCallBack.
@@ -214,8 +206,8 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           // Set named blob state as 'IN_PROGRESS', will set the state to be 'READY' in the ttlUpdate success callback: routerTtlUpdateCallback
           state = NamedBlobState.IN_PROGRESS;
         }
-        conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs())).thenApply(
-            result -> {
+        conversionFuture = getNamedBlobDb().put(record, state, RestUtils.isUpsertForNamedBlob(restRequest.getArgs()))
+            .thenApply(result -> {
               restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, result.getInsertedRecord().getVersion());
               return result.getInsertedRecord().getBlobId();
             });

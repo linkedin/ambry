@@ -57,6 +57,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -201,34 +202,24 @@ public class NamedBlobPostHandler {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
 
         if (restRequest.getArgs().containsKey("uploads")) {
-          restRequest.setArg(RestUtils.Headers.URL_TYPE, "POST");
-          restRequest.setArg(RestUtils.Headers.URL_TTL, "300");
-          restRequest.setArg(RestUtils.Headers.MAX_UPLOAD_SIZE, "5242880");
-          restRequest.setArg(RestUtils.Headers.CHUNK_UPLOAD, "true");
-
-          // Create signed url
-          String signedUrl = urlSigningService.getSignedUrl(restRequest);
-          LOGGER.debug("NamedBlobPostHandler | Generated {} from {}", signedUrl, restRequest);
-
-          // Create xml response
+          String uploadId = UUID.randomUUID().toString();
           RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
           String bucket = namedBlobPath.getAccountName();
           String key = namedBlobPath.getBlobName();
           LOGGER.info(
               "NamedBlobPostHandler | Sending response for Multipart begin upload. Bucket = {}, Key = {}, Upload Id = {}",
-              bucket, key, signedUrl);
+              bucket, key, uploadId);
           InitiateMultipartUploadResult initiateMultipartUploadResult = new InitiateMultipartUploadResult();
           initiateMultipartUploadResult.setBucket(bucket);
           initiateMultipartUploadResult.setKey(key);
-          initiateMultipartUploadResult.setUploadId(signedUrl);
+          initiateMultipartUploadResult.setUploadId(uploadId);
           ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
           ObjectMapper objectMapper = new XmlMapper();
           objectMapper.writeValue(outputStream, initiateMultipartUploadResult);
           ReadableStreamChannel channel =
               new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
           restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-          restResponseChannel.setHeader(RestUtils.Headers.SIGNED_URL, signedUrl);
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
 
@@ -436,7 +427,7 @@ public class NamedBlobPostHandler {
       String reservedMetadataBlobId = null;
       List<String> signedChunkIds = new ArrayList<>();
 
-      LOGGER.info("NamedBlobPostHandler | received parts are {}", completeMultipartUpload.getPart());
+      LOGGER.info("NamedBlobPostHandler | received parts are {}", (Object) completeMultipartUpload.getPart());
 
       for (Part part : completeMultipartUpload.getPart()) {
         LOGGER.info("NamedBlobPostHandler | part is {}", part);
@@ -467,15 +458,10 @@ public class NamedBlobPostHandler {
         long chunkSizeBytes = RestUtils.getLongHeader(metadata, Headers.BLOB_SIZE, true);
 
         totalStitchedBlobSize += chunkSizeBytes;
-        // Expiration time is sent to the router, but not verified in this handler. The router is responsible for making
-        // checks related to internal ambry requirements, like making sure that the chunks do not expire before the
-        // metadata blob.
-        @SuppressWarnings("ConstantConditions")
-        long expirationTimeMs = RestUtils.getLongHeader(metadata, EXPIRATION_TIME_MS_KEY, true);
         verifyChunkAccountAndContainer(blobId, stitchedBlobProperties);
         reservedMetadataBlobId = getAndVerifyReservedMetadataBlobId(metadata, reservedMetadataBlobId, blobId);
 
-        chunksToStitch.add(new ChunkInfo(blobId, chunkSizeBytes, expirationTimeMs, reservedMetadataBlobId));
+        chunksToStitch.add(new ChunkInfo(blobId, chunkSizeBytes, -1, reservedMetadataBlobId));
       }
       //the actual blob size for stitched blob is the sum of all the chunk sizes
       restResponseChannel.setHeader(Headers.BLOB_SIZE, totalStitchedBlobSize);

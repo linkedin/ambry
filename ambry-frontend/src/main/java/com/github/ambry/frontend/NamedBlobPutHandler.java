@@ -66,6 +66,8 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
+import static com.github.ambry.rest.RestUtils.Headers.TARGET_DATASET_VERSION;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
 
@@ -183,18 +185,11 @@ public class NamedBlobPutHandler {
           .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
       try {
         // Start the callback chain by parsing blob info headers and performing request security processing.
-
-        if (restRequest.getArgs().containsKey("uploadId")) {
-          // This is a put chunk request in s3 multipart uploads
-          String signedUrl = (String) restRequest.getArgs().get("uploadId");
-          LOGGER.info("Multipart chunk upload for S3. URL string is {}", signedUrl);
-          UrlBuilder urlBuilder = UrlBuilder.parse(signedUrl);
-          LOGGER.info("Built URL from string. URL is {}", urlBuilder);
-          for (String parameter : urlBuilder.getQuery().keySet()) {
-            String value = urlBuilder.getQuery().get(parameter);
-            LOGGER.info("Multipart chunk upload for S3. Adding query parameter {} and value {}", parameter, value);
-            restRequest.setArg(parameter, value);
-          }
+        String uploadId = RestUtils.getHeader(restRequest.getArgs(), "uploadId", false);
+        if (uploadId != null) {
+          LOGGER.info("This is a multipart chunk upload for S3. Session Id = {}", uploadId);
+          restRequest.setArg(S3_CHUNK_UPLOAD, true);
+          restRequest.setArg(SESSION, uploadId);
         }
 
         securityService.processRequest(restRequest, securityProcessRequestCallback());
@@ -255,7 +250,9 @@ public class NamedBlobPutHandler {
      */
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
-        setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
+        if (RestUtils.isS3ChunkUpload(restRequest.getArgs())) {
+          setSignedIdMetadataAndBlobSize(blobInfo.getBlobProperties());
+        }
         idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
       }, uri, LOGGER, deleteDatasetCallback);
     }
@@ -460,8 +457,7 @@ public class NamedBlobPutHandler {
      * @return the {@link PutBlobOptions} to use, parsed from the request.
      */
     private PutBlobOptions getPutBlobOptionsFromRequest() throws RestServiceException {
-      boolean chunkUpload = isChunkUpload(restRequest.getArgs());
-      LOGGER.info("Is chunk upload {}", chunkUpload);
+      boolean chunkUpload = isS3ChunkUpload(restRequest.getArgs());
       PutBlobOptionsBuilder builder = new PutBlobOptionsBuilder().chunkUpload(chunkUpload).restRequest(restRequest);
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       if (maxUploadSize != null) {
@@ -477,25 +473,23 @@ public class NamedBlobPutHandler {
      * @throws RestServiceException
      */
     private void setSignedIdMetadataAndBlobSize(BlobProperties blobProperties) throws RestServiceException {
-      if (RestUtils.isChunkUpload(restRequest.getArgs())) {
-        Map<String, String> metadata = new HashMap<>(2);
-        metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
-        metadata.put(RestUtils.Headers.SESSION,
-            RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
-        metadata.put(EXPIRATION_TIME_MS_KEY, Long.toString(
-            Utils.addSecondsToEpochTime(SystemTime.getInstance().milliseconds(),
-                blobProperties.getTimeToLiveInSeconds())));
-        if (blobProperties.getReservedMetadataBlobId() != null) {
-          metadata.put(RestUtils.Headers.RESERVED_METADATA_ID, blobProperties.getReservedMetadataBlobId());
-        } else {
-          ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
-              frontendMetrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.inc();
-          throwRestServiceExceptionIfEnabled(
-              new RestServiceException("No reserved metadata id present to set in chunked upload response",
-                  RestServiceErrorCode.BadRequest), router.getRouterConfig().routerReservedMetadataEnabled);
-        }
-        restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
+      Map<String, String> metadata = new HashMap<>(2);
+      metadata.put(RestUtils.Headers.BLOB_SIZE, Long.toString(restRequest.getBlobBytesReceived()));
+      metadata.put(RestUtils.Headers.SESSION,
+          RestUtils.getHeader(restRequest.getArgs(), RestUtils.Headers.SESSION, true));
+      metadata.put(EXPIRATION_TIME_MS_KEY, Long.toString(
+          Utils.addSecondsToEpochTime(SystemTime.getInstance().milliseconds(),
+              blobProperties.getTimeToLiveInSeconds())));
+      if (blobProperties.getReservedMetadataBlobId() != null) {
+        metadata.put(RestUtils.Headers.RESERVED_METADATA_ID, blobProperties.getReservedMetadataBlobId());
+      } else {
+        ReservedMetadataIdMetrics.getReservedMetadataIdMetrics(
+            frontendMetrics.getMetricRegistry()).noReservedMetadataFoundForChunkedUploadResponseCount.inc();
+        throwRestServiceExceptionIfEnabled(
+            new RestServiceException("No reserved metadata id present to set in chunked upload response",
+                RestServiceErrorCode.BadRequest), router.getRouterConfig().routerReservedMetadataEnabled);
       }
+      restRequest.setArg(RestUtils.InternalKeys.SIGNED_ID_METADATA_KEY, metadata);
       //the actual blob size is the number of bytes read
       restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
     }
@@ -654,7 +648,7 @@ public class NamedBlobPutHandler {
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_ACCOUNT_NAME, accountName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_CONTAINER_NAME, containerName);
         restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_NAME, datasetName);
-        restResponseChannel.setHeader(RestUtils.Headers.TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
+        restResponseChannel.setHeader(TARGET_DATASET_VERSION, datasetVersionRecord.getVersion());
         if (datasetVersionRecord.getExpirationTimeMs() != Utils.Infinite_Time) {
           restResponseChannel.setHeader(RestUtils.Headers.DATASET_EXPIRATION_TIME,
               new Date(datasetVersionRecord.getExpirationTimeMs()));
@@ -687,7 +681,7 @@ public class NamedBlobPutHandler {
       String accountName = dataset.getAccountName();
       String containerName = dataset.getContainerName();
       String datasetName = dataset.getDatasetName();
-      String targetVersion = (String) restResponseChannel.getHeader(Headers.TARGET_DATASET_VERSION);
+      String targetVersion = (String) restResponseChannel.getHeader(TARGET_DATASET_VERSION);
       try {
         accountService.updateDatasetVersionState(accountName, containerName, datasetName, targetVersion,
             DatasetVersionState.READY);
@@ -778,7 +772,7 @@ public class NamedBlobPutHandler {
           if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
             frontendMetrics.deleteDatasetVersionIfUploadFailCount.inc();
             Dataset dataset = (Dataset) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET);
-            String version = (String) restResponseChannel.getHeader(Headers.TARGET_DATASET_VERSION);
+            String version = (String) restResponseChannel.getHeader(TARGET_DATASET_VERSION);
             accountService.deleteDatasetVersion(dataset.getAccountName(), dataset.getContainerName(),
                 dataset.getDatasetName(), version);
           }
