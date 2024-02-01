@@ -27,6 +27,7 @@ public class PutBlobOptions {
   private final boolean chunkUpload;
   private final long maxUploadSize;
   private final RestRequest restRequest;
+  private final boolean skipCompositeChunk;
 
   /**
    * @param chunkUpload {@code true} to indicate that the {@code putBlob()} call is for a single data chunk of a
@@ -38,6 +39,21 @@ public class PutBlobOptions {
     this.chunkUpload = chunkUpload;
     this.maxUploadSize = maxUploadSize;
     this.restRequest = restRequest;
+    this.skipCompositeChunk = false;
+  }
+
+  /**
+   * @param chunkUpload {@code true} to indicate that the {@code putBlob()} call is for a single data chunk of a
+   *                    stitched blob.
+   * @param maxUploadSize the max size of the uploaded blob in bytes. To be enforced by the router. Can be null.
+   * @param restRequest The {@link RestRequest} that triggered this put operation.
+   * @param skipCompositeChunk if true, don't generate composite blob, and return data chunk info in string.
+   */
+  public PutBlobOptions(boolean chunkUpload, long maxUploadSize, RestRequest restRequest, boolean skipCompositeChunk) {
+    this.chunkUpload = chunkUpload;
+    this.maxUploadSize = maxUploadSize;
+    this.restRequest = restRequest;
+    this.skipCompositeChunk = skipCompositeChunk;
   }
 
   /**
@@ -62,6 +78,13 @@ public class PutBlobOptions {
     return restRequest;
   }
 
+  /**
+   * @return the skipCompositeChunk
+   */
+  public boolean skipCompositeChunk() {
+    return skipCompositeChunk;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -73,17 +96,17 @@ public class PutBlobOptions {
 
     PutBlobOptions options = (PutBlobOptions) o;
     return chunkUpload == options.chunkUpload && maxUploadSize == options.maxUploadSize && Objects.equals(restRequest,
-        options.restRequest);
+        options.restRequest) && (skipCompositeChunk == options.skipCompositeChunk);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(chunkUpload, maxUploadSize, restRequest);
+    return Objects.hash(chunkUpload, maxUploadSize, restRequest, skipCompositeChunk);
   }
 
   @Override
   public String toString() {
     return "PutBlobOptions{" + "chunkUpload=" + chunkUpload + ", maxUploadSize=" + maxUploadSize + ", restRequest="
-        + restRequest + '}';
+        + restRequest + ", skipCompositeChunk=" + skipCompositeChunk + "}";
   }
 }

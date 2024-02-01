@@ -591,6 +591,60 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
+   * Test the PutBlob with skipCompositeChunk option.
+   * We don't generate composite chunk for it.
+   * Instead, we return PutBlobMetaInfo which includes the data chunk list.
+   * @throws Exception
+   */
+  @Test
+  public void testS3PartUpload() throws Exception {
+    for (int chunkNumber = 1; chunkNumber < 10; chunkNumber++) {
+      // composite blob with "chunkNumber" of data chunks
+      maxPutChunkSize = PUT_CONTENT_SIZE / chunkNumber;
+      if (PUT_CONTENT_SIZE % maxPutChunkSize != 0) {
+        maxPutChunkSize++;
+      }
+      MockServerLayout layout = new MockServerLayout(mockClusterMap);
+      String localDcName = "DC3";
+      setRouter(getNonBlockingRouterPropertiesForRepairRequests(localDcName, true, false), layout,
+          new LoggingNotificationSystem());
+      setOperationParams();
+
+      // set skipCompositeChunk to true
+      PutBlobOptions putBlobOptions = new PutBlobOptionsBuilder().skipCompositeChunk(true).build();
+      String compositeBlobInfo = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putBlobOptions)
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      PutBlobMetaInfo metaInfo = PutBlobMetaInfo.deserialize(compositeBlobInfo);
+
+      // verify the PutBlobMetaInfo
+      Assert.assertEquals(chunkNumber, metaInfo.getChunkNumber());
+      // verify the content, one data chunk after another
+      List<Pair<String, Long>> chunks = metaInfo.getOrderedChunkIdSizeList();
+      int chunkSize = maxPutChunkSize;
+      for (int i = 0; i < chunkNumber; i++) {
+        GetBlobResult chunkResult =
+            router.getBlob(chunks.get(i).getFirst(), new GetBlobOptionsBuilder().build(), null, null).get();
+        // last chunk
+        if (i == chunkNumber - 1) {
+          chunkSize = PUT_CONTENT_SIZE - maxPutChunkSize * i;
+        }
+
+        // verify data content
+        RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+        chunkResult.getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
+        InputStream input = retainingAsyncWritableChannel.consumeContentAsInputStream();
+        retainingAsyncWritableChannel.close();
+        Assert.assertEquals(chunkSize, input.available());
+        byte[] readContent = Utils.readBytesFromStream(input, chunkSize);
+        input.close();
+
+        byte[] originSlice = Arrays.copyOfRange(putContent, i * maxPutChunkSize, i * maxPutChunkSize + chunkSize);
+        Assert.assertArrayEquals(originSlice, readContent);
+      }
+    }
+  }
+
+  /**
    * Test behavior with various null inputs to router methods.
    * @throws Exception
    */
