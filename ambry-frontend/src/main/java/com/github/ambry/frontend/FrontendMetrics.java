@@ -170,6 +170,7 @@ public class FrontendMetrics {
   public final Histogram blobPropsBuildTimeInMs;
   // NAMED BLOB PUT
   public final Histogram blobPropsBuildForNameBlobPutTimeInMs;
+  public final Histogram namedBlobPutGetChunksToStitchTimeInMs;
 
   // OPTIONS
   public final Histogram optionsPreProcessingTimeInMs;
@@ -353,6 +354,7 @@ public class FrontendMetrics {
         new RestRequestMetricsGroup(UndeleteHandler.class, "UndeleteBlob", false, metricRegistry, frontendConfig);
     putBlobMetricsGroup =
         new RestRequestMetricsGroup(NamedBlobPutHandler.class, "PutBlob", false, metricRegistry, frontendConfig);
+
 
     // AsyncOperationTracker.Metrics instances
     postSecurityProcessRequestMetrics =
@@ -540,6 +542,8 @@ public class FrontendMetrics {
     // NAMEDBLOBPUT
     blobPropsBuildForNameBlobPutTimeInMs = metricRegistry.histogram(
         MetricRegistry.name(FrontendRestRequestService.class, "blobPropsBuildForNameBlobPutTimeInMs"));
+    namedBlobPutGetChunksToStitchTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(FrontendRestRequestService.class, "NamedBlobPutGetChunksToStitchTimeInMs"));
     // OPTIONS
     optionsPreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "OptionsPreProcessingTimeInMs"));

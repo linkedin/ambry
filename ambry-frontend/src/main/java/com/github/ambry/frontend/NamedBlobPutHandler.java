@@ -455,6 +455,7 @@ public class NamedBlobPutHandler {
      */
     List<ChunkInfo> getChunksToStitch(BlobProperties stitchedBlobProperties, JSONObject stitchRequestJson)
         throws RestServiceException {
+      long getChunksToStitchStartTime = System.currentTimeMillis();
       String reservedMetadataBlobId = null;
       List<String> signedChunkIds = StitchRequestSerDe.fromJson(stitchRequestJson);
       if (signedChunkIds.isEmpty()) {
@@ -493,6 +494,7 @@ public class NamedBlobPutHandler {
       }
       //the actual blob size for stitched blob is the sum of all the chunk sizes
       restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, totalStitchedBlobSize);
+      frontendMetrics.namedBlobPutGetChunksToStitchTimeInMs.update(System.currentTimeMillis() - getChunksToStitchStartTime);
       return chunksToStitch;
     }
 
