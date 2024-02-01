@@ -53,6 +53,7 @@ import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
 import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingConsumer;
 import com.github.ambry.utils.Utils;
@@ -142,17 +143,19 @@ public class PostBlobHandlerTest {
   private String reservedMetadataId;
 
   public PostBlobHandlerTest(boolean isReservedMetadataEnabled) {
-    idConverterFactory = new FrontendTestIdConverterFactory();
-    securityServiceFactory = new FrontendTestSecurityServiceFactory();
     Properties props = new Properties();
     CommonTestUtils.populateRequiredRouterProps(props);
     props.setProperty(RouterConfig.RESERVED_METADATA_ENABLED, Boolean.toString(isReservedMetadataEnabled));
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
+    MetricRegistry metricRegistry = new MetricRegistry();
+    idSigningService = new AmbryIdSigningService();
+    idConverterFactory = new FrontendTestIdConverterFactory(verifiableProperties, metricRegistry,
+        new TestNamedBlobDb(SystemTime.getInstance(), 1000), idSigningService);
+    securityServiceFactory = new FrontendTestSecurityServiceFactory();
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    metrics = new FrontendMetrics(metricRegistry, frontendConfig);
     injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
-    idSigningService = new AmbryIdSigningService();
     if (isReservedMetadataEnabled) {
       reservedMetadataId =
           new BlobId(BlobId.BLOB_ID_V6, BlobId.BlobIdType.NATIVE, (byte) 1, REF_ACCOUNT.getId(), REF_CONTAINER.getId(),

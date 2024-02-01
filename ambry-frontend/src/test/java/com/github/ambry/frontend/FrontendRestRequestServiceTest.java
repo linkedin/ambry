@@ -1758,7 +1758,8 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void misbehavingIdConverterTest() throws InstantiationException, JSONException {
-    FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
+    FrontendTestIdConverterFactory converterFactory =
+        new FrontendTestIdConverterFactory(verifiableProperties, metricRegistry, namedBlobDb, idSigningService);
     String exceptionMsg = TestUtils.getRandomString(10);
     converterFactory.exceptionToThrow = new IllegalStateException(exceptionMsg);
     doIdConverterExceptionTest(converterFactory, exceptionMsg);
@@ -1771,7 +1772,8 @@ public class FrontendRestRequestServiceTest {
    */
   @Test
   public void idConverterExceptionPipelineTest() throws InstantiationException, JSONException {
-    FrontendTestIdConverterFactory converterFactory = new FrontendTestIdConverterFactory();
+    FrontendTestIdConverterFactory converterFactory =
+        new FrontendTestIdConverterFactory(verifiableProperties, metricRegistry, namedBlobDb, idSigningService);
     String exceptionMsg = TestUtils.getRandomString(10);
     converterFactory.exceptionToReturn = new IllegalStateException(exceptionMsg);
     doIdConverterExceptionTest(converterFactory, exceptionMsg);
@@ -2593,13 +2595,39 @@ public class FrontendRestRequestServiceTest {
   static void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
       String contentType, String ownerId, String targetAccountName, String targetContainerName,
       String uploadNamedBlobMode) throws JSONException {
+    setAmbryHeadersForPut(headers, ttlInSecs, isPrivate, serviceId, contentType, ownerId, targetAccountName,
+        targetContainerName, uploadNamedBlobMode, true);
+  }
+
+  /**
+   * Sets headers that helps build {@link BlobProperties} on the server. See argument list for the headers that are set.
+   * Any other headers have to be set explicitly.
+   * @param headers the {@link JSONObject} where the headers should be set.
+   * @param ttlInSecs sets the {@link RestUtils.Headers#TTL} header. Set to {@link Utils#Infinite_Time} if no
+   *                  expiry.
+   * @param isPrivate sets the {@link RestUtils.Headers#PRIVATE} header. Allowed values: true, false.
+   * @param serviceId sets the {@link RestUtils.Headers#SERVICE_ID} header. Required.
+   * @param contentType sets the {@link RestUtils.Headers#AMBRY_CONTENT_TYPE} header. Required and has to be a valid MIME
+   *                    type.
+   * @param ownerId sets the {@link RestUtils.Headers#OWNER_ID} header. Optional - if not required, send null.
+   * @param targetAccountName sets the {@link RestUtils.Headers#TARGET_ACCOUNT_NAME} header. Can be {@code null}.
+   * @param targetContainerName sets the {@link RestUtils.Headers#TARGET_CONTAINER_NAME} header. Can be {@code null}.
+   * @param uploadNamedBlobMode
+   * @param namedUpsert boolean to indicate if the named blob upload is an upsert or not.
+   * @throws IllegalArgumentException if any of {@code headers}, {@code serviceId}, {@code contentType} is null or if
+   *                                  {@code contentLength} < 0 or if {@code ttlInSecs} < -1.
+   * @throws JSONException
+   */
+  static void setAmbryHeadersForPut(JSONObject headers, long ttlInSecs, boolean isPrivate, String serviceId,
+      String contentType, String ownerId, String targetAccountName, String targetContainerName,
+      String uploadNamedBlobMode, boolean namedUpsert) throws JSONException {
     if (headers != null && serviceId != null && contentType != null) {
       if (ttlInSecs != Utils.Infinite_Time) {
         headers.put(RestUtils.Headers.TTL, Long.toString(ttlInSecs));
       }
       headers.put(RestUtils.Headers.SERVICE_ID, serviceId);
       headers.put(RestUtils.Headers.AMBRY_CONTENT_TYPE, contentType);
-      headers.put(RestUtils.Headers.NAMED_UPSERT, true);
+      headers.put(RestUtils.Headers.NAMED_UPSERT, namedUpsert);
       if (targetAccountName != null) {
         headers.put(RestUtils.Headers.TARGET_ACCOUNT_NAME, targetAccountName);
       }
@@ -4126,22 +4154,47 @@ class FrontendTestSecurityServiceFactory implements SecurityServiceFactory {
 /**
  * Implementation of {@link IdConverterFactory} that returns exceptions.
  */
-class FrontendTestIdConverterFactory implements IdConverterFactory {
+class FrontendTestIdConverterFactory extends AmbryIdConverterFactory {
+  private final NamedBlobDb namedBlobDb;
   Exception exceptionToReturn = null;
   RuntimeException exceptionToThrow = null;
   String translation = null;
   boolean returnInputIfTranslationNull = false;
+  boolean enableConflictDetection = false;
+  boolean passThrough = false;
   volatile String lastInput = null;
   volatile BlobInfo lastBlobInfo = null;
   volatile String lastConvertedId = null;
 
+  /**
+   * Constructor for {@link FrontendTestIdConverterFactory}
+   * @param verifiableProperties {@link VerifiableProperties} object.
+   * @param metricRegistry {@link MetricRegistry} object.
+   * @param namedBlobDb {@link NamedBlobDb} object.
+   * @param idSigningService {@link IdSigningService} object.
+   */
+  public FrontendTestIdConverterFactory(VerifiableProperties verifiableProperties, MetricRegistry metricRegistry,
+      NamedBlobDb namedBlobDb, IdSigningService idSigningService) {
+    super(verifiableProperties, metricRegistry, idSigningService, namedBlobDb);
+    this.namedBlobDb = namedBlobDb;
+  }
+
   @Override
   public IdConverter getIdConverter() {
-    return new TestIdConverter();
+      return new TestIdConverter((AmbryIdConverter) super.getIdConverter());
   }
 
   private class TestIdConverter implements IdConverter {
     private boolean isOpen = true;
+    private final AmbryIdConverter ambryIdConverter;
+
+    /**
+     * TestIdConverter constructor.
+     * @param ambryIdConverter AmbryIdConverter object to use for pass through.
+     */
+    public TestIdConverter(AmbryIdConverter ambryIdConverter) {
+      this.ambryIdConverter = ambryIdConverter;
+    }
 
     @Override
     public Future<String> convert(RestRequest restRequest, String input, Callback<String> callback) {
@@ -4153,16 +4206,33 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
-      if ((restRequest.getRestMethod() == RestMethod.PUT || restRequest.getRestMethod() == RestMethod.POST)
-          && RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
+      if (passThrough) {
+        return ambryIdConverter.convert(restRequest, input, blobInfo, callback);
+      }
+        if ((restRequest.getRestMethod() == RestMethod.PUT || restRequest.getRestMethod() == RestMethod.POST)
+            && RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
         restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
       }
       return completeOperation(input, blobInfo, callback);
     }
 
     @Override
+    public Future<Boolean> detectConflict(RestRequest restRequest, Callback<Boolean> callback) {
+      if (!isOpen) {
+        throw new IllegalStateException("IdConverter closed");
+      }
+      if (passThrough) {
+        return ambryIdConverter.detectConflict(restRequest, callback);
+      }
+      return completeOperation(false, callback);
+    }
+
+    @Override
     public void close() {
       isOpen = false;
+      if (passThrough) {
+        ambryIdConverter.close();
+      }
     }
 
     /**
@@ -4184,6 +4254,28 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
         toReturn = translation == null ? returnInputIfTranslationNull ? input : null : translation;
       }
       lastConvertedId = toReturn;
+      futureResult.done(toReturn, exceptionToReturn);
+      if (callback != null) {
+        callback.onCompletion(toReturn, exceptionToReturn);
+      }
+      return futureResult;
+    }
+
+    /**
+     * Completes the operation by creating and invoking a {@link Future} and invoking the {@code callback} if non-null.
+     * @param status boolean indicating whether the ID can cause a conflict.
+     * @param callback the {@link Callback} to invoke. Can be null.
+     * @return the created {@link Future}.
+     */
+    private Future<Boolean> completeOperation(Boolean status, Callback<Boolean> callback) {
+      if (exceptionToThrow != null) {
+        throw exceptionToThrow;
+      }
+      FutureResult<Boolean> futureResult = new FutureResult<>();
+      Boolean toReturn = null;
+      if (exceptionToReturn == null) {
+        toReturn = status;
+      }
       futureResult.done(toReturn, exceptionToReturn);
       if (callback != null) {
         callback.onCompletion(toReturn, exceptionToReturn);

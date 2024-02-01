@@ -215,24 +215,34 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
-        if (RestUtils.isNamedBlobStitchRequest(restRequest)) {
-          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
-            frontendMetrics.addDatasetVersionRate.mark();
-            addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
-          }
-          RetainingAsyncWritableChannel channel =
-              new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
-          restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
+        if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
+          accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
+          frontendMetrics.addDatasetVersionRate.mark();
+          addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
+        }
+        idConverter.detectConflict(restRequest, detectConflictCallback(blobInfo));
+      }, uri, LOGGER, deleteDatasetCallback);
+    }
+
+    /**
+     * After ensuring that there is no conflict in the named blob stitch upload request, read the request body from the
+     * rest request and call {@link Router#stitchBlob} to stitch the chunks.
+     * @param blobInfo the {@link BlobInfo} to make the router call with.
+     * @return a {@link Callback} to be used with conflict detection.
+     */
+    private Callback<Boolean> detectConflictCallback(BlobInfo blobInfo) {
+      return buildCallback(frontendMetrics.putIdConflictDetectionMetrics, conflictDetected -> {
+        if (conflictDetected) {
+          throw new RestServiceException("Blob with the same name already exists", RestServiceErrorCode.Conflict);
         } else {
-          if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-            accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
-            frontendMetrics.addDatasetVersionRate.mark();
-            addDatasetVersion(blobInfo.getBlobProperties(), restRequest);
+          if (RestUtils.isNamedBlobStitchRequest(restRequest)) {
+            RetainingAsyncWritableChannel channel = new RetainingAsyncWritableChannel(frontendConfig.maxJsonRequestSizeBytes);
+            restRequest.readInto(channel, fetchStitchRequestBodyCallback(channel, blobInfo));
+          } else {
+            PutBlobOptions options = getPutBlobOptionsFromRequest();
+            router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
+                routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
           }
-          PutBlobOptions options = getPutBlobOptionsFromRequest();
-          router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
-              routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
         }
       }, uri, LOGGER, deleteDatasetCallback);
     }
@@ -259,9 +269,11 @@ public class NamedBlobPutHandler {
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
-          bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
-              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
-              routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)),
+          bytesRead -> {
+            router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
+                getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
+                routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+          },
           uri, LOGGER, deleteDatasetCallback);
     }
 

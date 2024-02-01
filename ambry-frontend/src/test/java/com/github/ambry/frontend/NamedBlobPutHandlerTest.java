@@ -132,19 +132,21 @@ public class NamedBlobPutHandlerTest {
   private final IdSigningService idSigningService;
   private FrontendConfig frontendConfig;
   private NamedBlobPutHandler namedBlobPutHandler;
-  private final String request_path;
+  private MetricRegistry metricRegistry = new MetricRegistry();
+  private String request_path;
   private final String request_noupdate_path;
   private final String dataset_version_request_path;
 
+  private boolean namedUpsert = false;
+
   public NamedBlobPutHandlerTest() throws Exception {
-    idConverterFactory = new FrontendTestIdConverterFactory();
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
     Properties props = new Properties();
     CommonTestUtils.populateRequiredRouterProps(props);
     VerifiableProperties verifiableProperties = new VerifiableProperties(props);
     router = new InMemoryRouter(verifiableProperties, CLUSTER_MAP);
     FrontendConfig frontendConfig = new FrontendConfig(verifiableProperties);
-    metrics = new FrontendMetrics(new MetricRegistry(), frontendConfig);
+    metrics = new FrontendMetrics(metricRegistry, frontendConfig);
     injector = new AccountAndContainerInjector(ACCOUNT_SERVICE, metrics, frontendConfig);
     idSigningService = new AmbryIdSigningService();
     request_path =
@@ -154,8 +156,9 @@ public class NamedBlobPutHandlerTest {
         NAMED_BLOB_PREFIX + SLASH + REF_ACCOUNT.getName() + SLASH + REF_CONTAINER.getName() + SLASH + DATASET_NAME
             + SLASH + VERSION;
     NamedBlobDbFactory namedBlobDbFactory =
-        new TestNamedBlobDbFactory(verifiableProperties, new MetricRegistry(), ACCOUNT_SERVICE);
+        new TestNamedBlobDbFactory(verifiableProperties, metricRegistry, ACCOUNT_SERVICE);
     namedBlobDb = namedBlobDbFactory.getNamedBlobDb();
+    idConverterFactory = new FrontendTestIdConverterFactory(verifiableProperties, metricRegistry, namedBlobDb, idSigningService);
     initNamedBlobPutHandler(props);
   }
 
@@ -286,6 +289,7 @@ public class NamedBlobPutHandlerTest {
     //success case
     String uploadSession = UUID.randomUUID().toString();
     String[] prefixToTest = new String[]{"/" + CLUSTER_NAME, ""};
+    int nameSuffixToTestConflict = 1;
     for (String prefix : prefixToTest) {
 
       // multiple chunks
@@ -340,6 +344,30 @@ public class NamedBlobPutHandlerTest {
       // unsigned ID
       stitchBlobAndVerify(getStitchRequestBody(Collections.singletonList("/notASignedId")), null,
           restServiceExceptionChecker(RestServiceErrorCode.BadRequest));
+
+      // test for conflict detection
+      // first upload should go through
+      idConverterFactory.passThrough = true;
+      namedUpsert = false;
+      String old_request_path = request_path;
+      request_path = request_path + nameSuffixToTestConflict;
+      chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 10, 200, 19, 0, 50);
+      signedChunkIds = chunksToStitch.stream()
+          .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
+          .collect(Collectors.toList());
+      stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch, null, false);
+
+      // the second attempt to stitch a blob with the same name should fail with Conflict.
+      chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45);
+      signedChunkIds = chunksToStitch.stream()
+          .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
+          .collect(Collectors.toList());
+      stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch,
+          restServiceExceptionChecker(RestServiceErrorCode.Conflict), false);
+      idConverterFactory.passThrough = false;
+      namedUpsert = true;
+      request_path = old_request_path;
+      nameSuffixToTestConflict++;
     }
   }
 
@@ -471,12 +499,25 @@ public class NamedBlobPutHandlerTest {
    */
   private void stitchBlobAndVerify(byte[] requestBody, List<ChunkInfo> expectedStitchedChunks,
       ThrowingConsumer<ExecutionException> errorChecker) throws Exception {
+    stitchBlobAndVerify(requestBody, expectedStitchedChunks, errorChecker, true);
+  }
+  /**
+   * Make a stitch blob call using {@link PostBlobHandler} and verify the result of the operation.
+   * @param requestBody the body of the stitch request to supply.
+   * @param expectedStitchedChunks the expected chunks stitched together.
+   * @param errorChecker if non-null, expect an exception to be thrown by the post flow and verify it using this
+   *                     {@link ThrowingConsumer}.
+   * @throws Exception
+   */
+  private void stitchBlobAndVerify(byte[] requestBody, List<ChunkInfo> expectedStitchedChunks,
+      ThrowingConsumer<ExecutionException> errorChecker, boolean isPermanentBlob) throws Exception {
     // unlike stitch for blob IDs, one step permanent stitch named blob can be supported through the built-in update TTL
     // call
-    for (long ttl : new long[]{TestUtils.TTL_SECS, Utils.Infinite_Time}) {
+    long[] ttlArray = isPermanentBlob ? new long[]{TestUtils.TTL_SECS, Utils.Infinite_Time} : new long[]{TestUtils.TTL_SECS};
+    for (long ttl : ttlArray) {
       JSONObject headers = new JSONObject();
       FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, ttl, !REF_CONTAINER.isCacheable(), SERVICE_ID,
-          CONTENT_TYPE, OWNER_ID, null, null, "STITCH");
+          CONTENT_TYPE, OWNER_ID, null, null, "STITCH", namedUpsert);
       RestRequest request = getRestRequest(headers, request_path, requestBody);
       RestResponseChannel restResponseChannel = new MockRestResponseChannel();
       FutureResult<Void> future = new FutureResult<>();
@@ -486,22 +527,21 @@ public class NamedBlobPutHandlerTest {
       namedBlobPutHandler.handle(request, restResponseChannel, future::done);
       if (errorChecker == null) {
         future.get(TIMEOUT_SECS, TimeUnit.SECONDS);
-        assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
-            restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
-        InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
-        assertEquals("List of chunks stitched does not match expected", expectedStitchedChunks,
-            blob.getStitchedChunks());
-        ByteArrayOutputStream expectedContent = new ByteArrayOutputStream();
-        expectedStitchedChunks.stream()
-            .map(chunkInfo -> router.getActiveBlobs().get(chunkInfo.getBlobId()).getBlob().array())
-            .forEach(buf -> expectedContent.write(buf, 0, buf.length));
-        assertEquals("Unexpected blob content stored", ByteBuffer.wrap(expectedContent.toByteArray()), blob.getBlob());
+        if(!idConverterFactory.passThrough) {
+          assertEquals("Unexpected location header", idConverterFactory.lastConvertedId,
+              restResponseChannel.getHeader(RestUtils.Headers.LOCATION));
+          InMemoryRouter.InMemoryBlob blob = router.getActiveBlobs().get(idConverterFactory.lastInput);
+          assertEquals("List of chunks stitched does not match expected", expectedStitchedChunks, blob.getStitchedChunks());
+          ByteArrayOutputStream expectedContent = new ByteArrayOutputStream();
+          expectedStitchedChunks.stream()
+              .map(chunkInfo -> router.getActiveBlobs().get(chunkInfo.getBlobId()).getBlob().array())
+              .forEach(buf -> expectedContent.write(buf, 0, buf.length));
+          assertEquals("Unexpected blob content stored", ByteBuffer.wrap(expectedContent.toByteArray()), blob.getBlob());
+          assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
+        }
         //check actual size of stitched blob
         assertEquals("Unexpected blob size", Long.toString(getStitchedBlobSize(expectedStitchedChunks)),
             restResponseChannel.getHeader(RestUtils.Headers.BLOB_SIZE));
-        assertEquals("Unexpected TTL in named blob DB", ttl,
-            idConverterFactory.lastBlobInfo.getBlobProperties().getTimeToLiveInSeconds());
-        assertEquals("Unexpected TTL in blob", ttl, blob.getBlobProperties().getTimeToLiveInSeconds());
       } else {
         TestUtils.assertException(ExecutionException.class, () -> future.get(TIMEOUT_SECS, TimeUnit.SECONDS),
             errorChecker);
