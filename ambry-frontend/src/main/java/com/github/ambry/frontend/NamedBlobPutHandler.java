@@ -494,7 +494,9 @@ public class NamedBlobPutHandler {
       }
       //the actual blob size for stitched blob is the sum of all the chunk sizes
       restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, totalStitchedBlobSize);
+      long timetaken = System.currentTimeMillis() - getChunksToStitchStartTime;
       frontendMetrics.namedBlobPutGetChunksToStitchTimeInMs.update(System.currentTimeMillis() - getChunksToStitchStartTime);
+      System.out.print("Time taken to get chunks to stitch: " + timetaken + " ms\n");
       return chunksToStitch;
     }
 

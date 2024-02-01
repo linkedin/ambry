@@ -283,18 +283,24 @@ public class NamedBlobPutHandlerTest {
     idConverterFactory.translation = CONVERTED_ID;
     long creationTimeMs = System.currentTimeMillis();
     time.setCurrentMilliseconds(creationTimeMs);
+    int[] chunkSizes = new int[262144];
     //success case
     String uploadSession = UUID.randomUUID().toString();
     String[] prefixToTest = new String[]{"/" + CLUSTER_NAME, ""};
+    for (int i = 0; i < 262144; i++) {
+      chunkSizes[i] = 238;
+    }
     for (String prefix : prefixToTest) {
-
       // multiple chunks
-      List<ChunkInfo> chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45, 10, 200, 19, 0, 50);
+      List<ChunkInfo> chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, chunkSizes);
       List<String> signedChunkIds = chunksToStitch.stream()
           .map(chunkInfo -> prefix + getSignedId(chunkInfo, uploadSession))
           .collect(Collectors.toList());
       stitchBlobAndVerify(getStitchRequestBody(signedChunkIds), chunksToStitch, null);
 
+      if (chunksToStitch.size() == 262144) {
+        return;
+      }
       // one chunk
       chunksToStitch = uploadChunksViaRouter(creationTimeMs, REF_CONTAINER, 45);
       signedChunkIds = chunksToStitch.stream()
