@@ -21,6 +21,8 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3HeadHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
+import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
+import com.github.ambry.frontend.s3.S3PostHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.quota.QuotaManager;
@@ -110,6 +112,8 @@ class FrontendRestRequestService implements RestRequestService {
   private S3ListHandler s3ListHandler;
   private S3PutHandler s3PutHandler;
   private S3HeadHandler s3HeadHandler;
+  private S3PostHandler s3PostHandler;
+  private S3MultipartUploadHandler s3MultipartUploadHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
   private final Random random = new Random();
@@ -206,15 +210,17 @@ class FrontendRestRequestService implements RestRequestService {
 
     namedBlobListHandler =
         new NamedBlobListHandler(securityService, namedBlobDb, accountAndContainerInjector, frontendMetrics);
-    namedBlobPutHandler =
-        new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router, accountAndContainerInjector,
-            frontendConfig, frontendMetrics, clusterName, quotaManager, accountService, deleteBlobHandler);
+    namedBlobPutHandler = new NamedBlobPutHandler(securityService, namedBlobDb, idConverter, idSigningService, router,
+        accountAndContainerInjector, frontendConfig, frontendMetrics, clusterName, quotaManager, accountService,
+        deleteBlobHandler);
 
     getClusterMapSnapshotHandler = new GetClusterMapSnapshotHandler(securityService, frontendMetrics, clusterMap);
     getResourceInfoHandler = new GetResourceInfoHandler(securityService, frontendMetrics, clusterMap);
     getAccountsHandler = new GetAccountsHandler(securityService, accountService, frontendMetrics);
-    getDatasetsHandler = new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
-    listDatasetsHandler = new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    getDatasetsHandler =
+        new GetDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
+    listDatasetsHandler =
+        new ListDatasetsHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     listDatasetVersionHandler =
         new ListDatasetVersionHandler(securityService, accountService, frontendMetrics, accountAndContainerInjector);
     getStatsReportHandler = new GetStatsReportHandler(securityService, frontendMetrics, accountStatsStore);
@@ -224,15 +230,21 @@ class FrontendRestRequestService implements RestRequestService {
     s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler);
     s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     s3ListHandler = new S3ListHandler(namedBlobListHandler);
-    s3PutHandler = new S3PutHandler(namedBlobPutHandler);
+    s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
+    s3MultipartUploadHandler =
+        new S3MultipartUploadHandler(securityService, frontendMetrics, namedBlobPutHandler, accountAndContainerInjector,
+            frontendConfig, namedBlobDb, idConverter, router, quotaManager);
+    s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
+    s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler);
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
       int initialDelayInSeconds = random.nextInt(frontendConfig.namedBlobCleanupSeconds);
       namedBlobsCleanupTask =
-          namedBlobsCleanupScheduler.scheduleAtFixedRate(
-              namedBlobsCleanupRunner, initialDelayInSeconds, frontendConfig.namedBlobCleanupSeconds, TimeUnit.SECONDS);
-      logger.info("Named Blob Stale Data Cleanup Process has started with {} seconds initial delay", initialDelayInSeconds);
+          namedBlobsCleanupScheduler.scheduleAtFixedRate(namedBlobsCleanupRunner, initialDelayInSeconds,
+              frontendConfig.namedBlobCleanupSeconds, TimeUnit.SECONDS);
+      logger.info("Named Blob Stale Data Cleanup Process has started with {} seconds initial delay",
+          initialDelayInSeconds);
     }
 
     isUp = true;
@@ -333,6 +345,9 @@ class FrontendRestRequestService implements RestRequestService {
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.ACCOUNTS)) {
         postAccountsHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+      } else if (isS3Request(restRequest)) {
+        s3PostHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else {
         postBlobHandler.handle(restRequest, restResponseChannel,

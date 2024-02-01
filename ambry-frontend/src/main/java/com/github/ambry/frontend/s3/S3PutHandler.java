@@ -21,8 +21,10 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 
 
 /**
@@ -31,13 +33,17 @@ import static com.github.ambry.rest.RestUtils.*;
  */
 public class S3PutHandler extends S3BaseHandler<Void> {
   private final NamedBlobPutHandler namedBlobPutHandler;
+  private final S3MultipartUploadHandler multipartUploadHandler;
 
   /**
    * Constructs a handler for uploading s3 requests.
-   * @param namedBlobPutHandler named blob put handler
+   *
+   * @param namedBlobPutHandler  the {@link NamedBlobPutHandler} to use.
+   * @param multipartUploadHandler the {@link S3MultipartUploadHandler} to use.
    */
-  public S3PutHandler(NamedBlobPutHandler namedBlobPutHandler) {
+  public S3PutHandler(NamedBlobPutHandler namedBlobPutHandler, S3MultipartUploadHandler multipartUploadHandler) {
     this.namedBlobPutHandler = namedBlobPutHandler;
+    this.multipartUploadHandler = multipartUploadHandler;
   }
 
   /**
@@ -49,8 +55,14 @@ public class S3PutHandler extends S3BaseHandler<Void> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
 
-    // 1. Add headers required by Ambry. These become the blob properties.
+    if (isMultipartUploadRequest(restRequest)) {
+      multipartUploadHandler.handle(restRequest, restResponseChannel,
+          (result, exception) -> callback.onCompletion(null, exception));
+      return;
+    }
+
     try {
+      // 1. Add headers required by Ambry. These become the blob properties.
       NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
       String accountName = namedBlobPath.getAccountName();
       restRequest.setArg(Headers.SERVICE_ID, accountName);
@@ -63,15 +75,25 @@ public class S3PutHandler extends S3BaseHandler<Void> {
 
     // 2. Upload the blob by following named blob PUT path
     namedBlobPutHandler.handle(restRequest, restResponseChannel, (result, exception) -> {
-      try {
-        if (exception == null && restResponseChannel.getStatus() == ResponseStatus.Created) {
-          // Set the response status to 200 since Ambry named blob PUT has response as 201.
-          restResponseChannel.setStatus(ResponseStatus.Ok);
-        }
+      if (exception != null) {
         callback.onCompletion(result, exception);
+        return;
+      }
+      try {
+        if (restResponseChannel.getStatus() == ResponseStatus.Created) {
+          restResponseChannel.setStatus(ResponseStatus.Ok);
+          String blobId = RestUtils.getHeader(restRequest.getArgs(), LOCATION, true);
+          restResponseChannel.setHeader("ETag", blobId);
+        }
+        callback.onCompletion(result, null);
       } catch (RestServiceException e) {
         callback.onCompletion(null, e);
       }
     });
+  }
+
+  private boolean isMultipartUploadRequest(RestRequest restRequest) {
+    return restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM) || restRequest.getArgs()
+        .containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 }

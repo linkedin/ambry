@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Class to hold different {@link RestRequestMetrics} for plain text, ssl, with and without encryption.
  */
-class RestRequestMetricsGroup {
+public class RestRequestMetricsGroup {
   private static final String SSL_SUFFIX = "Ssl";
   private static final String ENCRYPTED_SUFFIX = "Encrypted";
 
@@ -78,7 +78,7 @@ class RestRequestMetricsGroup {
    * @param encrypted {@code true} if the blob is encrypted. {@code false} otherwise
    * @return the appropriate {@link RestRequestMetrics} based on the params
    */
-  RestRequestMetrics getRestRequestMetrics(boolean sslUsed, boolean encrypted) {
+  public RestRequestMetrics getRestRequestMetrics(boolean sslUsed, boolean encrypted) {
     if (encrypted && encryptedMetricsEnabled) {
       return sslUsed ? sslEncryptedMetrics : nonSslEncryptedMetrics;
     } else {

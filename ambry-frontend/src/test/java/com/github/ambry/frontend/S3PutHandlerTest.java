@@ -147,6 +147,6 @@ public class S3PutHandlerTest {
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
             QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
-    s3PutHandler = new S3PutHandler(namedBlobPutHandler);
+    s3PutHandler = new S3PutHandler(namedBlobPutHandler, null);
   }
 }

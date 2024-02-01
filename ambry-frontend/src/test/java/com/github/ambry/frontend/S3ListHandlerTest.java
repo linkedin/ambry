@@ -27,8 +27,6 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.frontend.s3.Contents;
-import com.github.ambry.frontend.s3.ListBucketResult;
 import com.github.ambry.frontend.s3.S3ListHandler;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.named.NamedBlobDbFactory;
@@ -120,11 +118,12 @@ public class S3ListHandlerTest {
     // 3. Verify results
     ReadableStreamChannel readableStreamChannel = futureResult.get();
     ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
-    ListBucketResult listBucketResult = xmlMapper.readValue(byteBuffer.array(), ListBucketResult.class);
+    S3ListHandler.ListBucketResult listBucketResult =
+        xmlMapper.readValue(byteBuffer.array(), S3ListHandler.ListBucketResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", "application/xml",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-    Contents contents = listBucketResult.getContents().get(0);
+    S3ListHandler.Contents contents = listBucketResult.getContents().get(0);
     assertEquals("Mismatch in key name", KEY_NAME, contents.getKey());
     assertEquals("Mismatch in key count", 1, listBucketResult.getKeyCount());
     assertEquals("Mismatch in prefix", PREFIX, listBucketResult.getPrefix());
