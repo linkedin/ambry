@@ -332,7 +332,7 @@ public class FrontendConfig {
     maxAcceptableTtlSecsIfTtlRequired = verifiableProperties.getIntInRange(MAX_ACCEPTABLE_TTL_SECS_IF_TTL_REQUIRED_KEY,
         (int) TimeUnit.DAYS.toSeconds(30), 0, Integer.MAX_VALUE);
     maxJsonRequestSizeBytes =
-        verifiableProperties.getIntInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 20 * 1024 * 1024, 0, Integer.MAX_VALUE);
+        verifiableProperties.getIntInRange(MAX_JSON_REQUEST_SIZE_BYTES_KEY, 134217728, 0, Integer.MAX_VALUE);
     enableUndelete = verifiableProperties.getBoolean(ENABLE_UNDELETE, false);
     accountStatsStoreFactory =
         verifiableProperties.getString(ACCOUNT_STATS_STORE_FACTORY, DEFAULT_ACCOUNT_STATS_STORE_FACTORY);
