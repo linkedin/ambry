@@ -32,17 +32,16 @@ import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +57,7 @@ public class VcrReplicaThread extends ReplicaThread {
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss_SSS");
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -113,16 +113,19 @@ public class VcrReplicaThread extends ReplicaThread {
       return;
     }
     logger.trace(token.toString());
+    AtomicLong lastOpTime = new AtomicLong(-1);
+    exchangeMetadataResponse.getMissingStoreMessages().forEach(messageInfo ->
+        lastOpTime.set(Math.max(lastOpTime.get(), messageInfo.getOperationTimeMs())));
+    exchangeMetadataResponse.getReceivedStoreMessagesWithUpdatesPending().forEach(messageInfo ->
+        lastOpTime.set(Math.max(lastOpTime.get(), messageInfo.getOperationTimeMs())));
     String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
     String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
-    TableEntity entity = new TableEntity(partitionKey, rowKey).addProperty("tokenType", token.getType().toString());
-    if (token.getOffset() != null) {
-      entity.addProperty("logSegment", token.getOffset().getName().toString())
-          .addProperty("offset", token.getOffset().getOffset());
-    }
-    if (token.getStoreKey() != null) {
-      entity.addProperty("storeKey", token.getStoreKey().getID());
-    }
+    TableEntity entity = new TableEntity(partitionKey, rowKey)
+        .addProperty("tokenType", token.getType().toString())
+        .addProperty("logSegment", token.getOffset() == null ? "none" : token.getOffset().getName().toString())
+        .addProperty("offset", token.getOffset() == null ? "none" : token.getOffset().getOffset())
+        .addProperty("storeKey", token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
+        .addProperty("replicatedUntilUTC", lastOpTime.get() == -1L ? "-1" : DATE_FORMAT.format(lastOpTime.get()));
     try {
       entity.addProperty("binaryToken", token.toBytes());
       cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);

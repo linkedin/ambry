@@ -35,7 +35,6 @@ import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.cloud.TestCloudBlobCryptoAgentFactory;
 import com.github.ambry.cloud.VcrMetrics;
-import com.github.ambry.cloud.VcrReplicaThread;
 import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
@@ -63,7 +62,6 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.FindToken;
-import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.replication.MockFindToken;
 import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.MockHost;
@@ -73,16 +71,11 @@ import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.FindInfo;
-import com.github.ambry.store.LogSegmentName;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
-import com.github.ambry.store.Offset;
-import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreFindToken;
-import com.github.ambry.store.StoreFindTokenFactory;
 import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
@@ -94,9 +87,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -130,7 +121,6 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.cloud.CloudTestUtil.*;
 import static com.github.ambry.replication.ReplicationTest.*;
-import static com.github.ambry.store.StoreFindToken.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -1641,96 +1631,6 @@ public class CloudBlobStoreTest {
       assertEquals("Blob ttl should be infinite now.", Utils.Infinite_Time,
           map.get(blobId.toString()).getExpirationTime());
     }
-  }
-
-  @Test
-  public void testPersistTokenInReplicaThread() throws IOException, ReflectiveOperationException {
-    v2TestOnly();
-    setupCloudStore(false, false, 0, true);
-    // Setup 1 partition with 1 replica. numNodes controls numReplicas.
-    MockClusterMap mockClusterMap = new MockClusterMap(false, true, 1,
-        1, 1, true, false,
-        "localhost");
-    PartitionId partitionId = mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
-    DataNodeId dataNodeId = partitionId.getReplicaIds().get(0).getDataNodeId();
-    RemoteReplicaInfo remoteReplicaInfo =
-        new RemoteReplicaInfo(partitionId.getReplicaIds().get(0), null, null,
-            null, Long.MAX_VALUE, new SystemTime(), null);
-    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(new VerifiableProperties(properties));
-
-    // Create ReplicaThread
-    VcrReplicaThread vcrReplicaThread =
-        new VcrReplicaThread("vcrReplicaThreadTest", null, mockClusterMap,
-            new AtomicInteger(0), dataNodeId, null,
-            new ReplicationConfig(new VerifiableProperties(properties)),
-            new ReplicationMetrics(mockClusterMap.getMetricRegistry(), Collections.emptyList()), null,
-            null, null, mockClusterMap.getMetricRegistry(), false,
-            "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
-            null, null, null, dest,
-            new VerifiableProperties(properties));
-
-    // Create remoteReplica info object
-    StoreFindTokenFactory tokenFactory = new StoreFindTokenFactory(new BlobIdFactory(mockClusterMap));
-
-    // test 1: create new token and upload
-    Offset offset = new Offset(new LogSegmentName(3, 14), 36);
-    // StoreFindToken token = (StoreFindToken) tokenFactory.getNewFindToken();
-    StoreFindToken token = new StoreFindToken(offset, UUID.randomUUID(), UUID.randomUUID(), false, null, null, (short) -1);
-    ReplicaThread.ExchangeMetadataResponse response =
-        new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
-            -1, Collections.emptyMap(), new SystemTime());
-    vcrReplicaThread.advanceToken(remoteReplicaInfo, response);
-    assertEquals(remoteReplicaInfo.getToken(), token);
-    TableEntity rowReturned = dest.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
-        String.valueOf(partitionId.getId()), dataNodeId.getHostname());
-    ByteArrayInputStream inputStream = new ByteArrayInputStream((byte[]) rowReturned.getProperty("binaryToken"));
-    StoreFindToken tokenReturned = (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream));
-    assertEquals(token, tokenReturned);
-
-    // test 1: create new token and upload
-    offset = new Offset(new LogSegmentName(3, 14), 36);
-    token = new StoreFindToken(offset, UUID.randomUUID(), UUID.randomUUID(), false, null, null, (short) -1);
-    response =
-        new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
-            -1, Collections.emptyMap(), new SystemTime());
-    vcrReplicaThread.advanceToken(remoteReplicaInfo, response);
-    assertEquals(remoteReplicaInfo.getToken(), token);
-    rowReturned = dest.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
-        String.valueOf(partitionId.getId()), dataNodeId.getHostname());
-    inputStream = new ByteArrayInputStream((byte[]) rowReturned.getProperty("binaryToken"));
-    tokenReturned = (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream));
-    assertEquals(token, tokenReturned);
-
-    // test 1: create new token and upload
-    offset = new Offset(new LogSegmentName(3, 14), 36);
-    BlobId id = getUniqueId(refAccountId, refContainerId, false, partitionId);
-    token = new StoreFindToken(FindTokenType.IndexBased, offset, id, UUID.randomUUID(), UUID.randomUUID(), false, (short) 3, null, null, (short) -1);
-    response =
-        new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
-            -1, Collections.emptyMap(), new SystemTime());
-    vcrReplicaThread.advanceToken(remoteReplicaInfo, response);
-    assertEquals(remoteReplicaInfo.getToken(), token);
-    rowReturned = dest.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
-        String.valueOf(partitionId.getId()), dataNodeId.getHostname());
-    inputStream = new ByteArrayInputStream((byte[]) rowReturned.getProperty("binaryToken"));
-    tokenReturned = (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream));
-    assertEquals(token, tokenReturned);
-
-    // test 1: create new token and upload
-    offset = new Offset(new LogSegmentName(3, 14), 36);
-    id = getUniqueId(refAccountId, refContainerId, false, partitionId);
-    BlobId reset  = getUniqueId(refAccountId, refContainerId, false, partitionId);
-    token = new StoreFindToken(FindTokenType.IndexBased, offset, id, UUID.randomUUID(), UUID.randomUUID(), false, (short) 3, reset, PersistentIndex.IndexEntryType.PUT, (short) 3);
-    response =
-        new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
-            -1, Collections.emptyMap(), new SystemTime());
-    vcrReplicaThread.advanceToken(remoteReplicaInfo, response);
-    assertEquals(remoteReplicaInfo.getToken(), token);
-    rowReturned = dest.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
-        String.valueOf(partitionId.getId()), dataNodeId.getHostname());
-    inputStream = new ByteArrayInputStream((byte[]) rowReturned.getProperty("binaryToken"));
-    tokenReturned = (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream));
-    assertEquals(token, tokenReturned);
   }
 
   @Test

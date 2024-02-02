@@ -1714,6 +1714,19 @@ public class ReplicaThread implements Runnable {
       this.receivedStoreMessagesWithUpdatesPending = new HashSet<>();
     }
 
+    public ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
+        long localLagFromRemoteInBytes, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap, Time time,
+        Set<MessageInfo> receivedStoreMessagesWithUpdatesPending) {
+      this.missingStoreMessages = missingStoreMessages;
+      this.remoteKeyToLocalKeyMap = remoteKeyToLocalKeyMap;
+      this.remoteToken = remoteToken;
+      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
+      this.serverErrorCode = ServerErrorCode.No_Error;
+      this.time = time;
+      this.lastMissingMessageReceivedTimeSec = time.seconds();
+      this.receivedStoreMessagesWithUpdatesPending = receivedStoreMessagesWithUpdatesPending;
+    }
+
     ExchangeMetadataResponse(ServerErrorCode errorCode) {
       this.missingStoreMessages = null;
       this.remoteKeyToLocalKeyMap = null;
@@ -1759,7 +1772,7 @@ public class ReplicaThread implements Runnable {
      * Get missing store messages in this metadata exchange.
      * @return set of missing store messages as a new collection.
      */
-    synchronized Set<MessageInfo> getMissingStoreMessages() {
+    public synchronized Set<MessageInfo> getMissingStoreMessages() {
       return missingStoreMessages == null ? Collections.emptySet() : new HashSet<>(missingStoreMessages);
     }
 
@@ -1791,7 +1804,7 @@ public class ReplicaThread implements Runnable {
      * ttl_update, delete, undelete) still needs to be compared to properties of blob in local store and reconciled.
      * @return set of messages that are now found in store as a new collection
      */
-    synchronized Set<MessageInfo> getReceivedStoreMessagesWithUpdatesPending() {
+    public synchronized Set<MessageInfo> getReceivedStoreMessagesWithUpdatesPending() {
       return receivedStoreMessagesWithUpdatesPending == null ? Collections.emptySet()
           : new HashSet<>(receivedStoreMessagesWithUpdatesPending);
     }

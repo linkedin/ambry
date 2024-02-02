@@ -13,89 +13,201 @@
  */
 package com.github.ambry.vcr;
 
+import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudTokenPersistor;
+import com.github.ambry.cloud.RecoveryTokenFactory;
+import com.github.ambry.cloud.VcrReplicaThread;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
+import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationMetrics;
+import com.github.ambry.store.LogSegmentName;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.Offset;
+import com.github.ambry.store.PersistentIndex;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreFindTokenFactory;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.cloud.CloudTestUtil.*;
+import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
 
 /**
  * Test of the CloudTokenPersistor.
  */
-@RunWith(Parameterized.class)
-@Ignore
 public class CloudTokenPersistorTest {
-  public static final Logger logger = LoggerFactory.getLogger(CloudTokenPersistorTest.class);
-
+  private final MockPartitionId mockPartitionId;
+  private final MockClusterMap mockClusterMap;
+  protected final Properties properties;
+  protected final VerifiableProperties verifiableProperties;
+  private final AzuriteUtils azuriteUtils;
+  private final AzureCloudConfig azureCloudConfig;
+  private final StoreFindTokenFactory tokenFactory;
+  private final DataNodeId dataNodeId;
   protected String ambryBackupVersion;
+  private RemoteReplicaInfo replica;
+  private AzureCloudDestinationSync azuriteClient;
+  private short ACCOUNT_ID = 657;
+  private short CONTAINER_ID = 908;
 
-  /**
-   * Parameterized constructor.
-   */
-  public CloudTokenPersistorTest(String ambryBackupVersion) {
-    this.ambryBackupVersion = ambryBackupVersion;
-  }
-
-  /**
-   * Test parameters
-   * Version 1 = Legacy VCR code and tests
-   * Version 2 = VCR 2.0 with Sync cloud destination - AzureCloudDestinationSync
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{CloudConfig.AMBRY_BACKUP_VERSION_1}, {CloudConfig.AMBRY_BACKUP_VERSION_2}});
+  public CloudTokenPersistorTest() throws IOException {
+    this.ambryBackupVersion = CloudConfig.AMBRY_BACKUP_VERSION_2;
+    azuriteUtils = new AzuriteUtils();
+    properties = azuriteUtils.getAzuriteConnectionProperties();
+    properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(false));
+    properties.setProperty(AzureCloudConfig.AZURE_NAME_SCHEME_VERSION, "1");
+    properties.setProperty(AzureCloudConfig.AZURE_BLOB_CONTAINER_STRATEGY, "Partition");
+    properties.setProperty(ReplicationConfig.REPLICATION_CLOUD_TOKEN_FACTORY,
+        RecoveryTokenFactory.class.getCanonicalName());
+    properties.setProperty("replication.metadata.request.version", "2");
+    verifiableProperties = new VerifiableProperties(properties);
+    // Create test cluster
+    mockClusterMap = new MockClusterMap(false, true, 1,
+        1, 1, true, false,
+        "localhost");
+    // Create a test partition
+    mockPartitionId =
+        (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    dataNodeId = mockPartitionId.getReplicaIds().get(0).getDataNodeId();
+    azureCloudConfig = new AzureCloudConfig(verifiableProperties);
+    tokenFactory = new StoreFindTokenFactory(new BlobIdFactory(mockClusterMap));
   }
 
   @Before
-  public void beforeTest() {
-    boolean isV1 = ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_1);
-    boolean isConnectToAzurite = new AzuriteUtils().connectToAzurite();
-    boolean isV2 = ambryBackupVersion.equals(CloudConfig.AMBRY_BACKUP_VERSION_2);
-    if (!(isV1 || (isV2 && isConnectToAzurite))) {
-      logger.error("isV1 = {}, isV2 = {}, isConnectToAzurite = {}", isV1, isV2, isConnectToAzurite);
-    }
-    assumeTrue(isV1 || (isV2 && isConnectToAzurite));
+  public void beforeTest() throws ReflectiveOperationException {
+    // Assume Azurite is up and running
+    assumeTrue(azuriteUtils.connectToAzurite());
+    azuriteClient = azuriteUtils.getAzuriteClient(
+        properties, mockClusterMap.getMetricRegistry(),    null, null);
+    // Create remote-replica info
+    replica = new RemoteReplicaInfo(mockPartitionId.getReplicaIds().get(0), null, null,
+        null, Long.MAX_VALUE, SystemTime.getInstance(), null);
+  }
+
+  protected StoreFindToken getTokenFromAzureTable() throws IOException {
+    TableEntity rowReturned = azuriteClient.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+        String.valueOf(mockPartitionId.getId()), dataNodeId.getHostname());
+    ByteArrayInputStream inputStream = new ByteArrayInputStream((byte[]) rowReturned.getProperty("binaryToken"));
+    return (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream));
   }
 
   @Test
+  public void testPersistTokenInReplicaThread() throws IOException {
+    StoreFindToken token;
+    Offset offset = new Offset(new LogSegmentName(3, 14), 36);
+    ReplicaThread.ExchangeMetadataResponse response;;
+
+    // Create ReplicaThread
+    VcrReplicaThread vcrReplicaThread =
+        new VcrReplicaThread("vcrReplicaThreadTest", null, mockClusterMap,
+            new AtomicInteger(0), dataNodeId, null,
+            new ReplicationConfig(verifiableProperties),
+            new ReplicationMetrics(mockClusterMap.getMetricRegistry(), Collections.emptyList()), null,
+            null, null, mockClusterMap.getMetricRegistry(), false,
+            "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
+            null, null, null, azuriteClient,
+            verifiableProperties);
+
+    // test 1: uninitialized token
+    token =  new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null,
+        true, (short) 3, null, null, (short) -1);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
+            -1, Collections.emptyMap(), new SystemTime());
+    vcrReplicaThread.advanceToken(replica, response);
+    assertEquals(token, getTokenFromAzureTable());
+
+    // test 2: journal-based token w/o reset key
+    token = new StoreFindToken(FindTokenType.JournalBased, offset, null, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, null, null, (short) -1);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
+        Collections.emptyMap(), new SystemTime());
+    vcrReplicaThread.advanceToken(replica, response);
+    assertEquals(token, getTokenFromAzureTable());
+
+    // test 3: journal-based token w/ reset key
+    BlobId resetKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
+    token = new StoreFindToken(FindTokenType.JournalBased, offset, null, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
+        Collections.emptyMap(), new SystemTime());
+    vcrReplicaThread.advanceToken(replica, response);
+    assertEquals(token, getTokenFromAzureTable());
+
+    // test 3: index-based token
+    BlobId storeKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
+    token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
+        Collections.emptyMap(), new SystemTime());
+    vcrReplicaThread.advanceToken(replica, response);
+    assertEquals(token, getTokenFromAzureTable());
+
+    // test 4: response with missing messages
+    MessageInfo info = new MessageInfo(storeKey, 1000, false, false, false,
+        Utils.Infinite_Time, null, ACCOUNT_ID, CONTAINER_ID,
+        Utils.getTimeInMsToTheNearestSec(System.currentTimeMillis()), (short) 0);
+    token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.singleton(info), token, -1,
+        Collections.emptyMap(), new SystemTime());
+    vcrReplicaThread.advanceToken(replica, response);
+    assertEquals(token, getTokenFromAzureTable());
+
+    // test 5: response with messages pending updates
+    token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
+        Collections.emptyMap(), new SystemTime(), Collections.singleton(info));
+    vcrReplicaThread.advanceToken(replica, response);
+    assertEquals(token, getTokenFromAzureTable());
+  }
+
+  @Test
+  @Ignore
   public void basicTest() throws Exception {
     Properties props =
         VcrTestUtil.createVcrProperties("DC1", "vcrClusterName", "zkConnectString", 12310, 12410, 12510, null);
