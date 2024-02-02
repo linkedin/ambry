@@ -134,10 +134,6 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.vcrClusterParticipant = vcrClusterParticipant;
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
-    // We need a datacenter to replicate from, which should be specified in the cloud config.
-    if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
-      throw new IllegalStateException("One or more VCR cross colo replication peer datacenter should be specified");
-    }
     try {
       vcrHelixConfig =
           new ObjectMapper().readValue(cloudConfig.vcrHelixUpdateConfig, HelixVcrUtil.VcrHelixConfig.class);
