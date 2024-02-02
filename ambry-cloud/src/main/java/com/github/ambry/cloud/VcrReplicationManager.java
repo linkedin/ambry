@@ -18,6 +18,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
@@ -27,6 +28,7 @@ import com.github.ambry.clustermap.HelixVcrUtil;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterParticipantListener;
 import com.github.ambry.commons.ResponseHandler;
@@ -51,7 +53,6 @@ import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -62,6 +63,8 @@ import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -89,6 +92,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudConfig cloudConfig;
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
+  protected AzureMetrics azureMetrics;
   protected VerifiableProperties properties;
   protected  MetricRegistry registry;
   protected CloudDestination cloudDestination;
@@ -106,6 +110,14 @@ public class VcrReplicationManager extends ReplicationEngine {
   private volatile ScheduledFuture<?> ambryVcrHelixSyncCheckTaskFuture = null;
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
   private DistributedLock vcrUpdateDistributedLock = null;
+
+  public static final String TOKEN_TYPE = "tokenType";
+  public static final String LOG_SEGMENT = "logSegment";
+  public static final String OFFSET = "offset";
+  public static final String STORE_KEY = "storeKey";
+  public static final String REPLICATED_UNITL_UTC = "replicatedUntilUTC";
+  public static final String BINARY_TOKEN = "binaryToken";
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss");
 
   public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
       ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
@@ -145,7 +157,10 @@ public class VcrReplicationManager extends ReplicationEngine {
         storeKeyConverterFactory, new ServerConfig(properties).serverMessageTransformer);
     this.properties = properties;
     this.registry = registry;
-    this.persistor = null;
+    this.azureMetrics = new AzureMetrics(metricRegistry);
+    // TODO: Remove this after all nodes start using Azure Tables
+    this.persistor = new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics,
+        clusterMap, tokenHelper, cloudDestination);;
     if (cloudConfig.cloudBlobCompactionEnabled) {
       this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig, partitionToPartitionInfo.keySet(), vcrMetrics);
       /*
@@ -178,9 +193,8 @@ public class VcrReplicationManager extends ReplicationEngine {
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
-        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
-        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-        leaderBasedReplicationAdmin, this.persistor, cloudDestination, properties);
+        notification, storeKeyConverter, transformer, replicatingOverSsl, datacenterName, responseHandler, time,
+        replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, this.persistor, cloudDestination, properties);
   }
 
   @Override
@@ -189,36 +203,39 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   @Override
-  protected int reloadReplicationTokenIfExists(ReplicaId localReplicaId, List<RemoteReplicaInfo> remoteReplicaInfos)
+  protected int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas)
       throws ReplicationException {
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(properties);
     // For each replica of a partition
-    for (RemoteReplicaInfo replicaInfo : remoteReplicaInfos) {
+    for (RemoteReplicaInfo replicaInfo : peerReplicas) {
       String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
       String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
       // First look for the token in the new place - the table
-      TableEntity row = cloudDestination.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
-          partitionKey, rowKey);
+      TableEntity row = cloudDestination.getTableEntity(
+          azureCloudConfig.azureTableNameReplicaTokens, partitionKey, rowKey);
       if (row == null) {
         // If token is not found on the new place, then look for it in the old place
+        azureMetrics.absTokenRetrieveFailureCount.inc();
         // TODO: Remove this code after all nodes have migrated to using the table
-        return super.reloadReplicationTokenIfExists(localReplicaId, remoteReplicaInfos);
+        return super.reloadReplicationTokenIfExists(localReplica, peerReplicas);
       }
       FindTokenFactory findTokenFactory =
-          tokenHelper.getFindTokenFactoryFromReplicaType(replicaInfo.getReplicaId().getReplicaType());
-      byte[] binaryToken = (byte[]) row.getProperty("binaryToken");
-      DataInputStream inputStream = new DataInputStream(new ByteArrayInputStream(binaryToken));
-      StoreFindToken storeFindToken;
+          tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
       try {
-        storeFindToken = (StoreFindToken) findTokenFactory.getFindToken(inputStream);
-      } catch (IOException e) {
+        DataInputStream inputStream = new DataInputStream(
+            new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
+        replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
+        replicaInfo.setReplicatedUntilUTC(DATE_FORMAT.parse((String) row.getProperty(REPLICATED_UNITL_UTC)).getTime());
+      } catch (Throwable t) {
         // log and metric
-        storeFindToken = (StoreFindToken) findTokenFactory.getNewFindToken();
+        azureMetrics.absTokenRetrieveFailureCount.inc();
+        logger.error("Failed to deserialize token for peer replica {} due to {}", replicaInfo, t.toString());
+        t.printStackTrace();
+        replicaInfo.setToken(findTokenFactory.getNewFindToken());
+        replicaInfo.setReplicatedUntilUTC(-1);
       }
-      replicaInfo.initializeTokens(storeFindToken);
     }
-    // This retval is useless
-    return 0;
+    return (int) azureMetrics.absTokenRetrieveFailureCount.getCount();
   }
 
   @Override
@@ -383,9 +400,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       try {
         updatePartitionInfoMaps(remoteReplicaInfos, cloudReplica);
         partitionStoreMap.put(partitionId.toPathString(), store);
-        // Reload replication token if exist.
-        int tokenReloadFailCount = reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
-        vcrMetrics.tokenReloadWarnCount.inc(tokenReloadFailCount);
+        reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
 
         // Add remoteReplicaInfos to {@link ReplicaThread}.
         addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);

@@ -39,6 +39,7 @@ import com.azure.storage.blob.models.BlockBlobItem;
 import com.azure.storage.blob.models.DeleteSnapshotsOptionType;
 import com.azure.storage.blob.models.ListBlobsOptions;
 import com.azure.storage.blob.options.BlobParallelUploadOptions;
+import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
@@ -279,7 +280,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
       throwable = e;
     } finally {
       if (throwable != null) {
-        azureMetrics.azureTableEntityCreateErrorCount.inc();
         logger.error("Failed to fetch table entity {}/{} from {} due to {}",
             partitionKey, rowKey, tableName, throwable);
         throwable.printStackTrace();

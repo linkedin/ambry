@@ -19,6 +19,7 @@ import com.github.ambry.cloud.CloudDestination;
 import com.github.ambry.cloud.CloudTokenPersistor;
 import com.github.ambry.cloud.RecoveryTokenFactory;
 import com.github.ambry.cloud.VcrReplicaThread;
+import com.github.ambry.cloud.VcrReplicationManager;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationFactory;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
@@ -50,7 +51,7 @@ import com.github.ambry.store.Offset;
 import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreFindTokenFactory;
-import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
@@ -95,7 +96,7 @@ public class CloudTokenPersistorTest {
   private short CONTAINER_ID = 908;
 
   public CloudTokenPersistorTest() throws IOException {
-    this.ambryBackupVersion = CloudConfig.AMBRY_BACKUP_VERSION_2;
+    this.ambryBackupVersion = CloudConfig.AMBRY_BACKUP_VERSION_2; // V1 is completely deprecated
     azuriteUtils = new AzuriteUtils();
     properties = azuriteUtils.getAzuriteConnectionProperties();
     properties.setProperty(CloudConfig.CLOUD_COMPACTION_DRY_RUN_ENABLED, String.valueOf(false));
@@ -128,11 +129,12 @@ public class CloudTokenPersistorTest {
         null, Long.MAX_VALUE, SystemTime.getInstance(), null);
   }
 
-  protected StoreFindToken getTokenFromAzureTable() throws IOException {
+  protected Pair<TableEntity, StoreFindToken> getTokenFromAzureTable() throws IOException {
     TableEntity rowReturned = azuriteClient.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
         String.valueOf(mockPartitionId.getId()), dataNodeId.getHostname());
-    ByteArrayInputStream inputStream = new ByteArrayInputStream((byte[]) rowReturned.getProperty("binaryToken"));
-    return (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream));
+    ByteArrayInputStream inputStream = new ByteArrayInputStream(
+        (byte[]) rowReturned.getProperty(VcrReplicationManager.BINARY_TOKEN));
+    return new Pair<>(rowReturned, (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream)));
   }
 
   @Test
@@ -145,9 +147,8 @@ public class CloudTokenPersistorTest {
     VcrReplicaThread vcrReplicaThread =
         new VcrReplicaThread("vcrReplicaThreadTest", null, mockClusterMap,
             new AtomicInteger(0), dataNodeId, null,
-            new ReplicationConfig(verifiableProperties),
-            new ReplicationMetrics(mockClusterMap.getMetricRegistry(), Collections.emptyList()), null,
-            null, null, mockClusterMap.getMetricRegistry(), false,
+            null,
+            null, null, false,
             "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
             null, null, null, azuriteClient,
             verifiableProperties);
@@ -158,7 +159,7 @@ public class CloudTokenPersistorTest {
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
             -1, Collections.emptyMap(), new SystemTime());
     vcrReplicaThread.advanceToken(replica, response);
-    assertEquals(token, getTokenFromAzureTable());
+    assertEquals(token, getTokenFromAzureTable().getSecond());
 
     // test 2: journal-based token w/o reset key
     token = new StoreFindToken(FindTokenType.JournalBased, offset, null, UUID.randomUUID(), UUID.randomUUID(),
@@ -166,7 +167,7 @@ public class CloudTokenPersistorTest {
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
         Collections.emptyMap(), new SystemTime());
     vcrReplicaThread.advanceToken(replica, response);
-    assertEquals(token, getTokenFromAzureTable());
+    assertEquals(token, getTokenFromAzureTable().getSecond());
 
     // test 3: journal-based token w/ reset key
     BlobId resetKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
@@ -175,7 +176,7 @@ public class CloudTokenPersistorTest {
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
         Collections.emptyMap(), new SystemTime());
     vcrReplicaThread.advanceToken(replica, response);
-    assertEquals(token, getTokenFromAzureTable());
+    assertEquals(token, getTokenFromAzureTable().getSecond());
 
     // test 3: index-based token
     BlobId storeKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
@@ -184,18 +185,21 @@ public class CloudTokenPersistorTest {
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
         Collections.emptyMap(), new SystemTime());
     vcrReplicaThread.advanceToken(replica, response);
-    assertEquals(token, getTokenFromAzureTable());
+    assertEquals(token, getTokenFromAzureTable().getSecond());
 
     // test 4: response with missing messages
+    long lastOpTime = System.currentTimeMillis();
     MessageInfo info = new MessageInfo(storeKey, 1000, false, false, false,
         Utils.Infinite_Time, null, ACCOUNT_ID, CONTAINER_ID,
-        Utils.getTimeInMsToTheNearestSec(System.currentTimeMillis()), (short) 0);
+        Utils.getTimeInMsToTheNearestSec(lastOpTime), (short) 0);
     token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
         false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.singleton(info), token, -1,
         Collections.emptyMap(), new SystemTime());
     vcrReplicaThread.advanceToken(replica, response);
-    assertEquals(token, getTokenFromAzureTable());
+    assertEquals(token, getTokenFromAzureTable().getSecond());
+    assertEquals(VcrReplicationManager.DATE_FORMAT.format(lastOpTime),
+        getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
 
     // test 5: response with messages pending updates
     token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
@@ -203,7 +207,8 @@ public class CloudTokenPersistorTest {
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
         Collections.emptyMap(), new SystemTime(), Collections.singleton(info));
     vcrReplicaThread.advanceToken(replica, response);
-    assertEquals(token, getTokenFromAzureTable());
+    assertEquals(VcrReplicationManager.DATE_FORMAT.format(lastOpTime),
+        getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
   }
 
   @Test

@@ -37,8 +37,10 @@ import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -52,28 +54,29 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected VcrReplicationManager replicationManager;
   protected AzureMetrics azureMetrics;
 
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
-  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss");
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
-      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, ReplicaTokenPersistor tokenWriter,
       CloudDestination cloudDestination, VerifiableProperties properties) {
-    super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
-        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
+    super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+        new ReplicationConfig(properties),
+        new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList()), notification,
+        storeKeyConverter, transformer, clusterMap.getMetricRegistry(), replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     this.cloudDestination = cloudDestination;
     this.properties = properties;
     this.azureCloudConfig = new AzureCloudConfig(properties);
-    this.azureMetrics = new AzureMetrics(metricRegistry);
+    this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
   }
 
   /**
@@ -113,20 +116,34 @@ public class VcrReplicaThread extends ReplicaThread {
       return;
     }
     logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
-    AtomicLong lastOpTime = new AtomicLong(-1);
+    // Table entity = Table row
+    // =============================================================================================================
+    // | partition-key | row-key | tokenType | logSegment | offset | storeKey | replicatedUntilUTC   | binaryToken |
+    // =============================================================================================================
+    // | partition     | host1   | Journal   | 3_14       | 12     | AAAAZzz  | 2024_Feb_02_13_01_00 | AAASLKJDFX  |
+    // | partition     | host2   | Index     | 2_12       | 32     | AAEWsXZ  | 2024_Feb_02_13_01_00 | AAAEWODSDS  |
+    // =============================================================================================================
+    AtomicLong lastOpTime = new AtomicLong(remoteReplicaInfo.getReplicatedUntilUTC());
     exchangeMetadataResponse.getMissingStoreMessages().forEach(messageInfo ->
         lastOpTime.set(Math.max(lastOpTime.get(), messageInfo.getOperationTimeMs())));
     exchangeMetadataResponse.getReceivedStoreMessagesWithUpdatesPending().forEach(messageInfo ->
         lastOpTime.set(Math.max(lastOpTime.get(), messageInfo.getOperationTimeMs())));
+    remoteReplicaInfo.setReplicatedUntilUTC(lastOpTime.get());
     String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
     String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
     TableEntity entity = new TableEntity(partitionKey, rowKey)
-        .addProperty("tokenType", token.getType().toString())
-        .addProperty("logSegment", token.getOffset() == null ? "none" : token.getOffset().getName().toString())
-        .addProperty("offset", token.getOffset() == null ? "none" : token.getOffset().getOffset())
-        .addProperty("storeKey", token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
-        .addProperty("replicatedUntilUTC", lastOpTime.get() == -1L ? "-1" : DATE_FORMAT.format(lastOpTime.get()))
-        .addProperty("binaryToken", token.toBytes());
+        .addProperty(VcrReplicationManager.TOKEN_TYPE,
+            token.getType().toString())
+        .addProperty(VcrReplicationManager.LOG_SEGMENT,
+            token.getOffset() == null ? "none" : token.getOffset().getName().toString())
+        .addProperty(VcrReplicationManager.OFFSET,
+            token.getOffset() == null ? "none" : token.getOffset().getOffset())
+        .addProperty(VcrReplicationManager.STORE_KEY,
+            token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
+        .addProperty(VcrReplicationManager.REPLICATED_UNITL_UTC,
+            lastOpTime.get() == Utils.Infinite_Time ? "-1" : VcrReplicationManager.DATE_FORMAT.format(lastOpTime.get()))
+        .addProperty(VcrReplicationManager.BINARY_TOKEN,
+            token.toBytes());
     cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
   }
 }

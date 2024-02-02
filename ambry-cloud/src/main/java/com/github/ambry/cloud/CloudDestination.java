@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.azure.data.tables.TableClient;
 import com.azure.data.tables.models.TableEntity;
+import com.codahale.metrics.Counter;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
@@ -268,5 +269,6 @@ public interface CloudDestination extends Closeable {
    * @param rowKey
    * @return
    */
-  default TableEntity getTableEntity(String tableName, String partitionKey, String rowKey) { return null; }
+  default TableEntity getTableEntity(String tableName, String partitionKey, String rowKey) {
+    return null; }
 }
