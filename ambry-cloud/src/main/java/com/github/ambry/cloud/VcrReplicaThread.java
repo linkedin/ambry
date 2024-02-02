@@ -57,7 +57,7 @@ public class VcrReplicaThread extends ReplicaThread {
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
-  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss_SSS");
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss");
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
