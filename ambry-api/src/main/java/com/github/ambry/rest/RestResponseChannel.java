@@ -116,7 +116,7 @@ public interface RestResponseChannel extends AsyncWritableChannel {
   public Object getHeader(String headerName);
 
   /**
-   * Get the list of headers
+   * Get the readonly list of headers
    * @return the names of headers.
    */
   public List<String> getHeaders();

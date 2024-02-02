@@ -24,6 +24,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 /**
@@ -35,12 +36,12 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  */
 abstract public class S3BaseHandler<R> {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3BaseHandler.class);
-  public static final String AMBRY_PARAMETERS_PREFIX = "x-ambry-";
 
   /**
    * Handles the S3 request and construct the response.
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
-   * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
+   *
+   * @param restRequest the {@link RestRequest} that contains the request headers and body.
+   * @param restResponseChannel the {@link RestResponseChannel} that contains the response headers and body.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    * @throws RestServiceException exception when the processing fails
    */
@@ -49,10 +50,11 @@ abstract public class S3BaseHandler<R> {
 
   /**
    * Process the request and construct the response, internally the invocation is delegated
-   * to method {@link #doHandle(RestRequest, RestResponseChannel, Callback)}
+   * to method {@link #doHandle(RestRequest, RestResponseChannel, Callback)}, which is
+   * implemented by subclasses.
    *
-   * @param restRequest the {@link RestRequest} that contains the request parameters and body.
-   * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
+   * @param restRequest the {@link RestRequest} that contains the request headers and body.
+   * @param restResponseChannel the {@link RestResponseChannel} that contains the response headers and body.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    * @throws RestServiceException exception when the processing fails
    */
@@ -82,7 +84,7 @@ abstract public class S3BaseHandler<R> {
 
   private void removeAmbryHeaders(RestResponseChannel restResponseChannel) {
     restResponseChannel.getHeaders().stream()
-        .filter(header -> header.startsWith(AMBRY_PARAMETERS_PREFIX))
+        .filter(header -> header.startsWith(AMBRY_HEADER_PREFIX))
         .forEach(restResponseChannel::removeHeader);
   }
 }

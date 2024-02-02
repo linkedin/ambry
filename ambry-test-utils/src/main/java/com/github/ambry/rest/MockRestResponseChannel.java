@@ -218,7 +218,7 @@ public class MockRestResponseChannel implements RestResponseChannel {
     } catch (JSONException e) {
       throw new IllegalStateException(e);
     }
-    return headers;
+    return Collections.unmodifiableList(headers);
   }
 
   @Override

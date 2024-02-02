@@ -30,6 +30,7 @@ import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
 
+import static com.github.ambry.rest.RestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -46,6 +47,7 @@ public class S3BaseHandlerTest {
       @Override
       protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback callback) {
         restResponseChannel.setHeader("x-ambry-foo", "foo");
+        restResponseChannel.setHeader("x-ambry-bar", "bar");
         // Verify that the response has Ambry headers
         assertTrue("Failed to set Ambry header", hasAmbryHeaders(restResponseChannel));
         callback.onCompletion(null, null);
@@ -70,6 +72,6 @@ public class S3BaseHandlerTest {
 
   private boolean hasAmbryHeaders(RestResponseChannel restResponseChannel) {
     return restResponseChannel.getHeaders().stream()
-        .anyMatch(header -> header.startsWith(S3BaseHandler.AMBRY_PARAMETERS_PREFIX));
+        .anyMatch(header -> header.startsWith(AMBRY_HEADER_PREFIX));
   }
 }

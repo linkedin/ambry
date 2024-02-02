@@ -18,6 +18,7 @@ import com.github.ambry.router.FutureResult;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,7 +78,8 @@ public class NoOpResponseChannel implements RestResponseChannel{
 
   @Override
   public List<String> getHeaders() {
-    return new ArrayList<>(headers.keySet());
+    return Collections.unmodifiableList(
+        new ArrayList<>(headers.keySet()));
   }
 
   @Override
