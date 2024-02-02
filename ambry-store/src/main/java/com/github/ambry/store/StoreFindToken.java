@@ -153,7 +153,7 @@ public class StoreFindToken implements FindToken {
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
    * @param resetKeyVersion The life version of reset key.
    */
-  public StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive, StoreKey resetKey,
+  StoreFindToken(Offset offset, UUID sessionId, UUID incarnationId, boolean inclusive, StoreKey resetKey,
       PersistentIndex.IndexEntryType resetKeyType, short resetKeyVersion) {
     this(FindTokenType.JournalBased, offset, null, sessionId, incarnationId, inclusive, CURRENT_VERSION, resetKey,
         resetKeyType, resetKeyVersion);

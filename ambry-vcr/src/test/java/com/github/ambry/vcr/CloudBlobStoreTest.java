@@ -140,7 +140,7 @@ public class CloudBlobStoreTest {
   private CloudBlobStore store;
   private CloudDestination dest;
   private PartitionId partitionId;
-  private MockClusterMap clusterMap;
+  private ClusterMap clusterMap;
   private VcrMetrics vcrMetrics;
   private Random random = new Random();
   private short refAccountId = 50;
