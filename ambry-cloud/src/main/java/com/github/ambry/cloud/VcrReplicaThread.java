@@ -109,10 +109,10 @@ public class VcrReplicaThread extends ReplicaThread {
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
     if (token == null) {
       azureMetrics.absTokenPersistFailureCount.inc();
-      logger.error("Null token for replica {}", remoteReplicaInfo.toString());
+      logger.error("Null token for replica {}", remoteReplicaInfo);
       return;
     }
-    logger.trace(token.toString());
+    logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
     AtomicLong lastOpTime = new AtomicLong(-1);
     exchangeMetadataResponse.getMissingStoreMessages().forEach(messageInfo ->
         lastOpTime.set(Math.max(lastOpTime.get(), messageInfo.getOperationTimeMs())));
