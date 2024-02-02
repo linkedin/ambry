@@ -239,6 +239,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureMetrics.azureTableEntityCreateErrorCount.inc();
         logger.error("Failed to insert table entity {}/{} in {} due to {}",
             tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
+        throwable.printStackTrace();
       }
     }
   }
@@ -260,6 +261,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureMetrics.azureTableEntityCreateErrorCount.inc();
         logger.error("Failed to upsert table entity {}/{} in {} due to {}",
             tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
+        throwable.printStackTrace();
       }
     }
   }
@@ -280,6 +282,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureMetrics.azureTableEntityCreateErrorCount.inc();
         logger.error("Failed to fetch table entity {}/{} from {} due to {}",
             partitionKey, rowKey, tableName, throwable);
+        throwable.printStackTrace();
       }
     }
     return null;

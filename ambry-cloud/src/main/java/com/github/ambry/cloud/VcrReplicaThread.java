@@ -125,16 +125,8 @@ public class VcrReplicaThread extends ReplicaThread {
         .addProperty("logSegment", token.getOffset() == null ? "none" : token.getOffset().getName().toString())
         .addProperty("offset", token.getOffset() == null ? "none" : token.getOffset().getOffset())
         .addProperty("storeKey", token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
-        .addProperty("replicatedUntilUTC", lastOpTime.get() == -1L ? "-1" : DATE_FORMAT.format(lastOpTime.get()));
-    try {
-      entity.addProperty("binaryToken", token.toBytes());
-      cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
-    } catch (Throwable t) {
-      // Swallow all errors to not halt replication
-      azureMetrics.absTokenPersistFailureCount.inc();
-      logger.error("Failed to upload token to Azure Storage table {} due to {}",
-          azureCloudConfig.azureTableNameReplicaTokens, t.toString());
-      t.printStackTrace();
-    }
+        .addProperty("replicatedUntilUTC", lastOpTime.get() == -1L ? "-1" : DATE_FORMAT.format(lastOpTime.get()))
+        .addProperty("binaryToken", token.toBytes());
+    cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
   }
 }
