@@ -118,7 +118,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   public static final String BINARY_TOKEN = "binaryToken";
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss");
 
-  public VcrReplicationManager(VerifiableProperties properties, MetricRegistry registry, StoreManager storeManager,
+  public VcrReplicationManager(VerifiableProperties properties, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
       CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
       NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
