@@ -63,6 +63,7 @@ import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.replication.BlobIdTransformer;
 import com.github.ambry.replication.FindToken;
+import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.replication.MockFindToken;
 import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.MockHost;
@@ -77,6 +78,7 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MockMessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.Offset;
+import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFindToken;
@@ -1688,6 +1690,37 @@ public class CloudBlobStoreTest {
     // test 1: create new token and upload
     offset = new Offset(new LogSegmentName(3, 14), 36);
     token = new StoreFindToken(offset, UUID.randomUUID(), UUID.randomUUID(), false, null, null, (short) -1);
+    response =
+        new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
+            -1, Collections.emptyMap(), new SystemTime());
+    vcrReplicaThread.advanceToken(remoteReplicaInfo, response);
+    assertEquals(remoteReplicaInfo.getToken(), token);
+    rowReturned = dest.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+        String.valueOf(partitionId.getId()), dataNodeId.getHostname());
+    inputStream = new ByteArrayInputStream((byte[]) rowReturned.getProperty("binaryToken"));
+    tokenReturned = (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream));
+    assertEquals(token, tokenReturned);
+
+    // test 1: create new token and upload
+    offset = new Offset(new LogSegmentName(3, 14), 36);
+    BlobId id = getUniqueId(refAccountId, refContainerId, false, partitionId);
+    token = new StoreFindToken(FindTokenType.IndexBased, offset, id, UUID.randomUUID(), UUID.randomUUID(), false, (short) 3, null, null, (short) -1);
+    response =
+        new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
+            -1, Collections.emptyMap(), new SystemTime());
+    vcrReplicaThread.advanceToken(remoteReplicaInfo, response);
+    assertEquals(remoteReplicaInfo.getToken(), token);
+    rowReturned = dest.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+        String.valueOf(partitionId.getId()), dataNodeId.getHostname());
+    inputStream = new ByteArrayInputStream((byte[]) rowReturned.getProperty("binaryToken"));
+    tokenReturned = (StoreFindToken) tokenFactory.getFindToken(new DataInputStream(inputStream));
+    assertEquals(token, tokenReturned);
+
+    // test 1: create new token and upload
+    offset = new Offset(new LogSegmentName(3, 14), 36);
+    id = getUniqueId(refAccountId, refContainerId, false, partitionId);
+    BlobId reset  = getUniqueId(refAccountId, refContainerId, false, partitionId);
+    token = new StoreFindToken(FindTokenType.IndexBased, offset, id, UUID.randomUUID(), UUID.randomUUID(), false, (short) 3, reset, PersistentIndex.IndexEntryType.PUT, (short) 3);
     response =
         new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
             -1, Collections.emptyMap(), new SystemTime());
