@@ -946,7 +946,7 @@ class PutOperation {
   String getBlobIdString() {
     // we call getBlobIdString to set the return result of FutureResult<String>
     // when skipCompositeChunk is true, we don't generate composite blob, we return {@link PutBlobMetaInfo}
-    if (options != null && options.skipCompositeChunk()) {
+    if (options.skipCompositeChunk()) {
       return putBlobMetaInfo;
     } else {
       return blobId == null ? null : blobId.getID();

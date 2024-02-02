@@ -59,7 +59,7 @@ public class PutBlobOptionsTest {
     assertEquals("PutBlobOptions should be equal", a, b);
     assertEquals("PutBlobOptions hashcodes should be equal", a.hashCode(), b.hashCode());
     assertEquals("toString output not as expected",
-        "PutBlobOptions{chunkUpload=true, maxUploadSize=3, restRequest=null}", a.toString());
+        "PutBlobOptions{chunkUpload=true, maxUploadSize=3, restRequest=null, skipCompositeChunk=false}", a.toString());
     b = new PutBlobOptionsBuilder().chunkUpload(false).maxUploadSize(3).build();
     assertThat("PutBlobOptions should not be equal.", a, not(b));
   }
