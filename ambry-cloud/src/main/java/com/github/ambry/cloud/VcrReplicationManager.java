@@ -94,7 +94,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final VcrClusterParticipant vcrClusterParticipant;
   protected AzureMetrics azureMetrics;
   protected VerifiableProperties properties;
-  protected  MetricRegistry registry;
   protected CloudDestination cloudDestination;
   private CloudStorageCompactor cloudStorageCompactor;
   protected ScheduledExecutorService cloudCompactionScheduler;
@@ -119,19 +118,21 @@ public class VcrReplicationManager extends ReplicationEngine {
   public static final String BINARY_TOKEN = "binaryToken";
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss");
 
-  public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
-      ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
+  public VcrReplicationManager(VerifiableProperties properties, MetricRegistry registry, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
-      ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory, VcrMetrics vcrMetrics,
-      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName) throws ReplicationException, IllegalStateException {
-    super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler,
-        vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(), networkClientFactory,
-        vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
-        storeManager, null, true);
-    this.cloudConfig = cloudConfig;
+      CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
+      throws ReplicationException, IllegalStateException {
+    super(new ReplicationConfig(properties), new ClusterMapConfig(properties), new StoreConfig(properties),
+        storeKeyFactory, clusterMap, scheduler, vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(),
+        networkClientFactory, clusterMap.getMetricRegistry(), requestNotification, storeKeyConverterFactory,
+        new ServerConfig(properties).serverMessageTransformer, null, storeManager, null,
+        true);
+    this.properties = properties;
+    this.cloudConfig = new CloudConfig(properties);
+    this.vcrMetrics = new VcrMetrics(metricRegistry);
+    this.azureMetrics = new AzureMetrics(metricRegistry);
     this.vcrClusterParticipant = vcrClusterParticipant;
-    this.vcrMetrics = vcrMetrics;
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     // We need a datacenter to replicate from, which should be specified in the cloud config.
     if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
@@ -144,25 +145,12 @@ public class VcrReplicationManager extends ReplicationEngine {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }
     vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
-  }
-
-  public VcrReplicationManager(VerifiableProperties properties, MetricRegistry registry, StoreManager storeManager,
-      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
-      CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
-      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
-      throws ReplicationException, IllegalStateException {
-    this(new CloudConfig(properties), new ReplicationConfig(properties), new ClusterMapConfig(properties),
-        new StoreConfig(properties), storeManager, storeKeyFactory, clusterMap,
-        vcrClusterParticipant, scheduler, networkClientFactory, new VcrMetrics(registry), requestNotification,
-        storeKeyConverterFactory, new ServerConfig(properties).serverMessageTransformer);
-    this.properties = properties;
-    this.registry = registry;
-    this.azureMetrics = new AzureMetrics(metricRegistry);
     // TODO: Remove this after all nodes start using Azure Tables
     this.persistor = new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics,
         clusterMap, tokenHelper, cloudDestination);;
     if (cloudConfig.cloudBlobCompactionEnabled) {
-      this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig, partitionToPartitionInfo.keySet(), vcrMetrics);
+      this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig,
+          partitionToPartitionInfo.keySet(), vcrMetrics);
       /*
         Create a new scheduler and schedule 1 daemon for compaction. No need to config this.
         The existing scheduling framework schedules tasks at a fixed rate, not a fixed delay and does not use daemons.
