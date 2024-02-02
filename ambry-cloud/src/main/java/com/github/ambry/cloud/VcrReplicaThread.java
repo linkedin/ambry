@@ -17,6 +17,7 @@ package com.github.ambry.cloud;
 import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -52,6 +53,7 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected AzureMetrics azureMetrics;
 
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
@@ -71,6 +73,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.cloudDestination = cloudDestination;
     this.properties = properties;
     this.azureCloudConfig = new AzureCloudConfig(properties);
+    this.azureMetrics = new AzureMetrics(metricRegistry);
   }
 
   /**
@@ -105,6 +108,7 @@ public class VcrReplicaThread extends ReplicaThread {
     // Now persist the token in cloud
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
     if (token == null) {
+      azureMetrics.absTokenPersistFailureCount.inc();
       logger.error("Null token for replica {}", remoteReplicaInfo.toString());
       return;
     }
@@ -124,6 +128,7 @@ public class VcrReplicaThread extends ReplicaThread {
       cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
     } catch (Throwable t) {
       // Swallow all errors to not halt replication
+      azureMetrics.absTokenPersistFailureCount.inc();
       logger.error("Failed to upload token to Azure Storage table {} due to {}",
           azureCloudConfig.azureTableNameReplicaTokens, t.toString());
       t.printStackTrace();
