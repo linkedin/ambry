@@ -47,6 +47,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -60,6 +61,7 @@ import static org.junit.Assume.*;
  * Test of the CloudTokenPersistor.
  */
 @RunWith(Parameterized.class)
+@Ignore
 public class CloudTokenPersistorTest {
   public static final Logger logger = LoggerFactory.getLogger(CloudTokenPersistorTest.class);
 

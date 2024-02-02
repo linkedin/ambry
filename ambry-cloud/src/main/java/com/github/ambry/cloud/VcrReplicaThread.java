@@ -31,19 +31,27 @@ import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Replicates from server to VCR
  */
 public class VcrReplicaThread extends ReplicaThread {
+  private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
 
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
@@ -83,5 +91,42 @@ public class VcrReplicaThread extends ReplicaThread {
         cloudDestination.createTableEntity(azureCloudConfig.azureTableNameCorruptBlobs,
             new TableEntity(messageInfo.getStoreKey().getID(), remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname())
                 .addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath())));
+  }
+
+  /**
+   * Persists token to cloud in each replication cycle
+   * @param remoteReplicaInfo Remote replica info object
+   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   */
+  @Override
+  public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    // The parent method sets in-memory token
+    super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
+    // Now persist the token in cloud
+    StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
+    if (token == null) {
+      logger.error("Null token for replica {}", remoteReplicaInfo.toString());
+      return;
+    }
+    logger.trace(token.toString());
+    String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
+    String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
+    TableEntity entity = new TableEntity(partitionKey, rowKey).addProperty("tokenType", token.getType().toString());
+    if (token.getOffset() != null) {
+      entity.addProperty("logSegment", token.getOffset().getName().toString())
+          .addProperty("offset", token.getOffset().getOffset());
+    }
+    if (token.getStoreKey() != null) {
+      entity.addProperty("storeKey", token.getStoreKey().getID());
+    }
+    try {
+      entity.addProperty("binaryToken", token.toBytes());
+      cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
+    } catch (Throwable t) {
+      // Swallow all errors to not halt replication
+      logger.error("Failed to upload token to Azure Storage table {} due to {}",
+          azureCloudConfig.azureTableNameReplicaTokens, t.toString());
+      t.printStackTrace();
+    }
   }
 }

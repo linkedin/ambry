@@ -13,6 +13,7 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,6 +51,7 @@ import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
@@ -57,6 +59,8 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -141,9 +145,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         storeKeyConverterFactory, new ServerConfig(properties).serverMessageTransformer);
     this.properties = properties;
     this.registry = registry;
-    this.persistor =
-        new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            tokenHelper, cloudDestination);
+    this.persistor = null;
     if (cloudConfig.cloudBlobCompactionEnabled) {
       this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig, partitionToPartitionInfo.keySet(), vcrMetrics);
       /*
@@ -161,6 +163,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudDestination = cloudDestination;
     // Create the table at the start so that we can catch issues in creation, and the table is ready for threads to log
     this.cloudDestination.getTableClient(new AzureCloudConfig(properties).azureTableNameCorruptBlobs);
+    this.cloudDestination.getTableClient(new AzureCloudConfig(properties).azureTableNameReplicaTokens);
   }
 
   /**
@@ -178,6 +181,44 @@ public class VcrReplicationManager extends ReplicationEngine {
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin, this.persistor, cloudDestination, properties);
+  }
+
+  @Override
+  public void retrieveReplicaTokensAndPersistIfNecessary(String mountPath) {
+    // nothing to do as tokens are loaded in reloadReplicationTokenIfExists() when helix adds replica
+  }
+
+  @Override
+  protected int reloadReplicationTokenIfExists(ReplicaId localReplicaId, List<RemoteReplicaInfo> remoteReplicaInfos)
+      throws ReplicationException {
+    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(properties);
+    // For each replica of a partition
+    for (RemoteReplicaInfo replicaInfo : remoteReplicaInfos) {
+      String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
+      String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
+      // First look for the token in the new place - the table
+      TableEntity row = cloudDestination.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+          partitionKey, rowKey);
+      if (row == null) {
+        // If token is not found on the new place, then look for it in the old place
+        // TODO: Remove this code after all nodes have migrated to using the table
+        return super.reloadReplicationTokenIfExists(localReplicaId, remoteReplicaInfos);
+      }
+      FindTokenFactory findTokenFactory =
+          tokenHelper.getFindTokenFactoryFromReplicaType(replicaInfo.getReplicaId().getReplicaType());
+      byte[] binaryToken = (byte[]) row.getProperty("binaryToken");
+      DataInputStream inputStream = new DataInputStream(new ByteArrayInputStream(binaryToken));
+      StoreFindToken storeFindToken;
+      try {
+        storeFindToken = (StoreFindToken) findTokenFactory.getFindToken(inputStream);
+      } catch (IOException e) {
+        // log and metric
+        storeFindToken = (StoreFindToken) findTokenFactory.getNewFindToken();
+      }
+      replicaInfo.initializeTokens(storeFindToken);
+    }
+    // This retval is useless
+    return 0;
   }
 
   @Override
@@ -270,10 +311,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   protected void scheduleTasks() {
-    // start background persistent thread
-    // start scheduler thread to persist index in the background
-    scheduleTask(persistor, true, replicationConfig.replicationTokenFlushDelaySeconds,
-        replicationConfig.replicationTokenFlushIntervalSeconds, "replica token persistor");
 
     if (cloudConfig.cloudBlobCompactionEnabled && cloudStorageCompactor != null) {
       logger.info("[COMPACT] Waiting {} seconds to populate partitions for compaction", cloudConfig.cloudBlobCompactionStartupDelaySecs);

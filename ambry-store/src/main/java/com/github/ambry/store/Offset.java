@@ -38,7 +38,7 @@ public class Offset implements Comparable<Offset> {
    * @param offset the offset within the segment.
    * @throws IllegalArgumentException if {@code name} is {@code null} or {@code offset} < 0.
    */
-  Offset(LogSegmentName name, long offset) {
+  public Offset(LogSegmentName name, long offset) {
     if (name == null || offset < 0) {
       throw new IllegalArgumentException("Name [" + name + "] is null or offset [" + offset + "] < 0");
     }

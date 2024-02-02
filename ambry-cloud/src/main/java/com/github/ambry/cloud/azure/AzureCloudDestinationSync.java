@@ -244,6 +244,48 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   /**
+   * Upserts a row in Azure Table
+   * An Azure Table Entity is a row with paritionKey and rowKey
+   * @param tableName Name of the table in Azure Table Service
+   * @param tableEntity Table row to insert
+   */
+  public void upsertTableEntity(String tableName, TableEntity tableEntity) {
+    Throwable throwable = null;
+    try {
+      getTableClient(tableName).upsertEntity(tableEntity);
+    } catch (Throwable e) {
+      throwable = e;
+    } finally {
+      if (throwable != null) {
+        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        logger.error("Failed to upsert table entity {}/{} in {} due to {}",
+            tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
+      }
+    }
+  }
+
+  /**
+   * Fetches a row in Azure Table
+   * An Azure Table Entity is a row with partitionKey and rowKey
+   * @param tableName Name of the table in Azure Table Service
+   */
+  public TableEntity getTableEntity(String tableName, String partitionKey, String rowKey) {
+    Throwable throwable = null;
+    try {
+      return getTableClient(tableName).getEntity(partitionKey, rowKey);
+    } catch (Throwable e) {
+      throwable = e;
+    } finally {
+      if (throwable != null) {
+        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        logger.error("Failed to fetch table entity {}/{} from {} due to {}",
+            partitionKey, rowKey, tableName, throwable);
+      }
+    }
+    return null;
+  }
+
+  /**
    * Returns blob container in Azure for an Ambry partition
    * @param partitionId Ambry partition
    * @return blobContainerClient

@@ -1684,7 +1684,7 @@ public class ReplicaThread implements Runnable {
     return exchangeMetadataResponsesInEachCycle;
   }
 
-  protected static class ExchangeMetadataResponse {
+  public static class ExchangeMetadataResponse {
     // Set of messages from remote replica missing in the local store.
     final Set<MessageInfo> missingStoreMessages;
     // Set of messages whose blobs are now present in local store  but their properties (ttl_update, delete, undelete)
@@ -1702,7 +1702,7 @@ public class ReplicaThread implements Runnable {
     // since the time the last missing message was received(lastMissingMessageReceivedTimeSec).
     long lastMissingMessageReceivedTimeSec;
 
-    ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
+    public ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
         long localLagFromRemoteInBytes, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap, Time time) {
       this.missingStoreMessages = missingStoreMessages;
       this.remoteKeyToLocalKeyMap = remoteKeyToLocalKeyMap;

@@ -252,4 +252,21 @@ public interface CloudDestination extends Closeable {
    * @param tableEntity Table row to insert
    */
   default void createTableEntity(String tableName, TableEntity tableEntity) {}
+
+  /**
+   * Up-serts an entry into a Azure Table.
+   * An Azure Table Entity is a row with partitionKey and rowKey
+   * @param token Replica token
+   * @param entity Table row
+   */
+  default void upsertTableEntity(String token, TableEntity entity) {}
+
+  /**
+   * Retrieves a table row from Azure table
+   * @param tableName
+   * @param partitionKey
+   * @param rowKey
+   * @return
+   */
+  default TableEntity getTableEntity(String tableName, String partitionKey, String rowKey) { return null; }
 }

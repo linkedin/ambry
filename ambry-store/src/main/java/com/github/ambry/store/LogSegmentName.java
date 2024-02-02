@@ -30,7 +30,7 @@ import java.util.Objects;
  * If the file name format changes, the version of {@link LogSegment} has to be updated and this class updated to
  * handle the new and old versions.
  */
-class LogSegmentName implements Comparable<LogSegmentName> {
+public class LogSegmentName implements Comparable<LogSegmentName> {
   static final String SUFFIX = BlobStore.SEPARATOR + "log";
   /**
    * For backwards compatibility, if the log contains only a single segment, the segment will have a special name.
@@ -95,7 +95,7 @@ class LogSegmentName implements Comparable<LogSegmentName> {
    * @param position the relative position of the log segment.
    * @param generation the generation of the log segment.
    */
-  private LogSegmentName(long position, long generation) {
+  public LogSegmentName(long position, long generation) {
     this.position = position;
     this.generation = generation;
   }
