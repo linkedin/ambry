@@ -199,8 +199,9 @@ public class VcrReplicationManager extends ReplicationEngine {
           azureCloudConfig.azureTableNameReplicaTokens, partitionKey, rowKey);
       if (row == null) {
         // If token is not found on the new place, then look for it in the old place
-        azureMetrics.absTokenRetrieveFailureCount.inc();
-        // TODO: Remove this code after all nodes have migrated to using the table
+        vcrMetrics.tokenReloadWarnCount.inc();
+        // TODO: Remove this code after all nodes have migrated to using the table, tokenReloadWarnCount == 0
+        // TODO: Use absTokenRetrieveFailureCount
         return super.reloadReplicationTokenIfExists(localReplica, peerReplicas);
       }
       FindTokenFactory findTokenFactory =
