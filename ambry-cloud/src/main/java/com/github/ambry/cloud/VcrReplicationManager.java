@@ -141,7 +141,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }
     vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
-    // TODO: Remove this after all nodes start using Azure Tables
+    // TODO: Remove this code after all nodes have migrated to using the table, tokenReloadWarnCount == 0
     this.persistor = new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics,
         clusterMap, tokenHelper, cloudDestination);;
     if (cloudConfig.cloudBlobCompactionEnabled) {
@@ -199,10 +199,14 @@ public class VcrReplicationManager extends ReplicationEngine {
           azureCloudConfig.azureTableNameReplicaTokens, partitionKey, rowKey);
       if (row == null) {
         // If token is not found on the new place, then look for it in the old place
-        vcrMetrics.tokenReloadWarnCount.inc();
         // TODO: Remove this code after all nodes have migrated to using the table, tokenReloadWarnCount == 0
-        // TODO: Use absTokenRetrieveFailureCount
-        return super.reloadReplicationTokenIfExists(localReplica, peerReplicas);
+        vcrMetrics.tokenReloadWarnCount.inc();
+        if (super.reloadReplicationTokenIfExists(localReplica, peerReplicas) > 0) {
+          // If token is not found in the old place too, then that's a real error !
+          azureMetrics.absTokenRetrieveFailureCount.inc();
+          logger.error("Failed to retrieve tokens for peer replicas of local replica {}", localReplica);
+        }
+        return (int) azureMetrics.absTokenRetrieveFailureCount.getCount();
       }
       FindTokenFactory findTokenFactory =
           tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
@@ -315,6 +319,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   protected void scheduleTasks() {
+    // Do not schedule any background token writer
 
     if (cloudConfig.cloudBlobCompactionEnabled && cloudStorageCompactor != null) {
       logger.info("[COMPACT] Waiting {} seconds to populate partitions for compaction", cloudConfig.cloudBlobCompactionStartupDelaySecs);
