@@ -736,10 +736,7 @@ public class ReplicaThread implements Runnable {
 
             // There are no missing keys. We just advance the token
             if (exchangeMetadataResponse.missingStoreMessages.size() == 0) {
-              remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
-              remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
-                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
+              advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
             }
 
             replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
@@ -902,7 +899,7 @@ public class ReplicaThread implements Runnable {
     long startTime = time.milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     Map<MessageInfo, StoreKey> remoteMessageToConvertedKeyNonNull = new HashMap<>();
-
+    long lastOpTime = remoteReplicaInfo.getReplicatedUntilUTC();
     for (MessageInfo messageInfo : messageInfoList) {
       StoreKey storeKey = messageInfo.getStoreKey();
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
@@ -915,7 +912,9 @@ public class ReplicaThread implements Runnable {
           || !skipPredicate.test(messageInfo))) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
+      lastOpTime = Math.max(lastOpTime, messageInfo.getOperationTimeMs());
     }
+    remoteReplicaInfo.setReplicatedUntilUTC(lastOpTime);
     Set<StoreKey> convertedMissingStoreKeys =
         remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()));
     Set<MessageInfo> missingRemoteMessages = new HashSet<>();

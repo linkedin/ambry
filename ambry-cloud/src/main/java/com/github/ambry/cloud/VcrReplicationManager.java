@@ -372,7 +372,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (peerReplicas != null) {
       for (ReplicaId peerReplica : peerReplicas) {
         if (!shouldReplicateFromDc(peerReplica.getDataNodeId().getDatacenterName())) {
-          logger.error("Skipping replication from {}", peerReplica.getDataNodeId().getDatacenterName());
+          logger.trace("Skipping replication from {}", peerReplica.getDataNodeId().getDatacenterName());
           continue;
         }
         // We need to ensure that a replica token gets persisted only after the corresponding data in the

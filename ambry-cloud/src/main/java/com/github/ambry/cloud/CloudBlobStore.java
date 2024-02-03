@@ -123,7 +123,7 @@ public class CloudBlobStore implements Store {
           cloudConfig.recentBlobCacheLimit);
       recentBlobCache = Collections.synchronizedMap(new RecentBlobCache(cloudConfig.recentBlobCacheLimit));
     } else {
-      logger.info("Not creating recentBlobCache");
+      logger.trace("Not creating recentBlobCache");
       recentBlobCache = null;
     }
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);

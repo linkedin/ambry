@@ -120,12 +120,7 @@ public class VcrReplicaThread extends ReplicaThread {
     // | partition     | host1   | Journal   | 3_14       | 12     | AAAAZzz  | 2024_Feb_02_13_01_00 | AAASLKJDFX  |
     // | partition     | host2   | Index     | 2_12       | 32     | AAEWsXZ  | 2024_Feb_02_13_01_00 | AAAEWODSDS  |
     // =============================================================================================================
-    AtomicLong lastOpTime = new AtomicLong(remoteReplicaInfo.getReplicatedUntilUTC());
-    exchangeMetadataResponse.getMissingStoreMessages().forEach(messageInfo ->
-        lastOpTime.set(Math.max(lastOpTime.get(), messageInfo.getOperationTimeMs())));
-    exchangeMetadataResponse.getReceivedStoreMessagesWithUpdatesPending().forEach(messageInfo ->
-        lastOpTime.set(Math.max(lastOpTime.get(), messageInfo.getOperationTimeMs())));
-    remoteReplicaInfo.setReplicatedUntilUTC(lastOpTime.get());
+    long lastOpTime = remoteReplicaInfo.getReplicatedUntilUTC();
     String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
     String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
     TableEntity entity = new TableEntity(partitionKey, rowKey)
@@ -138,8 +133,8 @@ public class VcrReplicaThread extends ReplicaThread {
         .addProperty(VcrReplicationManager.STORE_KEY,
             token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
         .addProperty(VcrReplicationManager.REPLICATED_UNITL_UTC,
-            lastOpTime.get() == Utils.Infinite_Time ? String.valueOf(Utils.Infinite_Time)
-                : VcrReplicationManager.DATE_FORMAT.format(lastOpTime.get()))
+            lastOpTime == Utils.Infinite_Time ? String.valueOf(Utils.Infinite_Time)
+                : VcrReplicationManager.DATE_FORMAT.format(lastOpTime))
         .addProperty(VcrReplicationManager.BINARY_TOKEN,
             token.toBytes());
     cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
