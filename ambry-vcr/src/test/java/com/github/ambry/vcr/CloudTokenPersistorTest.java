@@ -152,7 +152,7 @@ public class CloudTokenPersistorTest {
   }
 
   @Test
-  public void testPersistTokenInReplicaThread() throws IOException {
+  public void testPersistToken() throws IOException {
     StoreFindToken token;
     Offset offset = new Offset(new LogSegmentName(3, 14), 36);
     ReplicaThread.ExchangeMetadataResponse response;;
