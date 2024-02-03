@@ -70,7 +70,7 @@ public class DeleteBlobHandler {
     this.accountService = accountService;
   }
 
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
       throws RestServiceException {
     RestRequestMetrics requestMetrics =
         metrics.deleteBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false);

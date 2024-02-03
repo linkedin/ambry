@@ -672,6 +672,10 @@ class NettyResponseChannel implements RestResponseChannel {
         nettyMetrics.acceptedCount.inc();
         status = HttpResponseStatus.ACCEPTED;
         break;
+      case NoContent:
+        nettyMetrics.noContentCount.inc();
+        status = HttpResponseStatus.NO_CONTENT;
+        break;
       case PartialContent:
         nettyMetrics.partialContentCount.inc();
         status = HttpResponseStatus.PARTIAL_CONTENT;
