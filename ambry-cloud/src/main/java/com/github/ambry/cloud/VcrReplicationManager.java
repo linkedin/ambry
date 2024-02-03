@@ -187,7 +187,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   @Override
-  protected int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas)
+  public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas)
       throws ReplicationException {
     AzureCloudConfig azureCloudConfig = new AzureCloudConfig(properties);
     // For each replica of a partition
@@ -209,7 +209,9 @@ public class VcrReplicationManager extends ReplicationEngine {
         DataInputStream inputStream = new DataInputStream(
             new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
         replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
-        replicaInfo.setReplicatedUntilUTC(DATE_FORMAT.parse((String) row.getProperty(REPLICATED_UNITL_UTC)).getTime());
+        String replUntil = (String) row.getProperty(REPLICATED_UNITL_UTC);
+        long time = replUntil.equals(String.valueOf(Utils.Infinite_Time)) ? -1 : DATE_FORMAT.parse(replUntil).getTime();
+        replicaInfo.setReplicatedUntilUTC(time);
       } catch (Throwable t) {
         // log and metric
         azureMetrics.absTokenRetrieveFailureCount.inc();

@@ -138,7 +138,8 @@ public class VcrReplicaThread extends ReplicaThread {
         .addProperty(VcrReplicationManager.STORE_KEY,
             token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
         .addProperty(VcrReplicationManager.REPLICATED_UNITL_UTC,
-            lastOpTime.get() == Utils.Infinite_Time ? "-1" : VcrReplicationManager.DATE_FORMAT.format(lastOpTime.get()))
+            lastOpTime.get() == Utils.Infinite_Time ? String.valueOf(Utils.Infinite_Time)
+                : VcrReplicationManager.DATE_FORMAT.format(lastOpTime.get()))
         .addProperty(VcrReplicationManager.BINARY_TOKEN,
             token.toBytes());
     cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);

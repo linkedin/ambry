@@ -30,8 +30,10 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.MockVcrClusterSpectator;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
@@ -39,18 +41,25 @@ import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.FindTokenType;
+import com.github.ambry.replication.MockNetworkClientFactory;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
+import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationMetrics;
+import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.LogSegmentName;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreFindTokenFactory;
+import com.github.ambry.store.StoreKeyConverterFactory;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -66,7 +75,9 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -75,6 +86,7 @@ import org.junit.Test;
 import static com.github.ambry.cloud.CloudTestUtil.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -89,6 +101,7 @@ public class CloudTokenPersistorTest {
   private final AzureCloudConfig azureCloudConfig;
   private final StoreFindTokenFactory tokenFactory;
   private final DataNodeId dataNodeId;
+  protected BlobIdFactory storeKeyFactory;
   protected String ambryBackupVersion;
   private RemoteReplicaInfo replica;
   private AzureCloudDestinationSync azuriteClient;
@@ -115,7 +128,8 @@ public class CloudTokenPersistorTest {
         (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     dataNodeId = mockPartitionId.getReplicaIds().get(0).getDataNodeId();
     azureCloudConfig = new AzureCloudConfig(verifiableProperties);
-    tokenFactory = new StoreFindTokenFactory(new BlobIdFactory(mockClusterMap));
+    storeKeyFactory = new BlobIdFactory(mockClusterMap);
+    tokenFactory = new StoreFindTokenFactory(storeKeyFactory);
   }
 
   @Before
@@ -178,7 +192,7 @@ public class CloudTokenPersistorTest {
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(token, getTokenFromAzureTable().getSecond());
 
-    // test 3: index-based token
+    // test 4: index-based token
     BlobId storeKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
     token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
         false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
@@ -187,7 +201,7 @@ public class CloudTokenPersistorTest {
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(token, getTokenFromAzureTable().getSecond());
 
-    // test 4: response with missing messages
+    // test 5: response with missing messages
     long lastOpTime = System.currentTimeMillis();
     MessageInfo info = new MessageInfo(storeKey, 1000, false, false, false,
         Utils.Infinite_Time, null, ACCOUNT_ID, CONTAINER_ID,
@@ -201,7 +215,7 @@ public class CloudTokenPersistorTest {
     assertEquals(VcrReplicationManager.DATE_FORMAT.format(lastOpTime),
         getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
 
-    // test 5: response with messages pending updates
+    // test 6: response with messages pending updates
     token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
         false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
@@ -209,6 +223,83 @@ public class CloudTokenPersistorTest {
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(VcrReplicationManager.DATE_FORMAT.format(lastOpTime),
         getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
+  }
+
+  protected void uploadTokenToAzureTable(RemoteReplicaInfo replica, StoreFindToken token, long lastOpTime) {
+    String partitionKey = String.valueOf(replica.getReplicaId().getPartitionId().getId());
+    String rowKey = replica.getReplicaId().getDataNodeId().getHostname();
+    TableEntity entity = new TableEntity(partitionKey, rowKey)
+        .addProperty(VcrReplicationManager.TOKEN_TYPE,
+            token.getType().toString())
+        .addProperty(VcrReplicationManager.LOG_SEGMENT,
+            token.getOffset() == null ? "none" : token.getOffset().getName().toString())
+        .addProperty(VcrReplicationManager.OFFSET,
+            token.getOffset() == null ? "none" : token.getOffset().getOffset())
+        .addProperty(VcrReplicationManager.STORE_KEY,
+            token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
+        .addProperty(VcrReplicationManager.REPLICATED_UNITL_UTC,
+            lastOpTime == Utils.Infinite_Time ? String.valueOf(Utils.Infinite_Time)
+                : VcrReplicationManager.DATE_FORMAT.format(lastOpTime))
+        .addProperty(VcrReplicationManager.BINARY_TOKEN,
+            token.toBytes());
+    azuriteClient.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
+  }
+
+  @Test
+  public void testRetrieveToken() throws ReplicationException {
+    StoreFindToken token;
+    long lastOpTime;
+    Offset offset = new Offset(new LogSegmentName(3, 14), 36);
+    VcrClusterParticipant vcrClusterParticipant = mock(VcrClusterParticipant.class);
+    when(vcrClusterParticipant.getCurrentDataNodeId()).thenReturn(dataNodeId);
+    NetworkClientFactory networkClientFactory = mock(NetworkClientFactory.class);
+    VcrReplicationManager vcrReplicationManager =
+          new VcrReplicationManager(verifiableProperties, null, storeKeyFactory, mockClusterMap,
+              vcrClusterParticipant, azuriteClient, null, networkClientFactory, null,
+              null);
+
+    // No one checks if local and peer are the same replica. Hmm ?
+    // test 1: uninitialized token
+    lastOpTime = Utils.Infinite_Time;
+    token =  new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null,
+        true, (short) 3, null, null, (short) -1);
+    uploadTokenToAzureTable(replica, token, lastOpTime);
+    vcrReplicationManager.reloadReplicationTokenIfExists(
+        mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
+    assertEquals(token, replica.getToken());
+    assertEquals(lastOpTime, replica.getReplicatedUntilUTC());
+
+    // test 2: journal-based token w/o reset key
+    lastOpTime = Utils.Infinite_Time;
+    token = new StoreFindToken(FindTokenType.JournalBased, offset, null, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, null, null, (short) -1);
+    uploadTokenToAzureTable(replica, token, lastOpTime);
+    vcrReplicationManager.reloadReplicationTokenIfExists(
+        mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
+    assertEquals(token, replica.getToken());
+    assertEquals(lastOpTime, replica.getReplicatedUntilUTC());
+
+    // test 3: journal-based token w/ reset key
+    lastOpTime = System.currentTimeMillis();
+    BlobId resetKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
+    token = new StoreFindToken(FindTokenType.JournalBased, offset, null, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
+    uploadTokenToAzureTable(replica, token, lastOpTime);
+    vcrReplicationManager.reloadReplicationTokenIfExists(
+        mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
+    assertEquals(token, replica.getToken());
+    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilUTC());
+
+    // test 4: index-based token
+    lastOpTime = System.currentTimeMillis();
+    BlobId storeKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
+    token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
+    uploadTokenToAzureTable(replica, token, lastOpTime);
+    vcrReplicationManager.reloadReplicationTokenIfExists(
+        mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
+    assertEquals(token, replica.getToken());
+    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilUTC());
   }
 
   @Test
