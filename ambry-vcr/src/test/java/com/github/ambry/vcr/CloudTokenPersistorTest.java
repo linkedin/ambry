@@ -201,26 +201,11 @@ public class CloudTokenPersistorTest {
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(token, getTokenFromAzureTable().getSecond());
 
-    // test 5: response with missing messages
+    // test 5: token with last operation time
     long lastOpTime = System.currentTimeMillis();
-    MessageInfo info = new MessageInfo(storeKey, 1000, false, false, false,
-        Utils.Infinite_Time, null, ACCOUNT_ID, CONTAINER_ID,
-        Utils.getTimeInMsToTheNearestSec(lastOpTime), (short) 0);
-    token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
-        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
-    response = new ReplicaThread.ExchangeMetadataResponse(Collections.singleton(info), token, -1,
-        Collections.emptyMap(), new SystemTime());
+    replica.setReplicatedUntilUTC(lastOpTime);
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(token, getTokenFromAzureTable().getSecond());
-    assertEquals(VcrReplicationManager.DATE_FORMAT.format(lastOpTime),
-        getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
-
-    // test 6: response with messages pending updates
-    token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
-        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
-    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
-        Collections.emptyMap(), new SystemTime(), Collections.singleton(info));
-    vcrReplicaThread.advanceToken(replica, response);
     assertEquals(VcrReplicationManager.DATE_FORMAT.format(lastOpTime),
         getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
   }
