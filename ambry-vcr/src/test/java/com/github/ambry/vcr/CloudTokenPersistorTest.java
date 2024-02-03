@@ -267,7 +267,7 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(lastOpTime, replica.getReplicatedUntilUTC());
+    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilUTC());
 
     // test 2: journal-based token w/o reset key
     lastOpTime = Utils.Infinite_Time;
@@ -277,7 +277,7 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(lastOpTime, replica.getReplicatedUntilUTC());
+    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilUTC());
 
     // test 3: journal-based token w/ reset key
     lastOpTime = System.currentTimeMillis();
