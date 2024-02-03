@@ -110,6 +110,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
   private DistributedLock vcrUpdateDistributedLock = null;
 
+  public static final String BACKUP_NODE = "backupNode";
   public static final String TOKEN_TYPE = "tokenType";
   public static final String LOG_SEGMENT = "logSegment";
   public static final String OFFSET = "offset";

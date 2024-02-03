@@ -124,6 +124,7 @@ public class VcrReplicaThread extends ReplicaThread {
     String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
     String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
     TableEntity entity = new TableEntity(partitionKey, rowKey)
+        .addProperty(VcrReplicationManager.BACKUP_NODE, dataNodeId.getHostname())
         .addProperty(VcrReplicationManager.TOKEN_TYPE,
             token.getType().toString())
         .addProperty(VcrReplicationManager.LOG_SEGMENT,

@@ -97,7 +97,7 @@ public class ReplicaThread implements Runnable {
   private final FindTokenHelper findTokenHelper;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
-  private final DataNodeId dataNodeId;
+  protected final DataNodeId dataNodeId;
   private final NetworkClient networkClient;
   private final ReplicationConfig replicationConfig;
   private final ReplicationMetrics replicationMetrics;
