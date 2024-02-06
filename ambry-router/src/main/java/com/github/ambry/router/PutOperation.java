@@ -44,6 +44,7 @@ import com.github.ambry.quota.QuotaException;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NettyRequest;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
@@ -157,6 +158,8 @@ class PutOperation {
   private volatile boolean operationCompleted = false;
   // the blob id of the overall blob. This will be set if and when the operation is successful.
   private BlobId blobId;
+
+  private String putBlobMetaInfo = null;
   // the cause for failure of this operation. This will be set if and when the operation encounters an irrecoverable
   // failure.
   private final AtomicReference<Exception> operationException = new AtomicReference<Exception>();
@@ -359,7 +362,8 @@ class PutOperation {
     }
     Exception exception = null;
     try {
-      if (options.isChunkUpload() && options.getMaxUploadSize() > routerConfig.routerMaxPutChunkSizeBytes) {
+      if (options.isChunkUpload() && options.getMaxUploadSize() > routerConfig.routerMaxPutChunkSizeBytes
+          && !RestUtils.isS3Request(restRequest)) {
         exception = new RouterException("Invalid max upload size for chunk upload: " + options.getMaxUploadSize(),
             RouterErrorCode.InvalidPutArgument);
       } else if (isStitchOperation()) {
@@ -601,10 +605,12 @@ class PutOperation {
       setOperationCompleted();
     }
     long operationLatencyMs = time.milliseconds() - chunk.chunkFillCompleteAtMs;
-    if (chunk.chunkBlobProperties.isEncrypted()) {
-      routerMetrics.putEncryptedChunkOperationLatencyMs.update(operationLatencyMs);
-    } else {
-      routerMetrics.putChunkOperationLatencyMs.update(operationLatencyMs, TimeUnit.MILLISECONDS);
+    if (chunk.chunkBlobProperties != null) {
+      if (chunk.chunkBlobProperties.isEncrypted()) {
+        routerMetrics.putEncryptedChunkOperationLatencyMs.update(operationLatencyMs);
+      } else {
+        routerMetrics.putChunkOperationLatencyMs.update(operationLatencyMs, TimeUnit.MILLISECONDS);
+      }
     }
     chunk.clear();
   }
@@ -938,7 +944,13 @@ class PutOperation {
    * @return the blobId if the operation is successful; null otherwise.
    */
   String getBlobIdString() {
-    return blobId == null ? null : blobId.getID();
+    // we call getBlobIdString to set the return result of FutureResult<String>
+    // when skipCompositeChunk is true, we don't generate composite blob, we return {@link PutBlobMetaInfo}
+    if (options.skipCompositeChunk()) {
+      return putBlobMetaInfo;
+    } else {
+      return blobId == null ? null : blobId.getID();
+    }
   }
 
   /**
@@ -2089,7 +2101,26 @@ class PutOperation {
               passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
               passedInBlobProperties.isEncrypted(), passedInBlobProperties.getExternalAssetTag(),
               passedInBlobProperties.getContentEncoding(), passedInBlobProperties.getFilename(), null);
-      if (isStitchOperation() || getNumDataChunks() > 1) {
+
+      if (options.skipCompositeChunk()) {
+        // close the request as the single blob. we don't generate the composite blob.
+        // we set first chunk id to the blobid since it's not supposed to be null. But we return putBlobMetaInfo only.
+        blobId = (BlobId) indexToChunkIdsAndChunkSizes.get(0).getFirst();
+        state = ChunkState.Complete;
+        setOperationCompleted();
+
+        // now generate the PutBlobMetaInfo which includes the data chunk list
+        // values returned are in the right order as TreeMap returns them in key-order.
+        // .stream.map.collect is supposed to return in order
+        List<Pair<String, Long>> orderedChunkList = new ArrayList<>(indexToChunkIdsAndChunkSizes.values()
+            .stream()
+            .map(p -> new Pair<>(p.getFirst().toString(), p.getSecond()))
+            .collect(Collectors.toList()));
+        PutBlobMetaInfo putBlobMetaInfoObj = new PutBlobMetaInfo(orderedChunkList, reservedMetadataChunkId.getID());
+        putBlobMetaInfo = PutBlobMetaInfo.serialize(putBlobMetaInfoObj);
+        logger.debug("S3 5MB : finalizeMetadataChunk orderedChunkIdList is {} {}", indexToChunkIdsAndChunkSizes,
+            putBlobMetaInfo);
+      } else if (isStitchOperation() || getNumDataChunks() > 1) {
         ByteBuffer serialized = null;
         // values returned are in the right order as TreeMap returns them in key-order.
         if (routerConfig.routerMetadataContentVersion == MessageFormatRecord.Metadata_Content_Version_V2) {

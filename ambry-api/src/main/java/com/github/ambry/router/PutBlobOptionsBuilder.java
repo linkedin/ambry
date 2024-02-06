@@ -25,6 +25,7 @@ public class PutBlobOptionsBuilder {
   private boolean chunkUpload = false;
   private long maxUploadSize = Long.MAX_VALUE;
   private RestRequest restRequest = null;
+  private boolean skipCompositeChunk = false;
 
   /**
    * @param chunkUpload {@code true} to indicate that this is an upload of a data chunk of a stitched upload.
@@ -54,9 +55,18 @@ public class PutBlobOptionsBuilder {
   }
 
   /**
+   * @param skipCompositeChunk: if true, skip the composite chunk.
+   * @return this builder.
+   */
+  public PutBlobOptionsBuilder skipCompositeChunk(boolean skipCompositeChunk) {
+    this.skipCompositeChunk = skipCompositeChunk;
+    return this;
+  }
+
+  /**
    * @return the {@link PutBlobOptions} built.
    */
   public PutBlobOptions build() {
-    return new PutBlobOptions(chunkUpload, maxUploadSize, restRequest);
+    return new PutBlobOptions(chunkUpload, maxUploadSize, restRequest, skipCompositeChunk);
   }
 }

@@ -913,7 +913,7 @@ public class RestUtils {
    * @return {@code true} if the request is a S3 API request.
    */
   public static boolean isS3Request(RestRequest restRequest) {
-    return restRequest.getArgs().containsKey(S3_REQUEST);
+    return restRequest != null && restRequest.getArgs().containsKey(S3_REQUEST);
   }
 
   /**
