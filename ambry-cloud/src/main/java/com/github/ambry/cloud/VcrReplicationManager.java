@@ -278,7 +278,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (cloudConfig.cloudBlobCompactionEnabled && cloudStorageCompactor != null) {
       logger.info("[COMPACT] Waiting {} seconds to populate partitions for compaction", cloudConfig.cloudBlobCompactionStartupDelaySecs);
       cloudCompactionScheduler.scheduleWithFixedDelay(cloudStorageCompactor, cloudConfig.cloudBlobCompactionStartupDelaySecs,
-          cloudConfig.cloudBlobCompactionIntervalHours, TimeUnit.HOURS);
+          TimeUnit.HOURS.toSeconds(cloudConfig.cloudBlobCompactionIntervalHours), TimeUnit.SECONDS);
     }
 
     // Schedule thread to purge blobs belonging to deprecated containers for this VCR's partitions
