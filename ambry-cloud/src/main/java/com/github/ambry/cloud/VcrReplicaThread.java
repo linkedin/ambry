@@ -51,6 +51,7 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected String azureTableNameReplicaTokens;
   protected AzureMetrics azureMetrics;
 
   protected AzureCloudConfig azureCloudConfig;
@@ -72,6 +73,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.cloudDestination = cloudDestination;
     this.properties = properties;
     this.azureCloudConfig = new AzureCloudConfig(properties);
+    this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
   }
 
@@ -142,7 +144,7 @@ public class VcrReplicaThread extends ReplicaThread {
         .addProperty(VcrReplicationManager.BINARY_TOKEN,
             token.toBytes());
     // Now persist the token in cloud
-    if (cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity)) {
+    if (cloudDestination.upsertTableEntity(azureTableNameReplicaTokens, entity)) {
       azureMetrics.ambryReplicaTokenWriteRate.mark();
     }
   }

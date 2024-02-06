@@ -101,6 +101,7 @@ public class CloudTokenPersistorTest {
   private final AzureCloudConfig azureCloudConfig;
   private final StoreFindTokenFactory tokenFactory;
   private final DataNodeId dataNodeId;
+  protected String azureTableNameReplicaTokens;
   protected BlobIdFactory storeKeyFactory;
   protected String ambryBackupVersion;
   private RemoteReplicaInfo replica;
@@ -128,6 +129,7 @@ public class CloudTokenPersistorTest {
         (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     dataNodeId = mockPartitionId.getReplicaIds().get(0).getDataNodeId();
     azureCloudConfig = new AzureCloudConfig(verifiableProperties);
+    this.azureTableNameReplicaTokens = azureCloudConfig.azureTableNameReplicaTokens;
     storeKeyFactory = new BlobIdFactory(mockClusterMap);
     tokenFactory = new StoreFindTokenFactory(storeKeyFactory);
   }
@@ -144,7 +146,7 @@ public class CloudTokenPersistorTest {
   }
 
   protected Pair<TableEntity, StoreFindToken> getTokenFromAzureTable() throws IOException {
-    TableEntity rowReturned = azuriteClient.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+    TableEntity rowReturned = azuriteClient.getTableEntity(azureTableNameReplicaTokens,
         String.valueOf(mockPartitionId.getId()), dataNodeId.getHostname());
     ByteArrayInputStream inputStream = new ByteArrayInputStream(
         (byte[]) rowReturned.getProperty(VcrReplicationManager.BINARY_TOKEN));
@@ -234,7 +236,7 @@ public class CloudTokenPersistorTest {
     String partitionKey = String.valueOf(replica.getReplicaId().getPartitionId().getId());
     String rowKey = replica.getReplicaId().getDataNodeId().getHostname();
     TableEntity oldEntity = new TableEntity(partitionKey, rowKey).addProperty("column", "value");
-    azuriteClient.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, oldEntity);
+    azuriteClient.upsertTableEntity(azureTableNameReplicaTokens, oldEntity);
     TableEntity newEntity = null;
 
     // test 1: uninitialized token
@@ -244,7 +246,7 @@ public class CloudTokenPersistorTest {
         -1, Collections.emptyMap(), new SystemTime());
     replica.setToken(token);
     vcrReplicaThread.advanceToken(replica, response);
-    newEntity = azuriteClient.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+    newEntity = azuriteClient.getTableEntity(azureTableNameReplicaTokens,
         partitionKey, rowKey);
     assertEquals(oldEntity.getProperty("column"), newEntity.getProperty("column"));
 
@@ -266,7 +268,7 @@ public class CloudTokenPersistorTest {
         -1, Collections.emptyMap(), new SystemTime());
     replica.setToken(token);
     vcrReplicaThread.advanceToken(replica, response);
-    newEntity = azuriteClient.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+    newEntity = azuriteClient.getTableEntity(azureTableNameReplicaTokens,
         partitionKey, rowKey);
     assertEquals(oldEntity.getProperty("column"), newEntity.getProperty("column"));
   }
@@ -288,7 +290,7 @@ public class CloudTokenPersistorTest {
                 : VcrReplicationManager.DATE_FORMAT.format(lastOpTime))
         .addProperty(VcrReplicationManager.BINARY_TOKEN,
             token.toBytes());
-    azuriteClient.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
+    azuriteClient.upsertTableEntity(azureTableNameReplicaTokens, entity);
   }
 
   @Test

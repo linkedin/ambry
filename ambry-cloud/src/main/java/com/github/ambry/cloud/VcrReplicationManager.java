@@ -92,6 +92,8 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudConfig cloudConfig;
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
+  protected String azureTableNameReplicaTokens;
+  protected AzureCloudConfig azureCloudConfig;
   protected AzureMetrics azureMetrics;
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
@@ -131,6 +133,7 @@ public class VcrReplicationManager extends ReplicationEngine {
         true);
     this.properties = properties;
     this.cloudConfig = new CloudConfig(properties);
+    this.azureCloudConfig = new AzureCloudConfig(properties);
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.vcrClusterParticipant = vcrClusterParticipant;
@@ -162,8 +165,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
     this.cloudDestination = cloudDestination;
     // Create the table at the start so that we can catch issues in creation, and the table is ready for threads to log
-    this.cloudDestination.getTableClient(new AzureCloudConfig(properties).azureTableNameCorruptBlobs);
-    this.cloudDestination.getTableClient(new AzureCloudConfig(properties).azureTableNameReplicaTokens);
+    this.cloudDestination.getTableClient(this.azureCloudConfig.azureTableNameCorruptBlobs);
+    azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
+    this.cloudDestination.getTableClient(azureTableNameReplicaTokens);
   }
 
   /**
@@ -196,8 +200,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
       String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
       // First look for the token in the new place - the table
-      TableEntity row = cloudDestination.getTableEntity(
-          azureCloudConfig.azureTableNameReplicaTokens, partitionKey, rowKey);
+      TableEntity row = cloudDestination.getTableEntity(azureTableNameReplicaTokens, partitionKey, rowKey);
       if (row == null) {
         // If token is not found on the new place, then look for it in the old place
         // TODO: Remove this code after all nodes have migrated to using the table, tokenReloadWarnCount == 0
