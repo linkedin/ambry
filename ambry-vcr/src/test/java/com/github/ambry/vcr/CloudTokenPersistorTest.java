@@ -210,6 +210,8 @@ public class CloudTokenPersistorTest {
         getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
   }
 
+  /**
+   * Tests that no token is uploaded to Azure Table if the token is unchanged in a repl-cycle.
    * This save dollars.
    */
   @Test
