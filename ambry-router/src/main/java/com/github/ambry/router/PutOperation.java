@@ -2104,6 +2104,7 @@ class PutOperation {
 
       if (options.skipCompositeChunk()) {
         // close the request as the single blob. we don't generate the composite blob.
+        // we set first chunk id to the blobid since it's not supposed to be null. But we return putBlobMetaInfo only.
         blobId = (BlobId) indexToChunkIdsAndChunkSizes.get(0).getFirst();
         state = ChunkState.Complete;
         setOperationCompleted();
@@ -2117,7 +2118,7 @@ class PutOperation {
             .collect(Collectors.toList()));
         PutBlobMetaInfo putBlobMetaInfoObj = new PutBlobMetaInfo(orderedChunkList, reservedMetadataChunkId.getID());
         putBlobMetaInfo = PutBlobMetaInfo.serialize(putBlobMetaInfoObj);
-        logger.info("S3 5MB : finalizeMetadataChunk orderedChunkIdList is {} {}", indexToChunkIdsAndChunkSizes,
+        logger.debug("S3 5MB : finalizeMetadataChunk orderedChunkIdList is {} {}", indexToChunkIdsAndChunkSizes,
             putBlobMetaInfo);
       } else if (isStitchOperation() || getNumDataChunks() > 1) {
         ByteBuffer serialized = null;

@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -73,7 +74,7 @@ public class PutBlobMetaInfo {
    * @return the list of chunk with blob id and blob size
    */
   public List<Pair<String, Long>> getOrderedChunkIdSizeList() {
-    return orderedChunkIdSizeList;
+    return Collections.unmodifiableList(orderedChunkIdSizeList);
   }
 
   /**
