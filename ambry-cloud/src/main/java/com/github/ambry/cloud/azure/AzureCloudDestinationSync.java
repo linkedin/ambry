@@ -39,7 +39,6 @@ import com.azure.storage.blob.models.BlockBlobItem;
 import com.azure.storage.blob.models.DeleteSnapshotsOptionType;
 import com.azure.storage.blob.models.ListBlobsOptions;
 import com.azure.storage.blob.options.BlobParallelUploadOptions;
-import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.account.AccountService;
@@ -246,18 +245,22 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   /**
-   * Upserts a row in Azure Table
-   * An Azure Table Entity is a row with paritionKey and rowKey
-   * @param tableName Name of the table in Azure Table Service
+   * Upserts a row in Azure Table An Azure Table Entity is a row with paritionKey and rowKey
+   *
+   * @param tableName   Name of the table in Azure Table Service
    * @param tableEntity Table row to insert
+   * @return
    */
-  public void upsertTableEntity(String tableName, TableEntity tableEntity) {
+  public boolean upsertTableEntity(String tableName, TableEntity tableEntity) {
     Throwable throwable = null;
     try {
       getTableClient(tableName).upsertEntity(tableEntity);
+      return true;
     } catch (Throwable e) {
       throwable = e;
+      return false;
     } finally {
+      // Executed before return statement
       if (throwable != null) {
         azureMetrics.azureTableEntityCreateErrorCount.inc();
         logger.error("Failed to upsert table entity {}/{} in {} due to {}",

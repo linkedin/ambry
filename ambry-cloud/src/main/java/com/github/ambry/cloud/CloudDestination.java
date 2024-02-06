@@ -15,7 +15,6 @@ package com.github.ambry.cloud;
 
 import com.azure.data.tables.TableClient;
 import com.azure.data.tables.models.TableEntity;
-import com.codahale.metrics.Counter;
 import com.github.ambry.account.Container;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
@@ -255,12 +254,15 @@ public interface CloudDestination extends Closeable {
   default void createTableEntity(String tableName, TableEntity tableEntity) {}
 
   /**
-   * Up-serts an entry into a Azure Table.
-   * An Azure Table Entity is a row with partitionKey and rowKey
+   * Up-serts an entry into a Azure Table. An Azure Table Entity is a row with partitionKey and rowKey
+   *
    * @param tableName Replica token
-   * @param entity Table row
+   * @param entity    Table row
+   * @return
    */
-  default void upsertTableEntity(String tableName, TableEntity entity) {}
+  default boolean upsertTableEntity(String tableName, TableEntity entity) {
+    return false;
+  }
 
   /**
    * Retrieves a table row from Azure table

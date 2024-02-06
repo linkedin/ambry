@@ -51,7 +51,6 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
-  protected VcrReplicationManager replicationManager;
   protected AzureMetrics azureMetrics;
 
   protected AzureCloudConfig azureCloudConfig;
@@ -103,13 +102,17 @@ public class VcrReplicaThread extends ReplicaThread {
    */
   @Override
   public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
     // The parent method sets in-memory token
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
-    // Now persist the token in cloud
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
     if (token == null) {
       azureMetrics.absTokenPersistFailureCount.inc();
       logger.error("Null token for replica {}", remoteReplicaInfo);
+      return;
+    }
+    if (token.equals(oldToken)) {
+      logger.trace("Skipping token upload due to unchanged token, oldToken = {}, newToken = {}", oldToken, token);
       return;
     }
     logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
@@ -117,8 +120,8 @@ public class VcrReplicaThread extends ReplicaThread {
     // =============================================================================================================
     // | partition-key | row-key | tokenType | logSegment | offset | storeKey | replicatedUntilUTC   | binaryToken |
     // =============================================================================================================
-    // | partition     | host1   | Journal   | 3_14       | 12     | AAAAZzz  | 2024_Feb_02_13_01_00 | AAASLKJDFX  |
-    // | partition     | host2   | Index     | 2_12       | 32     | AAEWsXZ  | 2024_Feb_02_13_01_00 | AAAEWODSDS  |
+    // | partition     | host1   | Journal   | 3_14       | 12     | none     | 2024_Feb_11_14_21_00 | AAASLKJDFX  |
+    // | partition     | host2   | Index     | 2_12       | 32     | AAEWsXZ  | 2024_Jan_02_13_01_00 | AAAEWODSDS  |
     // =============================================================================================================
     long lastOpTime = remoteReplicaInfo.getReplicatedUntilUTC();
     String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
@@ -138,6 +141,9 @@ public class VcrReplicaThread extends ReplicaThread {
                 : VcrReplicationManager.DATE_FORMAT.format(lastOpTime))
         .addProperty(VcrReplicationManager.BINARY_TOKEN,
             token.toBytes());
-    cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity);
+    // Now persist the token in cloud
+    if (cloudDestination.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, entity)) {
+      azureMetrics.ambryReplicaTokenWriteRate.mark();
+    }
   }
 }

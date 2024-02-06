@@ -210,6 +210,65 @@ public class CloudTokenPersistorTest {
         getTokenFromAzureTable().getFirst().getProperty(VcrReplicationManager.REPLICATED_UNITL_UTC));
   }
 
+   * This save dollars.
+   */
+  @Test
+  public void testPersistTokenUnchanged() {
+    StoreFindToken token;
+    Offset offset = new Offset(new LogSegmentName(3, 14), 36);
+    ReplicaThread.ExchangeMetadataResponse response;;
+
+    // Create ReplicaThread
+    VcrReplicaThread vcrReplicaThread =
+        new VcrReplicaThread("vcrReplicaThreadTest", null, mockClusterMap,
+            new AtomicInteger(0), dataNodeId, null,
+            null,
+            null, null, false,
+            "localhost", new ResponseHandler(mockClusterMap), new SystemTime(), null,
+            null, null, null, azuriteClient,
+            verifiableProperties);
+
+    // upload a dummy token; this must remain unchange in Azure Table through this test
+    String partitionKey = String.valueOf(replica.getReplicaId().getPartitionId().getId());
+    String rowKey = replica.getReplicaId().getDataNodeId().getHostname();
+    TableEntity oldEntity = new TableEntity(partitionKey, rowKey).addProperty("column", "value");
+    azuriteClient.upsertTableEntity(azureCloudConfig.azureTableNameReplicaTokens, oldEntity);
+    TableEntity newEntity = null;
+
+    // test 1: uninitialized token
+    token =  new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null,
+        true, (short) 3, null, null, (short) -1);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
+        -1, Collections.emptyMap(), new SystemTime());
+    replica.setToken(token);
+    vcrReplicaThread.advanceToken(replica, response);
+    newEntity = azuriteClient.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+        partitionKey, rowKey);
+    assertEquals(oldEntity.getProperty("column"), newEntity.getProperty("column"));
+
+    // test 2: journal-based token w/ reset key
+    BlobId resetKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
+    token = new StoreFindToken(FindTokenType.JournalBased, offset, null, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
+        Collections.emptyMap(), new SystemTime());
+    replica.setToken(token);
+    vcrReplicaThread.advanceToken(replica, response);
+    assertEquals(oldEntity.getProperty("column"), newEntity.getProperty("column"));
+
+    // test 3: index-based token
+    BlobId storeKey = getUniqueId(ACCOUNT_ID, CONTAINER_ID, false, mockPartitionId);
+    token = new StoreFindToken(FindTokenType.IndexBased, offset, storeKey, UUID.randomUUID(), UUID.randomUUID(),
+        false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
+    response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token,
+        -1, Collections.emptyMap(), new SystemTime());
+    replica.setToken(token);
+    vcrReplicaThread.advanceToken(replica, response);
+    newEntity = azuriteClient.getTableEntity(azureCloudConfig.azureTableNameReplicaTokens,
+        partitionKey, rowKey);
+    assertEquals(oldEntity.getProperty("column"), newEntity.getProperty("column"));
+  }
+
   protected void uploadTokenToAzureTable(RemoteReplicaInfo replica, StoreFindToken token, long lastOpTime) {
     String partitionKey = String.valueOf(replica.getReplicaId().getPartitionId().getId());
     String rowKey = replica.getReplicaId().getDataNodeId().getHostname();
