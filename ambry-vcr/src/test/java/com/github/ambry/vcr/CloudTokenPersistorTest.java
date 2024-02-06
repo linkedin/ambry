@@ -169,6 +169,9 @@ public class CloudTokenPersistorTest {
             null, null, null, azuriteClient,
             verifiableProperties);
 
+    long lastOpTime = System.currentTimeMillis();
+    replica.setReplicatedUntilUTC(lastOpTime);
+
     // test 1: uninitialized token
     token =  new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null,
         true, (short) 3, null, null, (short) -1);
@@ -200,12 +203,6 @@ public class CloudTokenPersistorTest {
         false, (short) 3, resetKey, PersistentIndex.IndexEntryType.PUT, (short) 3);
     response = new ReplicaThread.ExchangeMetadataResponse(Collections.emptySet(), token, -1,
         Collections.emptyMap(), new SystemTime());
-    vcrReplicaThread.advanceToken(replica, response);
-    assertEquals(token, getTokenFromAzureTable().getSecond());
-
-    // test 5: token with last operation time
-    long lastOpTime = System.currentTimeMillis();
-    replica.setReplicatedUntilUTC(lastOpTime);
     vcrReplicaThread.advanceToken(replica, response);
     assertEquals(token, getTokenFromAzureTable().getSecond());
     assertEquals(VcrReplicationManager.DATE_FORMAT.format(lastOpTime),
