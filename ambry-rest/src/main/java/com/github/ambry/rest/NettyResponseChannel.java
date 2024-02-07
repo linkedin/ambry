@@ -51,6 +51,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
@@ -361,7 +362,8 @@ class NettyResponseChannel implements RestResponseChannel {
     if (response == null) {
       response = responseMetadata;
     }
-    return new ArrayList<>(response.headers().names());
+    return Collections.unmodifiableList(
+        new ArrayList<>(response.headers().names()));
   }
 
   /**

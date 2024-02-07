@@ -21,7 +21,6 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.HeadBlobHandler;
 import com.github.ambry.frontend.NamedBlobPath;
-import com.github.ambry.frontend.Operations;
 import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
@@ -29,20 +28,17 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
-import com.github.ambry.router.ReadableStreamChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
-import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
  * Handler to handle all the S3 HEAD requests
  */
-public class S3HeadHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3HeadHandler.class);
+public class S3HeadHandler extends S3BaseHandler<Void> {
   private final S3HeadBucketHandler bucketHandler;
   private final S3HeadObjectHandler objectHandler;
 
@@ -70,26 +66,14 @@ public class S3HeadHandler {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    * @throws RestServiceException exception when the processing fails
    */
-  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<ReadableStreamChannel> callback) throws RestServiceException {
+  @Override
+  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<Void> callback) throws RestServiceException {
     String path = ((RequestPath) restRequest.getArgs().get(REQUEST_PATH)).getOperationOrBlobId(true);
-    LOGGER.debug("Head {}", path);
-
-    if (!path.startsWith(Operations.NAMED_BLOB)) {
-      throw new RuntimeException("S3HeadHandler only handles named blob requests");
-    }
-
-    Callback<ReadableStreamChannel> wrappedCallback = (result, exception) -> {
-
-      // TODO [S3]: remove x-ambry- headers
-
-      callback.onCompletion(result, exception);
-    };
-
     if (isHeadBucketRequest(path)) {
-      bucketHandler.handle(restRequest, restResponseChannel, wrappedCallback);
+      bucketHandler.handle(restRequest, restResponseChannel, callback);
     } else {
-      objectHandler.handle(restRequest, restResponseChannel, wrappedCallback);
+      objectHandler.handle(restRequest, restResponseChannel, callback);
     }
   }
 
@@ -107,17 +91,17 @@ public class S3HeadHandler {
     }
 
     private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<ReadableStreamChannel> callback) {
+        Callback<Void> callback) {
       new CallbackChain(restRequest, restResponseChannel, callback).start();
     }
 
     private class CallbackChain {
       private final RestRequest restRequest;
       private final RestResponseChannel restResponseChannel;
-      private final Callback<ReadableStreamChannel> finalCallback;
+      private final Callback<Void> finalCallback;
 
       private CallbackChain(RestRequest restRequest, RestResponseChannel restResponseChannel,
-          Callback<ReadableStreamChannel> finalCallback) {
+          Callback<Void> finalCallback) {
         this.restRequest = restRequest;
         this.restResponseChannel = restResponseChannel;
         this.finalCallback = finalCallback;
@@ -166,7 +150,7 @@ public class S3HeadHandler {
       this.headBlobHandler = headBlobHandler;
     }
     private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-        Callback<ReadableStreamChannel> callback) throws RestServiceException {
+        Callback<Void> callback) throws RestServiceException {
 
       // TODO [S3]: implement PartNumber handling
 

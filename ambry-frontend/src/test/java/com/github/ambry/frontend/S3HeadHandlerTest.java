@@ -36,7 +36,6 @@ import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
-import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -82,7 +81,7 @@ public class S3HeadHandlerTest {
     String uri = String.format("/s3/%s/", account.getName());
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    FutureResult<Void> futureResult = new FutureResult<>();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, "ambry-test"));
     s3HeadHandler.handle(request, restResponseChannel, futureResult::done);
@@ -98,7 +97,7 @@ public class S3HeadHandlerTest {
     String uri = String.format("/s3/%s/%s", account.getName(), KEY_NAME);
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    FutureResult<Void> futureResult = new FutureResult<>();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     s3HeadHandler.handle(request, restResponseChannel, futureResult::done);
@@ -120,7 +119,7 @@ public class S3HeadHandlerTest {
     String uri = String.format("/s3/%s/%s", account.getName(), KEY_NAME);
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    FutureResult<Void> futureResult = new FutureResult<>();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     request.setArg(RestUtils.Headers.RANGE, String.format("bytes=%d-%d", BEG, END));

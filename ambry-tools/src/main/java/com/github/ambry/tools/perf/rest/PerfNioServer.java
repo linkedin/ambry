@@ -438,7 +438,8 @@ class PerfNioServer implements NioServer {
 
     @Override
     public List<String> getHeaders() {
-      return new ArrayList<>(headers.keySet());
+      return Collections.unmodifiableList(
+          new ArrayList<>(headers.keySet()));
     }
 
     @Override

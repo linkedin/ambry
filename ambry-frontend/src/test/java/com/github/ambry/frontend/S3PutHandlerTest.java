@@ -102,11 +102,6 @@ public class S3PutHandlerTest {
     String blobId = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Location header must be present", blobId);
-    // Verify ambry specific headers are removed in response
-    for (String headerName : restResponseChannel.getHeaders()) {
-      assertFalse("Ambry specific response header " + headerName + "must not be present.",
-          headerName.startsWith(AMBRY_PARAMETERS_PREFIX));
-    }
 
     // 3. Verify blob name exists in named blob DB
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(accountName, containerName, blobName).get();

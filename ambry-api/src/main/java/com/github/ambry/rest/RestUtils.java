@@ -65,6 +65,11 @@ public class RestUtils {
   public static final String STITCH = "STITCH";
 
   /**
+   * prefix for all Ambry specific heaeders
+   */
+  public static final String AMBRY_HEADER_PREFIX = "x-ambry-";
+
+  /**
    * Ambry specific HTTP headers.
    */
   public static final class Headers {

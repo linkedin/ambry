@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
@@ -42,7 +43,6 @@ import java.util.UUID;
  * See https://github.com/linkedin/ambry/issues/788
  */
 public class AmbryUrlSigningService implements UrlSigningService {
-  static final String AMBRY_PARAMETERS_PREFIX = "x-ambry-";
   private static final String LINK_EXPIRY_TIME = "et";
   private static final String ENDPOINT_SUFFIX = "/";
   private static final String QUERY_STRING_START = "?";
@@ -135,7 +135,7 @@ public class AmbryUrlSigningService implements UrlSigningService {
     for (Map.Entry<String, Object> entry : args.entrySet()) {
       String name = entry.getKey();
       Object value = entry.getValue();
-      if (name.regionMatches(true, 0, AMBRY_PARAMETERS_PREFIX, 0, AMBRY_PARAMETERS_PREFIX.length())
+      if (name.regionMatches(true, 0, AMBRY_HEADER_PREFIX, 0, AMBRY_HEADER_PREFIX.length())
           && value instanceof String) {
         switch (name) {
           case RestUtils.Headers.URL_TTL:

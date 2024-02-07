@@ -29,8 +29,7 @@ import static com.github.ambry.rest.RestUtils.*;
  * Handles S3 requests for uploading blobs.
  * API reference: <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html">...</a>
  */
-public class S3PutHandler {
-  public static final String AMBRY_PARAMETERS_PREFIX = "x-ambry-";
+public class S3PutHandler extends S3BaseHandler<Void> {
   private final NamedBlobPutHandler namedBlobPutHandler;
 
   /**
@@ -47,7 +46,8 @@ public class S3PutHandler {
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
-  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
+  @Override
+  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
 
     // 1. Add headers required by Ambry. These become the blob properties.
     try {
@@ -64,12 +64,6 @@ public class S3PutHandler {
     // 2. Upload the blob by following named blob PUT path
     namedBlobPutHandler.handle(restRequest, restResponseChannel, (result, exception) -> {
       try {
-        // Remove any Ambry specific headers in response
-        for (String headerName : restResponseChannel.getHeaders()) {
-          if (headerName.startsWith(AMBRY_PARAMETERS_PREFIX)) {
-            restResponseChannel.removeHeader(headerName);
-          }
-        }
         if (exception == null && restResponseChannel.getStatus() == ResponseStatus.Created) {
           // Set the response status to 200 since Ambry named blob PUT has response as 201.
           restResponseChannel.setStatus(ResponseStatus.Ok);

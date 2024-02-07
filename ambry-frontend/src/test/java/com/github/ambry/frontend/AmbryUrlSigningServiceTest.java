@@ -44,6 +44,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static com.github.ambry.rest.RestUtils.*;
 import static org.junit.Assert.*;
 
 
@@ -59,7 +60,7 @@ public class AmbryUrlSigningServiceTest {
   private static final long MAX_URL_TTL_SECS = 60 * 60;
   private static final long CHUNK_UPLOAD_INITIAL_CHUNK_TTL_SECS = 24 * 1024 * 1024;
   private static final long CHUNK_UPLOAD_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
-  private static final String RANDOM_AMBRY_HEADER = AmbryUrlSigningService.AMBRY_PARAMETERS_PREFIX + "random";
+  private static final String RANDOM_AMBRY_HEADER = AMBRY_HEADER_PREFIX + "random";
   private final ClusterMap mockClusterMap;
   private final boolean isReservedMetadataEnabled;
 
