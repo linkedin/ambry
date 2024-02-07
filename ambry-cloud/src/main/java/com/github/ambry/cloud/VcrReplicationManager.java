@@ -166,7 +166,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudDestination = cloudDestination;
     // Create the table at the start so that we can catch issues in creation, and the table is ready for threads to log
     this.cloudDestination.getTableClient(this.azureCloudConfig.azureTableNameCorruptBlobs);
-    azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
+    azureTableNameReplicaTokens = "replicaTokens";
     this.cloudDestination.getTableClient(azureTableNameReplicaTokens);
   }
 

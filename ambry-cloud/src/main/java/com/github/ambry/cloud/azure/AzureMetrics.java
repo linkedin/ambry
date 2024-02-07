@@ -176,12 +176,9 @@ public class AzureMetrics {
   public final Counter azureTableEntityCreateErrorCount;
 
   public static final String AMBRY_REPLICA_TOKEN_WRITE_RATE = "ambryReplicaTokenWriteRate";
-  public final Meter ambryReplicaTokenWriteRate;
 
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
-    ambryReplicaTokenWriteRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class,
-        AMBRY_REPLICA_TOKEN_WRITE_RATE));
     azureTableCreateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class,
         AZURE_TABLE_CREATE_ERROR_COUNT));
     azureTableEntityCreateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class,

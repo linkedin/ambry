@@ -244,14 +244,6 @@ public class AzureCloudConfig {
   public final String azureTableNameCorruptBlobs;
 
   /**
-   * The Azure Table name for replica tokens.
-   */
-  public static final String AZURE_TABLE_NAME_REPLICA_TOKENS = "azure.table.name.replica.tokens";
-  public static final String DEFAULT_AZURE_TABLE_NAME_REPLICA_TOKENS = "replicaTokens";
-  @Config(AZURE_TABLE_NAME_REPLICA_TOKENS)
-  public final String azureTableNameReplicaTokens;
-
-  /**
    * The Cosmos DB endpoint.
    */
   @Config(COSMOS_ENDPOINT)
@@ -448,7 +440,6 @@ public class AzureCloudConfig {
     azureStorageConnectionString = verifiableProperties.getString(AZURE_STORAGE_CONNECTION_STRING, "");
     azureTableConnectionString = verifiableProperties.getString(AZURE_TABLE_CONNECTION_STRING, "");
     azureTableNameCorruptBlobs = verifiableProperties.getString(AZURE_TABLE_NAME_CORRUPT_BLOBS, DEFAULT_AZURE_TABLE_NAME_CORRUPT_BLOBS);
-    azureTableNameReplicaTokens = verifiableProperties.getString(AZURE_TABLE_NAME_REPLICA_TOKENS, DEFAULT_AZURE_TABLE_NAME_REPLICA_TOKENS);
     cosmosEndpoint = verifiableProperties.getString(COSMOS_ENDPOINT, ""); // just add a default "" else instantiation fails
     cosmosDatabase = verifiableProperties.getString(COSMOS_DATABASE, ""); // just add a default "" else instantiation fails
     cosmosCollection = verifiableProperties.getString(COSMOS_COLLECTION, ""); // just add a default "" else instantiation fails

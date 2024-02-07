@@ -73,7 +73,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.cloudDestination = cloudDestination;
     this.properties = properties;
     this.azureCloudConfig = new AzureCloudConfig(properties);
-    this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
+    this.azureTableNameReplicaTokens = "replicaTokens";
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
   }
 
@@ -145,7 +145,7 @@ public class VcrReplicaThread extends ReplicaThread {
             token.toBytes());
     // Now persist the token in cloud
     if (cloudDestination.upsertTableEntity(azureTableNameReplicaTokens, entity)) {
-      azureMetrics.ambryReplicaTokenWriteRate.mark();
+      // pass
     }
   }
 }
