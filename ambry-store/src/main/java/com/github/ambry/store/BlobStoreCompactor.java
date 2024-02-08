@@ -1444,11 +1444,9 @@ class BlobStoreCompactor {
       compactionLog.setSafeToken(safeToken);
       logger.debug("Set safe token for compaction in {} to {}", storeId, safeToken);
 
-      List<IndexEntry> copyCandidates = getValidIndexEntries(indexSegment, allIndexEntries);
+      List<IndexEntry> copyCandidates =
+          getValidIndexEntries(indexSegment, allIndexEntries, duplicateSearchSpan, checkAlreadyCopied);
       int validEntriesSize = copyCandidates.size();
-      copyCandidates.removeIf(copyCandidate ->
-          isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
-              config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
@@ -1456,6 +1454,16 @@ class BlobStoreCompactor {
       logger.trace("For index segment with start offset {} in {} - Total index entries: {}. Entries to copy: {}",
           indexSegment.getStartOffset(), storeId, allIndexEntries, copyCandidates);
       return copyCandidates;
+    }
+
+    private void validateAndAdd(List<IndexEntry> validEntries, IndexEntry indexEntry, IndexSegment indexSegment,
+        FileSpan duplicateSearchSpan, boolean checkAlreadyCopied) {
+      if (isDuplicate(indexEntry, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
+          config.storeContainerDeletionEnabled && isFromDeprecatedContainer(indexEntry))) {
+        // Invalid entry, do not add
+        return;
+      }
+      validEntries.add(indexEntry);
     }
 
     /**
@@ -1468,7 +1476,8 @@ class BlobStoreCompactor {
      * {@code allIndexEntries}.
      * @throws StoreException if {@link BlobReadOptions} could not be obtained from the store for deleted blobs.
      */
-    private List<IndexEntry> getValidIndexEntries(IndexSegment indexSegment, List<IndexEntry> allIndexEntries)
+    private List<IndexEntry> getValidIndexEntries(IndexSegment indexSegment, List<IndexEntry> allIndexEntries,
+        FileSpan duplicateSearchSpan, boolean checkAlreadyCopied)
         throws StoreException {
       // Assumed preference order from IndexSegment (current impl)
       // (Legend: entry/entries in segment -> output from IndexSegment#getIndexEntriesSince())
@@ -1494,14 +1503,15 @@ class BlobStoreCompactor {
               IndexValue secondVal = values.lower(values.last());
               if (secondVal != null && secondVal.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && isTtlUpdateEntryValid(
                   indexEntry.getKey(), indexSegment.getStartOffset())) {
-                validEntries.add(new IndexEntry(indexEntry.getKey(), secondVal));
+                validateAndAdd(validEntries, new IndexEntry(indexEntry.getKey(), secondVal), indexSegment,
+                    duplicateSearchSpan, checkAlreadyCopied);
               }
               // DELETE entry. Always valid.
-              validEntries.add(indexEntry);
+              validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
             } else {
               // if this delete cannot be counted and there is a corresponding unexpired PUT/TTL update entry in the same
               // index segment, we will need to add it.
-              addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
+              addAllEntriesForKeyInSegment(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
             }
           } else {
             // DELETE entry without corresponding PUT (may be left by previous compaction). Check if this delete
@@ -1511,14 +1521,14 @@ class BlobStoreCompactor {
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
                   indexEntry.getKey(), value.getExpiresAtMs());
             } else {
-              validEntries.add(indexEntry);
+              validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
             }
           }
         } else if (value.isTtlUpdate()) {
           // if IndexSegment::getIndexEntriesSince() returns a TTL update entry, it is because it is the ONLY entry i.e.
           // no PUT or DELETE in the same index segment.
           if (isTtlUpdateEntryValid(indexEntry.getKey(), indexSegment.getStartOffset())) {
-            validEntries.add(indexEntry);
+            validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
           }
         } else {
           IndexValue valueFromIdx = srcIndex.findKey(indexEntry.getKey());
@@ -1529,7 +1539,7 @@ class BlobStoreCompactor {
                 deleteReferenceTime)) {
               // PUT entry that has not expired and is not considered deleted.
               // Add all values in this index segment (to account for the presence of TTL updates)
-              addAllEntriesForKeyInSegment(validEntries, indexSegment, indexEntry);
+              addAllEntriesForKeyInSegment(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
             } else {
               logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
                   indexEntry, indexSegment.getStartOffset(), storeId);
@@ -1586,26 +1596,31 @@ class BlobStoreCompactor {
 
     /**
      * Adds entries related to {@code entry} that are in the same {@code indexSegment} including {@code entry}
-     * @param entries the list of {@link IndexEntry} to add to.
+     * @param validEntries the list of {@link IndexEntry} to add to.
      * @param indexSegment the {@link IndexSegment} to fetch values from.
      * @param entry the {@link IndexEntry} that is under processing
      * @throws StoreException if there are problems using the index
      */
-    private void addAllEntriesForKeyInSegment(List<IndexEntry> entries, IndexSegment indexSegment, IndexEntry entry)
+    private void addAllEntriesForKeyInSegment(List<IndexEntry> validEntries, IndexEntry entry,
+        IndexSegment indexSegment, FileSpan duplicateSearchSpan, boolean checkAlreadyCopied)
         throws StoreException {
       logger.trace("Fetching related entries of a blob with entry {} in index segment with start offset {} in {} "
           + "because they need to be retained", entry, indexSegment.getStartOffset(), storeId);
       NavigableSet<IndexValue> values = indexSegment.find(entry.getKey());
       if (values.size() > 1) {
         // we are using a multivalued index segment. Any related values will be in this set
-        values.forEach(valueFromSeg -> entries.add(new IndexEntry(entry.getKey(), valueFromSeg)));
+        values.forEach(valueFromSeg ->
+            validateAndAdd(validEntries, new IndexEntry(entry.getKey(), valueFromSeg), indexSegment,
+                duplicateSearchSpan, checkAlreadyCopied));
       } else {
         // in a non multi valued segment, there can only be PUTs and DELETEs in the same segment
-        entries.add(entry);
+        validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
+        validEntries.add(entry);
         if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
           IndexValue putValue = getPutValueFromDeleteEntry(entry.getKey(), entry.getValue(), indexSegment);
           if (putValue != null) {
-            entries.add(new IndexEntry(entry.getKey(), putValue));
+            validateAndAdd(validEntries, new IndexEntry(entry.getKey(), putValue), indexSegment, duplicateSearchSpan,
+                checkAlreadyCopied);
           }
         }
       }
@@ -1654,7 +1669,7 @@ class BlobStoreCompactor {
     @Override
     public List<IndexEntry> getValidEntry(IndexSegment indexSegment, FileSpan duplicateSearchSpan,
         boolean checkAlreadyCopied) throws StoreException {
-      List<IndexEntry> copyCandidates = getValidIndexEntries(indexSegment);
+      List<IndexEntry> copyCandidates = getValidIndexEntries(indexSegment, duplicateSearchSpan, checkAlreadyCopied);
       int validEntriesSize = copyCandidates.size();
       copyCandidates.removeIf(copyCandidate ->
           isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
@@ -1668,6 +1683,16 @@ class BlobStoreCompactor {
       return copyCandidates;
     }
 
+    private void validateAndAdd(List<IndexEntry> validEntries, IndexEntry indexEntry, IndexSegment indexSegment,
+        FileSpan duplicateSearchSpan, boolean checkAlreadyCopied) {
+      if (isDuplicate(indexEntry, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
+          config.storeContainerDeletionEnabled && isFromDeprecatedContainer(indexEntry))) {
+        // Invalid entry, do not add
+        return;
+      }
+      validEntries.add(indexEntry);
+    }
+
     /**
      * Gets all the valid index entries in the given list of index entries.
      * @param indexSegment the {@link IndexSegment} that index entries are from.
@@ -1675,7 +1700,8 @@ class BlobStoreCompactor {
      * {@code allIndexEntries}.
      * @throws StoreException if {@link BlobReadOptions} could not be obtained from the store for deleted blobs.
      */
-    private List<IndexEntry> getValidIndexEntries(IndexSegment indexSegment) throws StoreException {
+    private List<IndexEntry> getValidIndexEntries(IndexSegment indexSegment, FileSpan duplicateSearchSpan,
+        boolean checkAlreadyCopied) throws StoreException {
       // Validity of a IndexValue is determined by itself and it's latest state. For example, if the current IndexValue
       // is a Put, and the latest IndexValue for this blob is a Delete, and the operation is done out of retention duration,
       // then this Put IndexValue is considered as invalid.
@@ -1739,7 +1765,7 @@ class BlobStoreCompactor {
           }
           if (currentLatestState.isUndelete() && currentLatestState.getLifeVersion() == currentValue.getLifeVersion()
               && !srcIndex.isExpired(currentLatestState)) {
-            validEntries.add(entry);
+            validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
           }
         } else if (currentValue.isDelete()) {
           if (currentLatestState.isPut()) {
@@ -1754,7 +1780,7 @@ class BlobStoreCompactor {
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
                   currentKey, currentValue.getExpiresAtMs());
             } else {
-              validEntries.add(entry);
+              validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
             }
           }
         } else if (currentValue.isTtlUpdate()) {
@@ -1773,13 +1799,13 @@ class BlobStoreCompactor {
           if (currentLatestState.isDelete()) {
             if (currentLatestState.getOperationTimeInMs() >= compactionLog.getCompactionDetails()
                 .getReferenceTimeMs()) {
-              validEntries.add(entry);
+              validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
             } else if (isTtlUpdateEntryValidWhenLatestStateIsDeleteAndRetention(currentKey,
                 indexSegment.getStartOffset())) {
-              validEntries.add(entry);
+              validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
             }
           } else {
-            validEntries.add(entry);
+            validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
           }
         } else {
           if (srcIndex.isExpired(currentLatestState)) {
@@ -1792,17 +1818,17 @@ class BlobStoreCompactor {
               throw new IllegalStateException(
                   "Two different lifeVersions  for puts key" + currentKey + " in store " + dataDir);
             }
-            validEntries.add(entry);
+            validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
           } else if (currentLatestState.isDelete()) {
             if (currentLatestState.getOperationTimeInMs() >= compactionLog.getCompactionDetails()
                 .getReferenceTimeMs()) {
-              validEntries.add(entry);
+              validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
             } else {
               logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
                   entry, indexSegment.getStartOffset(), storeId);
             }
           } else {
-            validEntries.add(entry);
+            validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
           }
         }
       }
