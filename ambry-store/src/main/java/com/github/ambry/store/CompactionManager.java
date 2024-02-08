@@ -185,7 +185,8 @@ class CompactionManager {
    * @return {@code true} if store is removed successfully. {@code false} if not.
    */
   boolean removeBlobStore(BlobStore store) {
-    CompactionExecutor compactionExecutor = storeCompactionExecutorMap.get(store);
+    CompactionExecutor compactionExecutor =
+        storeCompactionExecutorMap.computeIfAbsent(store, key -> getCompactionExecutorForStore());
     if (compactionExecutor == null) {
       stores.remove(store);
       return true;
