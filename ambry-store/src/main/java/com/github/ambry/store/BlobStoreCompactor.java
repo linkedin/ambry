@@ -1671,9 +1671,6 @@ class BlobStoreCompactor {
         boolean checkAlreadyCopied) throws StoreException {
       List<IndexEntry> copyCandidates = getValidIndexEntries(indexSegment, duplicateSearchSpan, checkAlreadyCopied);
       int validEntriesSize = copyCandidates.size();
-      copyCandidates.removeIf(copyCandidate ->
-          isDuplicate(copyCandidate, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
-              config.storeContainerDeletionEnabled && isFromDeprecatedContainer(copyCandidate)));
       // order by offset in log.
       copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of entries, {} are valid and {} will be copied in this round", validEntriesSize,
