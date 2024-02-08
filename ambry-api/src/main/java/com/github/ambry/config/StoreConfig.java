@@ -608,7 +608,15 @@ public class StoreConfig {
   public static final String storeRemoveDirectoryAndRestartBlobStoreName =
       "store.remove.directory.and.restart.blob.store";
 
+  /**
+   * True to remove all the files under the partition directory and restart the blob store when blob store fails to start.
+   */
+  public static final int DEFAULT_NUM_COMPACTION_EXECUTORS = 1;
+  public static final String NUM_COMPACTION_EXECUTORS = "num.compaction.executors";
+  @Config(NUM_COMPACTION_EXECUTORS)
+  public final int numCompactionExecutors;
   public StoreConfig(VerifiableProperties verifiableProperties) {
+    numCompactionExecutors = verifiableProperties.getString(NUM_COMPACTION_EXECUTORS, DEFAULT_NUM_COMPACTION_EXECUTORS);
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);

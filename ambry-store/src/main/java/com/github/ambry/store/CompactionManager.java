@@ -16,15 +16,18 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.IntStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,12 +46,12 @@ class CompactionManager {
   private final StoreConfig storeConfig;
   private final Time time;
   private final Set<BlobStore> stores = ConcurrentHashMap.newKeySet();
-  private final CompactionExecutor compactionExecutor;
+  private final List<CompactionExecutor> compactionExecutors;
+
   private final StorageManagerMetrics metrics;
   private final CompactionPolicy compactionPolicy;
   private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
   private final CompactionPolicyFactory compactionPolicyFactory;
-  private Thread compactionThread;
 
   /**
    * Creates a CompactionManager that handles scheduling and executing compaction.
@@ -65,13 +68,15 @@ class CompactionManager {
     this.stores.addAll(stores);
     this.time = time;
     this.metrics = metrics;
+    this.compactionExecutors = new ArrayList<>();
     if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
       EnumSet<Trigger> triggers = EnumSet.noneOf(Trigger.class);
       for (String trigger : storeConfig.storeCompactionTriggers) {
         triggers.add(Trigger.valueOf(trigger.toUpperCase()));
       }
-      compactionExecutor = new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize == 0 ? 0
-          : Math.max(storeConfig.storeCompactionOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize));
+      IntStream.rangeClosed(1, storeConfig.numCompactionExecutors).forEach(i -> compactionExecutors.add(
+          new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize == 0 ? 0
+          : Math.max(storeConfig.storeCompactionOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize))));
       try {
         compactionPolicyFactory = Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
         compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
@@ -81,7 +86,6 @@ class CompactionManager {
       }
     } else {
       compactionPolicyFactory = null;
-      compactionExecutor = null;
       compactionPolicy = null;
     }
   }
@@ -90,15 +94,16 @@ class CompactionManager {
    * Enables the compaction manager allowing it execute compactions if required.
    */
   void enable() {
-    if (compactionExecutor != null) {
+    for (CompactionExecutor compactionExecutor : compactionExecutors) {
       logger.info("Compaction thread started for {}", mountPath);
-      compactionThread = Utils.newThread(THREAD_NAME_PREFIX + mountPath, compactionExecutor, true);
+      Thread compactionThread = Utils.newThread(THREAD_NAME_PREFIX + mountPath, compactionExecutor, true);
       compactionThread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
           logger.error("Thread {} threw exception", t, e);
         }
       });
+      compactionExecutor.setCompactionThread(compactionThread);
       compactionExecutor.enable();
       compactionThread.start();
     }
@@ -108,7 +113,7 @@ class CompactionManager {
    * Disables the compaction manager which disallows any new compactions.
    */
   void disable() {
-    if (compactionExecutor != null) {
+    for (CompactionExecutor compactionExecutor : compactionExecutors) {
       compactionExecutor.disable();
     }
   }
@@ -117,13 +122,17 @@ class CompactionManager {
    * Awaits the termination of all pending jobs of the compaction manager.
    */
   void awaitTermination() {
-    if (compactionExecutor != null && compactionThread != null) {
-      try {
-        compactionThread.join(2000);
-      } catch (InterruptedException e) {
-        metrics.compactionManagerTerminateErrorCount.inc();
-        logger.error("Compaction thread join wait for {} was interrupted", mountPath);
+    for (CompactionExecutor compactionExecutor : compactionExecutors) {
+      Thread compactionThread = compactionExecutor.getCompactionThread();
+      if (compactionThread != null) {
+        try {
+          compactionThread.join(2000);
+        } catch (InterruptedException e) {
+          metrics.compactionManagerTerminateErrorCount.inc();
+          logger.error("Compaction thread join wait for {} was interrupted", mountPath);
+        }
       }
+
     }
   }
 
@@ -131,7 +140,13 @@ class CompactionManager {
    * @return {@code true} if the compaction thread is running. {@code false} otherwise.
    */
   boolean isCompactionExecutorRunning() {
-    return compactionExecutor != null && compactionExecutor.isRunning;
+    for (CompactionExecutor compactionExecutor : compactionExecutors) {
+      if (compactionExecutor.isRunning) {
+        // Return true if even a single thread is running on this blobStore
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -229,6 +244,7 @@ class CompactionManager {
     private volatile boolean enabled = false;
 
     volatile boolean isRunning = false;
+    Thread compactionThread;
 
     /**
      * @param triggers the {@link EnumSet} of active compaction triggers.
@@ -239,6 +255,14 @@ class CompactionManager {
       bundleReadBuffer = bundleReadBufferSize == 0 ? null : new byte[bundleReadBufferSize];
       logger.info("Buffer size is {} in compaction thread for {}", bundleReadBufferSize, mountPath);
       metrics.registerStoreSetToSkipInCompactionForMountPath(mountPath, storesToSkip);
+    }
+
+    public void setCompactionThread(Thread compactionThread) {
+      this.compactionThread = compactionThread;
+    }
+
+    public Thread getCompactionThread() {
+      return this.compactionThread;
     }
 
     /**
