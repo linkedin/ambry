@@ -1458,8 +1458,8 @@ class BlobStoreCompactor {
 
     private void validateAndAdd(List<IndexEntry> validEntries, IndexEntry indexEntry, IndexSegment indexSegment,
         FileSpan duplicateSearchSpan, boolean checkAlreadyCopied) {
-      if (isDuplicate(indexEntry, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) || (
-          config.storeContainerDeletionEnabled && isFromDeprecatedContainer(indexEntry))) {
+      if (isDuplicate(indexEntry, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) ||
+          (config.storeContainerDeletionEnabled && isFromDeprecatedContainer(indexEntry))) {
         // Invalid entry, do not add
         return;
       }
@@ -1615,7 +1615,6 @@ class BlobStoreCompactor {
       } else {
         // in a non multi valued segment, there can only be PUTs and DELETEs in the same segment
         validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
-        validEntries.add(entry);
         if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
           IndexValue putValue = getPutValueFromDeleteEntry(entry.getKey(), entry.getValue(), indexSegment);
           if (putValue != null) {
