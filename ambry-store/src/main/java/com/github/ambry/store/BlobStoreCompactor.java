@@ -30,6 +30,7 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1446,24 +1447,49 @@ class BlobStoreCompactor {
 
       List<IndexEntry> copyCandidates =
           getValidIndexEntries(indexSegment, allIndexEntries, duplicateSearchSpan, checkAlreadyCopied);
-      int validEntriesSize = copyCandidates.size();
-      // order by offset in log.
-      copyCandidates.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       logger.debug("Out of {} entries, {} are valid and {} will be copied in this round", allIndexEntries.size(),
-          validEntriesSize, copyCandidates.size());
+          copyCandidates.size(), copyCandidates.size());
       logger.trace("For index segment with start offset {} in {} - Total index entries: {}. Entries to copy: {}",
           indexSegment.getStartOffset(), storeId, allIndexEntries, copyCandidates);
       return copyCandidates;
     }
 
-    private void validateAndAdd(List<IndexEntry> validEntries, IndexEntry indexEntry, IndexSegment indexSegment,
-        FileSpan duplicateSearchSpan, boolean checkAlreadyCopied) {
+    /**
+     *
+     * @param validEntries
+     * @param indexEntry
+     * @param indexSegment
+     * @param duplicateSearchSpan
+     * @param maxEntry
+     * @param comparator
+     * @param checkAlreadyCopied
+     * @return Max element in validEntries if validEntries is sorted before and after inserting new element,
+     * else returns null to indicate that we cannot guarantee sorted order of elements.
+     */
+    private IndexEntry validateAndAdd(List<IndexEntry> validEntries, IndexEntry indexEntry, IndexSegment indexSegment,
+        FileSpan duplicateSearchSpan, IndexEntry maxEntry, Comparator<IndexEntry> comparator, boolean checkAlreadyCopied) {
       if (isDuplicate(indexEntry, duplicateSearchSpan, indexSegment.getStartOffset(), checkAlreadyCopied) ||
           (config.storeContainerDeletionEnabled && isFromDeprecatedContainer(indexEntry))) {
         // Invalid entry, do not add
-        return;
+        return null;
       }
       validEntries.add(indexEntry);
+      if (validEntries.size() == 1) {
+        // If the list has just one element, it is sorted
+        return indexEntry;
+      }
+      if (maxEntry == null) {
+        // If the list has more than one element, but we don't max entry so far, then we cannot guarantee sortedness.
+        // So return null. Null also means list is not sorted so far.
+        return null;
+      }
+      if (comparator.compare(indexEntry, maxEntry) >= 0) {
+        // If we know the max elem and the new elem is greater than or equal to max, then return new elem to
+        // maintain stable sort property
+        return indexEntry;
+      }
+      // If new elem is less than max, return null to indicate sorted order is no longer guaranteed
+      return null;
     }
 
     /**
@@ -1490,6 +1516,7 @@ class BlobStoreCompactor {
       // PUT + TTL update + DELETE -> DELETE
       long deleteReferenceTime = compactionLog.getCompactionDetails().getReferenceTimeMs();
       List<IndexEntry> validEntries = new ArrayList<>();
+      IndexEntry maxEntry = null;
       for (IndexEntry indexEntry : allIndexEntries) {
         IndexValue value = indexEntry.getValue();
         if (value.isDelete()) {
@@ -1503,15 +1530,17 @@ class BlobStoreCompactor {
               IndexValue secondVal = values.lower(values.last());
               if (secondVal != null && secondVal.isFlagSet(IndexValue.Flags.Ttl_Update_Index) && isTtlUpdateEntryValid(
                   indexEntry.getKey(), indexSegment.getStartOffset())) {
-                validateAndAdd(validEntries, new IndexEntry(indexEntry.getKey(), secondVal), indexSegment,
-                    duplicateSearchSpan, checkAlreadyCopied);
+                maxEntry = validateAndAdd(validEntries, new IndexEntry(indexEntry.getKey(), secondVal), indexSegment,
+                    duplicateSearchSpan, maxEntry, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR, checkAlreadyCopied);
               }
               // DELETE entry. Always valid.
-              validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
+              maxEntry = validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, maxEntry,
+                  PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR, checkAlreadyCopied);
             } else {
               // if this delete cannot be counted and there is a corresponding unexpired PUT/TTL update entry in the same
               // index segment, we will need to add it.
-              addAllEntriesForKeyInSegment(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
+              maxEntry = addAllEntriesForKeyInSegment(validEntries, indexEntry, indexSegment, duplicateSearchSpan,
+                  maxEntry, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR, checkAlreadyCopied);
             }
           } else {
             // DELETE entry without corresponding PUT (may be left by previous compaction). Check if this delete
@@ -1521,14 +1550,16 @@ class BlobStoreCompactor {
                   "Delete tombstone of {} (with expiration time {} ms) is removable and won't be copied to target log segment",
                   indexEntry.getKey(), value.getExpiresAtMs());
             } else {
-              validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
+              maxEntry = validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, maxEntry,
+                  PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR, checkAlreadyCopied);
             }
           }
         } else if (value.isTtlUpdate()) {
           // if IndexSegment::getIndexEntriesSince() returns a TTL update entry, it is because it is the ONLY entry i.e.
           // no PUT or DELETE in the same index segment.
           if (isTtlUpdateEntryValid(indexEntry.getKey(), indexSegment.getStartOffset())) {
-            validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
+            maxEntry = validateAndAdd(validEntries, indexEntry, indexSegment, duplicateSearchSpan, maxEntry,
+                PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR, checkAlreadyCopied);
           }
         } else {
           IndexValue valueFromIdx = srcIndex.findKey(indexEntry.getKey());
@@ -1539,7 +1570,8 @@ class BlobStoreCompactor {
                 deleteReferenceTime)) {
               // PUT entry that has not expired and is not considered deleted.
               // Add all values in this index segment (to account for the presence of TTL updates)
-              addAllEntriesForKeyInSegment(validEntries, indexEntry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
+              maxEntry = addAllEntriesForKeyInSegment(validEntries, indexEntry, indexSegment, duplicateSearchSpan,
+                  maxEntry, PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR, checkAlreadyCopied);
             } else {
               logger.trace("{} in index segment with start offset {} in {} is not valid because it is a deleted PUT",
                   indexEntry, indexSegment.getStartOffset(), storeId);
@@ -1549,6 +1581,11 @@ class BlobStoreCompactor {
                 indexEntry, indexSegment.getStartOffset(), storeId);
           }
         }
+      }
+      if (maxEntry == null) {
+        // Since maxEntry is null, it indicates the list is not sorted.
+        // So, order by offset in log.
+        validEntries.sort(PersistentIndex.INDEX_ENTRIES_OFFSET_COMPARATOR);
       }
       return validEntries;
     }
@@ -1601,28 +1638,32 @@ class BlobStoreCompactor {
      * @param entry the {@link IndexEntry} that is under processing
      * @throws StoreException if there are problems using the index
      */
-    private void addAllEntriesForKeyInSegment(List<IndexEntry> validEntries, IndexEntry entry,
-        IndexSegment indexSegment, FileSpan duplicateSearchSpan, boolean checkAlreadyCopied)
+    private IndexEntry addAllEntriesForKeyInSegment(List<IndexEntry> validEntries, IndexEntry entry,
+        IndexSegment indexSegment, FileSpan duplicateSearchSpan, IndexEntry maxEntryYet, Comparator<IndexEntry> comparator,
+        boolean checkAlreadyCopied)
         throws StoreException {
       logger.trace("Fetching related entries of a blob with entry {} in index segment with start offset {} in {} "
           + "because they need to be retained", entry, indexSegment.getStartOffset(), storeId);
       NavigableSet<IndexValue> values = indexSegment.find(entry.getKey());
+      IndexEntry maxEntry = maxEntryYet;
       if (values.size() > 1) {
         // we are using a multivalued index segment. Any related values will be in this set
-        values.forEach(valueFromSeg ->
-            validateAndAdd(validEntries, new IndexEntry(entry.getKey(), valueFromSeg), indexSegment,
-                duplicateSearchSpan, checkAlreadyCopied));
+        for (IndexValue valueFromSeg : values) {
+          maxEntry = validateAndAdd(validEntries, new IndexEntry(entry.getKey(), valueFromSeg), indexSegment,
+              duplicateSearchSpan, maxEntry, comparator, checkAlreadyCopied);
+        }
       } else {
         // in a non multi valued segment, there can only be PUTs and DELETEs in the same segment
-        validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, checkAlreadyCopied);
+        maxEntry = validateAndAdd(validEntries, entry, indexSegment, duplicateSearchSpan, maxEntry, comparator, checkAlreadyCopied);
         if (entry.getValue().isFlagSet(IndexValue.Flags.Delete_Index)) {
           IndexValue putValue = getPutValueFromDeleteEntry(entry.getKey(), entry.getValue(), indexSegment);
           if (putValue != null) {
-            validateAndAdd(validEntries, new IndexEntry(entry.getKey(), putValue), indexSegment, duplicateSearchSpan,
-                checkAlreadyCopied);
+            maxEntry = validateAndAdd(validEntries, new IndexEntry(entry.getKey(), putValue), indexSegment, duplicateSearchSpan,
+                maxEntry, comparator, checkAlreadyCopied);
           }
         }
       }
+      return maxEntry;
     }
 
     /**
