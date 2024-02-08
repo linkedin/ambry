@@ -132,7 +132,7 @@ class CompactionManager {
       Thread compactionThread = compactionExecutor.getCompactionThread();
       if (compactionThread != null) {
         try {
-          compactionThread.join(2000);
+          compactionThread.join(10000);
         } catch (InterruptedException e) {
           metrics.compactionManagerTerminateErrorCount.inc();
           logger.error("Compaction thread join wait for {} was interrupted", mountPath);
