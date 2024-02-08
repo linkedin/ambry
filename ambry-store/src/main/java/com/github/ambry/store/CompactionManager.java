@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
@@ -49,7 +50,7 @@ class CompactionManager {
   private final Time time;
   private final Set<BlobStore> stores = ConcurrentHashMap.newKeySet();
   private final List<CompactionExecutor> compactionExecutors;
-
+  private final AtomicInteger currentCompactionExecutor;
   private final StorageManagerMetrics metrics;
   private final CompactionPolicy compactionPolicy;
   private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
@@ -73,6 +74,7 @@ class CompactionManager {
     this.metrics = metrics;
     this.compactionExecutors = new ArrayList<>();
     this.storeCompactionExecutorMap = new HashMap<>();
+    this.currentCompactionExecutor = new AtomicInteger(0);
     if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
       EnumSet<Trigger> triggers = EnumSet.noneOf(Trigger.class);
       for (String trigger : storeConfig.storeCompactionTriggers) {
@@ -159,7 +161,8 @@ class CompactionManager {
    * @return {@code true} if the scheduling was successful. {@code false} if not.
    */
   boolean scheduleNextForCompaction(BlobStore store) {
-    CompactionExecutor compactionExecutor = storeCompactionExecutorMap.get(store);
+    CompactionExecutor compactionExecutor =
+        storeCompactionExecutorMap.computeIfAbsent(store, key -> getCompactionExecutorForStore());
     return compactionExecutor != null && compactionExecutor.scheduleNextForCompaction(store);
   }
 
@@ -169,7 +172,8 @@ class CompactionManager {
    * @param enable whether to enable ({@code true}) or disable.
    */
   void controlCompactionForBlobStore(BlobStore store, boolean enable) {
-    CompactionExecutor compactionExecutor = storeCompactionExecutorMap.get(store);
+    CompactionExecutor compactionExecutor =
+        storeCompactionExecutorMap.computeIfAbsent(store, key -> getCompactionExecutorForStore());
     if (compactionExecutor != null) {
       compactionExecutor.controlCompactionForBlobStore(store, enable);
     }
@@ -227,8 +231,8 @@ class CompactionManager {
     if (compactionExecutors.isEmpty()) {
       return null;
     }
-    int compactorIdx = (stores.size() + 1) % storeConfig.numCompactionExecutors;
-    return compactionExecutors.get(compactorIdx);
+    currentCompactionExecutor.set(currentCompactionExecutor.incrementAndGet() % storeConfig.numCompactionExecutors);
+    return compactionExecutors.get(currentCompactionExecutor.get());
   }
 
   /**
