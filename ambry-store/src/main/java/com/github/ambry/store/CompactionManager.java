@@ -19,8 +19,10 @@ import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -52,6 +54,7 @@ class CompactionManager {
   private final CompactionPolicy compactionPolicy;
   private static final Logger logger = LoggerFactory.getLogger(CompactionManager.class);
   private final CompactionPolicyFactory compactionPolicyFactory;
+  private final Map<Store, CompactionExecutor> storeCompactionExecutorMap;
 
   /**
    * Creates a CompactionManager that handles scheduling and executing compaction.
@@ -69,6 +72,7 @@ class CompactionManager {
     this.time = time;
     this.metrics = metrics;
     this.compactionExecutors = new ArrayList<>();
+    this.storeCompactionExecutorMap = new HashMap<>();
     if (!storeConfig.storeCompactionTriggers[0].isEmpty()) {
       EnumSet<Trigger> triggers = EnumSet.noneOf(Trigger.class);
       for (String trigger : storeConfig.storeCompactionTriggers) {
@@ -155,6 +159,7 @@ class CompactionManager {
    * @return {@code true} if the scheduling was successful. {@code false} if not.
    */
   boolean scheduleNextForCompaction(BlobStore store) {
+    CompactionExecutor compactionExecutor = storeCompactionExecutorMap.get(store);
     return compactionExecutor != null && compactionExecutor.scheduleNextForCompaction(store);
   }
 
@@ -164,6 +169,7 @@ class CompactionManager {
    * @param enable whether to enable ({@code true}) or disable.
    */
   void controlCompactionForBlobStore(BlobStore store, boolean enable) {
+    CompactionExecutor compactionExecutor = storeCompactionExecutorMap.get(store);
     if (compactionExecutor != null) {
       compactionExecutor.controlCompactionForBlobStore(store, enable);
     }
@@ -175,6 +181,7 @@ class CompactionManager {
    * @return {@code true} if store is removed successfully. {@code false} if not.
    */
   boolean removeBlobStore(BlobStore store) {
+    CompactionExecutor compactionExecutor = storeCompactionExecutorMap.get(store);
     if (compactionExecutor == null) {
       stores.remove(store);
       return true;
@@ -185,6 +192,7 @@ class CompactionManager {
     }
     // stores.remove(store) is invoked within compactionExecutor.removeBlobStore() because it requires lock
     compactionExecutor.removeBlobStore(store);
+    storeCompactionExecutorMap.remove(store);
     return true;
   }
 
@@ -204,13 +212,23 @@ class CompactionManager {
    * @param store the {@link BlobStore} which would be added.
    */
   void addBlobStore(BlobStore store) {
-    if (compactionExecutor == null) {
+    if (compactionExecutors.isEmpty()) {
       stores.add(store);
-    } else {
-      // we first disable compaction on new store and then add it into stores set
-      compactionExecutor.controlCompactionForBlobStore(store, false);
-      stores.add(store);
+      return;
     }
+    CompactionExecutor executor = getCompactionExecutorForStore();
+    // we first disable compaction on new store and then add it into stores set
+    executor.controlCompactionForBlobStore(store, false);
+    storeCompactionExecutorMap.put(store, executor);
+    stores.add(store);
+  }
+
+  CompactionExecutor getCompactionExecutorForStore() {
+    if (compactionExecutors.isEmpty()) {
+      return null;
+    }
+    int compactorIdx = (stores.size() + 1) % storeConfig.numCompactionExecutors;
+    return compactionExecutors.get(compactorIdx);
   }
 
   /**

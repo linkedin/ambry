@@ -616,7 +616,7 @@ public class StoreConfig {
   @Config(NUM_COMPACTION_EXECUTORS)
   public final int numCompactionExecutors;
   public StoreConfig(VerifiableProperties verifiableProperties) {
-    numCompactionExecutors = verifiableProperties.getString(NUM_COMPACTION_EXECUTORS, DEFAULT_NUM_COMPACTION_EXECUTORS);
+    numCompactionExecutors = verifiableProperties.getInt(NUM_COMPACTION_EXECUTORS, DEFAULT_NUM_COMPACTION_EXECUTORS);
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
     storeIndexMaxMemorySizeBytes = verifiableProperties.getInt("store.index.max.memory.size.bytes", 20 * 1024 * 1024);
