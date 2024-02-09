@@ -80,6 +80,7 @@ class CompactionManager {
       for (String trigger : storeConfig.storeCompactionTriggers) {
         triggers.add(Trigger.valueOf(trigger.toUpperCase()));
       }
+      logger.info("[COMPACT] Creating {} threads for compacting disk {}", storeConfig.numCompactionExecutors, mountPath);
       IntStream.rangeClosed(1, storeConfig.numCompactionExecutors).forEach(i -> compactionExecutors.add(
           new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize == 0 ? 0
           : Math.max(storeConfig.storeCompactionOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize))));
@@ -103,9 +104,11 @@ class CompactionManager {
    * Enables the compaction manager allowing it execute compactions if required.
    */
   void enable() {
+    int threadIdx = 0;
     for (CompactionExecutor compactionExecutor : compactionExecutors) {
-      logger.info("Compaction thread started for {}", mountPath);
-      Thread compactionThread = Utils.newThread(THREAD_NAME_PREFIX + mountPath, compactionExecutor, true);
+      String threadName = THREAD_NAME_PREFIX + mountPath + String.format("_%s", threadIdx);
+      Thread compactionThread = Utils.newThread(threadName, compactionExecutor, true);
+      threadIdx += 1;
       compactionThread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
@@ -115,6 +118,7 @@ class CompactionManager {
       compactionExecutor.setCompactionThread(compactionThread);
       compactionExecutor.enable();
       compactionThread.start();
+      logger.info("[COMPACT] Compaction thread {} started for disk {}", threadName, mountPath);
     }
   }
 
@@ -138,7 +142,8 @@ class CompactionManager {
           compactionThread.join(2000);
         } catch (InterruptedException e) {
           metrics.compactionManagerTerminateErrorCount.inc();
-          logger.error("Compaction thread join wait for {} was interrupted", mountPath);
+          logger.error("[COMPACT] Compaction thread {} join wait for disk {} was interrupted",
+              compactionThread.getName(), mountPath);
         }
       }
 
@@ -307,7 +312,7 @@ class CompactionManager {
     public void run() {
       isRunning = true;
       try {
-        logger.info("Starting compaction thread for {}", mountPath);
+        logger.info("Starting compaction thread {} for {}", compactionThread.getName(), mountPath);
         // complete any compactions in progress
         for (BlobStore store : storeSubset) {
           logger.trace("{} being checked for resume", store);
