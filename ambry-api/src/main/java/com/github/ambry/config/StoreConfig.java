@@ -609,7 +609,7 @@ public class StoreConfig {
       "store.remove.directory.and.restart.blob.store";
 
   /**
-   * True to remove all the files under the partition directory and restart the blob store when blob store fails to start.
+   * Number of compaction executors
    */
   public static final int DEFAULT_NUM_COMPACTION_EXECUTORS = 1;
   public static final String NUM_COMPACTION_EXECUTORS = "num.compaction.executors";
