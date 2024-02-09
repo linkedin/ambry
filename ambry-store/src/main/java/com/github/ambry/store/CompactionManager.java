@@ -432,7 +432,7 @@ class CompactionManager {
       } finally {
         lock.unlock();
       }
-      logger.info("Disabled compaction thread for {}", mountPath);
+      logger.info("Disabled compaction thread {} for {}", compactionThread.getName(), mountPath);
     }
 
     /**
