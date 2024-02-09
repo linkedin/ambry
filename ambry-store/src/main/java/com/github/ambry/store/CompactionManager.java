@@ -106,7 +106,7 @@ class CompactionManager {
   void enable() {
     int threadIdx = 0;
     for (CompactionExecutor compactionExecutor : compactionExecutors) {
-      String threadName = THREAD_NAME_PREFIX + mountPath + String.format("_%s", threadIdx);
+      String threadName = THREAD_NAME_PREFIX + mountPath + String.format("-%s", threadIdx);
       Thread compactionThread = Utils.newThread(threadName, compactionExecutor, true);
       threadIdx += 1;
       compactionThread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
