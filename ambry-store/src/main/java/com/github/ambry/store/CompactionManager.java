@@ -83,6 +83,9 @@ class CompactionManager {
       IntStream.rangeClosed(1, storeConfig.numCompactionExecutors).forEach(i -> compactionExecutors.add(
           new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize == 0 ? 0
           : Math.max(storeConfig.storeCompactionOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize))));
+      this.stores.forEach(store ->
+          storeCompactionExecutorMap.computeIfAbsent(store, key -> getCompactionExecutorForStore())
+              .addBlobStoreForCompaction(store));
       try {
         compactionPolicyFactory = Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
         compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
@@ -224,6 +227,7 @@ class CompactionManager {
     CompactionExecutor executor = getCompactionExecutorForStore();
     // we first disable compaction on new store and then add it into stores set
     executor.controlCompactionForBlobStore(store, false);
+    executor.addBlobStoreForCompaction(store);
     storeCompactionExecutorMap.put(store, executor);
     stores.add(store);
   }
@@ -268,24 +272,31 @@ class CompactionManager {
 
     volatile boolean isRunning = false;
     Thread compactionThread;
+    private Set<BlobStore> storeSubset;
+
 
     /**
      * @param triggers the {@link EnumSet} of active compaction triggers.
      * @param bundleReadBufferSize the size of buffer to reuse in compaction copy phase. Bundle read is disabled if 0.
      */
     CompactionExecutor(EnumSet<Trigger> triggers, int bundleReadBufferSize) {
+      this.storeSubset = new HashSet<>();
       this.triggers = triggers;
       bundleReadBuffer = bundleReadBufferSize == 0 ? null : new byte[bundleReadBufferSize];
       logger.info("Buffer size is {} in compaction thread for {}", bundleReadBufferSize, mountPath);
       metrics.registerStoreSetToSkipInCompactionForMountPath(mountPath, storesToSkip);
     }
 
-    public void setCompactionThread(Thread compactionThread) {
+    void setCompactionThread(Thread compactionThread) {
       this.compactionThread = compactionThread;
     }
 
-    public Thread getCompactionThread() {
+    Thread getCompactionThread() {
       return this.compactionThread;
+    }
+
+    void addBlobStoreForCompaction(BlobStore store) {
+      storeSubset.add(store);
     }
 
     /**
@@ -298,7 +309,7 @@ class CompactionManager {
       try {
         logger.info("Starting compaction thread for {}", mountPath);
         // complete any compactions in progress
-        for (BlobStore store : stores) {
+        for (BlobStore store : storeSubset) {
           logger.trace("{} being checked for resume", store);
           if (store.isStarted()) {
             logger.trace("{} is started and eligible for resume check", store);
@@ -317,7 +328,7 @@ class CompactionManager {
         // continue to do compactions as required.
         long expectedNextCheckTime = time.milliseconds() + waitTimeMs;
         if (triggers.contains(Trigger.PERIODIC)) {
-          storesToCheck.addAll(stores);
+          storesToCheck.addAll(storeSubset);
         }
         int storesNoCompaction = 0;
         while (enabled) {
@@ -376,7 +387,7 @@ class CompactionManager {
                 }
                 if (triggers.contains(Trigger.PERIODIC) && time.milliseconds() >= expectedNextCheckTime) {
                   expectedNextCheckTime = time.milliseconds() + waitTimeMs;
-                  storesToCheck.addAll(stores);
+                  storesToCheck.addAll(storeSubset);
                 }
               }
             } finally {
@@ -461,6 +472,7 @@ class CompactionManager {
       lock.lock();
       try {
         stores.remove(store);
+        storeSubset.remove(store);
         // It's ok to remove store from "storesDisabledCompaction" and "storesToSkip" list while executor thread is
         // going through each store to check compaction eligibility. Note that the executor will first check if store
         // is started, which is guaranteed to be false before removeBlobStore() is invoked.
