@@ -15,20 +15,19 @@
 package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.frontend.DeleteBlobHandler;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 
 /**
  * Handler to handle all the S3 DELETE requests
  */
 public class S3DeleteHandler extends S3BaseHandler<Void> {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3DeleteHandler.class);
+
   private S3DeleteObjectHandler objectHandler;
 
   /**
@@ -63,17 +62,8 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
 
     private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
         throws RestServiceException {
-      deleteBlobHandler.handle(restRequest, restResponseChannel, ((result, exception) -> {
-        if (exception != null) {
-          callback.onCompletion(null, exception);
-        } else {
-          try {
-            restResponseChannel.setStatus(ResponseStatus.NoContent);
-            callback.onCompletion(null, null);
-          } catch (RestServiceException e) {
-            callback.onCompletion(null, e);
-          }
-        }
+      deleteBlobHandler.handle(restRequest, restResponseChannel, CallbackUtils.chainCallback(callback, (result) -> {
+        restResponseChannel.setStatus(ResponseStatus.NoContent);
       }));
     }
   }

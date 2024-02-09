@@ -15,10 +15,12 @@
 package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.frontend.Operations;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.ReadableStreamChannel;
 import org.slf4j.Logger;
@@ -32,7 +34,7 @@ import static com.github.ambry.rest.RestUtils.InternalKeys.*;
  * logging and response header handling
  *
  * @param <R> the type of the result the object in callbacks. It is {@link Void} for requests that don't
- *           require a response body, otherwise it is {@link ReadableStreamChannel}.
+ *            require a response body, otherwise it is {@link ReadableStreamChannel}.
  */
 abstract public class S3BaseHandler<R> {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3BaseHandler.class);
@@ -59,27 +61,27 @@ abstract public class S3BaseHandler<R> {
    * @throws RestServiceException exception when the processing fails
    */
   public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<R> callback) throws RestServiceException {
-    String path = ((RequestPath) restRequest.getArgs().get(REQUEST_PATH)).getOperationOrBlobId(true);
-    if (!path.startsWith(Operations.NAMED_BLOB)) {
-      throw new RuntimeException("S3 request handler can only handle named blob requests");
-    }
-
-    String action = getClass().getSimpleName()
-        .replace("S3", "")
-        .replace("Handler", "");
-    LOGGER.debug("{} {}", action, path);
-
-    doHandle(restRequest, restResponseChannel, (result, exception) -> {
-      if (exception != null) {
-        callback.onCompletion(null, exception);
-      } else try {
-        removeAmbryHeaders(restResponseChannel);
-        callback.onCompletion(result, null);
-      } catch (Exception e) {
-        callback.onCompletion(null, e);
+      Callback<R> callback) {
+    try {
+      String path = ((RequestPath) restRequest.getArgs().get(REQUEST_PATH)).getOperationOrBlobId(true);
+      if (!path.startsWith(Operations.NAMED_BLOB)) {
+        throw new RuntimeException("S3 request handler can only handle named blob requests");
       }
-    });
+
+      String action = getClass().getSimpleName()
+          .replace("S3", "")
+          .replace("Handler", "");
+      LOGGER.debug("{} {}", action, path);
+
+      doHandle(restRequest, restResponseChannel, CallbackUtils.chainCallback(callback, (r) -> {
+        removeAmbryHeaders(restResponseChannel);
+      }));
+    }
+    catch (Throwable t) {
+      Exception e = t instanceof Exception ? (Exception) t
+          : new RestServiceException(t, RestServiceErrorCode.InternalServerError);
+      callback.onCompletion(null, e);
+    }
   }
 
   private void removeAmbryHeaders(RestResponseChannel restResponseChannel) {

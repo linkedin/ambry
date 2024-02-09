@@ -20,6 +20,7 @@ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.frontend.NamedBlobListEntry;
 import com.github.ambry.frontend.NamedBlobListHandler;
 import com.github.ambry.frontend.Page;
@@ -73,26 +74,17 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
-    namedBlobListHandler.handle(restRequest, restResponseChannel, ((result, exception) -> {
-      if (exception != null) {
-        callback.onCompletion(result, exception);
-        return;
-      }
-
-      try {
-        // Convert from json response to S3 xml response as defined in
-        // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_ResponseSyntax.
-        ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
-        JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
-        Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
-        ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
-        callback.onCompletion(readableStreamChannel, null);
-      } catch (Exception e) {
-        callback.onCompletion(null, e);
-      }
+    namedBlobListHandler.handle(restRequest, restResponseChannel, CallbackUtils.chainCallback(callback, (result) -> {
+      // Convert from json response to S3 xml response as defined in
+      // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_ResponseSyntax.
+      ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
+      JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
+      Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
+      ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
+      return readableStreamChannel;
     }));
   }
 

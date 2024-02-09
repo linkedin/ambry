@@ -15,6 +15,7 @@
 package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
+import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.NamedBlobPutHandler;
 import com.github.ambry.rest.ResponseStatus;
@@ -53,43 +54,30 @@ public class S3PutHandler extends S3BaseHandler<Void> {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    */
   @Override
-  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback) {
-
+  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+      throws RestServiceException {
     if (isMultipartUploadRequest(restRequest)) {
       multipartUploadHandler.handle(restRequest, restResponseChannel,
           (result, exception) -> callback.onCompletion(null, exception));
       return;
     }
 
-    try {
-      // 1. Add headers required by Ambry. These become the blob properties.
-      NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
-      String accountName = namedBlobPath.getAccountName();
-      restRequest.setArg(Headers.SERVICE_ID, accountName);
-      restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
-      restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
-    } catch (RestServiceException e) {
-      callback.onCompletion(null, e);
-      return;
-    }
+    // 1. Add headers required by Ambry. These become the blob properties.
+    NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+    String accountName = namedBlobPath.getAccountName();
+    restRequest.setArg(Headers.SERVICE_ID, accountName);
+    restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
+    restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
 
     // 2. Upload the blob by following named blob PUT path
-    namedBlobPutHandler.handle(restRequest, restResponseChannel, (result, exception) -> {
-      if (exception != null) {
-        callback.onCompletion(result, exception);
-        return;
+    namedBlobPutHandler.handle(restRequest, restResponseChannel, CallbackUtils.chainCallback(callback, (r) -> {
+      if (restResponseChannel.getStatus() == ResponseStatus.Created) {
+        // Set the response status to 200 since Ambry named blob PUT has response as 201.
+        restResponseChannel.setStatus(ResponseStatus.Ok);
+        String blobId = RestUtils.getHeader(restRequest.getArgs(), LOCATION, true);
+        restResponseChannel.setHeader("ETag", blobId);
       }
-      try {
-        if (restResponseChannel.getStatus() == ResponseStatus.Created) {
-          restResponseChannel.setStatus(ResponseStatus.Ok);
-          String blobId = RestUtils.getHeader(restRequest.getArgs(), LOCATION, true);
-          restResponseChannel.setHeader("ETag", blobId);
-        }
-        callback.onCompletion(result, null);
-      } catch (RestServiceException e) {
-        callback.onCompletion(null, e);
-      }
-    });
+    }));
   }
 
   private boolean isMultipartUploadRequest(RestRequest restRequest) {
