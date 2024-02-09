@@ -31,6 +31,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
@@ -38,6 +40,7 @@ import static org.junit.Assert.*;
 /**
  * Unit tests {@link CompactionManager}.
  */
+@RunWith(Parameterized.class)
 public class CompactionManagerTest {
   private static final String MOUNT_PATH = "/tmp/";
   private static final String ALL_COMPACTION_TRIGGERS = "Periodic,Admin";
@@ -49,9 +52,19 @@ public class CompactionManagerTest {
   private CompactionManager compactionManager;
 
   /**
+   * Number of compaction executors
+   * @return Number of compaction executors
+   */
+  @Parameterized.Parameters
+  public static List<Integer> data() {
+    return Arrays.asList(1, 2, 3);
+  }
+
+  /**
    * Instantiates {@link CompactionManagerTest} with the required cast
    */
-  public CompactionManagerTest() {
+  public CompactionManagerTest(int numCompactionExecutors) {
+    properties.setProperty(StoreConfig.NUM_COMPACTION_EXECUTORS, String.valueOf(numCompactionExecutors));
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
