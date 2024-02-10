@@ -194,7 +194,6 @@ public class VcrReplicationManager extends ReplicationEngine {
   @Override
   public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas)
       throws ReplicationException {
-    AzureCloudConfig azureCloudConfig = new AzureCloudConfig(properties);
     // For each replica of a partition
     for (RemoteReplicaInfo replicaInfo : peerReplicas) {
       String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
