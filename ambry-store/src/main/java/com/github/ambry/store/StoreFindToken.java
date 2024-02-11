@@ -175,8 +175,9 @@ public class StoreFindToken implements FindToken {
    * @param resetKeyType The {@link PersistentIndex.IndexEntryType} associated with this reset key.
    * @param resetKeyVersion The life version of reset key.
    */
-  StoreFindToken(FindTokenType type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId, boolean inclusive,
-      short version, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType, short resetKeyVersion) {
+  public StoreFindToken(FindTokenType type, Offset offset, StoreKey key, UUID sessionId, UUID incarnationId,
+      boolean inclusive, short version, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType,
+      short resetKeyVersion) {
     if (!type.equals(FindTokenType.Uninitialized)) {
       if (offset == null || sessionId == null) {
         throw new IllegalArgumentException("Offset [" + offset + "] or SessionId [" + sessionId + "] cannot be null");

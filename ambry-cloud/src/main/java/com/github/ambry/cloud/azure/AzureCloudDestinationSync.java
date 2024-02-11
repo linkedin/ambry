@@ -239,8 +239,56 @@ public class AzureCloudDestinationSync implements CloudDestination {
         azureMetrics.azureTableEntityCreateErrorCount.inc();
         logger.error("Failed to insert table entity {}/{} in {} due to {}",
             tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
+        throwable.printStackTrace();
       }
     }
+  }
+
+  /**
+   * Upserts a row in Azure Table An Azure Table Entity is a row with paritionKey and rowKey
+   *
+   * @param tableName   Name of the table in Azure Table Service
+   * @param tableEntity Table row to insert
+   * @return
+   */
+  public boolean upsertTableEntity(String tableName, TableEntity tableEntity) {
+    Throwable throwable = null;
+    try {
+      getTableClient(tableName).upsertEntity(tableEntity);
+      return true;
+    } catch (Throwable e) {
+      throwable = e;
+      return false;
+    } finally {
+      // Executed before return statement
+      if (throwable != null) {
+        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        logger.error("Failed to upsert table entity {}/{} in {} due to {}",
+            tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
+        throwable.printStackTrace();
+      }
+    }
+  }
+
+  /**
+   * Fetches a row in Azure Table
+   * An Azure Table Entity is a row with partitionKey and rowKey
+   * @param tableName Name of the table in Azure Table Service
+   */
+  public TableEntity getTableEntity(String tableName, String partitionKey, String rowKey) {
+    Throwable throwable = null;
+    try {
+      return getTableClient(tableName).getEntity(partitionKey, rowKey);
+    } catch (Throwable e) {
+      throwable = e;
+    } finally {
+      if (throwable != null) {
+        logger.error("Failed to fetch table entity {}/{} from {} due to {}",
+            partitionKey, rowKey, tableName, throwable);
+        throwable.printStackTrace();
+      }
+    }
+    return null;
   }
 
   /**

@@ -15,8 +15,8 @@
 package com.github.ambry.cloud;
 
 import com.azure.data.tables.models.TableEntity;
-import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -32,18 +32,27 @@ import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Replicates from server to VCR
  */
 public class VcrReplicaThread extends ReplicaThread {
+  private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected String azureTableNameReplicaTokens;
+  protected AzureMetrics azureMetrics;
 
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
@@ -51,18 +60,21 @@ public class VcrReplicaThread extends ReplicaThread {
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
-      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, ReplicaTokenPersistor tokenWriter,
       CloudDestination cloudDestination, VerifiableProperties properties) {
-    super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
-        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
+    super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+        new ReplicationConfig(properties),
+        new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList()), notification,
+        storeKeyConverter, transformer, clusterMap.getMetricRegistry(), replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     this.cloudDestination = cloudDestination;
     this.properties = properties;
     this.azureCloudConfig = new AzureCloudConfig(properties);
+    this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
+    this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
   }
 
   /**
@@ -83,5 +95,57 @@ public class VcrReplicaThread extends ReplicaThread {
         cloudDestination.createTableEntity(azureCloudConfig.azureTableNameCorruptBlobs,
             new TableEntity(messageInfo.getStoreKey().getID(), remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname())
                 .addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath())));
+  }
+
+  /**
+   * Persists token to cloud in each replication cycle
+   * @param remoteReplicaInfo Remote replica info object
+   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   */
+  @Override
+  public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
+    // The parent method sets in-memory token
+    super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
+    StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
+    if (token == null) {
+      azureMetrics.absTokenPersistFailureCount.inc();
+      logger.error("Null token for replica {}", remoteReplicaInfo);
+      return;
+    }
+    if (token.equals(oldToken)) {
+      logger.trace("Skipping token upload due to unchanged token, oldToken = {}, newToken = {}", oldToken, token);
+      return;
+    }
+    logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
+    // Table entity = Table row
+    // =============================================================================================================
+    // | partition-key | row-key | tokenType | logSegment | offset | storeKey | replicatedUntilUTC   | binaryToken |
+    // =============================================================================================================
+    // | partition     | host1   | Journal   | 3_14       | 12     | none     | 2024_Feb_11_14_21_00 | AAASLKJDFX  |
+    // | partition     | host2   | Index     | 2_12       | 32     | AAEWsXZ  | 2024_Jan_02_13_01_00 | AAAEWODSDS  |
+    // =============================================================================================================
+    long lastOpTime = remoteReplicaInfo.getReplicatedUntilUTC();
+    String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
+    String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
+    TableEntity entity = new TableEntity(partitionKey, rowKey)
+        .addProperty(VcrReplicationManager.BACKUP_NODE, dataNodeId.getHostname())
+        .addProperty(VcrReplicationManager.TOKEN_TYPE,
+            token.getType().toString())
+        .addProperty(VcrReplicationManager.LOG_SEGMENT,
+            token.getOffset() == null ? "none" : token.getOffset().getName().toString())
+        .addProperty(VcrReplicationManager.OFFSET,
+            token.getOffset() == null ? "none" : token.getOffset().getOffset())
+        .addProperty(VcrReplicationManager.STORE_KEY,
+            token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
+        .addProperty(VcrReplicationManager.REPLICATED_UNITL_UTC,
+            lastOpTime == Utils.Infinite_Time ? String.valueOf(Utils.Infinite_Time)
+                : VcrReplicationManager.DATE_FORMAT.format(lastOpTime))
+        .addProperty(VcrReplicationManager.BINARY_TOKEN,
+            token.toBytes());
+    // Now persist the token in cloud
+    if (cloudDestination.upsertTableEntity(azureTableNameReplicaTokens, entity)) {
+      azureMetrics.ambryReplicaTokenWriteRate.mark();
+    }
   }
 }

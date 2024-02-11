@@ -13,10 +13,12 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
@@ -26,6 +28,7 @@ import com.github.ambry.clustermap.HelixVcrUtil;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.clustermap.VcrClusterParticipantListener;
 import com.github.ambry.commons.ResponseHandler;
@@ -57,7 +60,11 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -85,8 +92,10 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final CloudConfig cloudConfig;
   private final VcrMetrics vcrMetrics;
   private final VcrClusterParticipant vcrClusterParticipant;
+  protected String azureTableNameReplicaTokens;
+  protected AzureCloudConfig azureCloudConfig;
+  protected AzureMetrics azureMetrics;
   protected VerifiableProperties properties;
-  protected  MetricRegistry registry;
   protected CloudDestination cloudDestination;
   private CloudStorageCompactor cloudStorageCompactor;
   protected ScheduledExecutorService cloudCompactionScheduler;
@@ -103,24 +112,32 @@ public class VcrReplicationManager extends ReplicationEngine {
   private final HelixVcrUtil.VcrHelixConfig vcrHelixConfig;
   private DistributedLock vcrUpdateDistributedLock = null;
 
-  public VcrReplicationManager(CloudConfig cloudConfig, ReplicationConfig replicationConfig,
-      ClusterMapConfig clusterMapConfig, StoreConfig storeConfig, StoreManager storeManager,
+  public static final String BACKUP_NODE = "backupNode";
+  public static final String TOKEN_TYPE = "tokenType";
+  public static final String LOG_SEGMENT = "logSegment";
+  public static final String OFFSET = "offset";
+  public static final String STORE_KEY = "storeKey";
+  public static final String REPLICATED_UNITL_UTC = "replicatedUntilUTC";
+  public static final String BINARY_TOKEN = "binaryToken";
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss");
+
+  public VcrReplicationManager(VerifiableProperties properties, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
-      ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory, VcrMetrics vcrMetrics,
-      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory,
-      String transformerClassName) throws ReplicationException, IllegalStateException {
-    super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler,
-        vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(), networkClientFactory,
-        vcrMetrics.getMetricRegistry(), requestNotification, storeKeyConverterFactory, transformerClassName, null,
-        storeManager, null, true);
-    this.cloudConfig = cloudConfig;
+      CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
+      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
+      throws ReplicationException, IllegalStateException {
+    super(new ReplicationConfig(properties), new ClusterMapConfig(properties), new StoreConfig(properties),
+        storeKeyFactory, clusterMap, scheduler, vcrClusterParticipant.getCurrentDataNodeId(), Collections.emptyList(),
+        networkClientFactory, clusterMap.getMetricRegistry(), requestNotification, storeKeyConverterFactory,
+        new ServerConfig(properties).serverMessageTransformer, null, storeManager, null,
+        true);
+    this.properties = properties;
+    this.cloudConfig = new CloudConfig(properties);
+    this.azureCloudConfig = new AzureCloudConfig(properties);
+    this.vcrMetrics = new VcrMetrics(metricRegistry);
+    this.azureMetrics = new AzureMetrics(metricRegistry);
     this.vcrClusterParticipant = vcrClusterParticipant;
-    this.vcrMetrics = vcrMetrics;
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
-    // We need a datacenter to replicate from, which should be specified in the cloud config.
-    if (cloudConfig.vcrSourceDatacenters.isEmpty()) {
-      throw new IllegalStateException("One or more VCR cross colo replication peer datacenter should be specified");
-    }
     try {
       vcrHelixConfig =
           new ObjectMapper().readValue(cloudConfig.vcrHelixUpdateConfig, HelixVcrUtil.VcrHelixConfig.class);
@@ -128,24 +145,12 @@ public class VcrReplicationManager extends ReplicationEngine {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }
     vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
-  }
-
-  public VcrReplicationManager(VerifiableProperties properties, MetricRegistry registry, StoreManager storeManager,
-      StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
-      CloudDestination cloudDestination, ScheduledExecutorService scheduler, NetworkClientFactory networkClientFactory,
-      NotificationSystem requestNotification, StoreKeyConverterFactory storeKeyConverterFactory)
-      throws ReplicationException, IllegalStateException {
-    this(new CloudConfig(properties), new ReplicationConfig(properties), new ClusterMapConfig(properties),
-        new StoreConfig(properties), storeManager, storeKeyFactory, clusterMap,
-        vcrClusterParticipant, scheduler, networkClientFactory, new VcrMetrics(registry), requestNotification,
-        storeKeyConverterFactory, new ServerConfig(properties).serverMessageTransformer);
-    this.properties = properties;
-    this.registry = registry;
-    this.persistor =
-        new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            tokenHelper, cloudDestination);
+    // TODO: Remove this code after all nodes have migrated to using the table, tokenReloadWarnCount == 0
+    this.persistor = new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics,
+        clusterMap, tokenHelper, cloudDestination);;
     if (cloudConfig.cloudBlobCompactionEnabled) {
-      this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig, partitionToPartitionInfo.keySet(), vcrMetrics);
+      this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig,
+          partitionToPartitionInfo.keySet(), vcrMetrics);
       /*
         Create a new scheduler and schedule 1 daemon for compaction. No need to config this.
         The existing scheduling framework schedules tasks at a fixed rate, not a fixed delay and does not use daemons.
@@ -160,7 +165,9 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.cloudContainerCompactor = cloudDestination.getContainerCompactor();
     this.cloudDestination = cloudDestination;
     // Create the table at the start so that we can catch issues in creation, and the table is ready for threads to log
-    this.cloudDestination.getTableClient(new AzureCloudConfig(properties).azureTableNameCorruptBlobs);
+    this.cloudDestination.getTableClient(this.azureCloudConfig.azureTableNameCorruptBlobs);
+    azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
+    this.cloudDestination.getTableClient(azureTableNameReplicaTokens);
   }
 
   /**
@@ -175,9 +182,54 @@ public class VcrReplicationManager extends ReplicationEngine {
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
     return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
-        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
-        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-        leaderBasedReplicationAdmin, this.persistor, cloudDestination, properties);
+        notification, storeKeyConverter, transformer, replicatingOverSsl, datacenterName, responseHandler, time,
+        replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, this.persistor, cloudDestination, properties);
+  }
+
+  @Override
+  public void retrieveReplicaTokensAndPersistIfNecessary(String mountPath) {
+    // nothing to do as tokens are loaded in reloadReplicationTokenIfExists() when helix adds replica
+  }
+
+  @Override
+  public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas)
+      throws ReplicationException {
+    // For each replica of a partition
+    for (RemoteReplicaInfo replicaInfo : peerReplicas) {
+      String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
+      String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
+      // First look for the token in the new place - the table
+      TableEntity row = cloudDestination.getTableEntity(azureTableNameReplicaTokens, partitionKey, rowKey);
+      if (row == null) {
+        // If token is not found on the new place, then look for it in the old place
+        // TODO: Remove this code after all nodes have migrated to using the table, tokenReloadWarnCount == 0
+        vcrMetrics.tokenReloadWarnCount.inc();
+        if (super.reloadReplicationTokenIfExists(localReplica, peerReplicas) > 0) {
+          // If token is not found in the old place too, then that's a real error !
+          azureMetrics.absTokenRetrieveFailureCount.inc();
+          logger.error("Failed to retrieve tokens for peer replicas of local replica {}", localReplica);
+        }
+        return (int) azureMetrics.absTokenRetrieveFailureCount.getCount();
+      }
+      FindTokenFactory findTokenFactory =
+          tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
+      try {
+        DataInputStream inputStream = new DataInputStream(
+            new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
+        replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
+        String replUntil = (String) row.getProperty(REPLICATED_UNITL_UTC);
+        long time = replUntil.equals(String.valueOf(Utils.Infinite_Time)) ? -1 : DATE_FORMAT.parse(replUntil).getTime();
+        replicaInfo.setReplicatedUntilUTC(time);
+      } catch (Throwable t) {
+        // log and metric
+        azureMetrics.absTokenRetrieveFailureCount.inc();
+        logger.error("Failed to deserialize token for peer replica {} due to {}", replicaInfo, t.toString());
+        t.printStackTrace();
+        replicaInfo.setToken(findTokenFactory.getNewFindToken());
+        replicaInfo.setReplicatedUntilUTC(-1);
+      }
+    }
+    return (int) azureMetrics.absTokenRetrieveFailureCount.getCount();
   }
 
   @Override
@@ -270,10 +322,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   protected void scheduleTasks() {
-    // start background persistent thread
-    // start scheduler thread to persist index in the background
-    scheduleTask(persistor, true, replicationConfig.replicationTokenFlushDelaySeconds,
-        replicationConfig.replicationTokenFlushIntervalSeconds, "replica token persistor");
+    // Do not schedule any background token writer
 
     if (cloudConfig.cloudBlobCompactionEnabled && cloudStorageCompactor != null) {
       logger.info("[COMPACT] Waiting {} seconds to populate partitions for compaction", cloudConfig.cloudBlobCompactionStartupDelaySecs);
@@ -326,7 +375,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     if (peerReplicas != null) {
       for (ReplicaId peerReplica : peerReplicas) {
         if (!shouldReplicateFromDc(peerReplica.getDataNodeId().getDatacenterName())) {
-          logger.error("Skipping replication from {}", peerReplica.getDataNodeId().getDatacenterName());
+          logger.trace("Skipping replication from {}", peerReplica.getDataNodeId().getDatacenterName());
           continue;
         }
         // We need to ensure that a replica token gets persisted only after the corresponding data in the
@@ -346,9 +395,7 @@ public class VcrReplicationManager extends ReplicationEngine {
       try {
         updatePartitionInfoMaps(remoteReplicaInfos, cloudReplica);
         partitionStoreMap.put(partitionId.toPathString(), store);
-        // Reload replication token if exist.
-        int tokenReloadFailCount = reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
-        vcrMetrics.tokenReloadWarnCount.inc(tokenReloadFailCount);
+        reloadReplicationTokenIfExists(cloudReplica, remoteReplicaInfos);
 
         // Add remoteReplicaInfos to {@link ReplicaThread}.
         addRemoteReplicaInfoToReplicaThread(remoteReplicaInfos, true);

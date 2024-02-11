@@ -97,7 +97,7 @@ public class ReplicaThread implements Runnable {
   private final FindTokenHelper findTokenHelper;
   private final ClusterMap clusterMap;
   private final AtomicInteger correlationIdGenerator;
-  private final DataNodeId dataNodeId;
+  protected final DataNodeId dataNodeId;
   private final NetworkClient networkClient;
   private final ReplicationConfig replicationConfig;
   private final ReplicationMetrics replicationMetrics;
@@ -736,10 +736,7 @@ public class ReplicaThread implements Runnable {
 
             // There are no missing keys. We just advance the token
             if (exchangeMetadataResponse.missingStoreMessages.size() == 0) {
-              remoteReplicaInfo.setToken(exchangeMetadataResponse.remoteToken);
-              remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
-                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
+              advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
             }
 
             replicationMetrics.updateLagMetricForRemoteReplica(remoteReplicaInfo,
@@ -902,7 +899,7 @@ public class ReplicaThread implements Runnable {
     long startTime = time.milliseconds();
     List<MessageInfo> messageInfoList = replicaMetadataResponseInfo.getMessageInfoList();
     Map<MessageInfo, StoreKey> remoteMessageToConvertedKeyNonNull = new HashMap<>();
-
+    long lastOpTime = remoteReplicaInfo.getReplicatedUntilUTC();
     for (MessageInfo messageInfo : messageInfoList) {
       StoreKey storeKey = messageInfo.getStoreKey();
       logger.trace("Remote node: {} Thread name: {} Remote replica: {} Key from remote: {}", remoteNode, threadName,
@@ -915,7 +912,9 @@ public class ReplicaThread implements Runnable {
           || !skipPredicate.test(messageInfo))) {
         remoteMessageToConvertedKeyNonNull.put(messageInfo, convertedKey);
       }
+      lastOpTime = Math.max(lastOpTime, messageInfo.getOperationTimeMs());
     }
+    remoteReplicaInfo.setReplicatedUntilUTC(lastOpTime);
     Set<StoreKey> convertedMissingStoreKeys =
         remoteReplicaInfo.getLocalStore().findMissingKeys(new ArrayList<>(remoteMessageToConvertedKeyNonNull.values()));
     Set<MessageInfo> missingRemoteMessages = new HashSet<>();
@@ -1684,7 +1683,7 @@ public class ReplicaThread implements Runnable {
     return exchangeMetadataResponsesInEachCycle;
   }
 
-  protected static class ExchangeMetadataResponse {
+  public static class ExchangeMetadataResponse {
     // Set of messages from remote replica missing in the local store.
     final Set<MessageInfo> missingStoreMessages;
     // Set of messages whose blobs are now present in local store  but their properties (ttl_update, delete, undelete)
@@ -1702,7 +1701,7 @@ public class ReplicaThread implements Runnable {
     // since the time the last missing message was received(lastMissingMessageReceivedTimeSec).
     long lastMissingMessageReceivedTimeSec;
 
-    ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
+    public ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
         long localLagFromRemoteInBytes, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap, Time time) {
       this.missingStoreMessages = missingStoreMessages;
       this.remoteKeyToLocalKeyMap = remoteKeyToLocalKeyMap;
@@ -1712,6 +1711,19 @@ public class ReplicaThread implements Runnable {
       this.time = time;
       this.lastMissingMessageReceivedTimeSec = time.seconds();
       this.receivedStoreMessagesWithUpdatesPending = new HashSet<>();
+    }
+
+    public ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
+        long localLagFromRemoteInBytes, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap, Time time,
+        Set<MessageInfo> receivedStoreMessagesWithUpdatesPending) {
+      this.missingStoreMessages = missingStoreMessages;
+      this.remoteKeyToLocalKeyMap = remoteKeyToLocalKeyMap;
+      this.remoteToken = remoteToken;
+      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
+      this.serverErrorCode = ServerErrorCode.No_Error;
+      this.time = time;
+      this.lastMissingMessageReceivedTimeSec = time.seconds();
+      this.receivedStoreMessagesWithUpdatesPending = receivedStoreMessagesWithUpdatesPending;
     }
 
     ExchangeMetadataResponse(ServerErrorCode errorCode) {
@@ -1759,7 +1771,7 @@ public class ReplicaThread implements Runnable {
      * Get missing store messages in this metadata exchange.
      * @return set of missing store messages as a new collection.
      */
-    synchronized Set<MessageInfo> getMissingStoreMessages() {
+    public synchronized Set<MessageInfo> getMissingStoreMessages() {
       return missingStoreMessages == null ? Collections.emptySet() : new HashSet<>(missingStoreMessages);
     }
 
@@ -1791,7 +1803,7 @@ public class ReplicaThread implements Runnable {
      * ttl_update, delete, undelete) still needs to be compared to properties of blob in local store and reconciled.
      * @return set of messages that are now found in store as a new collection
      */
-    synchronized Set<MessageInfo> getReceivedStoreMessagesWithUpdatesPending() {
+    public synchronized Set<MessageInfo> getReceivedStoreMessagesWithUpdatesPending() {
       return receivedStoreMessagesWithUpdatesPending == null ? Collections.emptySet()
           : new HashSet<>(receivedStoreMessagesWithUpdatesPending);
     }

@@ -60,12 +60,12 @@ import org.slf4j.LoggerFactory;
  * recovering an index from the log and commit and recover index to disk . This class
  * is not thread safe and expects the caller to do appropriate synchronization.
  **/
-class PersistentIndex {
+public class PersistentIndex {
 
   /**
    * Represents the different types of index entries.
    */
-  enum IndexEntryType {
+  public enum IndexEntryType {
     TTL_UPDATE, PUT, DELETE, UNDELETE
   }
 
