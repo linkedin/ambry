@@ -132,10 +132,6 @@ public class ReplicationMetrics {
   public final Counter remoteReplicaInfoAddError;
   public final Counter allResponsedKeysExist;
 
-  // Metrics for replication from cloud
-  public final Counter addCloudPartitionErrorCount;
-  public final Counter cloudTokenReloadWarnCount;
-
   private MetricRegistry registry;
   private final Map<String, Counter> metadataRequestErrorMap = new ConcurrentHashMap<>();
   private final Map<String, Counter> getRequestErrorMap = new HashMap<>();
@@ -280,10 +276,6 @@ public class ReplicationMetrics {
         registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoRemoveError"));
     remoteReplicaInfoAddError = registry.counter(MetricRegistry.name(ReplicaThread.class, "RemoteReplicaInfoAddError"));
     allResponsedKeysExist = registry.counter(MetricRegistry.name(ReplicaThread.class, "AllResponsedKeysExist"));
-    addCloudPartitionErrorCount =
-        registry.counter(MetricRegistry.name(CloudToStoreReplicationManager.class, "AddCloudPartitionErrorCount"));
-    cloudTokenReloadWarnCount =
-        registry.counter(MetricRegistry.name(CloudToStoreReplicationManager.class, "CloudTokenReloadWarnCount"));
     intraColoReplicationErrorCount =
         registry.counter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationErrorCount"));
     intraColoTimeoutRequestErrorCount =

@@ -495,7 +495,24 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
   @Override
   public void downloadBlob(BlobId blobId, OutputStream outputStream) throws CloudStorageException {
-    throw new UnsupportedOperationException("downloadBlob will not be implemented for AzureCloudDestinationSync");
+    AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
+    String blobIdStr = blobLayout.blobFilePath;
+    BlobContainerClient blobContainerClient = createOrGetBlobStore(blobLayout.containerName);
+    Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
+    try {
+      blobContainerClient.getBlobClient(blobIdStr).downloadStream(outputStream);
+      azureMetrics.blobDownloadSuccessCount.inc();
+    } catch (Throwable e) {
+      azureMetrics.blobDownloadErrorCount.inc();
+      String error = String.format("Failed to download blob %s from Azure blob storage due to %s",
+          blobLayout, e.getMessage());
+      logger.error(error);
+      throw AzureCloudDestination.toCloudStorageException(error, e, null);
+    } finally {
+      if (storageTimer != null) {
+        storageTimer.stop();
+      }
+    } // try-catch
   }
 
   @Override

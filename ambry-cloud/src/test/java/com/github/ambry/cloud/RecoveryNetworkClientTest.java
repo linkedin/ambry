@@ -63,13 +63,14 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -111,7 +112,8 @@ public class RecoveryNetworkClientTest {
   protected final VerifiableProperties verifiableProperties;
   protected final int AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE = 3;
   protected final int NUM_BLOBS = 100;
-  protected final long BLOB_SIZE = 1000;
+  protected String BLOB_DATA = "Use the Force, Luke!"; // Use string so we can print it out for comparison
+  protected final long BLOB_SIZE = BLOB_DATA.length();
   protected final short ACCOUNT_ID = 1024, CONTAINER_ID = 2048;
   public static final String LOCALHOST = "localhost";
 
@@ -194,6 +196,7 @@ public class RecoveryNetworkClientTest {
     azuriteClient.compactPartition(mockPartitionId.toPathString());
     // Add NUM_BLOBS of size BLOB_SIZE
     azureBlobs = new HashMap<>();
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     IntStream.range(0, NUM_BLOBS).forEach(i -> {
       BlobId blobId = CloudTestUtil.getUniqueId(testContainer.getParentAccountId(), testContainer.getId(),
           false, mockPartitionId);
@@ -202,11 +205,15 @@ public class RecoveryNetworkClientTest {
           BLOB_SIZE, false, false, false, Utils.Infinite_Time, null,
           testContainer.getParentAccountId(), testContainer.getId(),
           Utils.getTimeInMsToTheNearestSec(System.currentTimeMillis()), (short) 0));
+      try {
+        outputStream.write(BLOB_DATA.getBytes());
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
     });
     // Upload blobs
     List<MessageInfo> blobIds = new ArrayList<>(azureBlobs.values());
-    InputStream blobData = new ByteBufferInputStream(ByteBuffer.wrap(
-        TestUtils.getRandomBytes((int) (NUM_BLOBS * BLOB_SIZE))));
+    InputStream blobData = new ByteBufferInputStream(ByteBuffer.wrap(outputStream.toByteArray()));
     MessageFormatWriteSet messageWriteSet = new MessageFormatWriteSet(
         new MessageSievingInputStream(blobData, blobIds, Collections.emptyList(), new MetricRegistry()),
         blobIds, false);
@@ -401,9 +408,28 @@ public class RecoveryNetworkClientTest {
     // Assert we recovered all blobIds intact
     assertTrue(((RecoveryToken) remoteStore.getToken()).isEndOfPartition());
     assertEquals(azureBlobs.size(), localBlobs.getMessageReadSetInfo().size());
-    localBlobs.getMessageReadSetInfo().forEach(messageInfo -> {
-      assertEquals(String.format("Azure blob metadata does not match that in local disk"),
-          azureBlobs.get(messageInfo.getStoreKey().getID()), messageInfo);
+    IntStream.range(0, localBlobs.getMessageReadSetInfo().size()).forEach(i -> {
+      // Match metadata
+      MessageInfo localInfo = localBlobs.getMessageReadSetInfo().get(i);
+      String blobIdStr = localInfo.getStoreKey().getID();
+      if (!azureBlobs.get(blobIdStr).equals(localInfo)) {
+        logger.error("Azure blob metadata for blob-%s %s does not match that in local disk, expected = {}, found = {}",
+            i, blobIdStr, azureBlobs.get(blobIdStr), localInfo);
+        fail("Metadata mismatch");
+      }
+      // Match data
+      try {
+        localBlobs.getMessageReadSet().doPrefetch(i, 0, BLOB_SIZE);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+      ByteBuffer localData = ByteBuffer.wrap(new byte[(int) BLOB_SIZE]);
+      localBlobs.getMessageReadSet().getPrefetchedData(i).readBytes(localData);
+      if (!Arrays.equals(BLOB_DATA.getBytes(), localData.array())) {
+        logger.error("Azure blob data for blob-%s %s does not match that in local disk, expected = {}, found = {}",
+            i, blobIdStr, BLOB_DATA, new String(localData.array()));
+        fail("Data mismatch");
+      }
     });
   }
 }

@@ -53,9 +53,11 @@ import com.github.ambry.utils.AbstractByteBufHolder;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -275,52 +277,52 @@ public class RecoveryNetworkClient implements NetworkClient {
   }
 
   /**
-   * Handle GetRequest but return fake blob content with all zero value bytes
+   * Downloads blobs from Azure Storage
+   * @param request
+   * @param downloadToStream
+   * @return
+   */
+  private PartitionResponseInfo downloadBlobs(PartitionRequestInfo request, ByteArrayOutputStream downloadToStream) {
+    List<MessageInfo> messageInfoList = new ArrayList<>();
+    for (StoreKey storeKey : request.getBlobIds()) {
+      // MessageInfo for the given store key is put in the cache in ReplicaMetadataRequest.
+      // All store keys in GetRequest should already have MessageInfos in the cache.
+      // If replication thread retries, it would send the ReplicaMetadataRequest again before the GetRequest.
+      MessageInfo info = messageInfoCache.remove(storeKey);
+      if (info == null) {
+        // TODO: Log and metric
+        logger.error("Failed to find MessageInfo for store key {} at partition {}", storeKey, request.getPartition());
+        return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.Blob_Not_Found);
+      }
+
+      try {
+        azureSyncClient.downloadBlob((BlobId) storeKey, downloadToStream);
+        messageInfoList.add(info);
+      } catch (CloudStorageException e) {
+        return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.IO_Error);
+      }
+    }
+    List<MessageMetadata> messageMetadataList = new ArrayList<>();
+    messageInfoList.forEach(info -> messageMetadataList.add(null)); // unused
+    return new PartitionResponseInfo(request.getPartition(), messageInfoList, messageMetadataList);
+  }
+
+  /**
+   * Handle GetRequest downloads blobs from Azure Storage
    * @param request The {@link GetRequest} to handle
    * @return A {@link GetResponse}.
-   * @throws IOException
    */
-  private GetResponse handleGetRequest(GetRequest request) throws IOException {
+  private GetResponse handleGetRequest(GetRequest request) {
     if (request.getMessageFormatFlag() != MessageFormatFlags.All) {
       throw new IllegalArgumentException("GetRequest should have MessageFormatFlags being ALL");
     }
-    List<PartitionResponseInfo> partitionResponseInfos = new ArrayList<>();
-    List<Send> blobsToSend = new ArrayList<>();
-    for (PartitionRequestInfo partitionRequestInfo : request.getPartitionInfoList()) {
-      boolean hasError = false;
-      List<MessageInfo> messageInfos = new ArrayList<>();
-      List<MessageMetadata> messageMetadatas = new ArrayList<>();
-      long allMessageInfoSize = 0;
-      for (StoreKey storeKey : partitionRequestInfo.getBlobIds()) {
-        // MessageInfo for the given store key is put in the cache in ReplicaMetadataRequest. All store keys in GetRequest
-        // should already have MessageInfos in the cache. If replication thread retries, it would send the ReplicaMetadataRequest
-        // again before the GetRequest.
-        MessageInfo info = messageInfoCache.remove(storeKey);
-        if (info != null) {
-          messageInfos.add(info);
-          messageMetadatas.add(null);
-          allMessageInfoSize += info.getSize();
-        } else {
-          logger.error("Failed to find MessageInfo for store key {} at partition {}", storeKey,
-              partitionRequestInfo.getPartition());
-          hasError = true;
-          break;
-        }
-      }
-      PartitionResponseInfo partitionResponseInfo;
-      if (!hasError) {
-        partitionResponseInfo =
-            new PartitionResponseInfo(partitionRequestInfo.getPartition(), messageInfos, messageMetadatas);
-      } else {
-        partitionResponseInfo =
-            new PartitionResponseInfo(partitionRequestInfo.getPartition(), ServerErrorCode.Blob_Not_Found);
-      }
-      partitionResponseInfos.add(partitionResponseInfo);
-      logger.trace("Create a AllZeroSend for length {} at partition {}", allMessageInfoSize,
-          partitionRequestInfo.getPartition());
-      blobsToSend.add(new AllZeroSend(allMessageInfoSize));
-    }
-    return new GetResponse(request.getCorrelationId(), request.getClientId(), partitionResponseInfos,
+    List<PartitionResponseInfo> partitionResponseInfoList = new ArrayList<>();
+    ByteArrayOutputStream downloadToStream = new ByteArrayOutputStream();
+    request.getPartitionInfoList().forEach(partitionRequestInfo ->
+        partitionResponseInfoList.add(downloadBlobs(partitionRequestInfo, downloadToStream)));
+    List<Send> blobsToSend = Collections.singletonList(
+        new AllSend(downloadToStream.size(), downloadToStream.toByteArray()));
+    return new GetResponse(request.getCorrelationId(), request.getClientId(), partitionResponseInfoList,
         new CompositeSend(blobsToSend), ServerErrorCode.No_Error);
   }
 
@@ -344,13 +346,13 @@ public class RecoveryNetworkClient implements NetworkClient {
   /**
    * A helper implementation of {@link Send} to return all zeros.
    */
-  public static class AllZeroSend extends AbstractByteBufHolder<AllZeroSend> implements Send {
+  public static class AllSend extends AbstractByteBufHolder<AllSend> implements Send {
     private final long size;
     private final ByteBuf content;
 
-    public AllZeroSend(long size) {
+    public AllSend(long size, byte[] bytes) {
       this.size = size;
-      this.content = Unpooled.wrappedBuffer(new byte[(int) size]);
+      this.content = Unpooled.wrappedBuffer(bytes);
     }
 
     @Override
@@ -374,7 +376,7 @@ public class RecoveryNetworkClient implements NetworkClient {
     }
 
     @Override
-    public AllZeroSend replace(ByteBuf content) {
+    public AllSend replace(ByteBuf content) {
       return null;
     }
   }

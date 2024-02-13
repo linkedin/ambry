@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.replication;
+package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.account.InMemAccountService;
@@ -32,6 +32,8 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.StoreKey;
@@ -64,10 +66,10 @@ import static org.mockito.Mockito.*;
 
 
 /**
- * Tests for {@link CloudToStoreReplicationManager} when adding/removing cloud replica. The tests also cover the case
+ * Tests for {@link RecoveryManager} when adding/removing cloud replica. The tests also cover the case
  * where new replica is added due to "move replica".
  */
-public class CloudToStoreReplicationManagerTest {
+public class RecoveryManagerTest {
   private static final String NEW_PARTITION_NAME = "12";
   private static final String CLOUD_DC_NAME = "CloudDc";
   private static final String VCR_MOUNT_PATH = CLOUD_REPLICA_MOUNT + "/1";
@@ -86,7 +88,7 @@ public class CloudToStoreReplicationManagerTest {
   private final MockVcrClusterSpectator mockClusterSpectator;
   private final MockClusterMap clusterMap;
 
-  public CloudToStoreReplicationManagerTest() throws Exception {
+  public RecoveryManagerTest() throws Exception {
     List<TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new TestUtils.ZkInfo(null, "DC1", (byte) 0, 2299, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -140,13 +142,13 @@ public class CloudToStoreReplicationManagerTest {
             clusterMap.getMetricRegistry(), null, clusterMap, currentNode, null,
             Collections.singletonList(mockHelixParticipant), new MockTime(), null,
             new InMemAccountService(false, false));
-    CloudToStoreReplicationManager cloudToStoreReplicationManager =
-        new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
+    RecoveryManager recoveryManager =
+        new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
             storeKeyFactory, clusterMap, mockScheduler, currentNode, mock(NetworkClientFactory.class),
             clusterMap.getMetricRegistry(), null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
             mockClusterSpectator, mockHelixParticipant);
     storageManager.start();
-    cloudToStoreReplicationManager.start();
+    recoveryManager.start();
     mockClusterSpectator.spectate();
     // 1. test adding cloud replica that is not present locally
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(NEW_PARTITION_NAME);
@@ -166,7 +168,7 @@ public class CloudToStoreReplicationManagerTest {
     mockHelixParticipant.onPartitionBecomeLeaderFromStandby(NEW_PARTITION_NAME);
     assertNotNull("Cloud replica thread should be created for DC1",
         TestUtils.getThreadByThisName(REPLICA_THREAD_PREFIX));
-    cloudToStoreReplicationManager.shutdown();
+    recoveryManager.shutdown();
     storageManager.shutdown();
   }
 
@@ -181,13 +183,13 @@ public class CloudToStoreReplicationManagerTest {
             clusterMap.getMetricRegistry(), null, clusterMap, currentNode, null,
             Collections.singletonList(mockHelixParticipant), new MockTime(), null,
             new InMemAccountService(false, false));
-    CloudToStoreReplicationManager cloudToStoreReplicationManager =
-        new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
+    RecoveryManager recoveryManager =
+        new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
             storeKeyFactory, clusterMap, mockScheduler, currentNode, mock(NetworkClientFactory.class),
             clusterMap.getMetricRegistry(), null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
             mockClusterSpectator, mockHelixParticipant);
     storageManager.start();
-    cloudToStoreReplicationManager.start();
+    recoveryManager.start();
     mockClusterSpectator.spectate();
     PartitionId localPartition = storageManager.getLocalPartitions().iterator().next();
     // 1. add cloud replica first for subsequent removal test
@@ -195,7 +197,7 @@ public class CloudToStoreReplicationManagerTest {
     String replicaPath = Cloud_Replica_Keyword + File.separator + localPartition.toPathString() + File.separator
         + localPartition.toPathString();
     RemoteReplicaInfo remoteReplicaInfo =
-        cloudToStoreReplicationManager.getRemoteReplicaInfo(localPartition, vcrNode.getHostname(), replicaPath);
+        recoveryManager.getRemoteReplicaInfo(localPartition, vcrNode.getHostname(), replicaPath);
     assertNotNull("Remote replica info should not be null", remoteReplicaInfo);
     assertEquals("There should be only one cloud replica thread created", 1,
         TestUtils.getAllThreadsByThisName(REPLICA_THREAD_PREFIX).size());
@@ -210,25 +212,25 @@ public class CloudToStoreReplicationManagerTest {
     mockHelixParticipant.onPartitionBecomeStandbyFromLeader(localPartition.toPathString());
     // ensure that the remote replica info has been successfully removed from replica thread
     assertNull("Cloud replica should be removed and no thread is assigned to it", remoteReplicaInfo.getReplicaThread());
-    cloudToStoreReplicationManager.shutdown();
+    recoveryManager.shutdown();
     storageManager.shutdown();
   }
 
-  /** Test {@code CloudToStoreReplicationManager#getCloudDataNode} */
+  /** Test {@code RecoveryManager#getCloudDataNode} */
   @Test
   public void testGetCloudDataNode() throws NoSuchFieldException, ReplicationException {
-    CloudToStoreReplicationManager mockCloudToStoreReplicationManager = mock(CloudToStoreReplicationManager.class);
+    RecoveryManager mockRecoveryManager = mock(RecoveryManager.class);
     List<DataNodeId> dataNodeIds = new ArrayList<>();
     Port port = new Port(1000, PortType.PLAINTEXT);
     AtomicReference<List<DataNodeId>> vcrNodes = new AtomicReference<>();
     vcrNodes.set(dataNodeIds);
-    FieldSetter.setField(mockCloudToStoreReplicationManager,
-        CloudToStoreReplicationManager.class.getDeclaredField("vcrNodes"), vcrNodes);
-    when(mockCloudToStoreReplicationManager.getCloudDataNode()).thenCallRealMethod();
+    FieldSetter.setField(mockRecoveryManager,
+        RecoveryManager.class.getDeclaredField("vcrNodes"), vcrNodes);
+    when(mockRecoveryManager.getCloudDataNode()).thenCallRealMethod();
 
     // test getCloudDataNode() with empty vcrNodes
     try {
-      mockCloudToStoreReplicationManager.getCloudDataNode();
+      mockRecoveryManager.getCloudDataNode();
       fail("Calling getCloudDataNode when there are no vcrNodes should throw exception.");
     } catch (ReplicationException rex) {
     }
@@ -242,7 +244,7 @@ public class CloudToStoreReplicationManagerTest {
     try {
       Set<String> dataNodeIdSet = new HashSet<>();
       for (int i = 0; i < 5; i++) {
-        dataNodeIdSet.add(mockCloudToStoreReplicationManager.getCloudDataNode().getHostname());
+        dataNodeIdSet.add(mockRecoveryManager.getCloudDataNode().getHostname());
       }
       assertTrue("getCloudDataNode shouldn't return same node every time", dataNodeIdSet.size() > 1);
     } catch (ReplicationException rex) {

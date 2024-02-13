@@ -237,7 +237,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * @param replicaPath replica path on the remote peer replica
    * @return RemoteReplicaInfo
    */
-  protected RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
+  public RemoteReplicaInfo getRemoteReplicaInfo(PartitionId partitionId, String hostName, String replicaPath) {
     RemoteReplicaInfo foundRemoteReplicaInfo = null;
 
     PartitionInfo partitionInfo = partitionToPartitionInfo.get(partitionId);
@@ -277,7 +277,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
         }
       }
 
-      if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
+      if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove && persistor != null) {
         // persist replica tokens
         persistor.write(true);
       }
@@ -560,7 +560,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       return;
     }
     removeRemoteReplicaInfoFromReplicaThread(partitionInfo.getRemoteReplicaInfos());
-    if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove) {
+    if (replicationConfig.replicationPersistTokenOnShutdownOrReplicaRemove && persistor != null) {
       try {
         persistor.write(partitionInfo.getLocalReplicaId().getMountPath(), false);
       } catch (IOException | ReplicationException e) {
