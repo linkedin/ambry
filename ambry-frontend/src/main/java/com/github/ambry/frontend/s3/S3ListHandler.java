@@ -16,6 +16,8 @@ package com.github.ambry.frontend.s3;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
+import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.NamedBlobListEntry;
@@ -37,6 +39,8 @@ import java.util.GregorianCalendar;
 import java.util.List;
 import org.json.JSONObject;
 import org.json.JSONTokener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -44,6 +48,7 @@ import org.json.JSONTokener;
  * API reference: <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html">...</a>
  */
 public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
+  private static final Logger LOGGER = LoggerFactory.getLogger(S3ListHandler.class);
   private final NamedBlobListHandler namedBlobListHandler;
   public static final String PREFIX_PARAM_NAME = "prefix";
   public static final String MAXKEYS_PARAM_NAME = "max-keys";
@@ -94,47 +99,117 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private ReadableStreamChannel serializeAsXml(RestRequest restRequest, Page<NamedBlobListEntry> namedBlobRecordPage)
       throws IOException, RestServiceException {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    ListBucketResult listBucketResult = new ListBucketResult();
+    String prefix = RestUtils.getHeader(restRequest.getArgs(), PREFIX_PARAM_NAME, false);
+    String delimiter = RestUtils.getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
+    String encodingType = RestUtils.getHeader(restRequest.getArgs(), ENCODING_TYPE_PARAM_NAME, false);
     String maxKeys = RestUtils.getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
     int maxKeysValue = maxKeys == null ? Integer.MAX_VALUE : Integer.parseInt(maxKeys);
-
     // Iterate through list of blob names.
     List<Contents> contentsList = new ArrayList<>();
     int keyCount = 0;
     for (NamedBlobListEntry namedBlobRecord : namedBlobRecordPage.getEntries()) {
-      Contents contents = new Contents();
       String blobName = namedBlobRecord.getBlobName();
-      contents.setKey(blobName);
       String todayDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(Calendar.getInstance().getTime());
-      contents.setLastModified(todayDate);
-      contentsList.add(contents);
+      contentsList.add(new Contents(blobName, todayDate));
       if (++keyCount == maxKeysValue) {
         break;
       }
     }
-
-    // Construct ListBucketResult pojo
-    listBucketResult.setName(restRequest.getPath());
-    String prefix = RestUtils.getHeader(restRequest.getArgs(), PREFIX_PARAM_NAME, false);
-    if (prefix != null) {
-      listBucketResult.setPrefix(prefix);
-    }
-    String delimiter = RestUtils.getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
-    if (delimiter != null) {
-      listBucketResult.setDelimiter(delimiter);
-    }
-    String encodingType = RestUtils.getHeader(restRequest.getArgs(), ENCODING_TYPE_PARAM_NAME, false);
-    if (encodingType != null) {
-      listBucketResult.setEncodingType(encodingType);
-    }
-    if (maxKeys != null) {
-      listBucketResult.setMaxKeys(maxKeysValue);
-    }
-    listBucketResult.setKeyCount(keyCount);
-    listBucketResult.setContents(contentsList);
-
+    ListBucketResult result =
+        new ListBucketResult(restRequest.getPath(), prefix, maxKeysValue, keyCount, delimiter, contentsList,
+            encodingType);
+    LOGGER.debug("Sending response for S3 ListObjects {}", result);
     // Serialize xml
-    xmlMapper.writeValue(outputStream, listBucketResult);
+    xmlMapper.writeValue(outputStream, result);
     return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+  }
+
+  public static class ListBucketResult {
+
+    @JacksonXmlProperty(localName = "Name")
+    private String name;
+    @JacksonXmlProperty(localName = "Prefix")
+    private String prefix;
+    @JacksonXmlProperty(localName = "MaxKeys")
+    private int maxKeys;
+    @JacksonXmlProperty(localName = "KeyCount")
+    private int keyCount;
+    @JacksonXmlProperty(localName = "Delimiter")
+    private String delimiter;
+    @JacksonXmlProperty(localName = "Contents")
+    @JacksonXmlElementWrapper(useWrapping = false)
+    private List<Contents> contents;
+    @JacksonXmlProperty(localName = "EncodingType")
+    private String encodingType;
+
+    public ListBucketResult() {
+
+    }
+
+    public ListBucketResult(String name, String prefix, int maxKeys, int keyCount, String delimiter,
+        List<Contents> contents, String encodingType) {
+      this.name = name;
+      this.prefix = prefix;
+      this.maxKeys = maxKeys;
+      this.keyCount = keyCount;
+      this.delimiter = delimiter;
+      this.contents = contents;
+      this.encodingType = encodingType;
+    }
+
+    public String getPrefix() {
+      return prefix;
+    }
+
+    public int getMaxKeys() {
+      return maxKeys;
+    }
+
+    public String getDelimiter() {
+      return delimiter;
+    }
+
+    public List<Contents> getContents() {
+      return contents;
+    }
+
+    public String getEncodingType() {
+      return encodingType;
+    }
+
+    public int getKeyCount() {
+      return keyCount;
+    }
+
+    @Override
+    public String toString() {
+      return "Name=" + name + ", Prefix=" + prefix + ", MaxKeys=" + maxKeys + ", KeyCount=" + keyCount + ", Delimiter="
+          + delimiter + ", Contents=" + contents + ", Encoding type=" + encodingType;
+    }
+  }
+
+  public static class Contents {
+    @JacksonXmlProperty(localName = "Key")
+    private String key;
+    @JacksonXmlProperty(localName = "LastModified")
+    private String lastModified;
+
+    public Contents() {
+
+    }
+
+    public Contents(String key, String lastModified) {
+      this.key = key;
+      this.lastModified = lastModified;
+    }
+
+    public String getKey() {
+      return key;
+    }
+
+    @Override
+    public String toString() {
+      return "Key=" + key + ", " + "LastModified=" + lastModified;
+    }
   }
 }

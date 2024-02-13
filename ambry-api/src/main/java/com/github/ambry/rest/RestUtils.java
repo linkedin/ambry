@@ -63,6 +63,8 @@ public class RestUtils {
   public static final String DEFAULT_EXTENSION = "bin";
   public static final String PATH_SEPARATOR_STRING = "/";
   public static final String STITCH = "STITCH";
+  public static final String UPLOADS_QUERY_PARAM = "uploads";
+  public static final String UPLOAD_ID_QUERY_PARAM = "uploadId";
 
   /**
    * prefix for all Ambry specific heaeders
@@ -106,6 +108,10 @@ public class RestUtils {
      * {@code "Location"}
      */
     public static final String LOCATION = "Location";
+    /**
+     * {@code "ETag"}
+     */
+    public static final String ETAG = "ETag";
     /**
      * {@code "Pragma"}
      */
@@ -259,6 +265,10 @@ public class RestUtils {
      * stitched together.
      */
     public static final String CHUNK_UPLOAD = "x-ambry-chunk-upload";
+    /**
+     * Boolean field set to "true" for upload part requests of S3 Multipart uploads.
+     */
+    public static final String S3_CHUNK_UPLOAD = "x-ambry-chunk-upload-s3";
     /**
      * The reserved blobid for metadata chunk of a stitched upload.
      */
