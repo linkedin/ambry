@@ -43,6 +43,10 @@ public class CloudServiceDataNode extends AmbryDataNode {
     super(dataCenterName, clusterMapConfig, dataCenterName, UNKNOWN_PORT, UNKNOWN_PORT, UNKNOWN_PORT);
   }
 
+  public CloudServiceDataNode(ClusterMapConfig clusterMapConfig) throws Exception {
+    super(clusterMapConfig.clusterMapDatacenterName, clusterMapConfig, clusterMapConfig.clusterMapDatacenterName, UNKNOWN_PORT, UNKNOWN_PORT, UNKNOWN_PORT);
+  }
+
   /**
    * @return a port with number {@link #UNKNOWN_PORT}, since CloudServiceDataNode cannot be connected to via a socket.
    */

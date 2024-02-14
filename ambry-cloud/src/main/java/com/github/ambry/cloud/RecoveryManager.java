@@ -17,6 +17,7 @@ import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
+import com.github.ambry.clustermap.CloudServiceDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -140,19 +141,13 @@ public class RecoveryManager extends ReplicationEngine {
 
   @Override
   public void start() {
-    // Add listener for vcr instance config changes
-    vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListenerImpl());
-    vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListenerImpl());
-
-    // Add listener for new coming assigned partition
-    clusterParticipant.registerPartitionStateChangeListener(
-        StateModelListenerType.CloudToStoreReplicationManagerListener, new PartitionStateChangeListenerImpl());
-
-    // start background persistent thread
-    // start scheduler thread to persist index in the background
-    scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
-        replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
-
+    replicationConfig.replicationVcrRecoveryPartitions.forEach(partition -> {
+      try {
+        addCloudReplica(partition);
+      } catch (Throwable e) {
+        logger.error("Failed to add cloud replica for partition {}", partition);
+      }
+    });
     started = true;
     startupLatch.countDown();
     logger.info("RecoveryManager started.");
@@ -240,7 +235,7 @@ public class RecoveryManager extends ReplicationEngine {
           partitionName);
       return;
     }
-    DataNodeId cloudDataNode = getCloudDataNode();
+    DataNodeId cloudDataNode = new CloudServiceDataNode(clusterMapConfig);
     CloudReplica peerCloudReplica = new CloudReplica(partitionId, cloudDataNode);
     FindTokenFactory findTokenFactory =
         tokenHelper.getFindTokenFactoryFromReplicaType(peerCloudReplica.getReplicaType());
