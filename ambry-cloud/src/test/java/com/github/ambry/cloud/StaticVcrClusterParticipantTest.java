@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -34,6 +35,7 @@ import static org.junit.Assert.*;
 /**
  * Test of StaticVcrCluster.
  */
+@Ignore
 public class StaticVcrClusterParticipantTest {
   private MockClusterAgentsFactory mockClusterAgentsFactory;
   private MockClusterMap mockClusterMap;

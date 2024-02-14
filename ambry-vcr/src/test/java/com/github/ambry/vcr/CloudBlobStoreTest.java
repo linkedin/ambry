@@ -132,7 +132,6 @@ import static org.mockito.Mockito.*;
 /**
  * Test class testing behavior of CloudBlobStore class.
  */
-@RunWith(Parameterized.class)
 public class CloudBlobStoreTest {
   public static final Logger logger = LoggerFactory.getLogger(CloudBlobStoreTest.class);
   private static final int SMALL_BLOB_SIZE = 100;
@@ -157,18 +156,8 @@ public class CloudBlobStoreTest {
   protected AccountService accountService = mock(AccountService.class);
   protected MetricRegistry metricRegistry;
 
-  /**
-   * Test parameters
-   * Version 1 = Legacy VCR code and tests
-   * Version 2 = VCR 2.0 with Sync cloud destination - AzureCloudDestinationSync
-   */
-  @Parameterized.Parameters
-  public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{CloudConfig.AMBRY_BACKUP_VERSION_1}, {CloudConfig.AMBRY_BACKUP_VERSION_2}});
-  }
-
-  public CloudBlobStoreTest(String ambryBackupVersion) throws Exception {
-    this.ambryBackupVersion = ambryBackupVersion;
+  public CloudBlobStoreTest() throws Exception {
+    this.ambryBackupVersion = CloudConfig.AMBRY_BACKUP_VERSION_2; // v1 is deprecated
     this.isVcr = true; // Just hardcode true. false is for blueshift, which is deprecated.
     partitionId = new MockPartitionId();
     clusterMap = new MockClusterMap();
