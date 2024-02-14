@@ -17,6 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.commons.AmbryCache;
+import com.github.ambry.commons.AmbryCacheEntry;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.NetworkClient;
@@ -30,11 +32,41 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
+import java.io.File;
+import java.io.FileDescriptor;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.EnumSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class RecoveryThread extends ReplicaThread {
+
+  public static final String RECOVER_TOKEN_FILE_PREFIX = "recovery_token";
+  private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
+  protected final AmbryCache fileDescriptorCache;
+
+  protected class FileDescriptor implements AmbryCacheEntry {
+
+    SeekableByteChannel _seekableByteChannel;
+
+    public FileDescriptor(SeekableByteChannel seekableByteChannel) {
+      this._seekableByteChannel = seekableByteChannel;
+    }
+
+    public SeekableByteChannel getSeekableByteChannel() {
+      return _seekableByteChannel;
+    }
+  }
 
   public RecoveryThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -46,6 +78,8 @@ public class RecoveryThread extends ReplicaThread {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+    this.fileDescriptorCache = new AmbryCache(String.format("%s-FDCache", threadName), true,
+        replicationConfig.maxBackupCheckerReportFd, metricRegistry);
   }
 
   /**
@@ -53,7 +87,82 @@ public class RecoveryThread extends ReplicaThread {
    * @param remoteReplicaInfo Remote replica info object
    * @param exchangeMetadataResponse Metadata object exchanged between replicas
    */
-  public void advanceTokenX(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+  @Override
+  public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    // Advance in-memory token
+    super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
     // truncate previous token in-place and persist in-place
+    RecoveryToken recoveryToken = (RecoveryToken) remoteReplicaInfo.getToken();
+    String token = String.format("%s%s%s_%s", remoteReplicaInfo.getLocalReplicaId().getMountPath(),
+        File.separatorChar, RECOVER_TOKEN_FILE_PREFIX, remoteReplicaInfo.getReplicaId().getPartitionId().getId());
+    logger.info("Writing recovery token to disk at {}", token);
+    truncateAndWriteToFile(token, recoveryToken.toString());
+  }
+
+  /**
+   * Returns a cached file-desc or creates a new one
+   * @param filePath File system path
+   * @param options Options to use when opening or creating a file
+   * @return File descriptor
+   */
+  protected SeekableByteChannel getFd(String filePath, EnumSet<StandardOpenOption> options) {
+    FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(filePath);
+    if (fileDescriptor == null) {
+      // Create parent folders
+      Path directories = Paths.get(filePath.substring(0, filePath.lastIndexOf(File.separator)));
+      try {
+        Files.createDirectories(directories);
+      } catch (IOException e) {
+        logger.error("Path = {}, Error creating folders = {}", directories, e.toString());
+        return null;
+      }
+      // Create file
+      try {
+        fileDescriptor = new FileDescriptor(Files.newByteChannel(Paths.get(filePath), options));
+      } catch (IOException e) {
+        logger.error("Path = {}, Options = {}, Error creating file = {}", filePath, options, e.toString());
+        return null;
+      }
+      // insert into cache
+      fileDescriptorCache.putObject(filePath, fileDescriptor);
+    }
+    return fileDescriptor.getSeekableByteChannel();
+  }
+
+  /**
+   * Truncates a file and then writes to it.
+   * Creates the file if absent.
+   * @param filePath Path of the file in the system
+   * @param text Text to append
+   * @return True if append was successful, false otherwise
+   */
+  protected boolean truncateAndWriteToFile(String filePath, String text) {
+    EnumSet<StandardOpenOption> options = EnumSet.of(StandardOpenOption.WRITE);
+    if (!Files.exists(Paths.get(filePath))) {
+      options.add(StandardOpenOption.CREATE);
+    }
+    SeekableByteChannel seekableByteChannel = getFd(filePath, options);
+    try {
+      seekableByteChannel.truncate(0);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    return writeToFile(seekableByteChannel, text);
+  }
+
+  /**
+   * Write to a given file
+   * @param seekableByteChannel File descriptor
+   * @param text Text to append
+   * @return True if write was successful, false otherwise
+   */
+  protected boolean writeToFile(SeekableByteChannel seekableByteChannel, String text) {
+    try {
+      seekableByteChannel.write(ByteBuffer.wrap(text.getBytes()));
+      return true;
+    } catch (IOException e) {
+      logger.error(e.toString());
+      return false;
+    }
   }
 }

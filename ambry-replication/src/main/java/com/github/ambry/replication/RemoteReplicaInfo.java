@@ -140,7 +140,7 @@ public class RemoteReplicaInfo {
     return replicaId;
   }
 
-  ReplicaId getLocalReplicaId() {
+  public ReplicaId getLocalReplicaId() {
     return localReplicaId;
   }
 

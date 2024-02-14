@@ -257,7 +257,7 @@ public class RecoveryNetworkClientTest {
             .setReturnInputIfAbsent(true);
     StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
     ReplicaThread recoveryThread =
-        new ReplicaThread("recovery-thread", findTokenHelper, mockClusterMap, new AtomicInteger(0),
+        new RecoveryThread("recovery-thread", findTokenHelper, mockClusterMap, new AtomicInteger(0),
             cloudServiceDataNode, recoveryNetworkClient, new ReplicationConfig(verifiableProperties),
             new ReplicationMetrics(mockClusterMap.getMetricRegistry(), Collections.emptyList()), null,
             storeKeyConverter, null,
