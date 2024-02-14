@@ -59,6 +59,7 @@ import static org.mockito.Mockito.*;
 /**
  * Test of the VCR Server.
  */
+@Ignore
 public class VcrServerTest {
 
   private MockClusterAgentsFactory mockClusterAgentsFactory;

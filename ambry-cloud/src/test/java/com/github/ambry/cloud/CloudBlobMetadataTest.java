@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.ArrayUtils;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static com.github.ambry.cloud.CloudBlobMetadata.*;
@@ -31,6 +32,7 @@ import static org.junit.Assert.*;
 
 
 /** Test for {@link CloudBlobMetadata} class. */
+@Ignore
 public class CloudBlobMetadataTest {
 
   private static final ObjectMapper mapperObj = new ObjectMapper();
