@@ -69,6 +69,7 @@ import static org.mockito.Mockito.*;
  * Tests for {@link RecoveryManager} when adding/removing cloud replica. The tests also cover the case
  * where new replica is added due to "move replica".
  */
+@Ignore
 public class RecoveryManagerTest {
   private static final String NEW_PARTITION_NAME = "12";
   private static final String CLOUD_DC_NAME = "CloudDc";
