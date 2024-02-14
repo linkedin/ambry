@@ -184,6 +184,7 @@ public class RecoveryNetworkClient implements NetworkClient {
       List<MessageInfo> messageInfoList = new ArrayList<>();
       if (prevToken.isEndOfPartition()) {
         // End of partition, nothing more to recover assuming nothing was written during recovery
+        logger.trace("Recovery reached end-of-partition for {}", rinfo.getPartitionId());
         responseList.add(
             new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
                 prevToken, messageInfoList, 0,

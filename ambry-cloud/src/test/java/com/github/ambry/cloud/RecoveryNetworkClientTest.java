@@ -398,8 +398,9 @@ public class RecoveryNetworkClientTest {
    */
   @Test
   public void testRecoveryReplication() throws StoreException {
-    int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE) +
-        (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1);
+    int numPages = (NUM_BLOBS/AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE)
+        + (NUM_BLOBS % AZURE_BLOB_STORAGE_MAX_RESULTS_PER_PAGE == 0 ? 0 : 1)
+        + 10; // Extra iter to test end-of-partition
     ReplicaThread recoveryThread = createRecoveryThread(createRecoveryClient(null));
     // Iterate N times to retrieve all blobIDs from cloud and store to disk
     IntStream.rangeClosed(1, numPages).forEach(i -> recoveryThread.replicate());
