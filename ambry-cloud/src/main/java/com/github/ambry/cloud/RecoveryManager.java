@@ -56,6 +56,8 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -76,6 +78,7 @@ import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
+import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.config.CloudConfig.*;
@@ -96,6 +99,7 @@ public class RecoveryManager extends ReplicationEngine {
   private final boolean trackPerDatacenterLagInMetric;
   private static final Random random = new Random();
   private final RecoveryMetrics recoveryMetrics;
+  public static final String RECOVER_TOKEN_FILE_PREFIX = "recovery_token";
 
   /**
    * Constructor for {@link RecoveryManager}
@@ -190,17 +194,28 @@ public class RecoveryManager extends ReplicationEngine {
     return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-        leaderBasedReplicationAdmin);
+        leaderBasedReplicationAdmin, this);
+  }
+
+  public String getRecoveryTokenFilename(RemoteReplicaInfo replica) {
+    return String.format("%s%s%s_%s", replica.getLocalReplicaId().getMountPath(),
+        File.separatorChar, RECOVER_TOKEN_FILE_PREFIX, replica.getReplicaId().getPartitionId().getId());
   }
 
   @Override
   public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas)
       throws ReplicationException {
     // For each replica of a partition
-    for (RemoteReplicaInfo replicaInfo : peerReplicas) {
-      String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
-      String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
-      // Read json token and set it in peer replica info
+    for (RemoteReplicaInfo peerReplica : peerReplicas) {
+      try {
+        // Read json token and set it in peer replica info
+        String jsonString = Utils.readStringFromFile(getRecoveryTokenFilename(peerReplica));
+        RecoveryToken recoveryToken = new RecoveryToken(new JSONObject(jsonString));
+        peerReplica.setToken(recoveryToken);
+      } catch (IOException e) {
+        // If fail to read token from file, just set a new token. This will restart recovery from the top.
+        peerReplica.setToken(new RecoveryToken());
+      }
     }
     return 0;
   }

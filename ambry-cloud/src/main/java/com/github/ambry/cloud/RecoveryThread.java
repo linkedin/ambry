@@ -50,10 +50,9 @@ import org.slf4j.LoggerFactory;
 
 
 public class RecoveryThread extends ReplicaThread {
-
-  public static final String RECOVER_TOKEN_FILE_PREFIX = "recovery_token";
   private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
   protected final AmbryCache fileDescriptorCache;
+  protected final RecoveryManager recoveryManager;
 
   protected class FileDescriptor implements AmbryCacheEntry {
 
@@ -74,12 +73,13 @@ public class RecoveryThread extends ReplicaThread {
       StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, RecoveryManager recoveryManager) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     this.fileDescriptorCache = new AmbryCache(String.format("%s-FDCache", threadName), true,
         replicationConfig.maxBackupCheckerReportFd, metricRegistry);
+    this.recoveryManager = recoveryManager;
   }
 
   /**
@@ -93,10 +93,9 @@ public class RecoveryThread extends ReplicaThread {
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
     // truncate previous token in-place and persist in-place
     RecoveryToken recoveryToken = (RecoveryToken) remoteReplicaInfo.getToken();
-    String token = String.format("%s%s%s_%s", remoteReplicaInfo.getLocalReplicaId().getMountPath(),
-        File.separatorChar, RECOVER_TOKEN_FILE_PREFIX, remoteReplicaInfo.getReplicaId().getPartitionId().getId());
-    logger.info("Writing recovery token to disk at {}", token);
-    truncateAndWriteToFile(token, recoveryToken.toString());
+    String tokenFile = recoveryManager.getRecoveryTokenFilename(remoteReplicaInfo);
+    logger.trace("Writing recovery token to disk at {}", tokenFile);
+    truncateAndWriteToFile(tokenFile, recoveryToken.toString());
   }
 
   /**

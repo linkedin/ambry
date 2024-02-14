@@ -256,6 +256,8 @@ public class RecoveryNetworkClientTest {
             .setConversionMap(new HashMap<>())
             .setReturnInputIfAbsent(true);
     StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+    RecoveryManager recoveryManager = mock(RecoveryManager.class);
+    when(recoveryManager.getRecoveryTokenFilename(any())).thenCallRealMethod();
     ReplicaThread recoveryThread =
         new RecoveryThread("recovery-thread", findTokenHelper, mockClusterMap, new AtomicInteger(0),
             cloudServiceDataNode, recoveryNetworkClient, new ReplicationConfig(verifiableProperties),
@@ -263,7 +265,7 @@ public class RecoveryNetworkClientTest {
             storeKeyConverter, null,
             mockClusterMap.getMetricRegistry(), false, cloudServiceDataNode.getDatacenterName(),
             new ResponseHandler(mockClusterMap), new SystemTime(), null, null,
-            null);
+            null, recoveryManager);
     // Add remote-replica-info to replica-thread
     recoveryThread.addRemoteReplicaInfo(remoteStore);
     return recoveryThread;
