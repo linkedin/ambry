@@ -220,7 +220,7 @@ public class RecoveryManager extends ReplicationEngine {
    * @param partitionName name of the partition of the replica to add.
    * @throws ReplicationException if replicas initialization failed.
    */
-  private void addCloudReplica(String partitionName) throws ReplicationException {
+  private void addCloudReplica(String partitionName) throws Exception {
     // Adding cloud replica occurs when replica becomes leader from standby. Hence, if this a new added replica, it
     // should be present in storage manager already.
     ReplicaId localReplica = storeManager.getReplica(partitionName);
@@ -337,7 +337,7 @@ public class RecoveryManager extends ReplicationEngine {
         // new cloud node to start replicating from.
         removeCloudReplica(partitionId.toPathString());
         addCloudReplica(partitionId.toPathString());
-      } catch (ReplicationException rex) {
+      } catch (Exception rex) {
         recoveryMetrics.addCloudPartitionErrorCount.inc();
         logger.error("Exception {} during remove/add replica for partitionId {}", rex, partitionId);
       }
@@ -429,7 +429,7 @@ public class RecoveryManager extends ReplicationEngine {
         synchronized (notificationLock) {
           try {
             addCloudReplica(partitionName);
-          } catch (ReplicationException rex) {
+          } catch (Exception rex) {
             logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
             recoveryMetrics.addCloudPartitionErrorCount.inc();
           }
