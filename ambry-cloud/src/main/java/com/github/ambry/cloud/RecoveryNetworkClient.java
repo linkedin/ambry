@@ -181,6 +181,16 @@ public class RecoveryNetworkClient implements NetworkClient {
         continue;
       }
 
+      List<MessageInfo> messageInfoList = new ArrayList<>();
+      if (prevToken.isEndOfPartition()) {
+        // End of partition, nothing more to recover assuming nothing was written during recovery
+        responseList.add(
+            new ReplicaMetadataResponseInfo(rinfo.getPartitionId(), rinfo.getReplicaType(),
+                prevToken, messageInfoList, 0,
+                ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId())));
+        continue;
+      }
+
       // List N blobs with metadata from Azure storage from prev token position
       ListBlobsOptions listBlobsOptions = new ListBlobsOptions()
           .setDetails(new BlobListDetails().setRetrieveMetadata(true))
@@ -207,7 +217,6 @@ public class RecoveryNetworkClient implements NetworkClient {
 
       // Extract ambry metadata
       logger.trace("For container {}, number of blobItems from Azure = {}", containerName, response.getValue().size());
-      List<MessageInfo> messageInfoList = new ArrayList<>();
       long bytesRead = 0, blobsRead = 0;
       for (BlobItem blobItem: response.getValue()) {
         MessageInfo messageInfo = getMessageInfo(blobItem);
