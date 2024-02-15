@@ -265,11 +265,11 @@ public class AmbryServer {
          */
         networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager,
             accountService);
-        vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
+        vcrClusterSpectator = null;
         _recoveryManager =
             new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
                 storeKeyFactory, clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
-                storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, null,
                 clusterParticipants.get(0));
         _recoveryManager.start();
       } else {

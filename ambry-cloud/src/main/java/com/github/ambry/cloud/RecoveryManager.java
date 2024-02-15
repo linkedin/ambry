@@ -125,7 +125,8 @@ public class RecoveryManager extends ReplicationEngine {
       ScheduledExecutorService scheduler, DataNodeId currentNode, NetworkClientFactory networkClientFactory,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
+      VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant)
+      throws ReplicationException, IOException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null, false);
@@ -137,6 +138,7 @@ public class RecoveryManager extends ReplicationEngine {
     this.persistor = null; // No need of a persistor
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     this.recoveryMetrics = new RecoveryMetrics(metricRegistry);
+    this.networkClientFactory.getNetworkClient();
   }
 
   @Override
@@ -204,12 +206,15 @@ public class RecoveryManager extends ReplicationEngine {
     for (RemoteReplicaInfo peerReplica : peerReplicas) {
       try {
         // Read json token and set it in peer replica info
-        String jsonString = Utils.readStringFromFile(getRecoveryTokenFilename(peerReplica));
+        String tokenFile = getRecoveryTokenFilename(peerReplica);
+        String jsonString = Utils.readStringFromFile(tokenFile);
         RecoveryToken recoveryToken = new RecoveryToken(new JSONObject(jsonString));
         peerReplica.setToken(recoveryToken);
+        logger.info("Loaded recovery token {} into memory", tokenFile);
       } catch (IOException e) {
         // If fail to read token from file, just set a new token. This will restart recovery from the top.
         peerReplica.setToken(new RecoveryToken());
+        logger.info("Created new recovery token for {}", peerReplica.getReplicaId().getPartitionId().getId());
       }
     }
     return 0;
@@ -263,6 +268,7 @@ public class RecoveryManager extends ReplicationEngine {
       replicationMetrics.addLagMetricForPartition(partitionId, true);
     }
     replicationMetrics.addCatchUpPointMetricForPartition(partitionId);
+    logger.info("Added partition-{} for recovery", partitionName);
   }
 
   /**

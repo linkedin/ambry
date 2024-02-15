@@ -86,7 +86,7 @@ public class AzureBlobLayoutStrategy {
    * @throws IllegalArgumentException if invalid config properties are present.
    */
   public AzureBlobLayoutStrategy(String clusterName, AzureCloudConfig azureCloudConfig) {
-    this.clusterName = clusterName;
+    this.clusterName = "ambry-corp";
     currentVersion = azureCloudConfig.azureNameSchemeVersion;
     blobContainerStrategy = BlobContainerStrategy.get(azureCloudConfig.azureBlobContainerStrategy);
     // Note: for ancient blobs (pre-container), account and container ids can be -1.  For that reason,
