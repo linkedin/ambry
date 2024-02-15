@@ -275,7 +275,7 @@ public class RecoveryNetworkClient implements NetworkClient {
           null,
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_ACCOUNT_ID)),
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_CONTAINER_ID)),
-          Long.parseLong(metadata.get(CloudBlobMetadata.FIELD_CREATION_TIME)),
+          Long.parseLong(metadata.containsKey(CloudBlobMetadata.FIELD_CREATION_TIME) ?
               metadata.get(CloudBlobMetadata.FIELD_CREATION_TIME) : String.valueOf(System.currentTimeMillis())),
           Short.parseShort(metadata.get(CloudBlobMetadata.FIELD_LIFE_VERSION)));
     } catch (Exception e) {
@@ -310,6 +310,7 @@ public class RecoveryNetworkClient implements NetworkClient {
         azureSyncClient.downloadBlob((BlobId) storeKey, downloadToStream);
         messageInfoList.add(info);
       } catch (CloudStorageException e) {
+        logger.error("Failed to download blob {} due to {}", storeKey.getID(), e.getMessage());
         e.printStackTrace();
         return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.IO_Error);
       }
