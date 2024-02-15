@@ -29,6 +29,7 @@ import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
@@ -90,12 +91,22 @@ public class RecoveryThread extends ReplicaThread {
   @Override
   public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
     // Advance in-memory token
+    StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
     // truncate previous token in-place and persist in-place
-    RecoveryToken recoveryToken = (RecoveryToken) remoteReplicaInfo.getToken();
+    StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
+    if (token == null) {
+      logger.error("Null token for replica {}", remoteReplicaInfo);
+      return;
+    }
+    if (token.equals(oldToken)) {
+      logger.trace("Not persisting token as it has not changed, oldToken = {}, newToken = {}", oldToken, token);
+      return;
+    }
+    logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
     String tokenFile = recoveryManager.getRecoveryTokenFilename(remoteReplicaInfo);
     logger.trace("Writing recovery token to disk at {}", tokenFile);
-    truncateAndWriteToFile(tokenFile, recoveryToken.toString());
+    truncateAndWriteToFile(tokenFile, token.toString());
   }
 
   /**
