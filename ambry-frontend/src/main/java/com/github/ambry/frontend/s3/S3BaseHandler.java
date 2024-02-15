@@ -68,13 +68,11 @@ abstract public class S3BaseHandler<R> {
         throw new RuntimeException("S3 request handler can only handle named blob requests");
       }
 
-      String action = getClass().getSimpleName()
-          .replace("S3", "")
-          .replace("Handler", "");
-      LOGGER.debug("{} {}", action, path);
+      LOGGER.debug("{} {}", restRequest.getRestMethod(), path);
 
       doHandle(restRequest, restResponseChannel, CallbackUtils.chainCallback(callback, (r) -> {
         removeAmbryHeaders(restResponseChannel);
+        callback.onCompletion(r, null);
       }));
     }
     catch (Throwable t) {

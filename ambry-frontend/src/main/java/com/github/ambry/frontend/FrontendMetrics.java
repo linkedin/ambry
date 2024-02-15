@@ -18,6 +18,9 @@ import com.codahale.metrics.Histogram;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.frontend.s3.S3DeleteHandler;
+import com.github.ambry.frontend.s3.S3ListHandler;
+import com.github.ambry.frontend.s3.S3PutHandler;
 import com.github.ambry.utils.AsyncOperationTracker;
 
 
@@ -155,6 +158,10 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics deleteSecurityPostProcessRequestMetrics;
 
   public final AsyncOperationTracker.Metrics deleteDatasetOutOfRetentionRequestMetrics;
+
+  public final AsyncOperationTracker.Metrics s3DeleteHandleMetrics;
+  public final AsyncOperationTracker.Metrics s3ListHandleMetrics;
+  public final AsyncOperationTracker.Metrics s3PutHandleMetrics;
 
   // Rates
   // AmbrySecurityService
@@ -480,6 +487,13 @@ public class FrontendMetrics {
 
     deleteDatasetOutOfRetentionRequestMetrics =
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "RetentionRequest", metricRegistry);
+
+    s3DeleteHandleMetrics =
+        new AsyncOperationTracker.Metrics(S3DeleteHandler.class, "S3Handle", metricRegistry);
+    s3ListHandleMetrics =
+        new AsyncOperationTracker.Metrics(S3ListHandler.class, "S3Handle", metricRegistry);
+    s3PutHandleMetrics =
+        new AsyncOperationTracker.Metrics(S3PutHandler.class, "S3Handle", metricRegistry);
 
     getStatsReportSecurityProcessRequestMetrics =
         new AsyncOperationTracker.Metrics(GetStatsReportHandler.class, "SecurityProcessRequest", metricRegistry);

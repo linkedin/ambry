@@ -114,7 +114,7 @@ public class S3DeleteHandlerTest {
     DeleteBlobHandler deleteBlobHandler =
         new DeleteBlobHandler(router, securityService, ambryIdConverterFactory.getIdConverter(), injector, metrics,
             new MockClusterMap(), QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
-    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler);
+    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, metrics);
   }
 
   private void putABlob() throws Exception {

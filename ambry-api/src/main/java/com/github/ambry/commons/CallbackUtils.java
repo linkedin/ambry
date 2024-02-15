@@ -137,9 +137,8 @@ public class CallbackUtils {
             : new RestServiceException(t, RestServiceErrorCode.InternalServerError);
       }
       finally {
-        if (exception == null) {
-          finalCallback.onCompletion(result, null);
-        } else {
+        // Note: we don't call the finalCallback in success case
+        if (exception != null) {
           finalCallback.onCompletion(null, exception);
         }
       }

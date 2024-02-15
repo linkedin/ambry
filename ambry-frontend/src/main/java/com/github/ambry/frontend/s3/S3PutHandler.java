@@ -15,7 +15,7 @@
 package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
-import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.NamedBlobPutHandler;
 import com.github.ambry.rest.ResponseStatus;
@@ -23,7 +23,10 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
 
@@ -33,8 +36,10 @@ import static com.github.ambry.rest.RestUtils.Headers.*;
  * API reference: <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html">...</a>
  */
 public class S3PutHandler extends S3BaseHandler<Void> {
+  private static final Logger LOGGER = LoggerFactory.getLogger(S3PutHandler.class);
   private final NamedBlobPutHandler namedBlobPutHandler;
   private final S3MultipartUploadHandler multipartUploadHandler;
+  private final FrontendMetrics metrics;
 
   /**
    * Constructs a handler for uploading s3 requests.
@@ -42,9 +47,11 @@ public class S3PutHandler extends S3BaseHandler<Void> {
    * @param namedBlobPutHandler  the {@link NamedBlobPutHandler} to use.
    * @param multipartUploadHandler the {@link S3MultipartUploadHandler} to use.
    */
-  public S3PutHandler(NamedBlobPutHandler namedBlobPutHandler, S3MultipartUploadHandler multipartUploadHandler) {
+  public S3PutHandler(NamedBlobPutHandler namedBlobPutHandler, S3MultipartUploadHandler multipartUploadHandler,
+      FrontendMetrics metrics) {
     this.namedBlobPutHandler = namedBlobPutHandler;
     this.multipartUploadHandler = multipartUploadHandler;
+    this.metrics = metrics;
   }
 
   /**
@@ -70,14 +77,15 @@ public class S3PutHandler extends S3BaseHandler<Void> {
     restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
 
     // 2. Upload the blob by following named blob PUT path
-    namedBlobPutHandler.handle(restRequest, restResponseChannel, CallbackUtils.chainCallback(callback, (r) -> {
+    namedBlobPutHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3PutHandleMetrics, (r) -> {
       if (restResponseChannel.getStatus() == ResponseStatus.Created) {
         // Set the response status to 200 since Ambry named blob PUT has response as 201.
         restResponseChannel.setStatus(ResponseStatus.Ok);
         String blobId = RestUtils.getHeader(restRequest.getArgs(), LOCATION, true);
         restResponseChannel.setHeader("ETag", blobId);
       }
-    }));
+      callback.onCompletion(null, null);
+    }, restRequest.getUri(), LOGGER, callback));
   }
 
   private boolean isMultipartUploadRequest(RestRequest restRequest) {
