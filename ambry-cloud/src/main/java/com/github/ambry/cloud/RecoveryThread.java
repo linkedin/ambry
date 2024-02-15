@@ -91,16 +91,16 @@ public class RecoveryThread extends ReplicaThread {
   @Override
   public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
     // Advance in-memory token
-    StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
+    RecoveryToken oldToken = (RecoveryToken) remoteReplicaInfo.getToken();
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
     // truncate previous token in-place and persist in-place
-    StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
+    RecoveryToken token = (RecoveryToken) remoteReplicaInfo.getToken();
     if (token == null) {
       logger.error("Null token for replica {}", remoteReplicaInfo);
       return;
     }
     if (token.equals(oldToken)) {
-      logger.trace("Not persisting token as it has not changed, oldToken = {}, newToken = {}", oldToken, token);
+      logger.trace("Not persisting recovery token as it is unchanged, oldToken = {}, newToken = {}", oldToken, token);
       return;
     }
     logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
