@@ -103,10 +103,14 @@ public class RecoveryThread extends ReplicaThread {
       logger.trace("Not persisting recovery token as it is unchanged, oldToken = {}, newToken = {}", oldToken, token);
       return;
     }
+    if (token.isEndOfPartition()) {
+      logger.info("Completed recovering partition {}", remoteReplicaInfo.getReplicaId().getPartitionId().getId());
+      token.endRecovery();
+    }
     logger.trace("replica = {}, token = {}", remoteReplicaInfo, token);
-    String tokenFile = recoveryManager.getRecoveryTokenFilename(remoteReplicaInfo);
-    logger.trace("Writing recovery token to disk at {}", tokenFile);
-    truncateAndWriteToFile(tokenFile, token.toString());
+    String tokenFilename = recoveryManager.getRecoveryTokenFilename(remoteReplicaInfo);
+    logger.trace("Writing recovery token to disk at {}", tokenFilename);
+    truncateAndWriteToFile(tokenFilename, token.toString());
   }
 
   /**

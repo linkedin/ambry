@@ -335,6 +335,32 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   /**
+   * Gets a descriptor to Azure blob storage container
+   * @param partitionId Partition ID
+   * @return {@link BlobContainerClient}
+   */
+  public BlobContainerClient getBlobStoreCached(String partitionId) {
+    // Get container ref from local cache
+    BlobContainerClient blobContainerClient = partitionToAzureStore.get(partitionId);
+
+    // If cache miss, then get container ref from cloud
+    if (blobContainerClient == null) {
+      blobContainerClient = getBlobStore(partitionId);
+    }
+
+    // If it is still null, throw the error and emit a metric
+    if (blobContainerClient == null) {
+      vcrMetrics.azureStoreContainerGetError.inc();
+      String errMsg = String.format("Azure blob storage container for partition %s is null", partitionId);
+      logger.error(errMsg);
+      throw new RuntimeException(errMsg);
+    }
+
+    partitionToAzureStore.put(partitionId, blobContainerClient);
+    return blobContainerClient;
+  }
+
+  /**
    * Creates an object that stores blobs in Azure blob storage
    * @param partitionId Partition ID
    * @return {@link BlobContainerClient}

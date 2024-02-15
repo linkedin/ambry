@@ -143,11 +143,11 @@ public class RecoveryManager extends ReplicationEngine {
 
   @Override
   public void start() {
-    replicationConfig.replicationVcrRecoveryPartitions.forEach(partition -> {
+    this.clusterMap.getAllPartitionIds(clusterMapConfig.MAX_REPLICAS_ALL_DATACENTERS).forEach(partition -> {
       try {
-        addCloudReplica(partition);
+        addCloudReplica(String.valueOf(partition.getId()));
       } catch (Throwable e) {
-        logger.error("Failed to add cloud replica for partition {}", partition);
+        logger.error("Failed to add cloud replica for partition-{}", partition);
       }
     });
     started = true;
@@ -268,7 +268,7 @@ public class RecoveryManager extends ReplicationEngine {
       replicationMetrics.addLagMetricForPartition(partitionId, true);
     }
     replicationMetrics.addCatchUpPointMetricForPartition(partitionId);
-    logger.info("Added partition-{} for recovery", partitionName);
+    logger.info("Added cloud replica for partition-{} for recovery", partitionName);
   }
 
   /**

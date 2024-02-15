@@ -49,7 +49,7 @@ public class RecoveryToken implements FindToken {
   private final String azureContainerId;
   private final String azureToken;
   private final String recoveryBeginTime;
-  private final String recoveryEndTime;
+  private String recoveryEndTime;
   private final boolean endOfPartition;
   private final long numBlobBytes;
   private final long numBlobs;
@@ -130,6 +130,9 @@ public class RecoveryToken implements FindToken {
 
   public boolean isEndOfPartition() {
     return endOfPartition;
+  }
+  public void endRecovery() {
+    this.recoveryEndTime = DATE_FORMAT.format(System.currentTimeMillis());
   }
 
   public static RecoveryToken fromBytes(DataInputStream stream) throws IOException {

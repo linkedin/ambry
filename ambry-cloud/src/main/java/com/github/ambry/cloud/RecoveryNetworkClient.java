@@ -198,7 +198,7 @@ public class RecoveryNetworkClient implements NetworkClient {
           .setMaxResultsPerPage(azureCloudConfig.azureBlobStorageMaxResultsPerPage);
       PagedResponse<BlobItem> response;
       try {
-        response = azureSyncClient.createOrGetBlobStore(containerName)
+        response = azureSyncClient.getBlobStoreCached(containerName)
             .listBlobs(listBlobsOptions, null)
             .iterableByPage(prevToken.getToken())
             .iterator()
