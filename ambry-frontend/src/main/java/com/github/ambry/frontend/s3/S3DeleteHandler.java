@@ -33,7 +33,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
  */
 public class S3DeleteHandler extends S3BaseHandler<Void> {
 
-  private S3DeleteObjectHandler objectHandler;
+  private final S3DeleteObjectHandler objectHandler;
   private final FrontendMetrics metrics;
 
   /**
