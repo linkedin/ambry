@@ -30,8 +30,6 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 
@@ -39,7 +37,7 @@ import static com.github.ambry.rest.RestUtils.*;
 /**
  * Handles requests for s3 multipart uploads.
  */
-public class S3MultipartUploadHandler {
+public class S3MultipartUploadHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final S3CreateMultipartUploadHandler createMultipartUploadHandler;
   private final S3CompleteMultipartUploadHandler completeMultipartUploadHandler;
   private final S3MultipartUploadPartHandler uploadPartHandler;
@@ -71,9 +69,11 @@ public class S3MultipartUploadHandler {
    * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
+   * @throws RestServiceException exception when the processing fails
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<ReadableStreamChannel> callback) {
+  @Override
+  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) throws RestServiceException {
     if (isCreateRequest(restRequest)) {
       createMultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
     } else if (isUploadPartRequest(restRequest)) {

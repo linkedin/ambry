@@ -47,46 +47,42 @@ public class S3MultipartUploadPartHandler {
    * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
+   * @throws RestServiceException exception when the processing fails
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<ReadableStreamChannel> callback) {
-    try {
+    Callback<ReadableStreamChannel> callback) throws RestServiceException {
+    // 1. Set headers required by Ambry. These become the blob properties.
+    NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
+    String accountName = namedBlobPath.getAccountName();
+    restRequest.setArg(Headers.SERVICE_ID, accountName);
+    restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
+    restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
 
-      // 1. Set headers required by Ambry. These become the blob properties.
-      NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
-      String accountName = namedBlobPath.getAccountName();
-      restRequest.setArg(Headers.SERVICE_ID, accountName);
-      restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
-      restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
+    // 2. Set the internal headers session id and chunk-upload. They are used during for multipart part uploads
+    String uploadId = RestUtils.getHeader(restRequest.getArgs(), UPLOAD_ID_QUERY_PARAM, true);
+    restRequest.setArg(S3_CHUNK_UPLOAD, true);
+    restRequest.setArg(SESSION, uploadId);
 
-      // 2. Set the internal headers session id and chunk-upload. They are used during for multipart part uploads
-      String uploadId = RestUtils.getHeader(restRequest.getArgs(), UPLOAD_ID_QUERY_PARAM, true);
-      restRequest.setArg(S3_CHUNK_UPLOAD, true);
-      restRequest.setArg(SESSION, uploadId);
-
-      // 3. Intercept the response callback and make needed changes in response headers.
-      Callback<Void> wrappedCallback = (result, exception) -> {
-        if (exception != null) {
-          callback.onCompletion(null, exception);
-          return;
+    // 3. Intercept the response callback and make needed changes in response headers.
+    Callback<Void> wrappedCallback = (result, exception) -> {
+      if (exception != null) {
+        callback.onCompletion(null, exception);
+        return;
+      }
+      try {
+        // Set the response status to 200 since Ambry named blob PUT has response as 201.
+        if (restResponseChannel.getStatus() == ResponseStatus.Created) {
+          restResponseChannel.setStatus(ResponseStatus.Ok);
+          String blobId = RestUtils.getHeader(restRequest.getArgs(), LOCATION, true);
+          restResponseChannel.setHeader("ETag", blobId);
         }
-        try {
-          // Set the response status to 200 since Ambry named blob PUT has response as 201.
-          if (restResponseChannel.getStatus() == ResponseStatus.Created) {
-            restResponseChannel.setStatus(ResponseStatus.Ok);
-            String blobId = RestUtils.getHeader(restRequest.getArgs(), LOCATION, true);
-            restResponseChannel.setHeader("ETag", blobId);
-          }
-          //TODO [S3]: remove x-ambry- headers
-          callback.onCompletion(null, null);
-        } catch (RestServiceException e) {
-          callback.onCompletion(null, e);
-        }
-      };
+        //TODO [S3]: remove x-ambry- headers
+        callback.onCompletion(null, null);
+      } catch (RestServiceException e) {
+        callback.onCompletion(null, e);
+      }
+    };
 
-      namedBlobPutHandler.handle(restRequest, restResponseChannel, wrappedCallback);
-    } catch (RestServiceException e) {
-      callback.onCompletion(null, e);
-    }
+    namedBlobPutHandler.handle(restRequest, restResponseChannel, wrappedCallback);
   }
 }

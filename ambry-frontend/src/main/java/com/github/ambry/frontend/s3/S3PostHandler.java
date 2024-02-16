@@ -27,7 +27,7 @@ import static com.github.ambry.rest.RestUtils.*;
 /**
  * Handles S3 POST requests.
  */
-public class S3PostHandler {
+public class S3PostHandler extends S3BaseHandler<ReadableStreamChannel> {
   private final S3MultipartUploadHandler multipartPostHandler;
 
   /**
@@ -42,15 +42,16 @@ public class S3PostHandler {
    * @param restRequest the {@link RestRequest} that contains the request parameters and body.
    * @param restResponseChannel the {@link RestResponseChannel} where headers should be set.
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
+   * @throws RestServiceException exception when the processing fails
    */
-  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<ReadableStreamChannel> callback) {
+  @Override
+  protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+      Callback<ReadableStreamChannel> callback) throws RestServiceException {
     if (isMultipartUploadRequest(restRequest)) {
       multipartPostHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       // Placeholder for handling any non-multipart S3 POST requests in the future.
-      callback.onCompletion(null,
-          new RestServiceException("Unsupported S3 POST request", RestServiceErrorCode.BadRequest));
+      throw new RestServiceException("Unsupported S3 POST request", RestServiceErrorCode.BadRequest);
     }
   }
 

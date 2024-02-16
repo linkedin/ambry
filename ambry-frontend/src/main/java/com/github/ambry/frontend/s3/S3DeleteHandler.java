@@ -16,27 +16,33 @@ package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.DeleteBlobHandler;
+import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.utils.ThrowingConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.frontend.FrontendUtils.*;
 
 
 /**
  * Handler to handle all the S3 DELETE requests
  */
 public class S3DeleteHandler extends S3BaseHandler<Void> {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3DeleteHandler.class);
-  private S3DeleteObjectHandler objectHandler;
+
+  private final S3DeleteObjectHandler objectHandler;
+  private final FrontendMetrics metrics;
 
   /**
    * Construct a handler for handling S3 DELETE requests.
    *
    * @param deleteBlobHandler the generic {@link DeleteBlobHandler} delegated to by the underlying delete object handler.
    */
-  public S3DeleteHandler(DeleteBlobHandler deleteBlobHandler) {
+  public S3DeleteHandler(DeleteBlobHandler deleteBlobHandler, FrontendMetrics metrics) {
+    this.metrics = metrics;
     this.objectHandler = new S3DeleteObjectHandler(deleteBlobHandler);
   }
 
@@ -55,26 +61,21 @@ public class S3DeleteHandler extends S3BaseHandler<Void> {
   }
 
   private class S3DeleteObjectHandler {
+    private final Logger LOGGER = LoggerFactory.getLogger(S3DeleteObjectHandler.class);
     private final DeleteBlobHandler deleteBlobHandler;
 
     private S3DeleteObjectHandler(DeleteBlobHandler deleteBlobHandler) {
       this.deleteBlobHandler = deleteBlobHandler;
     }
 
-    private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
+    private void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> finalCallback)
         throws RestServiceException {
-      deleteBlobHandler.handle(restRequest, restResponseChannel, ((result, exception) -> {
-        if (exception != null) {
-          callback.onCompletion(null, exception);
-        } else {
-          try {
-            restResponseChannel.setStatus(ResponseStatus.NoContent);
-            callback.onCompletion(null, null);
-          } catch (RestServiceException e) {
-            callback.onCompletion(null, e);
-          }
-        }
-      }));
+      ThrowingConsumer<Void> successAction = (r) -> {
+        restResponseChannel.setStatus(ResponseStatus.NoContent);
+        finalCallback.onCompletion(null, null);
+      };
+      deleteBlobHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3DeleteHandleMetrics,
+          successAction, restRequest.getUri(), LOGGER, finalCallback));
     }
   }
 }

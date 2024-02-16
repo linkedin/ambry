@@ -50,7 +50,6 @@ import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import static com.github.ambry.frontend.s3.S3PutHandler.*;
 import static org.junit.Assert.*;
 
 
@@ -147,6 +146,6 @@ public class S3PutHandlerTest {
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
             QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE);
-    s3PutHandler = new S3PutHandler(namedBlobPutHandler, null);
+    s3PutHandler = new S3PutHandler(namedBlobPutHandler, null, metrics);
   }
 }

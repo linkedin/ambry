@@ -227,15 +227,15 @@ class FrontendRestRequestService implements RestRequestService {
     postAccountsHandler = new PostAccountsHandler(securityService, accountService, frontendConfig, frontendMetrics);
     postDatasetsHandler = new PostDatasetsHandler(securityService, accountService, frontendConfig, frontendMetrics,
         accountAndContainerInjector);
-    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler);
+    s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, frontendMetrics);
     s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
-    s3ListHandler = new S3ListHandler(namedBlobListHandler);
+    s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
     s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     s3MultipartUploadHandler =
         new S3MultipartUploadHandler(securityService, frontendMetrics, namedBlobPutHandler, accountAndContainerInjector,
             frontendConfig, namedBlobDb, idConverter, router, quotaManager);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
-    s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler);
+    s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);

@@ -20,6 +20,7 @@ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.NamedBlobListEntry;
 import com.github.ambry.frontend.NamedBlobListHandler;
 import com.github.ambry.frontend.Page;
@@ -42,6 +43,8 @@ import org.json.JSONTokener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.frontend.FrontendUtils.*;
+
 
 /**
  * Handles S3 requests for listing blobs that start with a provided prefix.
@@ -49,19 +52,21 @@ import org.slf4j.LoggerFactory;
  */
 public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static final Logger LOGGER = LoggerFactory.getLogger(S3ListHandler.class);
-  private final NamedBlobListHandler namedBlobListHandler;
+  private static final ObjectMapper xmlMapper = new XmlMapper();
   public static final String PREFIX_PARAM_NAME = "prefix";
   public static final String MAXKEYS_PARAM_NAME = "max-keys";
   public static final String DELIMITER_PARAM_NAME = "delimiter";
   public static final String ENCODING_TYPE_PARAM_NAME = "encoding-type";
-  private static final ObjectMapper xmlMapper = new XmlMapper();
+  private final NamedBlobListHandler namedBlobListHandler;
+  private final FrontendMetrics metrics;
 
   /**
    * Constructs a handler for handling s3 requests for listing blobs.
    * @param namedBlobListHandler named blob list handler
    */
-  public S3ListHandler(NamedBlobListHandler namedBlobListHandler) {
+  public S3ListHandler(NamedBlobListHandler namedBlobListHandler, FrontendMetrics metrics) {
     this.namedBlobListHandler = namedBlobListHandler;
+    this.metrics = metrics;
   }
 
   /**
@@ -73,27 +78,18 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
-    namedBlobListHandler.handle(restRequest, restResponseChannel, ((result, exception) -> {
-      if (exception != null) {
-        callback.onCompletion(result, exception);
-        return;
-      }
-
-      try {
-        // Convert from json response to S3 xml response as defined in
-        // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_ResponseSyntax.
-        ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
-        JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
-        Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
-        ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
-        callback.onCompletion(readableStreamChannel, null);
-      } catch (Exception e) {
-        callback.onCompletion(null, e);
-      }
-    }));
+    namedBlobListHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3ListHandleMetrics, (result) -> {
+      // Convert from json response to S3 xml response as defined in
+      // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_ResponseSyntax.
+      ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
+      JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
+      Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
+      ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
+      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
+      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
+      callback.onCompletion(readableStreamChannel, null);
+    }, restRequest.getUri(), LOGGER, callback));
   }
 
   private ReadableStreamChannel serializeAsXml(RestRequest restRequest, Page<NamedBlobListEntry> namedBlobRecordPage)
