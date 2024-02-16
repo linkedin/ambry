@@ -14,7 +14,6 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterMapChangeListener;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -300,6 +299,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       // So do listener actions in addPartition() and removePartition().
       if (remoteReplicaInfo.getReplicaThread() != null) {
         remoteReplicaInfo.getReplicaThread().removeRemoteReplicaInfo(remoteReplicaInfo);
+        shutdownReplicaThreadForRemoteReplica(remoteReplicaInfo);
         remoteReplicaInfo.setReplicaThread(null);
       }
     }
@@ -311,22 +311,69 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * a {@link ReplicaThread} will be selected by {@link ReplicationEngine#getReplicaThreadIndexToUse(String)}.
    * Create threads pool for a DC if not exists.
    * @param remoteReplicaInfos List of {@link RemoteReplicaInfo} to add.
-   * @param startThread if threads need to be started when create.
+   * @param startThread if threads need to be started when created.
    */
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
     for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
-      DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
-      String datacenter = dataNodeIdToReplicate.getDatacenterName();
-      List<ReplicaThread> replicaThreads = getOrCreateThreadPoolIfNecessary(datacenter, startThread);
-      if (replicaThreads == null) {
-        logger.warn("Number of replica threads is smaller or equal to 0, not starting any replica threads for {}.",
-            datacenter);
+      ReplicaThread replicaThread = getReplicaThreadForRemoteReplica(remoteReplicaInfo, startThread);
+      if (replicaThread == null) {
+        logger.warn(
+            "Number of replica threads is smaller or equal to 0 for data center {}, not starting any replica threads for {}.",
+            remoteReplicaInfo.getReplicaId().getDataNodeId().getDatacenterName(), remoteReplicaInfo.getReplicaId());
         continue;
       }
-      ReplicaThread replicaThread = dataNodeIdToReplicaThread.computeIfAbsent(dataNodeIdToReplicate,
-          key -> replicaThreads.get(getReplicaThreadIndexToUse(datacenter)));
       replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
       remoteReplicaInfo.setReplicaThread(replicaThread);
+    }
+  }
+
+  /**
+   * Get thread for given remote replica. Creates thread if it doesn't exist.
+   * @param remoteReplicaInfo {@link RemoteReplicaInfo} for which thread is being requested.
+   * @param startThread if thread needs to be started when created.
+   * @return {@link ReplicaThread} for this remote replica.
+   */
+  private ReplicaThread getReplicaThreadForRemoteReplica(RemoteReplicaInfo remoteReplicaInfo, boolean startThread) {
+    DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
+    String datacenter = dataNodeIdToReplicate.getDatacenterName();
+    int numOfThreadsInPool =
+        datacenter.equals(dataNodeId.getDatacenterName()) ? replicationConfig.replicationNumOfIntraDCReplicaThreads
+            : replicationConfig.replicationNumOfInterDCReplicaThreads;
+    if (numOfThreadsInPool <= 0) {
+      return null;
+    }
+    if (!replicationConfig.replicationUseSeparateThreadForEachHost) {
+      List<ReplicaThread> replicaThreads =
+          getOrCreateThreadPoolIfNecessary(datacenter, startThread, numOfThreadsInPool);
+      return dataNodeIdToReplicaThread.computeIfAbsent(dataNodeIdToReplicate,
+          key -> replicaThreads.get(getReplicaThreadIndexToUse(datacenter)));
+    } else {
+      return dataNodeIdToReplicaThread.computeIfAbsent(dataNodeIdToReplicate,
+          key -> createThread(dataNodeIdToReplicate, startThread));
+    }
+  }
+
+  /**
+   * Shuts down replication thread if this is the last replica in the thread
+   * @param remoteReplicaInfo {@link RemoteReplicaInfo} being removed
+   */
+  private void shutdownReplicaThreadForRemoteReplica(RemoteReplicaInfo remoteReplicaInfo) {
+    if (!replicationConfig.replicationUseSeparateThreadForEachHost) {
+      return;
+    }
+    DataNodeId datanodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
+    String datacenter = datanodeId.getDatacenterName();
+    ReplicaThread replicaThread = remoteReplicaInfo.getReplicaThread();
+    Map<DataNodeId, List<RemoteReplicaInfo>> remoteReplicaInfosInReplicaThread = replicaThread.getRemoteReplicaInfos();
+    if (remoteReplicaInfosInReplicaThread.isEmpty() || remoteReplicaInfosInReplicaThread.get(datanodeId) == null
+        || remoteReplicaInfosInReplicaThread.get(datanodeId).isEmpty()) {
+      try {
+        replicaThread.shutdown();
+        replicaThreadPoolByDc.get(datacenter).remove(replicaThread);
+        dataNodeIdToReplicaThread.remove(datanodeId);
+      } catch (InterruptedException e) {
+        throw new RuntimeException("Encountered exception shutting down ReplicaThread", e);
+      }
     }
   }
 
@@ -340,19 +387,15 @@ public abstract class ReplicationEngine implements ReplicationAPI {
 
   /**
    * Get thread pool for given datacenter. Create thread pool for a datacenter if its thread pool doesn't exist.
-   * @param datacenter The datacenter String.
-   * @param startThread If thread needs to be started when create.
+   * @param datacenter      The datacenter String.
+   * @param startThread     If thread needs to be started when create.
+   * @param numberOfThreads the number of threads to be present in the pool
    * @return List of {@link ReplicaThread}s. Return null if number of replication thread in config is 0 for this DC.
    */
-  protected List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread) {
-    int numOfThreadsInPool =
-        datacenter.equals(dataNodeId.getDatacenterName()) ? replicationConfig.replicationNumOfIntraDCReplicaThreads
-            : replicationConfig.replicationNumOfInterDCReplicaThreads;
-    if (numOfThreadsInPool <= 0) {
-      return null;
-    }
+  protected List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread,
+      int numberOfThreads) {
     return replicaThreadPoolByDc.computeIfAbsent(datacenter,
-        key -> createThreadPool(datacenter, numOfThreadsInPool, startThread));
+        key -> createThreadPool(datacenter, numberOfThreads, startThread));
   }
 
   /**
@@ -375,7 +418,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * Create thread pool for a datacenter.
    * @param datacenter The datacenter String.
    * @param numberOfThreads Number of threads to create for the thread pool.
-   * @param startThread If thread needs to be started when create.
+   * @param startThread If thread needs to be started when created.
    */
   protected List<ReplicaThread> createThreadPool(String datacenter, int numberOfThreads, boolean startThread) {
     nextReplicaThreadIndexByDc.put(datacenter, new AtomicInteger(0));
@@ -407,6 +450,42 @@ public abstract class ReplicationEngine implements ReplicationAPI {
     }
     replicationMetrics.trackLiveThreadsCount(replicaThreads, datacenter);
     return replicaThreads;
+  }
+
+  /**
+   * Create thread for a remote node
+   * @param dataNodeId the remote node
+   * @param startThread If thread needs to be started when created.
+   * @return {@link ReplicaThread} created for the remote node
+   */
+  private ReplicaThread createThread(DataNodeId dataNodeId, boolean startThread) {
+    String datacenter = dataNodeId.getDatacenterName();
+    logger.info("Creating replica thread for remote host {} in data center {}", dataNodeId.getHostname(), datacenter);
+    ResponseHandler responseHandler = new ResponseHandler(clusterMap);
+    replicationMetrics.populateSingleColoMetrics(datacenter);
+    boolean replicatingOverSsl = sslEnabledDatacenters.contains(datacenter);
+    String threadIdentity = "ReplicaThread-" + dataNodeId.getHostname();
+    try {
+      StoreKeyConverter threadSpecificKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+      Transformer threadSpecificTransformer =
+          Utils.getObj(transformerClassName, storeKeyFactory, threadSpecificKeyConverter);
+      ReplicaThread replicaThread =
+          getReplicaThread(threadIdentity, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+              networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
+              threadSpecificKeyConverter, threadSpecificTransformer, metricRegistry, replicatingOverSsl, datacenter,
+              responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+      if (startThread) {
+        Thread thread = Utils.newThread(replicaThread.getName(), replicaThread, false);
+        thread.start();
+        logger.info("Started replica thread {}", thread.getName());
+      }
+      List<ReplicaThread> replicaThreads = replicaThreadPoolByDc.computeIfAbsent(datacenter, k -> new ArrayList<>());
+      replicaThreads.add(replicaThread);
+      replicationMetrics.trackLiveThreadsCount(replicaThreads, datacenter);
+      return replicaThread;
+    } catch (Exception e) {
+      throw new RuntimeException("Encountered exception instantiating ReplicaThread " + threadIdentity, e);
+    }
   }
 
   /**
