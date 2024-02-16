@@ -301,7 +301,6 @@ public class RecoveryNetworkClient implements NetworkClient {
       // If replication thread retries, it would send the ReplicaMetadataRequest again before the GetRequest.
       MessageInfo info = messageInfoCache.remove(storeKey);
       if (info == null) {
-        // TODO: Log and metric
         logger.error("Failed to find MessageInfo for store key {} at partition {}", storeKey, request.getPartition());
         return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.Blob_Not_Found);
       }
