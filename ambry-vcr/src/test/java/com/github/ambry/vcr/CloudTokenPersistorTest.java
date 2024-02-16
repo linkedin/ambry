@@ -129,7 +129,7 @@ public class CloudTokenPersistorTest {
         (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
     dataNodeId = mockPartitionId.getReplicaIds().get(0).getDataNodeId();
     azureCloudConfig = new AzureCloudConfig(verifiableProperties);
-    this.azureTableNameReplicaTokens = azureCloudConfig.DEFAULT_AZURE_TABLE_NAME_REPLICA_TOKENS;
+    this.azureTableNameReplicaTokens = azureCloudConfig.azureTableNameReplicaTokens;
     storeKeyFactory = new BlobIdFactory(mockClusterMap);
     tokenFactory = new StoreFindTokenFactory(storeKeyFactory);
   }

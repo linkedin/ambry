@@ -138,7 +138,7 @@ public class RecoveryManager extends ReplicationEngine {
     this.persistor = null; // No need of a persistor
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     this.recoveryMetrics = new RecoveryMetrics(metricRegistry);
-    this.networkClientFactory.getNetworkClient();
+    this.networkClientFactory.getNetworkClient(); // Test connection to Azure Storage and other services
   }
 
   @Override

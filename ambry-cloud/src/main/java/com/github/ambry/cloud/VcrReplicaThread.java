@@ -73,7 +73,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.cloudDestination = cloudDestination;
     this.properties = properties;
     this.azureCloudConfig = new AzureCloudConfig(properties);
-    this.azureTableNameReplicaTokens = this.azureCloudConfig.DEFAULT_AZURE_TABLE_NAME_REPLICA_TOKENS;
+    this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
   }
 

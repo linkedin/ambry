@@ -265,7 +265,7 @@ public class AmbryServer {
          */
         networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager,
             accountService);
-        vcrClusterSpectator = null;
+        vcrClusterSpectator = null; // Server does not talk to vcr during recovery
         _recoveryManager =
             new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
                 storeKeyFactory, clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
