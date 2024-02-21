@@ -84,7 +84,7 @@ public class RecoveryThread extends ReplicaThread {
   }
 
   /**
-   * Persists token to cloud in each replication cycle
+   * Persists token to disk in each replication cycle
    * @param remoteReplicaInfo Remote replica info object
    * @param exchangeMetadataResponse Metadata object exchanged between replicas
    */

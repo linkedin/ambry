@@ -146,11 +146,11 @@ public class RecoveryManager extends ReplicationEngine {
     // Use a static clustermap file on the host to know partitions assigned to the host.
     // Assume that there is no helix/zookeeper available post disaster.
     // In this design, server does not talk to vcr but directly to Azure.
-    this.clusterMap.getAllPartitionIds(clusterMapConfig.MAX_REPLICAS_ALL_DATACENTERS).forEach(partition -> {
+    this.clusterMap.getReplicaIds(this.dataNodeId).forEach(replica -> {
       try {
-        addCloudReplica(String.valueOf(partition.getId()));
+        addCloudReplica(String.valueOf(replica.getPartitionId().getId()));
       } catch (Throwable e) {
-        logger.error("Failed to add cloud replica for partition-{}", partition);
+        logger.error("Failed to add cloud replica for partition-{}", replica.getPartitionId().getId());
       }
     });
     started = true;

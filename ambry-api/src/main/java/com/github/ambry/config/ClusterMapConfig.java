@@ -37,7 +37,7 @@ public class ClusterMapConfig {
       "clustermap.enable.delete.invalid.data.in.mysql.aggregation.task";
   public static final String ENABLE_AGGREGATED_MONTHLY_ACCOUNT_REPORT =
       "clustermap.enable.aggregated.monthly.account.report";
-  public static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
+  private static final String MAX_REPLICAS_ALL_DATACENTERS = "max-replicas-all-datacenters";
 
   /**
    * The factory class used to get the resource state policies.
