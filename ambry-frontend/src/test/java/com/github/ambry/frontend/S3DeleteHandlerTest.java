@@ -61,7 +61,7 @@ public class S3DeleteHandlerTest {
 
   public S3DeleteHandlerTest() throws Exception {
     account = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    container = new ContainerBuilder().setName(Container.DEFAULT_S3_CONTAINER_NAME)
+    container = new ContainerBuilder().setName("container-a")
         .setId((short) 10)
         .setParentAccountId(account.getId())
         .setStatus(Container.ContainerStatus.ACTIVE)
@@ -75,7 +75,7 @@ public class S3DeleteHandlerTest {
   @Test
   public void deleteObjectTest() throws Exception {
     // 1. Delete the object
-    String uri = String.format("/s3/%s/%s", account.getName(), KEY_NAME);
+    String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
     RestRequest request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.DELETE, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();

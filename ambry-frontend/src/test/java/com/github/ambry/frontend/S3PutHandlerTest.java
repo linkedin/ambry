@@ -66,7 +66,7 @@ public class S3PutHandlerTest {
 
   public S3PutHandlerTest() throws Exception {
     account = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    Container container = new ContainerBuilder().setName(Container.DEFAULT_S3_CONTAINER_NAME)
+    Container container = new ContainerBuilder().setName("container-a")
         .setId((short) 10)
         .setParentAccountId(account.getId())
         .setStatus(Container.ContainerStatus.ACTIVE)
@@ -80,10 +80,10 @@ public class S3PutHandlerTest {
   public void putBlobsTest() throws Exception {
     // 1. Put a s3 blob
     String accountName = account.getName();
-    String containerName = Container.DEFAULT_S3_CONTAINER_NAME;
+    String containerName = "container-a";
     String blobName = "MyDirectory/MyKey";
     int size = 1024;
-    String uri = S3_PREFIX + SLASH + accountName + SLASH + blobName;
+    String uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName;
     JSONObject headers = new JSONObject();
     headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     headers.put(RestUtils.Headers.CONTENT_LENGTH, size);

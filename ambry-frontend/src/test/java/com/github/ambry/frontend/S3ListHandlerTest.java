@@ -71,7 +71,7 @@ public class S3ListHandlerTest {
 
   public S3ListHandlerTest() throws Exception {
     account = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    container = new ContainerBuilder().setName(Container.DEFAULT_S3_CONTAINER_NAME)
+    container = new ContainerBuilder().setName("container-a")
         .setId((short) 10)
         .setParentAccountId(account.getId())
         .setStatus(Container.ContainerStatus.ACTIVE)
@@ -105,8 +105,8 @@ public class S3ListHandlerTest {
 
     // 2. Get list of blobs by sending matching s3 request
     String s3_list_request_uri =
-        S3_PREFIX + SLASH + account.getName() + SLASH + "?prefix=" + PREFIX + "&delimiter=/" + "&max-keys=1"
-            + "&encoding-type=url";
+        S3_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + "?prefix=" + PREFIX
+            + "&delimiter=/" + "&max-keys=1" + "&encoding-type=url";
     request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,

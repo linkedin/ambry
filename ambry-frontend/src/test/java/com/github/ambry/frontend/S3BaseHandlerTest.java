@@ -39,8 +39,9 @@ public class S3BaseHandlerTest {
   @Test
   public void removeAmbryHeadersTest() throws Exception {
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
-    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(
-        RestMethod.HEAD, "/s3/account/key", new JSONObject(), null);
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, "/s3/account/container/key", new JSONObject(),
+            null);
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, "ambry-test"));
     S3BaseHandler<Void> s3BaseHandler = new S3BaseHandler() {

@@ -204,9 +204,9 @@ public class RequestPathTest {
    */
   @Test
   public void testS3Request() {
-    String path = "/s3/accountName/path/to/key";
-    RequestPath expectedRequestPath = new RequestPath("", "", "/named/accountName/container-s3/path/to/key",
-        "/named/accountName/container-s3/path/to/key", null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
+    String path = "/s3/accountName/container-a/path/to/key";
+    RequestPath expectedRequestPath = new RequestPath("", "", "/named/accountName/container-a/path/to/key",
+        "/named/accountName/container-a/path/to/key", null, NO_BLOB_SEGMENT_IDX_SPECIFIED);
     parseRequestPathAndVerify(path, Collections.emptyList(), "", expectedRequestPath, new JSONObject());
   }
 
