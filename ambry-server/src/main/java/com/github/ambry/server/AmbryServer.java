@@ -69,7 +69,7 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
-import com.github.ambry.replication.CloudToStoreReplicationManager;
+import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationSkipPredicate;
@@ -117,7 +117,7 @@ public class AmbryServer {
   private StorageManager storageManager = null;
   private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
-  private CloudToStoreReplicationManager cloudToStoreReplicationManager = null;
+  private RecoveryManager _recoveryManager = null;
   private static final Logger logger = LoggerFactory.getLogger(AmbryServer.class);
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
@@ -265,13 +265,13 @@ public class AmbryServer {
          */
         networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager,
             accountService);
-        vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
-        cloudToStoreReplicationManager =
-            new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
+        vcrClusterSpectator = null; // Server does not talk to vcr during recovery
+        _recoveryManager =
+            new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
                 storeKeyFactory, clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
-                storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, null,
                 clusterParticipants.get(0));
-        cloudToStoreReplicationManager.start();
+        _recoveryManager.start();
       } else {
         if (clusterMapConfig.clusterMapEnableHttp2Replication) {
           Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
@@ -472,8 +472,8 @@ public class AmbryServer {
       if (localChannel != null) {
         localChannel.shutdown();
       }
-      if (cloudToStoreReplicationManager != null) {
-        cloudToStoreReplicationManager.shutdown();
+      if (_recoveryManager != null) {
+        _recoveryManager.shutdown();
       }
       if (replicationManager != null) {
         replicationManager.shutdown();

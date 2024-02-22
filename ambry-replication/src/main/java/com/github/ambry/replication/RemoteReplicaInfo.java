@@ -140,7 +140,7 @@ public class RemoteReplicaInfo {
     return replicaId;
   }
 
-  ReplicaId getLocalReplicaId() {
+  public ReplicaId getLocalReplicaId() {
     return localReplicaId;
   }
 
@@ -194,7 +194,7 @@ public class RemoteReplicaInfo {
     return currentToken;
   }
 
-  synchronized ReplicaThread getReplicaThread() {
+  public synchronized ReplicaThread getReplicaThread() {
     return replicaThread;
   }
 

@@ -11,32 +11,54 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.replication;
+package com.github.ambry.cloud;
 
+import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
+import com.github.ambry.clustermap.CloudServiceDataNode;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.VcrClusterSpectator;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenFactory;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.PartitionInfo;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaThread;
+import com.github.ambry.replication.ReplicationEngine;
+import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -48,23 +70,26 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
+import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.config.CloudConfig.*;
 
 
 /**
- * {@link CloudToStoreReplicationManager} replicates data from Vcr nodes to ambry data nodes.
+ * {@link RecoveryManager} replicates data from Vcr nodes to ambry data nodes.
  * Cloud -> Store, run on storage node.
  */
-public class CloudToStoreReplicationManager extends ReplicationEngine {
+public class RecoveryManager extends ReplicationEngine {
   private final ClusterMapConfig clusterMapConfig;
   private final VcrClusterSpectator vcrClusterSpectator;
   private final ClusterParticipant clusterParticipant;
@@ -74,9 +99,11 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   private final Object notificationLock = new Object();
   private final boolean trackPerDatacenterLagInMetric;
   private static final Random random = new Random();
+  private final RecoveryMetrics recoveryMetrics;
+  public static final String RECOVER_TOKEN_FILE_PREFIX = "recovery_token";
 
   /**
-   * Constructor for {@link CloudToStoreReplicationManager}
+   * Constructor for {@link RecoveryManager}
    * @param replicationConfig {@link ReplicationConfig} object.
    * @param clusterMapConfig {@link ClusterMapConfig} object.
    * @param storeConfig {@link StoreConfig} object.
@@ -93,12 +120,13 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
    * @param clusterParticipant {@link ClusterParticipant} object to get changes in partition state of partitions on datanodes.
    * @throws ReplicationException
    */
-  public CloudToStoreReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
+  public RecoveryManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId currentNode, NetworkClientFactory networkClientFactory,
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant) throws ReplicationException {
+      VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant)
+      throws ReplicationException, IOException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null, false);
@@ -107,30 +135,27 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
     this.clusterParticipant = clusterParticipant;
     this.instanceNameToCloudDataNode = new AtomicReference<>(new ConcurrentHashMap<>());
     this.vcrNodes = new AtomicReference<>(new ArrayList<>());
-    this.persistor =
-        new DiskTokenPersistor(cloudReplicaTokenFileName, mountPathToPartitionInfos, replicationMetrics, clusterMap,
-            tokenHelper, storeManager);
+    this.persistor = null; // No need of a persistor
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
+    this.recoveryMetrics = new RecoveryMetrics(metricRegistry);
+    this.networkClientFactory.getNetworkClient(); // Test connection to Azure Storage and other services
   }
 
   @Override
   public void start() {
-    // Add listener for vcr instance config changes
-    vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListenerImpl());
-    vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListenerImpl());
-
-    // Add listener for new coming assigned partition
-    clusterParticipant.registerPartitionStateChangeListener(
-        StateModelListenerType.CloudToStoreReplicationManagerListener, new PartitionStateChangeListenerImpl());
-
-    // start background persistent thread
-    // start scheduler thread to persist index in the background
-    scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
-        replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
-
+    // Use a static clustermap file on the host to know partitions assigned to the host.
+    // Assume that there is no helix/zookeeper available post disaster.
+    // In this design, server does not talk to vcr but directly to Azure.
+    this.clusterMap.getReplicaIds(this.dataNodeId).forEach(replica -> {
+      try {
+        addCloudReplica(String.valueOf(replica.getPartitionId().getId()));
+      } catch (Throwable e) {
+        logger.error("Failed to add cloud replica for partition-{}", replica.getPartitionId().getId());
+      }
+    });
     started = true;
     startupLatch.countDown();
-    logger.info("CloudToStoreReplicationManager started.");
+    logger.info("RecoveryManager started.");
   }
 
   /**
@@ -156,11 +181,54 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
   }
 
   /**
+   * Returns Recovery thread
+   */
+  @Override
+  protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
+      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
+      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
+      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+    return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+        leaderBasedReplicationAdmin, this);
+  }
+
+  public String getRecoveryTokenFilename(RemoteReplicaInfo replica) {
+    return String.format("%s%s%s_%s", replica.getLocalReplicaId().getMountPath(),
+        File.separatorChar, RECOVER_TOKEN_FILE_PREFIX, replica.getReplicaId().getPartitionId().getId());
+  }
+
+  @Override
+  public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas)
+      throws ReplicationException {
+    // For each replica of a partition
+    for (RemoteReplicaInfo peerReplica : peerReplicas) {
+      try {
+        // Read json token and set it in peer replica info
+        String tokenFile = getRecoveryTokenFilename(peerReplica);
+        String jsonString = Utils.readStringFromFile(tokenFile);
+        RecoveryToken recoveryToken = new RecoveryToken(new JSONObject(jsonString));
+        peerReplica.setToken(recoveryToken);
+        logger.info("Loaded recovery token {} into memory", tokenFile);
+      } catch (IOException e) {
+        // If fail to read token from file, just set a new token. This will restart recovery from the top.
+        peerReplica.setToken(new RecoveryToken());
+        logger.info("Created new recovery token for {}", peerReplica.getReplicaId().getPartitionId().getId());
+      }
+    }
+    return 0;
+  }
+
+  /**
    * Add a replica of given partition and its {@link RemoteReplicaInfo}s to backup list.
    * @param partitionName name of the partition of the replica to add.
    * @throws ReplicationException if replicas initialization failed.
    */
-  private void addCloudReplica(String partitionName) throws ReplicationException {
+  private void addCloudReplica(String partitionName) throws Exception {
     // Adding cloud replica occurs when replica becomes leader from standby. Hence, if this a new added replica, it
     // should be present in storage manager already.
     ReplicaId localReplica = storeManager.getReplica(partitionName);
@@ -175,7 +243,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
           partitionName);
       return;
     }
-    DataNodeId cloudDataNode = getCloudDataNode();
+    DataNodeId cloudDataNode = new CloudServiceDataNode(clusterMapConfig);
     CloudReplica peerCloudReplica = new CloudReplica(partitionId, cloudDataNode);
     FindTokenFactory findTokenFactory =
         tokenHelper.getFindTokenFactoryFromReplicaType(peerCloudReplica.getReplicaType());
@@ -203,6 +271,7 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
       replicationMetrics.addLagMetricForPartition(partitionId, true);
     }
     replicationMetrics.addCatchUpPointMetricForPartition(partitionId);
+    logger.info("Added cloud replica for partition-{} for recovery", partitionName);
   }
 
   /**
@@ -277,8 +346,8 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         // new cloud node to start replicating from.
         removeCloudReplica(partitionId.toPathString());
         addCloudReplica(partitionId.toPathString());
-      } catch (ReplicationException rex) {
-        replicationMetrics.addCloudPartitionErrorCount.inc();
+      } catch (Exception rex) {
+        recoveryMetrics.addCloudPartitionErrorCount.inc();
         logger.error("Exception {} during remove/add replica for partitionId {}", rex, partitionId);
       }
     }
@@ -369,9 +438,9 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
         synchronized (notificationLock) {
           try {
             addCloudReplica(partitionName);
-          } catch (ReplicationException rex) {
+          } catch (Exception rex) {
             logger.error("Exception {} while adding replication for partition {}", rex, partitionName);
-            replicationMetrics.addCloudPartitionErrorCount.inc();
+            recoveryMetrics.addCloudPartitionErrorCount.inc();
           }
         }
       }
