@@ -64,7 +64,7 @@ public class S3HeadHandlerTest {
 
   public S3HeadHandlerTest() throws Exception {
     account = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    container = new ContainerBuilder().setName(Container.DEFAULT_S3_CONTAINER_NAME)
+    container = new ContainerBuilder().setName("container-a")
         .setId((short) 10)
         .setParentAccountId(account.getId())
         .setStatus(Container.ContainerStatus.ACTIVE)
@@ -78,8 +78,9 @@ public class S3HeadHandlerTest {
   @Test
   public void headBucketTest() throws Exception {
     // 1. Head the bucket with range
-    String uri = String.format("/s3/%s/", account.getName());
-    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
+    String uri = String.format("/s3/%s/%s/", account.getName(), container.getName());
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> futureResult = new FutureResult<>();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
@@ -94,8 +95,9 @@ public class S3HeadHandlerTest {
   @Test
   public void headObjectTest() throws Exception {
     // 1. Head the object with range
-    String uri = String.format("/s3/%s/%s", account.getName(), KEY_NAME);
-    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
+    String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> futureResult = new FutureResult<>();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
@@ -116,8 +118,9 @@ public class S3HeadHandlerTest {
   @Test
   public void headObjectWithRangeTest() throws Exception {
     // 1. Head the object with range
-    String uri = String.format("/s3/%s/%s", account.getName(), KEY_NAME);
-    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
+    String uri = String.format("/s3/%s/%s/%s", account.getName(), container.getName(), KEY_NAME);
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.HEAD, uri, new JSONObject(), null);
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> futureResult = new FutureResult<>();
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH,

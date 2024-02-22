@@ -82,7 +82,9 @@ public class S3PutHandler extends S3BaseHandler<Void> {
       if (restResponseChannel.getStatus() == ResponseStatus.Created) {
         // Set the response status to 200 since Ambry named blob PUT has response as 201.
         restResponseChannel.setStatus(ResponseStatus.Ok);
-        String blobId = RestUtils.getHeader(restRequest.getArgs(), LOCATION, true);
+        // Set S3 ETag header
+        String blobId = (String) restResponseChannel.getHeader(LOCATION);
+        blobId = blobId.startsWith("/") ? blobId.substring(1) : blobId;
         restResponseChannel.setHeader("ETag", blobId);
       }
       callback.onCompletion(null, null);
