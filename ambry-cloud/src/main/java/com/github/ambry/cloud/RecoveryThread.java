@@ -151,32 +151,16 @@ public class RecoveryThread extends ReplicaThread {
    * @return True if append was successful, false otherwise
    */
   protected boolean truncateAndWriteToFile(String filePath, String text) {
-    EnumSet<StandardOpenOption> options = EnumSet.of(StandardOpenOption.WRITE);
-    if (!Files.exists(Paths.get(filePath))) {
-      options.add(StandardOpenOption.CREATE);
-    }
+    EnumSet<StandardOpenOption> options = EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+        StandardOpenOption.TRUNCATE_EXISTING);
     SeekableByteChannel seekableByteChannel = getFd(filePath, options);
     try {
       seekableByteChannel.truncate(0);
-    } catch (IOException e) {
-      throw new RuntimeException(e);
-    }
-    return writeToFile(seekableByteChannel, text);
-  }
-
-  /**
-   * Write to a given file
-   * @param seekableByteChannel File descriptor
-   * @param text Text to append
-   * @return True if write was successful, false otherwise
-   */
-  protected boolean writeToFile(SeekableByteChannel seekableByteChannel, String text) {
-    try {
       seekableByteChannel.write(ByteBuffer.wrap(text.getBytes()));
       return true;
-    } catch (IOException e) {
-      logger.error(e.toString());
-      return false;
+    } catch (Throwable e) {
+      logger.error("Failed to write token {} to file {} due to {}", text, filePath, e.toString());
     }
+    return false;
   }
 }
