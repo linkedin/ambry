@@ -108,10 +108,6 @@ public class RecoveryNetworkClient implements NetworkClient {
     }
   }
 
-  public RecoveryMetrics getRecoveryMetrics() {
-    return recoveryMetrics;
-  }
-
   @Override
   public List<ResponseInfo> sendAndPoll(List<RequestInfo> requestsToSend, Set<Integer> requestsToDrop,
       int pollTimeoutMs) {
@@ -356,7 +352,7 @@ public class RecoveryNetworkClient implements NetworkClient {
   }
 
   /**
-   * A helper implementation of {@link Send} to return all zeros.
+   * A helper implementation of {@link Send} to return all bytes.
    */
   public static class AllSend extends AbstractByteBufHolder<AllSend> implements Send {
     private final long size;
