@@ -32,6 +32,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -90,23 +91,26 @@ public class S3MultipartUploadHandler extends S3BaseHandler<ReadableStreamChanne
    * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @return {@code True} if it is a creation/initiation of multipart uploads.
    */
-  public boolean isCreateRequest(RestRequest restRequest) {
-    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM);
+  public static boolean isCreateRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM);
   }
 
   /**
    * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @return {@code True} if it is a completion/abortion of multipart uploads.
    */
-  public boolean isCompleteRequest(RestRequest restRequest) {
-    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
+  public static boolean isCompleteRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 
   /**
    * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @return {@code True} if it is an upload part request for multipart uploads.
    */
-  public boolean isUploadPartRequest(RestRequest restRequest) {
-    return restRequest.getRestMethod() == RestMethod.PUT && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
+  public static boolean isUploadPartRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.PUT && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 }

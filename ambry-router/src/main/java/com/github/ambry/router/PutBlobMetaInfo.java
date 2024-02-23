@@ -29,6 +29,24 @@ import org.json.JSONObject;
 /**
  * This class holds information about the data chunk list or other metadata of the PutOperation
  * It contains a list of key size pair for the blob's data chunks, reserved metadata etc.
+ * json example:
+ * {
+ *     "chunks": [
+ *         {
+ *             "blob": "AAYQAkJbXNUAAQAAAAAAAAAHIykB00zhQV-L6XX9VNbfuQ",
+ *             "size": 112
+ *         },
+ *         {
+ *             "blob": "AAYQAkJbXNUAAQAAAAAAAAAAzqFnXhjfQMyKvXdDCHrN4w",
+ *             "size": 112
+ *         },
+ *         {
+ *             "blob": "AAYQAkJbXNUAAQAAAAAAAAAFsV4CWReKTnqkWguwPGDGQw",
+ *             "size": 104
+ *         }
+ *     ],
+ *     "reservedMetadataChunkId": "AAYIAkJbXNUAAQAAAAAAAAACEEbJqS49Sz2YIfqoDrpHmw"
+ * }
  */
 public class PutBlobMetaInfo {
   private static final String BLOB = "blob";
@@ -65,7 +83,7 @@ public class PutBlobMetaInfo {
    * Get the number of chunks
    * @return the chunk number
    */
-  public int getChunkNumber() {
+  public int getNumChunks() {
     return orderedChunkIdSizeList.size();
   }
 
@@ -126,8 +144,12 @@ public class PutBlobMetaInfo {
       throw new IOException("Not expected JSON content " + metaInfo);
     }
 
+    // reserved metadata chunk id. it can be null.
     jsonNode = rootNode.get(RESERVED_METADATA_CHUNK_ID);
-    String metaBlobId = jsonNode.textValue();
+    String metaBlobId = null;
+    if (jsonNode != null) {
+      metaBlobId = jsonNode.textValue();
+    }
     return new PutBlobMetaInfo(orderedChunkIdSizeList, metaBlobId);
   }
 

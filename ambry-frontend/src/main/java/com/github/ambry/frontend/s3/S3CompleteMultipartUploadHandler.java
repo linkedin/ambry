@@ -44,15 +44,21 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ChunkInfo;
+import com.github.ambry.router.PutBlobMetaInfo;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
 import com.github.ambry.router.RouterException;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.GregorianCalendar;
 import java.util.List;
@@ -287,6 +293,7 @@ public class S3CompleteMultipartUploadHandler {
     private CompleteMultipartUpload parseCompleteMultipartUploadBody(RetainingAsyncWritableChannel channel)
         throws RestServiceException {
       CompleteMultipartUpload completeMultipartUpload;
+      // TODO [s3] sanity check CompleteMultipartUpload, the part number has to be integer.
       try (InputStream inputStream = channel.consumeContentAsInputStream()) {
         completeMultipartUpload = objectMapper.readValue(inputStream, CompleteMultipartUpload.class);
         LOGGER.debug("Parsed CompleteMultipartUpload request {}", completeMultipartUpload);
@@ -344,10 +351,47 @@ public class S3CompleteMultipartUploadHandler {
      * @param completeMultipartUpload {@link CompleteMultipartUpload} request
      * @return a list of chunks to stitch that can be provided to the router.
      */
-    List<ChunkInfo> getChunksToStitch(CompleteMultipartUpload completeMultipartUpload) {
-      // TODO [S3] Get parts in order from CompleteMultipartUpload, deserialize each part id to get nested Ambry IDs and
-      //  return the flattened list
-      return new ArrayList<>();
+    List<ChunkInfo> getChunksToStitch(CompleteMultipartUpload completeMultipartUpload) throws RestServiceException {
+      // Get parts in order from CompleteMultipartUpload, deserialize each part id to get data chunk ids.
+      List<ChunkInfo> chunkInfos = new ArrayList<>();
+      try {
+        // sort the list in order
+        List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
+        Collections.sort(sortedParts, new Comparator<Part>() {
+          public int compare(Part p1, Part p2) {
+            return p1.getPartNumber() - p2.getPartNumber();
+          }
+        });
+
+        String reservedMetadataId = null;
+        for (Part part : sortedParts) {
+          PutBlobMetaInfo putBlobMetaInfoObj = PutBlobMetaInfo.deserialize(part.eTag);
+          // reservedMetadataId can be null. but if it's not null, they are supposed to be the same
+          String reserved = putBlobMetaInfoObj.getReservedMetadataChunkId();
+          if (reservedMetadataId == null) {
+            reservedMetadataId = reserved;
+          }
+          if (reserved != null && !reserved.equals(reservedMetadataId)) {
+            String error = "Reserved ID are different " + completeMultipartUpload;
+            throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+          }
+          // TODO [S3]: decide the life cycle of S3.
+          long expirationTimeInMs = -1;
+
+          List<Pair<String, Long>> chunks = putBlobMetaInfoObj.getOrderedChunkIdSizeList();
+          for (int i = 0; i < putBlobMetaInfoObj.getNumChunks(); i++) {
+            String blobId = chunks.get(i).getFirst();
+            long chunkSize = chunks.get(i).getSecond();
+
+            ChunkInfo chunk = new ChunkInfo(blobId, chunkSize, expirationTimeInMs, reservedMetadataId);
+            chunkInfos.add(chunk);
+          }
+        }
+      } catch (IOException e) {
+        String error = "Could not parse xml request body " + completeMultipartUpload;
+        throw new RestServiceException(error, e, RestServiceErrorCode.BadRequest);
+      }
+      return chunkInfos;
     }
   }
 
@@ -401,6 +445,22 @@ public class S3CompleteMultipartUploadHandler {
       this.eTag = eTag;
     }
 
+    public String getBucket() {
+      return bucket;
+    }
+
+    public String getKey() {
+      return key;
+    }
+
+    public String getLocation() {
+      return location;
+    }
+
+    public String geteTag() {
+      return eTag;
+    }
+
     @Override
     public String toString() {
       return "Bucket=" + bucket + ", " + "Key=" + key + ", " + "Location=" + location + ", " + "ETag=" + eTag;
@@ -424,6 +484,10 @@ public class S3CompleteMultipartUploadHandler {
 
     public String geteTag() {
       return eTag;
+    }
+
+    public int getPartNumber() throws NumberFormatException {
+      return Integer.parseInt(partNumber);
     }
 
     @Override

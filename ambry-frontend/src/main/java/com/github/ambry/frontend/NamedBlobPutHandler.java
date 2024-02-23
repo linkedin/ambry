@@ -25,6 +25,7 @@ import com.github.ambry.commons.RetryExecutor;
 import com.github.ambry.commons.RetryPolicies;
 import com.github.ambry.commons.RetryPolicy;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.NamedBlobDb;
@@ -280,7 +281,12 @@ public class NamedBlobPutHandler {
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
-        if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
+        // TODO [S3] Probably we don't reuse NamedBlobPutHandler but write a new S3PutHandler.
+        if (S3MultipartUploadHandler.isUploadPartRequest(restRequest)) {
+          // For s3 part upload, we don't need to do TtlUpdate, named blob db update etc. It only needs the PutBlob
+          securityService.processResponse(restRequest, restResponseChannel, blobInfo,
+              securityProcessResponseCallback());
+        } else if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
           // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
           // since the converted ID may be changed by the ID converter.
           String serviceId = blobInfo.getBlobProperties().getServiceId();
@@ -442,6 +448,10 @@ public class NamedBlobPutHandler {
       Long maxUploadSize = RestUtils.getLongHeader(restRequest.getArgs(), RestUtils.Headers.MAX_UPLOAD_SIZE, false);
       if (maxUploadSize != null) {
         builder.maxUploadSize(maxUploadSize);
+      }
+      // if it's the s3 part upload for the multi-part request, skip creating the composite chunk.
+      if (S3MultipartUploadHandler.isUploadPartRequest(restRequest)) {
+        builder.skipCompositeChunk(true);
       }
       return builder.build();
     }
