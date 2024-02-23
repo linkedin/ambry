@@ -123,6 +123,7 @@ public class S3CreateMultipartUploadHandler {
         String uploadId = UUID.randomUUID().toString();
         RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
+        // TODO [3] : What should be the bucket name, account + container?
         String bucket = namedBlobPath.getAccountName();
         String key = namedBlobPath.getBlobName();
         InitiateMultipartUploadResult initiateMultipartUploadResult =
@@ -152,6 +153,18 @@ public class S3CreateMultipartUploadHandler {
 
     public InitiateMultipartUploadResult() {
 
+    }
+
+    public String getBucket() {
+      return bucket;
+    }
+
+    public String getKey() {
+      return key;
+    }
+
+    public String getUploadId() {
+      return uploadId;
     }
 
     public InitiateMultipartUploadResult(String bucket, String key, String uploadId) {

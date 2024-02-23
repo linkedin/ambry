@@ -27,8 +27,8 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.store.StoreKey;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
-import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
@@ -49,7 +49,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.github.ambry.utils.Utils.*;
-import static org.mockito.Mockito.*;
 
 
 /**
@@ -532,7 +531,16 @@ public class InMemoryRouter implements Router {
           notificationSystem.onBlobCreated(blobId, postData.getBlobProperties(), null, null,
               postData.getOptions().isChunkUpload() ? NotificationBlobType.DataChunk : NotificationBlobType.Simple);
         }
-        operationResult = blobId;
+        if (postData.getOptions().skipCompositeChunk()) {
+          // now generate the PutBlobMetaInfo which includes the data chunk list
+          List<Pair<String, Long>> orderedChunkList = new ArrayList<>();
+          orderedChunkList.add(new Pair<>(blobId, blob.getBlobProperties().getBlobSize()));
+          String reservedMetadataBlobId = blob.getBlobProperties().getReservedMetadataBlobId();
+          PutBlobMetaInfo putBlobMetaInfoObj = new PutBlobMetaInfo(orderedChunkList, reservedMetadataBlobId);
+          operationResult = PutBlobMetaInfo.serialize(putBlobMetaInfoObj);
+        } else {
+          operationResult = blobId;
+        }
       } catch (RouterException e) {
         exception = e;
       } catch (Exception e) {

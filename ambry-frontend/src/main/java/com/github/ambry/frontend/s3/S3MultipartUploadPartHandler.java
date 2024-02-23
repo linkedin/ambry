@@ -62,6 +62,8 @@ public class S3MultipartUploadPartHandler {
     String uploadId = RestUtils.getHeader(restRequest.getArgs(), UPLOAD_ID_QUERY_PARAM, true);
     restRequest.setArg(S3_CHUNK_UPLOAD, true);
     restRequest.setArg(SESSION, uploadId);
+    // TODO [S3] : set part ttl value
+    // restRequest.setArg(TTL, xxx);
 
     // 3. Intercept the response callback and make needed changes in response headers.
     Callback<Void> wrappedCallback = (result, exception) -> {
@@ -73,9 +75,11 @@ public class S3MultipartUploadPartHandler {
         // Set the response status to 200 since Ambry named blob PUT has response as 201.
         if (restResponseChannel.getStatus() == ResponseStatus.Created) {
           restResponseChannel.setStatus(ResponseStatus.Ok);
-          String blobId = RestUtils.getHeader(restRequest.getArgs(), LOCATION, true);
-          restResponseChannel.setHeader("ETag", blobId);
         }
+
+        // Set S3 ETag header
+        String blobId = (String) restResponseChannel.getHeader(LOCATION);
+        restResponseChannel.setHeader("ETag", blobId);
         //TODO [S3]: remove x-ambry- headers
         callback.onCompletion(null, null);
       } catch (RestServiceException e) {

@@ -619,18 +619,24 @@ public class NonBlockingRouterTest extends NonBlockingRouterTestBase {
         .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
     PutBlobMetaInfo metaInfo = PutBlobMetaInfo.deserialize(compositeBlobInfo);
 
-    // verify the PutBlobMetaInfo
-    Assert.assertEquals(chunkNumber, metaInfo.getChunkNumber());
+    // Serialize and Deserialize, the PutBlobMetaInfo should be the same
+    String metaInfoStr = metaInfo.toString();
+    PutBlobMetaInfo deserializedMetaInfo = PutBlobMetaInfo.deserialize(metaInfoStr);
+
+    // verify the deserialized PutBlobMetaInfo
+    Assert.assertEquals(chunkNumber, deserializedMetaInfo.getNumChunks());
     // verify the content, one data chunk after another
-    List<Pair<String, Long>> chunks = metaInfo.getOrderedChunkIdSizeList();
+    List<Pair<String, Long>> chunks = deserializedMetaInfo.getOrderedChunkIdSizeList();
     int chunkSize = maxPutChunkSize;
     for (int i = 0; i < chunkNumber; i++) {
+      Pair<String, Long> chunk = chunks.get(i);
       GetBlobResult chunkResult =
-          router.getBlob(chunks.get(i).getFirst(), new GetBlobOptionsBuilder().build(), null, null).get();
+          router.getBlob(chunk.getFirst(), new GetBlobOptionsBuilder().build(), null, null).get();
       // last chunk
       if (i == chunkNumber - 1) {
         chunkSize = PUT_CONTENT_SIZE - maxPutChunkSize * i;
       }
+      Assert.assertEquals(chunkSize, chunk.getSecond().longValue());
 
       // verify data content
       RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
