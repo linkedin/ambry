@@ -76,6 +76,7 @@ class SimpleOperationTracker implements OperationTracker {
   protected final int replicaSuccessTarget;
   protected final int replicaParallelism;
   // How many NotFound responses from originating dc will terminate the operation.
+
   protected final int originatingDcNotFoundFailureThreshold;
   protected final int totalReplicaCount;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
