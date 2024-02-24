@@ -304,6 +304,7 @@ public class RecoveryNetworkClient implements NetworkClient {
       try {
         azureSyncClient.downloadBlob((BlobId) storeKey, downloadToStream);
         messageInfoList.add(info);
+        recoveryMetrics.blobDownloadByteRate.mark(info.getSize());
       } catch (CloudStorageException e) {
         logger.error("Failed to download blob {} due to {}", storeKey.getID(), e.getMessage());
         e.printStackTrace();

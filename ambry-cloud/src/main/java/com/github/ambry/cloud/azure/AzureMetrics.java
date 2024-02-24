@@ -40,10 +40,13 @@ public class AzureMetrics {
   public static final String BLOB_GET_PROPERTIES_LATENCY = "BlobGetPropertiesLatency";
   public static final String BLOB_GET_PROPERTIES_ERROR_COUNT = "BlobGetPropertiesErrorCount";
   public static final String BLOB_DOWNLOAD_REQUEST_COUNT = "BlobDownloadRequestCount";
+  public static final String BLOB_DOWNLOAD_SUCCESS_RATE = "BlobDownloadSuccessRate";
   public static final String BLOB_DOWNLOAD_SUCCESS_COUNT = "BlobDownloadSuccessCount";
   public static final String BLOB_DOWNLOAD_ERROR_COUNT = "BlobDownloadErrorCount";
   public static final String BLOB_UPLOAD_CONFLICT_COUNT = "BlobUploadConflictCount";
+  public static final String BLOB_UPLOAD_LATENCY = "BlobUploadLatency";
   public static final String BLOB_UPLOAD_TIME = "BlobUploadTime";
+  public static final String BLOB_DOWNLOAD_LATENCY = "BlobDownloadLatency";
   public static final String BLOB_DOWNLOAD_TIME = "BlobDownloadTime";
   public static final String BLOB_UPDATE_TIME = "BlobUpdateTime";
   public static final String BLOB_UPDATED_COUNT = "BlobUpdatedCount";
@@ -77,7 +80,11 @@ public class AzureMetrics {
   public static final String CONFIG_ERROR_COUNT = "ConfigErrorCount";
   public static final String BACKUP_SUCCESS_LATENCY = "BackupSuccessLatency";
   public static final String BACKUP_SUCCESS_BYTE_RATE = "BackupSuccessByteRate";
+  public static final String BLOB_UPLOAD_BYTE_RATE = "BlobUploadByteRate";
   public static final String BACKUP_ERROR_COUNT = "BackupErrorCount";
+  public static final String PARTITION_COMPACTION_ERROR_COUNT = "PartitionCompactionErrorCount";
+  public static final String BLOB_COMPACTION_ERROR_COUNT = "BlobCompactionErrorCount";
+  public static final String BLOB_COMPACTION_SUCCESS_RATE = "BlobCompactionSuccessRate";
   public static final String COMPACTION_PROGRESS_READ_ERROR_COUNT = "CompactionProgressReadErrorCount";
   public static final String COMPACTION_PROGRESS_WRITE_ERROR_COUNT = "CompactionProgressWriteErrorCount";
   public static final String ABS_TOKEN_REFRESH_ATTEMPT_COUNT = "ABSTokenRefreshAttemptCount";
@@ -92,16 +99,19 @@ public class AzureMetrics {
       "DeprecatedContainerCompactionFailureCount";
   public static final String DEPRECATED_CONTAINER_COMPACTION_SUCCESS_COUNT =
       "DeprecatedContainerCompactionSuccessCount";
+  public static final String BLOB_CONTAINER_ERROR_COUNT = "BlobContainerErrorCount";
   public static final String BLOB_COMPACTION_LATENCY = "BlobCompactionLatency";
   public static final String PARTITION_COMPACTION_LATENCY = "PartitionCompactionLatency";
 
+  // Azure Storage metrics
+  public final Counter blobContainerErrorCount;
   // Metrics
   public final Timer blobCompactionLatency;
   public final Timer partitionCompactionLatency;
   public final Counter blobUploadRequestCount;
   public final Counter blobUploadSuccessCount;
   public final Meter blobUploadSuccessRate;
-  public final Meter blobUpdateDeleteTimeSucessRate;
+  public final Meter blobUpdateDeleteTimeSuccessRate;
   public final Timer blobUpdateDeleteTimeLatency;
   public final Counter blobUpdateDeleteTimeErrorCount;
   public final Meter blobUndeleteSucessRate;
@@ -115,13 +125,16 @@ public class AzureMetrics {
   public final Counter blobGetPropertiesErrorCount;
   public final Counter blobUploadErrorCount;
   public final Counter blobDownloadRequestCount;
+  public final Meter blobDownloadSuccessRate;
   public final Counter blobDownloadSuccessCount;
   public final Counter blobDownloadErrorCount;
   public final Counter blobUploadConflictCount;
   public final Counter blobUpdatedCount;
   /** Attempts to update blob metadata that fail due to concurrent update (412) */
   public final Counter blobUpdateConflictCount;
+  public final Timer blobUploadLatency;
   public final Timer blobUploadTime;
+  public final Timer blobDownloadLatency;
   public final Timer blobDownloadTime;
   public final Timer blobUpdateTime;
   public final Timer documentCreateTime;
@@ -154,7 +167,13 @@ public class AzureMetrics {
   public final Counter configErrorCount;
   public final Timer backupSuccessLatency;
   public final Meter backupSuccessByteRate;
+  public final Meter blobUploadByteRate;
+
   public final Counter backupErrorCount;
+  public final Counter blobCompactionErrorCount;
+  public final Meter blobCompactionSuccessRate;
+  public final Counter partitionCompactionErrorCount;
+
   public final Counter compactionProgressReadErrorCount;
   public final Counter compactionProgressWriteErrorCount;
   public final Counter absTokenRefreshAttemptCount;
@@ -180,40 +199,49 @@ public class AzureMetrics {
 
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
-    ambryReplicaTokenWriteRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class,
-        AMBRY_REPLICA_TOKEN_WRITE_RATE));
-    azureTableCreateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class,
-        AZURE_TABLE_CREATE_ERROR_COUNT));
-    azureTableEntityCreateErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class,
-        AZURE_TABLE_ENTITY_CREATE_ERROR_COUNT));
-    blobCompactionLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_COMPACTION_LATENCY));
-    partitionCompactionLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, PARTITION_COMPACTION_LATENCY));
+
+    // V2 metrics
+    absTokenPersistFailureCount = registry.counter(MetricRegistry.name(AzureMetrics.class, ABS_TOKEN_PERSIST_FAILURE_COUNT));
+    absTokenRetrieveFailureCount = registry.counter(MetricRegistry.name(AzureMetrics.class, ABS_TOKEN_RETRIEVE_FAILURE_COUNT));
+    ambryReplicaTokenWriteRate = registry.meter(MetricRegistry.name(AzureMetrics.class, AMBRY_REPLICA_TOKEN_WRITE_RATE));
+    azureTableCreateErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, AZURE_TABLE_CREATE_ERROR_COUNT));
+    azureTableEntityCreateErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, AZURE_TABLE_ENTITY_CREATE_ERROR_COUNT));
+    blobCompactionErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_ERROR_COUNT));
+    blobCompactionLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_LATENCY));
+    blobCompactionSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_SUCCESS_RATE));
+    blobContainerErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_CONTAINER_ERROR_COUNT));
+    blobDownloadErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_DOWNLOAD_ERROR_COUNT));
+    blobDownloadLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_DOWNLOAD_LATENCY));
+    blobDownloadSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_DOWNLOAD_SUCCESS_RATE));
+    blobGetPropertiesErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_GET_PROPERTIES_ERROR_COUNT));
+    blobGetPropertiesLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_GET_PROPERTIES_LATENCY));;
+    blobGetPropertiesSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_GET_PROPERTIES_SUCCESS_RATE));
+    blobUndeleteErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UNDELETE_ERROR_COUNT));
+    blobUndeleteLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UNDELETE_LATENCY));
+    blobUndeleteSucessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UNDELETE_SUCCESS_RATE));
+    blobUpdateDeleteTimeErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_DELETE_TIME_ERROR_COUNT));
+    blobUpdateDeleteTimeLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_DELETE_TIME_LATENCY));
+    blobUpdateDeleteTimeSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_DELETE_TIME_SUCCESS_RATE));
+    blobUpdateTTLErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_ERROR_COUNT));
+    blobUpdateTTLLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_LATENCY));
+    blobUpdateTTLSucessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPDATE_TTL_SUCCESS_RATE));
+    blobUploadByteRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_BYTE_RATE));
+    blobUploadConflictCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_CONFLICT_COUNT));
+    blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_ERROR_COUNT));
+    blobUploadLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_LATENCY));
+    blobUploadSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_SUCCESS_RATE));
+    partitionCompactionErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, PARTITION_COMPACTION_ERROR_COUNT));
+    partitionCompactionLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, PARTITION_COMPACTION_LATENCY));
+
+    // Unused metrics
     blobUploadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_REQUEST_COUNT));
     blobUploadSuccessCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SUCCESS_COUNT));
-    blobUploadSuccessRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_SUCCESS_RATE));
-    blobUpdateDeleteTimeLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_DELETE_TIME_LATENCY));
-    blobUpdateDeleteTimeSucessRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_DELETE_TIME_SUCCESS_RATE));
-    blobUpdateDeleteTimeErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_DELETE_TIME_ERROR_COUNT));
-    blobUndeleteLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UNDELETE_LATENCY));
-    blobUndeleteSucessRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UNDELETE_SUCCESS_RATE));
-    blobUndeleteErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UNDELETE_ERROR_COUNT));
-    blobUpdateTTLLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TTL_LATENCY));
-    blobUpdateTTLSucessRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TTL_SUCCESS_RATE));
-    blobUpdateTTLErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_TTL_ERROR_COUNT));
-    blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_ERROR_COUNT));
-    blobGetPropertiesSuccessRate = registry.meter(MetricRegistry.name(AzureCloudDestination.class, BLOB_GET_PROPERTIES_SUCCESS_RATE));
-    blobGetPropertiesLatency = registry.timer(MetricRegistry.name(AzureCloudDestination.class, BLOB_GET_PROPERTIES_LATENCY));;
-    blobGetPropertiesErrorCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_GET_PROPERTIES_ERROR_COUNT));
     blobDownloadRequestCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_REQUEST_COUNT));
     blobDownloadSuccessCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_SUCCESS_COUNT));
-    blobDownloadErrorCount =
-        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_DOWNLOAD_ERROR_COUNT));
-    blobUploadConflictCount =
-        registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPLOAD_CONFLICT_COUNT));
     blobUpdatedCount = registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATED_COUNT));
     blobUpdateConflictCount =
         registry.counter(MetricRegistry.name(AzureCloudDestination.class, BLOB_UPDATE_CONFLICT_COUNT));
@@ -266,10 +294,6 @@ public class AzureMetrics {
         registry.counter(MetricRegistry.name(AzureStorageCompactor.class, COMPACTION_PROGRESS_WRITE_ERROR_COUNT));
     absTokenRefreshAttemptCount =
         registry.counter(MetricRegistry.name(StorageClient.class, ABS_TOKEN_REFRESH_ATTEMPT_COUNT));
-    absTokenPersistFailureCount =
-        registry.counter(MetricRegistry.name(AzureCloudDestination.class, ABS_TOKEN_PERSIST_FAILURE_COUNT));
-    absTokenRetrieveFailureCount =
-        registry.counter(MetricRegistry.name(AzureCloudDestination.class, ABS_TOKEN_RETRIEVE_FAILURE_COUNT));
     absForbiddenExceptionCount =
         registry.counter(MetricRegistry.name(StorageClient.class, ABS_FORBIDDEN_EXCEPTION_COUNT));
     storageClientOperationRetryCount =
