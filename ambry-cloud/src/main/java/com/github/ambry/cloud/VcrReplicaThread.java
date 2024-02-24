@@ -40,7 +40,6 @@ import com.github.ambry.utils.Utils;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,7 +108,7 @@ public class VcrReplicaThread extends ReplicaThread {
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
     StoreFindToken token = (StoreFindToken) remoteReplicaInfo.getToken();
     if (token == null) {
-      azureMetrics.absTokenPersistFailureCount.inc();
+      azureMetrics.replicaTokenWriteErrorCount.inc();
       logger.error("Null token for replica {}", remoteReplicaInfo);
       return;
     }
@@ -145,7 +144,9 @@ public class VcrReplicaThread extends ReplicaThread {
             token.toBytes());
     // Now persist the token in cloud
     if (cloudDestination.upsertTableEntity(azureTableNameReplicaTokens, entity)) {
-      azureMetrics.ambryReplicaTokenWriteRate.mark();
+      azureMetrics.replicaTokenWriteRate.mark();
+    } else {
+      azureMetrics.replicaTokenWriteErrorCount.inc();
     }
   }
 }

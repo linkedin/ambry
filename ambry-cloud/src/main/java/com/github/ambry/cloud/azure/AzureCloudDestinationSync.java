@@ -211,7 +211,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       return tableClientMap.computeIfAbsent(tableName,
           key -> azureTableServiceClient.getTableClient(tableName));
     } catch (Throwable e) {
-      azureMetrics.azureTableCreateErrorCount.inc();
+      azureMetrics.tableCreateErrorCount.inc();
       logger.error("Failed to create or get table {} in Azure Table Service due to {}", tableName, e);
       throw e;
     }
@@ -233,7 +233,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       throwable = e;
     } finally {
       if (throwable != null) {
-        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        azureMetrics.tableEntityCreateErrorCount.inc();
         logger.error("Failed to insert table entity {}/{} in {} due to {}",
             tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
         throwable.printStackTrace();
@@ -259,7 +259,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     } finally {
       // Executed before return statement
       if (throwable != null) {
-        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        azureMetrics.tableEntityCreateErrorCount.inc();
         logger.error("Failed to upsert table entity {}/{} in {} due to {}",
             tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
         throwable.printStackTrace();

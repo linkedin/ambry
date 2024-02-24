@@ -88,8 +88,8 @@ public class AzureMetrics {
   public static final String COMPACTION_PROGRESS_READ_ERROR_COUNT = "CompactionProgressReadErrorCount";
   public static final String COMPACTION_PROGRESS_WRITE_ERROR_COUNT = "CompactionProgressWriteErrorCount";
   public static final String ABS_TOKEN_REFRESH_ATTEMPT_COUNT = "ABSTokenRefreshAttemptCount";
-  public static final String ABS_TOKEN_PERSIST_FAILURE_COUNT = "ABSTokenPersistFailureCount";
-  public static final String ABS_TOKEN_RETRIEVE_FAILURE_COUNT = "ABSTokenRetrieveFailureCount";
+  public static final String REPLICA_TOKEN_WRITE_ERROR_COUNT = "ReplicaTokenWriteErrorCount";
+  public static final String REPLICA_TOKEN_READ_ERROR_COUNT = "ReplicaTokenReadErrorCount";
   public static final String ABS_FORBIDDEN_EXCEPTION_COUNT = "ABSForbiddenExceptionCount";
   public static final String STORAGE_CLIENT_OPERATION_RETRY_COUNT = "StorageClientOperationRetryCount";
   public static final String STORAGE_CLIENT_OPERATION_EXCEPTION_COUNT = "StorageClientOperationExceptionCount";
@@ -177,8 +177,8 @@ public class AzureMetrics {
   public final Counter compactionProgressReadErrorCount;
   public final Counter compactionProgressWriteErrorCount;
   public final Counter absTokenRefreshAttemptCount;
-  public final Counter absTokenPersistFailureCount;
-  public final Counter absTokenRetrieveFailureCount;
+  public final Counter replicaTokenWriteErrorCount;
+  public final Counter replicaTokenReadErrorCount;
 
   public final Counter absForbiddenExceptionCount;
   public final Counter storageClientOperationRetryCount;
@@ -189,23 +189,18 @@ public class AzureMetrics {
   private final MetricRegistry metricRegistry;
   Gauge<Long> lastContainerDeletionTimestamp;
 
-  public static final String AZURE_TABLE_CREATE_ERROR_COUNT = "azureTableCreateErrorCount";
-  public static final String AZURE_TABLE_ENTITY_CREATE_ERROR_COUNT = "azureTableEntityCreateErrorCount";
-  public final Counter azureTableCreateErrorCount;
-  public final Counter azureTableEntityCreateErrorCount;
+  public static final String TABLE_CREATE_ERROR_COUNT = "TableCreateErrorCount";
+  public static final String TABLE_ENTITY_CREATE_ERROR_COUNT = "TableEntityCreateErrorCount";
+  public final Counter tableCreateErrorCount;
+  public final Counter tableEntityCreateErrorCount;
 
-  public static final String AMBRY_REPLICA_TOKEN_WRITE_RATE = "ambryReplicaTokenWriteRate";
-  public final Meter ambryReplicaTokenWriteRate;
+  public static final String REPLICA_TOKEN_WRITE_RATE = "ReplicaTokenWriteRate";
+  public final Meter replicaTokenWriteRate;
 
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
 
     // V2 metrics
-    absTokenPersistFailureCount = registry.counter(MetricRegistry.name(AzureMetrics.class, ABS_TOKEN_PERSIST_FAILURE_COUNT));
-    absTokenRetrieveFailureCount = registry.counter(MetricRegistry.name(AzureMetrics.class, ABS_TOKEN_RETRIEVE_FAILURE_COUNT));
-    ambryReplicaTokenWriteRate = registry.meter(MetricRegistry.name(AzureMetrics.class, AMBRY_REPLICA_TOKEN_WRITE_RATE));
-    azureTableCreateErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, AZURE_TABLE_CREATE_ERROR_COUNT));
-    azureTableEntityCreateErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, AZURE_TABLE_ENTITY_CREATE_ERROR_COUNT));
     blobCompactionErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_ERROR_COUNT));
     blobCompactionLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_LATENCY));
     blobCompactionSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_SUCCESS_RATE));
@@ -232,6 +227,11 @@ public class AzureMetrics {
     blobUploadSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_SUCCESS_RATE));
     partitionCompactionErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, PARTITION_COMPACTION_ERROR_COUNT));
     partitionCompactionLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, PARTITION_COMPACTION_LATENCY));
+    replicaTokenReadErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, REPLICA_TOKEN_READ_ERROR_COUNT));
+    replicaTokenWriteErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, REPLICA_TOKEN_WRITE_ERROR_COUNT));
+    replicaTokenWriteRate = registry.meter(MetricRegistry.name(AzureMetrics.class, REPLICA_TOKEN_WRITE_RATE));
+    tableCreateErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, TABLE_CREATE_ERROR_COUNT));
+    tableEntityCreateErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, TABLE_ENTITY_CREATE_ERROR_COUNT));
 
     // Unused metrics
     blobUploadRequestCount =

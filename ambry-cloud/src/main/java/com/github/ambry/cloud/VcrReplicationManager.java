@@ -192,28 +192,14 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   @Override
-  public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas)
-      throws ReplicationException {
+  public int reloadReplicationTokenIfExists(ReplicaId localReplica, List<RemoteReplicaInfo> peerReplicas) {
     // For each replica of a partition
     for (RemoteReplicaInfo replicaInfo : peerReplicas) {
       String partitionKey = String.valueOf(replicaInfo.getReplicaId().getPartitionId().getId());
       String rowKey = replicaInfo.getReplicaId().getDataNodeId().getHostname();
-      // First look for the token in the new place - the table
-      TableEntity row = cloudDestination.getTableEntity(azureTableNameReplicaTokens, partitionKey, rowKey);
-      if (row == null) {
-        // If token is not found on the new place, then look for it in the old place
-        // TODO: Remove this code after all nodes have migrated to using the table, tokenReloadWarnCount == 0
-        vcrMetrics.tokenReloadWarnCount.inc();
-        if (super.reloadReplicationTokenIfExists(localReplica, peerReplicas) > 0) {
-          // If token is not found in the old place too, then that's a real error !
-          azureMetrics.absTokenRetrieveFailureCount.inc();
-          logger.error("Failed to retrieve tokens for peer replicas of local replica {}", localReplica);
-        }
-        return (int) azureMetrics.absTokenRetrieveFailureCount.getCount();
-      }
-      FindTokenFactory findTokenFactory =
-          tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
+      FindTokenFactory findTokenFactory = tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED);
       try {
+        TableEntity row = cloudDestination.getTableEntity(azureTableNameReplicaTokens, partitionKey, rowKey);
         DataInputStream inputStream = new DataInputStream(
             new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
         replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
@@ -222,14 +208,14 @@ public class VcrReplicationManager extends ReplicationEngine {
         replicaInfo.setReplicatedUntilUTC(time);
       } catch (Throwable t) {
         // log and metric
-        azureMetrics.absTokenRetrieveFailureCount.inc();
+        azureMetrics.replicaTokenReadErrorCount.inc();
         logger.error("Failed to deserialize token for peer replica {} due to {}", replicaInfo, t.toString());
         t.printStackTrace();
         replicaInfo.setToken(findTokenFactory.getNewFindToken());
         replicaInfo.setReplicatedUntilUTC(-1);
-      }
-    }
-    return (int) azureMetrics.absTokenRetrieveFailureCount.getCount();
+      } // try-catch
+    } // for-loop
+    return (int) azureMetrics.replicaTokenReadErrorCount.getCount();
   }
 
   @Override
