@@ -13,7 +13,6 @@
  */
 package com.github.ambry.vcr;
 
-import com.azure.core.credential.AzureNamedKey;
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
 import com.azure.data.tables.TableClient;
@@ -96,7 +95,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -113,8 +111,6 @@ import java.util.stream.IntStream;
 import org.apache.http.HttpStatus;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.slf4j.Logger;
