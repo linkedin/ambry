@@ -13,6 +13,7 @@
  */
 package com.github.ambry.vcr;
 
+import com.azure.core.credential.AzureNamedKey;
 import com.azure.core.http.rest.PagedResponse;
 import com.azure.core.http.rest.Response;
 import com.azure.data.tables.TableClient;
@@ -323,6 +324,7 @@ public class CloudBlobStoreTest {
       CloudBlobStore -> AzureCloudDestinationSync -> BlobContainerClient -> BlobClient
      */
     MetricRegistry metricRegistry = new MetricRegistry();
+    AzureMetrics azureMetrics = new AzureMetrics(metricRegistry);
     VcrMetrics vcrMetrics = new VcrMetrics(metricRegistry);
     AzureCloudDestinationSync spyDest = spy(new AzuriteUtils().getAzuriteClient(properties, metricRegistry,
         clusterMap, accountService));
@@ -346,12 +348,12 @@ public class CloudBlobStoreTest {
     // Return error when compaction tries to delete blobs and check nothing is deleted
     when(mockResponse.getStatusCode()).thenReturn(HttpStatus.SC_NOT_FOUND);
     assertEquals(0, spyDest.compactPartition(String.valueOf(partitionId.getId())));
-    assertEquals(numBlobs, vcrMetrics.compactionFailureCount.getCount());
+    assertEquals(numBlobs, azureMetrics.blobCompactionErrorCount.getCount());
     when(mockResponse.getStatusCode()).thenReturn(HttpStatus.SC_INTERNAL_SERVER_ERROR);
     assertEquals(0, spyDest.compactPartition(String.valueOf(partitionId.getId())));
-    assertEquals(numBlobs * 2, vcrMetrics.compactionFailureCount.getCount());
+    assertEquals(numBlobs * 2, azureMetrics.blobCompactionErrorCount.getCount());
     // Check blob exists
-    assertEquals(0, vcrMetrics.blobCompactionRate.getCount());
+    assertEquals(0, azureMetrics.blobCompactionSuccessRate.getCount());
     when(spyContainerClient.getBlobClient(any())).thenCallRealMethod();
     messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
         assertTrue(spyDest.doesBlobExist((BlobId) messageInfo.getStoreKey())));
@@ -359,7 +361,7 @@ public class CloudBlobStoreTest {
     // Really compact and check blobs are gone
     when(mockBlobClient.deleteWithResponse(any(), any(), any(), any())).thenCallRealMethod();
     assertEquals(numBlobs, spyDest.compactPartition(String.valueOf(partitionId.getId())));
-    assertEquals(numBlobs, vcrMetrics.blobCompactionRate.getCount());
+    assertEquals(numBlobs, azureMetrics.blobCompactionSuccessRate.getCount());
     messageWriteSet.getMessageSetInfo().forEach(messageInfo ->
         assertFalse(spyDest.doesBlobExist((BlobId) messageInfo.getStoreKey())));
   }
