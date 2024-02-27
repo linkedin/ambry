@@ -19,6 +19,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.CloudServiceDataNode;
@@ -68,6 +69,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -434,5 +436,24 @@ public class RecoveryNetworkClientTest {
         fail("Data mismatch");
       }
     });
+  }
+
+  /**
+   * Test simple metric registration
+   */
+  @Test
+  public void testMetricRegistration() {
+    Arrays.stream(AzureMetrics.class.getDeclaredFields())
+        .sequential()
+        .filter(field -> Modifier.isStatic(field.getModifiers()))
+        .forEach(field -> {
+          try {
+            logger.info("sensorType={}, sensorName={}, mbean={}", AzureMetrics.class.getSimpleName(),
+                field.get(AzureMetrics.class),
+                String.format("%s.%s", AzureMetrics.class.getCanonicalName(), field.get(AzureMetrics.class)));
+          } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+          }
+        });
   }
 }

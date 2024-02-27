@@ -197,6 +197,9 @@ public class AzureMetrics {
   public static final String REPLICA_TOKEN_WRITE_RATE = "ReplicaTokenWriteRate";
   public final Meter replicaTokenWriteRate;
 
+  public static final String COMPACTION_TASK_ERROR_COUNT = "CompactionTaskErrorCount";
+  public final Counter compactionTaskErrorCount;
+
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
 
@@ -225,6 +228,7 @@ public class AzureMetrics {
     blobUploadErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_ERROR_COUNT));
     blobUploadLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_LATENCY));
     blobUploadSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_UPLOAD_SUCCESS_RATE));
+    compactionTaskErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, COMPACTION_TASK_ERROR_COUNT));
     partitionCompactionErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, PARTITION_COMPACTION_ERROR_COUNT));
     partitionCompactionLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, PARTITION_COMPACTION_LATENCY));
     replicaTokenReadErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, REPLICA_TOKEN_READ_ERROR_COUNT));

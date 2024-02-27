@@ -145,12 +145,9 @@ public class VcrReplicationManager extends ReplicationEngine {
       throw new IllegalStateException("VcrHelixConfig is not correct");
     }
     vcrMetrics.registerVcrHelixUpdateGauge(this::getVcrHelixUpdaterAsCount, this::getVcrHelixUpdateInProgressAsCount);
-    // TODO: Remove this code after all nodes have migrated to using the table, tokenReloadWarnCount == 0
-    this.persistor = new CloudTokenPersistor(replicaTokenFileName, mountPathToPartitionInfos, replicationMetrics,
-        clusterMap, tokenHelper, cloudDestination);;
     if (cloudConfig.cloudBlobCompactionEnabled) {
-      this.cloudStorageCompactor =  new CloudStorageCompactor(cloudDestination, cloudConfig,
-          partitionToPartitionInfo.keySet(), vcrMetrics);
+      this.cloudStorageCompactor =  new CloudStorageCompactor(properties, metricRegistry, cloudDestination,
+          partitionToPartitionInfo.keySet());
       /*
         Create a new scheduler and schedule 1 daemon for compaction. No need to config this.
         The existing scheduling framework schedules tasks at a fixed rate, not a fixed delay and does not use daemons.
