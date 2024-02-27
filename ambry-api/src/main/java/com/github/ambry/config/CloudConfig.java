@@ -448,8 +448,32 @@ public class CloudConfig {
   @Default("false")
   public final boolean vcrHelixUpdateDryRun;
 
+  /**
+   * Not all nodes are identical; some possess more cores while others fewer.
+   * Therefore, adopting a predetermined count of replication threads is not advisable.
+   * Instead, the number of replication threads should be determined based on the number of cores available.
+   * The scaling factor provided below can assume three potential states: negative, zero, or positive.
+   * A negative value signifies the creation of a number of threads equal to the absolute value of the negative integer.
+   * Zero denotes the absence of thread creation.
+   * A positive value will serve as a multiplier for the number of CPUs to ascertain the number of threads to generate.
+   *
+   * For eg, for a node with 4 cores,
+   *  A cpu_scale of -2.5 will create 2 threads since int(|-2.5|) = 2
+   *  A cpu_scale of +2.5 will create 10 threads since int(2.5 * 4) = 10
+   */
+  public static final String BACKUP_NODE_CPU_SCALE = "backup.node.cpu.scale";
+  public static final float DEFAULT_BACKUP_NODE_CPU_SCALE = -1.0f; // 1 thread
+  // num_cpu-1 threads, prevent a fork bomb
+  public static final float MIN_BACKUP_NODE_CPU_SCALE = 1f - Float.valueOf(Runtime.getRuntime().availableProcessors());
+  public static final float MAX_BACKUP_NODE_CPU_SCALE = 4.0f; // 4 * num_cpus, prevent a fork bomb
+  @Config(BACKUP_NODE_CPU_SCALE)
+  public final float backupNodeCpuScale;
+
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
+    backupNodeCpuScale = verifiableProperties.getFloatInRange(BACKUP_NODE_CPU_SCALE,
+        DEFAULT_BACKUP_NODE_CPU_SCALE, MIN_BACKUP_NODE_CPU_SCALE, MAX_BACKUP_NODE_CPU_SCALE);
     cloudCompactionGracePeriodDays = verifiableProperties.getInt(CLOUD_COMPACTION_GRACE_PERIOD_DAYS, 7);
     cloudCompactionDryRunEnabled = verifiableProperties.getBoolean(CLOUD_COMPACTION_DRY_RUN_ENABLED, true);
     ambryBackupVersion = verifiableProperties.getString(AMBRY_BACKUP_VERSION, DEFAULT_AMBRY_BACKUP_VERSION);

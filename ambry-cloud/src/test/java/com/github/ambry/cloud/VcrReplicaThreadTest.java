@@ -13,12 +13,24 @@
  */
 package com.github.ambry.cloud;
 
+<<<<<<< HEAD
+=======
+import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+>>>>>>> 1f694a912 ([vcr-2.0] Introduce CPU scaling factor)
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
+<<<<<<< HEAD
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.RemoteReplicaInfo;
+=======
+import com.github.ambry.clustermap.VcrClusterParticipant;
+import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.network.NetworkClientFactory;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicationException;
+>>>>>>> 1f694a912 ([vcr-2.0] Introduce CPU scaling factor)
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -32,24 +44,25 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import static org.mockito.Mockito.*;
 
 public class VcrReplicaThreadTest {
   protected final VerifiableProperties properties;
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThreadTest.class);
+  protected MockClusterMap clustermap;
+  public static final int NUM_NODES = 5; // Also num_replicas
+  public static final int NUM_PARTITIONS = 10;
 
-  public VcrReplicaThreadTest() {
+  public VcrReplicaThreadTest() throws IOException {
     properties = new VerifiableProperties(new AzuriteUtils().getAzuriteConnectionProperties());
+    // Create test cluster MAP
+    clustermap = new MockClusterMap(false, false, NUM_NODES,
+        1, NUM_PARTITIONS, true, false,
+        "localhost");
   }
 
   @Test
   public void testSelectReplicas() throws IOException {
-    // Create test cluster MAP
-    int NUM_NODES = 5; // Also num_replicas
-    int NUM_PARTITIONS = 10;
-    MockClusterMap clustermap = new MockClusterMap(false, false, NUM_NODES,
-        1, NUM_PARTITIONS, true, false,
-        "localhost");
     // Give hosts a name
     AtomicInteger ai = new AtomicInteger(0);
     int Z = 'Z';
@@ -106,4 +119,15 @@ public class VcrReplicaThreadTest {
     });
   }
 
+  @Test
+  public void testNumReplThreads() throws ReplicationException {
+    VcrReplicationManager manager =
+        new VcrReplicationManager(properties, null, null, clustermap,
+            mock(VcrClusterParticipant.class), mock(AzureCloudDestinationSync.class), null,
+            mock(NetworkClientFactory.class), null, null);
+    Assert.assertEquals(0, manager.getNumReplThreads(0f));
+    Assert.assertEquals(2, manager.getNumReplThreads(-2.5f));
+    Assert.assertEquals((int) (Float.valueOf(Runtime.getRuntime().availableProcessors()) * 2.5f),
+        manager.getNumReplThreads(2.5f));
+  }
 }
