@@ -193,18 +193,17 @@ public class VcrReplicationManager extends ReplicationEngine {
    */
   @Override
   protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
-    for (RemoteReplicaInfo remoteReplicaInfo : remoteReplicaInfos) {
-      DataNodeId dataNodeIdToReplicate = remoteReplicaInfo.getReplicaId().getDataNodeId();
-      String datacenter = dataNodeIdToReplicate.getDatacenterName();
-      List<ReplicaThread> replicaThreads = getOrCreateThreadPoolIfNecessary(datacenter, startThread);
+    for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
+      String dc = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
+      List<ReplicaThread> replicaThreads = getOrCreateThreadPoolIfNecessary(dc, startThread);
       if (replicaThreads != null) {
-        ReplicaThread replicaThread = partitionToReplicaThread.computeIfAbsent(
-            remoteReplicaInfo.getLocalReplicaId().getPartitionId().getId(),
-            key -> replicaThreads.get(getReplicaThreadIndexToUse(datacenter)));
-        replicaThread.addRemoteReplicaInfo(remoteReplicaInfo);
-        remoteReplicaInfo.setReplicaThread(replicaThread);
+        ReplicaThread rthread = partitionToReplicaThread.computeIfAbsent(
+            rinfo.getLocalReplicaId().getPartitionId().getId(),
+            key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
+        rthread.addRemoteReplicaInfo(rinfo);
+        rinfo.setReplicaThread(rthread);
       } else {
-        logger.error("Replication thread pool is empty for datacenter {}", datacenter);
+        logger.error("Replication thread pool is empty for datacenter {}", dc);
       }
     }
   }
