@@ -16,9 +16,12 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureMetrics;
 
 
 public class RecoveryMetrics {
+  public static final String BLOB_DOWNLOAD_BYTE_RATE = "BlobDownloadByteRate";
+
   public final Counter recoveryTokenError;
   public final Counter listBlobsError;
   public final Counter metadataError;
@@ -27,7 +30,10 @@ public class RecoveryMetrics {
   // Metrics for replication from cloud
   public final Counter addCloudPartitionErrorCount;
   public final Counter cloudTokenReloadWarnCount;
+  public final Meter blobDownloadByteRate;
+
   public RecoveryMetrics(MetricRegistry registry) {
+    blobDownloadByteRate = registry.meter(MetricRegistry.name(RecoveryMetrics.class, BLOB_DOWNLOAD_BYTE_RATE));
     recoveryTokenError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, "RecoveryTokenError"));
     listBlobsError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, "ListBlobsError"));
     metadataError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, "MetadataError"));

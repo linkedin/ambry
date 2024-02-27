@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
 import com.github.ambry.clustermap.PartitionId;
@@ -47,11 +48,11 @@ import static org.mockito.Mockito.*;
 public class CloudStorageCompactorTest {
   private static final Logger logger = LoggerFactory.getLogger(CloudStorageCompactorTest.class);
 
-  private final CloudDestination mockDest = mock(CloudDestination.class);
-  private final CloudStorageCompactor compactor;
-  private final Map<PartitionId, PartitionInfo> partitionMap = new HashMap<>();
-  private final VcrMetrics vcrMetrics = new VcrMetrics(new MetricRegistry());
-  private final int pageSize = 10;
+  protected CloudDestination mockDest;
+  protected CloudStorageCompactor compactor;
+  protected Map<PartitionId, PartitionInfo> partitionMap;
+  protected AzureMetrics azureMetrics;
+  protected final int pageSize = 10;
   protected ScheduledExecutorService cloudCompactionScheduler;
   protected CloudConfig cloudConfig;
   public CloudStorageCompactorTest() {
@@ -64,8 +65,13 @@ public class CloudStorageCompactorTest {
     properties.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_INTERVAL_HOURS, "48"); // Set a long sleep between cycles
     properties.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_ENABLED, "true");
     properties.setProperty(CloudConfig.CLOUD_BLOB_COMPACTION_STARTUP_DELAY_SECS, "0"); // No delay for testing
-    cloudConfig = new CloudConfig(new VerifiableProperties(properties));
-    compactor = new CloudStorageCompactor(mockDest, cloudConfig, partitionMap.keySet(), vcrMetrics);
+    VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
+    MetricRegistry registry = new MetricRegistry();
+    partitionMap = new HashMap<>();
+    mockDest = mock(CloudDestination.class);
+    azureMetrics = new AzureMetrics(registry);
+    cloudConfig = new CloudConfig(verifiableProperties);
+    compactor = new CloudStorageCompactor(verifiableProperties, registry, mockDest, partitionMap.keySet());
     cloudCompactionScheduler =
         Utils.newScheduler(1, "cloud-compaction-controller-", true);
   }
@@ -100,19 +106,19 @@ public class CloudStorageCompactorTest {
     }
 
     assertEquals(pageSize * numPartitions, compactor.compactPartitions());
-    assertEquals(0, vcrMetrics.compactionFailureCount.getCount());
+    assertEquals(0, azureMetrics.compactionTaskErrorCount.getCount());
 
     // remove a partition from map
     partitionMap.remove(new MockPartitionId(0, defaultClass));
     assertEquals(pageSize * (numPartitions - 1), compactor.compactPartitions());
-    assertEquals(0, vcrMetrics.compactionFailureCount.getCount());
+    assertEquals(0, azureMetrics.compactionTaskErrorCount.getCount());
 
     // Make compaction fail for some partitions
     CloudStorageException csex = new CloudStorageException("failure", new RuntimeException("Don't hurt me!"));
     when(mockDest.compactPartition(eq("2"), any())).thenThrow(csex);
     when(mockDest.compactPartition(eq("20"), any())).thenThrow(csex);
     assertEquals(pageSize * (numPartitions - 3), compactor.compactPartitions());
-    assertEquals(2, vcrMetrics.compactionFailureCount.getCount());
+    assertEquals(2, azureMetrics.compactionTaskErrorCount.getCount());
 
     // Test shutdown
     assertFalse("Should not be shutting down yet", compactor.isShutDown());

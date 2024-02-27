@@ -88,7 +88,7 @@ public class AzureCompactionTool {
           null).getCloudDestination();
       CloudConfig cloudConfig = new CloudConfig(verifiableProperties);
       CloudStorageCompactor compactor =
-          new CloudStorageCompactor(azureDest, cloudConfig, partitionIdSet, new VcrMetrics(new MetricRegistry()));
+          new CloudStorageCompactor(verifiableProperties, new MetricRegistry(), azureDest, partitionIdSet);
 
       // Attempt clean shutdown if someone Ctrl-C's us.
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {

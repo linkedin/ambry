@@ -13,8 +13,11 @@
  */
 package com.github.ambry.cloud;
 
+import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.config.CloudConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -36,9 +39,9 @@ import org.slf4j.LoggerFactory;
  */
 public class CloudStorageCompactor extends Thread {
   private static final Logger logger = LoggerFactory.getLogger(CloudStorageCompactor.class);
+  protected AzureMetrics azureMetrics;
   protected CloudDestination cloudDestination;
   protected Set<PartitionId> partitions;
-  protected VcrMetrics vcrMetrics;
   protected ScheduledThreadPoolExecutor executorService;
 
   protected CloudConfig cloudConfig;
@@ -55,8 +58,21 @@ public class CloudStorageCompactor extends Thread {
       VcrMetrics vcrMetrics) {
     this.cloudDestination = cloudDestination;
     this.partitions = partitions;
-    this.vcrMetrics = vcrMetrics;
     this.cloudConfig = cloudConfig;
+    this.doneLatch = new CountDownLatch(1);
+    this.numBlobsErased = new AtomicInteger();
+    // Give threads a name, so they can be identified in a thread-dump and set them as daemon or background
+    this.executorService = (ScheduledThreadPoolExecutor) Utils.newScheduler(this.cloudConfig.cloudCompactionNumThreads,
+        "cloud-compaction-worker-", true);
+    logger.info("[COMPACT] Created CloudStorageCompactor");
+  }
+
+  public CloudStorageCompactor(VerifiableProperties properties, MetricRegistry registry,
+      CloudDestination cloudDestination, Set<PartitionId> partitions) {
+    this.cloudDestination = cloudDestination;
+    this.partitions = partitions;
+    this.azureMetrics = new AzureMetrics(registry);
+    this.cloudConfig = new CloudConfig(properties);
     this.doneLatch = new CountDownLatch(1);
     this.numBlobsErased = new AtomicInteger();
     // Give threads a name, so they can be identified in a thread-dump and set them as daemon or background
@@ -221,7 +237,7 @@ public class CloudStorageCompactor extends Thread {
         return numBlobsErased.addAndGet(cloudDestination.compactPartition(partitionId.toPathString(), compactor));
       } catch (Throwable throwable) {
         // Swallow all exceptions
-        vcrMetrics.compactionFailureCount.inc();
+        azureMetrics.compactionTaskErrorCount.inc();
         logger.error("[COMPACT] Failed to compact partition-{} due to {}",
             partitionId.toPathString(), throwable);
       }
@@ -234,7 +250,7 @@ public class CloudStorageCompactor extends Thread {
       return future.get();
     } catch (Throwable throwable) {
       // Swallow all exceptions
-      vcrMetrics.compactionFailureCount.inc();
+      azureMetrics.compactionTaskErrorCount.inc();
       logger.error("[COMPACT] Failed to collect compaction result due to {}", throwable);
     }
     return 0;
@@ -261,7 +277,7 @@ public class CloudStorageCompactor extends Thread {
           .max(Integer::compare)
           .orElse(0);
     } catch (Throwable throwable) {
-      vcrMetrics.compactionFailureCount.inc();
+      azureMetrics.compactionTaskErrorCount.inc();
       logger.error("[COMPACT] Failed to execute cloud-compaction tasks due to",
           throwable);
     }

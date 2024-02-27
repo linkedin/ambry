@@ -51,7 +51,6 @@ import com.github.ambry.cloud.CloudStorageCompactor;
 import com.github.ambry.cloud.CloudStorageException;
 import com.github.ambry.cloud.CloudUpdateValidator;
 import com.github.ambry.cloud.FindResult;
-import com.github.ambry.cloud.VcrMetrics;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.CloudConfig;
@@ -100,7 +99,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
   protected ClusterMapConfig clusterMapConfig;
   protected ConcurrentHashMap<String, BlobContainerClient> partitionToAzureStore;
   protected ConcurrentHashMap<String, TableClient> tableClientMap;
-  protected VcrMetrics vcrMetrics;
   protected final AtomicBoolean shutdownCompaction = new AtomicBoolean(false);
   protected AccountService accountService;
   protected StoreConfig storeConfig;
@@ -168,7 +166,6 @@ public class AzureCloudDestinationSync implements CloudDestination {
     this.clusterMapConfig = new ClusterMapConfig(verifiableProperties);
     this.partitionToAzureStore = new ConcurrentHashMap<>();
     this.tableClientMap = new ConcurrentHashMap<>();
-    this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureBlobLayoutStrategy = new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig);
     logger.info("azureCloudConfig.azureStorageClientClass = {}", azureCloudConfig.azureStorageClientClass);
     StorageClient storageClient =
@@ -214,7 +211,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       return tableClientMap.computeIfAbsent(tableName,
           key -> azureTableServiceClient.getTableClient(tableName));
     } catch (Throwable e) {
-      azureMetrics.azureTableCreateErrorCount.inc();
+      azureMetrics.tableCreateErrorCount.inc();
       logger.error("Failed to create or get table {} in Azure Table Service due to {}", tableName, e);
       throw e;
     }
@@ -236,7 +233,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       throwable = e;
     } finally {
       if (throwable != null) {
-        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        azureMetrics.tableEntityCreateErrorCount.inc();
         logger.error("Failed to insert table entity {}/{} in {} due to {}",
             tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
         throwable.printStackTrace();
@@ -262,7 +259,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
     } finally {
       // Executed before return statement
       if (throwable != null) {
-        azureMetrics.azureTableEntityCreateErrorCount.inc();
+        azureMetrics.tableEntityCreateErrorCount.inc();
         logger.error("Failed to upsert table entity {}/{} in {} due to {}",
             tableEntity.getPartitionKey(), tableEntity.getRowKey(), tableName, throwable);
         throwable.printStackTrace();
@@ -304,7 +301,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         return null;
       }
     } catch (BlobStorageException blobStorageException) {
-      vcrMetrics.azureStoreContainerGetError.inc();
+      azureMetrics.blobContainerErrorCount.inc();
       logger.error("Failed to get Azure blob storage container for partition {} due to {}", partitionId,
           blobStorageException.getServiceMessage());
       throw blobStorageException;
@@ -326,7 +323,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         logger.info("Azure blob storage container for partition {} already exists", partitionId);
         return getBlobStore(partitionId);
       }
-      vcrMetrics.azureStoreContainerGetError.inc();
+      azureMetrics.blobContainerErrorCount.inc();
       logger.error("Failed to create Azure blob storage container for partition {} due to {}", partitionId,
           blobStorageException.getServiceMessage());
       throw blobStorageException;
@@ -350,7 +347,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     // If it is still null, throw the error and emit a metric
     if (blobContainerClient == null) {
-      vcrMetrics.azureStoreContainerGetError.inc();
+      azureMetrics.blobContainerErrorCount.inc();
       String errMsg = String.format("Azure blob storage container for partition %s is null", partitionId);
       logger.error(errMsg);
       throw new RuntimeException(errMsg);
@@ -381,7 +378,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
     // If it is still null, throw the error and emit a metric
     if (blobContainerClient == null) {
-      vcrMetrics.azureStoreContainerGetError.inc();
+      azureMetrics.blobContainerErrorCount.inc();
       String errMsg = String.format("Azure blob storage container for partition %s is null", partitionId);
       logger.error(errMsg);
       throw new RuntimeException(errMsg);
@@ -475,7 +472,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
 
       BlobContainerClient blobContainerClient = createOrGetBlobStore(blobLayout.containerName);
       ////////////////////////////////// Upload blob to Azure blob storage ////////////////////////////////////////
-      storageTimer = azureMetrics.blobUploadTime.time();
+      storageTimer = azureMetrics.blobUploadLatency.time();
       Response<BlockBlobItem> blockBlobItemResponse =
           blobContainerClient.getBlobClient(blobIdStr)
               .uploadWithResponse(blobParallelUploadOptions, Duration.ofMillis(cloudConfig.cloudRequestTimeout),
@@ -486,7 +483,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       // Success rate is effective, Counter is ineffective because it just monotonically increases
       azureMetrics.blobUploadSuccessRate.mark();
       // Measure ingestion rate, helps decide fleet size
-      azureMetrics.backupSuccessByteRate.mark(inputLength);
+      azureMetrics.blobUploadByteRate.mark(inputLength);
       logger.trace("Successful upload of blob {} to Azure blob storage with statusCode = {}, etag = {}",
           blobIdStr, blockBlobItemResponse.getStatusCode(),
           blockBlobItemResponse.getValue().getETag());
@@ -524,10 +521,10 @@ public class AzureCloudDestinationSync implements CloudDestination {
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     String blobIdStr = blobLayout.blobFilePath;
     BlobContainerClient blobContainerClient = createOrGetBlobStore(blobLayout.containerName);
-    Timer.Context storageTimer = azureMetrics.blobDownloadTime.time();
+    Timer.Context storageTimer = azureMetrics.blobDownloadLatency.time();
     try {
       blobContainerClient.getBlobClient(blobIdStr).downloadStream(outputStream);
-      azureMetrics.blobDownloadSuccessCount.inc();
+      azureMetrics.blobDownloadSuccessRate.mark();
     } catch (Throwable e) {
       azureMetrics.blobDownloadErrorCount.inc();
       String error = String.format("Failed to download blob %s from Azure blob storage due to %s",
@@ -636,7 +633,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
       logger.trace("Updating deleteTime of blob {} in Azure blob storage ", blobLayout.blobFilePath);
       Response<Void> response = updateBlobMetadata(blobLayout, blobProperties, cloudMetadata);
       // Success rate is effective, success counter is ineffective because it just monotonically increases
-      azureMetrics.blobUpdateDeleteTimeSucessRate.mark();
+      azureMetrics.blobUpdateDeleteTimeSuccessRate.mark();
       logger.trace("Successfully updated deleteTime of blob {} in Azure blob storage with statusCode = {}, etag = {}",
           blobLayout.blobFilePath, response.getStatusCode(), response.getHeaders().get(HttpHeaderName.ETAG));
       return true;
@@ -734,7 +731,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         logger.trace(error);
         return lifeVersion;
       }
-      azureMetrics.blobUpdateDeleteTimeErrorCount.inc();
+      azureMetrics.blobUndeleteErrorCount.inc();
       logger.error(error);
       throw AzureCloudDestination.toCloudStorageException(error, bse, null);
     } catch (Throwable t) {
@@ -973,12 +970,12 @@ public class AzureCloudDestinationSync implements CloudDestination {
               logger.trace("[COMPACT] Erased blob {} from Azure blob storage, reason = {}, status = {}", blobItem.getName(),
                   eraseReason, response.getStatusCode());
               numBlobsPurged += 1;
-              vcrMetrics.blobCompactionRate.mark();
+              azureMetrics.blobCompactionSuccessRate.mark();
               break;
             case HttpStatus.SC_NOT_FOUND:
             default:
               // Just increment a counter and set an alert on it. No need to throw an error and fail the thread.
-              vcrMetrics.compactionFailureCount.inc();
+              azureMetrics.blobCompactionErrorCount.inc();
               logger.error("[COMPACT] Failed to erase blob {} from Azure blob storage with status {}", blobItem.getName(),
                   response.getStatusCode());
           }
@@ -1058,7 +1055,7 @@ public class AzureCloudDestinationSync implements CloudDestination {
         }
       }
     } catch (Throwable t) {
-      vcrMetrics.compactionFailureCount.inc();
+      azureMetrics.partitionCompactionErrorCount.inc();
       String error = String.format("[COMPACT] Failed to compact partition %s due to %s", partitionPath, t.getMessage());
       logger.error(error);
       // Swallow error & return partial result. We want to be as close as possible to the real number of blobs deleted.
@@ -1070,86 +1067,14 @@ public class AzureCloudDestinationSync implements CloudDestination {
     return numBlobsPurged;
   }
 
-  // Azure naming rules: https://learn.microsoft.com/en-us/rest/api/storageservices/naming-and-referencing-containers--blobs--and-metadata
-  public static final String TOKEN_CONTAINER = "replica-token-container";
-
-  /**
-   * Return AzureTokenFileName
-   * @param tokenLayout Token layout
-   * @param tokenFileName Token file name
-   * @return AzureTokenFileName
-   */
-  protected String getAzureTokenFileName(AzureBlobLayoutStrategy.BlobLayout tokenLayout, String tokenFileName) {
-    return tokenLayout.containerName + "-" + tokenFileName;
-  }
   @Override
-  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream)
-      throws CloudStorageException {
-    /*
-      Would have loved to upload the token for each partition separately as an index-able file in
-      Azure Storage's table offering but due to lack of time and legacy constraints, here is the impl.
-      https://learn.microsoft.com/en-us/azure/cosmos-db/table/support?toc=https%3A%2F%2Flearn.microsoft.com%2Fen-us%2Fazure%2Fstorage%2Ftables%2Ftoc.json&bc=https%3A%2F%2Flearn.microsoft.com%2Fen-us%2Fazure%2Fbread%2Ftoc.json
-
-      Current impl:
-      Its copied straight from V1. The only change is the naming and location of token.
-      With blobLayoutStrategy = PARTITION, the V1 code stores each the token for each container in the container itself.
-      This makes searching for the token extremely difficult.
-      So for V2, I store the tokens in TOKEN_CONTAINER. This is not new.
-      If you set blobLayoutStrategy = CONTAINER, then this behavior ensues.
-      However, we want to set blobLayoutStrategy = PARTITION for V2 but still want the tokens in a separate container.
-     */
-    // Prepare to upload token to Azure blob storage
-    AzureBlobLayoutStrategy.BlobLayout
-        tokenLayout = azureBlobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
-    String azureTokenFileName = getAzureTokenFileName(tokenLayout, tokenFileName);
-    // There is no parallelism, but we still need to create and pass this object to SDK.
-    BlobParallelUploadOptions blobParallelUploadOptions =
-        new BlobParallelUploadOptions(inputStream);
-    // Without content-type, get-token floods log with warnings
-    blobParallelUploadOptions.setHeaders(new BlobHttpHeaders().setContentType("application/octet-stream"));
-    try {
-      BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
-      // Upload token to Azure blob storage
-      blobContainerClient.getBlobClient(azureTokenFileName)
-          .uploadWithResponse(blobParallelUploadOptions, Duration.ofMillis(cloudConfig.cloudRequestTimeout),
-              Context.NONE);
-    } catch (Exception e) {
-      azureMetrics.absTokenPersistFailureCount.inc();
-      String error = String.format("Unable to persist token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
-      throw AzureCloudDestination.toCloudStorageException(error, e, null);
-    }
+  public void persistTokens(String partitionPath, String tokenFileName, InputStream inputStream) {
+    throw new UnsupportedOperationException("AzureCloudDestinationSync::persistTokens is unsupported");
   }
 
   @Override
-  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream)
-      throws CloudStorageException {
-    // Prepare to download token from Azure blob storage
-    AzureBlobLayoutStrategy.BlobLayout
-        tokenLayout = azureBlobLayoutStrategy.getTokenBlobLayout(partitionPath, tokenFileName);
-    String azureTokenFileName = getAzureTokenFileName(tokenLayout, tokenFileName);
-    try {
-      BlobContainerClient blobContainerClient = createOrGetBlobStore(TOKEN_CONTAINER);
-      // Download token from Azure blob storage
-      blobContainerClient.getBlobClient(azureTokenFileName).downloadStream(outputStream);
-      return true;
-    } catch (BlobStorageException e) {
-      azureMetrics.absTokenRetrieveFailureCount.inc();
-      String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
-      logger.error(error);
-      if (e.getErrorCode() == BlobErrorCode.BLOB_NOT_FOUND) {
-        /*
-          When we are starting from scratch, the backing store will not have any tokens.
-          Return false if the blob is not found. The caller will handle it.
-         */
-        return false;
-      }
-      throw AzureCloudDestination.toCloudStorageException(error, e, null);
-    } catch (Throwable e) {
-      azureMetrics.absTokenRetrieveFailureCount.inc();
-      String error = String.format("Unable to retrieve token %s/%s due to %s", TOKEN_CONTAINER, azureTokenFileName, e.getMessage());
-      logger.error(error);
-      throw AzureCloudDestination.toCloudStorageException(error, e, null);
-    }
+  public boolean retrieveTokens(String partitionPath, String tokenFileName, OutputStream outputStream) {
+    throw new UnsupportedOperationException("AzureCloudDestinationSync::retrieveTokens is unsupported");
   }
 
   @Override
@@ -1171,8 +1096,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public void deprecateContainers(Collection<Container> deprecatedContainers) throws CloudStorageException {
-
+  public void deprecateContainers(Collection<Container> deprecatedContainers) {
+    throw new UnsupportedOperationException("AzureCloudDestinationSync::deprecateContainers is unsupported");
   }
 
   @Override
@@ -1181,7 +1106,5 @@ public class AzureCloudDestinationSync implements CloudDestination {
   }
 
   @Override
-  public void close() throws IOException {
-
-  }
+  public void close() throws IOException {}
 }

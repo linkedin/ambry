@@ -19,6 +19,7 @@ import com.github.ambry.account.Container;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.CloudServiceDataNode;
@@ -68,6 +69,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -434,5 +436,34 @@ public class RecoveryNetworkClientTest {
         fail("Data mismatch");
       }
     });
+  }
+
+  /**
+   * Test simple metric registration
+   */
+  @Test
+  public void testMetricRegistration() {
+    Arrays.stream(AzureMetrics.class.getDeclaredFields())
+        .sequential()
+        .filter(field -> Modifier.isPublic(field.getModifiers()) && Modifier.isStatic(field.getModifiers())
+            && Modifier.isFinal(field.getModifiers()))
+        .forEach(field -> {
+          try {
+            String value = (String) field.get(AzureMetrics.class);
+            String type = "unknown";
+            if (value.endsWith("Count")) {
+              type = "counter";
+            } else if (value.endsWith("Rate")) {
+              type = "meter";
+            } else if (value.endsWith("Latency")) {
+              type = "histogram";
+            }
+            logger.info("sensorType={}, sensorName={}, type={}, mbean={}", AzureMetrics.class.getSimpleName(),
+                value, type,
+                String.format("%s.%s", AzureMetrics.class.getCanonicalName(), field.get(AzureMetrics.class)));
+          } catch (IllegalAccessException e) {
+            throw new RuntimeException(e);
+          }
+        });
   }
 }
