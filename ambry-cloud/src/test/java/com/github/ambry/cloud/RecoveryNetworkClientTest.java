@@ -448,8 +448,17 @@ public class RecoveryNetworkClientTest {
         .filter(field -> Modifier.isStatic(field.getModifiers()))
         .forEach(field -> {
           try {
-            logger.info("sensorType={}, sensorName={}, mbean={}", AzureMetrics.class.getSimpleName(),
-                field.get(AzureMetrics.class),
+            String value = (String) field.get(AzureMetrics.class);
+            String type = "unknown";
+            if (value.endsWith("Count")) {
+              type = "counter";
+            } else if (value.endsWith("Rate")) {
+              type = "meter";
+            } else if (value.endsWith("Latency")) {
+              type = "histogram";
+            }
+            logger.info("sensorType={}, sensorName={}, type={}, mbean={}", AzureMetrics.class.getSimpleName(),
+                value, type,
                 String.format("%s.%s", AzureMetrics.class.getCanonicalName(), field.get(AzureMetrics.class)));
           } catch (IllegalAccessException e) {
             throw new RuntimeException(e);

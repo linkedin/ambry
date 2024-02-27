@@ -186,8 +186,8 @@ public class AzureMetrics {
   public final Counter storageClientFailureAfterRetryCount;
   public final Counter deprecatedContainerCompactionFailureCount;
   public final Counter deprecatedContainerCompactionSuccessCount;
-  private final MetricRegistry metricRegistry;
-  Gauge<Long> lastContainerDeletionTimestamp;
+  public final MetricRegistry metricRegistry;
+  public Gauge<Long> lastContainerDeletionTimestamp;
 
   public static final String TABLE_CREATE_ERROR_COUNT = "TableCreateErrorCount";
   public static final String TABLE_ENTITY_CREATE_ERROR_COUNT = "TableEntityCreateErrorCount";
