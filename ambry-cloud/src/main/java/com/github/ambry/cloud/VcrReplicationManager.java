@@ -187,7 +187,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   /**
-   * Assign all replicas of a partition to a single thread to avoid concurrent updates ot Azure cloud.
+   * Assign all replicas of a partition to the same thread to avoid concurrent updates to Azure
    * @param remoteReplicaInfos List of {@link RemoteReplicaInfo}
    * @param startThread start threads on creation
    */
