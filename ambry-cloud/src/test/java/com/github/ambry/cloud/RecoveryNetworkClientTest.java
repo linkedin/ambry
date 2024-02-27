@@ -445,7 +445,8 @@ public class RecoveryNetworkClientTest {
   public void testMetricRegistration() {
     Arrays.stream(AzureMetrics.class.getDeclaredFields())
         .sequential()
-        .filter(field -> Modifier.isStatic(field.getModifiers()))
+        .filter(field -> Modifier.isPublic(field.getModifiers()) && Modifier.isStatic(field.getModifiers())
+            && Modifier.isFinal(field.getModifiers()))
         .forEach(field -> {
           try {
             String value = (String) field.get(AzureMetrics.class);
