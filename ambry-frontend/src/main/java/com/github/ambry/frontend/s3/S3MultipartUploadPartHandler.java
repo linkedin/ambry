@@ -152,7 +152,6 @@ public class S3MultipartUploadPartHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(frontendMetrics.putSecurityProcessRequestMetrics, securityCheckResult -> {
-        //make sure this has been called after processRequest(permission check) since it needs to query dataset db.
         BlobInfo blobInfo = getBlobInfoFromRequest();
         securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobInfo));
       }, uri, logger, finalCallback);
@@ -227,35 +226,7 @@ public class S3MultipartUploadPartHandler {
       // TODO [S3] may consolidate and move it to a central place.
       long propsBuildStartTime = System.currentTimeMillis();
       accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, frontendMetrics.putBlobMetricsGroup);
-      if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {
-        accountAndContainerInjector.injectDatasetForNamedBlob(restRequest);
-      }
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
-      Container container = RestUtils.getContainerFromArgs(restRequest.getArgs());
-      if (blobProperties.getTimeToLiveInSeconds() + TimeUnit.MILLISECONDS.toSeconds(
-          blobProperties.getCreationTimeInMs()) > Integer.MAX_VALUE) {
-        logger.debug("TTL set to very large value in PUT request with BlobProperties {}", blobProperties);
-        frontendMetrics.ttlTooLargeError.inc();
-      } else if (container.isTtlRequired() && (blobProperties.getTimeToLiveInSeconds() == Utils.Infinite_Time
-          || blobProperties.getTimeToLiveInSeconds() > frontendConfig.maxAcceptableTtlSecsIfTtlRequired)) {
-        String descriptor = RestUtils.getAccountFromArgs(restRequest.getArgs()).getName() + ":" + container.getName();
-        if (frontendConfig.failIfTtlRequiredButNotProvided) {
-          throw new RestServiceException(
-              "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " is required for upload to " + descriptor,
-              RestServiceErrorCode.InvalidArgs);
-        } else {
-          logger.debug("{} attempted an upload with ttl {} to {}", blobProperties.getServiceId(),
-              blobProperties.getTimeToLiveInSeconds(), descriptor);
-          frontendMetrics.ttlNotCompliantError.inc();
-          restResponseChannel.setHeader(RestUtils.Headers.NON_COMPLIANCE_WARNING,
-              "TTL < " + frontendConfig.maxAcceptableTtlSecsIfTtlRequired + " will be required for future uploads");
-        }
-      }
-      // inject encryption frontendMetrics if applicable
-      if (blobProperties.isEncrypted()) {
-        restRequest.getMetricsTracker()
-            .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), true));
-      }
       Map<String, Object> userMetadataFromRequest = new HashMap<>(restRequest.getArgs());
       byte[] userMetadata = RestUtils.buildUserMetadata(userMetadataFromRequest);
       frontendMetrics.blobPropsBuildForNameBlobPutTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
