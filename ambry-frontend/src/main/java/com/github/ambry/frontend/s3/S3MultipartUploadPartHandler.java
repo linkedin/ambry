@@ -141,12 +141,8 @@ public class S3MultipartUploadPartHandler {
     private void start() {
       restRequest.getMetricsTracker()
           .injectMetrics(frontendMetrics.putBlobMetricsGroup.getRestRequestMetrics(restRequest.isSslUsed(), false));
-      try {
-        // Start the callback chain by parsing blob info headers and performing request security processing.
-        securityService.processRequest(restRequest, securityProcessRequestCallback());
-      } catch (Exception e) {
-        finalCallback.onCompletion(null, e);
-      }
+      // Start the callback chain by parsing blob info headers and performing request security processing.
+      securityService.processRequest(restRequest, securityProcessRequestCallback());
     }
 
     /**
@@ -209,20 +205,15 @@ public class S3MultipartUploadPartHandler {
      */
     private Callback<Void> securityProcessResponseCallback() {
       return buildCallback(frontendMetrics.putBlobSecurityProcessResponseMetrics, securityCheckResult -> {
-        try {
-          // Set the response status to 200 since Ambry named blob PUT has response as 201.
-          if (restResponseChannel.getStatus() == ResponseStatus.Created) {
-            restResponseChannel.setStatus(ResponseStatus.Ok);
-          }
-
-          // Set S3 ETag header
-          String blobId = (String) restResponseChannel.getHeader(LOCATION);
-          restResponseChannel.setHeader("ETag", blobId);
-          //TODO [S3]: remove x-ambry- headers
-          finalCallback.onCompletion(null, null);
-        } catch (RestServiceException e) {
-          finalCallback.onCompletion(null, e);
+        // Set the response status to 200 since Ambry named blob PUT has response as 201.
+        if (restResponseChannel.getStatus() == ResponseStatus.Created) {
+          restResponseChannel.setStatus(ResponseStatus.Ok);
         }
+
+        // Set S3 ETag header
+        String blobId = (String) restResponseChannel.getHeader(LOCATION);
+        restResponseChannel.setHeader("ETag", blobId);
+        finalCallback.onCompletion(null, null);
       }, restRequest.getUri(), logger, finalCallback);
     }
 
@@ -233,6 +224,7 @@ public class S3MultipartUploadPartHandler {
      * @throws RestServiceException if there is an error while parsing the {@link BlobInfo} arguments.
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
+      // TODO [S3] may consolidate and move it to a central place.
       long propsBuildStartTime = System.currentTimeMillis();
       accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, frontendMetrics.putBlobMetricsGroup);
       if (RestUtils.isDatasetVersionQueryEnabled(restRequest.getArgs())) {

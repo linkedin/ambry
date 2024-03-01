@@ -19,7 +19,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.IdConverter;
-import com.github.ambry.frontend.NamedBlobPutHandler;
 import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.quota.QuotaManager;
