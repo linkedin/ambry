@@ -60,7 +60,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
-import static com.github.ambry.frontend.s3.S3Payload.*;
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 
 public class S3MultipartUploadTest {

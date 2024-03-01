@@ -22,7 +22,7 @@ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 /**
  * This class contains the payload for S3 requests rendered in XML.
  */
-public class S3Payload {
+public class S3MessagePayload {
   public static class CompleteMultipartUpload {
     @JacksonXmlProperty(localName = "Part")
     @JacksonXmlElementWrapper(useWrapping = false)

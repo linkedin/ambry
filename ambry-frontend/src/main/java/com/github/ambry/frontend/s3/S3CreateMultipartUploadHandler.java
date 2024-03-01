@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
-import static com.github.ambry.frontend.s3.S3Payload.*;
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 /**
  * Handles a request for s3 CreateMultipartUploads according to the

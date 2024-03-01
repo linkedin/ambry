@@ -56,6 +56,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.GregorianCalendar;
 import java.util.List;
@@ -68,7 +69,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
-import static com.github.ambry.frontend.s3.S3Payload.*;
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 
 /**
@@ -355,9 +356,7 @@ public class S3CompleteMultipartUploadHandler {
       try {
         // sort the list in order
         List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
-        Collections.sort(sortedParts, (p1, p2) -> {
-            return p1.getPartNumber() - p2.getPartNumber();
-        });
+        Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
 
         String reservedMetadataId = null;
         for (Part part : sortedParts) {
