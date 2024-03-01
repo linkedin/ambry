@@ -16,8 +16,6 @@ package com.github.ambry.frontend.s3;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
@@ -58,7 +56,6 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.GregorianCalendar;
 import java.util.List;
@@ -71,6 +68,7 @@ import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
+import static com.github.ambry.frontend.s3.S3Payload.*;
 
 
 /**
@@ -357,15 +355,13 @@ public class S3CompleteMultipartUploadHandler {
       try {
         // sort the list in order
         List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
-        Collections.sort(sortedParts, new Comparator<Part>() {
-          public int compare(Part p1, Part p2) {
+        Collections.sort(sortedParts, (p1, p2) -> {
             return p1.getPartNumber() - p2.getPartNumber();
-          }
         });
 
         String reservedMetadataId = null;
         for (Part part : sortedParts) {
-          PutBlobMetaInfo putBlobMetaInfoObj = PutBlobMetaInfo.deserialize(part.eTag);
+          PutBlobMetaInfo putBlobMetaInfoObj = PutBlobMetaInfo.deserialize(part.geteTag());
           // reservedMetadataId can be null. but if it's not null, they are supposed to be the same
           String reserved = putBlobMetaInfoObj.getReservedMetadataChunkId();
           if (reservedMetadataId == null) {
@@ -392,107 +388,6 @@ public class S3CompleteMultipartUploadHandler {
         throw new RestServiceException(error, e, RestServiceErrorCode.BadRequest);
       }
       return chunkInfos;
-    }
-  }
-
-  public static class CompleteMultipartUpload {
-
-    @JacksonXmlProperty(localName = "Part")
-    @JacksonXmlElementWrapper(useWrapping = false)
-    private Part[] part;
-
-    public CompleteMultipartUpload() {
-
-    }
-
-    public CompleteMultipartUpload(Part[] part) {
-      this.part = part;
-    }
-
-    public Part[] getPart() {
-      return part;
-    }
-
-    @Override
-    public String toString() {
-      StringBuilder sb = new StringBuilder();
-      for (Part part : part) {
-        sb.append(part).append(",");
-      }
-      return sb.toString();
-    }
-  }
-
-  public static class CompleteMultipartUploadResult {
-
-    @JacksonXmlProperty(localName = "Bucket")
-    private String bucket;
-    @JacksonXmlProperty(localName = "Key")
-    private String key;
-    @JacksonXmlProperty(localName = "Location")
-    private String location;
-    @JacksonXmlProperty(localName = "ETag")
-    private String eTag;
-
-    public CompleteMultipartUploadResult() {
-
-    }
-
-    public CompleteMultipartUploadResult(String bucket, String key, String location, String eTag) {
-      this.bucket = bucket;
-      this.key = key;
-      this.location = location;
-      this.eTag = eTag;
-    }
-
-    public String getBucket() {
-      return bucket;
-    }
-
-    public String getKey() {
-      return key;
-    }
-
-    public String getLocation() {
-      return location;
-    }
-
-    public String geteTag() {
-      return eTag;
-    }
-
-    @Override
-    public String toString() {
-      return "Bucket=" + bucket + ", " + "Key=" + key + ", " + "Location=" + location + ", " + "ETag=" + eTag;
-    }
-  }
-
-  public static class Part {
-    @JacksonXmlProperty(localName = "PartNumber")
-    private String partNumber;
-    @JacksonXmlProperty(localName = "ETag")
-    private String eTag;
-
-    public Part() {
-
-    }
-
-    public Part(String partNumber, String eTag) {
-      this.partNumber = partNumber;
-      this.eTag = eTag;
-    }
-
-    public String geteTag() {
-      return eTag;
-    }
-
-    public int getPartNumber() throws NumberFormatException {
-      return Integer.parseInt(partNumber);
-    }
-
-    @Override
-    public String toString() {
-      return "Part number = " + partNumber + ", eTag = " + eTag;
     }
   }
 }

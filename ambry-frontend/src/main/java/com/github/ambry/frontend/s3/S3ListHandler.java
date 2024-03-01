@@ -16,8 +16,6 @@ package com.github.ambry.frontend.s3;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.FrontendMetrics;
@@ -44,6 +42,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.s3.S3Payload.*;
 
 
 /**
@@ -118,94 +117,5 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     // Serialize xml
     xmlMapper.writeValue(outputStream, result);
     return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
-  }
-
-  public static class ListBucketResult {
-
-    @JacksonXmlProperty(localName = "Name")
-    private String name;
-    @JacksonXmlProperty(localName = "Prefix")
-    private String prefix;
-    @JacksonXmlProperty(localName = "MaxKeys")
-    private int maxKeys;
-    @JacksonXmlProperty(localName = "KeyCount")
-    private int keyCount;
-    @JacksonXmlProperty(localName = "Delimiter")
-    private String delimiter;
-    @JacksonXmlProperty(localName = "Contents")
-    @JacksonXmlElementWrapper(useWrapping = false)
-    private List<Contents> contents;
-    @JacksonXmlProperty(localName = "EncodingType")
-    private String encodingType;
-
-    public ListBucketResult() {
-
-    }
-
-    public ListBucketResult(String name, String prefix, int maxKeys, int keyCount, String delimiter,
-        List<Contents> contents, String encodingType) {
-      this.name = name;
-      this.prefix = prefix;
-      this.maxKeys = maxKeys;
-      this.keyCount = keyCount;
-      this.delimiter = delimiter;
-      this.contents = contents;
-      this.encodingType = encodingType;
-    }
-
-    public String getPrefix() {
-      return prefix;
-    }
-
-    public int getMaxKeys() {
-      return maxKeys;
-    }
-
-    public String getDelimiter() {
-      return delimiter;
-    }
-
-    public List<Contents> getContents() {
-      return contents;
-    }
-
-    public String getEncodingType() {
-      return encodingType;
-    }
-
-    public int getKeyCount() {
-      return keyCount;
-    }
-
-    @Override
-    public String toString() {
-      return "Name=" + name + ", Prefix=" + prefix + ", MaxKeys=" + maxKeys + ", KeyCount=" + keyCount + ", Delimiter="
-          + delimiter + ", Contents=" + contents + ", Encoding type=" + encodingType;
-    }
-  }
-
-  public static class Contents {
-    @JacksonXmlProperty(localName = "Key")
-    private String key;
-    @JacksonXmlProperty(localName = "LastModified")
-    private String lastModified;
-
-    public Contents() {
-
-    }
-
-    public Contents(String key, String lastModified) {
-      this.key = key;
-      this.lastModified = lastModified;
-    }
-
-    public String getKey() {
-      return key;
-    }
-
-    @Override
-    public String toString() {
-      return "Key=" + key + ", " + "LastModified=" + lastModified;
-    }
   }
 }

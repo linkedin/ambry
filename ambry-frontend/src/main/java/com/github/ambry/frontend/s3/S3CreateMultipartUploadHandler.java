@@ -16,7 +16,6 @@ package com.github.ambry.frontend.s3;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.FrontendMetrics;
@@ -37,7 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
-
+import static com.github.ambry.frontend.s3.S3Payload.*;
 
 /**
  * Handles a request for s3 CreateMultipartUploads according to the
@@ -139,43 +138,6 @@ public class S3CreateMultipartUploadHandler {
         restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
         finalCallback.onCompletion(channel, null);
       }, uri, LOGGER, finalCallback);
-    }
-  }
-
-  public static class InitiateMultipartUploadResult {
-
-    @JacksonXmlProperty(localName = "Bucket")
-    private String bucket;
-    @JacksonXmlProperty(localName = "Key")
-    private String key;
-    @JacksonXmlProperty(localName = "UploadId")
-    private String uploadId;
-
-    public InitiateMultipartUploadResult() {
-
-    }
-
-    public String getBucket() {
-      return bucket;
-    }
-
-    public String getKey() {
-      return key;
-    }
-
-    public String getUploadId() {
-      return uploadId;
-    }
-
-    public InitiateMultipartUploadResult(String bucket, String key, String uploadId) {
-      this.bucket = bucket;
-      this.key = key;
-      this.uploadId = uploadId;
-    }
-
-    @Override
-    public String toString() {
-      return "Bucket=" + bucket + ", Key=" + key + ", UploadId=" + uploadId;
     }
   }
 }
