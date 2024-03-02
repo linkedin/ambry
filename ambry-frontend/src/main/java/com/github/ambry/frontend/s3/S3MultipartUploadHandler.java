@@ -19,7 +19,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.IdConverter;
-import com.github.ambry.frontend.NamedBlobPutHandler;
 import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.quota.QuotaManager;
@@ -47,7 +46,6 @@ public class S3MultipartUploadHandler extends S3BaseHandler<ReadableStreamChanne
    * Construct a handler for handling S3 POST requests during multipart uploads.
    * @param securityService the {@link SecurityService} to use.
    * @param frontendMetrics {@link FrontendMetrics} instance where metrics should be recorded.
-   * @param namedBlobPutHandler the {@link NamedBlobPutHandler} to use.
    * @param accountAndContainerInjector helper to resolve account and container for a given request.
    * @param frontendConfig the {@link FrontendConfig} to use.
    * @param namedBlobDb the {@link NamedBlobDb} to use.
@@ -56,14 +54,15 @@ public class S3MultipartUploadHandler extends S3BaseHandler<ReadableStreamChanne
    * @param quotaManager The {@link QuotaManager} class to account for quota usage in serving requests.
    */
   public S3MultipartUploadHandler(SecurityService securityService, FrontendMetrics frontendMetrics,
-      NamedBlobPutHandler namedBlobPutHandler, AccountAndContainerInjector accountAndContainerInjector,
-      FrontendConfig frontendConfig, NamedBlobDb namedBlobDb, IdConverter idConverter, Router router,
-      QuotaManager quotaManager) {
+      AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig, NamedBlobDb namedBlobDb,
+      IdConverter idConverter, Router router, QuotaManager quotaManager) {
     this.createMultipartUploadHandler = new S3CreateMultipartUploadHandler(securityService, frontendMetrics);
     this.completeMultipartUploadHandler =
         new S3CompleteMultipartUploadHandler(securityService, namedBlobDb, idConverter, router,
             accountAndContainerInjector, frontendMetrics, frontendConfig, quotaManager);
-    this.uploadPartHandler = new S3MultipartUploadPartHandler(namedBlobPutHandler);
+    this.uploadPartHandler =
+        new S3MultipartUploadPartHandler(securityService, idConverter, router, accountAndContainerInjector,
+            frontendConfig, frontendMetrics, quotaManager);
   }
 
   /**

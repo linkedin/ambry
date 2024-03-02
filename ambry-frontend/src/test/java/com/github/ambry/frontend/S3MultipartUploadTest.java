@@ -267,8 +267,7 @@ public class S3MultipartUploadTest {
     getBlobHandler =
         new GetBlobHandler(frontendConfig, router, securityService, idConverter, injector, metrics, clusterMap,
             quotaManager, ACCOUNT_SERVICE);
-    s3MultipartUploadHandler =
-        new S3MultipartUploadHandler(securityService, metrics, namedBlobPutHandler, injector, frontendConfig,
+    s3MultipartUploadHandler = new S3MultipartUploadHandler(securityService, metrics, injector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
