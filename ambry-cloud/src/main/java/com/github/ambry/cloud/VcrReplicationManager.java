@@ -119,7 +119,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   public static final String STORE_KEY = "storeKey";
   public static final String REPLICATED_UNITL_UTC = "replicatedUntilUTC";
   public static final String BINARY_TOKEN = "binaryToken";
-  public static final String DATE_FORMAT ="yyyy_MMM_dd_HH_mm_ss";
+  public static final String DATE_FORMAT = "yyyy_MMM_dd_HH_mm_ss";
 
   public VcrReplicationManager(VerifiableProperties properties, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
