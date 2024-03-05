@@ -217,7 +217,7 @@ public class ReplicaThread implements Runnable {
     return unmodifiableReplicationDisabledPartitions;
   }
 
-  String getName() {
+  public String getName() {
     return threadName;
   }
 

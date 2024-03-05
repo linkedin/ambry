@@ -202,6 +202,7 @@ public class VcrReplicationManager extends ReplicationEngine {
             key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
         rthread.addRemoteReplicaInfo(rinfo);
         rinfo.setReplicaThread(rthread);
+        logger.info("Added replica {} to thread {}", rinfo, rthread.getName());
       } else {
         logger.error("Replication thread pool is empty for datacenter {}", dc);
       }
