@@ -37,6 +37,8 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -127,6 +129,7 @@ public class VcrReplicaThread extends ReplicaThread {
     long lastOpTime = remoteReplicaInfo.getReplicatedUntilUTC();
     String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
     String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
+    DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
     TableEntity entity = new TableEntity(partitionKey, rowKey)
         .addProperty(VcrReplicationManager.BACKUP_NODE, dataNodeId.getHostname())
         .addProperty(VcrReplicationManager.TOKEN_TYPE,
@@ -139,7 +142,7 @@ public class VcrReplicaThread extends ReplicaThread {
             token.getStoreKey() == null ? "none" : token.getStoreKey().getID())
         .addProperty(VcrReplicationManager.REPLICATED_UNITL_UTC,
             lastOpTime == Utils.Infinite_Time ? String.valueOf(Utils.Infinite_Time)
-                : VcrReplicationManager.DATE_FORMAT.format(lastOpTime))
+                : formatter.format(lastOpTime))
         .addProperty(VcrReplicationManager.BINARY_TOKEN,
             token.toBytes());
     // Now persist the token in cloud
