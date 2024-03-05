@@ -18,17 +18,21 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.github.ambry.clustermap.HelixClusterManager.HelixClusterManagerQueryHelper;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
  * Metrics for the {@link HelixClusterManager}
  */
 class HelixClusterManagerMetrics {
+  private static final Logger logger = LoggerFactory.getLogger(HelixClusterManagerMetrics.class);
   private final HelixClusterManagerQueryHelper clusterMapCallback;
   private final MetricRegistry registry;
 
@@ -170,16 +174,23 @@ class HelixClusterManagerMetrics {
         () -> partitionPartiallySealedCount);
 
     Gauge<Long> isMajorityReplicasDownForAnyPartition = () -> {
+      List<ReplicaId> downReplicas = new ArrayList<>();
       for (PartitionId partition : clusterMapCallback.getPartitions()) {
+        downReplicas.clear();
         List<? extends ReplicaId> replicas = partition.getReplicaIds();
         int replicaCount = replicas.size();
-        int downReplicas = 0;
+        int downReplicaCount = 0;
         for (ReplicaId replicaId : replicas) {
           if (replicaId.isDown()) {
-            downReplicas++;
+            downReplicaCount++;
+            downReplicas.add(replicaId);
           }
         }
-        if (downReplicas > replicaCount / 2) {
+        if (downReplicaCount > replicaCount / 2) {
+          if (logger.isTraceEnabled()) {
+            logger.trace("There are more than more of the replicas are down for partition {}, the down replicas are {}",
+                partition.toPathString(), downReplicas);
+          }
           return 1L;
         }
       }
