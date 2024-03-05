@@ -51,6 +51,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 
 public class S3ListHandlerTest {
@@ -118,12 +119,12 @@ public class S3ListHandlerTest {
     // 3. Verify results
     ReadableStreamChannel readableStreamChannel = futureResult.get();
     ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
-    S3ListHandler.ListBucketResult listBucketResult =
-        xmlMapper.readValue(byteBuffer.array(), S3ListHandler.ListBucketResult.class);
+    ListBucketResult listBucketResult =
+        xmlMapper.readValue(byteBuffer.array(), ListBucketResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", "application/xml",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-    S3ListHandler.Contents contents = listBucketResult.getContents().get(0);
+    Contents contents = listBucketResult.getContents().get(0);
     assertEquals("Mismatch in key name", KEY_NAME, contents.getKey());
     assertEquals("Mismatch in key count", 1, listBucketResult.getKeyCount());
     assertEquals("Mismatch in prefix", PREFIX, listBucketResult.getPrefix());

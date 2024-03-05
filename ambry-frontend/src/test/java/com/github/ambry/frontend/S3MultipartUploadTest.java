@@ -28,8 +28,6 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.frontend.s3.S3CompleteMultipartUploadHandler;
-import com.github.ambry.frontend.s3.S3CreateMultipartUploadHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.frontend.s3.S3PostHandler;
 import com.github.ambry.frontend.s3.S3PutHandler;
@@ -61,8 +59,8 @@ import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
 
-import static com.github.ambry.account.Container.*;
 import static org.junit.Assert.*;
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 
 public class S3MultipartUploadTest {
@@ -119,8 +117,8 @@ public class S3MultipartUploadTest {
     s3PostHandler.handle(request, restResponseChannel, postResult::done);
     ReadableStreamChannel readableStreamChannel = postResult.get();
     ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
-    S3CreateMultipartUploadHandler.InitiateMultipartUploadResult initUploadResult =
-        xmlMapper.readValue(byteBuffer.array(), S3CreateMultipartUploadHandler.InitiateMultipartUploadResult.class);
+    InitiateMultipartUploadResult initUploadResult =
+        xmlMapper.readValue(byteBuffer.array(), InitiateMultipartUploadResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", "application/xml",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
@@ -177,13 +175,12 @@ public class S3MultipartUploadTest {
     // 3. CompleteMultipartUpload
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;
     headers = new JSONObject();
-    S3CompleteMultipartUploadHandler.Part part1 = new S3CompleteMultipartUploadHandler.Part("1", etag1);
-    S3CompleteMultipartUploadHandler.Part part2 = new S3CompleteMultipartUploadHandler.Part("2", etag2);
+    Part part1 = new Part("1", etag1);
+    Part part2 = new Part("2", etag2);
     // intentionally add part1 and part2 in wrong order.
     // when do the stitch, we re-order the chunk based on the partNumber.
-    S3CompleteMultipartUploadHandler.Part parts[] = {part2, part1};
-    S3CompleteMultipartUploadHandler.CompleteMultipartUpload completeMultipartUpload =
-        new S3CompleteMultipartUploadHandler.CompleteMultipartUpload(parts);
+    Part parts[] = {part2, part1};
+    CompleteMultipartUpload completeMultipartUpload = new CompleteMultipartUpload(parts);
     XmlMapper xmlMapper = new XmlMapper();
     ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
     xmlMapper.writeValue(byteArrayOutputStream, completeMultipartUpload);
@@ -202,8 +199,8 @@ public class S3MultipartUploadTest {
     readableStreamChannel = postResult.get();
     byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
     byte[] byteArray = byteBuffer.array();
-    S3CompleteMultipartUploadHandler.CompleteMultipartUploadResult completeMultipartUploadResult =
-        xmlMapper.readValue(byteArray, S3CompleteMultipartUploadHandler.CompleteMultipartUploadResult.class);
+    CompleteMultipartUploadResult completeMultipartUploadResult =
+        xmlMapper.readValue(byteArray, CompleteMultipartUploadResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", "application/xml",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
