@@ -110,6 +110,7 @@ public class FrontendMetrics {
   public final AsyncOperationTracker.Metrics putReadStitchRequestMetrics;
   public final AsyncOperationTracker.Metrics putRouterStitchBlobMetrics;
   public final AsyncOperationTracker.Metrics putRouterPutBlobMetrics;
+  public final AsyncOperationTracker.Metrics putIdConflictDetectionMetrics;
   public final AsyncOperationTracker.Metrics putIdConversionMetrics;
   public final AsyncOperationTracker.Metrics putBlobRouterMetrics;
   public final AsyncOperationTracker.Metrics putBlobSecurityProcessResponseMetrics;
@@ -171,6 +172,7 @@ public class FrontendMetrics {
   public final Meter securityServiceProcessResponseRate;
   // AmbryIdConverter
   public final Meter idConverterRequestRate;
+  public final Meter idConverterDetectConflictRate;
   // Latencies
   // FrontendRestRequestService
   // POST
@@ -224,6 +226,7 @@ public class FrontendMetrics {
   // AmbryIdConverter
   public final Histogram idConverterProcessingTimeInMs;
   public final Histogram idConversionDownstreamCallbackTimeInMs;
+  public final Histogram idConversionDetectConflictDownstreamCallbackTimeInMs;
 
   // GetPeersHandler
   public final Histogram getPeersProcessingTimeInMs;
@@ -442,6 +445,8 @@ public class FrontendMetrics {
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putRouterStitchBlob", metricRegistry);
     putRouterPutBlobMetrics =
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putRouterPutBlob", metricRegistry);
+    putIdConflictDetectionMetrics =
+        new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "idConflictDetection", metricRegistry);
     putIdConversionMetrics =
         new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "putIdConversion", metricRegistry);
     putBlobRouterMetrics = new AsyncOperationTracker.Metrics(NamedBlobPutHandler.class, "router", metricRegistry);
@@ -547,6 +552,7 @@ public class FrontendMetrics {
         metricRegistry.meter(MetricRegistry.name(AmbrySecurityService.class, "ProcessResponseRate"));
     // AmbryIdConverter
     idConverterRequestRate = metricRegistry.meter(MetricRegistry.name(AmbryIdConverterFactory.class, "RequestRate"));
+    idConverterDetectConflictRate = metricRegistry.meter(MetricRegistry.name(AmbryIdConverterFactory.class, "DetectConflictRate"));
 
     // Latencies
     // FrontendRestRequestService
@@ -638,6 +644,8 @@ public class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "ProcessingTimeInMs"));
     idConversionDownstreamCallbackTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "DownstreamCallbackTimeInMs"));
+    idConversionDetectConflictDownstreamCallbackTimeInMs =
+        metricRegistry.histogram(MetricRegistry.name(AmbryIdConverterFactory.class, "DetectConflictCallbackTimeInMs"));
     // GetPeersHandler
     getPeersProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(GetPeersHandler.class, "ProcessingTimeInMs"));
