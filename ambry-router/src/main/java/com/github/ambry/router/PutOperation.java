@@ -1347,6 +1347,14 @@ class PutOperation {
       if (!routerConfig.routerReservedMetadataEnabled || isSimpleBlob || isMetadataChunk()) {
         return null;
       }
+      // S3 doesn't use reserved metadata chunk.
+      // 1. For multipart upload, S3 doesn't use signed url. And for the data chunk, we don't reserve metadata chunk.
+      //    Customer may upload part by part for days.
+      // 2. For regular update, it's not chunked upload. It's uploaded with single PutObject.
+      //    Don't reserve metadata chunk either. We manage the S3 life cycle right away.
+      if (RestUtils.isS3Request(restRequest)) {
+        return null;
+      }
       return metadataPutChunk.reservedMetadataChunkId.getID();
     }
 
@@ -2116,6 +2124,7 @@ class PutOperation {
             .stream()
             .map(p -> new Pair<>(p.getFirst().toString(), p.getSecond()))
             .collect(Collectors.toList()));
+        // S3 Part Upload, we don't reserve metadata chunk id for each data chunk. Refer to resolveReservedMetadataId.
         PutBlobMetaInfo putBlobMetaInfoObj = new PutBlobMetaInfo(orderedChunkList, null);
         putBlobMetaInfo = PutBlobMetaInfo.serialize(putBlobMetaInfoObj);
         logger.debug("S3 5MB : finalizeMetadataChunk orderedChunkIdList is {} {}", indexToChunkIdsAndChunkSizes,
