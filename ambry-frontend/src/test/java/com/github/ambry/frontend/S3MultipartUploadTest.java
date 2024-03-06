@@ -108,7 +108,7 @@ public class S3MultipartUploadTest {
     multiPartUploadTest(3600L);
   }
 
-  public void multiPartUploadTest(Long ttl) throws Exception {
+  private void multiPartUploadTest(Long ttl) throws Exception {
 
     long expectedTtl = ttl == null || ttl == Utils.Infinite_Time
         ? frontendConfig.permanentNamedBlobInitialPutTtl : ttl;
