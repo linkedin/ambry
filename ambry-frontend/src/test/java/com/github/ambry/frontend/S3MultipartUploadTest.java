@@ -47,6 +47,7 @@ import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import java.io.ByteArrayOutputStream;
@@ -93,16 +94,26 @@ public class S3MultipartUploadTest {
   }
 
   @Test
-  public void testPutPermanentBlob() throws Exception {
+  public void testPutWithoutTtl() throws Exception {
+    multiPartUploadTest(null);
+  }
+
+  @Test
+  public void testPutWithInfiniteTtl() throws Exception {
     multiPartUploadTest(Utils.Infinite_Time);
   }
 
   @Test
-  public void testPutTempBlob() throws Exception {
-    multiPartUploadTest(3600);
+  public void testPutWithSomeTtl() throws Exception {
+    multiPartUploadTest(3600L);
   }
 
-  public void multiPartUploadTest(long expirationTime) throws Exception {
+  public void multiPartUploadTest(Long ttl) throws Exception {
+
+    long expectedTtl = ttl == null || ttl == Utils.Infinite_Time
+        ? frontendConfig.permanentNamedBlobInitialPutTtl : ttl;
+    long startTime = SystemTime.getInstance().milliseconds();
+
     // 1. CreateMultipartUpload
     String accountName = account.getName();
     String containerName = container.getName();
@@ -135,7 +146,9 @@ public class S3MultipartUploadTest {
         + "&partNumber=1";
     headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     headers.put(RestUtils.Headers.CONTENT_LENGTH, size);
-    headers.put(RestUtils.Headers.TTL, expirationTime);
+    if (ttl != null) {
+      headers.put(RestUtils.Headers.TTL, ttl);
+    }
     byte[] content1 = TestUtils.getRandomBytes(size);
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, uri, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content1), null)));
@@ -147,16 +160,20 @@ public class S3MultipartUploadTest {
     putResult.get();
     String etag1 = (String) restResponseChannel.getHeader(RestUtils.Headers.ETAG);
     String location1 = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
+    NamedBlobRecord record1 = namedBlobDb.get(accountName, containerName, blobName).get();
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Etag must be present", etag1);
     assertNotNull("Location must be present", location1);
+    assertEquals("TTL wasn't set properly", expectedTtl, getTtl(record1, startTime));
 
     // 2.2 part2
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId
         + "&partNumber=2";
     headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     headers.put(RestUtils.Headers.CONTENT_LENGTH, size);
-    headers.put(RestUtils.Headers.TTL, expirationTime);
+    if (ttl != null) {
+      headers.put(RestUtils.Headers.TTL, ttl);
+    }
     byte[] content2 = TestUtils.getRandomBytes(size);
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, uri, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content2), null)));
@@ -168,9 +185,11 @@ public class S3MultipartUploadTest {
     putResult.get();
     String etag2 = (String) restResponseChannel.getHeader(RestUtils.Headers.ETAG);
     String location2 = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
+    NamedBlobRecord record2 = namedBlobDb.get(accountName, containerName, blobName).get();
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Etag must be present", etag2);
     assertNotNull("Location must be present", location2);
+    assertEquals("TTL wasn't set properly", expectedTtl, getTtl(record2, startTime));
 
     // 3. CompleteMultipartUpload
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;
@@ -212,11 +231,12 @@ public class S3MultipartUploadTest {
         completeMultipartUploadResult.getLocation());
     assertNotNull("ETag must be present", completeMultipartUploadResult.geteTag());
 
-    // 4. Verify blob name exists in named blob DB
+    // 4. Verify blob name exists in named blob DB with correct TTL
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(accountName, containerName, blobName).get();
     // Etag starts with leading "/", for example "/AAYQ_wMcAAoAAQAAAAAAAAAEo8Hyvs1LTbqsXwFykRZW4w".
     assertEquals("Mismatch in blob name to blob id mapping", completeMultipartUploadResult.geteTag(),
         "/" + namedBlobRecord.getBlobId());
+    assertEquals("TTL wasn't set properly", Utils.Infinite_Time, namedBlobRecord.getExpirationTimeMs());
 
     // 5. Verify that getting a s3 blob should work
     headers = new JSONObject();
@@ -268,5 +288,9 @@ public class S3MultipartUploadTest {
             namedBlobDb, idConverter, router, quotaManager);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
+  }
+
+  private long getTtl(NamedBlobRecord record, long startTime) {
+    return (record.getExpirationTimeMs() - startTime) / 1000L;
   }
 }
