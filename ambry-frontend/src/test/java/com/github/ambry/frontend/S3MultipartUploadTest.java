@@ -211,9 +211,8 @@ public class S3MultipartUploadTest {
 
     // 4. Verify blob name exists in named blob DB with correct TTL
     NamedBlobRecord namedBlobRecord = namedBlobDb.get(accountName, containerName, blobName).get();
-    // Etag starts with leading "/", for example "/AAYQ_wMcAAoAAQAAAAAAAAAEo8Hyvs1LTbqsXwFykRZW4w".
     assertEquals("Mismatch in blob name to blob id mapping", completeMultipartUploadResult.geteTag(),
-        "/" + namedBlobRecord.getBlobId());
+        namedBlobRecord.getBlobId());
     assertEquals("TTL wasn't set properly", Utils.Infinite_Time, namedBlobRecord.getExpirationTimeMs());
 
     // 5. Verify that getting a s3 blob should work

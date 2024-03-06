@@ -175,7 +175,11 @@ public class S3MultipartUploadPartHandler {
     private Callback<String> routerPutBlobCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putRouterPutBlobMetrics, blobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, restRequest.getBlobBytesReceived());
-        idConverter.convert(restRequest, blobId, blobInfo, idConverterCallback(blobInfo, blobId));
+        // TODO [S3] Make changes to sign ETags. Currently they are sent as shown below.
+        //  ETag: {"chunks":[{"blob":"AAYQAQBlAAgAAQAAAAAAAAAAw6UGCoNgS8KGgV-SGXAMdQ","size":4194304},
+        //  {"blob":"AAYQAQBlAAgAAQAAAAAAAAAA6Jaga4MiRFiBXi_jjaiQhg","size":1052262}]}
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
+        securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, logger, finalCallback);
     }
 
