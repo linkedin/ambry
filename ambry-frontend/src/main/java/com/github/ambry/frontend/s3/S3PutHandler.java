@@ -63,7 +63,7 @@ public class S3PutHandler extends S3BaseHandler<Void> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
       throws RestServiceException {
-    if (isMultipartUploadRequest(restRequest)) {
+    if (S3MultipartUploadHandler.isUploadPartRequest(restRequest)) {
       multipartUploadHandler.handle(restRequest, restResponseChannel,
           (result, exception) -> callback.onCompletion(null, exception));
       return;
@@ -88,10 +88,5 @@ public class S3PutHandler extends S3BaseHandler<Void> {
       }
       callback.onCompletion(null, null);
     }, restRequest.getUri(), LOGGER, callback));
-  }
-
-  private boolean isMultipartUploadRequest(RestRequest restRequest) {
-    return restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM) || restRequest.getArgs()
-        .containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 }

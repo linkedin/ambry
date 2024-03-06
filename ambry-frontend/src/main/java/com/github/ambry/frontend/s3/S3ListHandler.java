@@ -21,7 +21,11 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.NamedBlobListEntry;
 import com.github.ambry.frontend.NamedBlobListHandler;
+import com.github.ambry.frontend.NamedBlobPath;
+import com.github.ambry.frontend.Operations;
 import com.github.ambry.frontend.Page;
+import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
@@ -43,6 +47,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -58,14 +63,18 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   public static final String ENCODING_TYPE_PARAM_NAME = "encoding-type";
   private final NamedBlobListHandler namedBlobListHandler;
   private final FrontendMetrics metrics;
+  private final S3MultipartUploadHandler multipartUploadHandler;
 
   /**
    * Constructs a handler for handling s3 requests for listing blobs.
-   * @param namedBlobListHandler named blob list handler
+   * @param namedBlobListHandler  the {@link NamedBlobListHandler} to use.
+   * @param multipartUploadHandler the {@link S3MultipartUploadHandler} to use.
    */
-  public S3ListHandler(NamedBlobListHandler namedBlobListHandler, FrontendMetrics metrics) {
+  public S3ListHandler(NamedBlobListHandler namedBlobListHandler, FrontendMetrics metrics,
+      S3MultipartUploadHandler multipartUploadHandler) {
     this.namedBlobListHandler = namedBlobListHandler;
     this.metrics = metrics;
+    this.multipartUploadHandler = multipartUploadHandler;
   }
 
   /**
@@ -77,18 +86,25 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
-    namedBlobListHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3ListHandleMetrics, (result) -> {
-      // Convert from json response to S3 xml response as defined in
-      // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_ResponseSyntax.
-      ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
-      JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
-      Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
-      ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
-      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
-      callback.onCompletion(readableStreamChannel, null);
-    }, restRequest.getUri(), LOGGER, callback));
+
+    if (S3MultipartUploadHandler.isListPartRequest(restRequest)) {
+      multipartUploadHandler.handle(restRequest, restResponseChannel, callback);
+      return;
+    }
+
+    namedBlobListHandler.handle(restRequest, restResponseChannel,
+        buildCallback(metrics.s3ListHandleMetrics, (result) -> {
+          // Convert from json response to S3 xml response as defined in
+          // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_ResponseSyntax.
+          ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
+          JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
+          Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
+          ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
+          callback.onCompletion(readableStreamChannel, null);
+        }, restRequest.getUri(), LOGGER, callback));
   }
 
   private ReadableStreamChannel serializeAsXml(RestRequest restRequest, Page<NamedBlobListEntry> namedBlobRecordPage)
@@ -117,5 +133,16 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     // Serialize xml
     xmlMapper.writeValue(outputStream, result);
     return new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is a request to list parts of a completed multipart upload request.
+   */
+  public static boolean isListBucketRequest(RestRequest restRequest) throws RestServiceException {
+    RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
+    return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
+        && requestPath.matchesOperation(Operations.NAMED_BLOB)
+        && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null;
   }
 }

@@ -156,6 +156,6 @@ public class S3ListHandlerTest {
         CLUSTER_NAME, QuotaTestUtils.createDummyQuotaManager(), ACCOUNT_SERVICE, null);
     NamedBlobListHandler namedBlobListHandler =
         new NamedBlobListHandler(securityServiceFactory.getSecurityService(), namedBlobDb, injector, metrics);
-    s3ListHandler = new S3ListHandler(namedBlobListHandler, metrics);
+    s3ListHandler = new S3ListHandler(namedBlobListHandler, metrics, null);
   }
 }

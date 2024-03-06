@@ -42,8 +42,8 @@ import static com.github.ambry.frontend.s3.S3MessagePayload.*;
  * Handles a request for s3 CreateMultipartUploads according to the
  * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateMultipartUpload.html">...</a>
  */
-public class S3CreateMultipartUploadHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3CreateMultipartUploadHandler.class);
+public class S3MultipartCreateUploadHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartCreateUploadHandler.class);
   private static final ObjectMapper objectMapper = new XmlMapper();
   private final SecurityService securityService;
   private final FrontendMetrics frontendMetrics;
@@ -53,7 +53,7 @@ public class S3CreateMultipartUploadHandler {
    * @param securityService   the {@link SecurityService} to use.
    * @param frontendMetrics   {@link FrontendMetrics} instance where metrics should be recorded.
    */
-  public S3CreateMultipartUploadHandler(SecurityService securityService, FrontendMetrics frontendMetrics) {
+  public S3MultipartCreateUploadHandler(SecurityService securityService, FrontendMetrics frontendMetrics) {
     this.securityService = securityService;
     this.frontendMetrics = frontendMetrics;
   }
@@ -65,7 +65,7 @@ public class S3CreateMultipartUploadHandler {
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
-    new S3CreateMultipartUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
+    new S3MultipartCreateUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
   /**

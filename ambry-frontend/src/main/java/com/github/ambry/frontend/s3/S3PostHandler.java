@@ -21,8 +21,6 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.ReadableStreamChannel;
 
-import static com.github.ambry.rest.RestUtils.*;
-
 
 /**
  * Handles S3 POST requests.
@@ -47,16 +45,12 @@ public class S3PostHandler extends S3BaseHandler<ReadableStreamChannel> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
-    if (isMultipartUploadRequest(restRequest)) {
+    if (S3MultipartUploadHandler.isCreateRequest(restRequest) || S3MultipartUploadHandler.isCompleteRequest(
+        restRequest)) {
       multipartPostHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       // Placeholder for handling any non-multipart S3 POST requests in the future.
       throw new RestServiceException("Unsupported S3 POST request", RestServiceErrorCode.BadRequest);
     }
-  }
-
-  private boolean isMultipartUploadRequest(RestRequest restRequest) {
-    return restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM) || restRequest.getArgs()
-        .containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 }
