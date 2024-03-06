@@ -119,7 +119,7 @@ public class VcrReplicationManager extends ReplicationEngine {
   public static final String STORE_KEY = "storeKey";
   public static final String REPLICATED_UNITL_UTC = "replicatedUntilUTC";
   public static final String BINARY_TOKEN = "binaryToken";
-  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy_MMM_dd_HH_mm_ss");
+  public static final String DATE_FORMAT = "yyyy_MMM_dd_HH_mm_ss";
 
   public VcrReplicationManager(VerifiableProperties properties, StoreManager storeManager,
       StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, VcrClusterParticipant vcrClusterParticipant,
@@ -201,7 +201,8 @@ public class VcrReplicationManager extends ReplicationEngine {
             new ByteArrayInputStream((byte[]) row.getProperty(BINARY_TOKEN)));
         replicaInfo.setToken(findTokenFactory.getFindToken(inputStream));
         String replUntil = (String) row.getProperty(REPLICATED_UNITL_UTC);
-        long time = replUntil.equals(String.valueOf(Utils.Infinite_Time)) ? -1 : DATE_FORMAT.parse(replUntil).getTime();
+        DateFormat formatter = new SimpleDateFormat(DATE_FORMAT);
+        long time = replUntil.equals(String.valueOf(Utils.Infinite_Time)) ? -1 : formatter.parse(replUntil).getTime();
         replicaInfo.setReplicatedUntilUTC(time);
       } catch (Throwable t) {
         // log and metric
