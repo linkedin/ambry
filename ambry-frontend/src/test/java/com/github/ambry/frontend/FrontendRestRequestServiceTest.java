@@ -41,6 +41,7 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.DeleteResult;
@@ -4152,8 +4153,8 @@ class FrontendTestIdConverterFactory implements IdConverterFactory {
       if (!isOpen) {
         throw new IllegalStateException("IdConverter closed");
       }
-      if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
-          .matchesOperation(Operations.NAMED_BLOB)) {
+      if ((restRequest.getRestMethod() == RestMethod.PUT || restRequest.getRestMethod() == RestMethod.POST)
+          && RestUtils.getRequestPath(restRequest).matchesOperation(Operations.NAMED_BLOB)) {
         restRequest.setArg(RestUtils.InternalKeys.NAMED_BLOB_VERSION, -1L);
       }
       return completeOperation(input, blobInfo, callback);
