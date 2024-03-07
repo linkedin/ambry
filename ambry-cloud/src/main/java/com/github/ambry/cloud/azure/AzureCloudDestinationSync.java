@@ -767,8 +767,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
     try {
       return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).exists();
     } catch (Throwable t) {
-      String error = String.format("Failed to check if blob %s exists in Azure blob storage due to %s", blobLayout, t.getMessage());
-      logger.error(error);
+      azureMetrics.blobCheckError.inc();
+      logger.error("Failed to check if blob {} exists in Azure blob storage due to {}", blobLayout, t.getMessage());
       return false;
     }
   }

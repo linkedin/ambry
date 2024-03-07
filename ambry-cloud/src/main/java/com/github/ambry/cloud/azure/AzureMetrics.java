@@ -200,10 +200,14 @@ public class AzureMetrics {
   public static final String COMPACTION_TASK_ERROR_COUNT = "CompactionTaskErrorCount";
   public final Counter compactionTaskErrorCount;
 
+  public static final String BLOB_CHECK_ERROR = "BlobCheckError";
+  public final Counter blobCheckError;
+
   public AzureMetrics(MetricRegistry registry) {
     this.metricRegistry = registry;
 
     // V2 metrics
+    blobCheckError = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_CHECK_ERROR));
     blobCompactionErrorCount = registry.counter(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_ERROR_COUNT));
     blobCompactionLatency = registry.timer(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_LATENCY));
     blobCompactionSuccessRate = registry.meter(MetricRegistry.name(AzureMetrics.class, BLOB_COMPACTION_SUCCESS_RATE));
