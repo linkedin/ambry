@@ -32,6 +32,7 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
@@ -428,7 +429,7 @@ public class NonBlockingRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      RestRequest restRequest, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     if (blobProperties == null || chunksToStitch == null) {
       throw new IllegalArgumentException("blobProperties or chunksToStitch must not be null");
     }
@@ -444,8 +445,8 @@ public class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, futureResult, callback,
-          quotaChargeCallback);
+      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, restRequest, futureResult,
+          callback, quotaChargeCallback);
     } else {
       RouterException routerException =
           new RouterException("Cannot accept operation because Router is closed", RouterErrorCode.RouterClosed);

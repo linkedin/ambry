@@ -26,6 +26,7 @@ import com.github.ambry.notification.NotificationBlobType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
@@ -271,7 +272,7 @@ public class InMemoryRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      RestRequest restRequest, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     FutureResult<String> futureResult = new FutureResult<>();
     if (!handlePrechecks(futureResult, callback)) {
       return futureResult;

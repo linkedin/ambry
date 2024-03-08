@@ -265,6 +265,44 @@ class PutOperation {
   }
 
   /**
+   * Construct a PutOperation for composite blob stitching with the given parameters. This will upload a single metadata
+   * blob containing information about each of the chunks in {@code chunksToStitch}. The metadata blob created will
+   * behave like a normal composite blob where the data chunks are the blobs listed in {@code chunksToStitch}.
+   * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
+   * @param routerMetrics The {@link NonBlockingRouterMetrics} to be used for reporting metrics.
+   * @param clusterMap the {@link ClusterMap} of the cluster
+   * @param notificationSystem the {@link NotificationSystem} to use for blob creation notifications.
+   * @param accountService the {@link AccountService} used for account/container id and name mapping.
+   * @param userMetadata the userMetadata associated with the put operation.
+   * @param chunksToStitch the list of chunks to stitch together. The put operation business logic will treat the
+   *                       metadata in the {@link ChunkInfo} object as a source of truth when validating that the
+   *                       chunks can be stitched.
+   * @param restRequest the associated {@link RestRequest}.
+   * @param futureResult the future that will contain the result of the operation.
+   * @param callback the callback that is to be called when the operation completes.
+   * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
+   * @param kms {@link KeyManagementService} to assist in fetching container keys for encryption or decryption
+   * @param cryptoService {@link CryptoService} to assist in encryption or decryption
+   * @param cryptoJobHandler {@link CryptoJobHandler} to assist in the execution of crypto jobs
+   * @param time the Time instance to use.
+   * @param blobProperties the BlobProperties associated with the put operation.
+   * @param partitionClass the partition class to choose partitions from. Can be {@code null} if no affinity is required
+   * @param quotaChargeCallback {@link QuotaChargeCallback} to listen to events that should result in charging quota.
+   * @param compressionService The compression service use to compress data chunks.
+   * @return the {@link PutOperation}.
+   */
+  static PutOperation forStitching(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      ClusterMap clusterMap, NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
+      List<ChunkInfo> chunksToStitch, RestRequest restRequest, FutureResult<String> futureResult,
+      Callback<String> callback, RouterCallback routerCallback, KeyManagementService kms, CryptoService cryptoService,
+      CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties, String partitionClass,
+      QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
+    return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
+        null, chunksToStitch, new PutBlobOptionsBuilder().restRequest(restRequest).build(), futureResult, callback,
+        routerCallback, null, kms, cryptoService, cryptoJobHandler, time, blobProperties, partitionClass,
+        quotaChargeCallback, compressionService);
+  }
+  /**
    * Construct a PutOperation with the given parameters. This private constructor is used for both blob uploads and
    * post-upload stitching.
    * @param routerConfig the {@link RouterConfig} containing the configs for put operations.
@@ -1607,7 +1645,7 @@ class PutOperation {
      * otherwise.
      */
     boolean shouldUseReservedMetadataId() {
-      return isMetadataChunk() && routerConfig.routerReservedMetadataEnabled;
+      return isMetadataChunk() && routerConfig.routerReservedMetadataEnabled && !RestUtils.isS3Request(restRequest);
     }
 
     /**
@@ -1948,7 +1986,7 @@ class PutOperation {
               ClusterMapUtils.reserveMetadataBlobId(partitionClass, Collections.emptyList(), reservedMetadataIdMetrics,
                   clusterMap, passedInBlobProperties.getAccountId(), passedInBlobProperties.getContainerId(),
                   passedInBlobProperties.isEncrypted(), routerConfig);
-        } else if (!chunksToStitch.isEmpty()) {
+        } else if (!chunksToStitch.isEmpty() && !RestUtils.isS3Request(restRequest)) {
           // Empty chunksToStitch list is already handled in PutOperation constructor by now.
           setReservedMetadataChunkId(chunksToStitch.get(0).getReservedMetadataId());
           for (ChunkInfo chunkInfo : chunksToStitch) {
