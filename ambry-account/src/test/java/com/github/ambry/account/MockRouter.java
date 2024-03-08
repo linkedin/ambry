@@ -20,6 +20,7 @@ import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -133,7 +134,7 @@ public class MockRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      RestRequest restRequest, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     throw new UnsupportedOperationException("stichBlob is not supported by this mock");
   }
 
