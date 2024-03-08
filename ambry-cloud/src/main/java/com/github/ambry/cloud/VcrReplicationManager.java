@@ -50,6 +50,7 @@ import com.github.ambry.replication.ReplicationEngine;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
+import com.github.ambry.replication.ReplicationModelType;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
@@ -354,8 +355,21 @@ public class VcrReplicationManager extends ReplicationEngine {
       logger.error("Can't start cloudstore for replica {}", cloudReplica);
       throw new ReplicationException("Can't start cloudstore for replica " + cloudReplica);
     }
-    String localDc = vcrClusterParticipant.getCurrentDataNodeId().getDatacenterName();
-    List<? extends ReplicaId> peerReplicas = partitionId.getReplicaIdsByState(ReplicaState.LEADER, localDc);
+    List<? extends ReplicaId> peerReplicas = Collections.emptyList();
+    if (cloudConfig.backupPolicy.equals(ReplicationModelType.LEADER_BASED)) {
+      List<? extends ReplicaId> leaders = partitionId.getReplicaIdsByState(ReplicaState.LEADER,
+          vcrClusterParticipant.getCurrentDataNodeId().getDatacenterName());
+      if (leaders == null || leaders.isEmpty()) {
+        logger.error("No leader replicas found for partition {}", partitionId.getId());
+      } else {
+        // There must be exactly 1 leader in a datacenter, and we must back up only that leader
+        peerReplicas = Collections.singletonList(leaders.get(0));
+        logger.info("Backing up leader at {}:{} for partition {}", peerReplicas.get(0).getDataNodeId().getHostname(),
+            peerReplicas.get(0).getMountPath(), partitionId.getId());
+      }
+    } else {
+      peerReplicas = cloudReplica.getPeerReplicaIds();
+    }
     List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
     Store store = storeManager.getStore(partitionId);
     if (peerReplicas != null) {

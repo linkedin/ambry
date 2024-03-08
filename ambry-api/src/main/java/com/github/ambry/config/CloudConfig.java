@@ -13,6 +13,7 @@
  */
 package com.github.ambry.config;
 
+import com.github.ambry.replication.ReplicationModelType;
 import com.github.ambry.utils.Utils;
 import java.util.HashSet;
 import java.util.Set;
@@ -448,8 +449,20 @@ public class CloudConfig {
   @Default("false")
   public final boolean vcrHelixUpdateDryRun;
 
+  /**
+   * To specify the type of replication to be used for backup.
+   * If set to "LEADER_BASED", VCR will back up local-leader only.
+   * If set to "ALL_TO_ALL", VCR will back up all local-replicas.
+   */
+  public final String BACKUP_POLICY = "backup.policy";
+  public final ReplicationModelType DEFAULT_BACKUP_POLICY = ReplicationModelType.ALL_TO_ALL;
+  @Config(BACKUP_POLICY)
+  public final ReplicationModelType backupPolicy;
+
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
+    backupPolicy = ReplicationModelType.valueOf(verifiableProperties.getString(BACKUP_POLICY, DEFAULT_BACKUP_POLICY.name()));
     cloudCompactionGracePeriodDays = verifiableProperties.getInt(CLOUD_COMPACTION_GRACE_PERIOD_DAYS, 7);
     cloudCompactionDryRunEnabled = verifiableProperties.getBoolean(CLOUD_COMPACTION_DRY_RUN_ENABLED, true);
     ambryBackupVersion = verifiableProperties.getString(AMBRY_BACKUP_VERSION, DEFAULT_AMBRY_BACKUP_VERSION);
