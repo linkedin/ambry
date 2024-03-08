@@ -14,7 +14,6 @@
  */
 package com.github.ambry.frontend.s3;
 
-import com.github.ambry.account.Container;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.frontend.AccountAndContainerInjector;
@@ -29,7 +28,6 @@ import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.PutBlobOptions;
@@ -39,7 +37,6 @@ import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,10 +101,8 @@ public class S3MultipartUploadPartHandler {
     String uploadId = RestUtils.getHeader(restRequest.getArgs(), UPLOAD_ID_QUERY_PARAM, true);
     restRequest.setArg(S3_CHUNK_UPLOAD, true);
     restRequest.setArg(SESSION, uploadId);
-    // TODO [S3] : set part ttl value
-    // restRequest.setArg(TTL, xxx);
-
     restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
+    restRequest.setArg(TTL, frontendConfig.chunkUploadInitialChunkTtlSecs);
 
     // TODO [S3] verifyChunkAccountAndContainer? getAndVerifyReservedMetadataBlobId?
     new S3MultipartUploadPartHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
@@ -166,7 +161,7 @@ public class S3MultipartUploadPartHandler {
     private Callback<Void> securityPostProcessRequestCallback(BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
         PutBlobOptions options = getPutBlobOptionsFromRequest();
-        router.putBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(), restRequest, options,
+        router.putBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(), restRequest, options,
             routerPutBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
       }, uri, logger, finalCallback);
     }
@@ -247,25 +242,6 @@ public class S3MultipartUploadPartHandler {
       // it's the s3 part upload for the multi-part request, skip creating the composite chunk.
       builder.skipCompositeChunk(true);
       return builder.build();
-    }
-
-    /**
-     * Create a {@link BlobProperties} for the router upload (putBlob or stitchBlob) with a finite TTL such that
-     * orphaned blobs will not be created if the write to the named blob metadata DB fails.
-     * @param blobInfoFromRequest the {@link BlobInfo} parsed from the request.
-     * @return a {@link BlobProperties} for a TTL-ed initial router call.
-     */
-    BlobProperties getPropertiesForRouterUpload(BlobInfo blobInfoFromRequest) {
-      BlobProperties properties;
-      if (blobInfoFromRequest.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
-        properties = new BlobProperties(blobInfoFromRequest.getBlobProperties());
-        // For blob with infinite time, the procedure is putBlob with a TTL, record insert to database with
-        // infinite TTL, and ttlUpdate.
-        properties.setTimeToLiveInSeconds(frontendConfig.permanentNamedBlobInitialPutTtl);
-      } else {
-        properties = blobInfoFromRequest.getBlobProperties();
-      }
-      return properties;
     }
   }
 }

@@ -226,18 +226,13 @@ public class S3MultipartCompleteUploadHandler {
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
         restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
-        if (blobInfo.getBlobProperties().getTimeToLiveInSeconds() == Utils.Infinite_Time) {
-          // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
-          // since the converted ID may be changed by the ID converter.
-          String serviceId = blobInfo.getBlobProperties().getServiceId();
-          retryExecutor.runWithRetries(retryPolicy,
-              callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
-                  QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
-              routerTtlUpdateCallback(blobInfo, blobId));
-        } else {
-          securityService.processResponse(restRequest, restResponseChannel, blobInfo,
-              securityProcessResponseCallback());
-        }
+        // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
+        // since the converted ID may be changed by the ID converter.
+        String serviceId = blobInfo.getBlobProperties().getServiceId();
+        retryExecutor.runWithRetries(retryPolicy,
+            callback -> router.updateBlobTtl(blobId, serviceId, Utils.Infinite_Time, callback,
+                QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), this::isRetriable,
+            routerTtlUpdateCallback(blobInfo, blobId));
       }, uri, LOGGER, finalCallback);
     }
 
