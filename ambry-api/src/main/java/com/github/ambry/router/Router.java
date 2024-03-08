@@ -19,6 +19,7 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
+import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
@@ -69,12 +70,13 @@ public interface Router extends Closeable {
    * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
    *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
    *                       fields are set accurately.
+   * @param restRequest the associated {@link RestRequest}.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
   Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
+      RestRequest restRequest, Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
@@ -153,7 +155,28 @@ public interface Router extends Closeable {
   default CompletableFuture<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
       List<ChunkInfo> chunksToStitch) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    stitchBlob(blobProperties, userMetadata, chunksToStitch, CallbackUtils.fromCompletableFuture(future), null);
+    stitchBlob(blobProperties, userMetadata, chunksToStitch, null, CallbackUtils.fromCompletableFuture(future), null);
+    return future;
+  }
+
+  /**
+   * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
+   * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
+   * by this operation can be used to fetch the chunks as if they were a single blob.
+   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
+   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
+   * @param userMetadata Optional user metadata about the blob. This can be null.
+   * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
+   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
+   *                       fields are set accurately.
+   * @param restRequest the associated {@link RestRequest}.
+   * @return A future that would contain the BlobId eventually.
+   */
+  default CompletableFuture<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
+      List<ChunkInfo> chunksToStitch, RestRequest restRequest) {
+    CompletableFuture<String> future = new CompletableFuture<>();
+    stitchBlob(blobProperties, userMetadata, chunksToStitch, restRequest, CallbackUtils.fromCompletableFuture(future),
+        null);
     return future;
   }
 

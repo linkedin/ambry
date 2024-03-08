@@ -14,6 +14,7 @@
 package com.github.ambry.router;
 
 import com.github.ambry.commons.BlobId;
+import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
@@ -21,14 +22,21 @@ import com.github.ambry.rest.MockRestRequest;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
@@ -40,6 +48,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.router.RouterTestHelpers.*;
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
 
 /**
@@ -145,14 +154,15 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
   }
 
   /**
-   * Test the PutBlob with skipCompositeChunk option. It's used by S3 multipart upload.
-   * We don't generate composite chunk for it.
+   * Test the S3 Multipart upload
+   * 1. Part Upload: Test the PutBlob with skipCompositeChunk option. We don't generate composite chunk for it.
    * Instead, we return PutBlobMetaInfo which includes the data chunk list.
    * No matter if router enables "reserved metadata chunk" feature, S3 part upload doesn't reserve metadata chunk.
+   * 2. Stitch Blob: It's called in completeMultipartUpload. It stitches all data chunks.
    * @throws Exception
    */
   @Test
-  public void testS3PartUpload() throws Exception {
+  public void testS3MultiPartUpload() throws Exception {
     int chunkNumber = 9;
     // composite blob with "chunkNumber" of data chunks
     maxPutChunkSize = PUT_CONTENT_SIZE / chunkNumber;
@@ -162,51 +172,68 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
     setRouter();
     setOperationParams();
 
-    // set skipCompositeChunk to true
-    RestRequest request = createRestRequestForPutOperation();
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(request, null, CLUSTER_NAME));
-    PutBlobOptions putBlobOptions = new PutBlobOptionsBuilder().restRequest(request).skipCompositeChunk(true).build();
-    String compositeBlobInfo = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putBlobOptions)
-        .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-    PutBlobMetaInfo metaInfo = PutBlobMetaInfo.deserialize(compositeBlobInfo);
+    int numParts = 2;
+    Part parts[] = new Part[numParts];
+    for (int part = 0; part < numParts; part++) {
+      // set skipCompositeChunk to true
+      RestRequest request = createRestRequestForPutOperation();
+      request.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(request, null, CLUSTER_NAME));
+      PutBlobOptions putBlobOptions = new PutBlobOptionsBuilder().restRequest(request).skipCompositeChunk(true).build();
+      ReadableStreamChannel putChannel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(putContent));
+      String compositeBlobInfo = router.putBlob(putBlobProperties, putUserMetadata, putChannel, putBlobOptions)
+          .get(AWAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      PutBlobMetaInfo metaInfo = PutBlobMetaInfo.deserialize(compositeBlobInfo);
 
-    // Serialize and Deserialize, the PutBlobMetaInfo should be the same
-    String metaInfoStr = metaInfo.toString();
-    PutBlobMetaInfo deserializedMetaInfo = PutBlobMetaInfo.deserialize(metaInfoStr);
+      // Serialize and Deserialize, the PutBlobMetaInfo should be the same
+      String metaInfoStr = metaInfo.toString();
+      PutBlobMetaInfo deserializedMetaInfo = PutBlobMetaInfo.deserialize(metaInfoStr);
 
-    // verify the deserialized PutBlobMetaInfo
-    Assert.assertEquals(chunkNumber, deserializedMetaInfo.getNumChunks());
-    // verify the content, one data chunk after another
-    List<Pair<String, Long>> chunks = deserializedMetaInfo.getOrderedChunkIdSizeList();
-    // reserved metadata chunk id should be null
-    Assert.assertNull(deserializedMetaInfo.getReservedMetadataChunkId());
-    int chunkSize = maxPutChunkSize;
-    for (int i = 0; i < chunkNumber; i++) {
-      Pair<String, Long> chunk = chunks.get(i);
-      GetBlobResult chunkResult =
-          router.getBlob(chunk.getFirst(), new GetBlobOptionsBuilder().build(), null, null).get();
-      // last chunk
-      if (i == chunkNumber - 1) {
-        chunkSize = PUT_CONTENT_SIZE - maxPutChunkSize * i;
+      // verify the deserialized PutBlobMetaInfo
+      Assert.assertEquals(chunkNumber, deserializedMetaInfo.getNumChunks());
+      // verify the content, one data chunk after another
+      List<Pair<String, Long>> chunks = deserializedMetaInfo.getOrderedChunkIdSizeList();
+      // reserved metadata chunk id should be null
+      Assert.assertNull(deserializedMetaInfo.getReservedMetadataChunkId());
+      int chunkSize = maxPutChunkSize;
+      for (int i = 0; i < chunkNumber; i++) {
+        Pair<String, Long> chunk = chunks.get(i);
+        GetBlobResult chunkResult =
+            router.getBlob(chunk.getFirst(), new GetBlobOptionsBuilder().build(), null, null).get();
+        // last chunk
+        if (i == chunkNumber - 1) {
+          chunkSize = PUT_CONTENT_SIZE - maxPutChunkSize * i;
+        }
+        Assert.assertEquals(chunkSize, chunk.getSecond().longValue());
+
+        // verify the reserved metadata chunk id of each data chunk is null
+        BlobProperties blobProperties = chunkResult.getBlobInfo().getBlobProperties();
+        Assert.assertEquals(blobProperties.getReservedMetadataBlobId(), null);
+
+        // verify data content
+        RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
+        chunkResult.getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
+        InputStream input = retainingAsyncWritableChannel.consumeContentAsInputStream();
+        retainingAsyncWritableChannel.close();
+        Assert.assertEquals(chunkSize, input.available());
+        byte[] readContent = Utils.readBytesFromStream(input, chunkSize);
+        input.close();
+
+        byte[] originSlice = Arrays.copyOfRange(putContent, i * maxPutChunkSize, i * maxPutChunkSize + chunkSize);
+        Assert.assertArrayEquals(originSlice, readContent);
       }
-      Assert.assertEquals(chunkSize, chunk.getSecond().longValue());
 
-      // verify the reserved metadata chunk id of each data chunk is null
-      BlobProperties blobProperties = chunkResult.getBlobInfo().getBlobProperties();
-      Assert.assertEquals(blobProperties.getReservedMetadataBlobId(), null);
-
-      // verify data content
-      RetainingAsyncWritableChannel retainingAsyncWritableChannel = new RetainingAsyncWritableChannel();
-      chunkResult.getBlobDataChannel().readInto(retainingAsyncWritableChannel, null).get();
-      InputStream input = retainingAsyncWritableChannel.consumeContentAsInputStream();
-      retainingAsyncWritableChannel.close();
-      Assert.assertEquals(chunkSize, input.available());
-      byte[] readContent = Utils.readBytesFromStream(input, chunkSize);
-      input.close();
-
-      byte[] originSlice = Arrays.copyOfRange(putContent, i * maxPutChunkSize, i * maxPutChunkSize + chunkSize);
-      Assert.assertArrayEquals(originSlice, readContent);
+      parts[part] = new Part(Integer.toString(part + 1), compositeBlobInfo);
     }
+
+    // Complete Multipart Upload with the stitch command
+    CompleteMultipartUpload completeMultipartUpload = new CompleteMultipartUpload(parts);
+
+    RestRequest request = createRestRequestForPutOperation();
+    List<ChunkInfo> chunksToStitch = getChunksToStitch(completeMultipartUpload);
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(request, null, CLUSTER_NAME));
+    String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch, request).get();
+
+    router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
   }
 
   private RestRequest createRestRequestForPutOperation()
@@ -216,5 +243,43 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
     request.put(MockRestRequest.REST_METHOD_KEY, RestMethod.POST.name());
     request.put(MockRestRequest.URI_KEY, uri);
     return new MockRestRequest(request, null);
+  }
+
+  List<ChunkInfo> getChunksToStitch(CompleteMultipartUpload completeMultipartUpload) throws RestServiceException {
+    // Get parts in order from CompleteMultipartUpload, deserialize each part id to get data chunk ids.
+    List<ChunkInfo> chunkInfos = new ArrayList<>();
+    try {
+      // sort the list in order
+      List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
+      Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
+
+      String reservedMetadataId = null;
+      for (Part part : sortedParts) {
+        PutBlobMetaInfo putBlobMetaInfoObj = PutBlobMetaInfo.deserialize(part.geteTag());
+        // reservedMetadataId can be null. but if it's not null, they are supposed to be the same
+        String reserved = putBlobMetaInfoObj.getReservedMetadataChunkId();
+        if (reservedMetadataId == null) {
+          reservedMetadataId = reserved;
+        }
+        if (reserved != null && !reserved.equals(reservedMetadataId)) {
+          String error = "Reserved ID are different " + completeMultipartUpload;
+          throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
+        }
+        long expirationTimeInMs = -1;
+
+        List<Pair<String, Long>> chunks = putBlobMetaInfoObj.getOrderedChunkIdSizeList();
+        for (int i = 0; i < putBlobMetaInfoObj.getNumChunks(); i++) {
+          String blobId = chunks.get(i).getFirst();
+          long chunkSize = chunks.get(i).getSecond();
+
+          ChunkInfo chunk = new ChunkInfo(blobId, chunkSize, expirationTimeInMs, reservedMetadataId);
+          chunkInfos.add(chunk);
+        }
+      }
+    } catch (IOException e) {
+      String error = "Could not parse xml request body " + completeMultipartUpload;
+      throw new RestServiceException(error, e, RestServiceErrorCode.BadRequest);
+    }
+    return chunkInfos;
   }
 }

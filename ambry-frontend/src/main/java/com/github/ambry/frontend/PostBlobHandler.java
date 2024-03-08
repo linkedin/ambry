@@ -200,7 +200,7 @@ class PostBlobHandler {
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.postReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(blobInfo.getBlobProperties(), blobInfo.getUserMetadata(),
-              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
+              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), restRequest,
               routerStitchBlobCallback(blobInfo),
               QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, false)), uri, LOGGER,
           finalCallback);
