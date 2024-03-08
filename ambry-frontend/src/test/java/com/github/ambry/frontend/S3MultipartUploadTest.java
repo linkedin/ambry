@@ -110,8 +110,6 @@ public class S3MultipartUploadTest {
 
   private void multiPartUploadTest(Long ttl) throws Exception {
 
-    long expectedTtl = ttl == null || ttl == Utils.Infinite_Time
-        ? frontendConfig.permanentNamedBlobInitialPutTtl : ttl;
     long startTime = SystemTime.getInstance().milliseconds();
 
     // 1. CreateMultipartUpload
@@ -164,7 +162,7 @@ public class S3MultipartUploadTest {
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Etag must be present", etag1);
     assertNotNull("Location must be present", location1);
-    assertEquals("TTL wasn't set properly", expectedTtl, getTtl(record1, startTime));
+    assertEquals("TTL wasn't set properly", frontendConfig.chunkUploadInitialChunkTtlSecs, getTtl(record1, startTime));
 
     // 2.2 part2
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId
@@ -189,7 +187,7 @@ public class S3MultipartUploadTest {
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Etag must be present", etag2);
     assertNotNull("Location must be present", location2);
-    assertEquals("TTL wasn't set properly", expectedTtl, getTtl(record2, startTime));
+    assertEquals("TTL wasn't set properly", frontendConfig.chunkUploadInitialChunkTtlSecs, getTtl(record2, startTime));
 
     // 3. CompleteMultipartUpload
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;

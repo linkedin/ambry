@@ -102,9 +102,7 @@ public class S3MultipartUploadPartHandler {
     restRequest.setArg(S3_CHUNK_UPLOAD, true);
     restRequest.setArg(SESSION, uploadId);
     restRequest.setArg(SEND_FAILURE_REASON, Boolean.TRUE);
-    if (Utils.Infinite_Time == RestUtils.getTtlFromRequestHeader(restRequest.getArgs())) {
-      restRequest.setArg(TTL, frontendConfig.permanentNamedBlobInitialPutTtl);
-    }
+    restRequest.setArg(TTL, frontendConfig.chunkUploadInitialChunkTtlSecs);
 
     // TODO [S3] verifyChunkAccountAndContainer? getAndVerifyReservedMetadataBlobId?
     new S3MultipartUploadPartHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
