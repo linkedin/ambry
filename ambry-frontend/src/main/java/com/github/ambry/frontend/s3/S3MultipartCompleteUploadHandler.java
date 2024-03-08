@@ -77,8 +77,8 @@ import static com.github.ambry.frontend.s3.S3MessagePayload.*;
  * <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html">...</a>
  * TODO [S3] Add support for Abort multipart uploads.
  */
-public class S3CompleteMultipartUploadHandler {
-  private static final Logger LOGGER = LoggerFactory.getLogger(S3CompleteMultipartUploadHandler.class);
+public class S3MultipartCompleteUploadHandler {
+  private static final Logger LOGGER = LoggerFactory.getLogger(S3MultipartCompleteUploadHandler.class);
   private static final ObjectMapper objectMapper = new XmlMapper();
   private final SecurityService securityService;
   private final FrontendMetrics frontendMetrics;
@@ -104,7 +104,7 @@ public class S3CompleteMultipartUploadHandler {
    * @param frontendConfig              the {@link FrontendConfig} to use.
    * @param quotaManager                The {@link QuotaManager} class to account for quota usage in serving requests.
    */
-  public S3CompleteMultipartUploadHandler(SecurityService securityService, NamedBlobDb namedBlobDb,
+  public S3MultipartCompleteUploadHandler(SecurityService securityService, NamedBlobDb namedBlobDb,
       IdConverter idConverter, Router router, AccountAndContainerInjector accountAndContainerInjector,
       FrontendMetrics frontendMetrics, FrontendConfig frontendConfig, QuotaManager quotaManager) {
     this.securityService = securityService;
@@ -124,7 +124,7 @@ public class S3CompleteMultipartUploadHandler {
    */
   void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
-    new S3CompleteMultipartUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
+    new S3MultipartCompleteUploadHandler.CallbackChain(restRequest, restResponseChannel, callback).start();
   }
 
   /**
@@ -357,7 +357,6 @@ public class S3CompleteMultipartUploadHandler {
         // sort the list in order
         List<Part> sortedParts = Arrays.asList(completeMultipartUpload.getPart());
         Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
-
         String reservedMetadataId = null;
         for (Part part : sortedParts) {
           PutBlobMetaInfo putBlobMetaInfoObj = PutBlobMetaInfo.deserialize(part.geteTag());

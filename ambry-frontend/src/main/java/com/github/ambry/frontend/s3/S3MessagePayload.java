@@ -240,4 +240,29 @@ public class S3MessagePayload {
       return "Key=" + key + ", " + "LastModified=" + lastModified;
     }
   }
+
+  public static class ListPartsResult {
+
+    @JacksonXmlProperty(localName = "Bucket")
+    private String bucket;
+    @JacksonXmlProperty(localName = "Key")
+    private String key;
+    @JacksonXmlProperty(localName = "UploadId")
+    private String uploadId;
+
+    public ListPartsResult() {
+
+    }
+
+    public ListPartsResult(String bucket, String key, String uploadId) {
+      this.bucket = bucket;
+      this.key = key;
+      this.uploadId = uploadId;
+    }
+
+    @Override
+    public String toString() {
+      return "Bucket=" + bucket + ", Key=" + key + ", UploadId=" + uploadId;
+    }
+  }
 }

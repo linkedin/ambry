@@ -18,6 +18,7 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
+import com.github.ambry.frontend.s3.S3BaseHandler;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
 import com.github.ambry.frontend.s3.S3HeadHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
@@ -229,13 +230,13 @@ class FrontendRestRequestService implements RestRequestService {
         accountAndContainerInjector);
     s3DeleteHandler = new S3DeleteHandler(deleteBlobHandler, frontendMetrics);
     s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
-    s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
     s3HeadHandler = new S3HeadHandler(headBlobHandler, securityService, frontendMetrics, accountService);
     s3MultipartUploadHandler =
         new S3MultipartUploadHandler(securityService, frontendMetrics, accountAndContainerInjector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
+    s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
     namedBlobsCleanupRunner = new NamedBlobsCleanupRunner(router, namedBlobDb);
     if (frontendConfig.enableNamedBlobCleanupTask) {
       namedBlobsCleanupScheduler = Utils.newScheduler(1, "named-blobs-cleanup-", false);
@@ -315,15 +316,21 @@ class FrontendRestRequestService implements RestRequestService {
       } else if (requestPath.matchesOperation(Operations.STATS_REPORT)) {
         getStatsReportHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
-          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
-        if (isS3Request(restRequest)) {
+      } else if (isS3Request(restRequest)) {
+        if (S3BaseHandler.isListBucketRequest(restRequest)) {
           s3ListHandler.handle(restRequest, restResponseChannel,
               (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
+        } else if (S3BaseHandler.isMultipartListPartRequest(restRequest)) {
+          s3MultipartUploadHandler.handle(restRequest, restResponseChannel,
+              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
         } else {
-          namedBlobListHandler.handle(restRequest, restResponseChannel,
+          getBlobHandler.handle(requestPath, restRequest, restResponseChannel,
               (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
         }
+      } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
+          && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
+        namedBlobListHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (RestUtils.getBooleanHeader(restRequest.getArgs(), ENABLE_DATASET_VERSION_LISTING, false)
           && DatasetVersionPath.parse(requestPath, restRequest.getArgs()).getVersion() == null) {
         listDatasetVersionHandler.handle(restRequest, restResponseChannel,

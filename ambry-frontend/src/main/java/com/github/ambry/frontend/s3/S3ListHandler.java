@@ -61,7 +61,7 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
 
   /**
    * Constructs a handler for handling s3 requests for listing blobs.
-   * @param namedBlobListHandler named blob list handler
+   * @param namedBlobListHandler  the {@link NamedBlobListHandler} to use.
    */
   public S3ListHandler(NamedBlobListHandler namedBlobListHandler, FrontendMetrics metrics) {
     this.namedBlobListHandler = namedBlobListHandler;
@@ -77,18 +77,19 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) {
-    namedBlobListHandler.handle(restRequest, restResponseChannel, buildCallback(metrics.s3ListHandleMetrics, (result) -> {
-      // Convert from json response to S3 xml response as defined in
-      // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_ResponseSyntax.
-      ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
-      JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
-      Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
-      ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
-      restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
-      restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
-      callback.onCompletion(readableStreamChannel, null);
-    }, restRequest.getUri(), LOGGER, callback));
+    namedBlobListHandler.handle(restRequest, restResponseChannel,
+        buildCallback(metrics.s3ListHandleMetrics, (result) -> {
+          // Convert from json response to S3 xml response as defined in
+          // https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_ResponseSyntax.
+          ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) result).getContent();
+          JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
+          Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
+          ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
+          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
+          callback.onCompletion(readableStreamChannel, null);
+        }, restRequest.getUri(), LOGGER, callback));
   }
 
   private ReadableStreamChannel serializeAsXml(RestRequest restRequest, Page<NamedBlobListEntry> namedBlobRecordPage)
