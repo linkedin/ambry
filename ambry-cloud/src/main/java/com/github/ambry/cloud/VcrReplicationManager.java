@@ -367,8 +367,10 @@ public class VcrReplicationManager extends ReplicationEngine {
         logger.info("Backing up leader at {}:{} for partition {}", peerReplicas.get(0).getDataNodeId().getHostname(),
             peerReplicas.get(0).getMountPath(), partitionId.getId());
       }
-    } else {
+    } else if (cloudConfig.backupPolicy.equals(ReplicationModelType.ALL_TO_ALL)) {
       peerReplicas = cloudReplica.getPeerReplicaIds();
+    } else {
+      logger.error("Unrecognized backup policy {}", cloudConfig.backupPolicy);
     }
     List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
     Store store = storeManager.getStore(partitionId);
