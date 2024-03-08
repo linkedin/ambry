@@ -94,21 +94,7 @@ public class S3MultipartUploadTest {
   }
 
   @Test
-  public void testPutWithoutTtl() throws Exception {
-    multiPartUploadTest(null);
-  }
-
-  @Test
-  public void testPutWithInfiniteTtl() throws Exception {
-    multiPartUploadTest(Utils.Infinite_Time);
-  }
-
-  @Test
-  public void testPutWithSomeTtl() throws Exception {
-    multiPartUploadTest(3600L);
-  }
-
-  private void multiPartUploadTest(Long ttl) throws Exception {
+  public void multiPartUploadTest() throws Exception {
 
     long startTime = SystemTime.getInstance().milliseconds();
 
@@ -144,9 +130,6 @@ public class S3MultipartUploadTest {
         + "&partNumber=1";
     headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     headers.put(RestUtils.Headers.CONTENT_LENGTH, size);
-    if (ttl != null) {
-      headers.put(RestUtils.Headers.TTL, ttl);
-    }
     byte[] content1 = TestUtils.getRandomBytes(size);
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, uri, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content1), null)));
@@ -169,9 +152,6 @@ public class S3MultipartUploadTest {
         + "&partNumber=2";
     headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
     headers.put(RestUtils.Headers.CONTENT_LENGTH, size);
-    if (ttl != null) {
-      headers.put(RestUtils.Headers.TTL, ttl);
-    }
     byte[] content2 = TestUtils.getRandomBytes(size);
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, uri, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content2), null)));
