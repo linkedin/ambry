@@ -45,8 +45,8 @@ public class S3PostHandler extends S3BaseHandler<ReadableStreamChannel> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
-    if (S3MultipartUploadHandler.isCreateRequest(restRequest) || S3MultipartUploadHandler.isCompleteRequest(
-        restRequest)) {
+    if (S3MultipartUploadHandler.isMultipartCreateUploadRequest(restRequest)
+        || S3MultipartUploadHandler.isMultipartCompleteUploadRequest(restRequest)) {
       multipartPostHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       // Placeholder for handling any non-multipart S3 POST requests in the future.

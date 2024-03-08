@@ -22,16 +22,12 @@ import com.github.ambry.frontend.IdConverter;
 import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.named.NamedBlobDb;
 import com.github.ambry.quota.QuotaManager;
-import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-
-import static com.github.ambry.rest.RestUtils.*;
-import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -76,53 +72,17 @@ public class S3MultipartUploadHandler extends S3BaseHandler<ReadableStreamChanne
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
-    if (isCreateRequest(restRequest)) {
+    if (isMultipartCreateUploadRequest(restRequest)) {
       createMultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
-    } else if (isUploadPartRequest(restRequest)) {
+    } else if (isMultipartUploadPartRequest(restRequest)) {
       uploadPartHandler.handle(restRequest, restResponseChannel, callback);
-    } else if (isCompleteRequest(restRequest)) {
+    } else if (isMultipartCompleteUploadRequest(restRequest)) {
       completeMultipartUploadHandler.handle(restRequest, restResponseChannel, callback);
-    } else if (isListPartRequest(restRequest)) {
+    } else if (isMultipartListPartRequest(restRequest)) {
       listPartsHandler.handle(restRequest, restResponseChannel, callback);
     } else {
       callback.onCompletion(null,
           new RestServiceException("Invalid S3 Multipart request", RestServiceErrorCode.BadRequest));
     }
-  }
-
-  /**
-   * @param restRequest the {@link RestRequest} that contains the request parameters.
-   * @return {@code True} if it is a creation/initiation of multipart uploads.
-   */
-  public static boolean isCreateRequest(RestRequest restRequest) {
-    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
-        && restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM);
-  }
-
-  /**
-   * @param restRequest the {@link RestRequest} that contains the request parameters.
-   * @return {@code True} if it is a completion/abortion of multipart uploads.
-   */
-  public static boolean isCompleteRequest(RestRequest restRequest) {
-    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
-        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
-  }
-
-  /**
-   * @param restRequest the {@link RestRequest} that contains the request parameters.
-   * @return {@code True} if it is an upload part request for multipart uploads.
-   */
-  public static boolean isUploadPartRequest(RestRequest restRequest) {
-    return restRequest.getRestMethod() == RestMethod.PUT && restRequest.getArgs().containsKey(S3_REQUEST)
-        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
-  }
-
-  /**
-   * @param restRequest the {@link RestRequest} that contains the request parameters.
-   * @return {@code True} if it is a request to list parts of a completed multipart upload request.
-   */
-  public static boolean isListPartRequest(RestRequest restRequest) {
-    return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
-        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 }

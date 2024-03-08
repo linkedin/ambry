@@ -63,7 +63,7 @@ public class S3PutHandler extends S3BaseHandler<Void> {
   @Override
   protected void doHandle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<Void> callback)
       throws RestServiceException {
-    if (S3MultipartUploadHandler.isUploadPartRequest(restRequest)) {
+    if (S3MultipartUploadHandler.isMultipartUploadPartRequest(restRequest)) {
       multipartUploadHandler.handle(restRequest, restResponseChannel,
           (result, exception) -> callback.onCompletion(null, exception));
       return;

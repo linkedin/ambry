@@ -16,8 +16,10 @@ package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.Operations;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -28,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
+
 
 /**
  * Base class for all S3 handle classes that provides crosscutting functionality such as
@@ -60,8 +63,7 @@ abstract public class S3BaseHandler<R> {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    * @throws RestServiceException exception when the processing fails
    */
-  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
-      Callback<R> callback) {
+  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel, Callback<R> callback) {
     try {
       String path = ((RequestPath) restRequest.getArgs().get(REQUEST_PATH)).getOperationOrBlobId(true);
       if (!path.startsWith(Operations.NAMED_BLOB)) {
@@ -74,8 +76,7 @@ abstract public class S3BaseHandler<R> {
         removeAmbryHeaders(restResponseChannel);
         callback.onCompletion(r, null);
       }));
-    }
-    catch (Throwable t) {
+    } catch (Throwable t) {
       Exception e = t instanceof Exception ? (Exception) t
           : new RestServiceException(t, RestServiceErrorCode.InternalServerError);
       callback.onCompletion(null, e);
@@ -83,8 +84,55 @@ abstract public class S3BaseHandler<R> {
   }
 
   private void removeAmbryHeaders(RestResponseChannel restResponseChannel) {
-    restResponseChannel.getHeaders().stream()
+    restResponseChannel.getHeaders()
+        .stream()
         .filter(header -> header.startsWith(AMBRY_HEADER_PREFIX))
         .forEach(restResponseChannel::removeHeader);
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is a request to list parts of a completed multipart upload request.
+   */
+  public static boolean isListBucketRequest(RestRequest restRequest) throws RestServiceException {
+    RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
+    return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
+        && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null;
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is a creation/initiation of multipart uploads.
+   */
+  public static boolean isMultipartCreateUploadRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOADS_QUERY_PARAM);
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is a completion/abortion of multipart uploads.
+   */
+  public static boolean isMultipartCompleteUploadRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.POST && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is an upload part request for multipart uploads.
+   */
+  public static boolean isMultipartUploadPartRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.PUT && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is a request to list parts of a completed multipart upload request.
+   */
+  public static boolean isMultipartListPartRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
   }
 }
