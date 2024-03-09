@@ -543,6 +543,7 @@ class LogSegment implements Read, Write {
    */
   void flush() throws IOException {
     fileChannel.force(true);
+    directIOExecutor.flush();
   }
 
   /**
@@ -554,10 +555,12 @@ class LogSegment implements Read, Write {
     if (open.compareAndSet(true, false)) {
       if (!skipDiskFlush) {
         flush();
+        directIOExecutor.flush();
       }
       try {
         // attempt to close file descriptors even when there is a disk I/O error.
         fileChannel.close();
+        directIOExecutor.close();
       } catch (IOException e) {
         if (!skipDiskFlush) {
           throw e;
