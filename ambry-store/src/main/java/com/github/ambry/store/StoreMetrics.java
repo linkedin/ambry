@@ -246,7 +246,7 @@ public class StoreMetrics {
     compactionBufferReadSize =
         registry.histogram(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBufferReadSize"));
     compactionBufferReadUtilizationRate =
-        registry.histogram(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBufferReadUtilizationRate"))
+        registry.histogram(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBufferReadUtilizationRate"));
     permanentDeleteTombstonePurgeCount =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "PermanentDeleteTombstonePurgeCount"));
     compactionCopyRecordTimeInMs =
