@@ -873,12 +873,15 @@ class BlobStoreCompactor {
           int ioCount = Utils.readFileToByteBuffer(fileChannel, startOffset, bufferToUse);
           srcMetrics.compactionBundleReadBufferIoCount.inc(ioCount);
         }
+        srcMetrics.compactionBufferReadSize.update(readSize);
 
         // copy from buffer to tgtLog
+        int effectiveBytes = 0;
         for (int i = start; i <= end; i++) {
           IndexEntry srcIndexEntry = srcIndexEntries.get(i);
           IndexValue srcValue = srcIndexEntry.getValue();
           long usedCapacity = tgtIndex.getLogUsedCapacity();
+          effectiveBytes += (int) srcValue.getSize();
           if (isActive && (tgtLog.getCapacityInBytes() - usedCapacity >= srcValue.getSize())) {
             Offset endOffsetOfLastMessage = tgtLog.getEndOffset();
             if (config.storeCompactionMinOperationsBytesPerSec < config.storeCompactionOperationsBytesPerSec
@@ -1016,6 +1019,9 @@ class BlobStoreCompactor {
             copiedAll = false;
             break;
           }
+        }
+        if (readSize != 0) {
+          srcMetrics.compactionBufferReadUtilizationRate.update((int) (effectiveBytes * 1.0 / readSize * 100));
         }
         if (!copiedAll) {
           // break outer while loop
