@@ -307,8 +307,8 @@ class PutOperation {
     this.partitionClass = Objects.requireNonNull(partitionClass, "The provided partitionClass is null");
     this.channel = channel;
     this.options = options;
-    this.isSimpleBlob =
-        !options.isChunkUpload(); // if it is a chunked upload, then it should not be considered as simple blob.
+    this.isSimpleBlob = !options.isChunkUpload()
+        && !options.skipCompositeChunk(); // if it is a chunked upload, then it should not be considered as simple blob.
     this.chunksToStitch = chunksToStitch;
     this.futureResult = futureResult;
     this.callback = callback;
@@ -362,8 +362,7 @@ class PutOperation {
     }
     Exception exception = null;
     try {
-      if (options.isChunkUpload() && options.getMaxUploadSize() > routerConfig.routerMaxPutChunkSizeBytes
-          && !RestUtils.isS3Request(restRequest)) {
+      if (options.isChunkUpload() && options.getMaxUploadSize() > routerConfig.routerMaxPutChunkSizeBytes) {
         exception = new RouterException("Invalid max upload size for chunk upload: " + options.getMaxUploadSize(),
             RouterErrorCode.InvalidPutArgument);
       } else if (isStitchOperation()) {
@@ -485,7 +484,8 @@ class PutOperation {
             RouterUtils.getAccountContainer(accountService, getBlobProperties().getAccountId(),
                 getBlobProperties().getContainerId());
         NotificationBlobType blobType = isComposite() ? NotificationBlobType.Composite
-            : options.isChunkUpload() ? NotificationBlobType.DataChunk : NotificationBlobType.Simple;
+            : options.isChunkUpload() || options.skipCompositeChunk() ? NotificationBlobType.DataChunk
+                : NotificationBlobType.Simple;
         notificationSystem.onBlobCreated(getBlobIdString(), getBlobProperties(), accountContainer.getFirst(),
             accountContainer.getSecond(), blobType);
       }
@@ -2116,7 +2116,7 @@ class PutOperation {
             .stream()
             .map(p -> new Pair<>(p.getFirst().toString(), p.getSecond()))
             .collect(Collectors.toList()));
-        PutBlobMetaInfo putBlobMetaInfoObj = new PutBlobMetaInfo(orderedChunkList, reservedMetadataChunkId.getID());
+        PutBlobMetaInfo putBlobMetaInfoObj = new PutBlobMetaInfo(orderedChunkList, null);
         putBlobMetaInfo = PutBlobMetaInfo.serialize(putBlobMetaInfoObj);
         logger.debug("S3 5MB : finalizeMetadataChunk orderedChunkIdList is {} {}", indexToChunkIdsAndChunkSizes,
             putBlobMetaInfo);

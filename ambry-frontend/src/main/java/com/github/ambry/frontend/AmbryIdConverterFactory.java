@@ -18,6 +18,8 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.s3.S3BaseHandler;
+import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.DeleteResult;
@@ -108,7 +110,9 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
       try {
         if (!isOpen) {
           exception = new RestServiceException("IdConverter is closed", RestServiceErrorCode.ServiceUnavailable);
-        } else if (restRequest.getRestMethod().equals(RestMethod.POST)) {
+        } else if (restRequest.getRestMethod().equals(RestMethod.POST) && !RestUtils.isS3Request(restRequest)) {
+          // Ambry chunk uploads come as POST requests. Sign id if required.
+          // TODO [S3] Add ID conversion for S3 POST requests (coming during multipart uploads) as well
           convertedId = "/" + signIdIfRequired(restRequest, input);
         } else {
           CallbackUtils.callCallbackAfter(convertId(input, restRequest, blobInfo),
@@ -180,8 +184,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
           conversionFuture = getNamedBlobDb().get(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
               namedBlobPath.getBlobName(), getOption).thenApply(NamedBlobRecord::getBlobId);
         }
-      } else if (restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
-          .matchesOperation(Operations.NAMED_BLOB)) {
+      } else if (isNamedBlobPutRequest(restRequest) || isS3MultipartUploadCompleteRequest(restRequest)) {
         Objects.requireNonNull(blobInfo, "blobInfo cannot be null.");
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
         String blobId = RestUtils.stripSlashAndExtensionFromId(input);
@@ -206,6 +209,23 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
         conversionFuture = CompletableFuture.completedFuture(RestUtils.stripSlashAndExtensionFromId(decryptedInput));
       }
       return conversionFuture;
+    }
+
+    /**
+     * @param restRequest incoming {@link RestRequest}
+     * @return {@code true} if this named blob PUT request
+     */
+    private boolean isNamedBlobPutRequest(RestRequest restRequest) {
+      return restRequest.getRestMethod() == RestMethod.PUT && RestUtils.getRequestPath(restRequest)
+          .matchesOperation(Operations.NAMED_BLOB);
+    }
+
+    /**
+     * @param restRequest incoming {@link RestRequest}
+     * @return {@code true} if this is a S3 multipart completee request
+     */
+    private boolean isS3MultipartUploadCompleteRequest(RestRequest restRequest) {
+      return S3BaseHandler.isMultipartCompleteUploadRequest(restRequest);
     }
 
     /**
