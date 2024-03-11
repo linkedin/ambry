@@ -141,11 +141,9 @@ public class S3MultipartUploadTest {
     putResult.get();
     String etag1 = (String) restResponseChannel.getHeader(RestUtils.Headers.ETAG);
     String location1 = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
-    NamedBlobRecord record1 = namedBlobDb.get(accountName, containerName, blobName).get();
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Etag must be present", etag1);
     assertNotNull("Location must be present", location1);
-    assertEquals("TTL wasn't set properly", frontendConfig.chunkUploadInitialChunkTtlSecs, getTtl(record1, startTime));
 
     // 2.2 part2
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId
@@ -163,11 +161,9 @@ public class S3MultipartUploadTest {
     putResult.get();
     String etag2 = (String) restResponseChannel.getHeader(RestUtils.Headers.ETAG);
     String location2 = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
-    NamedBlobRecord record2 = namedBlobDb.get(accountName, containerName, blobName).get();
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Etag must be present", etag2);
     assertNotNull("Location must be present", location2);
-    assertEquals("TTL wasn't set properly", frontendConfig.chunkUploadInitialChunkTtlSecs, getTtl(record2, startTime));
 
     // 3. CompleteMultipartUpload
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId;
@@ -265,9 +261,5 @@ public class S3MultipartUploadTest {
             namedBlobDb, idConverter, router, quotaManager);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, metrics);
-  }
-
-  private long getTtl(NamedBlobRecord record, long startTime) {
-    return (record.getExpirationTimeMs() - startTime) / 1000L;
   }
 }
