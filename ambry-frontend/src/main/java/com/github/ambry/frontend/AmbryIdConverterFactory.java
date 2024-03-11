@@ -18,6 +18,7 @@ import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.s3.S3BaseHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
@@ -224,7 +225,7 @@ public class AmbryIdConverterFactory implements IdConverterFactory {
      * @return {@code true} if this is a S3 multipart completee request
      */
     private boolean isS3MultipartUploadCompleteRequest(RestRequest restRequest) {
-      return S3MultipartUploadHandler.isCompleteRequest(restRequest);
+      return S3BaseHandler.isMultipartCompleteUploadRequest(restRequest);
     }
 
     /**
