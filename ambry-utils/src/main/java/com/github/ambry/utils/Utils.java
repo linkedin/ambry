@@ -625,7 +625,7 @@ public class Utils {
   public static int readFileToByteBuf(FileChannel fileChannel, ByteBuf buffer, long offset, int size)
       throws IOException {
     // If the writable bytes in ByteBuf is less then the given size, ByteBuf would expand its capacity.
-    // Put an check here to make sure that we don't expand the capacity.
+    // Put a check here to make sure that we don't expand the capacity.
     if (buffer.writableBytes() < size) {
       throw new IllegalArgumentException(
           "ByteBuf doesn't have enough writable bytes [" + buffer.writableBytes() + "<" + size + "]");
