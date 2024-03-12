@@ -613,6 +613,35 @@ public class Utils {
   }
 
   /**
+   * Read "size" of bytes from a file channel to a {@link ByteBuf}. If "size" length of bytes can't be read because of
+   * EOF, this method would return already read bytes.
+   * @param fileChannel The file channel to read bytes
+   * @param buffer The target {@link ByteBuf} to write bytes to.
+   * @param offset The offset of the file channel to read bytes from.
+   * @param size The size to read
+   * @return The real bytes read from the file channel
+   * @throws IOException
+   */
+  public static int readFileToByteBuf(FileChannel fileChannel, ByteBuf buffer, long offset, int size)
+      throws IOException {
+    // If the writable bytes in ByteBuf is less then the given size, ByteBuf would expand its capacity.
+    // Put an check here to make sure that we don't expand the capacity.
+    if (buffer.writableBytes() < size) {
+      throw new IllegalArgumentException(
+          "ByteBuf doesn't have enough writable bytes [" + buffer.writableBytes() + "<" + size + "]");
+    }
+    int bytesRead = 0;
+    while (bytesRead < size) {
+      int readSize = buffer.writeBytes(fileChannel, offset + bytesRead, size - bytesRead);
+      if (readSize == -1 || readSize == 0) {
+        return bytesRead;
+      }
+      bytesRead += readSize;
+    }
+    return bytesRead;
+  }
+
+  /**
    * Instantiate a class instance from a given className.
    * @param className
    * @param <T>
@@ -1091,7 +1120,6 @@ public class Utils {
         .collect(Collectors.toCollection(collectionFactory));
   }
 
-
   /**
    * Split the input string by the specified delimiter, and then apply filter per item.
    *
@@ -1355,7 +1383,7 @@ public class Utils {
   public static void checkNotNullOrEmpty(String parameter, String exceptionMessage) {
     if (parameter == null) {
       throw new NullPointerException(exceptionMessage);
-    } else if(parameter.length() == 0) {
+    } else if (parameter.length() == 0) {
       throw new IllegalArgumentException(exceptionMessage);
     }
   }

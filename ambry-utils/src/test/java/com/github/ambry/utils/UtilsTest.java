@@ -15,8 +15,8 @@ package com.github.ambry.utils;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.epoll.Epoll;
-import io.netty.channel.kqueue.KQueue;
 import io.netty.channel.unix.Errors;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -45,6 +45,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -333,6 +334,65 @@ public class UtilsTest {
       Utils.readFileToByteBuffer(fileChannel, 21, buffer);
       fail("Should fail");
     } catch (IOException e) {
+    }
+  }
+
+  @Test
+  public void testReadFileToByteBuf() throws IOException {
+    File file = File.createTempFile("test", "1");
+    file.deleteOnExit();
+    FileChannel fileChannel = Utils.openChannel(file, false);
+
+    byte[] referenceBytes = new byte[20];
+    new Random().nextBytes(referenceBytes);
+    FileUtils.writeByteArrayToFile(file, referenceBytes);
+
+    ByteBuf buffer = PooledByteBufAllocator.DEFAULT.ioBuffer(20);
+    try {
+      // case 1: read larger than the the buffer
+      try {
+        // Try to read larger than the buffer
+        Utils.readFileToByteBuf(fileChannel, buffer, 0, 100);
+        fail("should fail");
+      } catch (IllegalArgumentException e) {
+        // Expected
+      }
+
+      // case 2: successful read
+      int sizeRead = Utils.readFileToByteBuf(fileChannel, buffer, 0, 20);
+      assertEquals(20, sizeRead);
+      assertEquals(20, buffer.readableBytes());
+      byte[] bytes = new byte[20];
+      buffer.readBytes(bytes);
+      assertArrayEquals(referenceBytes, bytes);
+
+      // case 3: read EOF
+      buffer.clear();
+      sizeRead = Utils.readFileToByteBuf(fileChannel, buffer, 10, 20);
+      assertFalse(sizeRead == 20);
+
+      FileChannel mockFileChannel = spy(fileChannel);
+      doAnswer(invocation -> {
+        ByteBuffer byteBuffer = invocation.getArgument(0);
+        long pos = invocation.getArgument(1);
+        int oldLimit = byteBuffer.limit();
+        // Only allow one byte at a time
+        byteBuffer.limit(byteBuffer.position() + 1);
+        int readSize = fileChannel.read(byteBuffer, pos);
+        byteBuffer.limit(oldLimit);
+        return readSize;
+      }).when(mockFileChannel).read(any(ByteBuffer.class), anyLong());
+
+      // case 4: multiple reads
+      buffer.clear();
+      sizeRead = Utils.readFileToByteBuf(mockFileChannel, buffer, 0, 20);
+      assertEquals(20, sizeRead);
+      assertEquals(20, buffer.readableBytes());
+      bytes = new byte[20];
+      buffer.readBytes(bytes);
+      assertArrayEquals(referenceBytes, bytes);
+    } finally {
+      buffer.release();
     }
   }
 
