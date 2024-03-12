@@ -23,7 +23,6 @@ import com.codahale.metrics.Timer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -110,6 +109,8 @@ public class StoreMetrics {
   public final Counter compactionBundleReadBufferIoCount;
   public final Counter compactionTargetIndexDuplicateOnNonRecoveryCount;
   public final Counter permanentDeleteTombstonePurgeCount;
+  public final Histogram compactionBufferReadSize;
+  public final Histogram compactionBufferReadUtilizationRate;
   public final Timer compactionCopyRecordTimeInMs;
   public final Timer compactionCopyDataByIndexSegmentTimeInMs;
   public final Timer compactionCopyDataByLogSegmentTimeInMs;
@@ -242,6 +243,10 @@ public class StoreMetrics {
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionBundleReadBufferIoCount"));
     compactionTargetIndexDuplicateOnNonRecoveryCount = registry.counter(
         MetricRegistry.name(BlobStoreCompactor.class, name + "CompactionTargetIndexDuplicateOnNonRecoveryCount"));
+    compactionBufferReadSize =
+        registry.histogram(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBufferReadSize"));
+    compactionBufferReadUtilizationRate =
+        registry.histogram(MetricRegistry.name(BlobStoreCompactor.class, "CompactionBufferReadUtilizationRate"));
     permanentDeleteTombstonePurgeCount =
         registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "PermanentDeleteTombstonePurgeCount"));
     compactionCopyRecordTimeInMs =
