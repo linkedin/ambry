@@ -18,6 +18,7 @@ import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -154,6 +155,9 @@ class LogSegment implements Read, Write {
     } catch (FileNotFoundException e) {
       throw new StoreException("File not found while creating log segment [" + file.getAbsolutePath() + "]", e,
           StoreErrorCodes.File_Not_Found);
+    } catch (EOFException e) {
+      throw new StoreException("Malformed log segment header at file [" + file.getAbsolutePath() + "]",
+          StoreErrorCodes.Log_File_Format_Error);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException(errorCode.toString() + " while creating log segment [" + file.getAbsolutePath() + "]", e,
@@ -561,6 +565,13 @@ class LogSegment implements Read, Write {
     buffer.putLong(crc.getValue());
     buffer.flip();
     appendFrom(buffer);
+    // Sync header data to disk so we won't have malformed header if there is a power outage.
+    try {
+      flush();
+    } catch (IOException e) {
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+      throw new StoreException(errorCode.toString() + " while flushing log segment header", e, errorCode);
+    }
   }
 
   @Override
