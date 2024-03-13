@@ -1763,17 +1763,11 @@ public class ReplicaThread implements Runnable {
     }
 
     /**
-     * Shallow copy Constructor for {@link ExchangeMetadataResponse}, which copies all field references with exception
-     * of 'missingStoreMessages' for which it creates new Set object.
+     * Shallow copy Constructor for {@link ExchangeMetadataResponse}, which copies all field references except
+     * 'missingStoreMessages' for which it takes the passed in parameter.
      * @param other other {@link ExchangeMetadataResponse} object.
      */
     public ExchangeMetadataResponse(ExchangeMetadataResponse other, HashSet<MessageInfo> messages) {
-      // Create a copy of 'missingStoreMessages' since it is mutable and sharing between multiple ExchangeMetadataResponses
-      // can make operations on it such as size(), isEmpty(), etc. hard to track.
-      // For example, an inter-colo thread could be fetching missing store messages from its copy of exchangeMetadataResponse
-      // in fixMissingKeys() method while an intra-colo thread could be emptying the missing store messages in
-      // exchangeMetadataResponse stored in RemoteReplicaInfo. Referencing same object of missingStoreMessages could
-      // lead to race conditions and is avoided for simplicity.
       this.missingStoreMessages = messages;
       this.remoteKeyToLocalKeyMap = other.remoteKeyToLocalKeyMap;
       this.remoteToken = other.remoteToken;
@@ -1781,6 +1775,7 @@ public class ReplicaThread implements Runnable {
       this.serverErrorCode = other.serverErrorCode;
       this.time = other.time;
       this.lastMissingMessageReceivedTimeSec = other.lastMissingMessageReceivedTimeSec;
+      // This is only used for leader-leader replication
       this.receivedStoreMessagesWithUpdatesPending = other.receivedStoreMessagesWithUpdatesPending;
     }
 
