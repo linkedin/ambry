@@ -55,16 +55,7 @@ public class StoreMessageReadSetTest {
     return Arrays.asList(new Object[][]{{false, true}, {true, true}, {false, false}, {true, false}});
   }
 
-  private static final StoreKeyFactory STORE_KEY_FACTORY;
-
-  static {
-    try {
-      STORE_KEY_FACTORY = Utils.getObj("com.github.ambry.store.MockIdFactory");
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
+  private static final StoreKeyFactory STORE_KEY_FACTORY = new MockIdFactory();
   private final File tempDir;
   private final StoreMetrics metrics;
   private final boolean doDataPrefetch;

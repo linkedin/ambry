@@ -166,12 +166,15 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
     long sizeToRead = Math.min(size, getMessageInfo().getSize() - relativeOffset);
     prefetchedData = PooledByteBufAllocator.DEFAULT.ioBuffer((int) sizeToRead);
     long fetchStartTime = SystemTime.getInstance().milliseconds();
-    int sizeRead = prefetchedData.writeBytes(getChannel(), offset.getOffset() + relativeOffset, (int) sizeToRead);
-    if (sizeRead == -1 || sizeRead != sizeToRead) {
+    FileChannel fileChannel = getChannel();
+    long fileOffset = offset.getOffset() + relativeOffset;
+    int sizeRead = Utils.readFileToByteBuf(fileChannel, prefetchedData, fileOffset, (int) sizeToRead);
+    if (sizeRead != sizeToRead) {
       throw new IOException(
-          "Input/output error: Reading from " + getFile().getAbsolutePath() + " at offset " + (offset.getOffset()
-              + relativeOffset) + ", expect " + sizeToRead + " bytes, but get " + sizeRead);
+          "Reading from " + getFile().getAbsolutePath() + " at offset " + fileOffset + ", expect " + sizeToRead
+              + " bytes, but get " + sizeRead);
     }
+
     if (diskMetrics != null) {
       diskMetrics.diskReadTimePerMbInMs.update(
           ((SystemTime.getInstance().milliseconds() - fetchStartTime) << 20) / sizeToRead);
