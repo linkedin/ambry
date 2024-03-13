@@ -1696,7 +1696,7 @@ public class ReplicaThread implements Runnable {
     final Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap;
     final FindToken remoteToken;
     final long localLagFromRemoteInBytes;
-    final ServerErrorCode serverErrorCode;
+    public final ServerErrorCode serverErrorCode;
     final Time time;
     // Time (in secs) at which last missing message was received. This is used in leader-based cross colo replication
     // to do cross colo fetches for non-leader replica pairs if there are still few missing local store messages and
@@ -1729,7 +1729,7 @@ public class ReplicaThread implements Runnable {
       this.receivedStoreMessagesWithUpdatesPending = receivedStoreMessagesWithUpdatesPending;
     }
 
-    ExchangeMetadataResponse(ServerErrorCode errorCode) {
+    public ExchangeMetadataResponse(ServerErrorCode errorCode) {
       this.missingStoreMessages = null;
       this.remoteKeyToLocalKeyMap = null;
       this.remoteToken = null;
@@ -1753,6 +1753,28 @@ public class ReplicaThread implements Runnable {
       // exchangeMetadataResponse stored in RemoteReplicaInfo. Referencing same object of missingStoreMessages could
       // lead to race conditions and is avoided for simplicity.
       this.missingStoreMessages = other.missingStoreMessages == null ? null : new HashSet<>(other.missingStoreMessages);
+      this.remoteKeyToLocalKeyMap = other.remoteKeyToLocalKeyMap;
+      this.remoteToken = other.remoteToken;
+      this.localLagFromRemoteInBytes = other.localLagFromRemoteInBytes;
+      this.serverErrorCode = other.serverErrorCode;
+      this.time = other.time;
+      this.lastMissingMessageReceivedTimeSec = other.lastMissingMessageReceivedTimeSec;
+      this.receivedStoreMessagesWithUpdatesPending = other.receivedStoreMessagesWithUpdatesPending;
+    }
+
+    /**
+     * Shallow copy Constructor for {@link ExchangeMetadataResponse}, which copies all field references with exception
+     * of 'missingStoreMessages' for which it creates new Set object.
+     * @param other other {@link ExchangeMetadataResponse} object.
+     */
+    public ExchangeMetadataResponse(ExchangeMetadataResponse other, HashSet<MessageInfo> messages) {
+      // Create a copy of 'missingStoreMessages' since it is mutable and sharing between multiple ExchangeMetadataResponses
+      // can make operations on it such as size(), isEmpty(), etc. hard to track.
+      // For example, an inter-colo thread could be fetching missing store messages from its copy of exchangeMetadataResponse
+      // in fixMissingKeys() method while an intra-colo thread could be emptying the missing store messages in
+      // exchangeMetadataResponse stored in RemoteReplicaInfo. Referencing same object of missingStoreMessages could
+      // lead to race conditions and is avoided for simplicity.
+      this.missingStoreMessages = messages;
       this.remoteKeyToLocalKeyMap = other.remoteKeyToLocalKeyMap;
       this.remoteToken = other.remoteToken;
       this.localLagFromRemoteInBytes = other.localLagFromRemoteInBytes;
@@ -1867,7 +1889,7 @@ public class ReplicaThread implements Runnable {
    * Each replication cycle, we will break all the replicas in order different groups and each group
    * has to go through these states to finish replication with nonblocking network client.
    */
-  enum ReplicaGroupReplicationState {
+  public enum ReplicaGroupReplicationState {
     /**
      * The group is ready to start replication.
      */
@@ -1911,7 +1933,7 @@ public class ReplicaThread implements Runnable {
    * network client. After getting the response from tne network client, it handles the response and moves to DONE
    * state. Any error happens in the middle of processing would force group to DONE state.
    */
-  class RemoteReplicaGroup {
+  public class RemoteReplicaGroup {
     private final List<RemoteReplicaInfo> remoteReplicaInfos;
     private List<ExchangeMetadataResponse> exchangeMetadataResponseList;
 
@@ -1988,6 +2010,10 @@ public class ReplicaThread implements Runnable {
 
     public List<ExchangeMetadataResponse> getExchangeMetadataResponseList() {
       return exchangeMetadataResponseList;
+    }
+
+    public void setExchangeMetadataResponseList(List<ExchangeMetadataResponse> metadataResponseList) {
+      exchangeMetadataResponseList = metadataResponseList;
     }
 
     /**

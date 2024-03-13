@@ -31,16 +31,23 @@ import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
+import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -58,6 +65,17 @@ public class VcrReplicaThread extends ReplicaThread {
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
+  protected HashMap<String, List<Pair<RemoteReplicaInfo, MessageInfo>>> blobToReplicas;
+  protected HashMap<RemoteReplicaInfo, HashSet<MessageInfo>> replicaToMessages;
+
+  class LexicographicComparator implements Comparator<Pair<RemoteReplicaInfo, MessageInfo>> {
+    @Override
+    public int compare(Pair<RemoteReplicaInfo, MessageInfo> a, Pair<RemoteReplicaInfo, MessageInfo> b) {
+      String r1 = a.getFirst().getReplicaId().getDataNodeId().toString();
+      String r2 = b.getFirst().getReplicaId().getDataNodeId().toString();
+      return r1.compareTo(r2);
+    }
+  }
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -76,6 +94,88 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
+    this.blobToReplicas = new HashMap<>();
+    this.replicaToMessages = new HashMap<>();
+  }
+
+  /**
+   * A callback method to invoke after calling handleReplicaMetadataResponse method for given RemoteReplicaGroup.
+   * Subclass can override this method to put more control to each group.
+   * @param group
+   */
+  protected void afterHandleReplicaMetadataResponse(RemoteReplicaGroup group) {
+    List<ExchangeMetadataResponse> exchangeMetadataResponseList = group.getExchangeMetadataResponseList();
+    List<RemoteReplicaInfo> replicasToReplicatePerNode = group.getRemoteReplicaInfos();
+    for (int i = 0; i < replicasToReplicatePerNode.size(); i++) {
+      ExchangeMetadataResponse metadata = exchangeMetadataResponseList.get(i);
+      RemoteReplicaInfo replica = replicasToReplicatePerNode.get(i);
+      if (metadata.serverErrorCode != ServerErrorCode.No_Error) {
+        // bad replica
+        continue;
+      }
+      /**
+       * Create a map of blob-id -> List<replica>
+       *   For eg.:
+       *
+       *   blob-id1 -> {replica-1, replica-2, replica-3} <sorted>
+       *   blob-id2 -> {replica-1, replica-2} <sorted>
+       *   blob-id3 -> {replica-1, replica-3} <sorted>
+       *   blob-id4 -> {replica-4, replica-5} <sorted>
+       *   blob-id3 -> {replica-4} <sorted>
+       *
+       */
+      for (MessageInfo messageInfo : metadata.getMissingStoreMessages()) {
+        String blobId = messageInfo.getStoreKey().getID();
+        List<Pair<RemoteReplicaInfo, MessageInfo>> replicaMessagePairList =
+            blobToReplicas.getOrDefault(blobId, new ArrayList<>());
+        replicaMessagePairList.add(new Pair<>(replica, messageInfo));
+        blobToReplicas.putIfAbsent(blobId, replicaMessagePairList);
+      }
+    }
+
+    for (Map.Entry<String, List<Pair<RemoteReplicaInfo, MessageInfo>>> entry : blobToReplicas.entrySet()) {
+      /**
+       * For each blob, sort the replicas in alphabetical order and just pick the first one.
+       * We can pick using any scheme, so why not alphabetical ? easy and consistent.
+       * Next, for the picked replica, collect all the blobs belonging to it.
+       */
+      List<Pair<RemoteReplicaInfo, MessageInfo>> replicaMessagePairList = entry.getValue();
+      replicaMessagePairList.sort(new LexicographicComparator());
+      Pair<RemoteReplicaInfo, MessageInfo> replicaMessagePair = replicaMessagePairList.get(0);
+      HashSet<MessageInfo> missingMessages =
+          replicaToMessages.getOrDefault(replicaMessagePair.getFirst(), new HashSet<>());
+      missingMessages.add(replicaMessagePair.getSecond());
+      replicaToMessages.putIfAbsent(replicaMessagePair.getFirst(), missingMessages);
+    }
+
+    /**
+     * Construct the exchangeMetadataResponseList
+     */
+    List<ExchangeMetadataResponse> newMetadataResponseList = new ArrayList<>();
+    for (int i = 0; i < replicasToReplicatePerNode.size(); i++) {
+      ExchangeMetadataResponse oldMetadata = exchangeMetadataResponseList.get(i);
+      RemoteReplicaInfo replica = replicasToReplicatePerNode.get(i);
+      ExchangeMetadataResponse newMetadata;
+      if (oldMetadata.serverErrorCode != ServerErrorCode.No_Error) {
+        newMetadata = oldMetadata;
+      } else if (replicaToMessages.containsKey(replica)) {
+        newMetadata = new ExchangeMetadataResponse(oldMetadata, replicaToMessages.get(replica));
+      } else {
+        newMetadata = new ExchangeMetadataResponse(oldMetadata, new HashSet<>());
+      }
+      newMetadataResponseList.add(newMetadata);
+    }
+
+    group.setExchangeMetadataResponseList(newMetadataResponseList);
+  }
+
+  /**
+   * A callback method to invoke after calling handleGetResponse method for given RemoteReplicaGroup.
+   * Subclass can override this method to put more control to each group.
+   * @param group
+   */
+  protected void afterHandleGetResponse(RemoteReplicaGroup group) {
+    // noop
   }
 
   /**
