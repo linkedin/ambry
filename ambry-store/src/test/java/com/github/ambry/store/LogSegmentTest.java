@@ -470,10 +470,12 @@ public class LogSegmentTest {
         getSegmentAndFileChannel(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     LogSegment segment = segmentAndFileChannel.getFirst();
     FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
+    // Ensure header is flushed
+    verify(mockFileChannel).force(true);
 
     // test that log segment is closed successfully, ensure that the flush method is invoked
     segment.close(false);
-    verify(mockFileChannel).force(true);
+    verify(mockFileChannel, times(2)).force(true);
     assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
     assertTrue("File couldn't be deleted.", (new File(tempDir, LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME).delete()));
   }
@@ -488,10 +490,11 @@ public class LogSegmentTest {
         getSegmentAndFileChannel(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     LogSegment segment = segmentAndFileChannel.getFirst();
     FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
+    verify(mockFileChannel).force(true);
 
     // test that log segment is being closed due to disk I/O error and flush operation should be skipped
     segment.close(true);
-    verify(mockFileChannel, times(0)).force(true);
+    verify(mockFileChannel).force(true);
     assertFalse("File channel is not closed", segment.getView().getSecond().isOpen());
     assertTrue("File couldn't be deleted.", (new File(tempDir, LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME).delete()));
   }
@@ -505,17 +508,19 @@ public class LogSegmentTest {
         getSegmentAndFileChannel(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     LogSegment segment = segmentAndFileChannel.getFirst();
     FileChannel mockFileChannel = segmentAndFileChannel.getSecond();
+    verify(mockFileChannel).force(true);
 
     // test that log segment is being closed due to disk I/O error (shouldSkipDiskFlush = true) and exception occurs
     // when closing file channel
     doThrow(new IOException("close channel failure")).when(mockFileChannel).close();
     segment.close(true);
-    verify(mockFileChannel, times(0)).force(true);
+    verify(mockFileChannel).force(true);
     assertTrue("File couldn't be deleted.", (new File(tempDir, LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME).delete()));
 
     segmentAndFileChannel = getSegmentAndFileChannel(LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME);
     segment = segmentAndFileChannel.getFirst();
     mockFileChannel = segmentAndFileChannel.getSecond();
+    verify(mockFileChannel).force(true);
 
     // test that log segment is being closed during normal shutdown (shouldSkipDiskFlush = false) and exception occurs
     doThrow(new IOException("close channel failure")).when(mockFileChannel).close();
@@ -525,7 +530,7 @@ public class LogSegmentTest {
     } catch (IOException e) {
       //expected
     }
-    verify(mockFileChannel).force(true);
+    verify(mockFileChannel, times(2)).force(true);
     assertTrue("File couldn't be deleted.", (new File(tempDir, LogSegmentName.SINGLE_SEGMENT_LOG_FILE_NAME).delete()));
   }
 
