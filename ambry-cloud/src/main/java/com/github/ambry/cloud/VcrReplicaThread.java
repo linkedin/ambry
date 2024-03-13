@@ -66,7 +66,7 @@ public class VcrReplicaThread extends ReplicaThread {
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
   protected HashMap<String, List<Pair<RemoteReplicaInfo, MessageInfo>>> blobToReplicas;
-  protected HashMap<RemoteReplicaInfo, HashSet<MessageInfo>> replicaToMessages;
+  protected HashMap<RemoteReplicaInfo, HashSet<MessageInfo>> replicaToBlobs;
 
   class LexicographicComparator implements Comparator<Pair<RemoteReplicaInfo, MessageInfo>> {
     @Override
@@ -95,7 +95,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
     this.blobToReplicas = new HashMap<>();
-    this.replicaToMessages = new HashMap<>();
+    this.replicaToBlobs = new HashMap<>();
   }
 
   /**
@@ -118,7 +118,7 @@ public class VcrReplicaThread extends ReplicaThread {
        *   For eg.:
        *
        *   blob-id1 -> {replica-1, replica-2, replica-3} <sorted>
-       *   blob-id2 -> {replica-1, replica-2} <sorted>
+       *   blob-id2 -> {replica-1, replica-2, replica-3} <sorted>
        *   blob-id3 -> {replica-1, replica-3} <sorted>
        *   blob-id4 -> {replica-4, replica-5} <sorted>
        *   blob-id5 -> {replica-4} <sorted>
@@ -135,21 +135,29 @@ public class VcrReplicaThread extends ReplicaThread {
 
     for (Map.Entry<String, List<Pair<RemoteReplicaInfo, MessageInfo>>> entry : blobToReplicas.entrySet()) {
       /**
-       * For each blob, sort the replicas in alphabetical order and just pick the first one.
+       * For each blob, sort the replicas in alphabetical order and pick a primary replica.
        * We can pick using any scheme, so why not alphabetical ? Easy and consistent.
        * Next, for the chosen replica, collect all the blobs belonging to it.
+       *
+       * For eg., we pick replica-1 and replica-4. We omit other replicas for now.
+       * We can come back to them if we fail to get blobs from replica-1 or 4.
+       *
+       *  replica-1 -> {blob-id1, blob-id2, blob-id3}
+       *  replica-4 -> {blob-id4, blob-id5}
+       *
        */
       List<Pair<RemoteReplicaInfo, MessageInfo>> replicaMessagePairList = entry.getValue();
       replicaMessagePairList.sort(new LexicographicComparator());
       Pair<RemoteReplicaInfo, MessageInfo> replicaMessagePair = replicaMessagePairList.get(0);
       HashSet<MessageInfo> missingMessages =
-          replicaToMessages.getOrDefault(replicaMessagePair.getFirst(), new HashSet<>());
+          replicaToBlobs.getOrDefault(replicaMessagePair.getFirst(), new HashSet<>());
       missingMessages.add(replicaMessagePair.getSecond());
-      replicaToMessages.putIfAbsent(replicaMessagePair.getFirst(), missingMessages);
+      replicaToBlobs.putIfAbsent(replicaMessagePair.getFirst(), missingMessages);
     }
 
     /**
      * Construct the exchangeMetadataResponseList.
+     * 
      * We have two lists - a metadata list and a replica list. There is one-to-one correspondence between them.
      * i-th metadata is from the i-th replica.
      *
@@ -159,6 +167,14 @@ public class VcrReplicaThread extends ReplicaThread {
      * If a replica is not the one we chose above, then we just set the list of blobs from it as an empty-set.
      *
      * Finally, we set the metadata list from the replica-group.
+     *
+     * For eg, the group would be:
+     *
+     *  replica-1 -> {blob-id1, blob-id2, blob-id3}
+     *  replica-2 -> {}
+     *  replica-3 -> {}
+     *  replica-4 -> {blob-id4, blob-id5}
+     *  replica-5 -> {}
      */
     List<ExchangeMetadataResponse> newMetadataResponseList = new ArrayList<>();
     for (int i = 0; i < replicasToReplicatePerNode.size(); i++) {
@@ -167,9 +183,9 @@ public class VcrReplicaThread extends ReplicaThread {
       ExchangeMetadataResponse newMetadata;
       if (oldMetadata.serverErrorCode != ServerErrorCode.No_Error) {
         newMetadata = oldMetadata;
-      } else if (replicaToMessages.containsKey(replica)) {
+      } else if (replicaToBlobs.containsKey(replica)) {
         // Copy all fields from old metadata except the list of missing messages. The new list is provided below.
-        newMetadata = new ExchangeMetadataResponse(oldMetadata, replicaToMessages.get(replica));
+        newMetadata = new ExchangeMetadataResponse(oldMetadata, replicaToBlobs.get(replica));
       } else {
         // Copy all fields from old metadata except the list of missing messages. The new list is provided below.
         newMetadata = new ExchangeMetadataResponse(oldMetadata, new HashSet<>());
@@ -177,6 +193,7 @@ public class VcrReplicaThread extends ReplicaThread {
       newMetadataResponseList.add(newMetadata);
     }
 
+    // Finally, we set the metadata list from the replica-group.
     group.setExchangeMetadataResponseList(newMetadataResponseList);
   }
 
