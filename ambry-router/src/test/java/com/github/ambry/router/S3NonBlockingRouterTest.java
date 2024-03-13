@@ -229,9 +229,10 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
     CompleteMultipartUpload completeMultipartUpload = new CompleteMultipartUpload(parts);
 
     RestRequest request = createRestRequestForPutOperation();
+    PutBlobOptions options = new PutBlobOptionsBuilder().restRequest(request).build();
     List<ChunkInfo> chunksToStitch = getChunksToStitch(completeMultipartUpload);
     request.setArg(RestUtils.InternalKeys.REQUEST_PATH, RequestPath.parse(request, null, CLUSTER_NAME));
-    String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch, request).get();
+    String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch, options).get();
 
     router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
   }

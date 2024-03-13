@@ -19,7 +19,6 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Utils;
 import java.io.Closeable;
 import java.io.IOException;
@@ -70,13 +69,13 @@ public interface Router extends Closeable {
    * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
    *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
    *                       fields are set accurately.
-   * @param restRequest the associated {@link RestRequest}.
+   * @param options the {@link PutBlobOptions}.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
    * @param quotaChargeCallback Listener interface to charge quota cost for the operation.
    * @return A future that would contain the BlobId eventually.
    */
   Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      RestRequest restRequest, Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback);
 
   /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
@@ -169,13 +168,13 @@ public interface Router extends Closeable {
    * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
    *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
    *                       fields are set accurately.
-   * @param restRequest the associated {@link RestRequest}.
+   * @param options the {@link PutBlobOptions}.
    * @return A future that would contain the BlobId eventually.
    */
   default CompletableFuture<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata,
-      List<ChunkInfo> chunksToStitch, RestRequest restRequest) {
+      List<ChunkInfo> chunksToStitch, PutBlobOptions options) {
     CompletableFuture<String> future = new CompletableFuture<>();
-    stitchBlob(blobProperties, userMetadata, chunksToStitch, restRequest, CallbackUtils.fromCompletableFuture(future),
+    stitchBlob(blobProperties, userMetadata, chunksToStitch, options, CallbackUtils.fromCompletableFuture(future),
         null);
     return future;
   }

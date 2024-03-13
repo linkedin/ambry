@@ -43,6 +43,8 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobMetaInfo;
+import com.github.ambry.router.PutBlobOptions;
+import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterErrorCode;
@@ -198,11 +200,12 @@ public class S3MultipartCompleteUploadHandler {
      * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
-          bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
-              getChunksToStitch(parseCompleteMultipartUploadBody(channel)), restRequest,
-              routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)),
-          uri, LOGGER, finalCallback);
+      return buildCallback(frontendMetrics.putReadStitchRequestMetrics, bytesRead -> {
+        PutBlobOptions options = new PutBlobOptionsBuilder().restRequest(restRequest).build();
+        router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
+            getChunksToStitch(parseCompleteMultipartUploadBody(channel)), options, routerStitchBlobCallback(blobInfo),
+            QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
+      }, uri, LOGGER, finalCallback);
     }
 
     /**

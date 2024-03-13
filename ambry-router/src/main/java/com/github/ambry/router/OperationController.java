@@ -30,7 +30,6 @@ import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
@@ -231,18 +230,18 @@ public class OperationController implements Runnable {
    * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
    *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
    *                       fields are set accurately.
-   * @param restRequest the {@link RestRequest} associated
+   * @param options the {@link PutBlobOptions}
    * @param futureResult A future result that would have the blob id eventually.
    * @param callback The {@link Callback} which will be invoked on the completion of the request .
    * @param quotaChargeCallback the {@link QuotaChargeCallback}
    */
   protected void stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      RestRequest restRequest, FutureResult<String> futureResult, Callback<String> callback,
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
       QuotaChargeCallback quotaChargeCallback) {
     if (!putManager.isOpen()) {
       handlePutManagerClosed(blobProperties, true, futureResult, callback);
     } else {
-      putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunksToStitch, restRequest, futureResult,
+      putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunksToStitch, options, futureResult,
           callback, quotaChargeCallback);
       routerCallback.onPollReady();
     }

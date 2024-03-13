@@ -277,7 +277,7 @@ class PutOperation {
    * @param chunksToStitch the list of chunks to stitch together. The put operation business logic will treat the
    *                       metadata in the {@link ChunkInfo} object as a source of truth when validating that the
    *                       chunks can be stitched.
-   * @param restRequest the associated {@link RestRequest}.
+   * @param options the {@link PutBlobOptions}.
    * @param futureResult the future that will contain the result of the operation.
    * @param callback the callback that is to be called when the operation completes.
    * @param routerCallback The {@link RouterCallback} to use for callbacks to the router.
@@ -293,14 +293,13 @@ class PutOperation {
    */
   static PutOperation forStitching(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
       ClusterMap clusterMap, NotificationSystem notificationSystem, AccountService accountService, byte[] userMetadata,
-      List<ChunkInfo> chunksToStitch, RestRequest restRequest, FutureResult<String> futureResult,
+      List<ChunkInfo> chunksToStitch, PutBlobOptions options, FutureResult<String> futureResult,
       Callback<String> callback, RouterCallback routerCallback, KeyManagementService kms, CryptoService cryptoService,
       CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties, String partitionClass,
       QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
-        null, chunksToStitch, new PutBlobOptionsBuilder().restRequest(restRequest).build(), futureResult, callback,
-        routerCallback, null, kms, cryptoService, cryptoJobHandler, time, blobProperties, partitionClass,
-        quotaChargeCallback, compressionService);
+        null, chunksToStitch, options, futureResult, callback, routerCallback, null, kms, cryptoService,
+        cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
   }
   /**
    * Construct a PutOperation with the given parameters. This private constructor is used for both blob uploads and
@@ -1390,6 +1389,7 @@ class PutOperation {
       //    Customer may upload part by part for days.
       // 2. For regular update, it's not chunked upload. It's uploaded with single PutObject.
       //    Don't reserve metadata chunk either. We manage the S3 life cycle right away.
+      // 3. For multipart Complete request, it uses stitch command. Avoid the metadata chunk exceptions.
       if (RestUtils.isS3Request(restRequest)) {
         return null;
       }

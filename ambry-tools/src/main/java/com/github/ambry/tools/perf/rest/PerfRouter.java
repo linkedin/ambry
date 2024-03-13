@@ -20,7 +20,6 @@ import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.rest.RestRequest;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
@@ -140,7 +139,7 @@ class PerfRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      RestRequest restRequest, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     logger.trace("Received stitchBlob call");
     final FutureResult<String> futureResult = new FutureResult<>();
     if (!routerOpen) {

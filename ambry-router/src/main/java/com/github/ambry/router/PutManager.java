@@ -28,7 +28,6 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.quota.QuotaChargeCallback;
-import com.github.ambry.rest.RestRequest;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import com.google.common.collect.Lists;
@@ -189,18 +188,18 @@ class PutManager {
    * @param blobProperties the blobProperties associated with the blob being put.
    * @param userMetaData the userMetaData associated with the blob being put.
    * @param chunksToStitch the list of chunks to stitch together.
-   * @param restRequest the associated {@link RestRequest}.
+   * @param options the {@link PutBlobOptions}.
    * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
    * @param callback the {@link Callback} object to be called on completion of the operation.
    * @param quotaChargeCallback the {@link QuotaChargeCallback}.
    */
   void submitStitchBlobOperation(BlobProperties blobProperties, byte[] userMetaData, List<ChunkInfo> chunksToStitch,
-      RestRequest restRequest, FutureResult<String> futureResult, Callback<String> callback,
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
       QuotaChargeCallback quotaChargeCallback) {
     String partitionClass = getPartitionClass(blobProperties);
     PutOperation putOperation =
         PutOperation.forStitching(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
-            userMetaData, chunksToStitch, restRequest, futureResult, callback, routerCallback, kms, cryptoService,
+            userMetaData, chunksToStitch, options, futureResult, callback, routerCallback, kms, cryptoService,
             cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
     putOperations.add(putOperation);
     putOperation.startOperation();
