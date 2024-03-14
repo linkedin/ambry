@@ -31,23 +31,16 @@ import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicaTokenPersistor;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
-import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -65,17 +58,6 @@ public class VcrReplicaThread extends ReplicaThread {
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
-  protected HashMap<String, List<Pair<RemoteReplicaInfo, MessageInfo>>> blobToReplicas;
-  protected HashMap<RemoteReplicaInfo, HashSet<MessageInfo>> replicaToBlobs;
-
-  class LexicographicComparator implements Comparator<Pair<RemoteReplicaInfo, MessageInfo>> {
-    @Override
-    public int compare(Pair<RemoteReplicaInfo, MessageInfo> a, Pair<RemoteReplicaInfo, MessageInfo> b) {
-      String r1 = a.getFirst().getReplicaId().getDataNodeId().toString();
-      String r2 = b.getFirst().getReplicaId().getDataNodeId().toString();
-      return r1.compareTo(r2);
-    }
-  }
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -94,116 +76,6 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
-    this.blobToReplicas = new HashMap<>();
-    this.replicaToBlobs = new HashMap<>();
-  }
-
-  /**
-   * A callback method to invoke after calling handleReplicaMetadataResponse method for given RemoteReplicaGroup.
-   * Subclass can override this method to put more control to each group.
-   * @param group
-   */
-  protected void afterHandleReplicaMetadataResponse(RemoteReplicaGroup group) {
-    List<ExchangeMetadataResponse> exchangeMetadataResponseList = group.getExchangeMetadataResponseList();
-    List<RemoteReplicaInfo> replicasToReplicatePerNode = group.getRemoteReplicaInfos();
-    for (int i = 0; i < replicasToReplicatePerNode.size(); i++) {
-      ExchangeMetadataResponse metadata = exchangeMetadataResponseList.get(i);
-      RemoteReplicaInfo replica = replicasToReplicatePerNode.get(i);
-      if (metadata.serverErrorCode != ServerErrorCode.No_Error) {
-        // bad replica
-        continue;
-      }
-      /**
-       * Create a map of blob-id -> List<replica>
-       *   For eg.:
-       *
-       *   blob-id1 -> {replica-1, replica-2, replica-3} <sorted>
-       *   blob-id2 -> {replica-1, replica-2, replica-3} <sorted>
-       *   blob-id3 -> {replica-1, replica-3} <sorted>
-       *   blob-id4 -> {replica-4, replica-5} <sorted>
-       *   blob-id5 -> {replica-4} <sorted>
-       *
-       */
-      for (MessageInfo messageInfo : metadata.getMissingStoreMessages()) {
-        String blobId = messageInfo.getStoreKey().getID();
-        List<Pair<RemoteReplicaInfo, MessageInfo>> replicaMessagePairList =
-            blobToReplicas.getOrDefault(blobId, new ArrayList<>());
-        replicaMessagePairList.add(new Pair<>(replica, messageInfo));
-        blobToReplicas.putIfAbsent(blobId, replicaMessagePairList);
-      }
-    }
-
-    for (Map.Entry<String, List<Pair<RemoteReplicaInfo, MessageInfo>>> entry : blobToReplicas.entrySet()) {
-      /**
-       * For each blob, sort the replicas in alphabetical order and pick a primary replica.
-       * We can pick using any scheme, so why not alphabetical ? Easy and consistent.
-       * Next, for the chosen replica, collect all the blobs belonging to it.
-       *
-       * For eg., we pick replica-1 and replica-4. We omit other replicas for now.
-       * We can come back to them if we fail to get blobs from replica-1 or 4.
-       *
-       *  replica-1 -> {blob-id1, blob-id2, blob-id3}
-       *  replica-4 -> {blob-id4, blob-id5}
-       *
-       */
-      List<Pair<RemoteReplicaInfo, MessageInfo>> replicaMessagePairList = entry.getValue();
-      replicaMessagePairList.sort(new LexicographicComparator());
-      Pair<RemoteReplicaInfo, MessageInfo> replicaMessagePair = replicaMessagePairList.get(0);
-      HashSet<MessageInfo> missingMessages =
-          replicaToBlobs.getOrDefault(replicaMessagePair.getFirst(), new HashSet<>());
-      missingMessages.add(replicaMessagePair.getSecond());
-      replicaToBlobs.putIfAbsent(replicaMessagePair.getFirst(), missingMessages);
-    }
-
-    /**
-     * Construct the exchangeMetadataResponseList.
-     *
-     * We have two lists - a metadata list and a replica list. There is one-to-one correspondence between them.
-     * i-th metadata is from the i-th replica.
-     *
-     * Iterate over these lists and construct a new metadata list.
-     * If a replica is in an error state, then the new metadata is just the same as the old one aka indicates error.
-     * If a replica is the one we chose above, then the new metadata is the list of blobs we want from the replica.
-     * If a replica is not the one we chose above, then we just set the list of blobs from it as an empty-set.
-     *
-     * Finally, we set the metadata list from the replica-group.
-     *
-     * For eg, the group would be:
-     *
-     *  replica-1 -> {blob-id1, blob-id2, blob-id3}
-     *  replica-2 -> {}
-     *  replica-3 -> {}
-     *  replica-4 -> {blob-id4, blob-id5}
-     *  replica-5 -> {}
-     */
-    List<ExchangeMetadataResponse> newMetadataResponseList = new ArrayList<>();
-    for (int i = 0; i < replicasToReplicatePerNode.size(); i++) {
-      ExchangeMetadataResponse oldMetadata = exchangeMetadataResponseList.get(i);
-      RemoteReplicaInfo replica = replicasToReplicatePerNode.get(i);
-      ExchangeMetadataResponse newMetadata;
-      if (oldMetadata.serverErrorCode != ServerErrorCode.No_Error) {
-        newMetadata = oldMetadata;
-      } else if (replicaToBlobs.containsKey(replica)) {
-        // Copy all fields from old metadata except the list of missing messages. The new list is provided below.
-        newMetadata = new ExchangeMetadataResponse(oldMetadata, replicaToBlobs.get(replica));
-      } else {
-        // Copy all fields from old metadata except the list of missing messages. The new list is provided below.
-        newMetadata = new ExchangeMetadataResponse(oldMetadata, new HashSet<>());
-      }
-      newMetadataResponseList.add(newMetadata);
-    }
-
-    // Finally, we set the metadata list from the replica-group.
-    group.setExchangeMetadataResponseList(newMetadataResponseList);
-  }
-
-  /**
-   * A callback method to invoke after calling handleGetResponse method for given RemoteReplicaGroup.
-   * Subclass can override this method to put more control to each group.
-   * @param group
-   */
-  protected void afterHandleGetResponse(RemoteReplicaGroup group) {
-    // noop
   }
 
   /**
@@ -226,7 +98,13 @@ public class VcrReplicaThread extends ReplicaThread {
                 .addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath())));
   }
 
-  private void advanceTokenHelper(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+  /**
+   * Persists token to cloud in each replication cycle
+   * @param remoteReplicaInfo Remote replica info object
+   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   */
+  @Override
+  public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
     StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
     // The parent method sets in-memory token
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
@@ -272,29 +150,6 @@ public class VcrReplicaThread extends ReplicaThread {
       azureMetrics.replicaTokenWriteRate.mark();
     } else {
       azureMetrics.replicaTokenWriteErrorCount.inc();
-    }
-  }
-
-  /**
-   * Persists token to cloud in each replication cycle
-   * @param remoteReplicaInfo Remote replica info object
-   * @param exchangeMetadataResponse Metadata object exchanged between replicas
-   */
-  @Override
-  public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
-    advanceTokenHelper(remoteReplicaInfo, exchangeMetadataResponse);
-    if (exchangeMetadataResponse.getMissingStoreMessages().isEmpty()) {
-      // This call is from get-metadata-cycle
-      // TODO: Error if present in any of the maps above
-      return;
-    }
-    // TODO: Error if absent in this map
-    replicaToBlobs.remove(remoteReplicaInfo);
-
-    // Find peers
-    HashSet<RemoteReplicaInfo> peerSet = new HashSet<>();
-    for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
-
     }
   }
 }
