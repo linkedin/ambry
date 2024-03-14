@@ -39,8 +39,12 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -58,6 +62,7 @@ public class VcrReplicaThread extends ReplicaThread {
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
+  protected int numReplIter;
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -76,6 +81,44 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
+    this.numReplIter = 0;
+  }
+
+  class ReplicaComparator implements Comparator<RemoteReplicaInfo> {
+    @Override
+    public int compare(RemoteReplicaInfo r1, RemoteReplicaInfo r2) {
+      String d1 = r1.getReplicaId().getDataNodeId().toString();
+      String d2 = r2.getReplicaId().getDataNodeId().toString();
+      return d1.compareTo(d2);
+    }
+  }
+
+  /**
+   * A custom filter that inheritors can override depending upon use case to pick which replicas to replicate from
+   * @param replicas A map of replicas {host -> {replicas}}
+   */
+  @Override
+  protected Map<DataNodeId, List<RemoteReplicaInfo>> customFilter(Map<DataNodeId, List<RemoteReplicaInfo>> replicas) {
+    HashMap<Long, List<RemoteReplicaInfo>> partitions = new HashMap<>();
+    // Group replicas by partition
+    replicas.values().forEach(rlist -> rlist.forEach(replica -> {
+      long pid = replica.getReplicaId().getPartitionId().getId();
+      List alist = partitions.getOrDefault(pid, new ArrayList<>());
+      alist.add(replica);
+      partitions.putIfAbsent(pid, alist);
+    }));
+    // Pick one replica per partition in this iteration
+    Map<DataNodeId, List<RemoteReplicaInfo>> chosenReplicas = new HashMap<>();
+    partitions.values().forEach(rlist -> {
+      rlist.sort(new ReplicaComparator());
+      RemoteReplicaInfo replica = rlist.get(numReplIter % rlist.size());
+      DataNodeId dnode = replica.getReplicaId().getDataNodeId();
+      List alist = chosenReplicas.getOrDefault(dnode, new ArrayList<>());
+      alist.add(replica);
+      chosenReplicas.putIfAbsent(dnode, alist);
+    });
+    numReplIter = (numReplIter % Integer.MAX_VALUE) + 1; // Prevent integer overflow
+    return chosenReplicas;
   }
 
   /**
