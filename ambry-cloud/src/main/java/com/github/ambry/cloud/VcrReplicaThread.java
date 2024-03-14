@@ -157,7 +157,7 @@ public class VcrReplicaThread extends ReplicaThread {
 
     /**
      * Construct the exchangeMetadataResponseList.
-     * 
+     *
      * We have two lists - a metadata list and a replica list. There is one-to-one correspondence between them.
      * i-th metadata is from the i-th replica.
      *
@@ -226,13 +226,7 @@ public class VcrReplicaThread extends ReplicaThread {
                 .addProperty("replicaPath", remoteReplicaInfo.getReplicaId().getReplicaPath())));
   }
 
-  /**
-   * Persists token to cloud in each replication cycle
-   * @param remoteReplicaInfo Remote replica info object
-   * @param exchangeMetadataResponse Metadata object exchanged between replicas
-   */
-  @Override
-  public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+  private void advanceTokenHelper(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
     StoreFindToken oldToken = (StoreFindToken) remoteReplicaInfo.getToken();
     // The parent method sets in-memory token
     super.advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
@@ -278,6 +272,29 @@ public class VcrReplicaThread extends ReplicaThread {
       azureMetrics.replicaTokenWriteRate.mark();
     } else {
       azureMetrics.replicaTokenWriteErrorCount.inc();
+    }
+  }
+
+  /**
+   * Persists token to cloud in each replication cycle
+   * @param remoteReplicaInfo Remote replica info object
+   * @param exchangeMetadataResponse Metadata object exchanged between replicas
+   */
+  @Override
+  public void advanceToken(RemoteReplicaInfo remoteReplicaInfo, ExchangeMetadataResponse exchangeMetadataResponse) {
+    advanceTokenHelper(remoteReplicaInfo, exchangeMetadataResponse);
+    if (exchangeMetadataResponse.getMissingStoreMessages().isEmpty()) {
+      // This call is from get-metadata-cycle
+      // TODO: Error if present in any of the maps above
+      return;
+    }
+    // TODO: Error if absent in this map
+    replicaToBlobs.remove(remoteReplicaInfo);
+
+    // Find peers
+    HashSet<RemoteReplicaInfo> peerSet = new HashSet<>();
+    for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
+
     }
   }
 }
