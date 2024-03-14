@@ -98,7 +98,7 @@ public class VcrReplicaThread extends ReplicaThread {
    * @param replicas A map of replicas {host -> {replicas}}
    */
   @Override
-  protected Map<DataNodeId, List<RemoteReplicaInfo>> customFilter(Map<DataNodeId, List<RemoteReplicaInfo>> replicas) {
+  public Map<DataNodeId, List<RemoteReplicaInfo>> customFilter(Map<DataNodeId, List<RemoteReplicaInfo>> replicas) {
     HashMap<Long, List<RemoteReplicaInfo>> partitions = new HashMap<>();
     // Group replicas by partition
     replicas.values().forEach(rlist -> rlist.forEach(replica -> {
