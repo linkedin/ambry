@@ -1706,7 +1706,7 @@ public class ReplicaThread implements Runnable {
     final Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap;
     final FindToken remoteToken;
     final long localLagFromRemoteInBytes;
-    public final ServerErrorCode serverErrorCode;
+    final ServerErrorCode serverErrorCode;
     final Time time;
     // Time (in secs) at which last missing message was received. This is used in leader-based cross colo replication
     // to do cross colo fetches for non-leader replica pairs if there are still few missing local store messages and
@@ -1726,20 +1726,7 @@ public class ReplicaThread implements Runnable {
       this.receivedStoreMessagesWithUpdatesPending = new HashSet<>();
     }
 
-    public ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
-        long localLagFromRemoteInBytes, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap, Time time,
-        Set<MessageInfo> receivedStoreMessagesWithUpdatesPending) {
-      this.missingStoreMessages = missingStoreMessages;
-      this.remoteKeyToLocalKeyMap = remoteKeyToLocalKeyMap;
-      this.remoteToken = remoteToken;
-      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
-      this.serverErrorCode = ServerErrorCode.No_Error;
-      this.time = time;
-      this.lastMissingMessageReceivedTimeSec = time.seconds();
-      this.receivedStoreMessagesWithUpdatesPending = receivedStoreMessagesWithUpdatesPending;
-    }
-
-    public ExchangeMetadataResponse(ServerErrorCode errorCode) {
+    ExchangeMetadataResponse(ServerErrorCode errorCode) {
       this.missingStoreMessages = null;
       this.remoteKeyToLocalKeyMap = null;
       this.remoteToken = null;
@@ -1894,7 +1881,7 @@ public class ReplicaThread implements Runnable {
    * Each replication cycle, we will break all the replicas in order different groups and each group
    * has to go through these states to finish replication with nonblocking network client.
    */
-  public enum ReplicaGroupReplicationState {
+  enum ReplicaGroupReplicationState {
     /**
      * The group is ready to start replication.
      */
@@ -1938,7 +1925,7 @@ public class ReplicaThread implements Runnable {
    * network client. After getting the response from tne network client, it handles the response and moves to DONE
    * state. Any error happens in the middle of processing would force group to DONE state.
    */
-  public class RemoteReplicaGroup {
+  class RemoteReplicaGroup {
     private final List<RemoteReplicaInfo> remoteReplicaInfos;
     private List<ExchangeMetadataResponse> exchangeMetadataResponseList;
 
@@ -2015,10 +2002,6 @@ public class ReplicaThread implements Runnable {
 
     public List<ExchangeMetadataResponse> getExchangeMetadataResponseList() {
       return exchangeMetadataResponseList;
-    }
-
-    public void setExchangeMetadataResponseList(List<ExchangeMetadataResponse> metadataResponseList) {
-      exchangeMetadataResponseList = metadataResponseList;
     }
 
     /**
