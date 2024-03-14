@@ -298,8 +298,9 @@ class PutOperation {
       CryptoJobHandler cryptoJobHandler, Time time, BlobProperties blobProperties, String partitionClass,
       QuotaChargeCallback quotaChargeCallback, CompressionService compressionService) {
     return new PutOperation(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService, userMetadata,
-        null, chunksToStitch, options, futureResult, callback, routerCallback, null, kms, cryptoService,
-        cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
+        null, chunksToStitch, options == null ? PutBlobOptions.DEFAULT : options, futureResult, callback,
+        routerCallback, null, kms, cryptoService, cryptoJobHandler, time, blobProperties, partitionClass,
+        quotaChargeCallback, compressionService);
   }
   /**
    * Construct a PutOperation with the given parameters. This private constructor is used for both blob uploads and

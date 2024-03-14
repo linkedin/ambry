@@ -251,12 +251,10 @@ public class NamedBlobPutHandler {
      * @return a {@link Callback} to be used with {@link RestRequest#readInto}.
      */
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
-      return buildCallback(frontendMetrics.putReadStitchRequestMetrics, bytesRead -> {
-            PutBlobOptions options = getPutBlobOptionsFromRequest();
-            router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
-                getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), options,
-                routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true));
-          },
+      return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
+          bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
+              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
+              routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)),
           uri, LOGGER, deleteDatasetCallback);
     }
 
