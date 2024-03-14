@@ -70,8 +70,7 @@ class CompactionManager {
       for (String trigger : storeConfig.storeCompactionTriggers) {
         triggers.add(Trigger.valueOf(trigger.toUpperCase()));
       }
-      compactionExecutor = new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize == 0 ? 0
-          : Math.max(storeConfig.storeCompactionOperationsBytesPerSec, storeConfig.storeCompactionMinBufferSize));
+      compactionExecutor = new CompactionExecutor(triggers, storeConfig.storeCompactionMinBufferSize);
       try {
         compactionPolicyFactory = Utils.getObj(storeConfig.storeCompactionPolicyFactory, storeConfig, time);
         compactionPolicy = compactionPolicyFactory.getCompactionPolicy();
