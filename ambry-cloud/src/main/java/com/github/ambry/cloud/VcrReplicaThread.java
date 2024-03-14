@@ -87,8 +87,8 @@ public class VcrReplicaThread extends ReplicaThread {
   class ReplicaComparator implements Comparator<RemoteReplicaInfo> {
     @Override
     public int compare(RemoteReplicaInfo r1, RemoteReplicaInfo r2) {
-      String d1 = r1.getReplicaId().getDataNodeId().toString();
-      String d2 = r2.getReplicaId().getDataNodeId().toString();
+      String d1 = r1.getReplicaId().getDataNodeId().getHostname();
+      String d2 = r2.getReplicaId().getDataNodeId().getHostname();
       return d1.compareTo(d2);
     }
   }
