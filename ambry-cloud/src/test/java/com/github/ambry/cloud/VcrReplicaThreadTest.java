@@ -36,7 +36,7 @@ public class VcrReplicaThreadTest {
   @Test
   public void testCustomFilter() throws IOException {
     // Create test cluster MAP
-    int NUM_NODES = 5;
+    int NUM_NODES = 5; // Also num_replicas
     int NUM_PARTITIONS = 10;
     MockClusterMap clustermap = new MockClusterMap(false, false, NUM_NODES,
         1, NUM_PARTITIONS, true, false,
@@ -82,10 +82,15 @@ public class VcrReplicaThreadTest {
       replicas.putIfAbsent(pid, dlist);
     })));
 
-    // Check that all replicas are covered
+    // Check that all replicas are covered, the replicas are picked in lexicographical order
     replicas.keySet().forEach(pid -> {
       List<String> dlist = replicas.get(pid);
       List<String> slist = dlist.stream().sorted().collect(Collectors.toList());
+      if (dlist.size() != NUM_NODES) {
+        logger.error("Insufficient replicas for partition {}, expected {} replicas, but found only {} which are {}",
+            pid, NUM_NODES, dlist.size(), String.join(", ", dlist));
+        Assert.assertTrue(false);
+      }
       if (!slist.equals(dlist)) {
         logger.error("Replicas are not sorted for partition {}, original list = [{}], sorted list = [{}]",
             pid, String.join(", ", dlist), String.join(", ", slist));
