@@ -1726,6 +1726,19 @@ public class ReplicaThread implements Runnable {
       this.receivedStoreMessagesWithUpdatesPending = new HashSet<>();
     }
 
+    public ExchangeMetadataResponse(Set<MessageInfo> missingStoreMessages, FindToken remoteToken,
+        long localLagFromRemoteInBytes, Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap, Time time,
+        Set<MessageInfo> receivedStoreMessagesWithUpdatesPending) {
+      this.missingStoreMessages = missingStoreMessages;
+      this.remoteKeyToLocalKeyMap = remoteKeyToLocalKeyMap;
+      this.remoteToken = remoteToken;
+      this.localLagFromRemoteInBytes = localLagFromRemoteInBytes;
+      this.serverErrorCode = ServerErrorCode.No_Error;
+      this.time = time;
+      this.lastMissingMessageReceivedTimeSec = time.seconds();
+      this.receivedStoreMessagesWithUpdatesPending = receivedStoreMessagesWithUpdatesPending;
+    }
+
     ExchangeMetadataResponse(ServerErrorCode errorCode) {
       this.missingStoreMessages = null;
       this.remoteKeyToLocalKeyMap = null;
@@ -1756,23 +1769,6 @@ public class ReplicaThread implements Runnable {
       this.serverErrorCode = other.serverErrorCode;
       this.time = other.time;
       this.lastMissingMessageReceivedTimeSec = other.lastMissingMessageReceivedTimeSec;
-      this.receivedStoreMessagesWithUpdatesPending = other.receivedStoreMessagesWithUpdatesPending;
-    }
-
-    /**
-     * Shallow copy Constructor for {@link ExchangeMetadataResponse}, which copies all field references except
-     * 'missingStoreMessages' for which it takes the passed in parameter.
-     * @param other other {@link ExchangeMetadataResponse} object.
-     */
-    public ExchangeMetadataResponse(ExchangeMetadataResponse other, HashSet<MessageInfo> messages) {
-      this.missingStoreMessages = messages;
-      this.remoteKeyToLocalKeyMap = other.remoteKeyToLocalKeyMap;
-      this.remoteToken = other.remoteToken;
-      this.localLagFromRemoteInBytes = other.localLagFromRemoteInBytes;
-      this.serverErrorCode = other.serverErrorCode;
-      this.time = other.time;
-      this.lastMissingMessageReceivedTimeSec = other.lastMissingMessageReceivedTimeSec;
-      // This is only used for leader-leader replication
       this.receivedStoreMessagesWithUpdatesPending = other.receivedStoreMessagesWithUpdatesPending;
     }
 

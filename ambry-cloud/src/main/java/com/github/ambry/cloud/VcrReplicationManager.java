@@ -103,7 +103,7 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   private CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
-  protected Map<Long, ReplicaThread> partitionToReplicaThread;
+  protected final Map<Long, ReplicaThread> partitionToReplicaThread;
   private final boolean trackPerDatacenterLagInMetric;
   private final Lock vcrHelixUpdateLock = new ReentrantLock();
   private volatile boolean isVcrHelixUpdater = false;
