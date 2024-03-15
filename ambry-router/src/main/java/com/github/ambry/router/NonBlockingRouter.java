@@ -428,7 +428,7 @@ public class NonBlockingRouter implements Router {
 
   @Override
   public Future<String> stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
-      Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
+      PutBlobOptions options, Callback<String> callback, QuotaChargeCallback quotaChargeCallback) {
     if (blobProperties == null || chunksToStitch == null) {
       throw new IllegalArgumentException("blobProperties or chunksToStitch must not be null");
     }
@@ -444,7 +444,7 @@ public class NonBlockingRouter implements Router {
     routerMetrics.operationQueuingRate.mark();
     FutureResult<String> futureResult = new FutureResult<>();
     if (isOpen.get()) {
-      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, futureResult, callback,
+      getOperationController().stitchBlob(blobProperties, userMetadata, chunksToStitch, options, futureResult, callback,
           quotaChargeCallback);
     } else {
       RouterException routerException =

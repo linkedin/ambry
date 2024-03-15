@@ -253,7 +253,7 @@ public class NamedBlobPutHandler {
     private Callback<Long> fetchStitchRequestBodyCallback(RetainingAsyncWritableChannel channel, BlobInfo blobInfo) {
       return buildCallback(frontendMetrics.putReadStitchRequestMetrics,
           bytesRead -> router.stitchBlob(getPropertiesForRouterUpload(blobInfo), blobInfo.getUserMetadata(),
-              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)),
+              getChunksToStitch(blobInfo.getBlobProperties(), readJsonFromChannel(channel)), null,
               routerStitchBlobCallback(blobInfo), QuotaUtils.buildQuotaChargeCallback(restRequest, quotaManager, true)),
           uri, LOGGER, deleteDatasetCallback);
     }

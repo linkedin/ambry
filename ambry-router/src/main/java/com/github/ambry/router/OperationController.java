@@ -221,6 +221,33 @@ public class OperationController implements Runnable {
   }
 
   /**
+   * Requests for a new metadata blob to be put asynchronously and invokes the {@link Callback} when the request
+   * completes. This metadata blob will contain references to the chunks provided as an argument. The blob ID returned
+   * by this operation can be used to fetch the chunks as if they were a single blob.
+   * @param blobProperties The properties of the blob. Note that the size specified in the properties is ignored. The
+   *                       channel is consumed fully, and the size of the blob is the number of bytes read from it.
+   * @param userMetadata Optional user metadata about the blob. This can be null.
+   * @param chunksToStitch the list of data chunks to stitch together. The router will treat the metadata in the
+   *                       {@link ChunkInfo} object as a source of truth, so the caller should ensure that these
+   *                       fields are set accurately.
+   * @param options the {@link PutBlobOptions}
+   * @param futureResult A future result that would have the blob id eventually.
+   * @param callback The {@link Callback} which will be invoked on the completion of the request .
+   * @param quotaChargeCallback the {@link QuotaChargeCallback}
+   */
+  protected void stitchBlob(BlobProperties blobProperties, byte[] userMetadata, List<ChunkInfo> chunksToStitch,
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
+    if (!putManager.isOpen()) {
+      handlePutManagerClosed(blobProperties, true, futureResult, callback);
+    } else {
+      putManager.submitStitchBlobOperation(blobProperties, userMetadata, chunksToStitch, options, futureResult,
+          callback, quotaChargeCallback);
+      routerCallback.onPollReady();
+    }
+  }
+
+  /**
    * Requests for a blob to be deleted asynchronously and invokes the {@link Callback} when the request completes.
    * @param blobIdStr The ID of the blob that needs to be deleted in string form
    * @param serviceId The service ID of the service deleting the blob. This can be null if unknown.
