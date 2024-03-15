@@ -53,7 +53,8 @@ public class S3MultipartUploadHandler extends S3BaseHandler<ReadableStreamChanne
   public S3MultipartUploadHandler(SecurityService securityService, FrontendMetrics frontendMetrics,
       AccountAndContainerInjector accountAndContainerInjector, FrontendConfig frontendConfig, NamedBlobDb namedBlobDb,
       IdConverter idConverter, Router router, QuotaManager quotaManager) {
-    createMultipartUploadHandler = new S3MultipartCreateUploadHandler(securityService, frontendMetrics);
+    createMultipartUploadHandler =
+        new S3MultipartCreateUploadHandler(securityService, frontendMetrics, accountAndContainerInjector);
     completeMultipartUploadHandler =
         new S3MultipartCompleteUploadHandler(securityService, namedBlobDb, idConverter, router,
             accountAndContainerInjector, frontendMetrics, frontendConfig, quotaManager);

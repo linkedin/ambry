@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.Callback;
+import com.github.ambry.frontend.AccountAndContainerInjector;
 import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.SecurityService;
@@ -47,15 +48,20 @@ public class S3MultipartCreateUploadHandler {
   private static final ObjectMapper objectMapper = new XmlMapper();
   private final SecurityService securityService;
   private final FrontendMetrics frontendMetrics;
+  private final AccountAndContainerInjector accountAndContainerInjector;
 
   /**
    * Construct a handler for handling S3 POST requests during multipart uploads.
-   * @param securityService   the {@link SecurityService} to use.
-   * @param frontendMetrics   {@link FrontendMetrics} instance where metrics should be recorded.
+   *
+   * @param securityService             the {@link SecurityService} to use.
+   * @param frontendMetrics             {@link FrontendMetrics} instance where metrics should be recorded.
+   * @param accountAndContainerInjector helper to resolve account and container for a given request.
    */
-  public S3MultipartCreateUploadHandler(SecurityService securityService, FrontendMetrics frontendMetrics) {
+  public S3MultipartCreateUploadHandler(SecurityService securityService, FrontendMetrics frontendMetrics,
+      AccountAndContainerInjector accountAndContainerInjector) {
     this.securityService = securityService;
     this.frontendMetrics = frontendMetrics;
+    this.accountAndContainerInjector = accountAndContainerInjector;
   }
 
   /**
@@ -95,6 +101,8 @@ public class S3MultipartCreateUploadHandler {
      */
     private void start() {
       try {
+        accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
+            frontendMetrics.postBlobMetricsGroup);
         securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);
