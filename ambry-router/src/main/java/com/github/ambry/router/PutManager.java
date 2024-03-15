@@ -184,6 +184,28 @@ class PutManager {
   }
 
   /**
+   * Submit a stitch blob operation to be processed asynchronously.
+   * @param blobProperties the blobProperties associated with the blob being put.
+   * @param userMetaData the userMetaData associated with the blob being put.
+   * @param chunksToStitch the list of chunks to stitch together.
+   * @param options the {@link PutBlobOptions}.
+   * @param futureResult the {@link FutureResult} that contains the pending result of the operation.
+   * @param callback the {@link Callback} object to be called on completion of the operation.
+   * @param quotaChargeCallback the {@link QuotaChargeCallback}.
+   */
+  void submitStitchBlobOperation(BlobProperties blobProperties, byte[] userMetaData, List<ChunkInfo> chunksToStitch,
+      PutBlobOptions options, FutureResult<String> futureResult, Callback<String> callback,
+      QuotaChargeCallback quotaChargeCallback) {
+    String partitionClass = getPartitionClass(blobProperties);
+    PutOperation putOperation =
+        PutOperation.forStitching(routerConfig, routerMetrics, clusterMap, notificationSystem, accountService,
+            userMetaData, chunksToStitch, options, futureResult, callback, routerCallback, kms, cryptoService,
+            cryptoJobHandler, time, blobProperties, partitionClass, quotaChargeCallback, compressionService);
+    putOperations.add(putOperation);
+    putOperation.startOperation();
+  }
+
+  /**
    * @param blobProperties the properties of the blob being put
    * @return the partition class as required by the properties
    */

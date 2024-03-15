@@ -224,6 +224,7 @@ project(':ambry-api') {
         compile "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
         compile "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
         compile "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
+        compile "com.fasterxml.jackson.dataformat:jackson-dataformat-xml:$jacksonVersion"
         testCompile project(':ambry-clustermap')
         testCompile project(':ambry-test-utils')
     }
