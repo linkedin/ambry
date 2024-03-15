@@ -60,35 +60,33 @@ public class VcrReplicaThreadTest {
     clustermap.getDataNodes().forEach(d -> d.setHostname(String.valueOf((char)(Z - (ai.getAndIncrement() % 26)))));
 
     // Create a test-thread
-    List<PartitionId> partitions = clustermap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
-    DataNodeId localhost = partitions.get(0).getReplicaIds().get(0).getDataNodeId();
-    VcrReplicaThread replicaThread =
+    VcrReplicaThread rthread =
         new VcrReplicaThread("vcrReplicaThreadTest", null, clustermap,
-            new AtomicInteger(0), localhost, null,
-            null,
+            new AtomicInteger(0), clustermap.getDataNodes().get(0), null, null,
             null, null, false,
-            "localhost", new ResponseHandler(clustermap), new SystemTime(), null,
-            null, null, null, null,
+            clustermap.getDataNodes().get(0).getDatacenterName(), null, null,
+            null, null, null, null, null,
             properties);
 
     // Assign replicas to test-thread
+    List<PartitionId> partitions = clustermap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS);
     Map<DataNodeId, List<RemoteReplicaInfo>> nodes = new HashMap<>();
     partitions.forEach(partition -> partition.getReplicaIds().forEach(replica -> {
       RemoteReplicaInfo rinfo =
-          new RemoteReplicaInfo(replica, null, null, new MockFindToken(0, 0),
-              Long.MAX_VALUE, SystemTime.getInstance(),
-              new Port(replica.getDataNodeId().getPort(), PortType.PLAINTEXT));
+          new RemoteReplicaInfo(replica, null, null, null, 0,
+              SystemTime.getInstance(), null);
+      rthread.addRemoteReplicaInfo(rinfo);
+      // Group by datanode
       DataNodeId dnode = replica.getDataNodeId();
       List rlist = nodes.getOrDefault(dnode, new ArrayList<>());
       rlist.add(rinfo);
       nodes.putIfAbsent(dnode, rlist);
-      replicaThread.addRemoteReplicaInfo(rinfo);
     }));
 
     // Call custom-filter. Each time its called, it picks one replica per partition per node.
     // If we call NUM_NODES, then all replicas across all nodes are covered.
     HashMap<Long, List<String>> replicas = new HashMap<>();
-    IntStream.rangeClosed(1,NUM_NODES).forEach(i -> replicaThread.customFilter(nodes).forEach((dnode, rlist) -> rlist.forEach(r -> {
+    IntStream.rangeClosed(1,NUM_NODES).forEach(i -> rthread.customFilter(nodes).forEach((dnode, rlist) -> rlist.forEach(r -> {
       long pid = r.getReplicaId().getPartitionId().getId();
       List dlist = replicas.getOrDefault(pid, new ArrayList<>());
       dlist.add(dnode.getHostname());
