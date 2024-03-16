@@ -56,6 +56,7 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected ReplicaComparator comparator;
   protected String azureTableNameReplicaTokens;
   protected AzureMetrics azureMetrics;
 
@@ -82,6 +83,7 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
     this.numReplIter = 0;
+    comparator = new ReplicaComparator();
   }
 
   class ReplicaComparator implements Comparator<RemoteReplicaInfo> {
@@ -112,7 +114,6 @@ public class VcrReplicaThread extends ReplicaThread {
     // Pick one replica per partition for this iteration
     // Group by data node
     Map<DataNodeId, List<RemoteReplicaInfo>> nodes = new HashMap<>();
-    ReplicaComparator comparator = new ReplicaComparator();
     partitions.values().forEach(rlist -> {
       rlist.sort(comparator);
       RemoteReplicaInfo replica = rlist.get(numReplIter % rlist.size());
