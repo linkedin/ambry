@@ -196,16 +196,16 @@ public class VcrReplicationManager extends ReplicationEngine {
     for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
       String dc = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
       List<ReplicaThread> replicaThreads = getOrCreateThreadPoolIfNecessary(dc, startThread);
-      if (replicaThreads != null) {
-        ReplicaThread rthread = partitionToReplicaThread.computeIfAbsent(
-            rinfo.getLocalReplicaId().getPartitionId().getId(),
-            key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
-        rthread.addRemoteReplicaInfo(rinfo);
-        rinfo.setReplicaThread(rthread);
-        logger.info("Added replica {} to thread {}", rinfo, rthread.getName());
-      } else {
+      if (replicaThreads == null || replicaThreads.isEmpty()) {
         logger.error("Replication thread pool is empty for datacenter {}", dc);
+        return;
       }
+      ReplicaThread rthread = partitionToReplicaThread.computeIfAbsent(
+          rinfo.getLocalReplicaId().getPartitionId().getId(),
+          key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
+      rthread.addRemoteReplicaInfo(rinfo);
+      rinfo.setReplicaThread(rthread);
+      logger.info("Added replica {} to thread {}", rinfo, rthread.getName());
     }
   }
 
