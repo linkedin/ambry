@@ -109,7 +109,8 @@ public class VcrReplicaThread extends ReplicaThread {
     // Group replicas by partition
     replicas.values().forEach(rlist -> rlist.forEach(replica -> partitions.computeIfAbsent(
         replica.getReplicaId().getPartitionId().getId(), k -> new ArrayList<>()).add(replica)));
-    // Pick one replica per partition in this iteration
+    // Pick one replica per partition for this iteration
+    // Group by data node
     Map<DataNodeId, List<RemoteReplicaInfo>> nodes = new HashMap<>();
     ReplicaComparator comparator = new ReplicaComparator();
     partitions.values().forEach(rlist -> {
