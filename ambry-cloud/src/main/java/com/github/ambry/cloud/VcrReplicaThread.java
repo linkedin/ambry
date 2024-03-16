@@ -112,8 +112,9 @@ public class VcrReplicaThread extends ReplicaThread {
     }));
     // Pick one replica per partition in this iteration
     Map<DataNodeId, List<RemoteReplicaInfo>> nodes = new HashMap<>();
+    ReplicaComparator comparator = new ReplicaComparator();
     partitions.values().forEach(rlist -> {
-      rlist.sort(new ReplicaComparator());
+      rlist.sort(comparator);
       RemoteReplicaInfo replica = rlist.get(numReplIter % rlist.size());
       nodes.computeIfAbsent(replica.getReplicaId().getDataNodeId(), k -> new ArrayList<>()).add(replica);
     });
