@@ -104,11 +104,11 @@ public class VcrReplicaThread extends ReplicaThread {
    */
   @Override
   public Map<DataNodeId, List<RemoteReplicaInfo>> selectReplicas(Map<DataNodeId, List<RemoteReplicaInfo>> replicas) {
-    HashMap<Long, List<RemoteReplicaInfo>> partitions = new HashMap<>();
+    HashMap<Long, ArrayList<RemoteReplicaInfo>> partitions = new HashMap<>();
     // Group replicas by partition
     replicas.values().forEach(rlist -> rlist.forEach(replica -> {
       long pid = replica.getReplicaId().getPartitionId().getId();
-      List alist = partitions.getOrDefault(pid, new ArrayList<>());
+      ArrayList alist = partitions.getOrDefault(pid, new ArrayList<>());
       alist.add(replica);
       partitions.putIfAbsent(pid, alist);
     }));
