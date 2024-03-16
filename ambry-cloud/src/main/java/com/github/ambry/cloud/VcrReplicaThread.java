@@ -100,6 +100,7 @@ public class VcrReplicaThread extends ReplicaThread {
    * This approach ensures that missing blob B is uploaded from R1 to Azure during the first iteration.
    * Subsequent iterations involving R2 and R3 skip the fetch and upload step for blob B, as it is already present.
    *
+   * There sure is a better algorithm to do this but the size of the input is enough for this crude code.
    * @param replicas A map of replicas {host -> {replicas}}
    */
   @Override
@@ -107,20 +108,14 @@ public class VcrReplicaThread extends ReplicaThread {
     HashMap<Long, ArrayList<RemoteReplicaInfo>> partitions = new HashMap<>();
     // Group replicas by partition
     replicas.values().forEach(rlist -> rlist.forEach(replica -> {
-      long pid = replica.getReplicaId().getPartitionId().getId();
-      ArrayList alist = partitions.getOrDefault(pid, new ArrayList<>());
-      alist.add(replica);
-      partitions.putIfAbsent(pid, alist);
+      partitions.computeIfAbsent(replica.getReplicaId().getPartitionId().getId(), k -> new ArrayList<>()).add(replica);
     }));
     // Pick one replica per partition in this iteration
     Map<DataNodeId, List<RemoteReplicaInfo>> nodes = new HashMap<>();
     partitions.values().forEach(rlist -> {
       rlist.sort(new ReplicaComparator());
       RemoteReplicaInfo replica = rlist.get(numReplIter % rlist.size());
-      DataNodeId dnode = replica.getReplicaId().getDataNodeId();
-      List alist = nodes.getOrDefault(dnode, new ArrayList<>());
-      alist.add(replica);
-      nodes.putIfAbsent(dnode, alist);
+      nodes.computeIfAbsent(replica.getReplicaId().getDataNodeId(), k -> new ArrayList<>()).add(replica);
     });
     numReplIter = (numReplIter % 100) + 1; // Prevent integer overflow
     return nodes;
