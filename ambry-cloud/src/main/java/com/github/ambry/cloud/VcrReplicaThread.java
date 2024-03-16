@@ -94,7 +94,12 @@ public class VcrReplicaThread extends ReplicaThread {
   }
 
   /**
-   * A custom filter that inheritors can override depending upon use case to pick which replicas to replicate from
+   * Selects replicas R1, R2, and R3 of a partition P in distinct iterations of the replication loop.
+   * As the loop is continuous, each replica gets its turn.
+   * Consequently, in the first iteration, R1 is processed, followed by R2, and then R3.
+   * This approach ensures that missing blob B is uploaded from R1 to Azure during the first iteration.
+   * Subsequent iterations involving R2 and R3 skip the fetch and upload step for blob B, as it is already present.
+   *
    * @param replicas A map of replicas {host -> {replicas}}
    */
   @Override
