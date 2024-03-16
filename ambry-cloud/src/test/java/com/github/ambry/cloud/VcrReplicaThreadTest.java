@@ -43,7 +43,7 @@ public class VcrReplicaThreadTest {
   }
 
   @Test
-  public void testCustomFilter() throws IOException {
+  public void testSelectReplicas() throws IOException {
     // Create test cluster MAP
     int NUM_NODES = 5; // Also num_replicas
     int NUM_PARTITIONS = 10;
