@@ -343,7 +343,7 @@ public class ReplicaThread implements Runnable {
    * A custom filter that inheritors can override depending upon use case to pick which replicas to replicate from
    * @param replicas A map of replicas {host -> {replicas}}
    */
-  protected Map<DataNodeId, List<RemoteReplicaInfo>> customFilter(Map<DataNodeId, List<RemoteReplicaInfo>> replicas) {
+  protected Map<DataNodeId, List<RemoteReplicaInfo>> selectReplicas(Map<DataNodeId, List<RemoteReplicaInfo>> replicas) {
     // custom filter that inheritors can override for various use cases
     return replicas;
   }
@@ -381,8 +381,7 @@ public class ReplicaThread implements Runnable {
     try {
       // Before each cycle of replication, we clean up the cache in key converter.
       storeKeyConverter.dropCache();
-      Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = getRemoteReplicaInfos();
-      dataNodeToRemoteReplicaInfo = customFilter(dataNodeToRemoteReplicaInfo);
+      Map<DataNodeId, List<RemoteReplicaInfo>> dataNodeToRemoteReplicaInfo = selectReplicas(getRemoteReplicaInfos());
       for (Map.Entry<DataNodeId, List<RemoteReplicaInfo>> entry : dataNodeToRemoteReplicaInfo.entrySet()) {
         DataNodeId remoteNode = entry.getKey();
         List<RemoteReplicaInfo> replicasToReplicatePerNode = entry.getValue();

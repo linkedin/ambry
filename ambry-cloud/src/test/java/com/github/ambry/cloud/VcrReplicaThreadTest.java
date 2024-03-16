@@ -82,7 +82,7 @@ public class VcrReplicaThreadTest {
     // Call custom-filter. Each time its called, it picks one replica per partition per node.
     // If we call NUM_NODES, then all replicas across all nodes are covered.
     HashMap<Long, List<String>> replicas = new HashMap<>();
-    IntStream.rangeClosed(1,NUM_NODES).forEach(i -> rthread.customFilter(nodes).forEach((dnode, rlist) -> rlist.forEach(r -> {
+    IntStream.rangeClosed(1,NUM_NODES).forEach(i -> rthread.selectReplicas(nodes).forEach((dnode, rlist) -> rlist.forEach(r -> {
       long pid = r.getReplicaId().getPartitionId().getId();
       List dlist = replicas.getOrDefault(pid, new ArrayList<>());
       dlist.add(dnode.getHostname());
