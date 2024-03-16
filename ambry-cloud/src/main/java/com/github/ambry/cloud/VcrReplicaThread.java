@@ -117,7 +117,7 @@ public class VcrReplicaThread extends ReplicaThread {
       alist.add(replica);
       nodes.putIfAbsent(dnode, alist);
     });
-    numReplIter = (numReplIter % Integer.MAX_VALUE) + 1; // Prevent integer overflow
+    numReplIter = (numReplIter % 100) + 1; // Prevent integer overflow
     return nodes;
   }
 
