@@ -154,7 +154,7 @@ public class VerifiableProperties {
    * @param end The end of the range in which the value must fall
    * @return the {@link Float} value
    */
-  public Float getFloatInRange(String name, Float defaultVal, Float start, Float end) {
+  public Float getFloatInRange(String name, double defaultVal, Float start, Float end) {
     Float v = containsKey(name) ? Float.valueOf(Float.parseFloat(getProperty(name))) : defaultVal;
     if (v >= start && v <= end) {
       return v;

@@ -448,8 +448,24 @@ public class CloudConfig {
   @Default("false")
   public final boolean vcrHelixUpdateDryRun;
 
+  /**
+   * Not all nodes are identical; some possess more cores while others fewer.
+   * Therefore, adopting a predetermined count of replication threads is not advisable.
+   * Instead, the number of replication threads should be determined based on the number of cores available.
+   * The scaling factor provided below can assume three potential states: negative, zero, or positive.
+   * A negative value signifies the creation of a number of threads equal to the absolute value of the negative integer.
+   * Zero denotes the absence of thread creation.
+   * A positive value will serve as a multiplier for the number of CPUs to ascertain the number of threads to generate.
+   */
+  public static final String BACKUP_CPU_SCALE_FACTOR = "vcr.cpu.scale.factor";
+  public static final double DEFAULT_BACKUP_CPU_SCALE_FACTOR = 1.0;
+  @Config(BACKUP_CPU_SCALE_FACTOR)
+  public final double backupCpuScaleFactor;
+
+
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
+    backupCpuScaleFactor = verifiableProperties.getDouble(BACKUP_CPU_SCALE_FACTOR, DEFAULT_BACKUP_CPU_SCALE_FACTOR);
     cloudCompactionGracePeriodDays = verifiableProperties.getInt(CLOUD_COMPACTION_GRACE_PERIOD_DAYS, 7);
     cloudCompactionDryRunEnabled = verifiableProperties.getBoolean(CLOUD_COMPACTION_DRY_RUN_ENABLED, true);
     ambryBackupVersion = verifiableProperties.getString(AMBRY_BACKUP_VERSION, DEFAULT_AMBRY_BACKUP_VERSION);
