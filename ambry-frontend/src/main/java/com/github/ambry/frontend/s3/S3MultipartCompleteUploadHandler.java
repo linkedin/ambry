@@ -156,6 +156,8 @@ public class S3MultipartCompleteUploadHandler {
      */
     private void start() {
       try {
+        accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,
+            frontendMetrics.postBlobMetricsGroup);
         securityService.processRequest(restRequest, securityProcessRequestCallback());
       } catch (Exception e) {
         finalCallback.onCompletion(null, e);
@@ -314,7 +316,6 @@ public class S3MultipartCompleteUploadHandler {
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
-      accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, frontendMetrics.putBlobMetricsGroup);
       BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
       frontendMetrics.blobPropsBuildForNameBlobPutTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
       LOGGER.trace("Blob properties of blob being PUT - {}", blobProperties);
