@@ -13,24 +13,16 @@
  */
 package com.github.ambry.cloud;
 
-<<<<<<< HEAD
-=======
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
->>>>>>> 1f694a912 ([vcr-2.0] Introduce CPU scaling factor)
 import com.github.ambry.cloud.azure.AzuriteUtils;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
-<<<<<<< HEAD
-import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.replication.RemoteReplicaInfo;
-=======
 import com.github.ambry.clustermap.VcrClusterParticipant;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationException;
->>>>>>> 1f694a912 ([vcr-2.0] Introduce CPU scaling factor)
 import com.github.ambry.utils.SystemTime;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -44,6 +36,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import static org.mockito.Mockito.*;
 
 public class VcrReplicaThreadTest {
