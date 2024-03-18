@@ -334,7 +334,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
    * Select next available {@link ReplicaThread} in given datacenter.
    * @param datacenter the datacenter String.
    */
-  private int getReplicaThreadIndexToUse(String datacenter) {
+  protected int getReplicaThreadIndexToUse(String datacenter) {
     return nextReplicaThreadIndexByDc.get(datacenter).getAndIncrement() % replicaThreadPoolByDc.get(datacenter).size();
   }
 

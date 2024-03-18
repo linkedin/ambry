@@ -198,7 +198,7 @@ public class RemoteReplicaInfo {
     return replicaThread;
   }
 
-  synchronized void setReplicaThread(ReplicaThread replicaThread) {
+  public synchronized void setReplicaThread(ReplicaThread replicaThread) {
     this.replicaThread = replicaThread;
   }
 

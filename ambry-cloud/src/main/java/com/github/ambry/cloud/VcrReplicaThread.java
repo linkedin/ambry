@@ -39,8 +39,12 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.slf4j.Logger;
@@ -52,12 +56,14 @@ import org.slf4j.LoggerFactory;
  */
 public class VcrReplicaThread extends ReplicaThread {
   private static final Logger logger = LoggerFactory.getLogger(VcrReplicaThread.class);
+  protected ReplicaComparator comparator;
   protected String azureTableNameReplicaTokens;
   protected AzureMetrics azureMetrics;
 
   protected AzureCloudConfig azureCloudConfig;
   protected VerifiableProperties properties;
   protected CloudDestination cloudDestination;
+  protected int numReplIter;
 
   public VcrReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -76,6 +82,45 @@ public class VcrReplicaThread extends ReplicaThread {
     this.azureCloudConfig = new AzureCloudConfig(properties);
     this.azureTableNameReplicaTokens = this.azureCloudConfig.azureTableNameReplicaTokens;
     this.azureMetrics = new AzureMetrics(clusterMap.getMetricRegistry());
+    this.numReplIter = 0;
+    comparator = new ReplicaComparator();
+  }
+
+  class ReplicaComparator implements Comparator<RemoteReplicaInfo> {
+    @Override
+    public int compare(RemoteReplicaInfo r1, RemoteReplicaInfo r2) {
+      String d1 = r1.getReplicaId().getDataNodeId().getHostname();
+      String d2 = r2.getReplicaId().getDataNodeId().getHostname();
+      return d1.compareTo(d2);
+    }
+  }
+
+  /**
+   * Selects replicas R1, R2, and R3 of a partition P in distinct iterations of the replication loop.
+   * As the loop is continuous, each replica gets its turn.
+   * Consequently, in the first iteration, R1 is processed, followed by R2, and then R3.
+   * This approach ensures that missing blob B is uploaded from R1 to Azure during the first iteration.
+   * Subsequent iterations involving R2 and R3 skip the fetch and upload step for blob B, as it is already present.
+   *
+   * There sure is a better algorithm to do this but the size of the input is enough for this crude code.
+   * @param replicas A map of replicas {host -> {replicas}}
+   */
+  @Override
+  public Map<DataNodeId, List<RemoteReplicaInfo>> selectReplicas(Map<DataNodeId, List<RemoteReplicaInfo>> replicas) {
+    HashMap<Long, ArrayList<RemoteReplicaInfo>> partitions = new HashMap<>();
+    // Group replicas by partition
+    replicas.values().forEach(rlist -> rlist.forEach(replica -> partitions.computeIfAbsent(
+        replica.getReplicaId().getPartitionId().getId(), k -> new ArrayList<>()).add(replica)));
+    // Pick one replica per partition for this iteration
+    // Group by data node
+    Map<DataNodeId, List<RemoteReplicaInfo>> nodes = new HashMap<>();
+    partitions.values().forEach(rlist -> {
+      rlist.sort(comparator);
+      RemoteReplicaInfo replica = rlist.get(numReplIter % rlist.size());
+      nodes.computeIfAbsent(replica.getReplicaId().getDataNodeId(), k -> new ArrayList<>()).add(replica);
+    });
+    numReplIter = (numReplIter % 100) + 1; // Prevent integer overflow
+    return nodes;
   }
 
   /**

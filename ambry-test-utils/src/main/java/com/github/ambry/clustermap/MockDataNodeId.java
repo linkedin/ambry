@@ -29,7 +29,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 public class MockDataNodeId implements DataNodeId {
   private final Map<PortType, Port> ports;
   private final List<String> mountPaths;
-  private final String hostname;
+  private String hostname;
   private final String datacenter;
   private List<String> sslEnabledDataCenters = new ArrayList<String>();
   private boolean enableHttp2Replication = false;
@@ -59,6 +59,10 @@ public class MockDataNodeId implements DataNodeId {
    */
   public MockDataNodeId(List<Port> ports, List<String> mountPaths, String dataCenter) {
     this("localhost", ports, mountPaths, dataCenter);
+  }
+
+  public void setHostname(String hostname) {
+    this.hostname = hostname;
   }
 
   private void populatePorts(List<Port> ports) {

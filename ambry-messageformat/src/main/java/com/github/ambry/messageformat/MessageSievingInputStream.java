@@ -29,7 +29,6 @@ import java.io.SequenceInputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
-import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import org.slf4j.Logger;
@@ -57,6 +56,16 @@ public class MessageSievingInputStream extends InputStream {
   public final Counter messageSievingDeprecatedMessagesDiscardedCount;
   public final Counter messageSievingDeletedMessagesDiscardedCount;
   public final Counter messageSievingExpiredMessagesDiscardedCount;
+
+  private String replicaLocation;
+
+  public String getReplicaLocation() {
+    return replicaLocation;
+  }
+
+  public void setReplicaLocation(String peer) {
+    this.replicaLocation = peer;
+  }
 
   /**
    * @param inStream The stream from which bytes need to be read. If the underlying stream is SocketInputStream, it needs

@@ -71,6 +71,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -102,6 +103,7 @@ public class VcrReplicationManager extends ReplicationEngine {
 
   private CloudContainerCompactor cloudContainerCompactor;
   private final Map<String, Store> partitionStoreMap = new HashMap<>();
+  protected final Map<Long, ReplicaThread> partitionToReplicaThread;
   private final boolean trackPerDatacenterLagInMetric;
   private final Lock vcrHelixUpdateLock = new ReentrantLock();
   private volatile boolean isVcrHelixUpdater = false;
@@ -137,6 +139,7 @@ public class VcrReplicationManager extends ReplicationEngine {
     this.vcrMetrics = new VcrMetrics(metricRegistry);
     this.azureMetrics = new AzureMetrics(metricRegistry);
     this.vcrClusterParticipant = vcrClusterParticipant;
+    this.partitionToReplicaThread = new ConcurrentHashMap<>();
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     try {
       vcrHelixConfig =
@@ -181,6 +184,29 @@ public class VcrReplicationManager extends ReplicationEngine {
     return new VcrReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
         notification, storeKeyConverter, transformer, replicatingOverSsl, datacenterName, responseHandler, time,
         replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, this.persistor, cloudDestination, properties);
+  }
+
+  /**
+   * Assign all replicas of a partition to the same thread to avoid concurrent updates to Azure
+   * @param remoteReplicaInfos List of {@link RemoteReplicaInfo}
+   * @param startThread start threads on creation
+   */
+  @Override
+  protected void addRemoteReplicaInfoToReplicaThread(List<RemoteReplicaInfo> remoteReplicaInfos, boolean startThread) {
+    for (RemoteReplicaInfo rinfo : remoteReplicaInfos) {
+      String dc = rinfo.getReplicaId().getDataNodeId().getDatacenterName();
+      List<ReplicaThread> replicaThreads = getOrCreateThreadPoolIfNecessary(dc, startThread);
+      if (replicaThreads == null || replicaThreads.isEmpty()) {
+        logger.error("Replication thread pool is empty for datacenter {}", dc);
+        return;
+      }
+      ReplicaThread rthread = partitionToReplicaThread.computeIfAbsent(
+          rinfo.getLocalReplicaId().getPartitionId().getId(),
+          key -> replicaThreads.get(getReplicaThreadIndexToUse(dc)));
+      rthread.addRemoteReplicaInfo(rinfo);
+      rinfo.setReplicaThread(rthread);
+      logger.info("Added replica {} to thread {}", rinfo, rthread.getName());
+    }
   }
 
   @Override

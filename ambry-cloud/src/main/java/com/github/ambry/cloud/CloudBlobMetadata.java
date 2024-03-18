@@ -59,6 +59,16 @@ public class CloudBlobMetadata {
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
 
+  private String replicaLocation;
+
+  public String getReplicaLocation() {
+    return replicaLocation;
+  }
+
+  public void setReplicaLocation(String peer) {
+    this.replicaLocation = peer;
+  }
+
   private String id;
   private String partitionId;
   private long creationTime;
