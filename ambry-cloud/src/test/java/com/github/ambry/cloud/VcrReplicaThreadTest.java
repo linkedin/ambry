@@ -112,6 +112,10 @@ public class VcrReplicaThreadTest {
     });
   }
 
+  /**
+   * Tests that expected number of repl threads are created based on cpu scaling factor
+   * @throws ReplicationException
+   */
   @Test
   public void testNumReplThreads() throws ReplicationException {
     VcrReplicationManager manager =
