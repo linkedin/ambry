@@ -187,6 +187,30 @@ public class VcrReplicationManager extends ReplicationEngine {
   }
 
   /**
+   * Returns the number of replication threads to create
+   * @return num replication threads
+   */
+  protected int getNumReplThreads(double cpuScale) {
+    if (cpuScale <= 0) {
+      // Fall here for 0 and avoid a call to runtime
+      return (int) Math.abs(cpuScale);
+    }
+    return (int) (Double.valueOf(Runtime.getRuntime().availableProcessors()) * cpuScale);
+  }
+
+  /**
+   * Get thread pool for given datacenter. Create thread pool for a datacenter if its thread pool doesn't exist.
+   * @param datacenter The datacenter String.
+   * @param startThread If thread needs to be started when create.
+   * @return List of {@link ReplicaThread}s. Return null if number of replication thread in config is 0 for this DC.
+   */
+  @Override
+  protected List<ReplicaThread> getOrCreateThreadPoolIfNecessary(String datacenter, boolean startThread) {
+    return replicaThreadPoolByDc.computeIfAbsent(datacenter,
+        key -> createThreadPool(datacenter, getNumReplThreads(cloudConfig.backupNodeCpuScale), startThread));
+  }
+
+  /**
    * Assign all replicas of a partition to the same thread to avoid concurrent updates to Azure
    * @param remoteReplicaInfos List of {@link RemoteReplicaInfo}
    * @param startThread start threads on creation
