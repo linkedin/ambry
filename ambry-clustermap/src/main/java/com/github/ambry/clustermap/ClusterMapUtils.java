@@ -694,6 +694,7 @@ public class ClusterMapUtils {
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
+    private HelixClusterManagerMetrics clusterManagerMetrics;
 
     /**
      * @param clusterManagerQueryHelper the {@link ClusterManagerQueryHelper} to query current cluster info
@@ -702,11 +703,12 @@ public class ClusterMapUtils {
      * @param defaultPartitionClass the default partition class to use if a partition class is not found
      */
     PartitionSelectionHelper(ClusterManagerQueryHelper<?, ?, ?, ?> clusterManagerQueryHelper, String localDatacenterName,
-        int minimumLocalReplicaCount, String defaultPartitionClass) {
+        int minimumLocalReplicaCount, String defaultPartitionClass, HelixClusterManagerMetrics clusterManagerMetrics) {
       this.localDatacenterName = localDatacenterName;
       this.minimumLocalReplicaCount = minimumLocalReplicaCount;
       this.clusterManagerQueryHelper = clusterManagerQueryHelper;
       this.defaultPartitionClass = defaultPartitionClass;
+      this.clusterManagerMetrics = clusterManagerMetrics;
       updatePartitions(clusterManagerQueryHelper.getPartitions(), localDatacenterName);
       logger.debug("Number of partitions in data center {} {}", localDatacenterName, allPartitions.size());
       for (Map.Entry<String, SortedMap<Integer, List<PartitionId>>> entry : partitionIdsByClassAndLocalReplicaCount.entrySet()) {
@@ -942,6 +944,12 @@ public class ClusterMapUtils {
         if (replica.isDown()) {
           return false;
         }
+      }
+
+      if(!(areAllReplicasForPartitionUp(partitionId) && areAllReplicaStatesEligibleForPut(partitionId, null)))
+      {
+        if(clusterManagerMetrics != null)
+          clusterManagerMetrics.ineligibleReplicaCount.inc();
       }
       return true;
     }

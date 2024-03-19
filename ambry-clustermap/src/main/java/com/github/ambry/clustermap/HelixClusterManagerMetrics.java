@@ -58,6 +58,8 @@ class HelixClusterManagerMetrics {
   public Gauge<Long> helixClusterManagerCurrentXid;
   public final Timer routingTableQueryTime;
   public final Counter resourceNameMismatchCount;
+  // Number of times we chose a local partition that was not fully available remotely for a put operation.
+  public final Counter ineligibleReplicaCount;
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -102,6 +104,8 @@ class HelixClusterManagerMetrics {
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceDeleteTriggerCount"));
     resourceNameMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "resourceNameMismatchCount"));
+    ineligibleReplicaCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "ineligibleReplicaCount"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated, final long instantiationExceptionCount) {
