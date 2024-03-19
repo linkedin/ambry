@@ -190,12 +190,12 @@ public class VcrReplicationManager extends ReplicationEngine {
    * Returns the number of replication threads to create
    * @return num replication threads
    */
-  protected int getNumReplThreads(float cpuScale) {
+  protected int getNumReplThreads(double cpuScale) {
     if (cpuScale <= 0) {
       // Fall here for 0 and avoid a call to runtime
       return (int) Math.abs(cpuScale);
     }
-    return (int) (Float.valueOf(Runtime.getRuntime().availableProcessors()) * cpuScale);
+    return (int) (Double.valueOf(Runtime.getRuntime().availableProcessors()) * cpuScale);
   }
 
   /**

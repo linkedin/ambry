@@ -122,9 +122,9 @@ public class VcrReplicaThreadTest {
         new VcrReplicationManager(properties, null, null, clustermap,
             mock(VcrClusterParticipant.class), mock(AzureCloudDestinationSync.class), null,
             mock(NetworkClientFactory.class), null, null);
-    Assert.assertEquals(0, manager.getNumReplThreads(0f));
-    Assert.assertEquals(2, manager.getNumReplThreads(-2.5f));
-    Assert.assertEquals((int) (Float.valueOf(Runtime.getRuntime().availableProcessors()) * 2.5f),
-        manager.getNumReplThreads(2.5f));
+    Assert.assertEquals(0, manager.getNumReplThreads(0));
+    Assert.assertEquals(2, manager.getNumReplThreads(-2.5));
+    Assert.assertEquals((int) (Double.valueOf(Runtime.getRuntime().availableProcessors()) * 2.5),
+        manager.getNumReplThreads(2.5));
   }
 }

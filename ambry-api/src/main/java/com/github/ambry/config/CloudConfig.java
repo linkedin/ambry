@@ -462,17 +462,17 @@ public class CloudConfig {
    *  A cpu_scale of +2.5 will create 10 threads since int(2.5 * 4) = 10
    */
   public static final String BACKUP_NODE_CPU_SCALE = "backup.node.cpu.scale";
-  public static final float DEFAULT_BACKUP_NODE_CPU_SCALE = -1.0f; // 1 thread
+  public static final double DEFAULT_BACKUP_NODE_CPU_SCALE = -1; // 1 thread
   // num_cpu-1 threads, prevent a fork bomb
-  public static final float MIN_BACKUP_NODE_CPU_SCALE = 1f - Float.valueOf(Runtime.getRuntime().availableProcessors());
-  public static final float MAX_BACKUP_NODE_CPU_SCALE = 4.0f; // 4 * num_cpus, prevent a fork bomb
+  public static final double MIN_BACKUP_NODE_CPU_SCALE = 1 - Double.valueOf(Runtime.getRuntime().availableProcessors());
+  public static final double MAX_BACKUP_NODE_CPU_SCALE = 4.0; // 4 * num_cpus, prevent a fork bomb
   @Config(BACKUP_NODE_CPU_SCALE)
-  public final float backupNodeCpuScale;
+  public final double backupNodeCpuScale;
 
 
   public CloudConfig(VerifiableProperties verifiableProperties) {
 
-    backupNodeCpuScale = verifiableProperties.getFloatInRange(BACKUP_NODE_CPU_SCALE,
+    backupNodeCpuScale = verifiableProperties.getDoubleInRange(BACKUP_NODE_CPU_SCALE,
         DEFAULT_BACKUP_NODE_CPU_SCALE, MIN_BACKUP_NODE_CPU_SCALE, MAX_BACKUP_NODE_CPU_SCALE);
     cloudCompactionGracePeriodDays = verifiableProperties.getInt(CLOUD_COMPACTION_GRACE_PERIOD_DAYS, 7);
     cloudCompactionDryRunEnabled = verifiableProperties.getBoolean(CLOUD_COMPACTION_DRY_RUN_ENABLED, true);
