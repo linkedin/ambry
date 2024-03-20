@@ -64,6 +64,14 @@ public class ReplicationConfig {
   public final int replicationNumOfInterDCReplicaThreads;
 
   /**
+   * If true, replication Get requests asks for deleted and expired blobs as well to succeed in scenarios where blobs
+   * get deleted or expired after replication metadata exchange.
+   */
+  @Config("replication.use.separate.thread.for.each.host")
+  @Default("true")
+  public final boolean replicationUseSeparateThreadForEachHost;
+
+  /**
    * The timeout to get a connection checkout from the connection pool for replication
    */
   @Config("replication.connection.pool.checkout.timeout.ms")
@@ -381,5 +389,7 @@ public class ReplicationConfig {
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_REMOTE_COLO, false);
     replicationUsingNonblockingNetworkClientForLocalColo =
         verifiableProperties.getBoolean(REPLICATION_USING_NONBLOCKING_NETWORK_CLIENT_FOR_LOCAL_COLO, false);
+    replicationUseSeparateThreadForEachHost =
+        verifiableProperties.getBoolean("replication.use.separate.thread.for.each.host", false);
   }
 }
