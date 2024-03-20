@@ -20,6 +20,7 @@ import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
+import com.github.ambry.cloud.BackupIntegrityMonitor;
 import com.github.ambry.cloud.RecoveryNetworkClientFactory;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
@@ -49,6 +50,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobStoreHardDelete;
 import com.github.ambry.messageformat.BlobStoreRecovery;
 import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.CompositeNetworkClientFactory;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.LocalNetworkClientFactory;
 import com.github.ambry.network.LocalRequestResponseChannel;
@@ -89,6 +91,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -263,15 +266,20 @@ public class AmbryServer {
          * having a separate CloudtoStorageManager for cloud offers the flexibility to override methods and add more
          * suited to cloud.
          */
-        networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager,
-            accountService);
+        networkClientFactory =
+            new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService);
         vcrClusterSpectator = null; // Server does not talk to vcr during recovery
         _recoveryManager =
-            new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-                storeKeyFactory, clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
-                storeKeyConverterFactory, serverConfig.serverMessageTransformer, null,
-                clusterParticipants.get(0));
+            new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+                clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, null, clusterParticipants.get(0));
         _recoveryManager.start();
+      } else if (true) {
+        // Backup integrity monitor here because vcr does not have code to store to disk and the code to create that is here
+        // (properties, storageManager, storeKeyFactory, clusterMap, recoveryNWClient, networkClient,
+        //  storeKeyConverterFactory)
+        CompositeNetworkClientFactory clientFactory = new CompositeNetworkClientFactory(Collections.emptyMap()); // FIXME
+        new BackupIntegrityMonitor(properties, clusterMap, clientFactory, storageManager, storeKeyFactory, storeKeyConverterFactory);
       } else {
         if (clusterMapConfig.clusterMapEnableHttp2Replication) {
           Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
