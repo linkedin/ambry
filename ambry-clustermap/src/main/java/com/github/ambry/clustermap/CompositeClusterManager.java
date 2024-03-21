@@ -34,11 +34,19 @@ import org.slf4j.LoggerFactory;
  * instance and uses the {@link StaticClusterManager} as the source-of-truth. It relays events to both and checks for
  * and reports inconsistencies in the views from the two underlying cluster managers.
  */
-class CompositeClusterManager implements ClusterMap {
+public class CompositeClusterManager implements ClusterMap {
   private static final Logger logger = LoggerFactory.getLogger(CompositeClusterManager.class);
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
+
+  public HelixClusterManager getHelixClusterManager() {
+    return helixClusterManager;
+  }
+
+  public StaticClusterManager getStaticClusterManager() {
+    return staticClusterManager;
+  }
 
   /**
    * Construct a CompositeClusterManager instance.
@@ -273,8 +281,10 @@ class CompositeClusterManager implements ClusterMap {
 
       Set<String> helixReplicaIdStrings = new HashSet<>();
       DataNodeId ambryDataNode = helixClusterManager.getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
-      for (ReplicaId replicaId : helixClusterManager.getReplicaIds(ambryDataNode)) {
-        helixReplicaIdStrings.add(replicaId.toString());
+      if (ambryDataNode != null) {
+        for (ReplicaId replicaId : helixClusterManager.getReplicaIds(ambryDataNode)) {
+          helixReplicaIdStrings.add(replicaId.toString());
+        }
       }
 
       if (!staticReplicaIdStrings.equals(helixReplicaIdStrings)) {

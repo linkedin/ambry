@@ -183,6 +183,24 @@ public class RecoveryManager extends ReplicationEngine {
   /**
    * Returns Recovery thread
    */
+  protected RecoveryThread getReplicationThread(String threadName) {
+    try {
+      String dc = dataNodeId.getDatacenterName();
+      StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+      Transformer transformer = Utils.getObj(transformerClassName, storeKeyFactory, storeKeyConverter);
+      return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+          networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
+          storeKeyConverter, transformer, metricRegistry, sslEnabledDatacenters.contains(dc), dc,
+          new ResponseHandler(clusterMap), time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin,
+          this);
+    } catch (IOException | ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Returns Recovery thread
+   */
   @Override
   protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,

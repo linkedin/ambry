@@ -1,41 +1,125 @@
+/**
+ * Copyright 2024 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.cloud;
 
-import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.CompositeClusterManager;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.DiskId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ClusterMapConfig;
-import com.github.ambry.config.NetworkConfig;
-import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.ServerConfig;
-import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.network.CompositeNetworkClientFactory;
-import com.github.ambry.replication.ReplicationEngine;
-import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.ReplicaThread;
+import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.StorageManager;
-import com.github.ambry.store.StoreKeyConverterFactory;
-import com.github.ambry.store.StoreKeyFactory;
-import java.util.Collections;
+import com.github.ambry.utils.Utils;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import static java.lang.Thread.*;
 
 
-public class BackupIntegrityMonitor extends ReplicationEngine {
+/**
+ * Checks the integrity of backup partitions in Azure
+ */
+public class BackupIntegrityMonitor implements Callable<Integer> {
+  private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
+  private final AtomicBoolean stop;
+  private final ClusterMapConfig clusterMapConfig;
+  private final CompositeClusterManager compositeClusterManager;
+  private final DataNodeId nodeId;
+  private final FindTokenHelper tokenFactory;
+  private final RecoveryManager azureReplicationManager;
+  private final RecoveryThread azureReplicator;
+  private final ReplicaThread serverReplicator;
+  private final ReplicationManager serverReplicationManager;
+  private final ScheduledExecutorService executor;
+  private final StorageManager storageManager;
 
-
-  public BackupIntegrityMonitor(VerifiableProperties properties, ClusterMap clusterMap,
-      CompositeNetworkClientFactory clientFactory, StorageManager localStorageManager,
-      StoreKeyFactory keyFactory, StoreKeyConverterFactory keyConverterFactory) throws ReplicationException {
-    super(new ReplicationConfig(properties), new ClusterMapConfig(properties), new StoreConfig(properties), keyFactory,
-        clusterMap, null, clusterMap.getDataNodeId(new NetworkConfig(properties).hostName, new NetworkConfig(properties).port),
-        Collections.emptyList(), clientFactory, clusterMap.getMetricRegistry(), null,
-        keyConverterFactory, new ServerConfig(properties).serverMessageTransformer, null,
-        localStorageManager, null, false);
+  public BackupIntegrityMonitor(RecoveryManager azure, ReplicationManager server,
+      CompositeClusterManager cluster, StorageManager storage, DataNodeId node, FindTokenHelper token,
+      VerifiableProperties properties) {
+    azureReplicationManager = azure;
+    azureReplicator = azure.getReplicationThread("backup_integrity_monitor");
+    clusterMapConfig = new ClusterMapConfig(properties);
+    compositeClusterManager = cluster;
+    executor = Utils.newScheduler(1, "ambry_backup_integrity_monitor_", true);
+    nodeId = node;
+    serverReplicationManager = server;
+    serverReplicator = server.getReplicationThread("backup_integrity_monitor");
+    stop = new AtomicBoolean(false);
+    storageManager = storage;
+    tokenFactory = token;
+    logger.info("Created BackupIntegrityMonitor");
   }
 
-  @Override
+  /**
+   * Starts and schedules monitor
+   */
   public void start() {
-
+    executor.schedule(this::call, 0, TimeUnit.SECONDS);
+    logger.info("Started BackupIntegrityMonitor");
   }
 
+  /**
+   * Shut down the monitor waiting for in progress operations to complete.
+   */
+  public void shutdown() {
+    /*
+      Shutdown executor.
+      This arbitrary wait is merely an attempt to allow the worker threads to gracefully exit.
+      We will force a shutdown later. All workers are daemons and JVM _will_ exit when only daemons remain.
+      Any data inconsistencies must be resolved separately, but not by trying to predict the right shutdown timeout.
+    */
+    logger.info("Shutting down BackupIntegrityMonitor");
+    stop.set(true);
+    Utils.shutDownExecutorService(executor, 10, TimeUnit.SECONDS);
+    logger.info("Completed shutting down BackupIntegrityMonitor");
+  }
+
+  /**
+   * This method randomly picks a partition in a cluster and locates its replica in the cluster and the cloud.
+   * Then it downloads and compares data from both replicas.
+   *
+   * TODO: Implement verificaion logic
+   * @return 0 for success, 1 for failure
+   * @throws Exception
+   */
   @Override
-  protected boolean shouldReplicateFromDc(String datacenterName) {
-    return false;
+  public Integer call() throws Exception {
+    while (!stop.get()) {
+      PartitionId partition =
+          compositeClusterManager.getHelixClusterManager().getAllPartitionIds(null).get(0); // FIXME: pick randomly
+      ReplicaId serverReplica = partition.getReplicaIds().get(0); // FIXME: pick randomly
+      logger.info("Picked partition {} and replica {} on host {}", partition.getId(), serverReplica.getReplicaPath(),
+          serverReplica.getDataNodeId().getHostname());
+
+      List<DiskId> diskIds =
+          compositeClusterManager.getStaticClusterManager().getDataNodeId("lva1-app86366.prod.linkedin.com", 15088).getDiskIds();
+      for (DiskId diskId : diskIds) {
+        logger.info("disk = {}, state = {}, cap = {}", diskId.getMountPath(), diskId.getState(), diskId.getRawCapacityInBytes());
+      }
+      // TODO: Implement verification logic
+      sleep(Duration.ofSeconds(10).toMillis());
+    }
+    return 0;
   }
 }

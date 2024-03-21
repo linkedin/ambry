@@ -131,7 +131,7 @@ public class StorageManager implements StoreManager {
     metrics = new StorageManagerMetrics(registry);
     storeMainMetrics = new StoreMetrics(registry);
     storeUnderCompactionMetrics = new StoreMetrics("UnderCompaction", registry);
-    if (clusterParticipants != null) {
+    if (clusterParticipants != null && !clusterParticipants.isEmpty()) {
       replicaStatusDelegates = new ArrayList<>();
       for (ClusterParticipant clusterParticipant : clusterParticipants) {
         ReplicaStatusDelegate replicaStatusDelegate = new ReplicaStatusDelegate(clusterParticipant);
