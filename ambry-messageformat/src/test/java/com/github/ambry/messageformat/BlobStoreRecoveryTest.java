@@ -18,6 +18,7 @@ import com.github.ambry.store.MessageStoreRecovery;
 import com.github.ambry.store.MockId;
 import com.github.ambry.store.MockIdFactory;
 import com.github.ambry.store.Read;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
@@ -172,7 +173,7 @@ public class BlobStoreRecoveryTest {
   }
 
   @Test
-  public void recoveryTest() throws MessageFormatException, IOException {
+  public void recoveryTest() throws MessageFormatException, IOException, StoreException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     // create log and write to it
     ReadImp readrecovery = new ReadImp();
