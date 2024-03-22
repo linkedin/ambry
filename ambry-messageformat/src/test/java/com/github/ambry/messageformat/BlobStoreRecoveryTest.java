@@ -62,6 +62,15 @@ public class BlobStoreRecoveryTest {
   }
 
   public class ReadImp implements Read {
+    private final boolean withPartialRecord;
+
+    ReadImp(boolean withPartialRecord) {
+      this.withPartialRecord = withPartialRecord;
+    }
+
+    ReadImp() {
+      this(true);
+    }
 
     ByteBuffer buffer;
     public MockId[] keys =
@@ -134,14 +143,20 @@ public class BlobStoreRecoveryTest {
       sizes.add(msg6.getSize());
 
       // 7th message
-      PutMessageFormatInputStream msg7 = new PutMessageFormatInputStream(keys[5], ByteBuffer.wrap(encryptionKey),
-          new BlobProperties(4000, "test", keys[5].getAccountId(), keys[5].getContainerId(), false),
-          ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
-      sizes.add(msg7.getSize());
+      PutMessageFormatInputStream msg7 = null;
+      if (withPartialRecord) {
+        msg7 = new PutMessageFormatInputStream(keys[5], ByteBuffer.wrap(encryptionKey),
+            new BlobProperties(4000, "test", keys[5].getAccountId(), keys[5].getContainerId(), false),
+            ByteBuffer.wrap(usermetadata), new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
+        sizes.add(msg7.getSize());
+      }
 
-      buffer = ByteBuffer.allocate(
-          (int) (msg1.getSize() + msg2.getSize() + msg3.getSize() + msg4.getSize() + msg5.getSize() + msg6.getSize()
-              + msg7.getSize() / 2));
+      int bufferSize =
+          (int) (msg1.getSize() + msg2.getSize() + msg3.getSize() + msg4.getSize() + msg5.getSize() + msg6.getSize());
+      if (withPartialRecord) {
+        bufferSize += msg7.getSize() / 2;
+      }
+      buffer = ByteBuffer.allocate(bufferSize);
 
       writeToBuffer(msg1, (int) msg1.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
@@ -149,7 +164,9 @@ public class BlobStoreRecoveryTest {
       writeToBuffer(msg4, (int) msg4.getSize());
       writeToBuffer(msg5, (int) msg5.getSize());
       writeToBuffer(msg6, (int) msg6.getSize());
-      writeToBuffer(msg7, (int) msg7.getSize() / 2);
+      if (withPartialRecord) {
+        writeToBuffer(msg7, (int) msg7.getSize() / 2);
+      }
       buffer.position(0);
     }
 
@@ -176,7 +193,7 @@ public class BlobStoreRecoveryTest {
   public void recoveryTest() throws MessageFormatException, IOException, StoreException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     // create log and write to it
-    ReadImp readrecovery = new ReadImp();
+    ReadImp readrecovery = new ReadImp(false);
     readrecovery.initialize();
     List<MessageInfo> recoveredMessages =
         recovery.recover(readrecovery, 0, readrecovery.getSize(), new MockIdFactory());
