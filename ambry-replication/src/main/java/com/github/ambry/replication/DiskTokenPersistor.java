@@ -92,7 +92,7 @@ public class DiskTokenPersistor extends ReplicaTokenPersistor {
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
     if (replicaTokenFile.exists()) {
       try (FileInputStream fileInputStream = new FileInputStream(replicaTokenFile)) {
-        return replicaTokenSerde.deserializeTokens(fileInputStream);
+        return replicaTokenSerde.deserializeTokens(fileInputStream, replicaTokenFile.getAbsolutePath());
       } catch (IOException e) {
         throw new ReplicationException("IO error while reading from replica token file at mount path " + mountPath, e);
       }
