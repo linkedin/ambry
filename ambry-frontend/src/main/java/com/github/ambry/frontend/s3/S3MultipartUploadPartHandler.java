@@ -30,11 +30,11 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
+import com.github.ambry.frontend.PutBlobMetaInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.router.Router;
-import com.github.ambry.utils.Utils;
 import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -178,7 +178,10 @@ public class S3MultipartUploadPartHandler {
         // TODO [S3] Make changes to sign ETags. Currently they are sent as shown below.
         //  ETag: {"chunks":[{"blob":"AAYQAQBlAAgAAQAAAAAAAAAAw6UGCoNgS8KGgV-SGXAMdQ","size":4194304},
         //  {"blob":"AAYQAQBlAAgAAQAAAAAAAAAA6Jaga4MiRFiBXi_jjaiQhg","size":1052262}]}
-        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, blobId);
+        PutBlobMetaInfo putBlobMetaInfo = PutBlobMetaInfo.deserialize(blobId);
+        S3MultipartETag etag = new S3MultipartETag(putBlobMetaInfo.getOrderedChunkIdSizeList());
+        String eTagStr = S3MultipartETag.serialize(etag);
+        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, eTagStr);
         securityService.processResponse(restRequest, restResponseChannel, blobInfo, securityProcessResponseCallback());
       }, uri, logger, finalCallback);
     }

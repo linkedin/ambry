@@ -16,6 +16,8 @@ package com.github.ambry.router;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.RetainingAsyncWritableChannel;
+import com.github.ambry.frontend.PutBlobMetaInfo;
+import com.github.ambry.frontend.s3.S3MultipartETag;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.rest.MockRestRequest;
@@ -39,6 +41,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Properties;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -59,6 +62,8 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
   private static final String CLUSTER_NAME = "ambry-test";
   private static final String S3_PREFIX = "/s3";
   private static final String SLASH = "/";
+  private static final Random random = new Random();
+
   private String accountName = "myAccount";
   private String containerName = "container-a";
   private String blobName = "MyDirectory/MyKey";
@@ -235,6 +240,27 @@ public class S3NonBlockingRouterTest extends NonBlockingRouterTestBase {
     String blobId = router.stitchBlob(putBlobProperties, putUserMetadata, chunksToStitch, options).get();
 
     router.getBlob(blobId, new GetBlobOptionsBuilder().build()).get();
+  }
+
+  @Test
+  public void testS3MultipartETag() throws Exception {
+    List<Pair<String, Long>> orgList = new ArrayList<>();
+    int chunkCount = 100;
+    for (int i = 0; i < chunkCount; i++) {
+      orgList.add(new Pair<>(String.valueOf(random.nextLong()), random.nextLong()));
+    }
+
+    S3MultipartETag orgETag = new S3MultipartETag(orgList);
+
+    // Serialize and Deserialize, the S3MultipartETag should be the same
+    String eTagstr = S3MultipartETag.serialize(orgETag);
+    S3MultipartETag deserializedETag = S3MultipartETag.deserialize(eTagstr);
+    Assert.assertEquals(orgETag, deserializedETag);
+    List<Pair<String, Long>> deserializedList = deserializedETag.getOrderedChunkIdSizeList();
+    for (int i = 0; i < chunkCount; i++) {
+      Assert.assertEquals(orgList.get(i).getFirst(), deserializedList.get(i).getFirst());
+      Assert.assertEquals(orgList.get(i).getSecond(), deserializedList.get(i).getSecond());
+    }
   }
 
   private RestRequest createRestRequestForPutOperation()
