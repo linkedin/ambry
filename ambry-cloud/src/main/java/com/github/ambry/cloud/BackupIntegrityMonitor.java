@@ -56,13 +56,13 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
       CompositeClusterManager cluster, StorageManager storage, DataNodeId node, FindTokenHelper token,
       VerifiableProperties properties) {
     azureReplicationManager = azure;
-    azureReplicator = azure.getReplicationThread("backup_integrity_monitor");
+    azureReplicator = azure.getRecoveryThread("ambry_backup_integrity_monitor");
     clusterMapConfig = new ClusterMapConfig(properties);
     compositeClusterManager = cluster;
     executor = Utils.newScheduler(1, "ambry_backup_integrity_monitor_", true);
     nodeId = node;
     serverReplicationManager = server;
-    serverReplicator = server.getReplicationThread("backup_integrity_monitor");
+    serverReplicator = server.getBackupCheckerThread("ambry_backup_integrity_monitor");
     stop = new AtomicBoolean(false);
     storageManager = storage;
     tokenFactory = token;
@@ -104,14 +104,17 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
   @Override
   public Integer call() throws Exception {
     while (!stop.get()) {
+      // TODO: Implement verification logic
+      // 1. Pick a partition P, replica R from helix cluster-map
+      // 2. Pick a disk D using static cluster-map
+      // 3. while(!done) { RecoveryThread::replicate(P) } - recover partition P from cloud and store data in disk D
+      // 4. while(!done) { BackupCheckerThread::replicate(R) } - copy metadata for replica R from server and compare with data in disk D
       PartitionId partition =
           compositeClusterManager.getHelixClusterManager().getAllPartitionIds(null).get(0); // FIXME: pick randomly
       ReplicaId serverReplica = partition.getReplicaIds().get(0); // FIXME: pick randomly
       logger.info("Picked partition {} and replica {} on host {}", partition.getId(), serverReplica.getReplicaPath(),
           serverReplica.getDataNodeId().getHostname());
-
-
-      // TODO: Implement verification logic
+      // TODO
       sleep(Duration.ofSeconds(10).toMillis());
     }
     return 0;

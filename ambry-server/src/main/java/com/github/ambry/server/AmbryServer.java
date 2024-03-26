@@ -249,10 +249,10 @@ public class AmbryServer {
       if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_RECOVERY_MODE.toString())) {
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
-         * We need to use CloudToStorageManager for one reason. It will add one replica for the server to replicate from
+         * We need to use RecoveryManager for one reason. It will add one replica for the server to replicate from
          * which is the Cloud. The regular ReplicationManager will add 3 replicas, and as a result 3 threads will try
          * to fetch the same data from Azure. Although this can be avoided with a minor change to ReplicationManager,
-         * having a separate CloudtoStorageManager for cloud offers the flexibility to override methods and add more
+         * having a separate RecoveryManager for cloud offers the flexibility to override methods and add more
          * suited to cloud.
          */
         networkClientFactory =
@@ -264,19 +264,19 @@ public class AmbryServer {
         recoveryManager.start();
       } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_VERIFICATION_MODE.toString())) {
         // Backup integrity monitor here because vcr does not have code to store to disk and the code to create that is here
-        RecoveryManager recoveryManager =
+        recoveryManager =
             new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
                 clusterMap, null, nodeId,
                 new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService),
                 registry, null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
                 null, null);
-        ReplicationManager serverReplicationManager =
+        replicationManager =
             new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
                 clusterMap, null, nodeId,
                 new Http2NetworkClientFactory(new Http2ClientMetrics(registry), new Http2ClientConfig(properties), sslHttp2Factory, time),
                 registry, null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
                 null, null);
-        backupIntegrityMonitor = new BackupIntegrityMonitor(recoveryManager, serverReplicationManager,
+        backupIntegrityMonitor = new BackupIntegrityMonitor(recoveryManager, replicationManager,
             (CompositeClusterManager) clusterMap, storageManager, nodeId, findTokenHelper, properties);
         backupIntegrityMonitor.start();
       } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE.toString())) {

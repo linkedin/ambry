@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -25,8 +24,6 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
-import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
@@ -55,8 +52,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -69,7 +64,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
@@ -183,7 +177,7 @@ public class RecoveryManager extends ReplicationEngine {
   /**
    * Returns Recovery thread
    */
-  protected RecoveryThread getReplicationThread(String threadName) {
+  protected RecoveryThread getRecoveryThread(String threadName) {
     try {
       String dc = dataNodeId.getDatacenterName();
       StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
