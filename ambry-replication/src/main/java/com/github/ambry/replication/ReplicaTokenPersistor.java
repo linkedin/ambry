@@ -189,7 +189,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
       }
     }
 
-    public List<ReplicaTokenInfo> deserializeTokens(InputStream inputStream) throws IOException, ReplicationException {
+    public List<ReplicaTokenInfo> deserializeTokens(InputStream inputStream) throws IOException {
       CrcInputStream crcStream = new CrcInputStream(inputStream);
       DataInputStream stream = new DataInputStream(crcStream);
       List<ReplicaTokenInfo> tokenInfoList = new ArrayList<>();
@@ -225,12 +225,14 @@ public abstract class ReplicaTokenPersistor implements Runnable {
         long computedCrc = crcStream.getValue();
         long readCrc = stream.readLong();
         if (computedCrc != readCrc) {
-          throw new ReplicationException(
+          throw new IOException(
               "Crc mismatch during replica token deserialization, computed " + computedCrc + ", read " + readCrc);
         }
         return tokenInfoList;
       } catch (IOException e) {
-        throw new ReplicationException("IO error deserializing replica tokens", e);
+        throw e;
+      } catch (Exception e) {
+        throw new IOException("Fail to deserialize replica tokens", e);
       } finally {
         stream.close();
       }
