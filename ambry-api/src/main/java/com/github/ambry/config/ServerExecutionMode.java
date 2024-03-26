@@ -14,18 +14,7 @@
 package com.github.ambry.config;
 
 public enum ServerExecutionMode {
-  DATA_RECOVERY_MODE("DATA_RECOVERY_MODE"),
-  DATA_VERIFICATION_MODE("DATA_VERIFICATION_MODE"),
-  DATA_SERVING_MODE("DATA_SERVING_MODE");
-
-  private final String serverExecutionMode;
-
-  ServerExecutionMode(String mode) {
-    this.serverExecutionMode = mode;
-  }
-
-  @Override
-  public String toString() {
-    return serverExecutionMode;
-  }
+  DATA_RECOVERY_MODE,
+  DATA_VERIFICATION_MODE,
+  DATA_SERVING_MODE;
 }

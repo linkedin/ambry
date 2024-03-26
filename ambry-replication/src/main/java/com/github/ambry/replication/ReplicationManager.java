@@ -281,20 +281,6 @@ public class ReplicationManager extends ReplicationEngine {
     return remoteReplicaInfos;
   }
 
-  public ReplicaThread getReplicationThread(String threadName) {
-    try {
-      String dc = dataNodeId.getDatacenterName();
-      StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
-      Transformer transformer = Utils.getObj(transformerClassName, storeKeyFactory, storeKeyConverter);
-      return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-          networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
-          storeKeyConverter, transformer, metricRegistry, sslEnabledDatacenters.contains(dc), dc,
-          new ResponseHandler(clusterMap), time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-    } catch (IOException | ReflectiveOperationException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   /**
    * {@link PartitionStateChangeListener} to capture changes in partition state.
    */
