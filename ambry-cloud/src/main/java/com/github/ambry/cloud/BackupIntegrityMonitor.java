@@ -112,11 +112,7 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
       logger.info("Picked partition {} and replica {} on host {}", partition.getId(), serverReplica.getReplicaPath(),
           serverReplica.getDataNodeId().getHostname());
 
-      List<DiskId> diskIds =
-          compositeClusterManager.getStaticClusterManager().getDataNodeId("lva1-app86366.prod.linkedin.com", 15088).getDiskIds();
-      for (DiskId diskId : diskIds) {
-        logger.info("disk = {}, state = {}, cap = {}", diskId.getMountPath(), diskId.getState(), diskId.getRawCapacityInBytes());
-      }
+
       // TODO: Implement verification logic
       sleep(Duration.ofSeconds(10).toMillis());
     }
