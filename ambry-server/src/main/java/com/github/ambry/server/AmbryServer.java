@@ -246,7 +246,7 @@ public class AmbryServer {
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
-      if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_RECOVERY_MODE.toString())) {
+      if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_RECOVERY_MODE)) {
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
          * We need to use RecoveryManager for one reason. It will add one replica for the server to replicate from
@@ -262,7 +262,7 @@ public class AmbryServer {
                 clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
                 storeKeyConverterFactory, serverConfig.serverMessageTransformer, null, null);
         recoveryManager.start();
-      } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_VERIFICATION_MODE.toString())) {
+      } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_VERIFICATION_MODE)) {
         // Backup integrity monitor here because vcr does not have code to store to disk and the code to create that is here
         recoveryManager =
             new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
@@ -279,7 +279,7 @@ public class AmbryServer {
         backupIntegrityMonitor = new BackupIntegrityMonitor(recoveryManager, replicationManager,
             (CompositeClusterManager) clusterMap, storageManager, nodeId, findTokenHelper, properties);
         backupIntegrityMonitor.start();
-      } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE.toString())) {
+      } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE)) {
 
         // if there are more than one participant on local node, we create a consistency checker to monitor and alert any
         // mismatch in sealed/stopped replica lists that maintained by each participant.
