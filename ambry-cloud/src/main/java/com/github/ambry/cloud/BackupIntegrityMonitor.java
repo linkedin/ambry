@@ -107,8 +107,8 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
       // TODO: Implement verification logic
       // 1. Pick a partition P, replica R from helix cluster-map
       // 2. Pick a disk D using static cluster-map
-      // 3. while(!done) { RecoveryThread::replicate(P) } - recover partition P from cloud and store data in disk D
-      // 4. while(!done) { BackupCheckerThread::replicate(R) } - copy metadata for replica R from server and compare with data in disk D
+      // 3. while(!done) { RecoveryThread::replicate(P) } - recover partition P from cloud and store metadata + data in disk D
+      // 4. while(!done) { BackupCheckerThread::replicate(R) } - copy metadata from replica R and compare with metadata in disk D
       PartitionId partition =
           compositeClusterManager.getHelixClusterManager().getAllPartitionIds(null).get(0); // FIXME: pick randomly
       ReplicaId serverReplica = partition.getReplicaIds().get(0); // FIXME: pick randomly
