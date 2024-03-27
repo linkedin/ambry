@@ -115,6 +115,25 @@ public class ReplicationManager extends ReplicationEngine {
   }
 
   /**
+   * Returns replication-thread object, not a thread
+   * @param threadName
+   * @return
+   */
+  public ReplicaThread getBackupCheckerThread(String threadName) {
+    try {
+      String dc = dataNodeId.getDatacenterName();
+      StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+      Transformer transformer = Utils.getObj(transformerClassName, storeKeyFactory, storeKeyConverter);
+      return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+          networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
+          storeKeyConverter, transformer, metricRegistry, sslEnabledDatacenters.contains(dc), dc,
+          new ResponseHandler(clusterMap), time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
+    } catch (IOException | ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
    * Returns replication thread
    */
   @Override

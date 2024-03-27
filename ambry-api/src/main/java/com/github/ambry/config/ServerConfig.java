@@ -127,7 +127,19 @@ public class ServerConfig {
   @Config("server.repair.requests.db.factory")
   public final String serverRepairRequestsDbFactory;
 
+  /**
+   * Server execution mode
+   * - Data recovery mode
+   * - Data verification mode
+   * - Data serving mode
+   */
+  public static final String SERVER_EXECUTION_MODE = "server.execution.mode";
+  @Config(SERVER_EXECUTION_MODE)
+  public final ServerExecutionMode serverExecutionMode;
+
   public ServerConfig(VerifiableProperties verifiableProperties) {
+    serverExecutionMode = verifiableProperties.getEnum(SERVER_EXECUTION_MODE, ServerExecutionMode.class,
+        ServerExecutionMode.DATA_SERVING_MODE);
     serverRequestHandlerNumSocketServerThreads =
         verifiableProperties.getInt(SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS,
             DEFAULT_SERVER_REQUEST_HANDLER_NUM_SOCKET_SERVER_THREADS);
