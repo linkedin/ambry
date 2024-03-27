@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.DiskId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.config.ClusterMapConfig;
@@ -25,6 +26,8 @@ import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.utils.Utils;
 import java.time.Duration;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +69,11 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
     stop = new AtomicBoolean(false);
     storageManager = storage;
     tokenFactory = token;
+    // log disk state
+    compositeClusterManager.getStaticClusterManager().getDataNodeId(nodeId.getHostname(), nodeId.getPort())
+        .getDiskIds()
+        .forEach(d -> logger.info("[BackupIntegrityMonitor] Disk = {} {} {} bytes", d.getMountPath(), d.getState(),
+            d.getRawCapacityInBytes()));
     logger.info("Created BackupIntegrityMonitor");
   }
 
@@ -74,7 +82,7 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
    */
   public void start() {
     executor.schedule(this::call, 0, TimeUnit.SECONDS);
-    logger.info("Started BackupIntegrityMonitor");
+    logger.info("[BackupIntegrityMonitor] Started BackupIntegrityMonitor");
   }
 
   /**
@@ -87,10 +95,10 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
       We will force a shutdown later. All workers are daemons and JVM _will_ exit when only daemons remain.
       Any data inconsistencies must be resolved separately, but not by trying to predict the right shutdown timeout.
     */
-    logger.info("Shutting down BackupIntegrityMonitor");
+    logger.info("[BackupIntegrityMonitor] Shutting down BackupIntegrityMonitor");
     stop.set(true);
     Utils.shutDownExecutorService(executor, 10, TimeUnit.SECONDS);
-    logger.info("Completed shutting down BackupIntegrityMonitor");
+    logger.info("[BackupIntegrityMonitor] Completed shutting down BackupIntegrityMonitor");
   }
 
   /**
@@ -103,16 +111,18 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
    */
   @Override
   public Integer call() throws Exception {
+    Random random = new Random();
     while (!stop.get()) {
       // TODO: Implement verification logic
       // 1. Pick a partition P, replica R from helix cluster-map
       // 2. Pick a disk D using static cluster-map
       // 3. while(!done) { RecoveryThread::replicate(P) } - recover partition P from cloud and store metadata + data in disk D
       // 4. while(!done) { BackupCheckerThread::replicate(R) } - copy metadata from replica R and compare with metadata in disk D
-      PartitionId partition =
-          compositeClusterManager.getHelixClusterManager().getAllPartitionIds(null).get(0); // FIXME: pick randomly
-      ReplicaId serverReplica = partition.getReplicaIds().get(0); // FIXME: pick randomly
-      logger.info("Picked partition {} and replica {} on host {}", partition.getId(), serverReplica.getReplicaPath(),
+      List<PartitionId> partitions = compositeClusterManager.getHelixClusterManager().getAllPartitionIds(null);
+      PartitionId partition = partitions.get(random.nextInt(partitions.size()));
+      List<ReplicaId> replicas = (List<ReplicaId>) partition.getReplicaIds();
+      ReplicaId serverReplica = replicas.get(random.nextInt(replicas.size()));
+      logger.info("[BackupIntegrityMonitor] Verifying {}:{}", serverReplica.getReplicaPath(),
           serverReplica.getDataNodeId().getHostname());
       // TODO
       sleep(Duration.ofSeconds(10).toMillis());
