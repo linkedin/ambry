@@ -108,6 +108,10 @@ class DataNode implements DataNodeId {
     return portNum;
   }
 
+  public Port getPortByType(PortType type) {
+    return ports.get(type);
+  }
+
   @Override
   public boolean hasSSLPort() {
     return ports.containsKey(PortType.SSL);

@@ -23,11 +23,15 @@ import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
 import com.github.ambry.cloud.BackupIntegrityMonitor;
 import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.cloud.RecoveryNetworkClientFactory;
+import com.github.ambry.clustermap.AmbryDataNode;
+import com.github.ambry.clustermap.AmbryServerDataNode;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HelixClusterManager;
+import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
@@ -100,6 +104,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import org.apache.logging.log4j.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -222,7 +227,6 @@ public class AmbryServer {
       // verify the configs
       properties.verify();
 
-      scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
       logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
       DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
       if (nodeId == null) {
@@ -234,20 +238,12 @@ public class AmbryServer {
           Utils.getObj(serverConfig.serverAccountServiceFactory, properties, registry);
       AccountService accountService = accountServiceFactory.getAccountService();
 
-      StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
-      FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
-      // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
-      // and some components require sole participant, the first one in the list will be primary participant.
-      storageManager =
-          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
-              new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
-      storageManager.start();
-
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
+
       if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_RECOVERY_MODE)) {
-        logger.info("Server execution mode is {}", ServerExecutionMode.DATA_RECOVERY_MODE);
+        logger.info("Server execution mode is DATA_RECOVERY_MODE");
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
          * We need to use RecoveryManager for one reason. It will add one replica for the server to replicate from
@@ -256,6 +252,14 @@ public class AmbryServer {
          * having a separate RecoveryManager for cloud offers the flexibility to override methods and add more
          * suited to cloud.
          */
+        StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+        // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
+        // and some components require sole participant, the first one in the list will be primary participant.
+        scheduler = Utils.newScheduler(1, true);
+        storageManager =
+            new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
+                new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
+        storageManager.start();
         networkClientFactory =
             new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService);
         recoveryManager =
@@ -264,25 +268,59 @@ public class AmbryServer {
                 storeKeyConverterFactory, serverConfig.serverMessageTransformer, null, null);
         recoveryManager.start();
       } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_VERIFICATION_MODE)) {
-        logger.info("Server execution mode is {}", ServerExecutionMode.DATA_VERIFICATION_MODE);
-        // Backup integrity monitor here because vcr does not have code to store to disk and the code to create that is here
+        logger.info("Server execution mode is DATA_VERIFICATION_MODE");
+        /**
+         * We need composite cluster manager because it has both static and helix cluster manager.
+         * We use helix-cluster-map to discover replicas of a partition.
+         * We use static-cluster-map to discover local disks on the host.
+         * The static map returns objects used for static maps. We need to convert them to be suitable for helix map.
+         */
+        if (!(clusterMap instanceof CompositeClusterManager)) {
+          throw new InstantiationException("Cluster manager must be of type CompositeClusterManager");
+        }
+        CompositeClusterManager compositeClusterManager = (CompositeClusterManager) clusterMap;
+        HelixClusterManager helixClusterManager = compositeClusterManager.getHelixClusterManager();
+        StaticClusterManager staticClusterManager = compositeClusterManager.getStaticClusterManager();
+        // Store key factory is instantiated in two places : here and in internal fork. Careful!
+        StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, helixClusterManager);
+        scheduler = Utils.newScheduler(1, true);
+        storageManager =
+            new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, staticClusterManager, nodeId,
+                new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
+        storageManager.start();
+        /**
+         * Backup integrity monitor here because vcr does not have code to store to disk. Only server does.
+         * DataNodeId -> AmbryDataNode -> AmbryServerDataNode : for helix
+         * DataNodeId -> DataNode : for static
+         */
+        AmbryServerDataNode helixNode = new AmbryServerDataNode(nodeId, clusterMapConfig);
         recoveryManager =
             new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-                clusterMap, null, nodeId,
-                new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService),
+                helixClusterManager, null, helixNode,
+                new RecoveryNetworkClientFactory(properties, registry, helixClusterManager, storageManager, accountService),
                 registry, null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
                 null, null);
         replicationManager =
             new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-                clusterMap, null, nodeId,
+                helixClusterManager, null, helixNode,
                 new Http2NetworkClientFactory(new Http2ClientMetrics(registry), new Http2ClientConfig(properties), sslHttp2Factory, time),
                 registry, null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
                 null, null);
         backupIntegrityMonitor = new BackupIntegrityMonitor(recoveryManager, replicationManager,
-            (CompositeClusterManager) clusterMap, storageManager, nodeId, findTokenHelper, properties);
+            compositeClusterManager, storageManager, helixNode, properties);
         backupIntegrityMonitor.start();
       } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE)) {
-        logger.info("Server execution mode is {}", ServerExecutionMode.DATA_SERVING_MODE);
+        logger.info("Server execution mode is DATA_SERVING_MODE");
+        scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
+        StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+        FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
+        // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
+        // and some components require sole participant, the first one in the list will be primary participant.
+        storageManager =
+            new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
+                new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
+        storageManager.start();
+
         // if there are more than one participant on local node, we create a consistency checker to monitor and alert any
         // mismatch in sealed/stopped replica lists that maintained by each participant.
         if (clusterParticipants != null && clusterParticipants.size() > 1

@@ -24,6 +24,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.clustermap.ReplicaType;
 import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
@@ -120,7 +121,7 @@ public class RecoveryManager extends ReplicationEngine {
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant)
-      throws ReplicationException, IOException {
+      throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null, false);
@@ -132,7 +133,6 @@ public class RecoveryManager extends ReplicationEngine {
     this.persistor = null; // No need of a persistor
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     this.recoveryMetrics = new RecoveryMetrics(metricRegistry);
-    this.networkClientFactory.getNetworkClient(); // Test connection to Azure Storage and other services
   }
 
   @Override
@@ -234,6 +234,19 @@ public class RecoveryManager extends ReplicationEngine {
     }
     return 0;
   }
+
+  public RemoteReplicaInfo getCloudReplica(ReplicaId replica) throws Exception {
+    PartitionId partition = replica.getPartitionId();
+    Store store = storeManager.getStore(partition);
+    DataNodeId cloudDataNode = new CloudServiceDataNode(clusterMapConfig);
+    CloudReplica cloudReplica = new CloudReplica(partition, cloudDataNode);
+    FindTokenFactory findTokenFactory =
+        tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
+    return new RemoteReplicaInfo(cloudReplica, replica, store, findTokenFactory.getNewFindToken(), 0,
+            SystemTime.getInstance(), cloudReplica.getDataNodeId().getPortToConnectTo());
+    // TODO: reload tokens
+  }
+
 
   /**
    * Add a replica of given partition and its {@link RemoteReplicaInfo}s to backup list.

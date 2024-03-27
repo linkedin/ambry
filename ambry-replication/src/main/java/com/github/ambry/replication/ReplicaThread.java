@@ -278,7 +278,7 @@ public class ReplicaThread implements Runnable {
    * Remove {@link RemoteReplicaInfo} from current {@link ReplicaThread}.
    * @param remoteReplicaInfo {@link RemoteReplicaInfo} to remove.
    */
-  void removeRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
+  public void removeRemoteReplicaInfo(RemoteReplicaInfo remoteReplicaInfo) {
     lock.lock();
     try {
       DataNodeId dataNodeId = remoteReplicaInfo.getReplicaId().getDataNodeId();
