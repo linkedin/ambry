@@ -42,7 +42,6 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ChunkInfo;
-import com.github.ambry.router.PutBlobMetaInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -364,30 +363,28 @@ public class S3MultipartCompleteUploadHandler {
         Collections.sort(sortedParts, Comparator.comparingInt(Part::getPartNumber));
         String reservedMetadataId = null;
         for (Part part : sortedParts) {
-          PutBlobMetaInfo putBlobMetaInfoObj = PutBlobMetaInfo.deserialize(part.geteTag());
-          // reservedMetadataId can be null. but if it's not null, they are supposed to be the same
-          String reserved = putBlobMetaInfoObj.getReservedMetadataChunkId();
-          if (reservedMetadataId == null) {
-            reservedMetadataId = reserved;
-          }
-          if (reserved != null && !reserved.equals(reservedMetadataId)) {
-            String error = "Reserved ID are different " + completeMultipartUpload;
-            throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
-          }
+          S3MultipartETag eTag = S3MultipartETag.deserialize(part.geteTag());
           // TODO [S3]: decide the life cycle of S3.
           long expirationTimeInMs = -1;
 
-          List<Pair<String, Long>> chunks = putBlobMetaInfoObj.getOrderedChunkIdSizeList();
-          for (int i = 0; i < putBlobMetaInfoObj.getNumChunks(); i++) {
-            String blobId = chunks.get(i).getFirst();
-            long chunkSize = chunks.get(i).getSecond();
+          if (eTag.getVersion() == S3MultipartETag.VERSION_1) {
+            List<Pair<String, Long>> chunks = eTag.getOrderedChunkIdSizeList();
+            for (int i = 0; i < chunks.size(); i++) {
+              String blobId = chunks.get(i).getFirst();
+              long chunkSize = chunks.get(i).getSecond();
 
-            ChunkInfo chunk = new ChunkInfo(blobId, chunkSize, expirationTimeInMs, reservedMetadataId);
-            chunkInfos.add(chunk);
+              ChunkInfo chunk = new ChunkInfo(blobId, chunkSize, expirationTimeInMs, reservedMetadataId);
+              chunkInfos.add(chunk);
+            }
+          } else {
+            String error = "Wrong ETag version " + completeMultipartUpload + " rest request " + restRequest;
+            LOGGER.error(error);
+            throw new RestServiceException(error, RestServiceErrorCode.BadRequest);
           }
         }
       } catch (IOException e) {
-        String error = "Could not parse xml request body " + completeMultipartUpload;
+        String error = "Could not parse xml request body " + completeMultipartUpload + " rest request " + restRequest;
+        LOGGER.error(error);
         throw new RestServiceException(error, e, RestServiceErrorCode.BadRequest);
       }
       return chunkInfos;

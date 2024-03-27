@@ -12,18 +12,19 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
 
-package com.github.ambry.router;
+package com.github.ambry.frontend;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import org.json.JSONArray;
-import org.json.JSONObject;
+import java.util.Objects;
 
 
 /**
@@ -96,23 +97,33 @@ public class PutBlobMetaInfo {
   }
 
   /**
+   * Serialize a {@link PutBlobMetaInfo} object to a JSON Object
+   * @param metaInfo the {@link PutBlobMetaInfo}
+   * @return the JSON object
+   */
+  public static ObjectNode serializeToJsonObject(PutBlobMetaInfo metaInfo) {
+    ObjectNode rootObject = objectMapper.createObjectNode();
+    // The order of elements in JSON arrays is preserved.
+    // https://www.rfc-editor.org/rfc/rfc7159.html
+    // An object is an unordered collection of zero or more name/value pairs
+    // An array is an ordered sequence of zero or more values.
+    ArrayNode chunks = objectMapper.createArrayNode();
+    for (Pair<String, Long> blobAndSize : metaInfo.orderedChunkIdSizeList) {
+      chunks.add(objectMapper.createObjectNode().put(BLOB, blobAndSize.getFirst()).put(SIZE, blobAndSize.getSecond()));
+    }
+    rootObject.put(CHUNKS, chunks);
+    rootObject.put(RESERVED_METADATA_CHUNK_ID, metaInfo.reservedMetadataChunkId);
+
+    return rootObject;
+  }
+
+  /**
    * Serialize a {@link PutBlobMetaInfo} object to a JSON string
    * @param metaInfo the {@link PutBlobMetaInfo}
    * @return the JSON string representation of the object
    */
   public static String serialize(PutBlobMetaInfo metaInfo) {
-    JSONObject rootObject = new JSONObject();
-
-    // The order of elements in JSON arrays is preserved.
-    // https://www.rfc-editor.org/rfc/rfc7159.html
-    // An object is an unordered collection of zero or more name/value pairs
-    // An array is an ordered sequence of zero or more values.
-    JSONArray chunks = new JSONArray();
-    for (Pair<String, Long> blobAndSize : metaInfo.orderedChunkIdSizeList) {
-      chunks.put(new JSONObject().put(BLOB, blobAndSize.getFirst()).put(SIZE, blobAndSize.getSecond()));
-    }
-    rootObject.put(CHUNKS, chunks);
-    rootObject.put(RESERVED_METADATA_CHUNK_ID, metaInfo.reservedMetadataChunkId);
+    ObjectNode rootObject = serializeToJsonObject(metaInfo);
 
     return rootObject.toString();
   }
@@ -156,5 +167,20 @@ public class PutBlobMetaInfo {
   @Override
   public String toString() {
     return PutBlobMetaInfo.serialize(this);
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+
+    PutBlobMetaInfo other = (PutBlobMetaInfo) o;
+
+    return Objects.equals(reservedMetadataChunkId, other.reservedMetadataChunkId) && Objects.equals(
+        orderedChunkIdSizeList, other.orderedChunkIdSizeList);
   }
 }
