@@ -80,7 +80,7 @@ public class CloudTokenPersistor extends ReplicaTokenPersistor {
       boolean tokenExists = cloudDestination.retrieveTokens(mountPath, replicaTokenFileName, tokenOutputStream);
       if (tokenExists) {
         InputStream inputStream = new ByteArrayInputStream(tokenOutputStream.toByteArray());
-        return replicaTokenSerde.deserializeTokens(inputStream);
+        return replicaTokenSerde.deserializeTokens(inputStream, replicaTokenFileName);
       } else {
         return Collections.emptyList();
       }

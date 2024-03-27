@@ -189,14 +189,14 @@ public abstract class ReplicaTokenPersistor implements Runnable {
       }
     }
 
-    public List<ReplicaTokenInfo> deserializeTokens(InputStream inputStream) throws IOException, ReplicationException {
+    public List<ReplicaTokenInfo> deserializeTokens(InputStream inputStream, String replicaTokenFilename) throws IOException, ReplicationException {
       CrcInputStream crcStream = new CrcInputStream(inputStream);
       DataInputStream stream = new DataInputStream(crcStream);
       List<ReplicaTokenInfo> tokenInfoList = new ArrayList<>();
       try {
         short version = stream.readShort();
         if (version < VERSION_0 || version > VERSION_1) {
-          throw new ReplicationException("Invalid version found during replica token deserialization: " + version);
+          throw new ReplicationException("Invalid version " + version + " found during replica token deserialization from file " + replicaTokenFilename);
         }
         while (stream.available() > Crc_Size) {
           // read partition id
@@ -230,7 +230,7 @@ public abstract class ReplicaTokenPersistor implements Runnable {
         }
         return tokenInfoList;
       } catch (IOException e) {
-        throw new ReplicationException("IO error deserializing replica tokens", e);
+        throw new ReplicationException("IO error deserializing replica tokens from file " + replicaTokenFilename, e);
       } finally {
         stream.close();
       }

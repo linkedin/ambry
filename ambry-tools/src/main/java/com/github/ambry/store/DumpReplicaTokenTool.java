@@ -106,7 +106,7 @@ public class DumpReplicaTokenTool {
     logger.info("Dumping replica token file {}", fileToRead);
     DataInputStream stream = new DataInputStream(new FileInputStream(fileToRead));
     try {
-      List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList = replicaTokenSerde.deserializeTokens(stream);
+      List<RemoteReplicaInfo.ReplicaTokenInfo> replicaTokenInfoList = replicaTokenSerde.deserializeTokens(stream, fileToRead);
       for (RemoteReplicaInfo.ReplicaTokenInfo replicaTokenInfo : replicaTokenInfoList) {
         logger.info(replicaTokenInfo.toString() + " " + replicaTokenInfo.getReplicaToken().toString());
       }
