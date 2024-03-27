@@ -120,7 +120,7 @@ public class RecoveryManager extends ReplicationEngine {
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant)
-      throws ReplicationException, IOException {
+      throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null, false);
@@ -132,7 +132,6 @@ public class RecoveryManager extends ReplicationEngine {
     this.persistor = null; // No need of a persistor
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     this.recoveryMetrics = new RecoveryMetrics(metricRegistry);
-    this.networkClientFactory.getNetworkClient(); // Test connection to Azure Storage and other services
   }
 
   @Override

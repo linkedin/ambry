@@ -13,11 +13,16 @@
  */
 package com.github.ambry.cloud;
 
+import com.github.ambry.clustermap.AmbryDisk;
+import com.github.ambry.clustermap.AmbryPartition;
+import com.github.ambry.clustermap.AmbryServerReplica;
 import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.DiskId;
+import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.FindTokenHelper;
@@ -32,6 +37,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -102,6 +108,21 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
   }
 
   /**
+   * Select a local disk for given replica
+   * @param replica
+   * @return
+   */
+  private DiskId getDisk(ReplicaId replica) {
+    // TODO: Handle disk full or unavailable
+    return compositeClusterManager.getStaticClusterManager().getDataNodeId(nodeId.getHostname(), nodeId.getPort())
+        .getDiskIds().stream()
+        .filter(d -> d.getState() == HardwareState.AVAILABLE)
+        .filter(d -> d.getAvailableSpaceInBytes() >= replica.getCapacityInBytes())
+        .collect(Collectors.toList())
+        .get(0);
+  }
+
+  /**
    * This method randomly picks a partition in a cluster and locates its replica in the cluster and the cloud.
    * Then it downloads and compares data from both replicas.
    *
@@ -118,12 +139,24 @@ public class BackupIntegrityMonitor implements Callable<Integer> {
       // 2. Pick a disk D using static cluster-map
       // 3. while(!done) { RecoveryThread::replicate(P) } - recover partition P from cloud and store metadata + data in disk D
       // 4. while(!done) { BackupCheckerThread::replicate(R) } - copy metadata from replica R and compare with metadata in disk D
+
+      // Select partition P
       List<PartitionId> partitions = compositeClusterManager.getHelixClusterManager().getAllPartitionIds(null);
       PartitionId partition = partitions.get(random.nextInt(partitions.size()));
+
+      // Select server replica R for partition P
       List<ReplicaId> replicas = (List<ReplicaId>) partition.getReplicaIds();
       ReplicaId serverReplica = replicas.get(random.nextInt(replicas.size()));
       logger.info("[BackupIntegrityMonitor] Verifying {}:{}", serverReplica.getReplicaPath(),
           serverReplica.getDataNodeId().getHostname());
+
+      // Select cloud replica C for partition P
+      DiskId disk = getDisk(serverReplica);
+      AmbryServerReplica cloudReplica = new AmbryServerReplica(clusterMapConfig, (AmbryPartition) partition,
+          (AmbryDisk) disk, true, serverReplica.getCapacityInBytes(), ReplicaSealStatus.NOT_SEALED);
+      logger.info("[BackupIntegrityMonitor] Restoring partition-{} to disk {}", partition.getId(), disk.toString());
+
+      // azureReplicator.addRemoteReplicaInfo(); Add replica to thread
       // TODO
       sleep(Duration.ofSeconds(10).toMillis());
     }
