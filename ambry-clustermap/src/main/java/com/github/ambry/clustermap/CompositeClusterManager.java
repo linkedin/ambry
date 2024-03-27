@@ -68,22 +68,7 @@ public class CompositeClusterManager implements ClusterMap {
 
   @Override
   public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
-    DuplicatingInputStream duplicatingInputStream = new DuplicatingInputStream(stream);
-    duplicatingInputStream.mark(0);
-    PartitionId partitionIdStatic = staticClusterManager.getPartitionIdFromStream(duplicatingInputStream);
-    if (helixClusterManager != null) {
-      duplicatingInputStream.reset();
-      try {
-        PartitionId partitionIdDynamic = helixClusterManager.getPartitionIdFromStream(duplicatingInputStream);
-        if (!partitionIdStatic.toString().equals(partitionIdDynamic.toString())) {
-          helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
-        }
-      } catch (IOException e) {
-        logger.warn("HelixClusterManager could not deserialize partition ID that StaticClusterManager could", e);
-        helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
-      }
-    }
-    return partitionIdStatic;
+    return helixClusterManager.getPartitionIdFromStream(stream);
   }
 
   @Override

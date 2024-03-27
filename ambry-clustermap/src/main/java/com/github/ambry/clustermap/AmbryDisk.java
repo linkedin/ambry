@@ -25,7 +25,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
 /**
  * {@link DiskId} implementation to use within dynamic cluster managers.
  */
-class AmbryDisk implements DiskId, Resource {
+public class AmbryDisk implements DiskId, Resource {
   private final AmbryDataNode datanode;
   private final String mountPath;
   private final ResourceStatePolicy resourceStatePolicy;
@@ -53,6 +53,25 @@ class AmbryDisk implements DiskId, Resource {
     this.maxCapacityInBytes = clusterMapConfig.clustermapMaxDiskCapacityInBytes;
     validate();
     this.availableSpaceInBytes = new AtomicLong(rawCapacityBytes);
+  }
+
+  /**
+   * Create an AmbryDisk object from Disk object
+   * AmbryDisk is a disk-descriptor used by helix cluster manager.
+   * Disk is a disk-descriptor used by static cluster manager.
+   * @param disk
+   * @param config
+   * @throws Exception
+   */
+  public AmbryDisk(Disk disk, ClusterMapConfig config) throws Exception {
+    DataNode node = disk.getDataNode();
+    datanode = new AmbryServerDataNode(node.getDatacenterName(), config, node.getHostname(),
+        node.getPort(), node.getRackId(), node.getSSLPort(), node.getHttp2Port(), node.getXid(), null);
+    mountPath = disk.getMountPath();
+    rawCapacityBytes = disk.getRawCapacityInBytes();
+    maxCapacityInBytes = disk.getRawCapacityInBytes();
+    availableSpaceInBytes = new AtomicLong(disk.getAvailableSpaceInBytes());
+    resourceStatePolicy = new NoOpResourceStatePolicy();
   }
 
   /**

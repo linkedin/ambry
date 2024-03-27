@@ -31,7 +31,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
  * A Disk stores {@link Replica}s. Each Disk is hosted on one specific {@link DataNode}. Each Disk is uniquely
  * identified by its DataNode and mount path (the path to this Disk's device on its DataNode).
  */
-class Disk implements DiskId {
+public class Disk implements DiskId {
   private final DataNode dataNode;
   private final String mountPath;
   private final ResourceStatePolicy diskStatePolicy;

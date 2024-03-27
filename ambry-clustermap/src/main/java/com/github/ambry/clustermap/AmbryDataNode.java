@@ -27,7 +27,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
 /**
  * {@link DataNodeId} implementation to use within dynamic cluster managers.
  */
-abstract class AmbryDataNode implements DataNodeId {
+public abstract class AmbryDataNode implements DataNodeId {
   private final String hostName;
   // exposed for subclass access
   protected final Port plainTextPort;
@@ -60,6 +60,15 @@ abstract class AmbryDataNode implements DataNodeId {
         Utils.getObj(clusterMapConfig.clusterMapResourceStatePolicyFactory, this, HardwareState.AVAILABLE,
             clusterMapConfig);
     this.resourceStatePolicy = resourceStatePolicyFactory.getResourceStatePolicy();
+  }
+
+  AmbryDataNode(DataNode node) {
+    hostName = node.getHostname();
+    dataCenterName = node.getDatacenterName();
+    plainTextPort = node.getPortByType(PortType.PLAINTEXT);
+    sslPort = node.getPortByType(PortType.SSL);
+    http2Port = node.getPortByType(PortType.HTTP2);
+    resourceStatePolicy = new NoOpResourceStatePolicy();
   }
 
   @Override
