@@ -88,7 +88,7 @@ public class S3MultipartETag {
     ObjectNode rootObject = objectMapper.createObjectNode();
 
     PutBlobMetaInfo metaInfo = new PutBlobMetaInfo(eTag.getOrderedChunkIdSizeList(), null);
-    ObjectNode chunks = PutBlobMetaInfo.serializeToJasonObject(metaInfo);
+    ObjectNode chunks = PutBlobMetaInfo.serializeToJsonObject(metaInfo);
     rootObject.put(DATA_CHUNK_LIST, chunks);
     rootObject.put(VERSION, CURRENT_VERSION);
 

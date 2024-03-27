@@ -101,7 +101,7 @@ public class PutBlobMetaInfo {
    * @param metaInfo the {@link PutBlobMetaInfo}
    * @return the JSON object
    */
-  public static ObjectNode serializeToJasonObject(PutBlobMetaInfo metaInfo) {
+  public static ObjectNode serializeToJsonObject(PutBlobMetaInfo metaInfo) {
     ObjectNode rootObject = objectMapper.createObjectNode();
     // The order of elements in JSON arrays is preserved.
     // https://www.rfc-editor.org/rfc/rfc7159.html
@@ -123,7 +123,7 @@ public class PutBlobMetaInfo {
    * @return the JSON string representation of the object
    */
   public static String serialize(PutBlobMetaInfo metaInfo) {
-    ObjectNode rootObject = serializeToJasonObject(metaInfo);
+    ObjectNode rootObject = serializeToJsonObject(metaInfo);
 
     return rootObject.toString();
   }
