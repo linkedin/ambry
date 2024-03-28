@@ -33,5 +33,6 @@ public interface MessageStoreRecovery {
    * @return A list of messages that were successfully recovered
    * @throws IOException
    */
-  List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory) throws IOException;
+  List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
+      throws IOException, StoreException;
 }
