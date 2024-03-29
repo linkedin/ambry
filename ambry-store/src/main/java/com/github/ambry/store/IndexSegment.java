@@ -77,7 +77,7 @@ class IndexSegment implements Iterable<IndexEntry> {
   static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
   static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
 
-  private final static int VALUE_SIZE_INVALID_VALUE = -1;
+  final static int VALUE_SIZE_INVALID_VALUE = -1;
   private static final Logger logger = LoggerFactory.getLogger(IndexSegment.class);
   private final int VERSION_FIELD_LENGTH = 2;
   private final int KEY_OR_ENTRY_SIZE_FIELD_LENGTH = 4;
@@ -200,11 +200,14 @@ class IndexSegment implements Iterable<IndexEntry> {
           readFromFile(indexFile, journal);
         } catch (StoreException e) {
           if ((e.getErrorCode() == StoreErrorCodes.Index_Creation_Failure
-              || e.getErrorCode() == StoreErrorCodes.Index_Version_Error)) {
-            // we just log the error here and retain the index so far created.
-            // subsequent recovery process will add the missed out entries
-            logger.error("Index Segment : {} error while reading from index {}", indexFile.getAbsolutePath(),
-                e.getMessage());
+              || e.getErrorCode() == StoreErrorCodes.Index_Version_Error
+              || e.getErrorCode() == StoreErrorCodes.Index_File_Format_Error)) {
+            // As long as it's not io error, we can recover the last index segment file from logs. So
+            // we just log the error here and retain the index so far created. subsequent recovery
+            // process will add the missed out entries
+            logger.error(
+                "Index Segment {} encountered an error while loading to memory, ignore the error and rely on recovery to fix it.",
+                indexFile.getAbsolutePath(), e);
           } else {
             throw e;
           }

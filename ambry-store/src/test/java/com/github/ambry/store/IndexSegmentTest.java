@@ -548,7 +548,7 @@ public class IndexSegmentTest {
    * @throws Exception
    */
   @Test
-  public void loadBloomFileFailureTest() throws Exception{
+  public void loadBloomFileFailureTest() throws Exception {
     assumeTrue(formatVersion > PersistentIndex.VERSION_1);
     LogSegmentName logSegmentName1 = LogSegmentName.fromPositionAndGeneration(0, 0);
     int indexValueSize =
@@ -559,7 +559,7 @@ public class IndexSegmentTest {
             KEY_SIZE + indexValueSize, indexValueSize, config, metrics, time);
     Random random = new Random();
     short accountId1 = getRandomShort(random);
-    short containerId1= getRandomShort(random);
+    short containerId1 = getRandomShort(random);
     MockId id1 = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE), accountId1, containerId1);
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName1, 0), Utils.Infinite_Time, time.milliseconds(),
@@ -802,16 +802,19 @@ public class IndexSegmentTest {
       stream.getChannel().force(true);
       temp.renameTo(indexFile);
     }
-    for (boolean sealed : new boolean[]{true, false}) {
-      try {
-        createIndexSegmentFromFile(indexFile, sealed, journal);
-        fail("Should fail as index file is corrupted");
-      } catch (StoreException e) {
-        assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
-        StoreException rc = Utils.getRootCause(e, StoreException.class);
-        assertEquals("Mismatch in error code", StoreErrorCodes.Index_File_Format_Error, rc.getErrorCode());
-      }
+    try {
+      createIndexSegmentFromFile(indexFile, true, journal);
+      fail("Should fail as a sealed index file is corrupted");
+    } catch (StoreException e) {
+      assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+      StoreException rc = Utils.getRootCause(e, StoreException.class);
+      assertEquals("Mismatch in error code", StoreErrorCodes.Index_File_Format_Error, rc.getErrorCode());
     }
+
+    // A unsealed index segment should ignore the corruption since it can be recovered later by log
+    fromDisk = createIndexSegmentFromFile(indexFile, false, journal);
+    verifyIndexSegmentDetails(fromDisk, startOffset, 0, 0, false, startOffset.getOffset(), time.milliseconds(), null,
+        null, StoreFindToken.UNINITIALIZED_RESET_KEY_VERSION);
   }
 
   /**
@@ -1126,7 +1129,9 @@ public class IndexSegmentTest {
     assertEquals("Sealed state is incorrect", sealed, indexSegment.isSealed());
     assertEquals("Entry size is incorrect: " + formatVersion, indexPersistedEntrySize,
         indexSegment.getPersistedEntrySize());
-    assertEquals("Value size is incorrect", valueSize, indexSegment.getValueSize());
+    if (indexSegment.getValueSize() != VALUE_SIZE_INVALID_VALUE) {
+      assertEquals("Value size is incorrect", valueSize, indexSegment.getValueSize());
+    }
     assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
     assertEquals("Reset key type mismatch ", resetKeyType, indexSegment.getResetKeyType());
     assertEquals("Reset key life version mismatch", resetKeyLifeVersion, indexSegment.getResetKeyLifeVersion());
@@ -1279,8 +1284,8 @@ public class IndexSegmentTest {
     for (boolean oneEntryPerKey : new boolean[]{true, false}) {
       List<IndexEntry> indexEntries = new ArrayList<>();
       assertEquals("Unexpected return value from getIndexEntriesSince()", highestExpectedId != null,
-          segment.getIndexEntriesSince(idToCheck, condition, indexEntries, new AtomicLong(existingSize),
-              oneEntryPerKey, false));
+          segment.getIndexEntriesSince(idToCheck, condition, indexEntries, new AtomicLong(existingSize), oneEntryPerKey,
+              false));
       if (highestExpectedId != null) {
         assertEquals("Highest ID not as expected", highestExpectedId,
             indexEntries.get(indexEntries.size() - 1).getKey());
@@ -1545,8 +1550,8 @@ public class IndexSegmentTest {
    */
   private void verifyAllForIndexSegmentFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
       IndexSegment fromDisk, Offset startOffset, int numItems, int expectedSizeWritten, boolean sealed, long endOffset,
-      long lastModifiedTimeInMs, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType, short resetKeyLifeVersion)
-      throws StoreException {
+      long lastModifiedTimeInMs, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType,
+      short resetKeyLifeVersion) throws StoreException {
     verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, sealed, endOffset,
         lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     verifyFind(referenceIndex, fromDisk);
