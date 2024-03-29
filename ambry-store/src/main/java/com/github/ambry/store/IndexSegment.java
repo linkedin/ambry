@@ -768,7 +768,7 @@ class IndexSegment implements Iterable<IndexEntry> {
     logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
 
     ByteBuffer byteBuffer = checkFileDataIntegrity(fileToRead);
-    byteBuffer.flip();
+    byteBuffer.position(0);
     byteBuffer.limit(byteBuffer.capacity() - CRC_FIELD_LENGTH);
     // We've checked the CRC and it matches, which means this index segment file is intact. All the errors from here
     // on are logical errors, not format errors.
