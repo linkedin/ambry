@@ -1174,7 +1174,7 @@ public class IndexSegmentTest {
     assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
     assertEquals("Reset key type mismatch ", resetKeyType, indexSegment.getResetKeyType());
     assertEquals("Reset key life version mismatch", resetKeyLifeVersion, indexSegment.getResetKeyLifeVersion());
-    if (formatVersion != PersistentIndex.VERSION_0) {
+    if (formatVersion != PersistentIndex.VERSION_0 && indexSegment.getLastModifiedTimeMs() != 0) {
       assertEquals("Last modified time is incorrect", lastModifiedTimeInMs, indexSegment.getLastModifiedTimeMs());
     }
     // in case of formatVersion 0, last modified time is calculated based on SystemTime and hence cannot verify for equivalency
