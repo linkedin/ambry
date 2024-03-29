@@ -764,6 +764,7 @@ public class IndexSegmentTest {
     LogSegmentName logSegmentName = StoreTestUtils.getRandomLogSegmentName(null);
     Offset startOffset = new Offset(logSegmentName, writeStartOffset);
     IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
+    time.setCurrentMilliseconds(System.currentTimeMillis() / 1000 * 1000);
 
     List<Long> offsets = new ArrayList<>();
     offsets.add(writeStartOffset);
@@ -811,10 +812,48 @@ public class IndexSegmentTest {
       assertEquals("Mismatch in error code", StoreErrorCodes.Index_File_Format_Error, rc.getErrorCode());
     }
 
-    // A unsealed index segment should ignore the corruption since it can be recovered later by log
+    // An unsealed index segment should ignore the corruption since it can be recovered later by log
     fromDisk = createIndexSegmentFromFile(indexFile, false, journal);
     verifyIndexSegmentDetails(fromDisk, startOffset, 0, 0, false, startOffset.getOffset(), time.milliseconds(), null,
         null, StoreFindToken.UNINITIALIZED_RESET_KEY_VERSION);
+    assertEquals("End offset doesn't match", startOffset.getOffset(), fromDisk.getEndOffset().getOffset());
+    // We should be able to insert entries to this index segment
+    offsets = new ArrayList<>();
+    offsets.add(writeStartOffset);
+    for (int i = 0; i < 4; i++) {
+      // size has to be > 0 (no record is 0 sized)
+      long size = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
+      offsets.add(writeStartOffset + size);
+      writeStartOffset += size;
+    }
+    lastEntrySize = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
+    endOffset = offsets.get(offsets.size() - 1) + lastEntrySize;
+    referenceIndex = new TreeMap<>();
+    List<IndexEntry> newEntries = addPutEntries(offsets, lastEntrySize, fromDisk, referenceIndex, false, false);
+    // write to file
+    fromDisk.writeIndexSegmentToFile(fromDisk.getEndOffset());
+    // verify read from file
+    journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+    fromDisk = createIndexSegmentFromFile(fromDisk.getFile(), false, journal);
+    assertEquals("End offset doesn't match", endOffset, fromDisk.getEndOffset().getOffset());
+    StoreKey resetKey = null;
+    PersistentIndex.IndexEntryType resetKeyType = null;
+    short resetKeyLifeVersion = StoreFindToken.UNINITIALIZED_RESET_KEY_VERSION;
+    if (formatVersion != PersistentIndex.VERSION_0) {
+      resetKey = newEntries.get(0).getKey();
+      resetKeyType = PersistentIndex.IndexEntryType.PUT;
+      resetKeyLifeVersion = newEntries.get(0).getValue().getLifeVersion();
+    }
+    int expectedSizeWritten = (KEY_SIZE + fromDisk.getValueSize()) * 5;
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, 5, expectedSizeWritten, false, endOffset,
+        time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
+
+    // seal it and now reload it as a sealed index segment
+    fromDisk.seal();
+    journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+    fromDisk = createIndexSegmentFromFile(fromDisk.getFile(), true, journal);
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, 5, expectedSizeWritten, true, endOffset,
+        time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
   }
 
   /**

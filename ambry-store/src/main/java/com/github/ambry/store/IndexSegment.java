@@ -208,6 +208,9 @@ class IndexSegment implements Iterable<IndexEntry> {
             logger.error(
                 "Index Segment {} encountered an error while loading to memory, ignore the error and rely on recovery to fix it.",
                 indexFile.getAbsolutePath(), e);
+            // Make sure we are using the current version
+            version = PersistentIndex.CURRENT_VERSION;
+            lastModifiedTimeSec.set(time.seconds());
           } else {
             throw e;
           }
