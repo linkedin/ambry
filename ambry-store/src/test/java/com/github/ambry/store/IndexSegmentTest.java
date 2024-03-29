@@ -802,11 +802,15 @@ public class IndexSegmentTest {
       stream.getChannel().force(true);
       temp.renameTo(indexFile);
     }
-    try {
-      createIndexSegmentFromFile(indexFile, true, journal);
-      fail("Should fail as index file is corrupted");
-    } catch (StoreException e) {
-      assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+    for (boolean sealed : new boolean[]{true, false}) {
+      try {
+        createIndexSegmentFromFile(indexFile, sealed, journal);
+        fail("Should fail as index file is corrupted");
+      } catch (StoreException e) {
+        assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+        StoreException rc = Utils.getRootCause(e, StoreException.class);
+        assertEquals("Mismatch in error code", StoreErrorCodes.Index_File_Format_Error, rc.getErrorCode());
+      }
     }
   }
 

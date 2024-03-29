@@ -14,6 +14,7 @@
 package com.github.ambry.store;
 
 import com.github.ambry.config.StoreConfig;
+import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
@@ -712,21 +713,69 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
+   * Check integrity of data in byte buffer by comparing the CRC. The CRC should be stored in the last few
+   * bytes.
+   * @param byteBuffer The byte buffer
+   * @return {@code true} if the crc matches.
+   */
+  private boolean checkDataIntegrityInByteBufferWithCRC(ByteBuffer byteBuffer) {
+    byteBuffer.position(0);
+    byteBuffer.limit(byteBuffer.capacity() - CRC_FIELD_LENGTH);
+    CRC32 crc = new CRC32();
+    crc.update(byteBuffer.slice());
+    // reset the limit
+    byteBuffer.limit(byteBuffer.capacity());
+    return crc.getValue() == byteBuffer.getLong(byteBuffer.capacity() - CRC_FIELD_LENGTH);
+  }
+
+  /**
+   * Read all the data from the given file and check if the crc value matches.
+   * @param fileToRead The file to read data from.
+   * @return A {@link ByteBuffer} that contains all the data in the file, including crc value.
+   * @throws StoreException
+   */
+  private ByteBuffer checkFileDataIntegrity(File fileToRead) throws StoreException {
+    if (!fileToRead.exists()) {
+      throw new StoreException("Index segment file " + fileToRead.getAbsolutePath() + " doesn't exist",
+          StoreErrorCodes.File_Not_Found);
+    }
+    ByteBuffer byteBuffer = ByteBuffer.allocate((int) fileToRead.length());
+    try (FileInputStream fileInputStream = new FileInputStream(fileToRead)) {
+      Utils.readFileToByteBuffer(fileInputStream.getChannel(), 0, byteBuffer);
+      if (!checkDataIntegrityInByteBufferWithCRC(byteBuffer)) {
+        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
+            StoreErrorCodes.Index_File_Format_Error);
+      }
+    } catch (IOException e) {
+      StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
+      throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
+          + " while reading from file ", e, errorCode);
+    }
+    return byteBuffer;
+  }
+
+  /**
    * Reads the index segment from file into an in memory representation
    * @param fileToRead The file to read the index segment from
    * @param journal The journal to use.
    * @throws StoreException
    * @throws FileNotFoundException
    */
-  private void readFromFile(File fileToRead, Journal journal) throws StoreException, FileNotFoundException {
+  private void readFromFile(File fileToRead, Journal journal) throws StoreException {
+    logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
+
+    ByteBuffer byteBuffer = checkFileDataIntegrity(fileToRead);
+    byteBuffer.flip();
+    byteBuffer.limit(byteBuffer.capacity() - CRC_FIELD_LENGTH);
+    // We've checked the CRC and it matches, which means this index segment file is intact. All the errors from here
+    // on are logical errors, not format errors.
+
     // tmpEntrySize is a local variable. If the readFromfile is successful, will set maxEntrySize with it.
     // tmpValueSize is a local variable. If the readFromfile is successful, will set valueSize with it.
     int tmpEntrySize;
     int tmpValueSize;
-    logger.info("IndexSegment : {} reading index from file", indexFile.getAbsolutePath());
     index.clear();
-    CrcInputStream crcStream = new CrcInputStream(new FileInputStream(fileToRead));
-    try (DataInputStream stream = new DataInputStream(crcStream)) {
+    try (DataInputStream stream = new ByteBufferDataInputStream(byteBuffer)) {
       setVersion(stream.readShort());
       switch (getVersion()) {
         case PersistentIndex.VERSION_0:
@@ -813,20 +862,8 @@ class IndexSegment implements Iterable<IndexEntry> {
       }
       endOffset.set(new Offset(startOffset.getName(), maxEndOffset));
       logger.trace("IndexSegment : {} setting end offset for index {}", indexFile.getAbsolutePath(), maxEndOffset);
-      long crc = crcStream.getValue();
-      if (crc != stream.readLong()) {
-        // reset structures
-        maxEntrySize = 0;
-        valueSize = VALUE_SIZE_INVALID_VALUE;
-        endOffset.set(startOffset);
-        index.clear();
-        bloomFilter.clear();
-        throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
-            StoreErrorCodes.Index_Creation_Failure);
-      } else {
-        maxEntrySize = tmpEntrySize;
-        valueSize = tmpValueSize;
-      }
+      maxEntrySize = tmpEntrySize;
+      valueSize = tmpValueSize;
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
       throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " encountered " + errorCode.toString()
@@ -1220,6 +1257,8 @@ class IndexSegment implements Iterable<IndexEntry> {
             break;
         }
         checkDataIntegrity();
+        // We've checked the CRC and it matches, which means this index segment file is intact. All the errors from here
+        // on are logical errors, not format errors.
         serEntries.position(0);
         setVersion(serEntries.getShort());
         StoreKey storeKey;
@@ -1299,15 +1338,9 @@ class IndexSegment implements Iterable<IndexEntry> {
      * @throws StoreException
      */
     private void checkDataIntegrity() throws StoreException {
-      serEntries.position(0);
-      serEntries.limit(serEntries.capacity() - CRC_FIELD_LENGTH);
-      CRC32 crc = new CRC32();
-      crc.update(serEntries.slice());
-      // reset the limit
-      serEntries.limit(serEntries.capacity());
-      if (crc.getValue() != serEntries.getLong(serEntries.capacity() - CRC_FIELD_LENGTH)) {
+      if (!checkDataIntegrityInByteBufferWithCRC(serEntries)) {
         throw new StoreException("IndexSegment : " + indexFile.getAbsolutePath() + " crc check does not match",
-            StoreErrorCodes.Index_Creation_Failure);
+            StoreErrorCodes.Index_File_Format_Error);
       }
     }
 
