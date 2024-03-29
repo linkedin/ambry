@@ -26,8 +26,11 @@ import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -37,6 +40,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
+import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -1065,6 +1070,79 @@ public class IndexTest {
       multipleSegmentRecoveryTest();
     }
     totalIndexLossRecoveryTest();
+  }
+
+  /**
+   * Tests success case for recovery when the last index segment file is corrupted.
+   * @throws Exception
+   */
+  @Test
+  public void recoverySuccessWhenLastIndexSegmentFileCorrupted() throws Exception {
+    assumeTrue(isLogSegmented);
+    Map.Entry<Offset, TreeMap<MockId, TreeSet<IndexValue>>> lastIndexSegmentEntry = state.referenceIndex.lastEntry();
+    long lastModifiedTimeForLastIndexSegment = state.lastModifiedTimesInSecs.get(lastIndexSegmentEntry.getKey());
+    List<IndexEntry> activeSegmentEntries = new ArrayList<>();
+    for (Map.Entry<MockId, TreeSet<IndexValue>> entry : lastIndexSegmentEntry.getValue().entrySet()) {
+      StoreKey key = entry.getKey();
+      for (IndexValue value : entry.getValue()) {
+        activeSegmentEntries.add(new IndexEntry(key, value));
+      }
+    }
+    activeSegmentEntries.sort((e1, e2) -> e1.getValue().getOffset().compareTo(e2.getValue().getOffset()));
+    List<MessageInfo> activeSegmentInfos = new ArrayList<>();
+    for (IndexEntry entry : activeSegmentEntries) {
+      StoreKey key = entry.getKey();
+      IndexValue value = entry.getValue();
+      activeSegmentInfos.add(
+          new MessageInfo(key, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
+              value.getExpiresAtMs(), null, value.getAccountId(), value.getContainerId(), value.getOperationTimeInMs(),
+              value.getLifeVersion()));
+    }
+
+    Offset endOffset = state.index.getCurrentEndOffset();
+    // Write everything to disk
+    IndexSegment lastIndexSegment = state.index.getIndexSegments().get(state.index.getActiveIndexSegmentOffset());
+    state.index.close(true);
+
+    // Now corrupt last index segment file
+    // read index file to byte buffer and manipulate one of the bytes
+    File indexFile = lastIndexSegment.getFile();
+    ByteBuffer buf = ByteBuffer.allocate((int) indexFile.length());
+    try (RandomAccessFile raf = new RandomAccessFile(indexFile, "r")) {
+      raf.getChannel().read(buf);
+    }
+    // we use heap buffer here, so buf.array() should not be null
+    byte[] bytes = buf.array();
+    // make one of the bytes corrupted (avoid last 8 bytes as they are crc value)
+    int corruptIndex = new Random().nextInt(bytes.length - 8);
+    bytes[corruptIndex] ^= 0xff;
+    // write corrupted bytes to file
+    File temp = new File(indexFile.getAbsolutePath() + ".tmp");
+    try (FileOutputStream stream = new FileOutputStream(temp)) {
+      stream.write(bytes);
+      stream.getChannel().force(true);
+      temp.renameTo(indexFile);
+    }
+
+    state.recovery = (read, startOffset, eoffset, factory) -> activeSegmentInfos;
+    state.reloadIndex(false, false);
+    IndexSegment recoveredIndexSegment = state.index.getIndexSegments().get(state.index.getActiveIndexSegmentOffset());
+    assertEquals("LastModifedTime doesn't match", lastModifiedTimeForLastIndexSegment,
+        recoveredIndexSegment.getLastModifiedTimeMs() / 1000);
+    assertEquals("End offset doesn't match", endOffset, recoveredIndexSegment.getEndOffset());
+    int numberOfIndexValues =
+        (int) lastIndexSegmentEntry.getValue().values().stream().flatMap(ts -> ts.stream()).count();
+    assertEquals("Number of index entries doesn't match", numberOfIndexValues,
+        recoveredIndexSegment.getNumberOfItems());
+    for (Map.Entry<MockId, TreeSet<IndexValue>> keyAndValues : lastIndexSegmentEntry.getValue().entrySet()) {
+      MockId key = keyAndValues.getKey();
+      TreeSet<IndexValue> indexValues = keyAndValues.getValue();
+      NavigableSet<IndexValue> indexValuesFromSegment = recoveredIndexSegment.find(key);
+      assertNotNull(indexValuesFromSegment);
+      assertEquals("Number of index values doesn't match for key " + key, indexValues.size(),
+          indexValuesFromSegment.size());
+      assertEquals("IndexValues don't match", indexValues, indexValuesFromSegment);
+    }
   }
 
   /**
