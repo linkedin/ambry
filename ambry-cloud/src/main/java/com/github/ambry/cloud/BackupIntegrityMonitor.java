@@ -151,7 +151,6 @@ public class BackupIntegrityMonitor implements Runnable {
   @Override
   public void run() {
     Random random = new Random();
-    AmbryPartition partition = null;
     try {
       // 1. Pick a partition P, replica R from helix cluster-map
       // 2. Pick a disk D using static cluster-map
@@ -160,7 +159,7 @@ public class BackupIntegrityMonitor implements Runnable {
 
       /** Select partition P */
       List<PartitionId> partitions = helixClusterManager.getAllPartitionIds(null);
-      partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
+      AmbryPartition partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
 
       /** Create local Store S */
@@ -180,10 +179,10 @@ public class BackupIntegrityMonitor implements Runnable {
 
       /** Clean up local disks */
       stopLocalStore(partition);
+      logger.info("[BackupIntegrityMonitor] Verified backup partition-{}", partition.getId());
     } catch (Throwable e) {
       // TODO: latency metrics, errors
       logger.error("Failed to run verification due to {}", e.getMessage());
     }
-    logger.info("[BackupIntegrityMonitor] Verified backup partition-{}", partition.getId());
   }
 }
