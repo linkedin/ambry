@@ -19,6 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -68,7 +69,24 @@ public class CompositeClusterManager implements ClusterMap {
 
   @Override
   public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
-    return helixClusterManager.getPartitionIdFromStream(stream);
+    DuplicatingInputStream duplicatingInputStream = new DuplicatingInputStream(stream);
+    duplicatingInputStream.mark(0);
+    PartitionId partitionIdStatic = staticClusterManager.getPartitionIdFromStream(duplicatingInputStream);
+    PartitionId partitionIdDynamic = null;
+    if (helixClusterManager != null) {
+      duplicatingInputStream.reset();
+      try {
+        partitionIdDynamic = helixClusterManager.getPartitionIdFromStream(duplicatingInputStream);
+        if (!partitionIdStatic.toString().equals(partitionIdDynamic.toString())) {
+          helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
+        }
+      } catch (IOException e) {
+        logger.warn("HelixClusterManager could not deserialize partition ID that StaticClusterManager could", e);
+        helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
+      }
+    }
+    // Default to helix-partition-id, instead of static because our helix code is mature
+    return partitionIdDynamic;
   }
 
   @Override
@@ -86,11 +104,13 @@ public class CompositeClusterManager implements ClusterMap {
   @Override
   public List<PartitionId> getWritablePartitionIds(String partitionClass) {
     List<PartitionId> staticWritablePartitionIds = staticClusterManager.getWritablePartitionIds(partitionClass);
+    List<PartitionId> helixWritablePartitionIds = Collections.emptyList();
     if (helixClusterManager != null) {
-      List<PartitionId> helixWritablePartitionIds = helixClusterManager.getWritablePartitionIds(partitionClass);
+      helixWritablePartitionIds = helixClusterManager.getWritablePartitionIds(partitionClass);
       comparePartitions(staticWritablePartitionIds, helixWritablePartitionIds, "writable");
     }
-    return staticWritablePartitionIds;
+    // Default to helix-partition-id, instead of static because our helix code is mature
+    return helixWritablePartitionIds;
   }
 
   /**
@@ -103,11 +123,13 @@ public class CompositeClusterManager implements ClusterMap {
   @Override
   public List<PartitionId> getFullyWritablePartitionIds(String partitionClass) {
     List<PartitionId> staticWritablePartitionIds = staticClusterManager.getFullyWritablePartitionIds(partitionClass);
+    List<PartitionId> helixWritablePartitionIds = Collections.emptyList();
     if (helixClusterManager != null) {
-      List<PartitionId> helixWritablePartitionIds = helixClusterManager.getFullyWritablePartitionIds(partitionClass);
+      helixWritablePartitionIds = helixClusterManager.getFullyWritablePartitionIds(partitionClass);
       comparePartitions(staticWritablePartitionIds, helixWritablePartitionIds, "fully writable");
     }
-    return staticWritablePartitionIds;
+    // Default to helix-partition-id, instead of static because our helix code is mature
+    return helixWritablePartitionIds;
   }
 
   /**
@@ -182,12 +204,14 @@ public class CompositeClusterManager implements ClusterMap {
   @Override
   public List<PartitionId> getAllPartitionIds(String partitionClass) {
     List<PartitionId> staticPartitionIds = staticClusterManager.getAllPartitionIds(partitionClass);
+    List<PartitionId> helixPartitionIds = helixClusterManager.getAllPartitionIds(partitionClass);
     if (helixClusterManager != null) {
-      if (!areEqual(staticPartitionIds, helixClusterManager.getAllPartitionIds(partitionClass))) {
+      if (!areEqual(staticPartitionIds, helixPartitionIds)) {
         helixClusterManagerMetrics.getAllPartitionIdsMismatchCount.inc();
       }
     }
-    return staticPartitionIds;
+    // Default to helix-partition-id, instead of static because our helix code is mature
+    return helixPartitionIds;
   }
 
   /**
