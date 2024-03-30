@@ -1059,11 +1059,7 @@ public class StorageManager implements StoreManager {
       // messages, then when we reset the partitions, replica list in the StorageManager would be obsolete. Fortunately
       // all the replicas in the failed disks are already stopped, we just have to remove the disk from disk maps.
       failedDisks.addAll(newFailedDisks);
-      long healthyDiskCapacity = currentNode.getDiskIds()
-          .stream()
-          .filter(((Predicate<DiskId>) failedDisks::contains).negate())
-          .mapToLong(DiskId::getRawCapacityInBytes)
-          .sum();
+      int actualCapacityInGB = getCapacityOfHealthyDisks(currentNode.getDiskIds(), failedDisks);
       List<ReplicaId> replicasOnFailedDisks = partitionNameToReplicaId.values()
           .stream()
           .filter(replica -> newFailedDisks.contains(replica.getDiskId()))
@@ -1096,7 +1092,7 @@ public class StorageManager implements StoreManager {
         // 5: remove all the replicas from replication and state manger
         removeReplicasFromReplicationAndStatsManager(replicasOnFailedDisks);
         // 6. update disk capacity
-        updateDiskCapacity(healthyDiskCapacity);
+        updateDiskCapacity(actualCapacityInGB);
         // 7. Remove disks from the maps.
         cleanupDisksAndReplicas(newFailedDisks, replicasOnFailedDisks);
         success = true;
@@ -1189,10 +1185,7 @@ public class StorageManager implements StoreManager {
       logger.info("Replicas {} are successfully reset when handling disk failure", replicasOnFailedDisks);
     }
 
-    private void updateDiskCapacity(long healthyDiskCapacity) {
-      final long GB = 1024 * 1024 * 1024;
-      long capacityInGB = healthyDiskCapacity / GB;
-      int actualCapacityInGB = (int) ((double) capacityInGB * capacityReportingPercentage / 100);
+    private void updateDiskCapacity(int actualCapacityInGB) {
       if (!primaryClusterParticipant.updateDiskCapacity(actualCapacityInGB)) {
         throw new IllegalStateException("Failed to update disk capacity");
       }
