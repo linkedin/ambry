@@ -392,7 +392,7 @@ public class BlobStore implements Store {
     }
   }
 
-  ReplicaId getReplicaId() {
+  public ReplicaId getReplicaId() {
     return this.replicaId;
   }
 

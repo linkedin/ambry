@@ -30,9 +30,12 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
@@ -102,19 +105,43 @@ public class BackupIntegrityMonitor implements Runnable {
     logger.info("[BackupIntegrityMonitor] Stopped BackupIntegrityMonitor");
   }
 
-  /**
-   * Select a local disk for given replica
-   * @param size
-   * @return
-   */
-  private DiskId getDisk(long size) {
+  private BlobStore startLocalStore(AmbryPartition partition) throws Exception {
+    /**
+     * Create local replica L to store cloud data
+     * It will be at least as big as the largest replica of the partition on a server.
+     * Cloud replica will usually be smaller than server replica, unless server disk has a problem or is compacted.
+     */
+    long maxReplicaSize = partition.getReplicaIds().stream()
+        .map(r -> r.getCapacityInBytes())
+        .max(Long::compare)
+        .get();
     // TODO: Handle disk full or unavailable
-    return staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
+    List<DiskId> disks = staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
         .getDiskIds().stream()
         .filter(d -> d.getState() == HardwareState.AVAILABLE)
-        .filter(d -> d.getAvailableSpaceInBytes() >= size)
-        .collect(Collectors.toList())
-        .get(0);
+        .filter(d -> d.getAvailableSpaceInBytes() >= maxReplicaSize)
+        .collect(Collectors.toList());
+    // Pick disk randomly
+    DiskId disk = disks.get(new Random().nextInt(disks.size()));
+    // Convert Disk object to AmbryDisk object, static-map -> helix-map
+    AmbryDisk ambryDisk = new AmbryDisk((Disk) disk, clusterMapConfig);
+    AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, (AmbryPartition) partition, ambryDisk,
+        true, maxReplicaSize, ReplicaSealStatus.NOT_SEALED);
+    if (!(storageManager.addBlobStore(localReplica) && storageManager.startBlobStore(partition))) {
+      throw new RuntimeException(String.format("Failed to add Store for %s", partition.getId()));
+    }
+    Store store = storageManager.getStore(partition, true);
+    logger.info("[BackupIntegrityMonitor] Added Store {}", store.toString());
+    return (BlobStore) store;
+  }
+
+  private boolean stopLocalStore(AmbryPartition partition) throws IOException, StoreException {
+    Store store = storageManager.getStore(partition, true);
+    if (!(storageManager.shutdownBlobStore(partition) && storageManager.removeBlobStore(partition))) {
+      throw new RuntimeException(String.format("Failed to remove Store %s", store));
+    }
+    logger.info("[BackupIntegrityMonitor] Removed Store {}", store);
+    return true;
   }
 
   /**
@@ -124,7 +151,7 @@ public class BackupIntegrityMonitor implements Runnable {
   @Override
   public void run() {
     Random random = new Random();
-    PartitionId partition = null;
+    AmbryPartition partition = null;
     try {
       // 1. Pick a partition P, replica R from helix cluster-map
       // 2. Pick a disk D using static cluster-map
@@ -133,47 +160,26 @@ public class BackupIntegrityMonitor implements Runnable {
 
       /** Select partition P */
       List<PartitionId> partitions = helixClusterManager.getAllPartitionIds(null);
-      partition = partitions.get(random.nextInt(partitions.size()));
+      partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
 
-      /**
-       * Create local replica L to store cloud data
-       * It will be at least as big as the largest replica of the partition on a server.
-       * Cloud replica will usually be smaller than server replica, unless server disk has a problem or is compacted.
-       */
-      long maxReplicaSize = partition.getReplicaIds().stream()
-          .map(r -> r.getCapacityInBytes())
-          .max(Long::compare)
-          .get();
-      // Convert Disk object to AmbryDisk object, static-map -> helix-map
-      AmbryDisk disk = new AmbryDisk((Disk) getDisk(maxReplicaSize), clusterMapConfig);
-      AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, (AmbryPartition) partition, disk,
-          true, maxReplicaSize, ReplicaSealStatus.NOT_SEALED);
-      if (!(storageManager.addBlobStore(localReplica) && storageManager.startBlobStore(partition))) {
-        throw new RuntimeException(String.format("Failed to add Store for %s", partition.getId()));
-      }
-      Store store = storageManager.getStore(partition, true);
-      logger.info("[BackupIntegrityMonitor] Added Store {}", store.toString());
+      /** Create local Store S */
+      BlobStore store = startLocalStore(partition);
 
-      /** Recover cloud backup C for partition P */
-      RemoteReplicaInfo cloudReplica = azureReplicationManager.getCloudReplica(localReplica);
+      /** Restore cloud backup C */
+      RemoteReplicaInfo cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
-      logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} of approx. {} bytes to disk {}",
-          partition.getId(), maxReplicaSize, disk);
+      logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk {}", partition.getId(), store);
       while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) {
         azureReplicator.replicate();
       }
       azureReplicator.removeRemoteReplicaInfo(cloudReplica);
-      logger.info("[BackupIntegrityMonitor] Restored backup partition-{} of {} bytes to disk {}",
-          partition.getId(), store.getSizeInBytes(), disk);
+      logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk {}", partition.getId(), store);
 
       /** TODO: Replicate from server and compare */
 
       /** Clean up local disks */
-      if (!(storageManager.shutdownBlobStore(partition) && storageManager.removeBlobStore(partition))) {
-        throw new RuntimeException(String.format("Failed to remove Store %s", store));
-      }
-      logger.info("[BackupIntegrityMonitor] Removed Store {}", store);
+      stopLocalStore(partition);
     } catch (Throwable e) {
       // TODO: latency metrics, errors
       logger.error("Failed to run verification due to {}", e.getMessage());
