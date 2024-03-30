@@ -19,12 +19,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -282,25 +284,15 @@ public class CompositeClusterManager implements ClusterMap {
   @Override
   public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
     List<ReplicaId> staticReplicaIds = staticClusterManager.getReplicaIds(dataNodeId);
-    if (helixClusterManager != null) {
-      Set<String> staticReplicaIdStrings = new HashSet<>();
-      for (ReplicaId replicaId : staticReplicaIds) {
-        staticReplicaIdStrings.add(replicaId.toString());
-      }
-
-      Set<String> helixReplicaIdStrings = new HashSet<>();
-      DataNodeId ambryDataNode = helixClusterManager.getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
-      if (ambryDataNode != null) {
-        for (ReplicaId replicaId : helixClusterManager.getReplicaIds(ambryDataNode)) {
-          helixReplicaIdStrings.add(replicaId.toString());
-        }
-      }
-
-      if (!staticReplicaIdStrings.equals(helixReplicaIdStrings)) {
-        helixClusterManagerMetrics.getReplicaIdsMismatchCount.inc();
-      }
-    }
-    return staticReplicaIds;
+    DataNodeId ambryDataNode = helixClusterManager.getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
+    List<ReplicaId> dynamicReplicaIds = new ArrayList<>();
+    helixClusterManager.getReplicaIds(ambryDataNode).forEach(r -> dynamicReplicaIds.add(r));
+    String staticStr = String.join(",", staticReplicaIds.stream().map(r -> r.toString()).sorted().collect(Collectors.toList()));
+    String helixStr = String.join(",", dynamicReplicaIds.stream().map(r -> r.toString()).sorted().collect(Collectors.toList()));
+    if (!staticStr.equals(helixStr)) {
+      helixClusterManagerMetrics.getReplicaIdsMismatchCount.inc();
+    }     
+    return dynamicReplicaIds;
   }
 
   /**
@@ -341,13 +333,11 @@ public class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
-    if (replicaId instanceof Replica) {
-      staticClusterManager.onReplicaEvent(replicaId, event);
-      if (helixClusterManager != null) {
-        AmbryReplica ambryReplica = helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId(),
-            replicaId.getPartitionId().toPathString());
-        helixClusterManager.onReplicaEvent(ambryReplica, event);
-      }
+    staticClusterManager.onReplicaEvent(replicaId, event);
+    if (helixClusterManager != null) {
+      AmbryReplica ambryReplica = helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId(),
+          replicaId.getPartitionId().toPathString());
+      helixClusterManager.onReplicaEvent(ambryReplica, event);
     }
   }
 
