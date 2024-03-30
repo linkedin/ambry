@@ -150,7 +150,6 @@ public class BackupIntegrityMonitor implements Runnable {
    */
   @Override
   public void run() {
-    Random random = new Random();
     try {
       // 1. Pick a partition P, replica R from helix cluster-map
       // 2. Pick a disk D using static cluster-map
@@ -159,19 +158,17 @@ public class BackupIntegrityMonitor implements Runnable {
 
       /** Select partition P */
       List<PartitionId> partitions = helixClusterManager.getAllPartitionIds(null);
-      AmbryPartition partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
+      AmbryPartition partition = (AmbryPartition) partitions.get(new Random().nextInt(partitions.size()));
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
 
       /** Create local Store S */
       BlobStore store = startLocalStore(partition);
 
       /** Restore cloud backup C */
+      logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk {}", partition.getId(), store);
       RemoteReplicaInfo cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
-      logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk {}", partition.getId(), store);
-      while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) {
-        azureReplicator.replicate();
-      }
+      while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) { azureReplicator.replicate();}
       azureReplicator.removeRemoteReplicaInfo(cloudReplica);
       logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk {}", partition.getId(), store);
 
