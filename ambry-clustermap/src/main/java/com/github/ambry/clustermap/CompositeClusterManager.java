@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * A cluster manager that is a wrapper over a {@link StaticClusterManager} instance and a {@link HelixClusterManager}
- * instance and uses the {@link HelixClusterManager} as the source-of-truth. It relays events to both and checks for
+ * instance and uses the {@link StaticClusterManager} as the source-of-truth. It relays events to both and checks for
  * and reports inconsistencies in the views from the two underlying cluster managers.
  */
 public class CompositeClusterManager implements ClusterMap {
