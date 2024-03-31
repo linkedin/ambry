@@ -328,10 +328,10 @@ public class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
-    staticClusterManager.onReplicaEvent(replicaId, event);
     AmbryReplica ambryReplica = helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId(),
         replicaId.getPartitionId().toPathString());
     helixClusterManager.onReplicaEvent(ambryReplica, event);
+    staticClusterManager.onReplicaEvent(replicaId, event);
   }
 
   @Override
@@ -348,20 +348,19 @@ public class CompositeClusterManager implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    staticClusterManager.registerClusterMapListener(clusterMapChangeListener);
     helixClusterManager.registerClusterMapListener(clusterMapChangeListener);
   }
 
   @Override
   public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
       boolean checkLocalDcOnly) {
-    boolean staticHasEnoughEligible =
-        staticClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
-            checkLocalDcOnly);
     boolean helixHasEnoughEligible =
         helixClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
             checkLocalDcOnly);
     if (check) {
+      boolean staticHasEnoughEligible =
+          staticClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+              checkLocalDcOnly);
       if (helixHasEnoughEligible != staticHasEnoughEligible) {
         String staticLogStr = staticHasEnoughEligible ? "has" : "doesn't have";
         String helixLogStr = staticHasEnoughEligible ? "doesn't have" : "has";
