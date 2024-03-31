@@ -135,13 +135,16 @@ public class BackupIntegrityMonitor implements Runnable {
     return (BlobStore) store;
   }
 
-  private boolean stopLocalStore(AmbryPartition partition) throws IOException, StoreException {
+  private boolean stopLocalStore(AmbryPartition partition) {
     Store store = storageManager.getStore(partition, true);
-    if (!(storageManager.shutdownBlobStore(partition) && storageManager.removeBlobStore(partition))) {
-      throw new RuntimeException(String.format("Failed to stop/remove Store [%s]", store));
+    try {
+      boolean ret = storageManager.shutdownBlobStore(partition) && storageManager.removeBlobStore(partition);
+      logger.info("[BackupIntegrityMonitor] Stopped Store [{}]", store);
+      return ret;
+    } catch (Throwable e) {
+      logger.error(String.format("Failed to stop/remove Store [%s]", store));
+      return false;
     }
-    logger.info("[BackupIntegrityMonitor] Stopped Store [{}]", store);
-    return true;
   }
 
   /**
@@ -150,6 +153,8 @@ public class BackupIntegrityMonitor implements Runnable {
    */
   @Override
   public void run() {
+    RemoteReplicaInfo cloudReplica = null;
+    AmbryPartition partition = null;
     try {
       // 1. Pick a partition P, replica R from helix cluster-map
       // 2. Pick a disk D using static cluster-map
@@ -158,7 +163,7 @@ public class BackupIntegrityMonitor implements Runnable {
 
       /** Select partition P */
       List<PartitionId> partitions = helixClusterManager.getAllPartitionIds(null);
-      AmbryPartition partition = (AmbryPartition) partitions.get(new Random().nextInt(partitions.size()));
+      partition = (AmbryPartition) partitions.get(new Random().nextInt(partitions.size()));
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
 
       /** Create local Store S */
@@ -166,20 +171,21 @@ public class BackupIntegrityMonitor implements Runnable {
 
       /** Restore cloud backup C */
       logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk [{}]", partition.getId(), store);
-      RemoteReplicaInfo cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
+      cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
-      while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) { azureReplicator.replicate();}
-      azureReplicator.removeRemoteReplicaInfo(cloudReplica);
+      while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) { azureReplicator.replicate(); }
       logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}]", partition.getId(), store);
 
       /** TODO: Replicate from server and compare */
 
-      /** Clean up local disks */
-      stopLocalStore(partition);
       logger.info("[BackupIntegrityMonitor] Verified backup partition-{}", partition.getId());
     } catch (Throwable e) {
       // TODO: latency metrics, errors
-      logger.error("Failed to run verification due to {}", e.getMessage());
+      logger.error("[BackupIntegrityMonitor] Failed to verify backup partition-{} due to {}", partition.getId(),
+          e.getMessage());
+    } finally {
+      if (cloudReplica != null) { azureReplicator.removeRemoteReplicaInfo(cloudReplica); }
+      if (partition != null) { stopLocalStore(partition); }
     }
   }
 }

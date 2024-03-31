@@ -372,7 +372,7 @@ public class CompositeClusterManager implements ClusterMap {
     }
     return helixHasEnoughEligible;
   }
-  
+
   @Override
   public void close() {
     staticClusterManager.close();
