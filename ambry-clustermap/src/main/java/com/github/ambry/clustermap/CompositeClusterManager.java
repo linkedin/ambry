@@ -84,7 +84,7 @@ public class CompositeClusterManager implements ClusterMap {
       duplicatingInputStream.reset();
       PartitionId partitionIdStatic = staticClusterManager.getPartitionIdFromStream(duplicatingInputStream);
       if (!partitionIdStatic.toString().equals(partitionIdDynamic.toString())) {
-        logger.trace("Static PartitionId does not match Helix PartitionId");
+        logger.debug("Static PartitionId does not match Helix PartitionId");
         helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
       }
     }
@@ -238,6 +238,7 @@ public class CompositeClusterManager implements ClusterMap {
     if (check) {
       boolean staticHas = staticClusterManager.hasDatacenter(datacenterName);
       if (staticHas != helixHas) {
+        logger.debug("Static DC info does not match Helix DC info");
         helixClusterManagerMetrics.hasDatacenterMismatchCount.inc();
       }
     }
@@ -251,11 +252,18 @@ public class CompositeClusterManager implements ClusterMap {
 
   @Override
   public String getDatacenterName(byte id) {
-    String dcName = staticClusterManager.getDatacenterName(id);
-    if (helixClusterManager != null && !Objects.equals(dcName, helixClusterManager.getDatacenterName(id))) {
-      helixClusterManagerMetrics.getDatacenterNameMismatchCount.inc();
+    String helixDcName = null;
+    if (helixClusterManager != null && !Objects.equals(helixDcName, helixClusterManager.getDatacenterName(id))) {
+      helixDcName = helixClusterManager.getDatacenterName(id);
     }
-    return dcName;
+
+    if (check) {
+      if (!helixDcName.equals(staticClusterManager.getDatacenterName(id))) {
+        logger.debug("Static DC name does not match Helix DC name");
+        helixClusterManagerMetrics.getDatacenterNameMismatchCount.inc();
+      }
+    }
+    return helixDcName;
   }
 
   /**
@@ -280,6 +288,7 @@ public class CompositeClusterManager implements ClusterMap {
       DataNodeId staticDataNode = staticClusterManager.getDataNodeId(hostname, port);
       if (!Objects.equals(staticDataNode != null ? staticDataNode.toString() : null,
           helixDataNode != null ? helixDataNode.toString() : null)) {
+        logger.debug("Static data node does not match Helix data node");
         helixClusterManagerMetrics.getDataNodeIdMismatchCount.inc();
       }
     }
@@ -309,6 +318,7 @@ public class CompositeClusterManager implements ClusterMap {
       String staticStr = String.join(",", staticReplicaIds.stream().map(r -> r.toString()).sorted().collect(Collectors.toList()));
       String helixStr = String.join(",", dynamicReplicaIds.stream().map(r -> r.toString()).sorted().collect(Collectors.toList()));
       if (!staticStr.equals(helixStr)) {
+        logger.debug("Static replicas does not match Helix replicas");
         helixClusterManagerMetrics.getReplicaIdsMismatchCount.inc();
       }
     }
@@ -339,6 +349,7 @@ public class CompositeClusterManager implements ClusterMap {
         helixDataNodeIdStrings.add(dataNodeId.toString());
       }
       if (!staticDataNodeIdStrings.equals(helixDataNodeIdStrings)) {
+        logger.debug("Static data nodes do not match Helix data nodes");
         helixClusterManagerMetrics.getDataNodeIdsMismatchCount.inc();
       }
     }
