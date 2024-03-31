@@ -79,7 +79,7 @@ public class BackupIntegrityMonitor implements Runnable {
         .getDiskIds()
         .forEach(d -> logger.info("[BackupIntegrityMonitor] Disk = {} {} {} bytes", d.getMountPath(), d.getState(),
             d.getRawCapacityInBytes()));
-    logger.info("Created BackupIntegrityMonitor");
+    logger.info("[BackupIntegrityMonitor] Created BackupIntegrityMonitor");
   }
 
   /**
@@ -102,7 +102,7 @@ public class BackupIntegrityMonitor implements Runnable {
     */
     logger.info("[BackupIntegrityMonitor] Shutting down BackupIntegrityMonitor");
     Utils.shutDownExecutorService(executor, 10, TimeUnit.SECONDS);
-    logger.info("[BackupIntegrityMonitor] Stopped BackupIntegrityMonitor");
+    logger.info("[BackupIntegrityMonitor] Shut down  BackupIntegrityMonitor");
   }
 
   private BlobStore startLocalStore(AmbryPartition partition) throws Exception {
@@ -128,19 +128,19 @@ public class BackupIntegrityMonitor implements Runnable {
     AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, (AmbryPartition) partition, ambryDisk,
         true, maxReplicaSize, ReplicaSealStatus.NOT_SEALED);
     if (!(storageManager.addBlobStore(localReplica) && storageManager.startBlobStore(partition))) {
-      throw new RuntimeException(String.format("Failed to add Store for %s", partition.getId()));
+      throw new RuntimeException(String.format("Failed to add/start Store for %s", partition.getId()));
     }
     Store store = storageManager.getStore(partition, true);
-    logger.info("[BackupIntegrityMonitor] Added Store {}", store.toString());
+    logger.info("[BackupIntegrityMonitor] Started Store {}", store.toString());
     return (BlobStore) store;
   }
 
   private boolean stopLocalStore(AmbryPartition partition) throws IOException, StoreException {
     Store store = storageManager.getStore(partition, true);
     if (!(storageManager.shutdownBlobStore(partition) && storageManager.removeBlobStore(partition))) {
-      throw new RuntimeException(String.format("Failed to remove Store %s", store));
+      throw new RuntimeException(String.format("Failed to stop/remove Store [%s]", store));
     }
-    logger.info("[BackupIntegrityMonitor] Removed Store {}", store);
+    logger.info("[BackupIntegrityMonitor] Stopped Store [{}]", store);
     return true;
   }
 
@@ -165,12 +165,12 @@ public class BackupIntegrityMonitor implements Runnable {
       BlobStore store = startLocalStore(partition);
 
       /** Restore cloud backup C */
-      logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk {}", partition.getId(), store);
+      logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk [{}]", partition.getId(), store);
       RemoteReplicaInfo cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
       while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) { azureReplicator.replicate();}
       azureReplicator.removeRemoteReplicaInfo(cloudReplica);
-      logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk {}", partition.getId(), store);
+      logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}]", partition.getId(), store);
 
       /** TODO: Replicate from server and compare */
 
