@@ -174,7 +174,7 @@ public class BackupIntegrityMonitor implements Runnable {
       cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
       // TODO: Reload tokens
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
-      RecoveryToken token = (RecoveryToken) cloudReplica.getToken()
+      RecoveryToken token = (RecoveryToken) cloudReplica.getToken();
       while (!token.isEndOfPartition()) {
         azureReplicator.replicate();
         long numBlobs = token.getNumBlobs();
