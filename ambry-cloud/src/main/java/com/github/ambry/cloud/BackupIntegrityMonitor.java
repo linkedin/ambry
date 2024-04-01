@@ -58,7 +58,7 @@ public class BackupIntegrityMonitor implements Runnable {
   private final ReplicationManager serverReplicationManager;
   private final ScheduledExecutorService executor;
   private final StorageManager storageManager;
-
+  public final int RECOVERY_MILESTONE = 1000;
   public BackupIntegrityMonitor(RecoveryManager azure, ReplicationManager server,
       CompositeClusterManager cluster, StorageManager storage, DataNodeId node,
       VerifiableProperties properties) {
@@ -174,8 +174,14 @@ public class BackupIntegrityMonitor implements Runnable {
       cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
       // TODO: Reload tokens
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
-      while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) {
+      RecoveryToken token = (RecoveryToken) cloudReplica.getToken()
+      while (!token.isEndOfPartition()) {
         azureReplicator.replicate();
+        long numBlobs = token.getNumBlobs();
+        if (numBlobs % RECOVERY_MILESTONE == 0) {
+          // Print progress every N blobs
+          logger.info("Recovered {} blobs of partition-{} from Azure Storage", numBlobs, partition.getId());
+        }
       }
       logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}]", partition.getId(), store);
 
