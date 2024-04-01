@@ -42,9 +42,19 @@ public class CompositeClusterManager implements ClusterMap {
   final HelixClusterManager helixClusterManager;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
   final boolean check;
+
+  /**
+   * Returns the helix cluster manager
+   * @return HelixClusterManager
+   */
   public HelixClusterManager getHelixClusterManager() {
     return helixClusterManager;
   }
+
+  /**
+   * Returns the static cluster manager
+   * @return StaticClusterManager
+   */
   public StaticClusterManager getStaticClusterManager() {
     return staticClusterManager;
   }
