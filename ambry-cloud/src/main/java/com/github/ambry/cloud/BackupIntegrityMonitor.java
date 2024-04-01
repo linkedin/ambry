@@ -114,6 +114,7 @@ public class BackupIntegrityMonitor implements Runnable {
         .max(Long::compare)
         .get();
     // TODO: Handle disk full or unavailable
+    // TODO: Clear off other partitions on the disk
     List<DiskId> disks = staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
         .getDiskIds().stream()
         .filter(d -> d.getState() == HardwareState.AVAILABLE)
@@ -123,7 +124,7 @@ public class BackupIntegrityMonitor implements Runnable {
     DiskId disk = disks.get(new Random().nextInt(disks.size()));
     // Convert Disk object to AmbryDisk object, static-map -> helix-map
     AmbryDisk ambryDisk = new AmbryDisk((Disk) disk, clusterMapConfig);
-    AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, (AmbryPartition) partition, ambryDisk,
+    AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, partition, ambryDisk,
         true, maxReplicaSize, ReplicaSealStatus.NOT_SEALED);
     if (!(storageManager.addBlobStore(localReplica) && storageManager.startBlobStore(partition))) {
       throw new RuntimeException(String.format("Failed to add/start Store for %s", partition.getId()));
@@ -160,6 +161,7 @@ public class BackupIntegrityMonitor implements Runnable {
       // 4. while(!done) { BackupCheckerThread::replicate(R) } - copy metadata from R, compare with metadata in D
 
       /** Select partition P */
+      // TODO: Don't pick the same partition twice
       List<PartitionId> partitions = helixClusterManager.getAllPartitionIds(null);
       partition = (AmbryPartition) partitions.get(new Random().nextInt(partitions.size()));
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
@@ -170,6 +172,7 @@ public class BackupIntegrityMonitor implements Runnable {
       /** Restore cloud backup C */
       logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk [{}]", partition.getId(), store);
       cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
+      // TODO: Reload tokens
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
       while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) { azureReplicator.replicate(); }
       logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}]", partition.getId(), store);
