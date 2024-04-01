@@ -126,8 +126,8 @@ public class BackupIntegrityMonitor implements Runnable {
     AmbryDisk ambryDisk = new AmbryDisk((Disk) disk, clusterMapConfig);
     AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, partition, ambryDisk,
         true, maxReplicaSize, ReplicaSealStatus.NOT_SEALED);
-    if (!(storageManager.addBlobStore(localReplica) && storageManager.startBlobStore(partition))) {
-      throw new RuntimeException(String.format("Failed to add/start Store for %s", partition.getId()));
+    if (!storageManager.addBlobStore(localReplica)) {
+      throw new RuntimeException(String.format("Failed to start Store for %s", partition.getId()));
     }
     Store store = storageManager.getStore(partition, true);
     logger.info("[BackupIntegrityMonitor] Started Store {}", store.toString());
@@ -141,7 +141,7 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.info("[BackupIntegrityMonitor] Stopped Store [{}]", store);
       return ret;
     } catch (Throwable e) {
-      logger.error(String.format("Failed to stop/remove Store [%s]", store));
+      logger.error(String.format("Failed to stop Store [%s]", store));
       return false;
     }
   }
