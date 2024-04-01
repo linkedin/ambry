@@ -448,7 +448,7 @@ public class AccountAndContainerInjector {
         frontendMetrics.unrecognizedDatasetNameCount.inc();
         logger.error(
             "Dataset get failed for accountName " + accountName + " containerName " + containerName + " datasetName "
-                + datasetName, e);
+                + datasetName);
         throw new RestServiceException(e.getMessage(), RestServiceErrorCode.getRestServiceErrorCode(e.getErrorCode()));
       }
     }
