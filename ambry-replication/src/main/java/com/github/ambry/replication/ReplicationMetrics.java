@@ -635,7 +635,9 @@ public class ReplicationMetrics {
     String localStoreErrorMetricName =
         remoteReplica.getDataNodeId().getHostname() + "-" + remoteReplica.getDataNodeId().getPort() + "-"
             + remoteReplica.getPartitionId().toString() + "-localStoreError";
-    localStoreErrorMap.get(localStoreErrorMetricName).inc();
+    if (localStoreErrorMap.containsKey(localStoreErrorMetricName)) {
+      localStoreErrorMap.get(localStoreErrorMetricName).inc();
+    }
   }
 
   public void incrementReplicationErrors(boolean sslEnabled) {
