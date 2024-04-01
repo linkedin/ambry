@@ -74,8 +74,6 @@ public class AmbryServerDataNode extends AmbryDataNode {
     sslEnabledDataCenters = Utils.splitString(config.clusterMapSslEnabledDatacenters, ",");
     enableHttp2Replication = config.clusterMapEnableHttp2Replication;
     clusterManagerQueryHelper = null;
-    validateHostName(config.clusterMapResolveHostnames, getHostname());
-    validatePorts(plainTextPort, sslPort, http2Port, sslEnabledDataCenters.contains(getDatacenterName()));
   }
 
   @Override

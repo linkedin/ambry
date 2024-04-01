@@ -75,8 +75,8 @@ public class BackupIntegrityMonitor implements Runnable {
     // log disk state
     staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
         .getDiskIds()
-        .forEach(d -> logger.info("[BackupIntegrityMonitor] Disk = {} {} {} bytes", d.getMountPath(), d.getState(),
-            d.getRawCapacityInBytes()));
+        .forEach(d -> logger.info("[BackupIntegrityMonitor] Disk = {} {} {} bytes",
+            d.getMountPath(), d.getState(), d.getRawCapacityInBytes()));
     logger.info("[BackupIntegrityMonitor] Created BackupIntegrityMonitor");
   }
 
