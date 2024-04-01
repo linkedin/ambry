@@ -61,7 +61,7 @@ import static com.github.ambry.clustermap.StateTransitionException.TransitionErr
  */
 public class HelixParticipant implements ClusterParticipant, PartitionStateChangeListener {
   public static final String DISK_KEY = "DISK";
-  protected final HelixParticipantMetrics participantMetrics;
+  final HelixParticipantMetrics participantMetrics;
   private final HelixClusterManager clusterManager;
   private final String clusterName;
   private final String zkConnectStr;
@@ -508,6 +508,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
           capacityMap.put(DISK_KEY, diskCapacity);
           instanceConfig.setInstanceCapacityMap(capacityMap);
           helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+          participantMetrics.updateDiskCapacityCounter.inc();
         }
         success = true;
       } catch (Exception e) {

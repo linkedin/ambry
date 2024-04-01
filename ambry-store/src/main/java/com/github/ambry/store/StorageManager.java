@@ -398,9 +398,15 @@ public class StorageManager implements StoreManager {
     return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
   }
 
+  /**
+   * Return the disk capacity for healthy disks. This capacity is the sum of all healthy disks. The unit
+   * is GiB. This disk capacity is the value to report in instance config.
+   * @param allDiskIds All the disks on data node config
+   * @param failedDiskIds The failed disks
+   * @return The disk capacity.
+   */
   int getCapacityOfHealthyDisks(List<DiskId> allDiskIds, Collection<DiskId> failedDiskIds) {
     int capacityReportingPercentage = storeConfig.storeDiskCapacityReportingPercentage;
-    // Update disk capacity
     long healthyDiskCapacity = allDiskIds.stream()
         .filter(((Predicate<DiskId>) failedDiskIds::contains).negate())
         .mapToLong(DiskId::getRawCapacityInBytes)
