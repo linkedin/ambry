@@ -465,7 +465,7 @@ public class CloudConfig {
   public static final double DEFAULT_BACKUP_NODE_CPU_SCALE = -1; // 1 thread
   // num_cpu-1 threads, prevent a fork bomb
   public static final double MIN_BACKUP_NODE_CPU_SCALE = 1 - Double.valueOf(Runtime.getRuntime().availableProcessors());
-  public static final double MAX_BACKUP_NODE_CPU_SCALE = 4.0; // 4 * num_cpus, prevent a fork bomb
+  public static final double MAX_BACKUP_NODE_CPU_SCALE = 16.0; // 16 * num_cpus, this is max, not actual config value
   @Config(BACKUP_NODE_CPU_SCALE)
   public final double backupNodeCpuScale;
 
