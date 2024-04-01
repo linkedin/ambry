@@ -174,7 +174,9 @@ public class BackupIntegrityMonitor implements Runnable {
       cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
       // TODO: Reload tokens
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
-      while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) { azureReplicator.replicate(); }
+      while (!((RecoveryToken) cloudReplica.getToken()).isEndOfPartition()) {
+        azureReplicator.replicate();
+      }
       logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}]", partition.getId(), store);
 
       /** TODO: Replicate from server and compare */
@@ -185,8 +187,12 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.error("[BackupIntegrityMonitor] Failed to verify backup partition-{} due to {}", partition.getId(),
           e.getMessage());
     } finally {
-      if (cloudReplica != null) { azureReplicator.removeRemoteReplicaInfo(cloudReplica); }
-      if (partition != null) { stopLocalStore(partition); }
+      if (cloudReplica != null) {
+        azureReplicator.removeRemoteReplicaInfo(cloudReplica);
+      }
+      if (partition != null) {
+        stopLocalStore(partition);
+      }
     }
   }
 }
