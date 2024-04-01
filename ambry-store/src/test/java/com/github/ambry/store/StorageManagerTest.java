@@ -1140,7 +1140,7 @@ public class StorageManagerTest {
     storageManager.shutdown();
 
     // Now enable the feature to remove directory and restart blob store
-    generateConfigs(true, false, false, 2, true);
+    generateConfigs(true, false, false, 2, true, false);
     storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
 
@@ -1159,7 +1159,7 @@ public class StorageManagerTest {
     List<ReplicaId> badReplicas =
         replicas.stream().filter(r -> r.getMountPath().equals(badDiskMountPath)).collect(Collectors.toList());
 
-    generateConfigs(true, false, false, 2, true);
+    generateConfigs(true, false, false, 2, true, false);
     StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     storageManager.shutdown();
@@ -1192,7 +1192,7 @@ public class StorageManagerTest {
 
   @Test
   public void storeRemoveDirectoryAndRestartTestWithStoppedReplica() throws Exception {
-    generateConfigs(true, false, false, 2, true);
+    generateConfigs(true, false, false, 2, true, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
 
@@ -1213,7 +1213,7 @@ public class StorageManagerTest {
 
   @Test
   public void storeRemoveDirectoryAndRestartTestWithOtherError() throws Exception {
-    generateConfigs(true, false, false, 2, true);
+    generateConfigs(true, false, false, 2, true, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
 
@@ -1398,7 +1398,7 @@ public class StorageManagerTest {
    */
   @Test
   public void unrecognizedDirsRemovalTest() throws Exception {
-    generateConfigs(true, false, true, 2, false);
+    generateConfigs(true, false, true, 2, false, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     try {
@@ -1551,7 +1551,7 @@ public class StorageManagerTest {
    */
   @Test
   public void replicaFromOfflineToBootstrapFailureRetryWithDiskSpaceRequirementTest() throws Exception {
-    generateConfigs(true, false, false, 4, false);
+    generateConfigs(true, false, false, 4, false, false);
     MockClusterMap spyClusterMap = spy(clusterMap);
     MockDataNodeId localNode = spyClusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = spyClusterMap.getReplicaIds(localNode);
@@ -1640,6 +1640,7 @@ public class StorageManagerTest {
     try {
       List<? extends ReplicaId> replicas = clusterMap.getReplicaIds(localNode);
       Map<DiskId, List<ReplicaId>> diskToReplicas = clusterHelper.getDiskToReplicaMap();
+      clusterHelper.createAllMountPaths();
       StorageManager storageManager =
           new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
               new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
@@ -1727,7 +1728,6 @@ public class StorageManagerTest {
     String clusterName = clusterHelper.clusterName;
 
     try {
-      List<? extends ReplicaId> replicas = clusterMap.getReplicaIds(localNode);
       Map<DiskId, List<ReplicaId>> diskToReplicas = clusterHelper.getDiskToReplicaMap();
 
       StorageManager storageManager =
@@ -1804,22 +1804,126 @@ public class StorageManagerTest {
     }
   }
 
+  /**
+   * Test the case when the disk is fixed and we restore the disk's availability
+   * @throws Exception
+   */
+  @Test
+  public void testRestoreDiskAvailability() throws Exception {
+    ClusterSetupHelper clusterHelper = new ClusterSetupHelper();
+    clusterHelper.setupCluster();
+    clusterHelper.createAllMountPaths();
+    clusterHelper.turnFullAutoOnForLocalhost();
+
+    HelixClusterManager clusterMap = clusterHelper.clusterMap;
+    HelixParticipant helixParticipant = clusterHelper.helixParticipant;
+    HelixAdmin helixAdmin = clusterHelper.helixAdmin;
+    DataNodeId localNode = clusterHelper.localNode;
+    String clusterName = clusterHelper.clusterName;
+    String instanceName = clusterHelper.instanceName;
+
+    try {
+      List<DiskId> allDisks = new ArrayList<>(clusterHelper.getDiskToReplicaMap().keySet());
+      // 1. Start storage manager without restoring disk availability, it will not update the disk capacity
+      StorageManager storageManager =
+          new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+              new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+              Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+              new InMemAccountService(false, false));
+      // Start the storage manager, it will create all the replicas' directories
+      storageManager.start();
+      storageManager.shutdown();
+
+      int instanceCapacity = storageManager.getCapacityOfHealthyDisks(allDisks, Collections.emptyList());
+      InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertFalse(instanceConfig.getInstanceCapacityMap().containsKey("DISK"));
+
+      // 2. Start storage manager with restoring disk availability, it will update disk capacity
+      generateConfigs(true, true, false, 2, true, true);
+      storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+          new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+          Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+          new InMemAccountService(false, false));
+      storageManager.start();
+      storageManager.shutdown();
+      instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertTrue(instanceConfig.getInstanceCapacityMap().containsKey("DISK"));
+      assertEquals(instanceCapacity, instanceConfig.getInstanceCapacityMap().get("DISK").intValue());
+
+      // 3. Mark a disk as unavailable and then restore the disk's availability
+      DiskId badDiskId = allDisks.get(0);
+      helixParticipant.setDisksState(Collections.singletonList(badDiskId), HardwareState.UNAVAILABLE);
+
+      int instanceCapacityWithBadDisk =
+          storageManager.getCapacityOfHealthyDisks(allDisks, Collections.singletonList(badDiskId));
+      helixParticipant.updateDiskCapacity(instanceCapacityWithBadDisk);
+      instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertEquals(instanceCapacityWithBadDisk, instanceConfig.getInstanceCapacityMap().get("DISK").intValue());
+      // Delete mount path for bad disk so it can't be recovered
+      Utils.deleteFileOrDirectory(new File(badDiskId.getMountPath()));
+      storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+          new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+          Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+          new InMemAccountService(false, false));
+      storageManager.start();
+      storageManager.shutdown();
+      instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertEquals(instanceCapacityWithBadDisk, instanceConfig.getInstanceCapacityMap().get("DISK").intValue());
+      for (DiskId diskId : clusterHelper.getDiskToReplicaMap().keySet()) {
+        if (diskId.getMountPath().equals(badDiskId.getMountPath())) {
+          // this is the bad disk, it should still be available
+          assertEquals(HardwareState.UNAVAILABLE, diskId.getState());
+          break;
+        }
+      }
+
+      // 4. Recreate the mount path, this would bring back the bad disk
+      File file = new File(badDiskId.getMountPath());
+      assertTrue(file.mkdirs());
+      file.deleteOnExit();
+      storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+          new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+          Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+          new InMemAccountService(false, false));
+      storageManager.start();
+      storageManager.shutdown();
+      instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertEquals(instanceCapacity, instanceConfig.getInstanceCapacityMap().get("DISK").intValue());
+      for (DiskId diskId : clusterHelper.getDiskToReplicaMap().keySet()) {
+        if (diskId.getMountPath().equals(badDiskId.getMountPath())) {
+          // this is the bad disk, it should still be available
+          assertEquals(HardwareState.AVAILABLE, diskId.getState());
+          break;
+        }
+      }
+    } finally {
+      clusterHelper.shutdownCluster();
+    }
+  }
+
   // helpers
 
+  /**
+   * A helper class to setup a real cluster that has real connections to zookeeper and helix.
+   */
   class ClusterSetupHelper {
-    public String tempDirPath;
-    public String clusterName;
-    public String dcName;
-    public String instanceName;
-    public HelixParticipant helixParticipant;
-    public HelixAdmin helixAdmin;
-    public HelixClusterManager clusterMap;
-    public DataNodeId localNode;
+    String tempDirPath;
+    String clusterName;
+    String dcName;
+    String instanceName;
+    HelixParticipant helixParticipant;
+    HelixAdmin helixAdmin;
+    HelixClusterManager clusterMap;
+    DataNodeId localNode;
 
     private List<ZkInfo> zkInfoList = new ArrayList<>();
     private String oldBaseMountPath = TestHardwareLayout.baseMountPath;
     private long oldMinCapacity = MIN_REPLICA_CAPACITY_IN_BYTES;
 
+    /**
+     * Setup the cluster.
+     * @throws Exception
+     */
     public void setupCluster() throws Exception {
       tempDirPath = getTempDir("StorageManagerTest-");
       clusterName = "StorageManagerTestCluster";
@@ -1875,6 +1979,9 @@ public class StorageManagerTest {
       createAllMountPaths();
     }
 
+    /**
+     * Create the mount path directories for the local host
+     */
     private void createAllMountPaths() {
       for (DiskId diskId : getDiskToReplicaMap().keySet()) {
         File file = new File(diskId.getMountPath());
@@ -1885,6 +1992,10 @@ public class StorageManagerTest {
       }
     }
 
+    /**
+     * Get the disk to replica map for the local host
+     * @return
+     */
     public Map<DiskId, List<ReplicaId>> getDiskToReplicaMap() {
       List<? extends ReplicaId> replicas = clusterMap.getReplicaIds(localNode);
       Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
@@ -1894,6 +2005,10 @@ public class StorageManagerTest {
       return diskToReplicas;
     }
 
+    /**
+     * Turn FULL AUTO on for the local host
+     * @throws Exception
+     */
     public void turnFullAutoOnForLocalhost() throws Exception {
       // Turn FULL_AUTO on this host
       String resourceName = helixAdmin.getResourcesInCluster(clusterName).get(0);
@@ -1909,6 +2024,9 @@ public class StorageManagerTest {
       assertTrue(clusterMap.isDataNodeInFullAutoMode(localNode));
     }
 
+    /**
+     * Shut down the cluster
+     */
     public void shutdownCluster() {
       TestHardwareLayout.baseMountPath = oldBaseMountPath;
       MIN_REPLICA_CAPACITY_IN_BYTES = oldMinCapacity;
@@ -2094,9 +2212,10 @@ public class StorageManagerTest {
    * @param removeUnexpectedDirs {@code true} to remove unexpectedd directories when current node is in FULL AUTO
    * @param numSegment the number of log segment files to create
    * @parem removeDirectoryAndRestart {@code true} to remove directory of a blob store and restart it when it failes to start
+   * @param restoreDiskAvailability {@code true} to restore disk's availability when unavailable disk is fixed.
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig, boolean removeUnexpectedDirs,
-      int numSegment, boolean removeDirectoryAndRestart) {
+      int numSegment, boolean removeDirectoryAndRestart, boolean restoreDiskAvailability) {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -2121,6 +2240,8 @@ public class StorageManagerTest {
     }
     properties.setProperty(StoreConfig.storeRemoveDirectoryAndRestartBlobStoreName,
         String.valueOf(removeDirectoryAndRestart));
+    properties.setProperty(StoreConfig.storeRestoreUnavailableDiskInFullAutoName,
+        String.valueOf(restoreDiskAvailability));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
@@ -2133,7 +2254,7 @@ public class StorageManagerTest {
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) {
-    generateConfigs(segmentedLog, updateInstanceConfig, false, 2, false);
+    generateConfigs(segmentedLog, updateInstanceConfig, false, 2, false, false);
   }
 
   // unrecognizedDirsOnDiskTest() helpers

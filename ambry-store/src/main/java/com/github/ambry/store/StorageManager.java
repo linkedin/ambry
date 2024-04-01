@@ -278,15 +278,17 @@ public class StorageManager implements StoreManager {
           disksToRecover.add(diskId);
         }
       }
-      // We can set the disk available again
-      if (!primaryClusterParticipant.setDisksState(disksToRecover, HardwareState.AVAILABLE)) {
-        logger.error("Fail to restore availability for disk " + disksToRecover + ", ignore the error and move on");
-        return failedDiskIds;
-      } else {
-        logger.info("Successfully restore availability for disk " + disksToRecover);
+      if (!disksToRecover.isEmpty()) {
+        // We can set the disk available again
+        if (!primaryClusterParticipant.setDisksState(disksToRecover, HardwareState.AVAILABLE)) {
+          logger.error("Fail to restore availability for disk " + disksToRecover + ", ignore the error and move on");
+          return failedDiskIds;
+        } else {
+          logger.info("Successfully restore availability for disk " + disksToRecover);
+        }
+        disksToRecover.forEach(diskId -> diskId.setState(HardwareState.AVAILABLE));
+        failedDiskIds.removeAll(disksToRecover);
       }
-      disksToRecover.forEach(diskId -> diskId.setState(HardwareState.AVAILABLE));
-      failedDiskIds.removeAll(disksToRecover);
     }
 
     int actualCapacityInGB = getCapacityOfHealthyDisks(allDiskIds, failedDiskIds);
@@ -405,7 +407,7 @@ public class StorageManager implements StoreManager {
    * @param failedDiskIds The failed disks
    * @return The disk capacity.
    */
-  int getCapacityOfHealthyDisks(List<DiskId> allDiskIds, Collection<DiskId> failedDiskIds) {
+  int getCapacityOfHealthyDisks(Collection<DiskId> allDiskIds, Collection<DiskId> failedDiskIds) {
     int capacityReportingPercentage = storeConfig.storeDiskCapacityReportingPercentage;
     long healthyDiskCapacity = allDiskIds.stream()
         .filter(((Predicate<DiskId>) failedDiskIds::contains).negate())
