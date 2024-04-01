@@ -61,7 +61,7 @@ public class BackupIntegrityMonitor implements Runnable {
 
   public BackupIntegrityMonitor(RecoveryManager azure, ReplicationManager server,
       CompositeClusterManager cluster, StorageManager storage, DataNodeId node,
-      VerifiableProperties properties) throws Exception {
+      VerifiableProperties properties) {
     azureReplicationManager = azure;
     azureReplicator = azure.getRecoveryThread("ambry_backup_integrity_monitor");
     clusterMapConfig = new ClusterMapConfig(properties);
