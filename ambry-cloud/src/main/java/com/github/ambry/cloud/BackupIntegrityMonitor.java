@@ -180,8 +180,8 @@ public class BackupIntegrityMonitor implements Runnable {
         long numBlobs = token.getNumBlobs();
         if (numBlobs > 0 && (numBlobs % RECOVERY_MILESTONE == 0)) {
           // Print progress every N blobs
-          logger.info("Recovered {} blobs {} bytes of partition-{} from Azure Storage", numBlobs, token.getBytesRead(),
-              partition.getId());
+          logger.info("[BackupIntegrityMonitor] Recovered {} blobs {} bytes of partition-{} from Azure Storage",
+              numBlobs, token.getBytesRead(), partition.getId());
         }
       }
       logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}]", partition.getId(), store);
