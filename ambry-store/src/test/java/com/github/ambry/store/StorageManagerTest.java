@@ -82,8 +82,10 @@ import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONObject;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -109,6 +111,23 @@ public class StorageManagerTest {
   private StoreConfig storeConfig;
   private MockClusterMap clusterMap;
   private MetricRegistry metricRegistry;
+
+  private static String tempDirPath;
+  private static String dcName;
+  private static List<ZkInfo> zkInfoList = new ArrayList<>();
+
+  @BeforeClass
+  public static void setupZookeeperServer() throws Exception {
+    tempDirPath = getTempDir("StorageManagerTest-");
+    dcName = "DC0";
+    zkInfoList.add(new ZkInfo(tempDirPath, dcName, (byte) 0, 3199, true));
+  }
+
+  @AfterClass
+  public static void shutdownZookeeperServer() throws Exception {
+    zkInfoList.get(0).shutdown();
+    Utils.deleteFileOrDirectory(new File(tempDirPath));
+  }
 
   /**
    * Startup the {@link MockClusterMap} for a test.
@@ -1907,16 +1926,13 @@ public class StorageManagerTest {
    * A helper class to setup a real cluster that has real connections to zookeeper and helix.
    */
   class ClusterSetupHelper {
-    String tempDirPath;
     String clusterName;
-    String dcName;
     String instanceName;
     HelixParticipant helixParticipant;
     HelixAdmin helixAdmin;
     HelixClusterManager clusterMap;
     DataNodeId localNode;
 
-    private List<ZkInfo> zkInfoList = new ArrayList<>();
     private String oldBaseMountPath = TestHardwareLayout.baseMountPath;
     private long oldMinCapacity = MIN_REPLICA_CAPACITY_IN_BYTES;
 
@@ -1925,10 +1941,7 @@ public class StorageManagerTest {
      * @throws Exception
      */
     public void setupCluster() throws Exception {
-      tempDirPath = getTempDir("StorageManagerTest-");
-      clusterName = "StorageManagerTestCluster";
-      dcName = "DC0";
-      zkInfoList.add(new ZkInfo(tempDirPath, dcName, (byte) 0, 2199, true));
+      clusterName = "StorageManagerTestCluster-" + TestUtils.getRandomString(5);
       String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
       String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
       String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
@@ -2031,13 +2044,9 @@ public class StorageManagerTest {
       TestHardwareLayout.baseMountPath = oldBaseMountPath;
       MIN_REPLICA_CAPACITY_IN_BYTES = oldMinCapacity;
       try {
-        Utils.deleteFileOrDirectory(new File(tempDirPath));
         clusterMap.close();
         helixParticipant.close();
         helixAdmin.dropCluster(clusterName);
-        for (ZkInfo zkInfo : zkInfoList) {
-          zkInfo.shutdown();
-        }
       } catch (Exception e) {
         System.out.println("Fail to clean up all the components:" + e.getMessage());
       }
