@@ -268,7 +268,7 @@ public class StorageManager implements StoreManager {
     if (!storeConfig.storeRestoreUnavailableDiskInFullAuto || !clusterMap.isDataNodeInFullAutoMode(currentNode)) {
       return failedDiskIds;
     }
-    // We should try to retore the availability of failed disks
+    // We should try to restore the availability of failed disks
     if (!failedDiskIds.isEmpty()) {
       List<DiskId> disksToRecover = new ArrayList<>();
       for (DiskId diskId : failedDiskIds) {
