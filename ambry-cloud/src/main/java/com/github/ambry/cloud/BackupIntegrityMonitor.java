@@ -56,7 +56,7 @@ public class BackupIntegrityMonitor implements Runnable {
   private final DataNodeId nodeId;
   private final RecoveryManager azureReplicationManager;
   private final RecoveryThread azureReplicator;
-  private final ReplicaThread serverReplicaComparator;
+  private final ReplicaThread serverScanner;
   private final ReplicationManager serverReplicationManager;
   private final ScheduledExecutorService executor;
   private final StorageManager storageManager;
@@ -76,7 +76,7 @@ public class BackupIntegrityMonitor implements Runnable {
     executor = Utils.newScheduler(1, "ambry_backup_integrity_monitor_", true);
     nodeId = node;
     serverReplicationManager = server;
-    serverReplicaComparator = server.getBackupCheckerThread("ambry_backup_integrity_monitor");
+    serverScanner = server.getBackupCheckerThread("ambry_backup_integrity_monitor");
     storageManager = storage;
     // log disk state
     staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
@@ -160,6 +160,7 @@ public class BackupIntegrityMonitor implements Runnable {
   public void run() {
     RemoteReplicaInfo cloudReplica = null;
     AmbryPartition partition = null;
+    RemoteReplicaInfo serverReplica = null;
     try {
       // 1. Pick a partition P, replica R from helix cluster-map
       // 2. Pick a disk D using static cluster-map
@@ -196,26 +197,24 @@ public class BackupIntegrityMonitor implements Runnable {
       /** Replicate from server and compare */
       List<AmbryReplica> replicas = partition.getReplicaIds();
       AmbryReplica replica = replicas.get(random.nextInt(replicas.size()));
-      RemoteReplicaInfo serverReplica = serverReplicationManager.createRemoteReplicaInfos(
+      serverReplica = serverReplicationManager.createRemoteReplicaInfos(
           Collections.singletonList(replica), store.getReplicaId()).get(0);
-      serverReplicaComparator.addRemoteReplicaInfo(serverReplica);
+      serverScanner.addRemoteReplicaInfo(serverReplica);
       long replicaSize = replica.getCapacityInBytes();
-      long replicaBytesRead = serverReplica.getToken().getBytesRead();
+      long scannedBytes = serverReplica.getToken().getBytesRead();
       long scannerMilestone = SERVER_SCANNER_MILESTONE;
       logger.info("[BackupIntegrityMonitor] Scanning partition-{} from replica [{}]", partition.getId(), replica);
-      while (replicaBytesRead < (replicaSize * SERVER_SCANNER_END_GOAL)) {
-        serverReplicaComparator.replicate();
-        replicaBytesRead = serverReplica.getToken().getBytesRead();
-        if (replicaBytesRead > scannerMilestone) {
+      while (scannedBytes < (replicaSize * SERVER_SCANNER_END_GOAL)) {
+        serverScanner.replicate();
+        scannedBytes = serverReplica.getToken().getBytesRead();
+        if (scannedBytes > scannerMilestone) {
           // Print progress every N bytes
           logger.info("[BackupIntegrityMonitor] Scanned {} out of {} bytes ({} %) from replica {}",
-              replicaBytesRead, replicaSize, 100 * (replicaBytesRead/replicaSize), replica);
+              scannedBytes, replicaSize, 100 * (scannedBytes/replicaSize), replica);
           scannerMilestone += SERVER_SCANNER_MILESTONE;
         }
       }
-      logger.info("[BackupIntegrityMonitor] Scanned partition-{} from replica [{}]", partition.getId(), replica);
-
-      logger.info("[BackupIntegrityMonitor] Verified backup partition-{}", partition.getId());
+      logger.info("[BackupIntegrityMonitor] Verified backup partition-{} against replica {}", partition.getId(), replica);
     } catch (Throwable e) {
       // TODO: latency metrics, errors
       logger.error("[BackupIntegrityMonitor] Failed to verify backup partition-{} due to {}", partition.getId(),
@@ -223,6 +222,9 @@ public class BackupIntegrityMonitor implements Runnable {
     } finally {
       if (cloudReplica != null) {
         azureReplicator.removeRemoteReplicaInfo(cloudReplica);
+      }
+      if (serverReplica != null) {
+        serverScanner.removeRemoteReplicaInfo(serverReplica);
       }
       if (partition != null) {
         stopLocalStore(partition);

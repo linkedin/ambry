@@ -73,12 +73,7 @@ public class BackupCheckerThread extends ReplicaThread {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-    try {
-      fileManager = Utils.getObj(replicationConfig.backupCheckerFileManagerType, replicationConfig, metricRegistry);
-    } catch (ReflectiveOperationException e) {
-      logger.error("Failed to create file manager. ", e.toString());
-      throw new RuntimeException(e);
-    }
+    fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
     this.replicationConfig = replicationConfig;
     logger.info("Created BackupCheckerThread {}", threadName);
   }
