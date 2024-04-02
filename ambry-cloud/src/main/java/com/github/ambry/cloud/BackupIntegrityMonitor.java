@@ -178,7 +178,7 @@ public class BackupIntegrityMonitor implements Runnable {
       while (!token.isEndOfPartition()) {
         azureReplicator.replicate();
         long numBlobs = token.getNumBlobs();
-        if (numBlobs % RECOVERY_MILESTONE == 0) {
+        if (numBlobs > 0 && (numBlobs % RECOVERY_MILESTONE == 0)) {
           // Print progress every N blobs
           logger.info("Recovered {} blobs of partition-{} from Azure Storage", numBlobs, partition.getId());
         }
