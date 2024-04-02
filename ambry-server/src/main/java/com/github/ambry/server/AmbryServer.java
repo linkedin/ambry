@@ -223,16 +223,8 @@ public class AmbryServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
-      CloudConfig cloudConfig = new CloudConfig(properties);
       // verify the configs
       properties.verify();
-
-      logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
-      DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
-      if (nodeId == null) {
-        throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
-            + "is not present in the clustermap. Failing to start the datanode");
-      }
 
       AccountServiceFactory accountServiceFactory =
           Utils.getObj(serverConfig.serverAccountServiceFactory, properties, registry);
@@ -281,6 +273,7 @@ public class AmbryServer {
         CompositeClusterManager compositeClusterManager = (CompositeClusterManager) clusterMap;
         HelixClusterManager helixClusterManager = compositeClusterManager.getHelixClusterManager();
         StaticClusterManager staticClusterManager = compositeClusterManager.getStaticClusterManager();
+        DataNodeId nodeId = staticClusterManager.getDataNodeId(networkConfig.hostName, networkConfig.port);
         // Store key factory is instantiated in two places : here and in internal fork. Careful!
         StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, helixClusterManager);
         scheduler = Utils.newScheduler(1, true);
@@ -312,6 +305,12 @@ public class AmbryServer {
       } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE)) {
         logger.info("Server execution mode is DATA_SERVING_MODE");
         scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
+        logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
+        DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        if (nodeId == null) {
+          throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
+              + "is not present in the clustermap. Failing to start the datanode");
+        }
         StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
         FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
         // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
