@@ -19,11 +19,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,11 +36,28 @@ import org.slf4j.LoggerFactory;
  * instance and uses the {@link StaticClusterManager} as the source-of-truth. It relays events to both and checks for
  * and reports inconsistencies in the views from the two underlying cluster managers.
  */
-class CompositeClusterManager implements ClusterMap {
+public class CompositeClusterManager implements ClusterMap {
   private static final Logger logger = LoggerFactory.getLogger(CompositeClusterManager.class);
   final StaticClusterManager staticClusterManager;
   final HelixClusterManager helixClusterManager;
   final HelixClusterManagerMetrics helixClusterManagerMetrics;
+  final boolean check;
+
+  /**
+   * Returns the helix cluster manager
+   * @return HelixClusterManager
+   */
+  public HelixClusterManager getHelixClusterManager() {
+    return helixClusterManager;
+  }
+
+  /**
+   * Returns the static cluster manager
+   * @return StaticClusterManager
+   */
+  public StaticClusterManager getStaticClusterManager() {
+    return staticClusterManager;
+  }
 
   /**
    * Construct a CompositeClusterManager instance.
@@ -46,36 +65,32 @@ class CompositeClusterManager implements ClusterMap {
    * @param helixClusterManager the {@link HelixClusterManager} instance to use for comparison of views.
    */
   CompositeClusterManager(StaticClusterManager staticClusterManager, HelixClusterManager helixClusterManager) {
-    if (helixClusterManager != null
-        && staticClusterManager.getLocalDatacenterId() != helixClusterManager.getLocalDatacenterId()) {
+    this.staticClusterManager = Objects.requireNonNull(staticClusterManager, "staticClusterManager is required");
+    this.helixClusterManager = Objects.requireNonNull(helixClusterManager, "helixClusterManager is required");
+    this.helixClusterManagerMetrics = helixClusterManager.helixClusterManagerMetrics;
+    check = false;
+    if (staticClusterManager.getLocalDatacenterId() != helixClusterManager.getLocalDatacenterId()) {
       throw new IllegalStateException(
           "Datacenter ID in the static cluster map [" + staticClusterManager.getLocalDatacenterId()
               + "] does not match the one in helix [" + helixClusterManager.getLocalDatacenterId() + "]");
     }
-    this.staticClusterManager = staticClusterManager;
-    this.helixClusterManager = helixClusterManager;
-    this.helixClusterManagerMetrics =
-        helixClusterManager != null ? helixClusterManager.helixClusterManagerMetrics : null;
   }
 
   @Override
   public PartitionId getPartitionIdFromStream(InputStream stream) throws IOException {
     DuplicatingInputStream duplicatingInputStream = new DuplicatingInputStream(stream);
     duplicatingInputStream.mark(0);
-    PartitionId partitionIdStatic = staticClusterManager.getPartitionIdFromStream(duplicatingInputStream);
-    if (helixClusterManager != null) {
+    PartitionId partitionIdDynamic = null;
+    partitionIdDynamic = helixClusterManager.getPartitionIdFromStream(duplicatingInputStream);;
+    if (check) {
       duplicatingInputStream.reset();
-      try {
-        PartitionId partitionIdDynamic = helixClusterManager.getPartitionIdFromStream(duplicatingInputStream);
-        if (!partitionIdStatic.toString().equals(partitionIdDynamic.toString())) {
-          helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
-        }
-      } catch (IOException e) {
-        logger.warn("HelixClusterManager could not deserialize partition ID that StaticClusterManager could", e);
+      PartitionId partitionIdStatic = staticClusterManager.getPartitionIdFromStream(duplicatingInputStream);
+      if (!partitionIdStatic.toString().equals(partitionIdDynamic.toString())) {
+        logger.debug("Static PartitionId does not match Helix PartitionId");
         helixClusterManagerMetrics.getPartitionIdFromStreamMismatchCount.inc();
       }
     }
-    return partitionIdStatic;
+    return partitionIdDynamic;
   }
 
   @Override
@@ -92,12 +107,12 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public List<PartitionId> getWritablePartitionIds(String partitionClass) {
-    List<PartitionId> staticWritablePartitionIds = staticClusterManager.getWritablePartitionIds(partitionClass);
-    if (helixClusterManager != null) {
-      List<PartitionId> helixWritablePartitionIds = helixClusterManager.getWritablePartitionIds(partitionClass);
-      comparePartitions(staticWritablePartitionIds, helixWritablePartitionIds, "writable");
+    List<PartitionId> helixPartitions = helixClusterManager.getWritablePartitionIds(partitionClass);
+    if (check) {
+      List<PartitionId> staticPartitions = staticClusterManager.getWritablePartitionIds(partitionClass);
+      comparePartitions(staticPartitions, helixPartitions, "writable");
     }
-    return staticWritablePartitionIds;
+    return helixPartitions;
   }
 
   /**
@@ -109,12 +124,12 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public List<PartitionId> getFullyWritablePartitionIds(String partitionClass) {
-    List<PartitionId> staticWritablePartitionIds = staticClusterManager.getFullyWritablePartitionIds(partitionClass);
-    if (helixClusterManager != null) {
-      List<PartitionId> helixWritablePartitionIds = helixClusterManager.getFullyWritablePartitionIds(partitionClass);
-      comparePartitions(staticWritablePartitionIds, helixWritablePartitionIds, "fully writable");
+    List<PartitionId> helixPartitions = helixClusterManager.getFullyWritablePartitionIds(partitionClass);
+    if (check) {
+      List<PartitionId> staticPartitions = staticClusterManager.getFullyWritablePartitionIds(partitionClass);
+      comparePartitions(staticPartitions, helixPartitions, "fully writable");
     }
-    return staticWritablePartitionIds;
+    return helixPartitions;
   }
 
   /**
@@ -188,13 +203,12 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public List<PartitionId> getAllPartitionIds(String partitionClass) {
-    List<PartitionId> staticPartitionIds = staticClusterManager.getAllPartitionIds(partitionClass);
-    if (helixClusterManager != null) {
-      if (!areEqual(staticPartitionIds, helixClusterManager.getAllPartitionIds(partitionClass))) {
-        helixClusterManagerMetrics.getAllPartitionIdsMismatchCount.inc();
-      }
+    List<PartitionId> helixPartitions = helixClusterManager.getAllPartitionIds(partitionClass);
+    if (check) {
+      List<PartitionId> staticPartitions = staticClusterManager.getAllPartitionIds(partitionClass);
+      comparePartitions(staticPartitions, helixPartitions, "fully writable");
     }
-    return staticPartitionIds;
+    return helixPartitions;
   }
 
   /**
@@ -205,14 +219,15 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public boolean hasDatacenter(String datacenterName) {
-    boolean staticHas = staticClusterManager.hasDatacenter(datacenterName);
-    if (helixClusterManager != null) {
-      boolean helixHas = helixClusterManager.hasDatacenter(datacenterName);
+    boolean helixHas = helixClusterManager.hasDatacenter(datacenterName);
+    if (check) {
+      boolean staticHas = staticClusterManager.hasDatacenter(datacenterName);
       if (staticHas != helixHas) {
+        logger.debug("Static DC info does not match Helix DC info");
         helixClusterManagerMetrics.hasDatacenterMismatchCount.inc();
       }
     }
-    return staticHas;
+    return helixHas;
   }
 
   @Override
@@ -222,11 +237,14 @@ class CompositeClusterManager implements ClusterMap {
 
   @Override
   public String getDatacenterName(byte id) {
-    String dcName = staticClusterManager.getDatacenterName(id);
-    if (helixClusterManager != null && !Objects.equals(dcName, helixClusterManager.getDatacenterName(id))) {
-      helixClusterManagerMetrics.getDatacenterNameMismatchCount.inc();
+    String helixDcName = helixClusterManager.getDatacenterName(id);
+    if (check) {
+      if (!helixDcName.equals(staticClusterManager.getDatacenterName(id))) {
+        logger.debug("Static DC name does not match Helix DC name");
+        helixClusterManagerMetrics.getDatacenterNameMismatchCount.inc();
+      }
     }
-    return dcName;
+    return helixDcName;
   }
 
   /**
@@ -242,15 +260,16 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public DataNodeId getDataNodeId(String hostname, int port) {
-    DataNodeId staticDataNode = staticClusterManager.getDataNodeId(hostname, port);
-    if (helixClusterManager != null) {
-      DataNodeId helixDataNode = helixClusterManager.getDataNodeId(hostname, port);
+    DataNodeId helixDataNode = helixClusterManager.getDataNodeId(hostname, port);
+    if (check) {
+      DataNodeId staticDataNode = staticClusterManager.getDataNodeId(hostname, port);
       if (!Objects.equals(staticDataNode != null ? staticDataNode.toString() : null,
           helixDataNode != null ? helixDataNode.toString() : null)) {
+        logger.debug("Static data node does not match Helix data node");
         helixClusterManagerMetrics.getDataNodeIdMismatchCount.inc();
       }
     }
-    return staticDataNode;
+    return helixDataNode;
   }
 
   /**
@@ -264,24 +283,19 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public List<ReplicaId> getReplicaIds(DataNodeId dataNodeId) {
-    List<ReplicaId> staticReplicaIds = staticClusterManager.getReplicaIds(dataNodeId);
-    if (helixClusterManager != null) {
-      Set<String> staticReplicaIdStrings = new HashSet<>();
-      for (ReplicaId replicaId : staticReplicaIds) {
-        staticReplicaIdStrings.add(replicaId.toString());
-      }
-
-      Set<String> helixReplicaIdStrings = new HashSet<>();
-      DataNodeId ambryDataNode = helixClusterManager.getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
-      for (ReplicaId replicaId : helixClusterManager.getReplicaIds(ambryDataNode)) {
-        helixReplicaIdStrings.add(replicaId.toString());
-      }
-
-      if (!staticReplicaIdStrings.equals(helixReplicaIdStrings)) {
+    List<ReplicaId> dynamicReplicaIds = new ArrayList<>();
+    DataNodeId ambryDataNode = helixClusterManager.getDataNodeId(dataNodeId.getHostname(), dataNodeId.getPort());
+    helixClusterManager.getReplicaIds(ambryDataNode).forEach(r -> dynamicReplicaIds.add(r));
+    if (check) {
+      List<ReplicaId> staticReplicaIds = staticClusterManager.getReplicaIds(dataNodeId);
+      String staticStr = String.join(",", staticReplicaIds.stream().map(r -> r.toString()).sorted().collect(Collectors.toList()));
+      String helixStr = String.join(",", dynamicReplicaIds.stream().map(r -> r.toString()).sorted().collect(Collectors.toList()));
+      if (!staticStr.equals(helixStr)) {
+        logger.debug("Static replicas does not match Helix replicas");
         helixClusterManagerMetrics.getReplicaIdsMismatchCount.inc();
       }
     }
-    return staticReplicaIds;
+    return dynamicReplicaIds;
   }
 
   /**
@@ -291,28 +305,29 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public List<DataNodeId> getDataNodeIds() {
-    List<DataNodeId> staticDataNodeIds = staticClusterManager.getDataNodeIds();
-    if (helixClusterManager != null) {
+    List<DataNodeId> helixNodes = new ArrayList<>();
+    Set<String> helixDataNodeIdStrings = new HashSet<>();
+    helixClusterManager.getDataNodeIds().forEach(node -> helixNodes.add(node));
+    if (check) {
+      List<DataNodeId> staticDataNodeIds = staticClusterManager.getDataNodeIds();
       Set<String> staticDataNodeIdStrings = new HashSet<>();
       for (DataNodeId dataNodeId : staticDataNodeIds) {
         staticDataNodeIdStrings.add(dataNodeId.toString());
       }
-
-      Set<String> helixDataNodeIdStrings = new HashSet<>();
-      for (DataNodeId dataNodeId : helixClusterManager.getDataNodeIds()) {
+      for (DataNodeId dataNodeId : helixNodes) {
         helixDataNodeIdStrings.add(dataNodeId.toString());
       }
-
       if (!staticDataNodeIdStrings.equals(helixDataNodeIdStrings)) {
+        logger.debug("Static data nodes do not match Helix data nodes");
         helixClusterManagerMetrics.getDataNodeIdsMismatchCount.inc();
       }
     }
-    return staticDataNodeIds;
+    return helixNodes;
   }
 
   @Override
   public MetricRegistry getMetricRegistry() {
-    return staticClusterManager.getMetricRegistry();
+    return helixClusterManager.getMetricRegistry();
   }
 
   /**
@@ -322,14 +337,10 @@ class CompositeClusterManager implements ClusterMap {
    */
   @Override
   public void onReplicaEvent(ReplicaId replicaId, ReplicaEventType event) {
-    if (replicaId instanceof Replica) {
-      staticClusterManager.onReplicaEvent(replicaId, event);
-      if (helixClusterManager != null) {
-        AmbryReplica ambryReplica = helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId(),
-            replicaId.getPartitionId().toPathString());
-        helixClusterManager.onReplicaEvent(ambryReplica, event);
-      }
-    }
+    AmbryReplica ambryReplica = helixClusterManager.getReplicaForPartitionOnNode(replicaId.getDataNodeId(),
+        replicaId.getPartitionId().toPathString());
+    helixClusterManager.onReplicaEvent(ambryReplica, event);
+    staticClusterManager.onReplicaEvent(replicaId, event);
   }
 
   @Override
@@ -346,54 +357,34 @@ class CompositeClusterManager implements ClusterMap {
 
   @Override
   public void registerClusterMapListener(ClusterMapChangeListener clusterMapChangeListener) {
-    staticClusterManager.registerClusterMapListener(clusterMapChangeListener);
-    if (helixClusterManager != null) {
-      helixClusterManager.registerClusterMapListener(clusterMapChangeListener);
-    }
+    helixClusterManager.registerClusterMapListener(clusterMapChangeListener);
   }
 
   @Override
   public boolean hasEnoughEligibleReplicasAvailableForPut(PartitionId partitionId, int requiredEligibleReplicaCount,
       boolean checkLocalDcOnly) {
-    boolean staticHasEnoughEligible =
-        staticClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+    boolean helixHasEnoughEligible =
+        helixClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
             checkLocalDcOnly);
-    if (helixClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
-        checkLocalDcOnly) != staticHasEnoughEligible) {
-      String staticLogStr = staticHasEnoughEligible ? "has" : "doesn't have";
-      String helixLogStr = staticHasEnoughEligible ? "doesn't have" : "has";
-      logger.warn(
-          "Partition {} {} enough eligible replicas for put in static cluster map, but {} enough eligible replicas for put in helix cluster map.",
-          partitionId, staticLogStr, helixLogStr);
+    if (check) {
+      boolean staticHasEnoughEligible =
+          staticClusterManager.hasEnoughEligibleReplicasAvailableForPut(partitionId, requiredEligibleReplicaCount,
+              checkLocalDcOnly);
+      if (helixHasEnoughEligible != staticHasEnoughEligible) {
+        String staticLogStr = staticHasEnoughEligible ? "has" : "doesn't have";
+        String helixLogStr = staticHasEnoughEligible ? "doesn't have" : "has";
+        logger.warn(
+            "Partition {} {} enough eligible replicas for put in static cluster map, but {} enough eligible replicas for put in helix cluster map.",
+            partitionId, staticLogStr, helixLogStr);
+      }
     }
-    return staticHasEnoughEligible;
+    return helixHasEnoughEligible;
   }
-
 
   @Override
   public void close() {
     staticClusterManager.close();
-    if (helixClusterManager != null) {
-      helixClusterManager.close();
-    }
-  }
-
-  /**
-   * Check if two lists of partitions are equivalent
-   * @param partitionListOne {@link List} of {@link PartitionId}s to compare
-   * @param partitionListTwo {@link List} of {@link PartitionId}s to compare
-   * @return {@code true} if both list are equal, {@code false} otherwise
-   */
-  private boolean areEqual(List<PartitionId> partitionListOne, List<PartitionId> partitionListTwo) {
-    Set<String> partitionStringsOne = new HashSet<>();
-    for (PartitionId partitionId : partitionListOne) {
-      partitionStringsOne.add(partitionId.toString());
-    }
-    Set<String> partitionStringsTwo = new HashSet<>();
-    for (PartitionId partitionId : partitionListTwo) {
-      partitionStringsTwo.add(partitionId.toString());
-    }
-    return partitionStringsOne.equals(partitionStringsTwo);
+    helixClusterManager.close();
   }
 }
 

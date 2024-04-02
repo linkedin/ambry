@@ -32,7 +32,7 @@ import static com.github.ambry.clustermap.ClusterMapUtils.*;
  *
  * This implementation of {@link AmbryDataNode} represents a standard ambry-server host with physical disks.
  */
-class AmbryServerDataNode extends AmbryDataNode {
+public class AmbryServerDataNode extends AmbryDataNode {
   private final String rackId;
   private final long xid;
   private final List<String> sslEnabledDataCenters;
@@ -65,6 +65,15 @@ class AmbryServerDataNode extends AmbryDataNode {
     this.clusterManagerQueryHelper = clusterManagerQueryHelper;
     validateHostName(clusterMapConfig.clusterMapResolveHostnames, hostName);
     validatePorts(plainTextPort, sslPort, http2Port, sslEnabledDataCenters.contains(dataCenterName));
+  }
+
+  public AmbryServerDataNode(DataNodeId node, ClusterMapConfig config) {
+    super((DataNode) node);
+    rackId = node.getRackId();
+    xid = node.getXid();
+    sslEnabledDataCenters = Utils.splitString(config.clusterMapSslEnabledDatacenters, ",");
+    enableHttp2Replication = config.clusterMapEnableHttp2Replication;
+    clusterManagerQueryHelper = null;
   }
 
   @Override

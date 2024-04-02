@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.data.tables.models.TableEntity;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
@@ -26,7 +25,6 @@ import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.ReplicaType;
-import com.github.ambry.clustermap.StateModelListenerType;
 import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
@@ -55,8 +53,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -69,7 +65,6 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
@@ -126,7 +121,7 @@ public class RecoveryManager extends ReplicationEngine {
       MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
       VcrClusterSpectator vcrClusterSpectator, ClusterParticipant clusterParticipant)
-      throws ReplicationException, IOException {
+      throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeKeyFactory, clusterMap, scheduler, currentNode,
         Collections.emptyList(), networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null, false);
@@ -138,7 +133,6 @@ public class RecoveryManager extends ReplicationEngine {
     this.persistor = null; // No need of a persistor
     trackPerDatacenterLagInMetric = replicationConfig.replicationTrackPerDatacenterLagFromLocal;
     this.recoveryMetrics = new RecoveryMetrics(metricRegistry);
-    this.networkClientFactory.getNetworkClient(); // Test connection to Azure Storage and other services
   }
 
   @Override
@@ -183,6 +177,24 @@ public class RecoveryManager extends ReplicationEngine {
   /**
    * Returns Recovery thread
    */
+  protected RecoveryThread getRecoveryThread(String threadName) {
+    try {
+      String dc = dataNodeId.getDatacenterName();
+      StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
+      Transformer transformer = Utils.getObj(transformerClassName, storeKeyFactory, storeKeyConverter);
+      return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+          networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
+          storeKeyConverter, transformer, metricRegistry, sslEnabledDatacenters.contains(dc), dc,
+          new ResponseHandler(clusterMap), time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin,
+          this);
+    } catch (IOException | ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Returns Recovery thread
+   */
   @Override
   protected ReplicaThread getReplicaThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -222,6 +234,19 @@ public class RecoveryManager extends ReplicationEngine {
     }
     return 0;
   }
+
+  public RemoteReplicaInfo getCloudReplica(ReplicaId replica) throws Exception {
+    PartitionId partition = replica.getPartitionId();
+    Store store = storeManager.getStore(partition);
+    DataNodeId cloudDataNode = new CloudServiceDataNode(clusterMapConfig);
+    CloudReplica cloudReplica = new CloudReplica(partition, cloudDataNode);
+    FindTokenFactory findTokenFactory =
+        tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
+    return new RemoteReplicaInfo(cloudReplica, replica, store, findTokenFactory.getNewFindToken(), 0,
+            SystemTime.getInstance(), cloudReplica.getDataNodeId().getPortToConnectTo());
+    // TODO: reload tokens
+  }
+
 
   /**
    * Add a replica of given partition and its {@link RemoteReplicaInfo}s to backup list.

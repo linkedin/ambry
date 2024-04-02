@@ -135,6 +135,10 @@ public class RecoveryToken implements FindToken {
     this.recoveryEndTime = DATE_FORMAT.format(System.currentTimeMillis());
   }
 
+  public long getNumBlobs() {
+    return numBlobs;
+  }
+
   public static RecoveryToken fromBytes(DataInputStream stream) throws IOException {
     byte[] buf = new byte[stream.readInt()];
     stream.readFully(buf);

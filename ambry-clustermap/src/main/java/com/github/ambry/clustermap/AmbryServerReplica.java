@@ -25,7 +25,7 @@ import static com.github.ambry.clustermap.ClusterMapSnapshotConstants.*;
  * {@link AmbryServerReplica} represents a standard ambry replica, one with physical disks hosted by an ambry-server
  * node.
  */
-class AmbryServerReplica extends AmbryReplica {
+public class AmbryServerReplica extends AmbryReplica {
   private final AmbryDisk disk;
 
   /**
@@ -37,7 +37,7 @@ class AmbryServerReplica extends AmbryReplica {
    * @param capacityBytes the capacity in bytes for this replica.
    * @param replicaSealStatus {@link ReplicaSealStatus} of the replica.
    */
-  AmbryServerReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk,
+  public AmbryServerReplica(ClusterMapConfig clusterMapConfig, AmbryPartition partition, AmbryDisk disk,
       boolean isReplicaStopped, long capacityBytes, ReplicaSealStatus replicaSealStatus) throws Exception {
     super(clusterMapConfig, partition, isReplicaStopped, capacityBytes, replicaSealStatus);
     this.disk = Objects.requireNonNull(disk, "null disk");

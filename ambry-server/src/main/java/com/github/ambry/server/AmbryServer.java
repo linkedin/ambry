@@ -20,13 +20,19 @@ import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
+import com.github.ambry.cloud.BackupIntegrityMonitor;
+import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.cloud.RecoveryNetworkClientFactory;
+import com.github.ambry.clustermap.AmbryDataNode;
+import com.github.ambry.clustermap.AmbryServerDataNode;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
+import com.github.ambry.clustermap.CompositeClusterManager;
 import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HelixClusterManager;
+import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.clustermap.VcrClusterAgentsFactory;
-import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.NettyInternalMetrics;
@@ -43,6 +49,7 @@ import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.ServerConfig;
+import com.github.ambry.config.ServerExecutionMode;
 import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -69,7 +76,6 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.RequestHandlerPool;
 import com.github.ambry.repair.RepairRequestsDb;
 import com.github.ambry.repair.RepairRequestsDbFactory;
-import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationSkipPredicate;
@@ -98,6 +104,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import org.apache.logging.log4j.core.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,15 +124,13 @@ public class AmbryServer {
   private StorageManager storageManager = null;
   private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
-  private RecoveryManager _recoveryManager = null;
+  private RecoveryManager recoveryManager = null;
   private static final Logger logger = LoggerFactory.getLogger(AmbryServer.class);
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
-  private final VcrClusterAgentsFactory _vcrClusterAgentsFactory;
   private final Function<MetricRegistry, JmxReporter> reporterFactory;
   private ClusterMap clusterMap;
   private List<ClusterParticipant> clusterParticipants;
-  private VcrClusterSpectator vcrClusterSpectator;
   private MetricRegistry registry = null;
   private JmxReporter reporter = null;
   private ConnectionPool connectionPool = null;
@@ -148,7 +153,7 @@ public class AmbryServer {
   private RepairRequestsSender repairRequestsSender = null;
   private Thread repairThread = null;
   private RepairRequestsDb repairRequestsDb = null;
-
+  private BackupIntegrityMonitor backupIntegrityMonitor = null;
   public AmbryServer(VerifiableProperties properties, ClusterAgentsFactory clusterAgentsFactory,
       VcrClusterAgentsFactory vcrClusterAgentsFactory, Time time) throws InstantiationException {
     this(properties, clusterAgentsFactory, vcrClusterAgentsFactory, new LoggingNotificationSystem(), time, null);
@@ -174,7 +179,6 @@ public class AmbryServer {
       Function<MetricRegistry, JmxReporter> reporterFactory) throws InstantiationException {
     this.properties = properties;
     this.clusterAgentsFactory = clusterAgentsFactory;
-    this._vcrClusterAgentsFactory = vcrClusterAgentsFactory;
     this.notificationSystem = notificationSystem;
     this.time = time;
     this.reporterFactory = reporterFactory;
@@ -199,6 +203,10 @@ public class AmbryServer {
     try {
       logger.info("starting");
       clusterParticipants = clusterAgentsFactory.getClusterParticipants();
+      if (clusterParticipants == null || clusterParticipants.isEmpty()) {
+        logger.info("Cluster participant list is null or empty");
+      }
+      ClusterParticipant clusterParticipant = clusterParticipants == null || clusterParticipants.isEmpty() ? null : clusterParticipants.get(0);
       logger.info("Setting up JMX.");
 
       long startTime = SystemTime.getInstance().milliseconds();
@@ -215,64 +223,122 @@ public class AmbryServer {
       SSLConfig sslConfig = new SSLConfig(properties);
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
-      CloudConfig cloudConfig = new CloudConfig(properties);
       // verify the configs
       properties.verify();
-
-      scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
-      // if there are more than one participants on local node, we create a consistency checker to monitor and alert any
-      // mismatch in sealed/stopped replica lists that maintained by each participant.
-      if (clusterParticipants != null && clusterParticipants.size() > 1
-          && serverConfig.serverParticipantsConsistencyCheckerPeriodSec > 0) {
-        consistencyChecker = new ParticipantsConsistencyChecker(clusterParticipants, metrics);
-        logger.info("Scheduling participants consistency checker with a period of {} secs",
-            serverConfig.serverParticipantsConsistencyCheckerPeriodSec);
-        consistencyCheckerScheduler = Utils.newScheduler(1, "consistency-checker-", false);
-        consistencyCheckerTask = consistencyCheckerScheduler.scheduleAtFixedRate(consistencyChecker, 0,
-            serverConfig.serverParticipantsConsistencyCheckerPeriodSec, TimeUnit.SECONDS);
-      }
-      logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
-      DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
-      if (nodeId == null) {
-        throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
-            + "is not present in the clustermap. Failing to start the datanode");
-      }
 
       AccountServiceFactory accountServiceFactory =
           Utils.getObj(serverConfig.serverAccountServiceFactory, properties, registry);
       AccountService accountService = accountServiceFactory.getAccountService();
 
-      StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
-      FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
-      // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
-      // and some components require sole participant, the first one in the list will be primary participant.
-      storageManager =
-          new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
-              new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
-      storageManager.start();
-
       SSLFactory sslHttp2Factory = new NettySslHttp2Factory(sslConfig);
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
-      if (replicationConfig.replicationEnabledWithVcrCluster) {
+
+      if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_RECOVERY_MODE)) {
+        logger.info("Server execution mode is DATA_RECOVERY_MODE");
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
-         * We need to use CloudToStorageManager for one reason. It will add one replica for the server to replicate from
+         * We need to use RecoveryManager for one reason. It will add one replica for the server to replicate from
          * which is the Cloud. The regular ReplicationManager will add 3 replicas, and as a result 3 threads will try
          * to fetch the same data from Azure. Although this can be avoided with a minor change to ReplicationManager,
-         * having a separate CloudtoStorageManager for cloud offers the flexibility to override methods and add more
+         * having a separate RecoveryManager for cloud offers the flexibility to override methods and add more
          * suited to cloud.
          */
-        networkClientFactory = new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager,
-            accountService);
-        vcrClusterSpectator = null; // Server does not talk to vcr during recovery
-        _recoveryManager =
-            new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-                storeKeyFactory, clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
-                storeKeyConverterFactory, serverConfig.serverMessageTransformer, null,
-                clusterParticipants.get(0));
-        _recoveryManager.start();
-      } else {
+        StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+        DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        if (nodeId == null) {
+          throw new IllegalArgumentException(String.format("Node %s absent in cluster-map", networkConfig.hostName));
+        }
+        // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
+        // and some components require sole participant, the first one in the list will be primary participant.
+        scheduler = Utils.newScheduler(1, true);
+        storageManager =
+            new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
+                new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
+        storageManager.start();
+        networkClientFactory =
+            new RecoveryNetworkClientFactory(properties, registry, clusterMap, storageManager, accountService);
+        recoveryManager =
+            new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+                clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, null, null);
+        recoveryManager.start();
+      } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_VERIFICATION_MODE)) {
+        logger.info("Server execution mode is DATA_VERIFICATION_MODE");
+        /**
+         * We need composite cluster manager because it has both static and helix cluster manager.
+         * We use helix-cluster-map to discover replicas of a partition.
+         * We use static-cluster-map to discover local disks on the host.
+         * The static map returns objects used for static maps. We need to convert them to be suitable for helix map.
+         */
+        if (!(clusterMap instanceof CompositeClusterManager)) {
+          throw new InstantiationException("Cluster manager must be of type CompositeClusterManager");
+        }
+        CompositeClusterManager compositeClusterManager = (CompositeClusterManager) clusterMap;
+        HelixClusterManager helixClusterManager = compositeClusterManager.getHelixClusterManager();
+        StaticClusterManager staticClusterManager = compositeClusterManager.getStaticClusterManager();
+        DataNodeId nodeId = staticClusterManager.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        if (nodeId == null) {
+          throw new IllegalArgumentException(String.format("Node %s absent in cluster-map", networkConfig.hostName));
+        }
+        // Store key factory is instantiated in two places : here and in internal fork. Careful!
+        StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, helixClusterManager);
+        scheduler = Utils.newScheduler(1, true);
+        storageManager =
+            new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, staticClusterManager, nodeId,
+                new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
+        storageManager.start();
+        /**
+         * Backup integrity monitor here because vcr does not have code to store to disk. Only server does.
+         * DataNodeId -> AmbryDataNode -> AmbryServerDataNode : for helix
+         * DataNodeId -> DataNode : for static
+         */
+        AmbryServerDataNode helixNode = new AmbryServerDataNode(nodeId, clusterMapConfig);
+        recoveryManager =
+            new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+                helixClusterManager, null, helixNode,
+                new RecoveryNetworkClientFactory(properties, registry, helixClusterManager, storageManager, accountService),
+                registry, null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
+                null, null);
+        replicationManager =
+            new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+                helixClusterManager, null, helixNode,
+                new Http2NetworkClientFactory(new Http2ClientMetrics(registry), new Http2ClientConfig(properties), sslHttp2Factory, time),
+                registry, null, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
+                null, null);
+        backupIntegrityMonitor = new BackupIntegrityMonitor(recoveryManager, replicationManager,
+            compositeClusterManager, storageManager, helixNode, properties);
+        backupIntegrityMonitor.start();
+      } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE)) {
+        logger.info("Server execution mode is DATA_SERVING_MODE");
+        scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
+        logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
+        DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        if (nodeId == null) {
+          throw new IllegalArgumentException("The node " + networkConfig.hostName + ":" + networkConfig.port
+              + "is not present in the clustermap. Failing to start the datanode");
+        }
+        StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+        FindTokenHelper findTokenHelper = new FindTokenHelper(storeKeyFactory, replicationConfig);
+        // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
+        // and some components require sole participant, the first one in the list will be primary participant.
+        storageManager =
+            new StorageManager(storeConfig, diskManagerConfig, scheduler, registry, storeKeyFactory, clusterMap, nodeId,
+                new BlobStoreHardDelete(), clusterParticipants, time, new BlobStoreRecovery(), accountService);
+        storageManager.start();
+
+        // if there are more than one participant on local node, we create a consistency checker to monitor and alert any
+        // mismatch in sealed/stopped replica lists that maintained by each participant.
+        if (clusterParticipants != null && clusterParticipants.size() > 1
+            && serverConfig.serverParticipantsConsistencyCheckerPeriodSec > 0) {
+          consistencyChecker = new ParticipantsConsistencyChecker(clusterParticipants, metrics);
+          logger.info("Scheduling participants consistency checker with a period of {} secs",
+              serverConfig.serverParticipantsConsistencyCheckerPeriodSec);
+          consistencyCheckerScheduler = Utils.newScheduler(1, "consistency-checker-", false);
+          consistencyCheckerTask = consistencyCheckerScheduler.scheduleAtFixedRate(consistencyChecker, 0,
+              serverConfig.serverParticipantsConsistencyCheckerPeriodSec, TimeUnit.SECONDS);
+        }
+
         if (clusterMapConfig.clusterMapEnableHttp2Replication) {
           Http2ClientMetrics http2ClientMetrics = new Http2ClientMetrics(registry);
           Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
@@ -291,117 +357,117 @@ public class AmbryServer {
         replicationManager =
             new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
                 clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
-                storeKeyConverterFactory, serverConfig.serverMessageTransformer, clusterParticipants.get(0),
+                storeKeyConverterFactory, serverConfig.serverMessageTransformer, clusterParticipant,
                 skipPredicate);
         replicationManager.start();
-      }
 
-      logger.info("Creating StatsManager to publish stats");
 
-      accountStatsMySqlStore =
-          statsConfig.enableMysqlReport ? (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(properties,
-              clusterMapConfig, registry).getAccountStatsStore() : null;
-      statsManager =
-          new StatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
-              clusterParticipants.get(0), accountStatsMySqlStore, accountService, nodeId);
-      statsManager.start();
+        logger.info("Creating StatsManager to publish stats");
 
-      ArrayList<Port> ports = new ArrayList<Port>();
-      ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
-      if (nodeId.hasSSLPort()) {
-        ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
-      }
-      networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
-      requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
-          registry, metrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
-          diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0));
-      requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumSocketServerThreads,
-          networkServer.getRequestResponseChannel(), requests);
-      networkServer.start();
+        accountStatsMySqlStore =
+            statsConfig.enableMysqlReport ? (AccountStatsMySqlStore) new AccountStatsMySqlStoreFactory(properties,
+                clusterMapConfig, registry).getAccountStatsStore() : null;
+        statsManager =
+            new StatsManager(storageManager, clusterMap, clusterMap.getReplicaIds(nodeId), registry, statsConfig, time,
+                clusterParticipant, accountStatsMySqlStore, accountService, nodeId);
+        statsManager.start();
 
-      // Start netty http2 server
-      if (nodeId.hasHttp2Port()) {
-        NettyConfig nettyConfig = new NettyConfig(properties);
-        NettyMetrics nettyMetrics = new NettyMetrics(registry);
-        Http2ServerMetrics http2ServerMetrics = new Http2ServerMetrics(registry);
-        Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
-
-        logger.info("Http2 port {} is enabled. Starting HTTP/2 service.", nodeId.getHttp2Port());
-        NettyServerRequestResponseChannel requestResponseChannel =
-            new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, metrics,
-                new ServerRequestResponseHelper(clusterMap, findTokenHelper));
-        AmbryServerRequests ambryServerRequestsForHttp2 =
-            new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
-                findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
-                diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0), connectionPool);
-        requestHandlerPoolForHttp2 =
-            new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
-                ambryServerRequestsForHttp2);
-
-        NioServerFactory nioServerFactory =
-            new StorageServerNettyFactory(nodeId.getHttp2Port(), requestResponseChannel, sslHttp2Factory, nettyConfig,
-                http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
-        nettyHttp2Server = nioServerFactory.getNioServer();
-        nettyHttp2Server.start();
-      }
-
-      if (serverConfig.serverRepairRequestsDbFactory != null) {
-        // if we have a RepairRequestsDB, start the threads to fix the partially failed requests.
-        try {
-          RepairRequestsDbFactory factory =
-              Utils.getObj(serverConfig.serverRepairRequestsDbFactory, properties, registry, nodeId.getDatacenterName(),
-                  time);
-          repairRequestsDb = factory.getRepairRequestsDb();
-
-          localChannel = new LocalRequestResponseChannel();
-          LocalNetworkClientFactory localClientFactory =
-              new LocalNetworkClientFactory(localChannel, networkConfig, new NetworkMetrics(registry), time);
-          AmbryRequests repairRequests =
-              new AmbryServerRequests(storageManager, localChannel, clusterMap, nodeId, registry, metrics,
-                  findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
-                  diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipants.get(0),
-                  connectionPool);
-          // Right now we only open single thread for the repairHandlerPool
-          repairHandlerPool = new RequestHandlerPool(1, localChannel, repairRequests, "Repair-");
-          // start the repairRequestSender. It sends requests through the localChannel to the repairHandlerPool
-          repairRequestsSender =
-              new RepairRequestsSender(localChannel, localClientFactory, clusterMap, nodeId, repairRequestsDb,
-                  clusterParticipants.get(0), registry, storageManager);
-          repairThread = Utils.daemonThread("Repair-Sender", repairRequestsSender);
-          repairThread.start();
-          logger.info("RepairRequests: open the db and started the handling thread {}.", repairRequestsDb);
-        } catch (Exception e) {
-          logger.error("RepairRequests: Cannot connect to the RepairRequestsDB. ", e);
+        ArrayList<Port> ports = new ArrayList<Port>();
+        ports.add(new Port(networkConfig.port, PortType.PLAINTEXT));
+        if (nodeId.hasSSLPort()) {
+          ports.add(new Port(nodeId.getSSLPort(), PortType.SSL));
         }
-      }
+        networkServer = new SocketServer(networkConfig, sslConfig, registry, ports);
+        requests = new AmbryServerRequests(storageManager, networkServer.getRequestResponseChannel(), clusterMap, nodeId,
+            registry, metrics, findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
+            diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipant);
+        requestHandlerPool = new RequestHandlerPool(serverConfig.serverRequestHandlerNumSocketServerThreads,
+            networkServer.getRequestResponseChannel(), requests);
+        networkServer.start();
 
-      // Other code
-      List<AmbryStatsReport> ambryStatsReports = new ArrayList<>();
-      Set<String> validStatsTypes = new HashSet<>();
-      for (StatsReportType type : StatsReportType.values()) {
-        validStatsTypes.add(type.toString());
-      }
+        // Start netty http2 server
+        if (nodeId.hasHttp2Port()) {
+          NettyConfig nettyConfig = new NettyConfig(properties);
+          NettyMetrics nettyMetrics = new NettyMetrics(registry);
+          Http2ServerMetrics http2ServerMetrics = new Http2ServerMetrics(registry);
+          Http2ClientConfig http2ClientConfig = new Http2ClientConfig(properties);
 
-      // StatsManager would publish account stats to AccountStatsStore, and optionally publish partition class stats
-      // as well. So if serverStatsReportsToPublish contains PARTITION_CLASS_REPORT, then be sure to enable partition
-      // class stats with StatsManagerConfig.publishPartitionClassReportPeriodInSecs.
-      // Also, since StatsManager is tightly coupled with mysql database right now, if variable accountStatsMySqlStore
-      // is null, there is no report to aggregate and publish.
-      if (!serverConfig.serverStatsReportsToPublish.isEmpty() && accountStatsMySqlStore != null) {
-        serverConfig.serverStatsReportsToPublish.forEach(e -> {
-          if (validStatsTypes.contains(e)) {
-            ambryStatsReports.add(new AmbryStatsReportImpl(serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
-                StatsReportType.valueOf(e)));
+          logger.info("Http2 port {} is enabled. Starting HTTP/2 service.", nodeId.getHttp2Port());
+          NettyServerRequestResponseChannel requestResponseChannel =
+              new NettyServerRequestResponseChannel(networkConfig, http2ServerMetrics, metrics,
+                  new ServerRequestResponseHelper(clusterMap, findTokenHelper));
+          AmbryServerRequests ambryServerRequestsForHttp2 =
+              new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, nodeId, registry, metrics,
+                  findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
+                  diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipant, connectionPool);
+          requestHandlerPoolForHttp2 =
+              new RequestHandlerPool(serverConfig.serverRequestHandlerNumOfThreads, requestResponseChannel,
+                  ambryServerRequestsForHttp2);
+
+          NioServerFactory nioServerFactory =
+              new StorageServerNettyFactory(nodeId.getHttp2Port(), requestResponseChannel, sslHttp2Factory, nettyConfig,
+                  http2ClientConfig, metrics, nettyMetrics, http2ServerMetrics, serverSecurityService);
+          nettyHttp2Server = nioServerFactory.getNioServer();
+          nettyHttp2Server.start();
+        }
+
+        if (serverConfig.serverRepairRequestsDbFactory != null) {
+          // if we have a RepairRequestsDB, start the threads to fix the partially failed requests.
+          try {
+            RepairRequestsDbFactory factory =
+                Utils.getObj(serverConfig.serverRepairRequestsDbFactory, properties, registry, nodeId.getDatacenterName(),
+                    time);
+            repairRequestsDb = factory.getRepairRequestsDb();
+
+            localChannel = new LocalRequestResponseChannel();
+            LocalNetworkClientFactory localClientFactory =
+                new LocalNetworkClientFactory(localChannel, networkConfig, new NetworkMetrics(registry), time);
+            AmbryRequests repairRequests =
+                new AmbryServerRequests(storageManager, localChannel, clusterMap, nodeId, registry, metrics,
+                    findTokenHelper, notificationSystem, replicationManager, storeKeyFactory, serverConfig,
+                    diskManagerConfig, storeKeyConverterFactory, statsManager, clusterParticipant,
+                    connectionPool);
+            // Right now we only open single thread for the repairHandlerPool
+            repairHandlerPool = new RequestHandlerPool(1, localChannel, repairRequests, "Repair-");
+            // start the repairRequestSender. It sends requests through the localChannel to the repairHandlerPool
+            repairRequestsSender =
+                new RepairRequestsSender(localChannel, localClientFactory, clusterMap, nodeId, repairRequestsDb,
+                    clusterParticipant, registry, storageManager);
+            repairThread = Utils.daemonThread("Repair-Sender", repairRequestsSender);
+            repairThread.start();
+            logger.info("RepairRequests: open the db and started the handling thread {}.", repairRequestsDb);
+          } catch (Exception e) {
+            logger.error("RepairRequests: Cannot connect to the RepairRequestsDB. ", e);
           }
-        });
-      }
+        }
 
-      if (vcrClusterSpectator != null) {
-        vcrClusterSpectator.spectate();
-      }
-      Callback<AggregatedAccountStorageStats> accountServiceCallback = new AccountServiceCallback(accountService);
-      for (ClusterParticipant clusterParticipant : clusterParticipants) {
-        clusterParticipant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
+        // Other code
+        List<AmbryStatsReport> ambryStatsReports = new ArrayList<>();
+        Set<String> validStatsTypes = new HashSet<>();
+        for (StatsReportType type : StatsReportType.values()) {
+          validStatsTypes.add(type.toString());
+        }
+
+        // StatsManager would publish account stats to AccountStatsStore, and optionally publish partition class stats
+        // as well. So if serverStatsReportsToPublish contains PARTITION_CLASS_REPORT, then be sure to enable partition
+        // class stats with StatsManagerConfig.publishPartitionClassReportPeriodInSecs.
+        // Also, since StatsManager is tightly coupled with mysql database right now, if variable accountStatsMySqlStore
+        // is null, there is no report to aggregate and publish.
+        if (!serverConfig.serverStatsReportsToPublish.isEmpty() && accountStatsMySqlStore != null) {
+          serverConfig.serverStatsReportsToPublish.forEach(e -> {
+            if (validStatsTypes.contains(e)) {
+              ambryStatsReports.add(new AmbryStatsReportImpl(serverConfig.serverQuotaStatsAggregateIntervalInMinutes,
+                  StatsReportType.valueOf(e)));
+            }
+          });
+        }
+
+        Callback<AggregatedAccountStorageStats> accountServiceCallback = new AccountServiceCallback(accountService);
+        for (ClusterParticipant participant : clusterParticipants) {
+          participant.participate(ambryStatsReports, accountStatsMySqlStore, accountServiceCallback);
+        }
+      } else {
+        throw new IllegalArgumentException("Unknown server execution mode");
       }
 
       if (nettyInternalMetrics != null) {
@@ -472,8 +538,11 @@ public class AmbryServer {
       if (localChannel != null) {
         localChannel.shutdown();
       }
-      if (_recoveryManager != null) {
-        _recoveryManager.shutdown();
+      if (backupIntegrityMonitor != null) {
+        backupIntegrityMonitor.shutdown();
+      }
+      if (recoveryManager != null) {
+        recoveryManager.shutdown();
       }
       if (replicationManager != null) {
         replicationManager.shutdown();
