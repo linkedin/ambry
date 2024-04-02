@@ -245,6 +245,10 @@ public class AmbryServer {
          * suited to cloud.
          */
         StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, clusterMap);
+        DataNodeId nodeId = clusterMap.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        if (nodeId == null) {
+          throw new IllegalArgumentException(String.format("Node %s absent in cluster-map", networkConfig.hostName));
+        }
         // In most cases, there should be only one participant in the clusterParticipants list. If there are more than one
         // and some components require sole participant, the first one in the list will be primary participant.
         scheduler = Utils.newScheduler(1, true);
@@ -274,6 +278,9 @@ public class AmbryServer {
         HelixClusterManager helixClusterManager = compositeClusterManager.getHelixClusterManager();
         StaticClusterManager staticClusterManager = compositeClusterManager.getStaticClusterManager();
         DataNodeId nodeId = staticClusterManager.getDataNodeId(networkConfig.hostName, networkConfig.port);
+        if (nodeId == null) {
+          throw new IllegalArgumentException(String.format("Node %s absent in cluster-map", networkConfig.hostName));
+        }
         // Store key factory is instantiated in two places : here and in internal fork. Careful!
         StoreKeyFactory storeKeyFactory = Utils.getObj(storeConfig.storeKeyFactory, helixClusterManager);
         scheduler = Utils.newScheduler(1, true);
