@@ -46,13 +46,10 @@ public class BackupCheckerFileManager {
   public static final String COLUMN_SEPARATOR = " | ";
 
   protected class FileDescriptor implements AmbryCacheEntry {
-
     SeekableByteChannel _seekableByteChannel;
-
     public FileDescriptor(SeekableByteChannel seekableByteChannel) {
       this._seekableByteChannel = seekableByteChannel;
     }
-
     public SeekableByteChannel getSeekableByteChannel() {
       return _seekableByteChannel;
     }
