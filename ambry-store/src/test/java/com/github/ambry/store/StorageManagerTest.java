@@ -82,8 +82,10 @@ import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
 import org.json.JSONObject;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -109,6 +111,23 @@ public class StorageManagerTest {
   private StoreConfig storeConfig;
   private MockClusterMap clusterMap;
   private MetricRegistry metricRegistry;
+
+  private static String tempDirPath;
+  private static String dcName;
+  private static List<ZkInfo> zkInfoList = new ArrayList<>();
+
+  @BeforeClass
+  public static void setupZookeeperServer() throws Exception {
+    tempDirPath = getTempDir("StorageManagerTest-");
+    dcName = "DC0";
+    zkInfoList.add(new ZkInfo(tempDirPath, dcName, (byte) 0, 3199, true));
+  }
+
+  @AfterClass
+  public static void shutdownZookeeperServer() throws Exception {
+    zkInfoList.get(0).shutdown();
+    Utils.deleteFileOrDirectory(new File(tempDirPath));
+  }
 
   /**
    * Startup the {@link MockClusterMap} for a test.
@@ -1140,7 +1159,7 @@ public class StorageManagerTest {
     storageManager.shutdown();
 
     // Now enable the feature to remove directory and restart blob store
-    generateConfigs(true, false, false, 2, true);
+    generateConfigs(true, false, false, 2, true, false);
     storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
 
@@ -1159,7 +1178,7 @@ public class StorageManagerTest {
     List<ReplicaId> badReplicas =
         replicas.stream().filter(r -> r.getMountPath().equals(badDiskMountPath)).collect(Collectors.toList());
 
-    generateConfigs(true, false, false, 2, true);
+    generateConfigs(true, false, false, 2, true, false);
     StorageManager storageManager = createStorageManager(dataNode, metricRegistry, null);
     storageManager.start();
     storageManager.shutdown();
@@ -1192,7 +1211,7 @@ public class StorageManagerTest {
 
   @Test
   public void storeRemoveDirectoryAndRestartTestWithStoppedReplica() throws Exception {
-    generateConfigs(true, false, false, 2, true);
+    generateConfigs(true, false, false, 2, true, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
 
@@ -1213,7 +1232,7 @@ public class StorageManagerTest {
 
   @Test
   public void storeRemoveDirectoryAndRestartTestWithOtherError() throws Exception {
-    generateConfigs(true, false, false, 2, true);
+    generateConfigs(true, false, false, 2, true, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     ReplicaId replica = clusterMap.getReplicaIds(dataNode).get(0);
 
@@ -1398,7 +1417,7 @@ public class StorageManagerTest {
    */
   @Test
   public void unrecognizedDirsRemovalTest() throws Exception {
-    generateConfigs(true, false, true, 2, false);
+    generateConfigs(true, false, true, 2, false, false);
     MockDataNodeId dataNode = clusterMap.getDataNodes().get(0);
     List<ReplicaId> replicas = clusterMap.getReplicaIds(dataNode);
     try {
@@ -1551,7 +1570,7 @@ public class StorageManagerTest {
    */
   @Test
   public void replicaFromOfflineToBootstrapFailureRetryWithDiskSpaceRequirementTest() throws Exception {
-    generateConfigs(true, false, false, 4, false);
+    generateConfigs(true, false, false, 4, false, false);
     MockClusterMap spyClusterMap = spy(clusterMap);
     MockDataNodeId localNode = spyClusterMap.getDataNodes().get(0);
     List<ReplicaId> localReplicas = spyClusterMap.getReplicaIds(localNode);
@@ -1629,75 +1648,18 @@ public class StorageManagerTest {
    */
   @Test
   public void testDiskFailureHandler() throws Exception {
-    String tempDirPath = getTempDir("StorageManagerTest-");
-    List<ZkInfo> zkInfoList = new ArrayList<>();
-    String clusterName = "StorageManagerTestCluster";
-    String dcName = "DC0";
-    zkInfoList.add(new ZkInfo(tempDirPath, dcName, (byte) 0, 2199, true));
-    String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
-    String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
-    String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
-    String oldBaseMountPath = TestHardwareLayout.baseMountPath;
-    long oldMinCapacity = MIN_REPLICA_CAPACITY_IN_BYTES;
-    MIN_REPLICA_CAPACITY_IN_BYTES = 1024;
-    TestHardwareLayout.baseMountPath = tempDirPath + "/mnt";
-    TestHardwareLayout testHardwareLayout =
-        new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
-    TestPartitionLayout testPartitionLayout =
-        new TestPartitionLayout(testHardwareLayout, 100, PartitionState.READ_WRITE, 1024, 3, null, 0);
-    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
-    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
-    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
-    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", "localhost");
-    DataNodeId dataNodeId = testHardwareLayout.getRandomDataNodeFromDc(dcName);
-    props.setProperty("clustermap.port", String.valueOf(dataNodeId.getPort()));
-    props.setProperty("clustermap.cluster.name", clusterName);
-    props.setProperty("clustermap.datacenter.name", dcName);
-    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
-    props.setProperty("clustermap.data.node.config.source.type", DataNodeConfigSourceType.PROPERTY_STORE.name());
-    props.setProperty("clustermap.enable.state.model.listener", "true");
-    props.setProperty("clustermap.update.datanode.info", "true");
-    props.setProperty(ClusterMapConfig.DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS, "10000");
-    clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    storeConfig = new StoreConfig(new VerifiableProperties(props));
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "", dcName, 100,
-        false, false, new HelixAdminFactory(), false, ClusterMapConfig.AMBRY_STATE_MODEL_DEF, BootstrapCluster,
-        DataNodeConfigSourceType.PROPERTY_STORE, false, 1000);
-
-    String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    HelixParticipant helixParticipant =
-        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
-            parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-                clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
-    // Mock a state change listener to throw an exception
-    PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
-    doThrow(new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
-        listener).onPartitionBecomeBootstrapFromOffline(anyString());
-    helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
-    helixParticipant.participate(Collections.emptyList(), null, null);
-
-    HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
-    HelixClusterManager clusterMap =
-        new HelixClusterManager(clusterMapConfig, instanceName, new HelixFactory(), metricRegistry);
+    ClusterSetupHelper clusterHelper = new ClusterSetupHelper();
+    clusterHelper.setupCluster();
+    HelixParticipant helixParticipant = clusterHelper.helixParticipant;
+    HelixAdmin helixAdmin = clusterHelper.helixAdmin;
+    HelixClusterManager clusterMap = clusterHelper.clusterMap;
+    DataNodeId localNode = clusterHelper.localNode;
+    String clusterName = clusterHelper.clusterName;
 
     try {
-      DataNodeId localNode = clusterMap.getDataNodeId("localhost", clusterMapConfig.clusterMapPort);
       List<? extends ReplicaId> replicas = clusterMap.getReplicaIds(localNode);
-      Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
-      for (ReplicaId replica : replicas) {
-        diskToReplicas.computeIfAbsent(replica.getDiskId(), disk -> new ArrayList<>()).add(replica);
-      }
-      // Create all mount paths
-      for (DiskId diskId : diskToReplicas.keySet()) {
-        File file = new File(diskId.getMountPath());
-        if (!file.exists()) {
-          assertTrue(file.mkdirs());
-          file.deleteOnExit();
-        }
-      }
+      Map<DiskId, List<ReplicaId>> diskToReplicas = clusterHelper.getDiskToReplicaMap();
+      clusterHelper.createAllMountPaths();
       StorageManager storageManager =
           new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
               new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
@@ -1710,18 +1672,8 @@ public class StorageManagerTest {
 
       assertEquals(new ArrayList<>(storageManager.getDiskToDiskManager().keySet()), handler.getAllDisks());
       assertEquals("There shouldn't be any failed disk", 0, handler.getFailedDisks().size());
-      // Turn FULL_AUTO on this host
-      String resourceName = helixAdmin.getResourcesInCluster(clusterName).get(0);
-      IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resourceName);
-      InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-      final String instanceGroupTag = "TAG_1000000";
-      idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-      idealState.setInstanceGroupTag(instanceGroupTag);
-      instanceConfig.addTag(instanceGroupTag);
-      helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
-      helixAdmin.setResourceIdealState(clusterName, resourceName, idealState);
-      Thread.sleep(500); // wait for clustermap to catch up
-      assertTrue(clusterMap.isDataNodeInFullAutoMode(localNode));
+      clusterHelper.turnFullAutoOnForLocalhost();
+
       // Set every replicas to error state
       sendStateTransitionMessages(helixParticipant.getHelixManager(), "10000", replicas, "OFFLINE", "BOOTSTRAP");
       Thread.sleep(1000);
@@ -1780,94 +1732,23 @@ public class StorageManagerTest {
 
       storageManager.shutdown();
     } finally {
-      TestHardwareLayout.baseMountPath = oldBaseMountPath;
-      MIN_REPLICA_CAPACITY_IN_BYTES = oldMinCapacity;
-      try {
-        Utils.deleteFileOrDirectory(new File(tempDirPath));
-        clusterMap.close();
-        helixParticipant.close();
-        helixAdmin.dropCluster(clusterName);
-        for (ZkInfo zkInfo : zkInfoList) {
-          zkInfo.shutdown();
-        }
-      } catch (Exception e) {
-        System.out.println("Fail to clean up all the components:" + e.getMessage());
-      }
+      clusterHelper.shutdownCluster();
     }
   }
 
   @Test
   public void testDiskFailureErrorCases() throws Exception {
-    String tempDirPath = getTempDir("StorageManagerTest-");
-    List<ZkInfo> zkInfoList = new ArrayList<>();
-    String clusterName = "StorageManagerTestCluster";
-    String dcName = "DC0";
-    zkInfoList.add(new ZkInfo(tempDirPath, dcName, (byte) 0, 2199, true));
-    String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
-    String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
-    String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
-    String oldBaseMountPath = TestHardwareLayout.baseMountPath;
-    long oldMinCapacity = MIN_REPLICA_CAPACITY_IN_BYTES;
-    MIN_REPLICA_CAPACITY_IN_BYTES = 1024;
-    TestHardwareLayout.baseMountPath = tempDirPath + "/mnt";
-    TestHardwareLayout testHardwareLayout =
-        new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
-    TestPartitionLayout testPartitionLayout =
-        new TestPartitionLayout(testHardwareLayout, 100, PartitionState.READ_WRITE, 1024, 3, null, 0);
-    JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
-    Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
-    Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
-    Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
-
-    Properties props = new Properties();
-    props.setProperty("clustermap.host.name", "localhost");
-    DataNodeId dataNodeId = testHardwareLayout.getRandomDataNodeFromDc(dcName);
-    props.setProperty("clustermap.port", String.valueOf(dataNodeId.getPort()));
-    props.setProperty("clustermap.cluster.name", clusterName);
-    props.setProperty("clustermap.datacenter.name", dcName);
-    props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
-    props.setProperty("clustermap.data.node.config.source.type", DataNodeConfigSourceType.PROPERTY_STORE.name());
-    props.setProperty("clustermap.enable.state.model.listener", "true");
-    props.setProperty("clustermap.update.datanode.info", "true");
-    props.setProperty(ClusterMapConfig.DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS, "10000");
-    clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
-    storeConfig = new StoreConfig(new VerifiableProperties(props));
-    HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "", dcName, 100,
-        false, false, new HelixAdminFactory(), false, ClusterMapConfig.AMBRY_STATE_MODEL_DEF, BootstrapCluster,
-        DataNodeConfigSourceType.PROPERTY_STORE, false, 1000);
-
-    String instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
-    HelixParticipant helixParticipant =
-        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
-            parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
-                clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
-
-    // Mock a state change listener to throw an exception
-    PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
-    doThrow(new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
-        listener).onPartitionBecomeBootstrapFromOffline(anyString());
-    helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
-    helixParticipant.participate(Collections.emptyList(), null, null);
-
-    HelixAdmin helixAdmin = helixParticipant.getHelixAdmin();
-    HelixClusterManager clusterMap =
-        new HelixClusterManager(clusterMapConfig, instanceName, new HelixFactory(), metricRegistry);
+    ClusterSetupHelper clusterHelper = new ClusterSetupHelper();
+    clusterHelper.setupCluster();
+    HelixParticipant helixParticipant = clusterHelper.helixParticipant;
+    HelixAdmin helixAdmin = clusterHelper.helixAdmin;
+    HelixClusterManager clusterMap = clusterHelper.clusterMap;
+    DataNodeId localNode = clusterHelper.localNode;
+    String clusterName = clusterHelper.clusterName;
 
     try {
-      DataNodeId localNode = clusterMap.getDataNodeId("localhost", clusterMapConfig.clusterMapPort);
-      List<? extends ReplicaId> replicas = clusterMap.getReplicaIds(localNode);
-      Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
-      for (ReplicaId replica : replicas) {
-        diskToReplicas.computeIfAbsent(replica.getDiskId(), disk -> new ArrayList<>()).add(replica);
-      }
-      // Create all mount paths
-      for (DiskId diskId : diskToReplicas.keySet()) {
-        File file = new File(diskId.getMountPath());
-        if (!file.exists()) {
-          assertTrue(file.mkdirs());
-          file.deleteOnExit();
-        }
-      }
+      Map<DiskId, List<ReplicaId>> diskToReplicas = clusterHelper.getDiskToReplicaMap();
+
       StorageManager storageManager =
           new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
               new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
@@ -1880,18 +1761,7 @@ public class StorageManagerTest {
 
       assertEquals(new ArrayList<>(storageManager.getDiskToDiskManager().keySet()), handler.getAllDisks());
       assertEquals("There shouldn't be any failed disk", 0, handler.getFailedDisks().size());
-      // Turn FULL_AUTO on this host
-      String resourceName = helixAdmin.getResourcesInCluster(clusterName).get(0);
-      IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resourceName);
-      InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
-      final String instanceGroupTag = "TAG_1000000";
-      idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
-      idealState.setInstanceGroupTag(instanceGroupTag);
-      instanceConfig.addTag(instanceGroupTag);
-      helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
-      helixAdmin.setResourceIdealState(clusterName, resourceName, idealState);
-      Thread.sleep(500); // wait for clustermap to catch up
-      assertTrue(clusterMap.isDataNodeInFullAutoMode(localNode));
+      clusterHelper.turnFullAutoOnForLocalhost();
 
       // Above are the same initialization code from the previous test method
       long failureCountBefore = storageManager.getStoreMainMetrics().handleDiskFailureCount.getCount();
@@ -1940,7 +1810,7 @@ public class StorageManagerTest {
       diskFailureErrorCountBefore++;
 
       // Test case 3. A success case
-      // Set every replicas to error state
+      // Set ever replicas to error statey
       sendStateTransitionMessages(helixParticipant.getHelixManager(), "10000",
           replicasOnFailedDisk.subList(replicasOnFailedDisk.size() - 1, replicasOnFailedDisk.size()), "OFFLINE",
           "BOOTSTRAP");
@@ -1949,23 +1819,239 @@ public class StorageManagerTest {
           diskToFail);
       storageManager.shutdown();
     } finally {
+      clusterHelper.shutdownCluster();
+    }
+  }
+
+  /**
+   * Test the case when the disk is fixed and we restore the disk's availability
+   * @throws Exception
+   */
+  @Test
+  public void testRestoreDiskAvailability() throws Exception {
+    ClusterSetupHelper clusterHelper = new ClusterSetupHelper();
+    clusterHelper.setupCluster();
+    clusterHelper.createAllMountPaths();
+    clusterHelper.turnFullAutoOnForLocalhost();
+
+    HelixClusterManager clusterMap = clusterHelper.clusterMap;
+    HelixParticipant helixParticipant = clusterHelper.helixParticipant;
+    HelixAdmin helixAdmin = clusterHelper.helixAdmin;
+    DataNodeId localNode = clusterHelper.localNode;
+    String clusterName = clusterHelper.clusterName;
+    String instanceName = clusterHelper.instanceName;
+
+    try {
+      List<DiskId> allDisks = new ArrayList<>(clusterHelper.getDiskToReplicaMap().keySet());
+      // 1. Start storage manager without restoring disk availability, it will not update the disk capacity
+      StorageManager storageManager =
+          new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+              new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+              Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+              new InMemAccountService(false, false));
+      // Start the storage manager, it will create all the replicas' directories
+      storageManager.start();
+      storageManager.shutdown();
+
+      int instanceCapacity = storageManager.getCapacityOfHealthyDisks(allDisks, Collections.emptyList());
+      InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertFalse(instanceConfig.getInstanceCapacityMap().containsKey("DISK"));
+
+      // 2. Start storage manager with restoring disk availability, it will update disk capacity
+      generateConfigs(true, true, false, 2, true, true);
+      storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+          new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+          Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+          new InMemAccountService(false, false));
+      storageManager.start();
+      storageManager.shutdown();
+      instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertTrue(instanceConfig.getInstanceCapacityMap().containsKey("DISK"));
+      assertEquals(instanceCapacity, instanceConfig.getInstanceCapacityMap().get("DISK").intValue());
+
+      // 3. Mark a disk as unavailable and then restore the disk's availability
+      DiskId badDiskId = allDisks.get(0);
+      helixParticipant.setDisksState(Collections.singletonList(badDiskId), HardwareState.UNAVAILABLE);
+
+      int instanceCapacityWithBadDisk =
+          storageManager.getCapacityOfHealthyDisks(allDisks, Collections.singletonList(badDiskId));
+      helixParticipant.updateDiskCapacity(instanceCapacityWithBadDisk);
+      instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertEquals(instanceCapacityWithBadDisk, instanceConfig.getInstanceCapacityMap().get("DISK").intValue());
+      // Delete mount path for bad disk so it can't be recovered
+      Utils.deleteFileOrDirectory(new File(badDiskId.getMountPath()));
+      storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+          new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+          Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+          new InMemAccountService(false, false));
+      storageManager.start();
+      storageManager.shutdown();
+      instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertEquals(instanceCapacityWithBadDisk, instanceConfig.getInstanceCapacityMap().get("DISK").intValue());
+      for (DiskId diskId : clusterHelper.getDiskToReplicaMap().keySet()) {
+        if (diskId.getMountPath().equals(badDiskId.getMountPath())) {
+          // this is the bad disk, it should still be available
+          assertEquals(HardwareState.UNAVAILABLE, diskId.getState());
+          break;
+        }
+      }
+
+      // 4. Recreate the mount path, this would bring back the bad disk
+      File file = new File(badDiskId.getMountPath());
+      assertTrue(file.mkdirs());
+      file.deleteOnExit();
+      storageManager = new StorageManager(storeConfig, diskManagerConfig, Utils.newScheduler(1, false), metricRegistry,
+          new MockIdFactory(), clusterMap, localNode, new DummyMessageStoreHardDelete(),
+          Collections.singletonList(helixParticipant), SystemTime.getInstance(), new DummyMessageStoreRecovery(),
+          new InMemAccountService(false, false));
+      storageManager.start();
+      storageManager.shutdown();
+      instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      assertEquals(instanceCapacity, instanceConfig.getInstanceCapacityMap().get("DISK").intValue());
+      for (DiskId diskId : clusterHelper.getDiskToReplicaMap().keySet()) {
+        if (diskId.getMountPath().equals(badDiskId.getMountPath())) {
+          // this is the bad disk, it should still be available
+          assertEquals(HardwareState.AVAILABLE, diskId.getState());
+          break;
+        }
+      }
+    } finally {
+      clusterHelper.shutdownCluster();
+    }
+  }
+
+  // helpers
+
+  /**
+   * A helper class to setup a real cluster that has real connections to zookeeper and helix.
+   */
+  class ClusterSetupHelper {
+    String clusterName;
+    String instanceName;
+    HelixParticipant helixParticipant;
+    HelixAdmin helixAdmin;
+    HelixClusterManager clusterMap;
+    DataNodeId localNode;
+
+    private String oldBaseMountPath = TestHardwareLayout.baseMountPath;
+    private long oldMinCapacity = MIN_REPLICA_CAPACITY_IN_BYTES;
+
+    /**
+     * Setup the cluster.
+     * @throws Exception
+     */
+    public void setupCluster() throws Exception {
+      clusterName = "StorageManagerTestCluster-" + TestUtils.getRandomString(5);
+      String hardwareLayoutPath = tempDirPath + "/hardwareLayoutTest.json";
+      String partitionLayoutPath = tempDirPath + "/partitionLayoutTest.json";
+      String zkLayoutPath = tempDirPath + "/zkLayoutPath.json";
+      MIN_REPLICA_CAPACITY_IN_BYTES = 1024;
+      TestHardwareLayout.baseMountPath = tempDirPath + "/mnt";
+      TestHardwareLayout testHardwareLayout =
+          new TestHardwareLayout(clusterName, 6, 100L * 1024 * 1024 * 1024, 6, 1, 18088, 20, false);
+      TestPartitionLayout testPartitionLayout =
+          new TestPartitionLayout(testHardwareLayout, 100, PartitionState.READ_WRITE, 1024, 3, null, 0);
+      JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
+      Utils.writeJsonObjectToFile(zkJson, zkLayoutPath);
+      Utils.writeJsonObjectToFile(testHardwareLayout.getHardwareLayout().toJSONObject(), hardwareLayoutPath);
+      Utils.writeJsonObjectToFile(testPartitionLayout.getPartitionLayout().toJSONObject(), partitionLayoutPath);
+
+      Properties props = new Properties();
+      props.setProperty("clustermap.host.name", "localhost");
+      DataNodeId dataNodeId = testHardwareLayout.getRandomDataNodeFromDc(dcName);
+      props.setProperty("clustermap.port", String.valueOf(dataNodeId.getPort()));
+      props.setProperty("clustermap.cluster.name", clusterName);
+      props.setProperty("clustermap.datacenter.name", dcName);
+      props.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+      props.setProperty("clustermap.data.node.config.source.type", DataNodeConfigSourceType.PROPERTY_STORE.name());
+      props.setProperty("clustermap.enable.state.model.listener", "true");
+      props.setProperty("clustermap.update.datanode.info", "true");
+      props.setProperty(ClusterMapConfig.DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS, "10000");
+      clusterMapConfig = new ClusterMapConfig(new VerifiableProperties(props));
+      storeConfig = new StoreConfig(new VerifiableProperties(props));
+      HelixBootstrapUpgradeUtil.bootstrapOrUpgrade(hardwareLayoutPath, partitionLayoutPath, zkLayoutPath, "", dcName,
+          100, false, false, new HelixAdminFactory(), false, ClusterMapConfig.AMBRY_STATE_MODEL_DEF, BootstrapCluster,
+          DataNodeConfigSourceType.PROPERTY_STORE, false, 1000);
+
+      instanceName = ClusterMapUtils.getInstanceName("localhost", clusterMapConfig.clusterMapPort);
+      helixParticipant =
+          new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
+              parseDcJsonAndPopulateDcInfo(clusterMapConfig.clusterMapDcsZkConnectStrings).get(
+                  clusterMapConfig.clusterMapDatacenterName).getZkConnectStrs().get(0), true);
+      helixAdmin = helixParticipant.getHelixAdmin();
+      // Mock a state change listener to throw an exception
+      PartitionStateChangeListener listener = mock(PartitionStateChangeListener.class);
+      doThrow(
+          new StateTransitionException("error", StateTransitionException.TransitionErrorCode.BootstrapFailure)).when(
+          listener).onPartitionBecomeBootstrapFromOffline(anyString());
+      helixParticipant.registerPartitionStateChangeListener(StateModelListenerType.StatsManagerListener, listener);
+      helixParticipant.participate(Collections.emptyList(), null, null);
+
+      clusterMap = new HelixClusterManager(clusterMapConfig, instanceName, new HelixFactory(), metricRegistry);
+      localNode = clusterMap.getDataNodeId("localhost", clusterMapConfig.clusterMapPort);
+      createAllMountPaths();
+    }
+
+    /**
+     * Create the mount path directories for the local host
+     */
+    private void createAllMountPaths() {
+      for (DiskId diskId : getDiskToReplicaMap().keySet()) {
+        File file = new File(diskId.getMountPath());
+        if (!file.exists()) {
+          assertTrue(file.mkdirs());
+          file.deleteOnExit();
+        }
+      }
+    }
+
+    /**
+     * Get the disk to replica map for the local host
+     * @return
+     */
+    public Map<DiskId, List<ReplicaId>> getDiskToReplicaMap() {
+      List<? extends ReplicaId> replicas = clusterMap.getReplicaIds(localNode);
+      Map<DiskId, List<ReplicaId>> diskToReplicas = new HashMap<>();
+      for (ReplicaId replica : replicas) {
+        diskToReplicas.computeIfAbsent(replica.getDiskId(), disk -> new ArrayList<>()).add(replica);
+      }
+      return diskToReplicas;
+    }
+
+    /**
+     * Turn FULL AUTO on for the local host
+     * @throws Exception
+     */
+    public void turnFullAutoOnForLocalhost() throws Exception {
+      // Turn FULL_AUTO on this host
+      String resourceName = helixAdmin.getResourcesInCluster(clusterName).get(0);
+      IdealState idealState = helixAdmin.getResourceIdealState(clusterName, resourceName);
+      InstanceConfig instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
+      final String instanceGroupTag = "TAG_1000000";
+      idealState.setRebalanceMode(IdealState.RebalanceMode.FULL_AUTO);
+      idealState.setInstanceGroupTag(instanceGroupTag);
+      instanceConfig.addTag(instanceGroupTag);
+      helixAdmin.setInstanceConfig(clusterName, instanceName, instanceConfig);
+      helixAdmin.setResourceIdealState(clusterName, resourceName, idealState);
+      Thread.sleep(500); // wait for clustermap to catch up
+      assertTrue(clusterMap.isDataNodeInFullAutoMode(localNode));
+    }
+
+    /**
+     * Shut down the cluster
+     */
+    public void shutdownCluster() {
       TestHardwareLayout.baseMountPath = oldBaseMountPath;
       MIN_REPLICA_CAPACITY_IN_BYTES = oldMinCapacity;
       try {
-        Utils.deleteFileOrDirectory(new File(tempDirPath));
         clusterMap.close();
         helixParticipant.close();
         helixAdmin.dropCluster(clusterName);
-        for (ZkInfo zkInfo : zkInfoList) {
-          zkInfo.shutdown();
-        }
       } catch (Exception e) {
         System.out.println("Fail to clean up all the components:" + e.getMessage());
       }
     }
   }
-
-  // helpers
 
   /**
    * Verify the state after handling a disk failure.
@@ -2135,9 +2221,10 @@ public class StorageManagerTest {
    * @param removeUnexpectedDirs {@code true} to remove unexpectedd directories when current node is in FULL AUTO
    * @param numSegment the number of log segment files to create
    * @parem removeDirectoryAndRestart {@code true} to remove directory of a blob store and restart it when it failes to start
+   * @param restoreDiskAvailability {@code true} to restore disk's availability when unavailable disk is fixed.
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig, boolean removeUnexpectedDirs,
-      int numSegment, boolean removeDirectoryAndRestart) {
+      int numSegment, boolean removeDirectoryAndRestart, boolean restoreDiskAvailability) {
     List<com.github.ambry.utils.TestUtils.ZkInfo> zkInfoList = new ArrayList<>();
     zkInfoList.add(new com.github.ambry.utils.TestUtils.ZkInfo(null, "DC0", (byte) 0, 2199, false));
     JSONObject zkJson = constructZkLayoutJSON(zkInfoList);
@@ -2162,6 +2249,8 @@ public class StorageManagerTest {
     }
     properties.setProperty(StoreConfig.storeRemoveDirectoryAndRestartBlobStoreName,
         String.valueOf(removeDirectoryAndRestart));
+    properties.setProperty(StoreConfig.storeRestoreUnavailableDiskInFullAutoName,
+        String.valueOf(restoreDiskAvailability));
     VerifiableProperties vProps = new VerifiableProperties(properties);
     diskManagerConfig = new DiskManagerConfig(vProps);
     storeConfig = new StoreConfig(vProps);
@@ -2174,7 +2263,7 @@ public class StorageManagerTest {
    * @param updateInstanceConfig whether to update InstanceConfig in Helix
    */
   private void generateConfigs(boolean segmentedLog, boolean updateInstanceConfig) {
-    generateConfigs(segmentedLog, updateInstanceConfig, false, 2, false);
+    generateConfigs(segmentedLog, updateInstanceConfig, false, 2, false, false);
   }
 
   // unrecognizedDirsOnDiskTest() helpers

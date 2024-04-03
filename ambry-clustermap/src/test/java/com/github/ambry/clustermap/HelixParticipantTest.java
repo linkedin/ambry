@@ -673,10 +673,17 @@ public class HelixParticipantTest {
       fail("Should fail on negative number");
     } catch (IllegalArgumentException e) {
     }
+    long updateCount = helixParticipant.participantMetrics.updateDiskCapacityCounter.getCount();
     assertTrue(helixParticipant.updateDiskCapacity(1000));
+    assertEquals(updateCount + 1, helixParticipant.participantMetrics.updateDiskCapacityCounter.getCount());
     instanceConfig = helixAdmin.getInstanceConfig(clusterName, instanceName);
     assertTrue(instanceConfig.getInstanceCapacityMap().containsKey(HelixParticipant.DISK_KEY));
     assertEquals(1000, instanceConfig.getInstanceCapacityMap().get(HelixParticipant.DISK_KEY).intValue());
+
+    // update with the same capacity again, this time we shouldn't update it.
+    updateCount++;
+    assertTrue(helixParticipant.updateDiskCapacity(1000));
+    assertEquals(updateCount, helixParticipant.participantMetrics.updateDiskCapacityCounter.getCount());
     helixParticipant.close();
   }
 

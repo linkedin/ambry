@@ -608,6 +608,13 @@ public class StoreConfig {
   public static final String storeRemoveDirectoryAndRestartBlobStoreName =
       "store.remove.directory.and.restart.blob.store";
 
+  /**
+   * True to restore disk's availability on data node config when an unavailable disk is fixed in FULL AUTO mode.
+   */
+  @Config(storeRestoreUnavailableDiskInFullAutoName)
+  public final boolean storeRestoreUnavailableDiskInFullAuto;
+  public static final String storeRestoreUnavailableDiskInFullAutoName = "store.restore.unavailable.disk.in.full.auto";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
@@ -770,5 +777,7 @@ public class StoreConfig {
         verifiableProperties.getBoolean(storeRemoveUnexpectedDirsInFullAutoName, false);
     storeRemoveDirectoryAndRestartBlobStore =
         verifiableProperties.getBoolean(storeRemoveDirectoryAndRestartBlobStoreName, false);
+    storeRestoreUnavailableDiskInFullAuto =
+        verifiableProperties.getBoolean(storeRestoreUnavailableDiskInFullAutoName, false);
   }
 }

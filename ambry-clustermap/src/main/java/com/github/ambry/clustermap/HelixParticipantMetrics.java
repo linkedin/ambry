@@ -31,6 +31,8 @@ class HelixParticipantMetrics {
   final Counter partitionDroppedCount;
   final Counter setReplicaDisabledStateErrorCount;
 
+  public final Counter updateDiskCapacityCounter;
+
   HelixParticipantMetrics(MetricRegistry metricRegistry, String zkConnectStr,
       Map<String, ReplicaState> localPartitionAndState) {
     String zkSuffix = zkConnectStr == null ? "" : "-" + zkConnectStr;
@@ -58,6 +60,8 @@ class HelixParticipantMetrics {
         metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "partitionDroppedCount" + zkSuffix));
     setReplicaDisabledStateErrorCount = metricRegistry.counter(
         MetricRegistry.name(HelixParticipant.class, "setReplicaDisabledStateErrorCount" + zkSuffix));
+    updateDiskCapacityCounter =
+        metricRegistry.counter(MetricRegistry.name(HelixParticipant.class, "updateDiskCapacityCount"));
   }
 
   /**

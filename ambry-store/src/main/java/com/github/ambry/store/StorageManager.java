@@ -238,16 +238,13 @@ public class StorageManager implements StoreManager {
    * @throws StoreException
    */
   void verifyDiskHealth() throws StoreException {
-    List<DiskId> allDiskIds = currentNode.getDiskIds();
-    Set<DiskId> failedDiskIds = allDiskIds.stream()
-        .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
-        .collect(Collectors.toSet());
+    Set<DiskId> failedDiskIds = maybeRestoreDiskAvailability();
     for (Map.Entry<DiskId, DiskManager> entry : diskToDiskManager.entrySet()) {
       if (!entry.getValue().isRunning()) {
         failedDiskIds.add(entry.getKey());
       }
     }
-    int totalDisks = allDiskIds.size();
+    int totalDisks = currentNode.getDiskIds().size();
     int failedDisks = failedDiskIds.size();
     // The failed disks has to larger than the threshold. If the threshold is 1, then even if all disks failed, it won't
     // throw an exception.
@@ -257,6 +254,49 @@ public class StorageManager implements StoreManager {
       logger.error("Failed disks are {}", failedDisks);
       throw new StoreException("More than enough disks failed", StoreErrorCodes.Initialization_Error);
     }
+  }
+
+  /**
+   * Maybe restore disk's availability and update instance capacity.
+   * @return A set of {@link DiskId}s that are still unavailable.
+   */
+  Set<DiskId> maybeRestoreDiskAvailability() {
+    List<DiskId> allDiskIds = currentNode.getDiskIds();
+    Set<DiskId> failedDiskIds = allDiskIds.stream()
+        .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
+        .collect(Collectors.toSet());
+    if (!storeConfig.storeRestoreUnavailableDiskInFullAuto || !clusterMap.isDataNodeInFullAutoMode(currentNode)) {
+      return failedDiskIds;
+    }
+    // We should try to restore the availability of failed disks
+    if (!failedDiskIds.isEmpty()) {
+      List<DiskId> disksToRecover = new ArrayList<>();
+      for (DiskId diskId : failedDiskIds) {
+        // If the mount path exist and is a directory, it's likely disk is already recovered
+        File mount = new File(diskId.getMountPath());
+        if (mount.exists() && mount.isDirectory()) {
+          disksToRecover.add(diskId);
+        }
+      }
+      if (!disksToRecover.isEmpty()) {
+        // We can set the disk available again
+        if (!primaryClusterParticipant.setDisksState(disksToRecover, HardwareState.AVAILABLE)) {
+          logger.error("Fail to restore availability for disk " + disksToRecover + ", ignore the error and move on");
+          return failedDiskIds;
+        } else {
+          logger.info("Successfully restore availability for disk " + disksToRecover);
+        }
+        disksToRecover.forEach(diskId -> diskId.setState(HardwareState.AVAILABLE));
+        failedDiskIds.removeAll(disksToRecover);
+      }
+    }
+
+    int actualCapacityInGB = getCapacityOfHealthyDisks(allDiskIds, failedDiskIds);
+    if (!primaryClusterParticipant.updateDiskCapacity(actualCapacityInGB)) {
+      throw new IllegalStateException("Failed to update disk capacity to " + actualCapacityInGB);
+    }
+    logger.info("Successfully update disk capacity to {} when restoring disk availability", actualCapacityInGB);
+    return failedDiskIds;
   }
 
   @Override
@@ -358,6 +398,24 @@ public class StorageManager implements StoreManager {
   public boolean controlCompactionForBlobStore(PartitionId id, boolean enabled) {
     DiskManager diskManager = partitionToDiskManager.get(id);
     return diskManager != null && diskManager.controlCompactionForBlobStore(id, enabled);
+  }
+
+  /**
+   * Return the disk capacity for healthy disks. This capacity is the sum of all healthy disks. The unit
+   * is GiB. This disk capacity is the value to report in instance config.
+   * @param allDiskIds All the disks on data node config
+   * @param failedDiskIds The failed disks
+   * @return The disk capacity.
+   */
+  int getCapacityOfHealthyDisks(Collection<DiskId> allDiskIds, Collection<DiskId> failedDiskIds) {
+    int capacityReportingPercentage = storeConfig.storeDiskCapacityReportingPercentage;
+    long healthyDiskCapacity = allDiskIds.stream()
+        .filter(((Predicate<DiskId>) failedDiskIds::contains).negate())
+        .mapToLong(DiskId::getRawCapacityInBytes)
+        .sum();
+    final long GB = 1024 * 1024 * 1024;
+    long capacityInGB = healthyDiskCapacity / GB;
+    return (int) ((double) capacityInGB * capacityReportingPercentage / 100);
   }
 
   /**
@@ -1009,11 +1067,7 @@ public class StorageManager implements StoreManager {
       // messages, then when we reset the partitions, replica list in the StorageManager would be obsolete. Fortunately
       // all the replicas in the failed disks are already stopped, we just have to remove the disk from disk maps.
       failedDisks.addAll(newFailedDisks);
-      long healthyDiskCapacity = diskToDiskManager.keySet()
-          .stream()
-          .filter(((Predicate<DiskId>) failedDisks::contains).negate())
-          .mapToLong(DiskId::getRawCapacityInBytes)
-          .sum();
+      int actualCapacityInGB = getCapacityOfHealthyDisks(currentNode.getDiskIds(), failedDisks);
       List<ReplicaId> replicasOnFailedDisks = partitionNameToReplicaId.values()
           .stream()
           .filter(replica -> newFailedDisks.contains(replica.getDiskId()))
@@ -1046,7 +1100,7 @@ public class StorageManager implements StoreManager {
         // 5: remove all the replicas from replication and state manger
         removeReplicasFromReplicationAndStatsManager(replicasOnFailedDisks);
         // 6. update disk capacity
-        updateDiskCapacity(healthyDiskCapacity);
+        updateDiskCapacity(actualCapacityInGB);
         // 7. Remove disks from the maps.
         cleanupDisksAndReplicas(newFailedDisks, replicasOnFailedDisks);
         success = true;
@@ -1139,10 +1193,7 @@ public class StorageManager implements StoreManager {
       logger.info("Replicas {} are successfully reset when handling disk failure", replicasOnFailedDisks);
     }
 
-    private void updateDiskCapacity(long healthyDiskCapacity) {
-      final long GB = 1024 * 1024 * 1024;
-      long capacityInGB = healthyDiskCapacity / GB;
-      int actualCapacityInGB = (int) ((double) capacityInGB * capacityReportingPercentage / 100);
+    private void updateDiskCapacity(int actualCapacityInGB) {
       if (!primaryClusterParticipant.updateDiskCapacity(actualCapacityInGB)) {
         throw new IllegalStateException("Failed to update disk capacity");
       }
