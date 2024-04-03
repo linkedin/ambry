@@ -16,6 +16,8 @@ package com.github.ambry.messageformat;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageStoreRecovery;
 import com.github.ambry.store.Read;
+import com.github.ambry.store.StoreErrorCodes;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Utils;
@@ -40,7 +42,7 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
 
   @Override
   public List<MessageInfo> recover(Read read, long startOffset, long endOffset, StoreKeyFactory factory)
-      throws IOException {
+      throws IOException, StoreException {
     ArrayList<MessageInfo> messageRecovered = new ArrayList<MessageInfo>();
     try {
       while (startOffset < endOffset) {
@@ -119,10 +121,12 @@ public class BlobStoreRecovery implements MessageStoreRecovery {
       // log in case where we were not able to parse a message. we stop recovery at that point and return the
       // messages that have been recovered so far.
       logger.error("Message format exception while recovering messages", e);
+      throw new StoreException(e, StoreErrorCodes.Log_File_Format_Error);
     } catch (IndexOutOfBoundsException e) {
       // log in case where were not able to read a complete message. we stop recovery at that point and return
       // the message that have been recovered so far.
       logger.error("Trying to read more than the available bytes");
+      throw new StoreException(e, StoreErrorCodes.Log_File_Format_Error);
     }
     for (MessageInfo messageInfo : messageRecovered) {
       logger.info("Message Recovered key {} size {} ttl {} deleted {} undelete {}", messageInfo.getStoreKey(),
