@@ -548,7 +548,7 @@ public class IndexSegmentTest {
    * @throws Exception
    */
   @Test
-  public void loadBloomFileFailureTest() throws Exception{
+  public void loadBloomFileFailureTest() throws Exception {
     assumeTrue(formatVersion > PersistentIndex.VERSION_1);
     LogSegmentName logSegmentName1 = LogSegmentName.fromPositionAndGeneration(0, 0);
     int indexValueSize =
@@ -559,7 +559,7 @@ public class IndexSegmentTest {
             KEY_SIZE + indexValueSize, indexValueSize, config, metrics, time);
     Random random = new Random();
     short accountId1 = getRandomShort(random);
-    short containerId1= getRandomShort(random);
+    short containerId1 = getRandomShort(random);
     MockId id1 = new MockId(TestUtils.getRandomString(CUSTOM_ID_SIZE), accountId1, containerId1);
     IndexValue value1 =
         IndexValueTest.getIndexValue(1000, new Offset(logSegmentName1, 0), Utils.Infinite_Time, time.milliseconds(),
@@ -764,6 +764,7 @@ public class IndexSegmentTest {
     LogSegmentName logSegmentName = StoreTestUtils.getRandomLogSegmentName(null);
     Offset startOffset = new Offset(logSegmentName, writeStartOffset);
     IndexSegment indexSegment = generateIndexSegment(startOffset, STORE_KEY_FACTORY);
+    time.setCurrentMilliseconds(System.currentTimeMillis() / 1000 * 1000);
 
     List<Long> offsets = new ArrayList<>();
     offsets.add(writeStartOffset);
@@ -804,10 +805,55 @@ public class IndexSegmentTest {
     }
     try {
       createIndexSegmentFromFile(indexFile, true, journal);
-      fail("Should fail as index file is corrupted");
+      fail("Should fail as a sealed index file is corrupted");
     } catch (StoreException e) {
       assertEquals("Mismatch in error code", StoreErrorCodes.Index_Creation_Failure, e.getErrorCode());
+      StoreException rc = Utils.getRootCause(e, StoreException.class);
+      assertEquals("Mismatch in error code", StoreErrorCodes.Index_File_Format_Error, rc.getErrorCode());
     }
+
+    // An unsealed index segment should ignore the corruption since it can be recovered later by log
+    fromDisk = createIndexSegmentFromFile(indexFile, false, journal);
+    verifyIndexSegmentDetails(fromDisk, startOffset, 0, 0, false, startOffset.getOffset(), time.milliseconds(), null,
+        null, StoreFindToken.UNINITIALIZED_RESET_KEY_VERSION);
+    assertEquals("End offset doesn't match", startOffset.getOffset(), fromDisk.getEndOffset().getOffset());
+    // We should be able to insert entries to this index segment
+    offsets = new ArrayList<>();
+    offsets.add(writeStartOffset);
+    for (int i = 0; i < 4; i++) {
+      // size has to be > 0 (no record is 0 sized)
+      long size = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
+      offsets.add(writeStartOffset + size);
+      writeStartOffset += size;
+    }
+    lastEntrySize = Utils.getRandomLong(TestUtils.RANDOM, 1000) + 1;
+    endOffset = offsets.get(offsets.size() - 1) + lastEntrySize;
+    referenceIndex = new TreeMap<>();
+    List<IndexEntry> newEntries = addPutEntries(offsets, lastEntrySize, fromDisk, referenceIndex, false, false);
+    // write to file
+    fromDisk.writeIndexSegmentToFile(fromDisk.getEndOffset());
+    // verify read from file
+    journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+    fromDisk = createIndexSegmentFromFile(fromDisk.getFile(), false, journal);
+    assertEquals("End offset doesn't match", endOffset, fromDisk.getEndOffset().getOffset());
+    StoreKey resetKey = null;
+    PersistentIndex.IndexEntryType resetKeyType = null;
+    short resetKeyLifeVersion = StoreFindToken.UNINITIALIZED_RESET_KEY_VERSION;
+    if (formatVersion != PersistentIndex.VERSION_0) {
+      resetKey = newEntries.get(0).getKey();
+      resetKeyType = PersistentIndex.IndexEntryType.PUT;
+      resetKeyLifeVersion = newEntries.get(0).getValue().getLifeVersion();
+    }
+    int expectedSizeWritten = (KEY_SIZE + fromDisk.getValueSize()) * 5;
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, 5, expectedSizeWritten, false, endOffset,
+        time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
+
+    // seal it and now reload it as a sealed index segment
+    fromDisk.seal();
+    journal = new Journal(tempDir.getAbsolutePath(), Integer.MAX_VALUE, Integer.MAX_VALUE);
+    fromDisk = createIndexSegmentFromFile(fromDisk.getFile(), true, journal);
+    verifyAllForIndexSegmentFromFile(referenceIndex, fromDisk, startOffset, 5, expectedSizeWritten, true, endOffset,
+        time.milliseconds(), resetKey, resetKeyType, resetKeyLifeVersion);
   }
 
   /**
@@ -1122,11 +1168,13 @@ public class IndexSegmentTest {
     assertEquals("Sealed state is incorrect", sealed, indexSegment.isSealed());
     assertEquals("Entry size is incorrect: " + formatVersion, indexPersistedEntrySize,
         indexSegment.getPersistedEntrySize());
-    assertEquals("Value size is incorrect", valueSize, indexSegment.getValueSize());
+    if (indexSegment.getValueSize() != VALUE_SIZE_INVALID_VALUE) {
+      assertEquals("Value size is incorrect", valueSize, indexSegment.getValueSize());
+    }
     assertEquals("Reset key mismatch ", resetKey, indexSegment.getResetKey());
     assertEquals("Reset key type mismatch ", resetKeyType, indexSegment.getResetKeyType());
     assertEquals("Reset key life version mismatch", resetKeyLifeVersion, indexSegment.getResetKeyLifeVersion());
-    if (formatVersion != PersistentIndex.VERSION_0) {
+    if (formatVersion != PersistentIndex.VERSION_0 && indexSegment.getLastModifiedTimeMs() != 0) {
       assertEquals("Last modified time is incorrect", lastModifiedTimeInMs, indexSegment.getLastModifiedTimeMs());
     }
     // in case of formatVersion 0, last modified time is calculated based on SystemTime and hence cannot verify for equivalency
@@ -1275,8 +1323,8 @@ public class IndexSegmentTest {
     for (boolean oneEntryPerKey : new boolean[]{true, false}) {
       List<IndexEntry> indexEntries = new ArrayList<>();
       assertEquals("Unexpected return value from getIndexEntriesSince()", highestExpectedId != null,
-          segment.getIndexEntriesSince(idToCheck, condition, indexEntries, new AtomicLong(existingSize),
-              oneEntryPerKey, false));
+          segment.getIndexEntriesSince(idToCheck, condition, indexEntries, new AtomicLong(existingSize), oneEntryPerKey,
+              false));
       if (highestExpectedId != null) {
         assertEquals("Highest ID not as expected", highestExpectedId,
             indexEntries.get(indexEntries.size() - 1).getKey());
@@ -1541,8 +1589,8 @@ public class IndexSegmentTest {
    */
   private void verifyAllForIndexSegmentFromFile(NavigableMap<MockId, NavigableSet<IndexValue>> referenceIndex,
       IndexSegment fromDisk, Offset startOffset, int numItems, int expectedSizeWritten, boolean sealed, long endOffset,
-      long lastModifiedTimeInMs, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType, short resetKeyLifeVersion)
-      throws StoreException {
+      long lastModifiedTimeInMs, StoreKey resetKey, PersistentIndex.IndexEntryType resetKeyType,
+      short resetKeyLifeVersion) throws StoreException {
     verifyIndexSegmentDetails(fromDisk, startOffset, numItems, expectedSizeWritten, sealed, endOffset,
         lastModifiedTimeInMs, resetKey, resetKeyType, resetKeyLifeVersion);
     verifyFind(referenceIndex, fromDisk);

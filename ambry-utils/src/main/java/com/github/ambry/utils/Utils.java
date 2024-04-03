@@ -592,7 +592,7 @@ public class Utils {
    * @param offset starting offset of the fileChanel to be read from
    * @param buffer the destination of the read
    * @return actual io count of fileChannel.read()
-   * @throws IOException
+   * @throws IOException When ByteBuffer can't be filled up or any other IO error.
    */
   public static int readFileToByteBuffer(FileChannel fileChannel, long offset, ByteBuffer buffer) throws IOException {
     int ioCount = 0;
