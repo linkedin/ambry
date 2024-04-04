@@ -23,6 +23,7 @@ import com.github.ambry.utils.Pair;
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
+import org.apache.commons.codec.binary.Base64;
 
 
 /**
@@ -92,14 +93,15 @@ public class S3MultipartETag {
     rootObject.put(DATA_CHUNK_LIST, chunks);
     rootObject.put(VERSION, CURRENT_VERSION);
 
-    return rootObject.toString();
+    return Base64.encodeBase64URLSafeString(rootObject.toString().getBytes());
   }
 
   /**
    * Deserialize the Json String to {@link S3MultipartETag}
    * @return the {@link S3MultipartETag}
    */
-  public static S3MultipartETag deserialize(String eTagStr) throws IOException {
+  public static S3MultipartETag deserialize(String encodedETagStr) throws IOException {
+    String eTagStr = new String(Base64.decodeBase64(encodedETagStr));
     JsonNode rootNode;
     try {
       rootNode = objectMapper.readTree(eTagStr);
