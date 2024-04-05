@@ -215,9 +215,9 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.info("[BackupIntegrityMonitor] Selected replica [{}]", replica);
       serverReplica = serverReplicationManager.createRemoteReplicaInfos(
           Collections.singletonList(replica), store.getReplicaId()).get(0);
-      logger.info("[BackupIntegrityMonitor] Created local replica [{}]", serverReplica);
+      logger.info("[BackupIntegrityMonitor] Created replica info [{}]", serverReplica);
       serverScanner.addRemoteReplicaInfo(serverReplica);
-      logger.info("[BackupIntegrityMonitor] Added local replica [{}]", serverReplica);
+      logger.info("[BackupIntegrityMonitor] Added replica info [{}]", serverReplica);
       long replicaSize = replica.getCapacityInBytes();
       long scannedBytes = 0;
       long scannerMilestone = SERVER_SCANNER_MILESTONE;
