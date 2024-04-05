@@ -274,7 +274,7 @@ public class S3MultipartCompleteUploadHandler {
         // Create xml response to send to user
         RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
-        String bucket = namedBlobPath.getAccountName();
+        String bucket = namedBlobPath.getContainerName();
         String key = namedBlobPath.getBlobName();
         String eTag = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
         String s3Location = restRequest.getPath();

@@ -133,7 +133,7 @@ public class S3MultipartListPartsHandler {
         try {
           RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
           NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
-          String bucket = namedBlobPath.getAccountName();
+          String bucket = namedBlobPath.getContainerName();
           String key = namedBlobPath.getBlobName();
           String uploadId = (String) restRequest.getArgs().get(UPLOAD_ID_QUERY_PARAM);
           LOGGER.debug(

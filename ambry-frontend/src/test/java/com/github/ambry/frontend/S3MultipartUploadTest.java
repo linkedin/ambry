@@ -95,9 +95,6 @@ public class S3MultipartUploadTest {
 
   @Test
   public void multiPartUploadTest() throws Exception {
-
-    long startTime = SystemTime.getInstance().milliseconds();
-
     // 1. CreateMultipartUpload
     String accountName = account.getName();
     String containerName = container.getName();
@@ -117,7 +114,7 @@ public class S3MultipartUploadTest {
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", "application/xml",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-    assertEquals("Mismatch on InitiateMultipartUploadResult.bucket", accountName, initUploadResult.getBucket());
+    assertEquals("Mismatch on InitiateMultipartUploadResult.bucket", containerName, initUploadResult.getBucket());
     assertEquals("Mismatch on InitiateMultipartUploadResult.key", blobName, initUploadResult.getKey());
     assertNotNull("UploadId must be present", initUploadResult.getUploadId());
 
@@ -197,7 +194,7 @@ public class S3MultipartUploadTest {
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertEquals("Mismatch in content type", "application/xml",
         restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
-    assertEquals("Mismatch on CompleteMultipartUploadResult.bucket", accountName,
+    assertEquals("Mismatch on CompleteMultipartUploadResult.bucket", containerName,
         completeMultipartUploadResult.getBucket());
     assertEquals("Mismatch on CompleteMultipartUploadResult.key", blobName, completeMultipartUploadResult.getKey());
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName;
