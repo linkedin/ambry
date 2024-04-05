@@ -13,18 +13,14 @@
  */
 package com.github.ambry.frontend;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import com.github.ambry.account.Account;
-import com.github.ambry.account.AccountBuilder;
 import com.github.ambry.account.AccountCollectionSerde;
 import com.github.ambry.account.Container;
-import com.github.ambry.account.ContainerBuilder;
 import com.github.ambry.account.InMemAccountService;
 import com.github.ambry.account.InMemAccountServiceFactory;
-import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.clustermap.ClusterMapSnapshotConstants;
 import com.github.ambry.clustermap.MockClusterMap;
-import com.github.ambry.clustermap.PartitionId;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.CommonTestUtils;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.commons.NettySslFactory;
@@ -35,30 +31,25 @@ import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.NettyConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.frontend.s3.S3MessagePayload;
 import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.NettyClient.ResponseParts;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestServer;
-import com.github.ambry.rest.RestTestUtils;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.ByteRanges;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
-import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -76,20 +67,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
+import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 import static com.github.ambry.utils.TestUtils.*;
 import static org.junit.Assert.*;
-import static org.junit.Assume.*;
 
 
 /**
@@ -111,6 +96,8 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
   private static NettyClient sslNettyClient = null;
   private final boolean addClusterPrefix = true;
 
+  private final ObjectMapper xmlMapper;
+
   static {
     try {
       CLUSTER_MAP = new MockClusterMap();
@@ -131,6 +118,7 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
    */
   public S3IntegrationTest() {
     super(FRONTEND_CONFIG, sslNettyClient);
+    xmlMapper = new XmlMapper();
   }
 
   /**
@@ -164,8 +152,36 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
   }
 
   @Test
-  public void flinkTest() {
-    System.out.println("flink test");
+  public void flinkMultipartTest() throws Exception {
+    // add account and container
+    Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
+    Container container = account.getContainerById(Container.DEFAULT_PUBLIC_CONTAINER_ID);
+    String prefix = String.format("/s3/%s", account.getName());
+    String bucket = container.getName();
+    String key = "1/2/3/4/5";
+    String uploadId = null;
+    {
+      // 1. Initiate multipart upload
+      HttpHeaders headers = new DefaultHttpHeaders();
+      headers.add(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
+      headers.add(RestUtils.Headers.CONTENT_LENGTH, 0);
+      String uri =  String.format("%s/%s/%s?uploads", prefix, bucket, key);
+      FullHttpRequest httpRequest = buildRequest(HttpMethod.POST, uri, headers, null);
+      NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+      HttpResponse response = getHttpResponse(responseParts);
+      assertEquals("Unexpected status", HttpResponseStatus.OK, response.status());
+      InitiateMultipartUploadResult initUploadResult = xmlMapper.readValue(
+          getContent(responseParts.queue, HttpUtil.getContentLength(response)).array(),
+          S3MessagePayload.InitiateMultipartUploadResult.class);
+      //assertEquals("Unexpected bucket", bucket, initUploadResult.getBucket());
+      assertEquals("Unexpected key", key, initUploadResult.getKey());
+      uploadId = initUploadResult.getUploadId();
+      assertNotNull("Unexpected uploadId", uploadId);
+    } {
+
+    }
+
+    return;
   }
 
   /**

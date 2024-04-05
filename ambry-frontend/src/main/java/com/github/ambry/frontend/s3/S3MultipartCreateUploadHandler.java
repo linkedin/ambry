@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
@@ -140,9 +141,9 @@ public class S3MultipartCreateUploadHandler {
         ReadableStreamChannel channel =
             new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
         restResponseChannel.setStatus(ResponseStatus.Ok);
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
+        restResponseChannel.setHeader(Headers.DATE, new GregorianCalendar().getTime());
+        restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
+        restResponseChannel.setHeader(Headers.CONTENT_LENGTH, channel.getSize());
         finalCallback.onCompletion(channel, null);
       }, uri, LOGGER, finalCallback);
     }

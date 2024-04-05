@@ -144,9 +144,9 @@ public class S3MultipartListPartsHandler {
           objectMapper.writeValue(outputStream, listPartsResult);
           ReadableStreamChannel channel =
               new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
-          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
+          restResponseChannel.setHeader(Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
+          restResponseChannel.setHeader(Headers.CONTENT_LENGTH, channel.getSize());
           finalCallback.onCompletion(channel, null);
         } catch (RestServiceException | IOException e) {
           finalCallback.onCompletion(null, e);

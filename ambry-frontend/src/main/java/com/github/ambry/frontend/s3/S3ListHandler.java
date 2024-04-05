@@ -25,7 +25,6 @@ import com.github.ambry.frontend.Page;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.ByteBufferDataInputStream;
 import java.io.ByteArrayOutputStream;
@@ -43,6 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
+import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
@@ -85,9 +85,9 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
           JSONObject jsonObject = new JSONObject(new JSONTokener(new ByteBufferDataInputStream(byteBuffer)));
           Page<NamedBlobListEntry> page = Page.fromJson(jsonObject, NamedBlobListEntry::new);
           ReadableStreamChannel readableStreamChannel = serializeAsXml(restRequest, page);
-          restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
-          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
+          restResponseChannel.setHeader(Headers.DATE, new GregorianCalendar().getTime());
+          restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
+          restResponseChannel.setHeader(Headers.CONTENT_LENGTH, readableStreamChannel.getSize());
           callback.onCompletion(readableStreamChannel, null);
         }, restRequest.getUri(), LOGGER, callback));
   }
@@ -95,10 +95,10 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private ReadableStreamChannel serializeAsXml(RestRequest restRequest, Page<NamedBlobListEntry> namedBlobRecordPage)
       throws IOException, RestServiceException {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    String prefix = RestUtils.getHeader(restRequest.getArgs(), PREFIX_PARAM_NAME, false);
-    String delimiter = RestUtils.getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
-    String encodingType = RestUtils.getHeader(restRequest.getArgs(), ENCODING_TYPE_PARAM_NAME, false);
-    String maxKeys = RestUtils.getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
+    String prefix = getHeader(restRequest.getArgs(), PREFIX_PARAM_NAME, false);
+    String delimiter = getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
+    String encodingType = getHeader(restRequest.getArgs(), ENCODING_TYPE_PARAM_NAME, false);
+    String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
     int maxKeysValue = maxKeys == null ? Integer.MAX_VALUE : Integer.parseInt(maxKeys);
     // Iterate through list of blob names.
     List<Contents> contentsList = new ArrayList<>();

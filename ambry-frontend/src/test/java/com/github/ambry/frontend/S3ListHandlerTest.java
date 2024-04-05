@@ -37,7 +37,6 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -50,6 +49,7 @@ import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.rest.RestUtils.*;
 import static org.junit.Assert.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
@@ -97,7 +97,7 @@ public class S3ListHandlerTest {
     byte[] content = TestUtils.getRandomBytes(1024);
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, request_path, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+    request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> putResult = new FutureResult<>();
@@ -110,7 +110,7 @@ public class S3ListHandlerTest {
             + "&delimiter=/" + "&max-keys=1" + "&encoding-type=url";
     request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+    request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
@@ -122,8 +122,8 @@ public class S3ListHandlerTest {
     ListBucketResult listBucketResult =
         xmlMapper.readValue(byteBuffer.array(), ListBucketResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
-    assertEquals("Mismatch in content type", "application/xml",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("Mismatch in content type", XML_CONTENT_TYPE,
+        restResponseChannel.getHeader(Headers.CONTENT_TYPE));
     Contents contents = listBucketResult.getContents().get(0);
     assertEquals("Mismatch in key name", KEY_NAME, contents.getKey());
     assertEquals("Mismatch in key count", 1, listBucketResult.getKeyCount());

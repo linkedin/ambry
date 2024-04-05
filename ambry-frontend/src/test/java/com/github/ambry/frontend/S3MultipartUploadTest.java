@@ -42,7 +42,6 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
@@ -60,6 +59,7 @@ import java.util.Properties;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import static com.github.ambry.rest.RestUtils.*;
 import static org.junit.Assert.*;
 import static com.github.ambry.frontend.s3.S3MessagePayload.*;
 
@@ -102,7 +102,7 @@ public class S3MultipartUploadTest {
     String uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploads";
     JSONObject headers = new JSONObject();
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, headers, null);
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+    request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     RestResponseChannel restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> postResult = new FutureResult<>();
@@ -112,8 +112,8 @@ public class S3MultipartUploadTest {
     InitiateMultipartUploadResult initUploadResult =
         xmlMapper.readValue(byteBuffer.array(), InitiateMultipartUploadResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
-    assertEquals("Mismatch in content type", "application/xml",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("Mismatch in content type", XML_CONTENT_TYPE,
+        restResponseChannel.getHeader(Headers.CONTENT_TYPE));
     assertEquals("Mismatch on InitiateMultipartUploadResult.bucket", containerName, initUploadResult.getBucket());
     assertEquals("Mismatch on InitiateMultipartUploadResult.key", blobName, initUploadResult.getKey());
     assertNotNull("UploadId must be present", initUploadResult.getUploadId());
@@ -125,19 +125,19 @@ public class S3MultipartUploadTest {
     int size = 8024;
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId
         + "&partNumber=1";
-    headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-    headers.put(RestUtils.Headers.CONTENT_LENGTH, size);
+    headers.put(Headers.CONTENT_TYPE, OCTET_STREAM_CONTENT_TYPE);
+    headers.put(Headers.CONTENT_LENGTH, size);
     byte[] content1 = TestUtils.getRandomBytes(size);
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, uri, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content1), null)));
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+    request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<Void> putResult = new FutureResult<>();
     s3PutHandler.handle(request, restResponseChannel, putResult::done);
     putResult.get();
-    String etag1 = (String) restResponseChannel.getHeader(RestUtils.Headers.ETAG);
-    String location1 = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
+    String etag1 = (String) restResponseChannel.getHeader(Headers.ETAG);
+    String location1 = (String) restResponseChannel.getHeader(Headers.LOCATION);
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Etag must be present", etag1);
     assertNotNull("Location must be present", location1);
@@ -145,19 +145,19 @@ public class S3MultipartUploadTest {
     // 2.2 part2
     uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName + "?uploadId=" + uploadId
         + "&partNumber=2";
-    headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-    headers.put(RestUtils.Headers.CONTENT_LENGTH, size);
+    headers.put(Headers.CONTENT_TYPE, OCTET_STREAM_CONTENT_TYPE);
+    headers.put(Headers.CONTENT_LENGTH, size);
     byte[] content2 = TestUtils.getRandomBytes(size);
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, uri, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content2), null)));
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+    request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     restResponseChannel = new MockRestResponseChannel();
     putResult = new FutureResult<>();
     s3PutHandler.handle(request, restResponseChannel, putResult::done);
     putResult.get();
-    String etag2 = (String) restResponseChannel.getHeader(RestUtils.Headers.ETAG);
-    String location2 = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
+    String etag2 = (String) restResponseChannel.getHeader(Headers.ETAG);
+    String location2 = (String) restResponseChannel.getHeader(Headers.LOCATION);
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertNotNull("Etag must be present", etag2);
     assertNotNull("Location must be present", location2);
@@ -177,11 +177,11 @@ public class S3MultipartUploadTest {
     String completeMultipartStr = byteArrayOutputStream.toString();
     byte[] content = completeMultipartStr.getBytes(StandardCharsets.UTF_8);
     size = content.length;
-    headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-    headers.put(RestUtils.Headers.CONTENT_LENGTH, size);
+    headers.put(Headers.CONTENT_TYPE, OCTET_STREAM_CONTENT_TYPE);
+    headers.put(Headers.CONTENT_LENGTH, size);
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.POST, uri, headers,
         new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+    request.setArg(InternalKeys.REQUEST_PATH,
         RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
     restResponseChannel = new MockRestResponseChannel();
     postResult = new FutureResult<>();
@@ -192,8 +192,8 @@ public class S3MultipartUploadTest {
     CompleteMultipartUploadResult completeMultipartUploadResult =
         xmlMapper.readValue(byteArray, CompleteMultipartUploadResult.class);
     assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
-    assertEquals("Mismatch in content type", "application/xml",
-        restResponseChannel.getHeader(RestUtils.Headers.CONTENT_TYPE));
+    assertEquals("Mismatch in content type", XML_CONTENT_TYPE,
+        restResponseChannel.getHeader(Headers.CONTENT_TYPE));
     assertEquals("Mismatch on CompleteMultipartUploadResult.bucket", containerName,
         completeMultipartUploadResult.getBucket());
     assertEquals("Mismatch on CompleteMultipartUploadResult.key", blobName, completeMultipartUploadResult.getKey());
@@ -212,7 +212,7 @@ public class S3MultipartUploadTest {
     headers = new JSONObject();
     request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, uri, headers, null);
     RequestPath requestPath = RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME);
-    request.setArg(RestUtils.InternalKeys.REQUEST_PATH, requestPath);
+    request.setArg(InternalKeys.REQUEST_PATH, requestPath);
     restResponseChannel = new MockRestResponseChannel();
     FutureResult<ReadableStreamChannel> getResult = new FutureResult<>();
     getBlobHandler.handle(requestPath, request, restResponseChannel, getResult::done);

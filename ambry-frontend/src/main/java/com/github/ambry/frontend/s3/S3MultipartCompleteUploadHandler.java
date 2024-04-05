@@ -40,7 +40,6 @@ import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
-import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ChunkInfo;
 import com.github.ambry.router.PutBlobOptions;
 import com.github.ambry.router.PutBlobOptionsBuilder;
@@ -230,7 +229,7 @@ public class S3MultipartCompleteUploadHandler {
      */
     private Callback<String> idConverterCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.putIdConversionMetrics, convertedBlobId -> {
-        restResponseChannel.setHeader(RestUtils.Headers.LOCATION, convertedBlobId);
+        restResponseChannel.setHeader(Headers.LOCATION, convertedBlobId);
         // Do ttl update with retryExecutor. Use the blob ID returned from the router instead of the converted ID
         // since the converted ID may be changed by the ID converter.
         String serviceId = blobInfo.getBlobProperties().getServiceId();
@@ -251,13 +250,13 @@ public class S3MultipartCompleteUploadHandler {
     private Callback<Void> routerTtlUpdateCallback(BlobInfo blobInfo, String blobId) {
       return buildCallback(frontendMetrics.updateBlobTtlRouterMetrics, convertedBlobId -> {
         // Set the named blob state to be 'READY' after the Ttl update succeed
-        if (!restRequest.getArgs().containsKey(RestUtils.InternalKeys.NAMED_BLOB_VERSION)) {
-          throw new RestServiceException("Internal key " + RestUtils.InternalKeys.NAMED_BLOB_VERSION
+        if (!restRequest.getArgs().containsKey(NAMED_BLOB_VERSION)) {
+          throw new RestServiceException("Internal key " + NAMED_BLOB_VERSION
               + " is required in Named Blob TTL update callback!", RestServiceErrorCode.InternalServerError);
         }
         long namedBlobVersion = (long) restRequest.getArgs().get(NAMED_BLOB_VERSION);
-        String blobIdClean = RestUtils.stripSlashAndExtensionFromId(blobId);
-        NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+        String blobIdClean = stripSlashAndExtensionFromId(blobId);
+        NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
         NamedBlobRecord record = new NamedBlobRecord(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
             namedBlobPath.getBlobName(), blobIdClean, Utils.Infinite_Time, namedBlobVersion);
         namedBlobDb.updateBlobTtlAndStateToReady(record).get();
@@ -276,7 +275,7 @@ public class S3MultipartCompleteUploadHandler {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
         String bucket = namedBlobPath.getContainerName();
         String key = namedBlobPath.getBlobName();
-        String eTag = (String) restResponseChannel.getHeader(RestUtils.Headers.LOCATION);
+        String eTag = (String) restResponseChannel.getHeader(Headers.LOCATION);
         String s3Location = restRequest.getPath();
         CompleteMultipartUploadResult completeMultipartUploadResult =
             new CompleteMultipartUploadResult(bucket, key, s3Location, eTag);
@@ -287,9 +286,9 @@ public class S3MultipartCompleteUploadHandler {
         ReadableStreamChannel channel =
             new ByteBufferReadableStreamChannel(ByteBuffer.wrap(outputStream.toByteArray()));
         restResponseChannel.setStatus(ResponseStatus.Ok);
-        restResponseChannel.setHeader(RestUtils.Headers.DATE, new GregorianCalendar().getTime());
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/xml");
-        restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, channel.getSize());
+        restResponseChannel.setHeader(Headers.DATE, new GregorianCalendar().getTime());
+        restResponseChannel.setHeader(Headers.CONTENT_TYPE, XML_CONTENT_TYPE);
+        restResponseChannel.setHeader(Headers.CONTENT_LENGTH, channel.getSize());
         finalCallback.onCompletion(channel, null);
       }, restRequest.getUri(), LOGGER, finalCallback);
     }
@@ -315,7 +314,7 @@ public class S3MultipartCompleteUploadHandler {
      */
     private BlobInfo getBlobInfoFromRequest() throws RestServiceException {
       long propsBuildStartTime = System.currentTimeMillis();
-      BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
+      BlobProperties blobProperties = buildBlobProperties(restRequest.getArgs());
       frontendMetrics.blobPropsBuildForNameBlobPutTimeInMs.update(System.currentTimeMillis() - propsBuildStartTime);
       LOGGER.trace("Blob properties of blob being PUT - {}", blobProperties);
       return new BlobInfo(blobProperties, ByteBuffer.allocate(0).array());
