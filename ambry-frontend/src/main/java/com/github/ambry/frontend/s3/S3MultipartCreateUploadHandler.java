@@ -131,7 +131,7 @@ public class S3MultipartCreateUploadHandler {
         RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(requestPath, restRequest.getArgs());
         // TODO [3] : What should be the bucket name, account + container?
-        String bucket = namedBlobPath.getAccountName();
+        String bucket = namedBlobPath.getContainerName();
         String key = namedBlobPath.getBlobName();
         InitiateMultipartUploadResult initiateMultipartUploadResult =
             new InitiateMultipartUploadResult(bucket, key, uploadId);
