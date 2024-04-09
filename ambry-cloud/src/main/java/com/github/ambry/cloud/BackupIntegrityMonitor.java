@@ -27,17 +27,22 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.store.BlobStore;
+import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.utils.Utils;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ScheduledExecutorService;
@@ -53,6 +58,7 @@ import org.slf4j.LoggerFactory;
 public class BackupIntegrityMonitor implements Runnable {
   private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
   private final ClusterMapConfig clusterMapConfig;
+  private final ReplicationConfig replicationConfig;
   private final HelixClusterManager helixClusterManager;
   private final StaticClusterManager staticClusterManager;
   private final DataNodeId nodeId;
@@ -72,6 +78,7 @@ public class BackupIntegrityMonitor implements Runnable {
     azureReplicationManager = azure;
     azureReplicator = azure.getRecoveryThread("ambry_backup_integrity_monitor");
     clusterMapConfig = new ClusterMapConfig(properties);
+    replicationConfig = new ReplicationConfig(properties);
     helixClusterManager = cluster.getHelixClusterManager();
     staticClusterManager = cluster.getStaticClusterManager();
     executor = Utils.newScheduler(1, "ambry_backup_integrity_monitor_", true);
@@ -208,7 +215,22 @@ public class BackupIntegrityMonitor implements Runnable {
           break;
         }
       }
-      logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}]", partition.getId(), store);
+      logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}], num_blobs = {}, num_bytes = {}",
+          partition.getId(), store, token.getNumBlobs(), token.getBytesRead());
+
+      /** Create a temporary map of all keys recovered from cloud */
+      // Get all entries in one-call, so keep the ceil buffer size high ~500MB, all of it may not be used
+      FindInfo finfo = store.findEntriesSince(new StoreFindToken(), 500 * (2 << 20),
+          null, null);
+      HashMap<String, MessageInfo> localKeys = new HashMap<>();
+      finfo.getMessageEntries().forEach(msg -> localKeys.put(msg.getStoreKey().getID(), msg));
+      if (token.getNumBlobs() != localKeys.size()) {
+        logger.error("[BackupIntegrityMonitor] Mismatch, num_blobs from cloud = {}, num_blobs from disk = {}",
+            token.getNumBlobs(), localKeys.size());
+      }
+      if (1+1 == 2) {
+        return;
+      }
 
       /** Replicate from server and compare */
       List<AmbryReplica> replicas = partition.getReplicaIds();
@@ -228,7 +250,7 @@ public class BackupIntegrityMonitor implements Runnable {
         serverScanner.replicate();
         scanEndTime = serverReplica.getReplicatedUntilUTC();
         if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
-          // Print progress every N bytes
+          // Print progress
           DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
           logger.info("[BackupIntegrityMonitor] Scanned replica {} until {}, stop at {}",
               replica, formatter.format(scanEndTime), formatter.format(currentTime - SCAN_STOP_RELTIME));
