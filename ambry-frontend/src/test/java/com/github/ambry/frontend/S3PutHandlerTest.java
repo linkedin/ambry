@@ -76,8 +76,7 @@ public class S3PutHandlerTest {
     setup();
   }
 
-  @Test
-  public void putBlobsTest() throws Exception {
+  public void putBlobsTestHelper(boolean provideContentType) throws Exception {
     // 1. Put a s3 blob
     String accountName = account.getName();
     String containerName = "container-a";
@@ -85,7 +84,9 @@ public class S3PutHandlerTest {
     int size = 1024;
     String uri = S3_PREFIX + SLASH + accountName + SLASH + containerName + SLASH + blobName;
     JSONObject headers = new JSONObject();
-    headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
+    if (provideContentType) {
+      headers.put(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
+    }
     headers.put(RestUtils.Headers.CONTENT_LENGTH, size);
     byte[] content = TestUtils.getRandomBytes(size);
     RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, uri, headers,
@@ -117,6 +118,12 @@ public class S3PutHandlerTest {
     ReadableStreamChannel readableStreamChannel = getResult.get();
     assertEquals("Mismatch on response status", ResponseStatus.Ok, restResponseChannel.getStatus());
     assertArrayEquals("Mismatch in blob content", content, ((ByteBufferRSC) readableStreamChannel).getBuffer().array());
+  }
+
+  @Test
+  public void putBlobsTest() throws Exception {
+    putBlobsTestHelper(false);
+    putBlobsTestHelper(true);
   }
 
   /**

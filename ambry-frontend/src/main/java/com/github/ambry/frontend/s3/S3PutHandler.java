@@ -73,7 +73,18 @@ public class S3PutHandler extends S3BaseHandler<Void> {
     NamedBlobPath namedBlobPath = NamedBlobPath.parse(getRequestPath(restRequest), restRequest.getArgs());
     String accountName = namedBlobPath.getAccountName();
     restRequest.setArg(Headers.SERVICE_ID, accountName);
-    restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
+
+    // https://www.w3.org/Protocols/rfc2616/rfc2616-sec7.html#sec7.2.1
+    // Any HTTP/1.1 message containing an entity-body SHOULD include a Content-Type header field defining the media type of that body.
+    // If and only if the media type is not given by a Content-Type field,
+    // the recipient MAY attempt to guess the media type via inspection of its content and/or the name extension(s).
+    // If the media type remains unknown, the recipient SHOULD treat it as type "application/octet-stream".
+    // TiKV S3 client doesn't specify the Content-Type for the PutObject
+    if (restRequest.getArgs().get(Headers.CONTENT_TYPE) == null) {
+      restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+    } else {
+      restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
+    }
     restRequest.setArg(Headers.AMBRY_CONTENT_ENCODING, restRequest.getArgs().get(Headers.CONTENT_ENCODING));
 
     // 2. Upload the blob by following named blob PUT path
