@@ -35,6 +35,8 @@ import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.utils.Utils;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -61,9 +63,8 @@ public class BackupIntegrityMonitor implements Runnable {
   private final ScheduledExecutorService executor;
   private final StorageManager storageManager;
   public final int RECOVERY_MILESTONE = 10; // num blobs
-  public final int MiB = 2 << 20; // 1 MiB
-  public final int SERVER_SCANNER_MILESTONE = 100 * MiB; // num bytes
-  public final double SERVER_SCANNER_END_GOAL = 0.01;
+  public final long SCAN_STOP_RELTIME = TimeUnit.DAYS.toMillis(7);
+  public final long SCAN_MILESTONE = TimeUnit.DAYS.toMillis(1);
 
   public BackupIntegrityMonitor(RecoveryManager azure, ReplicationManager server,
       CompositeClusterManager cluster, StorageManager storage, DataNodeId node,
@@ -217,19 +218,20 @@ public class BackupIntegrityMonitor implements Runnable {
           Collections.singletonList(replica), store.getReplicaId()).get(0);
       logger.info("[BackupIntegrityMonitor] Created replica info [{}]", serverReplica);
       serverScanner.addRemoteReplicaInfo(serverReplica);
+      serverReplica.getReplicatedUntilUTC();
       logger.info("[BackupIntegrityMonitor] Added replica info [{}]", serverReplica);
-      long replicaSize = replica.getCapacityInBytes();
-      long scannedBytes = 0;
-      long scannerMilestone = SERVER_SCANNER_MILESTONE;
+      long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilUTC();
+      long currentTime = System.currentTimeMillis();
       logger.info("[BackupIntegrityMonitor] Scanning partition-{} from replica [{}]", partition.getId(), replica);
-      while (scannedBytes < (replicaSize * SERVER_SCANNER_END_GOAL)) {
+      while (scanEndTime < (currentTime - SCAN_STOP_RELTIME)) {
+        scanStartTime = serverReplica.getReplicatedUntilUTC();
         serverScanner.replicate();
-        scannedBytes = serverReplica.getToken().getBytesRead();
-        if (scannedBytes > scannerMilestone) {
+        scanEndTime = serverReplica.getReplicatedUntilUTC();
+        if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
           // Print progress every N bytes
-          logger.info("[BackupIntegrityMonitor] Scanned {} out of {} bytes ({} %) from replica {}",
-              scannedBytes, replicaSize, 100 * (scannedBytes/replicaSize), replica);
-          scannerMilestone += SERVER_SCANNER_MILESTONE;
+          DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
+          logger.info("[BackupIntegrityMonitor] Scanned replica {} until {}, stop at {}",
+              replica, formatter.format(scanEndTime), formatter.format(currentTime - SCAN_STOP_RELTIME));
         }
       }
       logger.info("[BackupIntegrityMonitor] Verified backup partition-{} against replica {}", partition.getId(), replica);
