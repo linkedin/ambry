@@ -582,7 +582,7 @@ public class CompactionManagerTest {
     }
 
     @Override
-    void markCompactionStop() {
+    void markCompactionStop(boolean isFullRange) {
       compactStopCountdown.countDown();
     }
   }

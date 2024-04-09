@@ -261,6 +261,13 @@ class BlobStoreCompactor {
     }
   }
 
+  CompactionDetails getCompactionDetailsInProgress() {
+    if (compactionLog == null) {
+      throw new IllegalStateException("There is no compaction in progress");
+    }
+    return compactionLog.getCompactionDetails();
+  }
+
   /**
    * Resumes compaction from where it was left off.
    * @throws IllegalStateException if the compactor has not been initialized or if there is no compaction to resume.

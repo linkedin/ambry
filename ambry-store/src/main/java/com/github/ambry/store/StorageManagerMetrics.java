@@ -54,6 +54,7 @@ public class StorageManagerMetrics {
 
   private final Counter compactionCount;
   private final AtomicLong compactionsInProgress = new AtomicLong(0);
+  private final AtomicLong fullRangeCompactionsInProgress = new AtomicLong(0);
 
   // A map from mount path to a set of blob store to skip in compactions (error state)
   private final Map<String, Set<BlobStore>> mountPathToStoreSetToSkipInCompactions = new ConcurrentHashMap<>();
@@ -102,6 +103,10 @@ public class StorageManagerMetrics {
     Gauge<Long> compactionsInProgressGauge = compactionsInProgress::longValue;
     registry.register(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),
         compactionsInProgressGauge);
+
+    Gauge<Long> fullRangeCompactionsInProgressGauge = fullRangeCompactionsInProgress::longValue;
+    registry.register(MetricRegistry.name(CompactionManager.class, "FullRangeCompactionsInProgress"),
+        fullRangeCompactionsInProgressGauge);
 
     Gauge<Long> storeToSkipGauge =
         () -> mountPathToStoreSetToSkipInCompactions.values().stream().mapToLong(Set::size).sum();
@@ -183,17 +188,23 @@ public class StorageManagerMetrics {
    * @param incrementUniqueCompactionsCount {@code true} if this is a new compaction and not the resume of a suspended
    *                                                    one. {@code false otherwise}
    */
-  void markCompactionStart(boolean incrementUniqueCompactionsCount) {
+  void markCompactionStart(boolean incrementUniqueCompactionsCount, boolean isFullRange) {
     if (incrementUniqueCompactionsCount) {
       compactionCount.inc();
     }
     compactionsInProgress.incrementAndGet();
+    if (isFullRange) {
+      fullRangeCompactionsInProgress.incrementAndGet();
+    }
   }
 
   /**
    * Marks the end/suspension of a compaction.
    */
-  void markCompactionStop() {
+  void markCompactionStop(boolean isFullRange) {
     compactionsInProgress.decrementAndGet();
+    if (isFullRange) {
+      fullRangeCompactionsInProgress.decrementAndGet();
+    }
   }
 }
