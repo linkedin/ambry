@@ -28,9 +28,12 @@ import com.github.ambry.commons.TestSSLUtils;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.MySqlNamedBlobDbConfig;
 import com.github.ambry.config.NettyConfig;
+import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.frontend.s3.S3MessagePayload;
+import com.github.ambry.quota.QuotaMode;
+import com.github.ambry.quota.QuotaResourceType;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.utils.TestUtils;
@@ -50,6 +53,7 @@ import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Properties;
+import org.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -70,6 +74,7 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
   private static final FrontendConfig FRONTEND_CONFIG;
   private static final InMemAccountService ACCOUNT_SERVICE =
       new InMemAccountServiceFactory(false, true).getAccountService();
+  private static final Account ACCOUNT;
   private static final String DATA_CENTER_NAME = "localDc";
   private static final String HOST_NAME = "localhost";
   private static final String CLUSTER_NAME = "Cluster-name";
@@ -83,11 +88,12 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
       CLUSTER_MAP = new MockClusterMap();
       File trustStoreFile = File.createTempFile("truststore", ".jks");
       trustStoreFile.deleteOnExit();
-      FRONTEND_VERIFIABLE_PROPS = buildFrontendVProps(trustStoreFile);
       SSL_CLIENT_VERIFIABLE_PROPS = TestSSLUtils.createSslProps("", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
-      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
       ACCOUNT_SERVICE.clear();
       ACCOUNT_SERVICE.updateAccounts(Collections.singletonList(InMemAccountService.UNKNOWN_ACCOUNT));
+      ACCOUNT = ACCOUNT_SERVICE.createAndAddRandomAccount(QuotaResourceType.ACCOUNT);
+      FRONTEND_VERIFIABLE_PROPS = buildFrontendVPropsForQuota(trustStoreFile, ACCOUNT);
+      FRONTEND_CONFIG = new FrontendConfig(FRONTEND_VERIFIABLE_PROPS);
     } catch (Throwable t) {
       throw new IllegalStateException(t);
     }
@@ -133,9 +139,10 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
 
   @Test
   public void multipartUploadTest() throws Exception {
-    Account account = ACCOUNT_SERVICE.createAndAddRandomAccount();
-    for (Container container : account.getAllContainers()) {
-      doMultipartUploadTest(account, container, 2, 1024);
+    for (Container container : ACCOUNT.getAllContainers()) {
+      int partCount = TestUtils.RANDOM.nextInt(15) + 1;
+      int partSize = TestUtils.RANDOM.nextInt(1024) + 1;
+      doMultipartUploadTest(ACCOUNT, container, partCount, partSize);
     }
   }
 
@@ -225,9 +232,12 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
       HttpResponse response = getHttpResponse(responseParts);
       assertEquals("Unexpected status", HttpResponseStatus.OK, response.status());
       assertEquals("Unexpected content type", OCTET_STREAM_CONTENT_TYPE, response.headers().get(CONTENT_TYPE));
-      int contentLength = response.headers().getInt(CONTENT_LENGTH);
-      assertEquals("Unexpected content length", partCount * partSize, contentLength);
-      byte[] content = getContent(responseParts.queue, contentLength).array();
+      long expectedContentLength = partCount * partSize;
+      if (expectedContentLength <= frontendConfig.chunkedGetResponseThresholdInBytes) {
+        int contentLength = response.headers().getInt(CONTENT_LENGTH);
+        assertEquals("Unexpected content length", expectedContentLength, contentLength);
+      }
+      byte[] content = getContent(responseParts.queue, expectedContentLength).array();
       ByteBuffer expectedContent = ByteBuffer.wrap(new byte[partCount * partSize]);
       Arrays.stream(contents).forEach(expectedContent::put);
       assertArrayEquals("Unexpected content", expectedContent.array(), content);
@@ -237,30 +247,39 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
   /**
    * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
+   * @param account {@link Account} for which quota needs to be specified.
    * @return a {@link VerifiableProperties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVProps(File trustStoreFile)
+  private static VerifiableProperties buildFrontendVPropsForQuota(File trustStoreFile, Account account)
       throws IOException, GeneralSecurityException {
-    return buildFrontendVProps(trustStoreFile, true, PLAINTEXT_SERVER_PORT, SSL_SERVER_PORT);
+    Properties properties = buildFrontendVProps(trustStoreFile);
+    JSONObject cuResourceQuotaJson = new JSONObject();
+    JSONObject quotaJson = new JSONObject();
+    quotaJson.put("rcu", 10737418240L);
+    quotaJson.put("wcu", 10737418240L);
+    cuResourceQuotaJson.put(Integer.toString(account.getId()), quotaJson);
+    properties.setProperty(QuotaConfig.RESOURCE_CU_QUOTA_IN_JSON, cuResourceQuotaJson.toString());
+    properties.setProperty(QuotaConfig.THROTTLING_MODE, QuotaMode.TRACKING.name());
+    properties.setProperty(QuotaConfig.REQUEST_THROTTLING_ENABLED, String.valueOf(true));
+    properties.setProperty(QuotaConfig.FRONTEND_CU_CAPACITY_IN_JSON,
+        "{\n" + "  \"rcu\": 10240,\n" + "  \"wcu\": 10240\n" + "}");
+    return new VerifiableProperties(properties);
   }
 
   /**
    * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
-   * @param enableUndelete enable undelete in frontend when it's true.
-   * @param plaintextServerPort server port number to support plaintext protocol
-   * @param sslServerPort server port number to support ssl protocol
    * @return a {@link Properties} with the parameters for an Ambry frontend server.
    */
-  private static VerifiableProperties buildFrontendVProps(File trustStoreFile, boolean enableUndelete,
-      int plaintextServerPort, int sslServerPort) throws IOException, GeneralSecurityException {
+  private static Properties buildFrontendVProps(File trustStoreFile)
+      throws IOException, GeneralSecurityException {
     Properties properties = new Properties();
     properties.put("rest.server.rest.request.service.factory",
         "com.github.ambry.frontend.FrontendRestRequestServiceFactory");
     properties.put("rest.server.router.factory", "com.github.ambry.router.InMemoryRouterFactory");
     properties.put("rest.server.account.service.factory", "com.github.ambry.account.InMemAccountServiceFactory");
-    properties.put("netty.server.port", Integer.toString(plaintextServerPort));
-    properties.put("netty.server.ssl.port", Integer.toString(sslServerPort));
+    properties.put("netty.server.port", Integer.toString(PLAINTEXT_SERVER_PORT));
+    properties.put("netty.server.ssl.port", Integer.toString(SSL_SERVER_PORT));
     properties.put("netty.server.enable.ssl", "true");
     properties.put(NettyConfig.SSL_FACTORY_KEY, NettySslFactory.class.getName());
     // to test that backpressure does not impede correct operation.
@@ -274,9 +293,9 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
     properties.setProperty("clustermap.cluster.name", CLUSTER_NAME);
     properties.setProperty("clustermap.datacenter.name", DATA_CENTER_NAME);
     properties.setProperty("clustermap.host.name", HOST_NAME);
-    properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(enableUndelete));
+    properties.setProperty(FrontendConfig.ENABLE_UNDELETE, Boolean.toString(true));
     properties.setProperty(FrontendConfig.NAMED_BLOB_DB_FACTORY, "com.github.ambry.frontend.TestNamedBlobDbFactory");
     properties.setProperty(MySqlNamedBlobDbConfig.LIST_MAX_RESULTS, String.valueOf(NAMED_BLOB_LIST_RESULT_MAX));
-    return new VerifiableProperties(properties);
+    return properties;
   }
 }
