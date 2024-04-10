@@ -1514,7 +1514,6 @@ public class BlobStore implements Store {
   }
 
   CompactionDetails getCompactionDetailsInProgress() throws StoreException {
-    checkStarted();
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       return compactor.getCompactionDetailsInProgress();
     }
