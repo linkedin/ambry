@@ -555,7 +555,6 @@ class LogSegment implements Read, Write {
     if (open.compareAndSet(true, false)) {
       if (!skipDiskFlush) {
         flush();
-        directIOExecutor.flush();
       }
       try {
         // attempt to close file descriptors even when there is a disk I/O error.
@@ -655,8 +654,8 @@ class LogSegment implements Read, Write {
 
     @Override
     public <T> T execute(DirectIOOp<T> op) throws IOException {
-      // the direct io executes all the operation in the same thread so we don't need
-      // to care able the thread safety.
+      // The direct io executes all the operation in the same thread, we don't need
+      // to care about the thread safety.
       if (directIo == null) {
         directIo = DirectIoByteChannelAligner.open(file, bufferSize, false);
       }
