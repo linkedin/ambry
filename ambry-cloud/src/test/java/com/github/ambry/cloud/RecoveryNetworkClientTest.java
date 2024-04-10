@@ -174,15 +174,11 @@ public class RecoveryNetworkClientTest {
     // Create local store
     localStore =
         new BlobStore(mockPartitionId.getReplicaIds().get(0), new StoreConfig(verifiableProperties),
-            Utils.newScheduler(1, false),
-            Utils.newScheduler(1, false),
-            new DiskIOScheduler(null),
-            StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-            new StoreMetrics(mockClusterMap.getMetricRegistry()),
-            new StoreMetrics("UnderCompaction", mockClusterMap.getMetricRegistry()),
-            null, null, null, Collections.singletonList(mock(ReplicaStatusDelegate.class)),
-            new MockTime(), new InMemAccountService(false, false), null,
-            Utils.newScheduler(1, false));
+            Utils.newScheduler(1, false), Utils.newScheduler(1, false), null, new DiskIOScheduler(null),
+            StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, new StoreMetrics(mockClusterMap.getMetricRegistry()),
+            new StoreMetrics("UnderCompaction", mockClusterMap.getMetricRegistry()), null, null, null,
+            Collections.singletonList(mock(ReplicaStatusDelegate.class)), new MockTime(),
+            new InMemAccountService(false, false), null, Utils.newScheduler(1, false));
     localStore.start();
     // Create remote-replica info
     remoteStore =
