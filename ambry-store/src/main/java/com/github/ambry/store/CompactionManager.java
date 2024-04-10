@@ -257,14 +257,18 @@ class CompactionManager {
             CompactionDetails details = null;
             try {
               details = store.getCompactionDetailsInProgress();
-              metrics.markCompactionStart(false, details.isFullRange());
+              if (details != null) {
+                metrics.markCompactionStart(false, details.isFullRange());
+              }
               store.maybeResumeCompaction(bundleReadBuffer);
             } catch (Exception e) {
               metrics.compactionErrorCount.inc();
               logger.error("Compaction of store {} failed on resume. Continuing with the next store", store, e);
               storesToSkip.add(store);
             } finally {
-              metrics.markCompactionStop(details.isFullRange());
+              if (details != null) {
+                metrics.markCompactionStop(details.isFullRange());
+              }
             }
           }
         }

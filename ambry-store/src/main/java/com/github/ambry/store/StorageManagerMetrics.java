@@ -101,12 +101,12 @@ public class StorageManagerMetrics {
         registry.counter(MetricRegistry.name(CompactionManager.class, "CompactionExecutorErrorCount"));
 
     Gauge<Long> compactionsInProgressGauge = compactionsInProgress::longValue;
-    registry.register(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),
-        compactionsInProgressGauge);
+    registry.gauge(MetricRegistry.name(CompactionManager.class, "CompactionsInProgress"),
+        () -> compactionsInProgressGauge);
 
     Gauge<Long> fullRangeCompactionsInProgressGauge = fullRangeCompactionsInProgress::longValue;
-    registry.register(MetricRegistry.name(CompactionManager.class, "FullRangeCompactionsInProgress"),
-        fullRangeCompactionsInProgressGauge);
+    registry.gauge(MetricRegistry.name(CompactionManager.class, "FullRangeCompactionsInProgress"),
+        () -> fullRangeCompactionsInProgressGauge);
 
     Gauge<Long> storeToSkipGauge =
         () -> mountPathToStoreSetToSkipInCompactions.values().stream().mapToLong(Set::size).sum();
