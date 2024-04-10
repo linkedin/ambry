@@ -45,6 +45,7 @@ public class StoreMetrics {
   public final Timer findAllMessageInfosResponse;
   public final Timer isKeyDeletedResponse;
   public final Timer storeStartTime;
+  public final Histogram getRandomPutEntryReadOptionsInMs;
   public final Histogram storeShutdownTimeInMs;
   public final Histogram indexShutdownTimeInMs;
   public final Histogram hardDeleteShutdownTimeInMs;
@@ -158,6 +159,8 @@ public class StoreMetrics {
     isKeyDeletedResponse = registry.timer(MetricRegistry.name(BlobStore.class, name + "IsKeyDeletedResponse"));
     storeStartTime = registry.timer(MetricRegistry.name(BlobStore.class, name + "StoreStartTime"));
     storeShutdownTimeInMs = registry.histogram(MetricRegistry.name(BlobStore.class, name + "StoreShutdownTimeInMs"));
+    getRandomPutEntryReadOptionsInMs =
+        registry.histogram(MetricRegistry.name(PersistentIndex.class, name + "GetRandomPutEntryReadOptionsInMs"));
     indexShutdownTimeInMs =
         registry.histogram(MetricRegistry.name(PersistentIndex.class, name + "IndexShutdownTimeInMs"));
     hardDeleteShutdownTimeInMs =

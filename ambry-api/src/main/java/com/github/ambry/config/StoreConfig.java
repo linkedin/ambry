@@ -624,6 +624,15 @@ public class StoreConfig {
   public final boolean storeRestoreUnavailableDiskInFullAuto;
   public static final String storeRestoreUnavailableDiskInFullAutoName = "store.restore.unavailable.disk.in.full.auto";
 
+  /**
+   * True to proactively test storage availability of all blob stores on a disk when any blob store on this disk has
+   * io errors.
+   */
+  @Config(storeProactivelyTestStorageAvailabilityName)
+  public final boolean storeProactivelyTestStorageAvailability;
+  public static final String storeProactivelyTestStorageAvailabilityName =
+      "store.proactively.test.storage.availability";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
@@ -790,5 +799,7 @@ public class StoreConfig {
         verifiableProperties.getBoolean(storeRemoveDirectoryAndRestartBlobStoreName, false);
     storeRestoreUnavailableDiskInFullAuto =
         verifiableProperties.getBoolean(storeRestoreUnavailableDiskInFullAutoName, false);
+    storeProactivelyTestStorageAvailability =
+        verifiableProperties.getBoolean(storeProactivelyTestStorageAvailabilityName, false);
   }
 }

@@ -47,6 +47,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -94,6 +95,8 @@ public class DiskManager {
   private final EnumSet<StoreErrorCodes> recoverableStoreErrorCodes =
       EnumSet.of(StoreErrorCodes.Log_File_Format_Error, StoreErrorCodes.Index_File_Format_Error,
           StoreErrorCodes.Log_End_Offset_Error, StoreErrorCodes.Index_Recovery_Error);
+
+  private final AtomicBoolean ioErrorCheckerScheduled = new AtomicBoolean(false);
 
   private static final Logger logger = LoggerFactory.getLogger(DiskManager.class);
 
@@ -148,10 +151,9 @@ public class DiskManager {
         storeConfig.storeDiskIoReservoirTimeWindowMs);
     for (ReplicaId replica : replicas) {
       if (disk.equals(replica.getDiskId())) {
-        BlobStore store =
-            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
-                time, accountService, diskMetrics, indexPersistScheduler);
+        BlobStore store = new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, this, diskIOScheduler,
+            diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
+            replicaStatusDelegates, time, accountService, diskMetrics, indexPersistScheduler);
         stores.put(replica.getPartitionId(), store);
         partitionToReplicaMap.put(replica.getPartitionId(), replica);
         expectedDirs.add(replica.getReplicaPath());
@@ -271,9 +273,9 @@ public class DiskManager {
       try {
         Utils.deleteFileOrDirectory(new File(dataDir));
         BlobStore newStore =
-            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
-                time, accountService, diskMetrics, indexPersistScheduler);
+            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, this, diskIOScheduler,
+                diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
+                replicaStatusDelegates, time, accountService, diskMetrics, indexPersistScheduler);
         newStore.start();
         entry.setValue(newStore);
       } catch (Exception e) {
@@ -442,10 +444,9 @@ public class DiskManager {
           }
           logger.info("Old store directory is deleted for {}", replica);
         }
-        BlobStore store =
-            new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator,
-                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
-                time, accountService, null, indexPersistScheduler);
+        BlobStore store = new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, this, diskIOScheduler,
+            diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
+            replicaStatusDelegates, time, accountService, null, indexPersistScheduler);
         store.start();
         // collect store segment requirements and add into DiskSpaceAllocator
         List<DiskSpaceRequirements> storeRequirements = Collections.singletonList(store.getDiskSpaceRequirements());
@@ -734,6 +735,39 @@ public class DiskManager {
       diskSpaceAllocator.deleteAllSegmentsForStoreIds(Collections.singletonList(partitionName));
     } catch (Exception e) {
       logger.error("Failed to delete directories for failed blob store {}", partitionName, e);
+    }
+  }
+
+  /**
+   * A callback to invoke when a blob store encountered several io error and shut down itself. In this case,
+   * we should test all blob stores on this disk. If it's indeed a disk error, all blob stores would be forced
+   * to shut down themselves and enter ERROR state. Later disk failure handler would pick it up and move all
+   * the replica out to a different place in FULL AUTO.
+   */
+  void onBlobStoreIOError() {
+    if (storeConfig.storeProactivelyTestStorageAvailability && ioErrorCheckerScheduled.compareAndSet(false, true)) {
+      // Schedule the ioError checker to go over all the blob stores on this disk
+      logger.info("Submitting a task to test storage availability on disk {}", disk.getMountPath());
+      scheduler.submit(() -> {
+        List<BlobStore> storesToCheck = new ArrayList<>(stores.values());
+        for (BlobStore store : storesToCheck) {
+          logger.info("Testing storage availability for blob store {} on disk {}", store.getDataDir(),
+              disk.getMountPath());
+          if (store.isStarted()) {
+            // if any of the store has its underlying storage available, we stop the test on other
+            // blob stores since we know it's not a disk error.
+            if (store.testStorageAvailability()) {
+              logger.info("Blob store {} on disk {} is still available", store.getDataDir(), disk.getMountPath());
+              break;
+            } else {
+              logger.info("Blob store {} on disk {} become unavailable", store.getDataDir(), disk.getMountPath());
+            }
+          } else {
+            logger.info("Blob store {} on disk {} is not started", store.getDataDir(), disk.getMountPath());
+          }
+        }
+        ioErrorCheckerScheduled.set(false);
+      });
     }
   }
 

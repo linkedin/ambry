@@ -42,6 +42,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -77,8 +79,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.ReplicaState.*;
@@ -1889,9 +1889,9 @@ public class BlobStoreTest {
     StoreKeyFactory mockStoreKeyFactory = Mockito.spy(STORE_KEY_FACTORY);
     BlobStore testStore2 =
         new BlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), scheduler,
-            storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, storeMetrics, storeMetrics, mockStoreKeyFactory, recovery,
-            hardDelete, Collections.singletonList(mockDelegate), time, new InMemAccountService(false, false), null,
-            scheduler);
+            storeStatsScheduler, null, diskIOScheduler, diskSpaceAllocator, storeMetrics, storeMetrics,
+            mockStoreKeyFactory, recovery, hardDelete, Collections.singletonList(mockDelegate), time,
+            new InMemAccountService(false, false), null, scheduler);
 
     testStore2.start();
     assertTrue("Store should start up", testStore2.isStarted());
@@ -2110,9 +2110,9 @@ public class BlobStoreTest {
     MetricRegistry registry = new MetricRegistry();
     storeMetrics = new StoreMetrics(registry);
     BlobStore testStore =
-        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
-            diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete, null, time,
-            new InMemAccountService(false, false), null, scheduler);
+        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler, null,
+            diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete, null,
+            time, new InMemAccountService(false, false), null, scheduler);
     testStore.start();
     DiskSpaceRequirements diskSpaceRequirements = testStore.getDiskSpaceRequirements();
     diskAllocator.initializePool(diskSpaceRequirements == null ? Collections.emptyList()
@@ -2227,7 +2227,7 @@ public class BlobStoreTest {
     when(dynamicParticipant.supportsStateChanges()).thenReturn(true);
     ReplicaStatusDelegate delegate = new ReplicaStatusDelegate(dynamicParticipant);
     BlobStore testStore =
-        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler,
+        new BlobStore(getMockReplicaId(storeDir.getAbsolutePath()), config, scheduler, storeStatsScheduler, null,
             diskIOScheduler, diskAllocator, storeMetrics, storeMetrics, STORE_KEY_FACTORY, recovery, hardDelete,
             Collections.singletonList(delegate), time, new InMemAccountService(false, false), null, scheduler);
     testStore.start();
@@ -3918,17 +3918,17 @@ public class BlobStoreTest {
 
     MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
         StoreMetrics metrics) {
-      super(replicaId, config, scheduler, storeStatsScheduler, diskIOScheduler, diskSpaceAllocator, metrics, metrics,
-          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false),
-          null, scheduler);
+      super(replicaId, config, scheduler, storeStatsScheduler, null, diskIOScheduler, diskSpaceAllocator, metrics,
+          metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time,
+          new InMemAccountService(false, false), null, scheduler);
     }
 
     MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
         StoreMetrics metrics, BlobStoreStats blobStoreStats) {
-      super(replicaId, replicaId.getPartitionId().toString(), config, scheduler, storeStatsScheduler, diskIOScheduler,
-          diskSpaceAllocator, metrics, metrics, replicaId.getReplicaPath(), replicaId.getCapacityInBytes(),
-          STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time, new InMemAccountService(false, false),
-          blobStoreStats, null, scheduler);
+      super(replicaId, replicaId.getPartitionId().toString(), config, scheduler, storeStatsScheduler, null,
+          diskIOScheduler, diskSpaceAllocator, metrics, metrics, replicaId.getReplicaPath(),
+          replicaId.getCapacityInBytes(), STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time,
+          new InMemAccountService(false, false), blobStoreStats, null, scheduler);
     }
 
     /**
