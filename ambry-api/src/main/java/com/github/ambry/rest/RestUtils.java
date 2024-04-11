@@ -532,10 +532,13 @@ public class RestUtils {
     public final static String USER_METADATA_PART = "UserMetadata";
   }
 
+  public static final String JSON_CONTENT_TYPE = "application/json";
+  public static final String XML_CONTENT_TYPE = "application/xml";
+  public static final String OCTET_STREAM_CONTENT_TYPE = "application/octet-stream";
+
   public static final String HTTP_DATE_FORMAT = "EEE, dd MMM yyyy HH:mm:ss zzz";
   public static final String BYTE_RANGE_UNITS = "bytes";
   public static final String SIGNED_ID_PREFIX = "signedId/";
-  public static final String JSON_CONTENT_TYPE = "application/json";
   static final Charset CHARSET = StandardCharsets.UTF_8;
   private static final String BYTE_RANGE_PREFIX = BYTE_RANGE_UNITS + "=";
 
