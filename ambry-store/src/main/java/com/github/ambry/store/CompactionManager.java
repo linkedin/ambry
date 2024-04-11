@@ -255,20 +255,20 @@ class CompactionManager {
           if (store.isStarted()) {
             logger.trace("{} is started and eligible for resume check", store);
             CompactionDetails details = null;
+            boolean isFullRange = false;
             try {
               details = store.getCompactionDetailsInProgress();
               if (details != null) {
-                metrics.markCompactionStart(false, details.isFullRange());
+                isFullRange = details.isFullRange();
               }
+              metrics.markCompactionStart(false, isFullRange);
               store.maybeResumeCompaction(bundleReadBuffer);
             } catch (Exception e) {
               metrics.compactionErrorCount.inc();
               logger.error("Compaction of store {} failed on resume. Continuing with the next store", store, e);
               storesToSkip.add(store);
             } finally {
-              if (details != null) {
-                metrics.markCompactionStop(details.isFullRange());
-              }
+              metrics.markCompactionStop(isFullRange);
             }
           }
         }
