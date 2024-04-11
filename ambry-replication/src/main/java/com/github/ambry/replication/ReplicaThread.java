@@ -104,7 +104,7 @@ public class ReplicaThread implements Runnable {
   private final String threadName;
   private final NotificationSystem notification;
   private static final Logger logger = LoggerFactory.getLogger(ReplicaThread.class);
-  private final StoreKeyConverter storeKeyConverter;
+  protected final StoreKeyConverter storeKeyConverter;
   private final Transformer transformer;
   private final MetricRegistry metricRegistry;
   private final ResponseHandler responseHandler;
