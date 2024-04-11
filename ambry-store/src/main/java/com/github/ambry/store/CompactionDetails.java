@@ -129,6 +129,7 @@ class CompactionDetails {
 
       version
       referenceTimeMs
+      isFullRange (only in version 1)
       size of the logSegmentsUnderCompaction list
       segment_1_name_length segment_1_name
       segment_2_name_length segment_2_name
@@ -170,6 +171,7 @@ class CompactionDetails {
 
   @Override
   public String toString() {
-    return "(Delete Ref Time [" + referenceTimeMs + "] Segments to compact [" + logSegmentsUnderCompaction + "])";
+    return "(Delete Ref Time [" + referenceTimeMs + "] IsFullRange [" + isFullRange + "] Segments to compact ["
+        + logSegmentsUnderCompaction + "])";
   }
 }
