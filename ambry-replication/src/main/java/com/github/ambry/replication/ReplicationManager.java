@@ -119,7 +119,7 @@ public class ReplicationManager extends ReplicationEngine {
    * @param threadName
    * @return
    */
-  public ReplicaThread getBackupCheckerThread(String threadName) {
+  public BackupCheckerThread getBackupCheckerThread(String threadName) {
     try {
       String dc = dataNodeId.getDatacenterName();
       StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();

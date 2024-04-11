@@ -18,7 +18,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import com.github.ambry.utils.Utils;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 
 /**
@@ -267,6 +272,52 @@ public class MessageInfo {
   public int hashCode() {
     return Objects.hash(key, size, expirationTimeInMs, isDeleted, isTtlUpdated, isUndeleted, crc, accountId,
         containerId, operationTimeMs, lifeVersion);
+  }
+
+  public String toText() {
+    StringBuilder stringBuilder = new StringBuilder();
+    stringBuilder
+        .append(key).append(",")
+        .append(size).append(" bytes").append(",")
+        .append("upload=").append(operationTimeMs).append(" ms").append(",")
+        .append("expiry=").append(expirationTimeInMs).append(" ms").append(",")
+        .append("deleted=").append(isDeleted).append(",")
+        .append("crc=").append(crc).append(",")
+        .append("version=").append(lifeVersion);
+    return stringBuilder.toString();
+  }
+
+  public Set<BlobStateMatchStatus> isEqual(Object o) {
+    if (o == null) {
+      return Collections.singleton(BlobStateMatchStatus.BLOB_STATE_NULL);
+    }
+    if (getClass() != o.getClass()) {
+      return Collections.singleton(BlobStateMatchStatus.BLOB_STATE_CLASS_MISMATCH);
+    }
+    Set<BlobStateMatchStatus> status = new HashSet<>();
+    MessageInfo that = (MessageInfo) o;
+    if (!Objects.equals(key, that.key)) {
+      status.add(BlobStateMatchStatus.BLOB_STATE_KEY_MISMATCH);
+    }
+    if (size == that.size) {
+      status.add(BlobStateMatchStatus.BLOB_STATE_SIZE_MISMATCH);
+    }
+    if (expirationTimeInMs == that.expirationTimeInMs) {
+      status.add(BlobStateMatchStatus.BLOB_STATE_EXPIRY_MISMATCH);
+    }
+    if (isDeleted == that.isDeleted) {
+      status.add(BlobStateMatchStatus.BLOB_STATE_DELETE_MISMATCH);
+    }
+    if (!Objects.equals(crc, that.crc)) {
+      status.add(BlobStateMatchStatus.BLOB_STATE_CRC_MISMATCH);
+    }
+    if (lifeVersion == that.lifeVersion) {
+      status.add(BlobStateMatchStatus.BLOB_STATE_VERSION_MISMATCH);
+    }
+    if (status.isEmpty()) {
+      return Collections.singleton(BlobStateMatchStatus.BLOB_STATE_MATCH);
+    }
+    return status;
   }
 
   @Override

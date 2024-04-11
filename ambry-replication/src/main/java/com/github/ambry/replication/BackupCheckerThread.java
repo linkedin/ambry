@@ -22,6 +22,7 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.BlobStateMatchStatus;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoType;
 import com.github.ambry.store.StoreErrorCodes;
@@ -29,13 +30,15 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,8 +62,10 @@ public class BackupCheckerThread extends ReplicaThread {
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   protected final BackupCheckerFileManager fileManager;
   protected final ReplicationConfig replicationConfig;
+  protected HashMap<String, MessageInfo> azureBlobMap;
   public static final String DR_Verifier_Keyword = "dr";
-  public static final String MISSING_KEYS_FILE = "missingKeys";
+  public static final String BLOB_STATE_MISMATCHES = "blob_state_mismatches";
+
   public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -75,6 +80,7 @@ public class BackupCheckerThread extends ReplicaThread {
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
     this.replicationConfig = replicationConfig;
+    azureBlobMap = new HashMap<>();
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -84,6 +90,10 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   BackupCheckerFileManager getFileManager() {
     return this.fileManager;
+  }
+
+  public void setAzureBlobMap(HashMap<String, MessageInfo> azureBlobMap) {
+    this.azureBlobMap = azureBlobMap;
   }
 
   /**
@@ -178,35 +188,97 @@ public class BackupCheckerThread extends ReplicaThread {
 
   /**
    * This method checks if the blob is in local store in an acceptable state or encounters an acceptable error code
-   * @param remoteBlob the {@link MessageInfo} that will be checked for in the local-store
+   * @param serverBlob the {@link MessageInfo} that will be checked for in the local-store
    * @param remoteReplicaInfo The remote replica that is being replicated from
    * @param acceptableLocalBlobStates Acceptable states in which the blob must be present in the local-store
    * @param acceptableStoreErrorCodes Acceptable error codes when retrieving the blob from local-store
    */
-  protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
+  protected void checkLocalStore(MessageInfo serverBlob, RemoteReplicaInfo remoteReplicaInfo,
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
     try {
-      EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
-      // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
-      // However, get() can also do this with additional and appropriate StoreGetOptions.
-      MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
-      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-      messageInfoTypes.retainAll(getBlobStates(localBlob));
-      if (messageInfoTypes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), remoteReplicaInfo,
-            acceptableLocalBlobStates, remoteBlob.getStoreKey(), remoteBlob.getOperationTimeMs(),
-            getBlobStates(remoteBlob), getBlobStates(localBlob));
+      /**
+       * There are 4 cases
+       *
+       * blob_server_state | blob_azure_state
+       *  absent              absent          => we won't enter this function
+       *  absent              present         => we won't enter this function
+       *  present             absent          => blob_state_match_status = null
+       *                                        => print msg to file and nothing remove from keyMap
+       *  present             present         => blob_state_match_status = either matches or some mismatch
+       *                                        => print msg to file, if mismatched and then remove from keyMap
+       *
+       *  At the end of replication from server, keyMap must contain blobs present in azure _and_ absent in server.
+       */
+      if (azureBlobMap != null && !azureBlobMap.isEmpty()) {
+        String output = getFilePath(remoteReplicaInfo, BLOB_STATE_MISMATCHES);
+        // Use a user-provided key map for reference and comparison
+        String blobId = serverBlob.getStoreKey().getID();
+        MessageInfo azureBlob = azureBlobMap.get(blobId);
+        Set<BlobStateMatchStatus> status = serverBlob.isEqual(azureBlob);
+        if (!status.contains(BlobStateMatchStatus.BLOB_STATE_MATCH)) {
+          // print only when blob states do not match between server and azure
+          String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+              status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
+              serverBlob.toText(),
+              azureBlob == null ? "null" : azureBlob.toText(),
+              "\n");
+          fileManager.appendToFile(output, msg);
+        }
+        azureBlobMap.remove(blobId);
+      } else {
+        EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
+        // If no key-map exists, compare with local store as reference and comparison
+        // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
+        // However, get() can also do this with additional and appropriate StoreGetOptions.
+        MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(serverBlob.getStoreKey());
+        // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
+        messageInfoTypes.retainAll(getBlobStates(localBlob));
+        if (messageInfoTypes.isEmpty()) {
+          fileManager.appendToFile(getFilePath(remoteReplicaInfo, BLOB_STATE_MISMATCHES), remoteReplicaInfo,
+              acceptableLocalBlobStates, serverBlob.getStoreKey(), serverBlob.getOperationTimeMs(),
+              getBlobStates(serverBlob), getBlobStates(localBlob));
+        }
       }
     } catch (StoreException e) {
       EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
       // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
       storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
       if (storeErrorCodes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), remoteReplicaInfo,
-            acceptableLocalBlobStates, remoteBlob.getStoreKey(), remoteBlob.getOperationTimeMs(),
-            getBlobStates(remoteBlob), e.getErrorCode());
+        fileManager.appendToFile(getFilePath(remoteReplicaInfo, BLOB_STATE_MISMATCHES), remoteReplicaInfo,
+            acceptableLocalBlobStates, serverBlob.getStoreKey(), serverBlob.getOperationTimeMs(),
+            getBlobStates(serverBlob), e.getErrorCode());
       }
     }
+  }
+
+  @Override
+  public void addRemoteReplicaInfo(RemoteReplicaInfo rinfo) {
+    String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+        "datetime",
+        "blob_state_match_status",
+        "server_blob_state",
+        "azure_blob_state",
+        "\n");
+    fileManager.truncateAndWriteToFile(getFilePath(rinfo, BLOB_STATE_MISMATCHES), msg);
+    super.addRemoteReplicaInfo(rinfo);
+  }
+
+  public void printKeysAbsentInServer(RemoteReplicaInfo rinfo) {
+    if (azureBlobMap == null) {
+      logger.warn("Keymap is null");
+      return;
+    }
+    String output = getFilePath(rinfo, BLOB_STATE_MISMATCHES);
+    for (MessageInfo localBlob: azureBlobMap.values()) {
+      Set<BlobStateMatchStatus> status = localBlob.isEqual(null); // server blob is null
+      String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+          status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
+          "null",
+          localBlob.toText(),
+          "\n");
+      fileManager.appendToFile(output, msg);
+    }
+    azureBlobMap.clear();
   }
 
   /**

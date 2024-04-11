@@ -40,7 +40,8 @@ import org.slf4j.LoggerFactory;
  */
 public class BackupCheckerFileManager {
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerFileManager.class);
-  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
+  // 2024/04/11 00:00:05.481
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy/MMM/dd HH:mm:ss.SSS");
   protected final ReplicationConfig replicationConfig;
   protected final AmbryCache fileDescriptorCache;
   public static final String COLUMN_SEPARATOR = " | ";
