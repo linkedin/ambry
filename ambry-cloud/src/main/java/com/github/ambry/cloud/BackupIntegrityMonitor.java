@@ -202,7 +202,6 @@ public class BackupIntegrityMonitor implements Runnable {
       /** Restore cloud backup C */
       logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk [{}]", partition.getId(), store);
       cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
-      // TODO: Reload tokens
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
       RecoveryToken token = (RecoveryToken) cloudReplica.getToken();
       while (!token.isEndOfPartition()) {
