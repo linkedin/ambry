@@ -18,7 +18,7 @@ package com.github.ambry.store;
  */
 public enum BlobStateMatchStatus {
   BLOB_STATE_MATCH,
-  BLOB_STATE_NULL,
+  BLOB_ABSENT,
   BLOB_STATE_CLASS_MISMATCH,
   BLOB_STATE_KEY_MISMATCH,
   BLOB_STATE_SIZE_MISMATCH,

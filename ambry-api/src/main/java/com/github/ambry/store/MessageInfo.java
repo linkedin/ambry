@@ -281,15 +281,18 @@ public class MessageInfo {
    * version = blob version, applicable when blob encounters UN-DELETE.
    * @return
    */
-  public String toText() {
+  public static String toText(MessageInfo m) {
+    if (m == null) {
+      return "absent";
+    }
     return new StringBuilder()
-        .append(key).append(",")
-        .append(size).append(" bytes").append(",")
-        .append("ctime=").append(operationTimeMs).append(" ms").append(",")
-        .append("expiry=").append(expirationTimeInMs).append(" ms").append(",")
-        .append("obsolete=").append(isDeleted).append(",")
-        .append("crc=").append(crc).append(",")
-        .append("version=").append(lifeVersion)
+        .append(m.key).append(",")
+        .append(m.size).append(" bytes").append(",")
+        .append("ctime=").append(m.operationTimeMs).append(" ms").append(",")
+        .append("expiry=").append(m.expirationTimeInMs).append(" ms").append(",")
+        .append("obsolete=").append(m.isDeleted).append(",")
+        .append("crc=").append(m.crc).append(",")
+        .append("version=").append(m.lifeVersion)
         .toString();
   }
 
@@ -300,7 +303,7 @@ public class MessageInfo {
    */
   public Set<BlobStateMatchStatus> isEqual(Object o) {
     if (o == null) {
-      return Collections.singleton(BlobStateMatchStatus.BLOB_STATE_NULL);
+      return Collections.singleton(BlobStateMatchStatus.BLOB_ABSENT);
     }
     if (getClass() != o.getClass()) {
       return Collections.singleton(BlobStateMatchStatus.BLOB_STATE_CLASS_MISMATCH);

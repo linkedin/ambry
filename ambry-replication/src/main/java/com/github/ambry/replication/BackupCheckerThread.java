@@ -93,6 +93,10 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   public void setAzureBlobMap(HashMap<String, MessageInfo> azureBlobMap) {
+    if (azureBlobMap == null) {
+      logger.error("Azure blob map cannot be null");
+      return;
+    }
     this.azureBlobMap = azureBlobMap;
   }
 
@@ -183,8 +187,7 @@ public class BackupCheckerThread extends ReplicaThread {
           // print only when blob states do not match between server and azure
           String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
               status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
-              serverBlob.toText(),
-              azureBlob == null ? "null" : azureBlob.toText(),
+              MessageInfo.toText(serverBlob), MessageInfo.toText(azureBlob),
               "\n");
           fileManager.appendToFile(output, msg);
         }
@@ -238,17 +241,11 @@ public class BackupCheckerThread extends ReplicaThread {
    * @param rinfo
    */
   public void printKeysAbsentInServer(RemoteReplicaInfo rinfo) {
-    if (azureBlobMap == null) {
-      logger.warn("Keymap is null");
-      return;
-    }
     String output = getFilePath(rinfo, BLOB_STATE_MISMATCHES_FILE);
     for (MessageInfo localBlob: azureBlobMap.values()) {
-      Set<BlobStateMatchStatus> status = localBlob.isEqual(null); // server blob is null
       String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
-          status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
-          "null",
-          localBlob.toText(),
+          localBlob.isEqual(null).stream().map(s -> s.name()).collect(Collectors.joining(",")),
+          MessageInfo.toText(null), MessageInfo.toText(localBlob),
           "\n");
       fileManager.appendToFile(output, msg);
     }
@@ -278,7 +275,6 @@ public class BackupCheckerThread extends ReplicaThread {
     json.put("replica_token", rinfo.getToken().toString());
     json.put("replicated_until", rinfo.getReplicatedUntilUTC());
     // Pretty print with indent for easy viewing
-    // This will help us know when to stop DR process for sealed partitions
     fileManager.truncateAndWriteToFile(getFilePath(rinfo, REPLICA_STATUS_FILE), json.toString(4));
   }
 
