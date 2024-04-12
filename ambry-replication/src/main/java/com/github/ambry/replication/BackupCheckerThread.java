@@ -184,6 +184,7 @@ public class BackupCheckerThread extends ReplicaThread {
       ExchangeMetadataResponse metadataResponse =
           // TODO: If we need to compare data, then just add all keys here as missing keys
           // TODO: and don't mark group as done above
+          // TODO: compute and compare crc
           new ExchangeMetadataResponse(Collections.emptySet(), respinfo.getFindToken(),
               respinfo.getRemoteReplicaLagInBytes(), Collections.emptyMap(), time);
       advanceToken(repinfo, metadataResponse);
@@ -202,71 +203,6 @@ public class BackupCheckerThread extends ReplicaThread {
     // reset stored metadata response for this replica so that we send next request for metadata
     remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
     logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
-  }
-
-  /**
-   * This method checks if the blob is in local store in an acceptable state or encounters an acceptable error code
-   * @param serverBlob the {@link MessageInfo} that will be checked for in the local-store
-   * @param remoteReplicaInfo The remote replica that is being replicated from
-   * @param acceptableLocalBlobStates Acceptable states in which the blob must be present in the local-store
-   * @param acceptableStoreErrorCodes Acceptable error codes when retrieving the blob from local-store
-   */
-  protected void checkLocalStore(MessageInfo serverBlob, RemoteReplicaInfo remoteReplicaInfo,
-      EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
-    try {
-      /**
-       * We enter this fn only if the blob is missing in azure or its present but its state doesn't match with server
-       * There are 4 cases
-       *
-       * blob_server_state | blob_azure_state
-       *  absent              absent          => we won't enter this function
-       *  absent              present         => we won't enter this function
-       *  present             absent          => blob_state_match_status = null
-       *                                        => print msg to file and nothing remove from keyMap
-       *  present             present         => blob_state_match_status = matches, we won't enter this function
-       *                                      => blob_state_match_status = mismatches,
-       *                                        => print msg to file, if mismatched and then remove from keyMap
-       *
-       *  At the end of replication from server, keyMap must contain blobs present in azure _and_ absent in server.
-       */
-      if (azureBlobMap != null && !azureBlobMap.isEmpty()) {
-        String output = getFilePath(remoteReplicaInfo, BLOB_STATE_MISMATCHES_FILE);
-        // Use a user-provided key map for reference and comparison
-        String blobId = serverBlob.getStoreKey().getID();
-        MessageInfo azureBlob = azureBlobMap.get(blobId);
-        Set<BlobStateMatchStatus> status = serverBlob.isEqual(azureBlob);
-        // print only when blob states do not match between server and azure
-        String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
-            status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
-            serverBlob.toText(),
-            azureBlob == null ? "null" : azureBlob.toText(),
-            "\n");
-        fileManager.appendToFile(output, msg);
-        azureBlobMap.remove(blobId);
-      } else {
-        EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
-        // If no key-map exists, compare with local store as reference and comparison
-        // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
-        // However, get() can also do this with additional and appropriate StoreGetOptions.
-        MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(serverBlob.getStoreKey());
-        // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-        messageInfoTypes.retainAll(getBlobStates(localBlob));
-        if (messageInfoTypes.isEmpty()) {
-          fileManager.appendToFile(getFilePath(remoteReplicaInfo, BLOB_STATE_MISMATCHES_FILE), remoteReplicaInfo,
-              acceptableLocalBlobStates, serverBlob.getStoreKey(), serverBlob.getOperationTimeMs(),
-              getBlobStates(serverBlob), getBlobStates(localBlob));
-        }
-      }
-    } catch (StoreException e) {
-      EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
-      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-      storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
-      if (storeErrorCodes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, BLOB_STATE_MISMATCHES_FILE), remoteReplicaInfo,
-            acceptableLocalBlobStates, serverBlob.getStoreKey(), serverBlob.getOperationTimeMs(),
-            getBlobStates(serverBlob), e.getErrorCode());
-      }
-    }
   }
 
   @Override
@@ -297,29 +233,6 @@ public class BackupCheckerThread extends ReplicaThread {
       fileManager.appendToFile(output, msg);
     }
     azureBlobMap.clear();
-  }
-
-  /**
-   * Returns an enum corresponding to blob state
-   * @param messageInfo Blob state as message info object
-   * @return Blob state as enum
-   */
-  protected EnumSet<MessageInfoType> getBlobStates(MessageInfo messageInfo) {
-    // Blob must be PUT to begin with
-    EnumSet<MessageInfoType> messageInfoTypes = EnumSet.of(MessageInfoType.PUT);
-    if (messageInfo.isDeleted()) {
-      messageInfoTypes.add(MessageInfoType.DELETE);
-    }
-    if (messageInfo.isExpired()) {
-      messageInfoTypes.add(MessageInfoType.EXPIRED);
-    }
-    if (messageInfo.isTtlUpdated()) {
-      messageInfoTypes.add(MessageInfoType.TTL_UPDATE);
-    }
-    if (messageInfo.isUndeleted()) {
-      messageInfoTypes.add(MessageInfoType.UNDELETE);
-    }
-    return messageInfoTypes;
   }
 
   /**
