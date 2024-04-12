@@ -139,6 +139,20 @@ public class BackupCheckerThread extends ReplicaThread {
     group.setState(ReplicaGroupReplicationState.DONE);
   }
 
+  /**
+   * Checks each blob from server with its counterpart in cloud backup.
+   * There are 4 cases.
+   * server-blob : cloud-blob
+   * absent : absent  => nothing to do
+   * absent : present => print to file, blob may be compacted or missing on server
+   * present: absent  => print to file, blob may not have been backed up or somehow missing in cloud backup
+   * present: present => check blob-state matches, if not then print to file
+   * @param response The {@link ReplicaMetadataResponse}.
+   * @param replicas
+   * @param server The remote {@link DataNodeId}.
+   * @return
+   * @throws Exception
+   */
   List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
       List<RemoteReplicaInfo> replicas, DataNodeId server) throws Exception {
     if (azureBlobMap == null) {
@@ -201,6 +215,11 @@ public class BackupCheckerThread extends ReplicaThread {
     logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
   }
 
+  /**
+   * Add a replica to be copied from server.
+   * Additionally, clears some local files to store results and calls parent method.
+   * @param rinfo {@link RemoteReplicaInfo} to add.
+   */
   @Override
   public void addRemoteReplicaInfo(RemoteReplicaInfo rinfo) {
     String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
@@ -213,6 +232,11 @@ public class BackupCheckerThread extends ReplicaThread {
     super.addRemoteReplicaInfo(rinfo);
   }
 
+  /**
+   * Prints keys absent in server, but present in cloud. This may happen if the blob is compacted or somehow went
+   * missing from the server but is still present in azure backups.
+   * @param rinfo
+   */
   public void printKeysAbsentInServer(RemoteReplicaInfo rinfo) {
     if (azureBlobMap == null) {
       logger.warn("Keymap is null");

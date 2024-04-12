@@ -272,6 +272,15 @@ public class MessageInfo {
         containerId, operationTimeMs, lifeVersion);
   }
 
+  /**
+   * Print a concise readable text about blob-state
+   * ctime = create time or time in ms when blob was inserted in ambry
+   * expiry = time in ms when the blob will expire and eligible for garbage-collection
+   * obsolete = user has requested blob-delete and the blob is in DELETE state but not garbage-collected
+   * crc = blob data digest
+   * version = blob version, applicable when blob encounters UN-DELETE.
+   * @return
+   */
   public String toText() {
     return new StringBuilder()
         .append(key).append(",")
@@ -284,6 +293,11 @@ public class MessageInfo {
         .toString();
   }
 
+  /**
+   * Compares blob state from server-blob and cloud blob
+   * @param o
+   * @return
+   */
   public Set<BlobStateMatchStatus> isEqual(Object o) {
     if (o == null) {
       return Collections.singleton(BlobStateMatchStatus.BLOB_STATE_NULL);

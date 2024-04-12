@@ -13,6 +13,9 @@
  */
 package com.github.ambry.store;
 
+/**
+ * Status code blob-state match operation
+ */
 public enum BlobStateMatchStatus {
   BLOB_STATE_MATCH,
   BLOB_STATE_NULL,
