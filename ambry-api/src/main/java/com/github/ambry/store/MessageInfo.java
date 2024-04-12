@@ -298,19 +298,19 @@ public class MessageInfo {
     if (!Objects.equals(key, that.key)) {
       status.add(BlobStateMatchStatus.BLOB_STATE_KEY_MISMATCH);
     }
-    if (size == that.size) {
+    if (size != that.size) {
       status.add(BlobStateMatchStatus.BLOB_STATE_SIZE_MISMATCH);
     }
-    if (expirationTimeInMs == that.expirationTimeInMs) {
+    if (expirationTimeInMs != that.expirationTimeInMs) {
       status.add(BlobStateMatchStatus.BLOB_STATE_EXPIRY_MISMATCH);
     }
-    if (isDeleted == that.isDeleted) {
+    if (isDeleted != that.isDeleted) {
       status.add(BlobStateMatchStatus.BLOB_STATE_DELETE_MISMATCH);
     }
     if (!Objects.equals(crc, that.crc)) {
       status.add(BlobStateMatchStatus.BLOB_STATE_CRC_MISMATCH);
     }
-    if (lifeVersion == that.lifeVersion) {
+    if (lifeVersion != that.lifeVersion) {
       status.add(BlobStateMatchStatus.BLOB_STATE_VERSION_MISMATCH);
     }
     if (status.isEmpty()) {
