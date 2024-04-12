@@ -91,6 +91,7 @@ class LogSegment implements Read, Write {
     this.name = name;
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
+    this.directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
     try {
       fileChannel = Utils.openChannel(file, true);
       segmentView = new Pair<>(file, fileChannel);
@@ -104,7 +105,6 @@ class LogSegment implements Read, Write {
       if (config.storeSetFilePermissionEnabled) {
         Files.setPosixFilePermissions(this.file.toPath(), config.storeDataFilePermission);
       }
-      directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
     } catch (IOException e) {
       throw new StoreException("File not found while creating the log segment", e, StoreErrorCodes.File_Not_Found);
     }
