@@ -261,7 +261,6 @@ public class BackupCheckerThread extends ReplicaThread {
     }
     // Maintain alphabetical order of fields for string match
     json.put("replica_token", rinfo.getToken().toString());
-    json.put("replica_token_binary", new String(rinfo.getToken().toBytes(), StandardCharsets.UTF_8));
     json.put("replicated_until", rinfo.getReplicatedUntilUTC());
     // Pretty print with indent for easy viewing
     // This will help us know when to stop DR process for sealed partitions
