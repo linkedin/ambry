@@ -29,20 +29,24 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoType;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import java.io.File;
+import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,7 +74,7 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String DR_Verifier_Keyword = "dr";
   public static final String BLOB_STATE_MISMATCHES_FILE = "blob_state_mismatches";
 
-  public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
+  public static final String REPLICA_STATUS_FILE = "server_replica_token";
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -237,15 +241,30 @@ public class BackupCheckerThread extends ReplicaThread {
 
   /**
    * Prints a log if local store has caught up with remote store
-   * @param remoteReplicaInfo Info about remote replica
-   * @param exchangeMetadataResponse Metadata response object
+   * @param rinfo Info about remote replica
+   * @param mdResponse Metadata response object
    */
   @Override
-  protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse) {
+  protected void logReplicationStatus(RemoteReplicaInfo rinfo,
+      ExchangeMetadataResponse mdResponse) {
+    JSONObject json = new JSONObject();
+    try {
+      // Ensures json fields are printed exactly in the order they are inserted
+      Field changeMap = json.getClass().getDeclaredField("map");
+      changeMap.setAccessible(true);
+      changeMap.set(json, new LinkedHashMap<>());
+      changeMap.setAccessible(false);
+    } catch (IllegalAccessException | NoSuchFieldException e) {
+      logger.error(e.getMessage());
+      json = new JSONObject();
+    }
+    // Maintain alphabetical order of fields for string match
+    json.put("replica_token_binary", rinfo.getToken().toBytes());
+    json.put("replica_token", rinfo.getToken().toString());
+    json.put("replicated_until", rinfo.getReplicatedUntilUTC());
+    // Pretty print with indent for easy viewing
     // This will help us know when to stop DR process for sealed partitions
-    fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), remoteReplicaInfo,
-        exchangeMetadataResponse.localLagFromRemoteInBytes);
+    fileManager.truncateAndWriteToFile(getFilePath(rinfo, REPLICA_STATUS_FILE), json.toString());
   }
 
   /**
