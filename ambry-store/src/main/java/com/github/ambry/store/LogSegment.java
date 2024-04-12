@@ -151,13 +151,13 @@ class LogSegment implements Read, Write {
       this.name = name;
       this.metrics = metrics;
       fileChannel = Utils.openChannel(file, true);
+      directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
       segmentView = new Pair<>(file, fileChannel);
       // externals will set the correct value of end offset.
       endOffset = new AtomicLong(startOffset);
       if (config.storeSetFilePermissionEnabled) {
         Files.setPosixFilePermissions(this.file.toPath(), config.storeDataFilePermission);
       }
-      directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
     } catch (FileNotFoundException e) {
       throw new StoreException("File not found while creating log segment [" + file.getAbsolutePath() + "]", e,
           StoreErrorCodes.File_Not_Found);
@@ -190,6 +190,7 @@ class LogSegment implements Read, Write {
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
     this.fileChannel = fileChannel;
+    this.directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
     try {
       segmentView = new Pair<>(file, fileChannel);
       // externals will set the correct value of end offset.
@@ -200,7 +201,6 @@ class LogSegment implements Read, Write {
       if (config.storeSetFilePermissionEnabled) {
         Files.setPosixFilePermissions(file.toPath(), config.storeDataFilePermission);
       }
-      directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
     } catch (IOException e) {
       // the IOException comes from Files.setPosixFilePermissions which happens when file not found
       throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
