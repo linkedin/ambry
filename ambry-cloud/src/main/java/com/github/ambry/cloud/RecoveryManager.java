@@ -235,17 +235,17 @@ public class RecoveryManager extends ReplicationEngine {
     return 0;
   }
 
-  public RemoteReplicaInfo getCloudReplica(ReplicaId replica) throws Exception {
-    PartitionId partition = replica.getPartitionId();
+  public RemoteReplicaInfo getCloudReplica(ReplicaId local) throws Exception {
+    PartitionId partition = local.getPartitionId();
     Store store = storeManager.getStore(partition);
     DataNodeId cloudDataNode = new CloudServiceDataNode(clusterMapConfig);
     CloudReplica cloudReplica = new CloudReplica(partition, cloudDataNode);
     FindTokenFactory findTokenFactory =
         tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
-    RemoteReplicaInfo rinfo = new RemoteReplicaInfo(cloudReplica, replica, store, findTokenFactory.getNewFindToken(), 0,
-            SystemTime.getInstance(), cloudReplica.getDataNodeId().getPortToConnectTo());
-    reloadReplicationTokenIfExists(replica, Collections.singletonList(rinfo));
-    return rinfo;
+    RemoteReplicaInfo cloud = new RemoteReplicaInfo(cloudReplica, local, store, findTokenFactory.getNewFindToken(),
+        0, SystemTime.getInstance(), cloudReplica.getDataNodeId().getPortToConnectTo());
+    reloadReplicationTokenIfExists(local, Collections.singletonList(cloud));
+    return cloud;
   }
 
 

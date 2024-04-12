@@ -182,7 +182,8 @@ public class BackupCheckerThread extends ReplicaThread {
       }
       repinfo.setReplicatedUntilUTC(lastOpTime);
       ExchangeMetadataResponse metadataResponse =
-          // If we need to compare data, then just add all keys here as missing keys
+          // TODO: If we need to compare data, then just add all keys here as missing keys
+          // TODO: and don't mark group as done above
           new ExchangeMetadataResponse(Collections.emptySet(), respinfo.getFindToken(),
               respinfo.getRemoteReplicaLagInBytes(), Collections.emptyMap(), time);
       advanceToken(repinfo, metadataResponse);
