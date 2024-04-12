@@ -244,7 +244,6 @@ public class RecoveryManager extends ReplicationEngine {
         tokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.CLOUD_BACKED);
     RemoteReplicaInfo cloud = new RemoteReplicaInfo(cloudReplica, local, store, findTokenFactory.getNewFindToken(),
         0, SystemTime.getInstance(), cloudReplica.getDataNodeId().getPortToConnectTo());
-    reloadReplicationTokenIfExists(local, Collections.singletonList(cloud));
     return cloud;
   }
 

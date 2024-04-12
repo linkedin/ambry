@@ -39,8 +39,11 @@ import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.utils.Utils;
+import java.io.File;
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -53,7 +56,8 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Checks the integrity of backup partitions in Azure
+ * Checks the integrity of backup partitions in Azure.
+ * This is NOT thread-safe because it clears entire disk before each run.
  */
 public class BackupIntegrityMonitor implements Runnable {
   private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
@@ -130,8 +134,6 @@ public class BackupIntegrityMonitor implements Runnable {
         .max(Long::compare)
         .get();
     logger.info("[BackupIntegrityMonitor] maxReplicaSize = {}", maxReplicaSize);
-    // TODO: Handle disk full or unavailable
-    // TODO: Clear off other partitions on the disk
     List<DiskId> disks = staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
         .getDiskIds().stream()
         .filter(d -> d.getState() == HardwareState.AVAILABLE)
@@ -145,6 +147,16 @@ public class BackupIntegrityMonitor implements Runnable {
         .collect(Collectors.toList())
         .get(0);
     logger.info("[BackupIntegrityMonitor] mountpath = {}", disk.getMountPath());
+    // Clear disk to make space, this is simpler instead of deciding which partition to delete.
+    // This is why this is thread-unsafe.
+    Arrays.stream(new File(disk.getMountPath()).listFiles()).forEach(f -> {
+      try {
+        Utils.deleteFileOrDirectory(f);
+      } catch (Throwable e) {
+        // TODO: metric
+        logger.error("[BackupIntegrityMonitor] Failed to delete {}", f);
+      }
+    });
     // Convert Disk object to AmbryDisk object, static-map -> helix-map
     AmbryDisk ambryDisk = new AmbryDisk((Disk) disk, clusterMapConfig);
     AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, partition, ambryDisk,
@@ -202,6 +214,7 @@ public class BackupIntegrityMonitor implements Runnable {
       /** Restore cloud backup C */
       logger.info("[BackupIntegrityMonitor] Restoring backup partition-{} to disk [{}]", partition.getId(), store);
       cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
+      // No need to reload tokens, since we clear off disks before each run
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
       RecoveryToken token = (RecoveryToken) cloudReplica.getToken();
       while (!token.isEndOfPartition()) {

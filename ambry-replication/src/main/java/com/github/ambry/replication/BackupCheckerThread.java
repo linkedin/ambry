@@ -264,7 +264,7 @@ public class BackupCheckerThread extends ReplicaThread {
     json.put("replicated_until", rinfo.getReplicatedUntilUTC());
     // Pretty print with indent for easy viewing
     // This will help us know when to stop DR process for sealed partitions
-    fileManager.truncateAndWriteToFile(getFilePath(rinfo, REPLICA_STATUS_FILE), json.toString());
+    fileManager.truncateAndWriteToFile(getFilePath(rinfo, REPLICA_STATUS_FILE), json.toString(4));
   }
 
   /**
