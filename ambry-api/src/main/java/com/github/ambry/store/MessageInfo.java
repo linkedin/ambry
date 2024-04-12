@@ -19,8 +19,6 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import com.github.ambry.utils.Utils;
 import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
@@ -305,7 +303,7 @@ public class MessageInfo {
       status.add(BlobStateMatchStatus.BLOB_STATE_EXPIRY_MISMATCH);
     }
     if (isDeleted != that.isDeleted) {
-      status.add(BlobStateMatchStatus.BLOB_STATE_DELETE_MISMATCH);
+      status.add(BlobStateMatchStatus.BLOB_STATE_OBSOLETE_MISMATCH);
     }
     if (!Objects.equals(crc, that.crc)) {
       status.add(BlobStateMatchStatus.BLOB_STATE_CRC_MISMATCH);
