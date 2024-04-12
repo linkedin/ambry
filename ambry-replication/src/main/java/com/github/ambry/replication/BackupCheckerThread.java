@@ -36,6 +36,7 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -259,7 +260,7 @@ public class BackupCheckerThread extends ReplicaThread {
       json = new JSONObject();
     }
     // Maintain alphabetical order of fields for string match
-    json.put("replica_token_binary", rinfo.getToken().toBytes());
+    json.put("replica_token_binary", new String(rinfo.getToken().toBytes(), StandardCharsets.UTF_8));
     json.put("replica_token", rinfo.getToken().toString());
     json.put("replicated_until", rinfo.getReplicatedUntilUTC());
     // Pretty print with indent for easy viewing
