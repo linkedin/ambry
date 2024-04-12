@@ -275,16 +275,15 @@ public class MessageInfo {
   }
 
   public String toText() {
-    StringBuilder stringBuilder = new StringBuilder();
-    stringBuilder
+    return new StringBuilder()
         .append(key).append(",")
         .append(size).append(" bytes").append(",")
-        .append("upload=").append(operationTimeMs).append(" ms").append(",")
+        .append("ctime=").append(operationTimeMs).append(" ms").append(",")
         .append("expiry=").append(expirationTimeInMs).append(" ms").append(",")
-        .append("deleted=").append(isDeleted).append(",")
+        .append("obsolete=").append(isDeleted).append(",")
         .append("crc=").append(crc).append(",")
-        .append("version=").append(lifeVersion);
-    return stringBuilder.toString();
+        .append("version=").append(lifeVersion)
+        .toString();
   }
 
   public Set<BlobStateMatchStatus> isEqual(Object o) {

@@ -112,7 +112,7 @@ public class ReplicaThread implements Runnable {
   private final boolean replicatingOverSsl;
   private final String datacenterName;
   private final long threadThrottleDurationMs;
-  private final Time time;
+  protected final Time time;
   private final Counter throttleCount;
   private final Counter syncedBackOffCount;
   private final Counter idleCount;
