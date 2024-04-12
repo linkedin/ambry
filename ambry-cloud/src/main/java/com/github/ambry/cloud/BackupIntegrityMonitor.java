@@ -40,7 +40,6 @@ import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -56,8 +55,24 @@ import org.slf4j.LoggerFactory;
 
 
 /**
- * Checks the integrity of backup partitions in Azure.
- * This is NOT thread-safe because it clears entire disk before each run.
+ * BackupIntegrityMonitor monitors the integrity of backup partitions in Azure by comparing them with server partitions.
+ * It is NOT thread-safe because it clears entire disk before each run. This is the simplest thing to do rather than
+ * being clever about how to manage disk space.
+ *
+ * We do not want multiple threads or processes of BackupIntegrityMonitor running around in data center as that will put
+ * unnecessary load on Azure and on the servers. We want exactly _one_ thread of BackupIntegrityMonitor running per
+ * ambry cluster in a data center.
+ *
+ * Here are the steps BackupIntegrityMonitor follows:
+ * 0. Clear all local disks
+ * 1. Randomly pick a partition P & its server-replica R from helix cluster-map
+ * 2. Pick a local disk D using static cluster-map to store partition data
+ * 3. Restore P from Azure to D => while(!done) { RecoveryThread::replicate(P) }
+ * 4. Copy metadata from R & compare with metadata in D => while(!done) { BackupCheckerThread::replicate(R) }
+ *
+ * Because we clear disks in step 0, we must pick a partition randomly in step 1.
+ * If we sort and pick partitions from either end of the list, we will never get to the other end of the list because
+ * there will always at least be a restart due a deployment.
  */
 public class BackupIntegrityMonitor implements Runnable {
   private final Logger logger = LoggerFactory.getLogger(RecoveryThread.class);
@@ -125,7 +140,7 @@ public class BackupIntegrityMonitor implements Runnable {
 
   private BlobStore startLocalStore(AmbryPartition partition) throws Exception {
     /**
-     * Create local replica L to store cloud data
+     * Create a local replica store cloud data.
      * It will be at least as big as the largest replica of the partition on a server.
      * Cloud replica will usually be smaller than server replica, unless server disk has a problem or is compacted.
      */
@@ -139,11 +154,11 @@ public class BackupIntegrityMonitor implements Runnable {
         .filter(d -> d.getState() == HardwareState.AVAILABLE)
         .filter(d -> d.getAvailableSpaceInBytes() >= maxReplicaSize)
         .collect(Collectors.toList());
-    logger.info("[BackupIntegrityMonitor] disks.len = {}", disks.size());
+    logger.info("[BackupIntegrityMonitor] Number of local disks = {}", disks.size());
     // Pick disk randomly
-    // DiskId disk = disks.get(new Random().nextInt(disks.size()));
-    DiskId disk = disks.stream()
-        .filter(d -> d.getMountPath().equals("/mnt/u005/ambrydata"))
+    DiskId disk = disks.get(new Random().nextInt(disks.size()));
+    disk = disks.stream()
+        .filter(d -> d.getMountPath().equals("/mnt/u005/ambrydata")) // TODO: remove
         .collect(Collectors.toList())
         .get(0);
     logger.info("[BackupIntegrityMonitor] mountpath = {}", disk.getMountPath());
@@ -157,12 +172,13 @@ public class BackupIntegrityMonitor implements Runnable {
         logger.error("[BackupIntegrityMonitor] Failed to delete {}", f);
       }
     });
-    // Convert Disk object to AmbryDisk object, static-map -> helix-map
+    // Convert Disk object to AmbryDisk object, static-map object -> helix-map object
     AmbryDisk ambryDisk = new AmbryDisk((Disk) disk, clusterMapConfig);
     AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, partition, ambryDisk,
         true, maxReplicaSize, ReplicaSealStatus.NOT_SEALED);
     if (!storageManager.addBlobStore(localReplica)) {
-      throw new RuntimeException(String.format("Failed to start Store for %s", partition.getId()));
+      throw new RuntimeException(String.format("[BackupIntegrityMonitor] Failed to start Store for %s",
+          partition.getId()));
     }
     Store store = storageManager.getStore(partition, true);
     logger.info("[BackupIntegrityMonitor] Started Store {}", store.toString());
@@ -176,7 +192,7 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.info("[BackupIntegrityMonitor] Stopped Store [{}]", store);
       return ret;
     } catch (Throwable e) {
-      logger.error(String.format("Failed to stop Store [%s]", store));
+      logger.error(String.format("[BackupIntegrityMonitor] Failed to stop Store [%s]", store));
       return false;
     }
   }
@@ -192,10 +208,7 @@ public class BackupIntegrityMonitor implements Runnable {
     RemoteReplicaInfo serverReplica = null;
     HashMap<String, MessageInfo> azureBlobs = new HashMap<>();
     try {
-      // 1. Pick a partition P, replica R from helix cluster-map
-      // 2. Pick a disk D using static cluster-map
-      // 3. while(!done) { RecoveryThread::replicate(P) } - restore partition P from cloud to disk D
-      // 4. while(!done) { BackupCheckerThread::replicate(R) } - copy metadata from R, compare with metadata in D
+
       Random random = new Random();
 
       /** Select partition P */
@@ -203,7 +216,7 @@ public class BackupIntegrityMonitor implements Runnable {
       List<PartitionId> partitions = helixClusterManager.getAllPartitionIds(null);
       // partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       partition = (AmbryPartition) partitions.stream()
-          .filter(p -> p.getId() == 57177)
+          .filter(p -> p.getId() == 57177) // TODO: remove
           .collect(Collectors.toList())
           .get(0);
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
@@ -222,21 +235,22 @@ public class BackupIntegrityMonitor implements Runnable {
         token = (RecoveryToken) cloudReplica.getToken();
         long numBlobs = token.getNumBlobs();
         if (numBlobs > 0 && (numBlobs % RECOVERY_MILESTONE == 0)) {
-          // Print progress every N blobs
+          // Print progress, if N blobs have been restored from Azure
           logger.info("[BackupIntegrityMonitor] Recovered {} blobs {} bytes of partition-{} from Azure Storage",
               numBlobs, token.getBytesRead(), partition.getId());
-          break;
+          break; // TODO: remove
         }
       }
       logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}], num_blobs = {}, num_bytes = {}",
           partition.getId(), store, token.getNumBlobs(), token.getBytesRead());
 
       /** Create a temporary map of all keys recovered from cloud */
-      // Get all entries in one call, so keep the ceil buffer size high ~500MB, all of it may not be used
-      FindInfo finfo = store.findEntriesSince(new StoreFindToken(), 500 * (2 << 20),
+      // Get all entries in one call, so keep the ceil buffer size high 1GB, all of it will not be used
+      FindInfo finfo = store.findEntriesSince(new StoreFindToken(), 1000 * (2 << 20),
           null, null);
       finfo.getMessageEntries().forEach(msg -> azureBlobs.put(msg.getStoreKey().getID(), msg));
       if (token.getNumBlobs() != azureBlobs.size()) {
+        // TODO: metric
         logger.error("[BackupIntegrityMonitor] Mismatch, num_blobs from cloud = {}, num_blobs from disk = {}",
             token.getNumBlobs(), azureBlobs.size());
       }
@@ -250,21 +264,24 @@ public class BackupIntegrityMonitor implements Runnable {
           Collections.singletonList(replica), store.getReplicaId()).get(0);
       logger.info("[BackupIntegrityMonitor] Created peer server replica info [{}]", serverReplica);
       serverScanner.addRemoteReplicaInfo(serverReplica);
-      logger.info("[BackupIntegrityMonitor] Added peer server replica info [{}]", serverReplica);
+      logger.info("[BackupIntegrityMonitor] Queued peer server replica info [{}]", serverReplica);
       long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilUTC();
       long currentTime = System.currentTimeMillis();
-      logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}]", partition.getId(), replica);
+      logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}]",
+          partition.getId(), replica);
       while (scanEndTime < (currentTime - SCAN_STOP_RELTIME)) {
         scanStartTime = serverReplica.getReplicatedUntilUTC();
         serverScanner.replicate();
         scanEndTime = serverReplica.getReplicatedUntilUTC();
         if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
-          // Print progress
+          // Print progress, if a SCAN_MILESTONE's worth of data has been received from server
           DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
           logger.info("[BackupIntegrityMonitor] Scanned peer server replica {} until {}, stop at {}",
               replica, formatter.format(scanEndTime), formatter.format(currentTime - SCAN_STOP_RELTIME));
         }
       }
+      logger.info("[BackupIntegrityMonitor] Scanned partition-{} from peer server replica [{}]", partition.getId(),
+          replica);
       serverScanner.printKeysAbsentInServer(serverReplica);
 
       logger.info("[BackupIntegrityMonitor] Verified cloud backup partition-{} against peer server replica {}",
@@ -284,7 +301,7 @@ public class BackupIntegrityMonitor implements Runnable {
         serverScanner.removeRemoteReplicaInfo(serverReplica);
       }
       if (partition != null) {
-        // stopLocalStore(partition);
+        stopLocalStore(partition);
       }
     }
   }

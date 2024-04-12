@@ -26,20 +26,13 @@ import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.BlobStateMatchStatus;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageInfoType;
-import com.github.ambry.store.StoreErrorCodes;
-import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.lang.reflect.Field;
-import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -63,8 +56,6 @@ import org.slf4j.LoggerFactory;
  * 2> The backup may be ahead of the replica. This can happen if the replica is lagging behind its peers. If we recover
  * from such a backup, we'd still be consistent from the user's point of view. The lagging replica must catch up with
  * its peers and this checker will detect such lagging replicas as well.
- * TODO: Redirect to a different file
- * TODO: Testing on sample partitions
  */
 public class BackupCheckerThread extends ReplicaThread {
 
@@ -187,9 +178,9 @@ public class BackupCheckerThread extends ReplicaThread {
       }
       repinfo.setReplicatedUntilUTC(lastOpTime);
       ExchangeMetadataResponse metadataResponse =
-          // TODO: If we need to compare data, then just add all keys here as missing keys
-          // TODO: and don't mark group as done above
-          // TODO: compute and compare crc
+          // TODO: If we need to compare data, then just add all keys here as missing keys,
+          // TODO: and don't mark group as done above.
+          // TODO: Compute and compare crc instead of each byte of a blob.
           new ExchangeMetadataResponse(Collections.emptySet(), respinfo.getFindToken(),
               respinfo.getRemoteReplicaLagInBytes(), Collections.emptyMap(), time);
       advanceToken(repinfo, metadataResponse);
