@@ -65,6 +65,7 @@ public class RestUtils {
   public static final String STITCH = "STITCH";
   public static final String UPLOADS_QUERY_PARAM = "uploads";
   public static final String UPLOAD_ID_QUERY_PARAM = "uploadId";
+  public static final String CONTINUE = "100-continue";
 
   /**
    * prefix for all Ambry specific heaeders
@@ -96,6 +97,10 @@ public class RestUtils {
      * {@code "Date"}
      */
     public static final String DATE = "Date";
+    /**
+     * {@code "Expect"}
+     */
+    public static final String EXPECT = "Expect";
     /**
      * {@code "Expires"}
      */

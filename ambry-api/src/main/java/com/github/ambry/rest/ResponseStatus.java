@@ -18,6 +18,8 @@ package com.github.ambry.rest;
  * All the REST response statuses.
  */
 public enum ResponseStatus {
+  // 1xx
+  Continue(100),
   // 2xx
   /**
    * 200 OK - Resource found and all good.

@@ -177,7 +177,7 @@ public class NettyMessageProcessorTest {
     ByteBuffer receivedContent = doPostTest(postRequest, contents);
     compareContent(receivedContent, Collections.singletonList(content));
   }
-
+  
   /**
    * Tests for error handling flow when bad input streams are provided to the {@link NettyMessageProcessor}.
    */
