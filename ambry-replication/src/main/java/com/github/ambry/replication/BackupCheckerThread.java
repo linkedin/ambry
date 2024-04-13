@@ -26,11 +26,13 @@ import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.BlobMatchStatus;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -146,6 +148,20 @@ public class BackupCheckerThread extends ReplicaThread {
     group.setState(ReplicaGroupReplicationState.DONE);
   }
 
+  protected List<MessageInfo> mapBlob(MessageInfo blob) {
+    List<MessageInfo> retList = new ArrayList<>();
+    StoreKey keyConvert;
+    try {
+      if ((keyConvert = storeKeyConverter.convert(Collections.singleton(blob.getStoreKey()))
+          .get(blob.getStoreKey())) != null) {
+        retList.add(new MessageInfo(keyConvert, blob));
+      }
+    } catch (Throwable e) {
+      logger.error("Failed to convert blobID {} due to ", blob.getStoreKey().getID(), e.toString());
+    }
+    return retList;
+  }
+
   /**
    * Checks each blob from server with its counterpart in cloud backup.
    * There are 4 cases.
@@ -171,30 +187,22 @@ public class BackupCheckerThread extends ReplicaThread {
           // For each message from replica
           respinfo.getMessageInfoList().forEach(serverBlob -> {
             repinfo.setReplicatedUntilUTC(Math.max(repinfo.getReplicatedUntilUTC(), serverBlob.getOperationTimeMs()));
-            try {
-              // Don't do batch-convert, if one replica in batch fails, then it affects handling others
-              storeKeyConverter.convert(Collections.singleton(serverBlob.getStoreKey()))
-                  .values().stream()
-                  .filter(serverKeyConvert -> serverKeyConvert != null)
-                  .map(serverKeyConvert -> {
-                    MessageInfo serverBlobConvert = new MessageInfo(serverKeyConvert, serverBlob);
-                    MessageInfo azureBlob = azureBlobMap.remove(serverBlobConvert.getStoreKey()); // can be null
-                    return new ImmutableTriple(serverBlobConvert, azureBlob, serverBlobConvert.isEqual(azureBlob));
-                  }).filter(tuple ->
-                      !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
-                  .forEach(tuple -> {
-                    MessageInfo serverBlobConvert = (MessageInfo) tuple.getLeft();
-                    MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
-                    Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
-                    String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
-                        status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
-                        MessageInfo.toText(serverBlobConvert), MessageInfo.toText(azureBlob), "\n");
-                    fileManager.appendToFile(output, msg);
-                  });
-            } catch (Throwable e) {
-              // TODO: metric
-              logger.error("Failed to verify blobID {} due to ", serverBlob.getStoreKey().getID(), e.toString());
-            }
+            // Don't do batch-convert, if one replica in batch fails, then it affects handling others
+            mapBlob(serverBlob).stream()
+                .map(serverBlobConvert -> {
+                  MessageInfo azureBlob = azureBlobMap.remove(serverBlobConvert.getStoreKey()); // can be null
+                  return new ImmutableTriple(serverBlobConvert, azureBlob, serverBlobConvert.isEqual(azureBlob));
+                }).filter(tuple ->
+                    !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
+                .forEach(tuple -> {
+                  MessageInfo serverBlobConvert = (MessageInfo) tuple.getLeft();
+                  MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
+                  Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                  String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+                      status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
+                      MessageInfo.toText(serverBlobConvert), MessageInfo.toText(azureBlob), "\n");
+                  fileManager.appendToFile(output, msg);
+                });
           }); // For each message from replica
           // TODO: To compare data, treat all keys as missing, do not mark rgroup as "done" and compare blob-crc.
           advanceToken(repinfo, new ExchangeMetadataResponse(Collections.emptySet(), respinfo.getFindToken(),
