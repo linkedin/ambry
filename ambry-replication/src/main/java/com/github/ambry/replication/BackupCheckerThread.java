@@ -152,6 +152,7 @@ public class BackupCheckerThread extends ReplicaThread {
     List<MessageInfo> retList = new ArrayList<>();
     StoreKey keyConvert;
     try {
+      // Don't do batch-convert, if one replica in batch fails, then it affects handling others
       if ((keyConvert = storeKeyConverter.convert(Collections.singleton(blob.getStoreKey()))
           .get(blob.getStoreKey())) != null) {
         retList.add(new MessageInfo(keyConvert, blob));
@@ -177,17 +178,14 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
       List<RemoteReplicaInfo> replicas, DataNodeId server) {
-    // For each replica-response
     IntStream.range(0, response.getReplicaMetadataResponseInfoList().size())
         .filter(i -> response.getReplicaMetadataResponseInfoList().get(i).getError() == ServerErrorCode.No_Error)
-        .forEach(i -> {
+        .forEach(i -> { // For each replica-response
           ReplicaMetadataResponseInfo respinfo = response.getReplicaMetadataResponseInfoList().get(i);
           RemoteReplicaInfo repinfo = replicas.get(i);
           String output = getFilePath(repinfo, BLOB_STATE_MISMATCHES_FILE);
-          // For each message from replica
-          respinfo.getMessageInfoList().forEach(serverBlob -> {
+          respinfo.getMessageInfoList().forEach(serverBlob -> { // For each message from replica
             repinfo.setReplicatedUntilUTC(Math.max(repinfo.getReplicatedUntilUTC(), serverBlob.getOperationTimeMs()));
-            // Don't do batch-convert, if one replica in batch fails, then it affects handling others
             mapBlob(serverBlob).stream()
                 .map(serverBlobMapped -> {
                   MessageInfo azureBlob = azureBlobMap.remove(serverBlobMapped.getStoreKey()); // can be null
