@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
@@ -160,44 +161,40 @@ public class BackupCheckerThread extends ReplicaThread {
   List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
       List<RemoteReplicaInfo> replicas, DataNodeId server) {
     // For each replica-response
-    IntStream.range(0, response.getReplicaMetadataResponseInfoList().size()).forEach(
-        i -> {
+    IntStream.range(0, response.getReplicaMetadataResponseInfoList().size())
+        .filter(i -> response.getReplicaMetadataResponseInfoList().get(i).getError() == ServerErrorCode.No_Error)
+        .forEach(i -> {
           ReplicaMetadataResponseInfo respinfo = response.getReplicaMetadataResponseInfoList().get(i);
-          if (respinfo.getError() == ServerErrorCode.No_Error) {
-            RemoteReplicaInfo repinfo = replicas.get(i);
-            String output = getFilePath(repinfo, BLOB_STATE_MISMATCHES_FILE);
-            // For each message from replica
-            respinfo.getMessageInfoList().forEach(serverBlob -> {
-              repinfo.setReplicatedUntilUTC(Math.max(repinfo.getReplicatedUntilUTC(), serverBlob.getOperationTimeMs()));
-              try {
-                StoreKey storeKey = storeKeyConverter
-                        .convert(Collections.singleton(serverBlob.getStoreKey()))
-                        .get(serverBlob.getStoreKey());
-                if (storeKey != null) {
-                  MessageInfo azureBlob = azureBlobMap.get(storeKey.getID());
-                  Set<BlobStateMatchStatus> status = serverBlob.isEqual(azureBlob);
-                  if (!status.contains(BlobStateMatchStatus.BLOB_STATE_MATCH)) {
-                    // print only when blob states do not match between server and azure
-                    String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
-                        status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
-                        MessageInfo.toText(serverBlob), MessageInfo.toText(azureBlob), "\n");
-                    fileManager.appendToFile(output, msg);
-                  }
-                  azureBlobMap.remove(storeKey.getID());
-                }
-              } catch (Throwable e) {
-                // TODO: metric
-                logger.error("Failed to verify blobID {} due to ", serverBlob.getStoreKey().getID(), e.toString());
-              }
-            }); // For each message from replica
-            // TODO: If we need to compare data, then just add all keys here as missing keys,
-            // TODO: and don't mark group as done above.
-            // TODO: Compute and compare crc instead of each byte of a blob.
-            advanceToken(repinfo, new ExchangeMetadataResponse(Collections.emptySet(), respinfo.getFindToken(),
-                respinfo.getRemoteReplicaLagInBytes(), Collections.emptyMap(), time));
-          }
-        }
-    ); // For each replica-response
+          RemoteReplicaInfo repinfo = replicas.get(i);
+          String output = getFilePath(repinfo, BLOB_STATE_MISMATCHES_FILE);
+          // For each message from replica
+          respinfo.getMessageInfoList().forEach(serverBlob -> {
+            repinfo.setReplicatedUntilUTC(Math.max(repinfo.getReplicatedUntilUTC(), serverBlob.getOperationTimeMs()));
+            try {
+              storeKeyConverter.convert(Collections.singleton(serverBlob.getStoreKey()))
+                  .entrySet().stream()
+                  .filter(entry -> entry.getValue() != null)
+                  .forEach(entry -> {
+                    MessageInfo azureBlob = azureBlobMap.get(entry.getValue().getID());
+                    Set<BlobStateMatchStatus> status;
+                    if (!(status = serverBlob.isEqual(azureBlob)).contains(BlobStateMatchStatus.BLOB_STATE_MATCH)) {
+                      // print only when blob states do not match between server and azure
+                      String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+                          status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
+                          MessageInfo.toText(serverBlob), MessageInfo.toText(azureBlob), "\n");
+                      fileManager.appendToFile(output, msg);
+                    }
+                    azureBlobMap.remove(entry.getValue().getID());
+                  });
+            } catch (Throwable e) {
+              // TODO: metric
+              logger.error("Failed to verify blobID {} due to ", serverBlob.getStoreKey().getID(), e.toString());
+            }
+          }); // For each message from replica
+          // TODO: To compare data, treat all keys as missing, do not mark rgroup as "done" and compare blob-crc.
+          advanceToken(repinfo, new ExchangeMetadataResponse(Collections.emptySet(), respinfo.getFindToken(),
+              respinfo.getRemoteReplicaLagInBytes(), Collections.emptyMap(), time));
+    }); // For each replica-response
     return Collections.emptyList();
   }
 
@@ -238,13 +235,13 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   public void printKeysAbsentInServer(RemoteReplicaInfo rinfo) {
     String output = getFilePath(rinfo, BLOB_STATE_MISMATCHES_FILE);
-    for (MessageInfo localBlob: azureBlobMap.values()) {
+    azureBlobMap.values().forEach(azureBlob -> {
       String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
-          localBlob.isEqual(null).stream().map(s -> s.name()).collect(Collectors.joining(",")),
-          MessageInfo.toText(null), MessageInfo.toText(localBlob),
+          azureBlob.isEqual(null).stream().map(s -> s.name()).collect(Collectors.joining(",")),
+          MessageInfo.toText(null), MessageInfo.toText(azureBlob),
           "\n");
       fileManager.appendToFile(output, msg);
-    }
+    });
     azureBlobMap.clear();
   }
 
