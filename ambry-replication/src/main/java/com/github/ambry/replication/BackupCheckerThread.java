@@ -193,12 +193,12 @@ public class BackupCheckerThread extends ReplicaThread {
                 }).filter(tuple ->
                     !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
                 .forEach(tuple -> {
-                  MessageInfo serverBlobConvert = (MessageInfo) tuple.getLeft();
+                  MessageInfo serverBlobMapped = (MessageInfo) tuple.getLeft();
                   MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
                   Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
                   String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
                       status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
-                      MessageInfo.toText(serverBlobConvert), MessageInfo.toText(azureBlob), "\n");
+                      MessageInfo.toText(serverBlobMapped), MessageInfo.toText(azureBlob), "\n");
                   fileManager.appendToFile(output, msg);
                 });
           }); // For each message from replica
