@@ -172,7 +172,7 @@ public class BackupCheckerThread extends ReplicaThread {
           respinfo.getMessageInfoList().forEach(serverBlob -> {
             repinfo.setReplicatedUntilUTC(Math.max(repinfo.getReplicatedUntilUTC(), serverBlob.getOperationTimeMs()));
             try {
-              // Don't do batch-convert, if one replica in batch fails, then if affect handling others
+              // Don't do batch-convert, if one replica in batch fails, then it affects handling others
               storeKeyConverter.convert(Collections.singleton(serverBlob.getStoreKey()))
                   .values().stream()
                   .filter(serverKeyConvert -> serverKeyConvert != null)
