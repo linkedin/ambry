@@ -158,6 +158,7 @@ public class BackupCheckerThread extends ReplicaThread {
         retList.add(new MessageInfo(keyConvert, blob));
       }
     } catch (Throwable e) {
+      // TODO: metric
       logger.error("Failed to convert blobID {} due to ", blob.getStoreKey().getID(), e.toString());
     }
     return retList;
