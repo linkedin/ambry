@@ -189,9 +189,9 @@ public class BackupCheckerThread extends ReplicaThread {
             repinfo.setReplicatedUntilUTC(Math.max(repinfo.getReplicatedUntilUTC(), serverBlob.getOperationTimeMs()));
             // Don't do batch-convert, if one replica in batch fails, then it affects handling others
             mapBlob(serverBlob).stream()
-                .map(serverBlobConvert -> {
-                  MessageInfo azureBlob = azureBlobMap.remove(serverBlobConvert.getStoreKey()); // can be null
-                  return new ImmutableTriple(serverBlobConvert, azureBlob, serverBlobConvert.isEqual(azureBlob));
+                .map(serverBlobMapped -> {
+                  MessageInfo azureBlob = azureBlobMap.remove(serverBlobMapped.getStoreKey()); // can be null
+                  return new ImmutableTriple(serverBlobMapped, azureBlob, serverBlobMapped.isEqual(azureBlob));
                 }).filter(tuple ->
                     !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
                 .forEach(tuple -> {
