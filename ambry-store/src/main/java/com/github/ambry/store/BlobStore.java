@@ -1513,6 +1513,13 @@ public class BlobStore implements Store {
     }
   }
 
+  CompactionDetails getCompactionDetailsInProgress() throws StoreException {
+    if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
+      return compactor.getCompactionDetailsInProgress();
+    }
+    return null;
+  }
+
   /**
    * Detects duplicates in {@code writeSet}
    * @param infos the list of {@link MessageInfo} to detect duplicates in

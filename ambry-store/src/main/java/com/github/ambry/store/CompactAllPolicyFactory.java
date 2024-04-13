@@ -66,7 +66,8 @@ class CompactAllPolicy implements CompactionPolicy {
     logger.trace("UsedCapacity {} vs TotalCapacity {}", usedCapacity, totalCapacity);
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       if (logSegmentsNotInJournal != null) {
-        details = new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentsNotInJournal, null);
+        details =
+            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentsNotInJournal, null, true);
 
         Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =
             blobStoreStats.getValidDataSizeByLogSegment(
