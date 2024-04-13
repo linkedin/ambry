@@ -24,9 +24,8 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.store.BlobStateMatchStatus;
+import com.github.ambry.store.BlobMatchStatus;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
@@ -36,12 +35,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -175,16 +174,20 @@ public class BackupCheckerThread extends ReplicaThread {
               storeKeyConverter.convert(Collections.singleton(serverBlob.getStoreKey()))
                   .values().stream()
                   .filter(serverKeyConvert -> serverKeyConvert != null)
-                  .map(serverKeyConvert -> new MessageInfo(serverKeyConvert, serverBlob))
-                  .forEach(serverBlobConvert -> {
-                    MessageInfo azureBlob = azureBlobMap.remove(serverBlobConvert.getStoreKey());
-                    Set<BlobStateMatchStatus> status;
-                    if (!(status = serverBlobConvert.isEqual(azureBlob)).contains(BlobStateMatchStatus.BLOB_STATE_MATCH)) {
-                      String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
-                          status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
-                          MessageInfo.toText(serverBlobConvert), MessageInfo.toText(azureBlob), "\n");
-                      fileManager.appendToFile(output, msg);
-                    }
+                  .map(serverKeyConvert -> {
+                    MessageInfo serverBlobConvert = new MessageInfo(serverKeyConvert, serverBlob);
+                    MessageInfo azureBlob = azureBlobMap.remove(serverBlobConvert.getStoreKey()); // can be null
+                    return new ImmutableTriple(serverBlobConvert, azureBlob, serverBlobConvert.isEqual(azureBlob));
+                  }).filter(tuple ->
+                      !((Set<BlobMatchStatus>) tuple.getRight()).contains(BlobMatchStatus.BLOB_STATE_MATCH))
+                  .forEach(tuple -> {
+                    MessageInfo serverBlobConvert = (MessageInfo) tuple.getLeft();
+                    MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
+                    Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                    String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+                        status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
+                        MessageInfo.toText(serverBlobConvert), MessageInfo.toText(azureBlob), "\n");
+                    fileManager.appendToFile(output, msg);
                   });
             } catch (Throwable e) {
               // TODO: metric

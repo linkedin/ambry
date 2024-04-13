@@ -308,35 +308,35 @@ public class MessageInfo {
    * @param o
    * @return
    */
-  public Set<BlobStateMatchStatus> isEqual(Object o) {
+  public Set<BlobMatchStatus> isEqual(Object o) {
     if (o == null) {
-      return Collections.singleton(BlobStateMatchStatus.BLOB_ABSENT);
+      return Collections.singleton(BlobMatchStatus.BLOB_ABSENT);
     }
     if (getClass() != o.getClass()) {
-      return Collections.singleton(BlobStateMatchStatus.BLOB_STATE_CLASS_MISMATCH);
+      return Collections.singleton(BlobMatchStatus.BLOB_STATE_CLASS_MISMATCH);
     }
-    Set<BlobStateMatchStatus> status = new HashSet<>();
+    Set<BlobMatchStatus> status = new HashSet<>();
     MessageInfo that = (MessageInfo) o;
     if (!Objects.equals(key, that.key)) {
-      status.add(BlobStateMatchStatus.BLOB_STATE_KEY_MISMATCH);
+      status.add(BlobMatchStatus.BLOB_STATE_KEY_MISMATCH);
     }
     if (size != that.size) {
-      status.add(BlobStateMatchStatus.BLOB_STATE_SIZE_MISMATCH);
+      status.add(BlobMatchStatus.BLOB_STATE_SIZE_MISMATCH);
     }
     if (expirationTimeInMs != that.expirationTimeInMs) {
-      status.add(BlobStateMatchStatus.BLOB_STATE_EXPIRY_MISMATCH);
+      status.add(BlobMatchStatus.BLOB_STATE_EXPIRY_MISMATCH);
     }
     if (isDeleted != that.isDeleted) {
-      status.add(BlobStateMatchStatus.BLOB_STATE_OBSOLETE_MISMATCH);
+      status.add(BlobMatchStatus.BLOB_STATE_OBSOLETE_MISMATCH);
     }
     if (!Objects.equals(crc, that.crc)) {
-      status.add(BlobStateMatchStatus.BLOB_STATE_CRC_MISMATCH);
+      status.add(BlobMatchStatus.BLOB_STATE_CRC_MISMATCH);
     }
     if (lifeVersion != that.lifeVersion) {
-      status.add(BlobStateMatchStatus.BLOB_STATE_VERSION_MISMATCH);
+      status.add(BlobMatchStatus.BLOB_STATE_VERSION_MISMATCH);
     }
     if (status.isEmpty()) {
-      return Collections.singleton(BlobStateMatchStatus.BLOB_STATE_MATCH);
+      return Collections.singleton(BlobMatchStatus.BLOB_STATE_MATCH);
     }
     return status;
   }
