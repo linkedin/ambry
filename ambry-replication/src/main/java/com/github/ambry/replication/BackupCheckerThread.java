@@ -45,6 +45,8 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.store.BlobMatchStatus.*;
+
 
 /**
  * This class extends the replication logic encapsulated in ReplicaThread. Instead of apply updates
@@ -179,7 +181,7 @@ public class BackupCheckerThread extends ReplicaThread {
                     MessageInfo azureBlob = azureBlobMap.remove(serverBlobConvert.getStoreKey()); // can be null
                     return new ImmutableTriple(serverBlobConvert, azureBlob, serverBlobConvert.isEqual(azureBlob));
                   }).filter(tuple ->
-                      !((Set<BlobMatchStatus>) tuple.getRight()).contains(BlobMatchStatus.BLOB_STATE_MATCH))
+                      !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
                   .forEach(tuple -> {
                     MessageInfo serverBlobConvert = (MessageInfo) tuple.getLeft();
                     MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
