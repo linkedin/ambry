@@ -171,20 +171,20 @@ public class BackupCheckerThread extends ReplicaThread {
           respinfo.getMessageInfoList().forEach(serverBlob -> {
             repinfo.setReplicatedUntilUTC(Math.max(repinfo.getReplicatedUntilUTC(), serverBlob.getOperationTimeMs()));
             try {
+              // Don't do batch-convert, if one replica in batch fails, then if affect handling others
               storeKeyConverter.convert(Collections.singleton(serverBlob.getStoreKey()))
-                  .entrySet().stream()
-                  .filter(entry -> entry.getValue() != null)
-                  .forEach(entry -> {
-                    MessageInfo azureBlob = azureBlobMap.get(entry.getValue().getID());
+                  .values().stream()
+                  .filter(serverKeyConvert -> serverKeyConvert != null)
+                  .map(serverKeyConvert -> new MessageInfo(serverKeyConvert, serverBlob))
+                  .forEach(serverBlobConvert -> {
+                    MessageInfo azureBlob = azureBlobMap.remove(serverBlobConvert.getStoreKey());
                     Set<BlobStateMatchStatus> status;
-                    if (!(status = serverBlob.isEqual(azureBlob)).contains(BlobStateMatchStatus.BLOB_STATE_MATCH)) {
-                      // print only when blob states do not match between server and azure
+                    if (!(status = serverBlobConvert.isEqual(azureBlob)).contains(BlobStateMatchStatus.BLOB_STATE_MATCH)) {
                       String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
                           status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
-                          MessageInfo.toText(serverBlob), MessageInfo.toText(azureBlob), "\n");
+                          MessageInfo.toText(serverBlobConvert), MessageInfo.toText(azureBlob), "\n");
                       fileManager.appendToFile(output, msg);
                     }
-                    azureBlobMap.remove(entry.getValue().getID());
                   });
             } catch (Throwable e) {
               // TODO: metric

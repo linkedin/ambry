@@ -185,6 +185,13 @@ public class MessageInfo {
     this.lifeVersion = lifeVersion;
   }
 
+  public MessageInfo(StoreKey key, MessageInfo other) {
+    this(key, other.getSize(), other.isDeleted(), other.isTtlUpdated(), other.isUndeleted(),
+        other.getExpirationTimeInMs(), other.getCrc(), other.getAccountId(), other.getContainerId(),
+        other.getOperationTimeMs(), other.getLifeVersion());
+  }
+
+
   public StoreKey getStoreKey() {
     return key;
   }
