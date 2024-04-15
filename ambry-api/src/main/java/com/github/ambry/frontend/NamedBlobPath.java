@@ -34,7 +34,7 @@ public class NamedBlobPath {
 
   static final String PREFIX_PARAM = "prefix";
   static final String PAGE_PARAM = "page";
-  static final int MAX_BLOB_NAME_LENGTH = 191;
+  static final int MAX_BLOB_NAME_LENGTH = 350;
 
   /**
    * Parse the input path if it's a named blob request.
