@@ -99,6 +99,7 @@ public class RestUtils {
     public static final String DATE = "Date";
     /**
      * {@code "Expect"}
+     * This is only supported for named blob based PUT for now.
      */
     public static final String EXPECT = "Expect";
     /**

@@ -19,6 +19,9 @@ package com.github.ambry.rest;
  */
 public enum ResponseStatus {
   // 1xx
+  /**
+   * Everything so far is OK and that the client should continue with the request or ignore it if it is already finished.
+   */
   Continue(100),
   // 2xx
   /**

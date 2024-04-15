@@ -375,7 +375,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       }
       if (success && (
           (!request.getRestMethod().equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT)) || (
-              request.isMultipart() && requestContentFullyReceived)) || CONTINUE.equals(request.getArgs().get(EXPECT))) {
+              request.isMultipart() && requestContentFullyReceived)) || CONTINUE.equals(
+          request.getArgs().get(EXPECT))) {
         if (CONTINUE.equals(request.getArgs().get(EXPECT))) {
           request.setArg(EXPECT, "");
           responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);

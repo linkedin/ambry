@@ -668,6 +668,10 @@ class NettyResponseChannel implements RestResponseChannel {
   private HttpResponseStatus getHttpResponseStatus(ResponseStatus responseStatus) {
     HttpResponseStatus status;
     switch (responseStatus) {
+      case Continue:
+        nettyMetrics.continueCount.inc();
+        status = HttpResponseStatus.CONTINUE;
+        break;
       case Ok:
         nettyMetrics.okCount.inc();
         status = HttpResponseStatus.OK;
@@ -751,9 +755,6 @@ class NettyResponseChannel implements RestResponseChannel {
       case MethodNotAllowed:
         nettyMetrics.methodNotAllowedErrorCount.inc();
         status = HttpResponseStatus.METHOD_NOT_ALLOWED;
-        break;
-      case Continue:
-        status = HttpResponseStatus.CONTINUE;
         break;
       default:
         nettyMetrics.unknownResponseStatusCount.inc();
