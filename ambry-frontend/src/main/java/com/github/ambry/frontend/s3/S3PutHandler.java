@@ -22,6 +22,7 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,7 +82,7 @@ public class S3PutHandler extends S3BaseHandler<Void> {
     // If the media type remains unknown, the recipient SHOULD treat it as type "application/octet-stream".
     // TiKV S3 client doesn't specify the Content-Type for the PutObject
     if (restRequest.getArgs().get(Headers.CONTENT_TYPE) == null) {
-      restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+      restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, RestUtils.OCTET_STREAM_CONTENT_TYPE);
     } else {
       restRequest.setArg(Headers.AMBRY_CONTENT_TYPE, restRequest.getArgs().get(Headers.CONTENT_TYPE));
     }
