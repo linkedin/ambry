@@ -86,7 +86,7 @@ public class BackupCheckerThread extends ReplicaThread {
     fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
     this.replicationConfig = replicationConfig;
     azureBlobMap = new HashMap<>();
-    metrics = new ReplicationMetrics(clusterMap.getMetricRegistry());
+    metrics = new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList());
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
