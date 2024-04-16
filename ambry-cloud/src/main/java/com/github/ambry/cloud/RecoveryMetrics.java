@@ -16,7 +16,6 @@ package com.github.ambry.cloud;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.azure.AzureMetrics;
 
 
 public class RecoveryMetrics {
@@ -32,6 +31,9 @@ public class RecoveryMetrics {
   public final Counter cloudTokenReloadWarnCount;
   public final Meter blobDownloadByteRate;
 
+  public static final String BACKUP_CHECKER_RUNTIME_ERROR = "BackupCheckerRuntimeError";
+  public final Counter backupCheckerRuntimeError;
+
   public RecoveryMetrics(MetricRegistry registry) {
     blobDownloadByteRate = registry.meter(MetricRegistry.name(RecoveryMetrics.class, BLOB_DOWNLOAD_BYTE_RATE));
     recoveryTokenError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, "RecoveryTokenError"));
@@ -43,5 +45,8 @@ public class RecoveryMetrics {
         registry.counter(MetricRegistry.name(RecoveryMetrics.class, "AddCloudPartitionErrorCount"));
     cloudTokenReloadWarnCount =
         registry.counter(MetricRegistry.name(RecoveryMetrics.class, "CloudTokenReloadWarnCount"));
+
+    backupCheckerRuntimeError =
+        registry.counter(MetricRegistry.name(RecoveryMetrics.class, BACKUP_CHECKER_RUNTIME_ERROR));
   }
 }

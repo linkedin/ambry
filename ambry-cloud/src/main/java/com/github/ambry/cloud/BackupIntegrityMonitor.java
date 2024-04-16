@@ -90,6 +90,7 @@ public class BackupIntegrityMonitor implements Runnable {
   public final int RECOVERY_MILESTONE = 10; // num blobs
   public final long SCAN_STOP_RELTIME = TimeUnit.DAYS.toMillis(7);
   public final long SCAN_MILESTONE = TimeUnit.DAYS.toMillis(1);
+  private final RecoveryMetrics metrics;
 
   public BackupIntegrityMonitor(RecoveryManager azure, ReplicationManager server,
       CompositeClusterManager cluster, StorageManager storage, DataNodeId node,
@@ -102,6 +103,7 @@ public class BackupIntegrityMonitor implements Runnable {
     staticClusterManager = cluster.getStaticClusterManager();
     executor = Utils.newScheduler(1, "ambry_backup_integrity_monitor_", true);
     nodeId = node;
+    metrics = new RecoveryMetrics(cluster.getMetricRegistry());
     serverReplicationManager = server;
     serverScanner = server.getBackupCheckerThread("ambry_backup_integrity_monitor");
     storageManager = storage;
@@ -168,8 +170,8 @@ public class BackupIntegrityMonitor implements Runnable {
       try {
         Utils.deleteFileOrDirectory(f);
       } catch (Throwable e) {
-        // TODO: metric
-        logger.error("[BackupIntegrityMonitor] Failed to delete {}", f);
+        metrics.backupCheckerRuntimeError.inc();
+        throw new RuntimeException(String.format("[BackupIntegrityMonitor] Failed to delete %s due to %s", f, e));
       }
     });
     // Convert Disk object to AmbryDisk object, static-map object -> helix-map object
@@ -177,6 +179,7 @@ public class BackupIntegrityMonitor implements Runnable {
     AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, partition, ambryDisk,
         true, maxReplicaSize, ReplicaSealStatus.NOT_SEALED);
     if (!storageManager.addBlobStore(localReplica)) {
+      metrics.backupCheckerRuntimeError.inc();
       throw new RuntimeException(String.format("[BackupIntegrityMonitor] Failed to start Store for %s",
           partition.getId()));
     }
@@ -192,6 +195,7 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.info("[BackupIntegrityMonitor] Stopped Store [{}]", store);
       return ret;
     } catch (Throwable e) {
+      metrics.backupCheckerRuntimeError.inc();
       logger.error(String.format("[BackupIntegrityMonitor] Failed to stop Store [%s]", store));
       return false;
     }
@@ -250,7 +254,7 @@ public class BackupIntegrityMonitor implements Runnable {
           null, null);
       finfo.getMessageEntries().forEach(msg -> azureBlobs.put(msg.getStoreKey().getID(), msg));
       if (token.getNumBlobs() != azureBlobs.size()) {
-        // TODO: metric
+        metrics.backupCheckerRuntimeError.inc();
         logger.error("[BackupIntegrityMonitor] Mismatch, num_blobs from cloud = {}, num_blobs from disk = {}",
             token.getNumBlobs(), azureBlobs.size());
       }
@@ -287,12 +291,14 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.info("[BackupIntegrityMonitor] Verified cloud backup partition-{} against peer server replica {}",
           partition.getId(), replica);
     } catch (Throwable e) {
-      // TODO: latency metrics, errors
+      metrics.backupCheckerRuntimeError.inc();
       logger.error("[BackupIntegrityMonitor] Failed to verify cloud backup partition-{} due to {}", partition.getId(),
           e.getMessage());
       // Swallow all exceptions and print a trace for inspection, but do not kill the job
       e.printStackTrace();
-    } finally {
+    }
+
+    try {
       azureBlobs.clear();
       if (cloudReplica != null) {
         azureReplicator.removeRemoteReplicaInfo(cloudReplica);
@@ -303,6 +309,10 @@ public class BackupIntegrityMonitor implements Runnable {
       if (partition != null) {
         stopLocalStore(partition);
       }
+    } catch (Throwable e) {
+      metrics.backupCheckerRuntimeError.inc();
+      logger.error("[BackupIntegrityMonitor] Failed to stop due to {}", e.getMessage());
+      e.printStackTrace();
     }
   }
 }

@@ -32,7 +32,6 @@ import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import java.io.File;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -67,6 +66,7 @@ public class BackupCheckerThread extends ReplicaThread {
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   protected final BackupCheckerFileManager fileManager;
   protected final ReplicationConfig replicationConfig;
+  private final ReplicationMetrics metrics;
   protected HashMap<String, MessageInfo> azureBlobMap;
   public static final String DR_Verifier_Keyword = "dr";
   public static final String BLOB_STATE_MISMATCHES_FILE = "blob_state_mismatches";
@@ -86,6 +86,7 @@ public class BackupCheckerThread extends ReplicaThread {
     fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
     this.replicationConfig = replicationConfig;
     azureBlobMap = new HashMap<>();
+    metrics = new ReplicationMetrics(clusterMap.getMetricRegistry());
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -155,7 +156,7 @@ public class BackupCheckerThread extends ReplicaThread {
       keyConvert = storeKeyConverter.convert(Collections.singleton(blob.getStoreKey()))
           .get(blob.getStoreKey());
     } catch (Throwable e) {
-      // TODO: metric
+      metrics.backupIntegrityError.inc();
       logger.error("Failed to convert blobID {} due to ", blob.getStoreKey().getID(), e.toString());
     }
     return new MessageInfo(keyConvert, blob);
@@ -190,7 +191,9 @@ public class BackupCheckerThread extends ReplicaThread {
               })
               .filter(serverBlob -> serverBlob.getStoreKey() != null)
               .map(serverBlob -> {
-                MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey()); // can be null
+                MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey());
+                // azureBlob can be null, but serverBlob will never be null,
+                // hence serverBlob.isEqual() and _not_ azureBlob.isEqual()
                 return new ImmutableTriple(serverBlob, azureBlob, serverBlob.isEqual(azureBlob));
               })
               .filter(tuple -> !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
@@ -202,6 +205,7 @@ public class BackupCheckerThread extends ReplicaThread {
                     status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
                     MessageInfo.toText(serverBlob), MessageInfo.toText(azureBlob), "\n");
                 fileManager.appendToFile(output, msg);
+                metrics.backupIntegrityError.inc();
               }); // For each message from replica
           // TODO: To compare data, treat all keys as missing, do not mark rgroup as "done" and compare blob-crc.
           advanceToken(replica, new ExchangeMetadataResponse(Collections.emptySet(), metadata.getFindToken(),
