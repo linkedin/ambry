@@ -16,8 +16,11 @@ package com.github.ambry.frontend.s3;
 
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CallbackUtils;
+import com.github.ambry.frontend.AccountAndContainerInjector;
+import com.github.ambry.frontend.FrontendMetrics;
 import com.github.ambry.frontend.NamedBlobPath;
 import com.github.ambry.frontend.Operations;
+import com.github.ambry.frontend.SecurityService;
 import com.github.ambry.rest.RequestPath;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
@@ -28,6 +31,7 @@ import com.github.ambry.router.ReadableStreamChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
@@ -94,10 +98,19 @@ abstract public class S3BaseHandler<R> {
    * @param restRequest the {@link RestRequest} that contains the request parameters.
    * @return {@code True} if it is a request to list parts of a completed multipart upload request.
    */
-  public static boolean isListBucketRequest(RestRequest restRequest) throws RestServiceException {
+  public static boolean isListObjectRequest(RestRequest restRequest) throws RestServiceException {
     RequestPath requestPath = (RequestPath) restRequest.getArgs().get(REQUEST_PATH);
     return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
         && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null;
+  }
+
+  /**
+   * @param restRequest the {@link RestRequest} that contains the request parameters.
+   * @return {@code True} if it is a S3 request to get the Object Lock configuration for a bucket.
+   */
+  public static boolean isGetObjectLockConfigurationRequest(RestRequest restRequest) {
+    return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
+        && restRequest.getArgs().containsKey(OBJECT_LOCK_PARAM);
   }
 
   /**
@@ -134,5 +147,71 @@ abstract public class S3BaseHandler<R> {
   public static boolean isMultipartListPartRequest(RestRequest restRequest) {
     return restRequest.getRestMethod() == RestMethod.GET && restRequest.getArgs().containsKey(S3_REQUEST)
         && restRequest.getArgs().containsKey(UPLOAD_ID_QUERY_PARAM);
+  }
+
+  protected class DefaultCallbackChain {
+    private final RestRequest restRequest;
+    private final Callback<ReadableStreamChannel> finalCallback;
+    private final String uri;
+    private final FrontendMetrics metrics;
+    private AccountAndContainerInjector accountAndContainerInjector;
+    private SecurityService securityService;
+    private RestServiceErrorCode returnCode;
+    private String returnMessage;
+
+    /**
+     * @param restRequest the {@link RestRequest}.
+     * @param securityService the {@link SecurityService}.
+     * @param metrics the {@link FrontendMetrics}.
+     * @param accountAndContainerInjector the {@link AccountAndContainerInjector}.
+     * @param finalCallback the {@link Callback} to call on completion.
+     * @param returnCode the {@link RestServiceErrorCode}
+     * @param returnMessage the error message to return
+     */
+    protected DefaultCallbackChain(RestRequest restRequest, SecurityService securityService, FrontendMetrics metrics,
+        AccountAndContainerInjector accountAndContainerInjector, Callback<ReadableStreamChannel> finalCallback,
+        String returnMessage, RestServiceErrorCode returnCode) {
+      this.restRequest = restRequest;
+      this.metrics = metrics;
+      this.accountAndContainerInjector = accountAndContainerInjector;
+      this.securityService = securityService;
+      this.finalCallback = finalCallback;
+      this.returnCode = returnCode;
+      this.returnMessage = returnMessage;
+      this.uri = restRequest.getUri();
+    }
+
+    /**
+     * Start the chain by calling {@link SecurityService#processRequest}.
+     */
+    protected void start() {
+      try {
+        accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest, metrics.postBlobMetricsGroup);
+        securityService.processRequest(restRequest, securityProcessRequestCallback());
+      } catch (Exception e) {
+        finalCallback.onCompletion(null, e);
+      }
+    }
+
+    /**
+     * After {@link SecurityService#processRequest} finishes, call {@link SecurityService#postProcessRequest} to perform
+     * request time security checks that rely on the request being fully parsed and any additional arguments set.
+     * @return a {@link Callback} to be used with {@link SecurityService#processRequest}.
+     */
+    private Callback<Void> securityProcessRequestCallback() {
+      return buildCallback(metrics.putSecurityProcessRequestMetrics, securityCheckResult -> {
+        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback());
+      }, uri, LOGGER, finalCallback);
+    }
+
+    /**
+     * After {@link SecurityService#postProcessRequest} finishes, return response for the request.
+     * @return a {@link Callback} to be used with {@link SecurityService#postProcessRequest}.
+     */
+    private Callback<Void> securityPostProcessRequestCallback() {
+      return buildCallback(metrics.putSecurityPostProcessRequestMetrics, securityCheckResult -> {
+        throw new RestServiceException(returnMessage, returnCode);
+      }, uri, LOGGER, finalCallback);
+    }
   }
 }
