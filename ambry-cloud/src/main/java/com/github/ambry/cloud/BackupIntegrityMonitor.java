@@ -145,7 +145,7 @@ public class BackupIntegrityMonitor implements Runnable {
 
   private BlobStore startLocalStore(AmbryPartition partition) throws Exception {
     /**
-     * Create a local replica store cloud data.
+     * Create local replica L to store cloud data
      * It will be at least as big as the largest replica of the partition on a server.
      * Cloud replica will usually be smaller than server replica, unless server disk has a problem or is compacted.
      */
@@ -153,16 +153,17 @@ public class BackupIntegrityMonitor implements Runnable {
         .map(r -> r.getCapacityInBytes())
         .max(Long::compare)
         .get();
-    logger.info("[BackupIntegrityMonitor] maxReplicaSize = {}", maxReplicaSize);
+    logger.info("[BackupIntegrityMonitor] Largest replica for partition {} is {} bytes",
+        partition.getId(), maxReplicaSize);
     List<DiskId> disks = staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
         .getDiskIds().stream()
         .filter(d -> d.getState() == HardwareState.AVAILABLE)
         .filter(d -> d.getAvailableSpaceInBytes() >= maxReplicaSize)
         .collect(Collectors.toList());
-    logger.info("[BackupIntegrityMonitor] Number of usable local disks = {}", disks.size());
+    logger.info("[BackupIntegrityMonitor] {} disks that can accommodate {}", disks.size(), partition.getId());
     // Pick disk randomly
     DiskId disk = disks.get(new Random().nextInt(disks.size()));
-    logger.info("[BackupIntegrityMonitor] mount-path = {}", disk.getMountPath());
+    logger.info("[BackupIntegrityMonitor] Select disk at mount path {}", disk.getMountPath());
     // Clear disk to make space, this is simpler instead of deciding which partition to delete.
     // This is why this is thread-unsafe.
     Arrays.stream(new File(disk.getMountPath()).listFiles()).forEach(f -> {
