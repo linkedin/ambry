@@ -857,6 +857,122 @@ public class IndexSegmentTest {
   }
 
   /**
+   * Test {@link IndexSegment#getFirstPutEntry()} when it returns valid entry
+   * @throws Exception
+   */
+  @Test
+  public void testGetFirstPutEntry() throws Exception {
+    LogSegmentName logSegmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
+    MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id2 = new MockId("1" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    short lifeVersion = (short) 0;
+
+    // Index segment would have
+    // 1. delete for id1
+    // 2. put for id3
+    // 3. put for id2
+    // 4. delete for id2
+    // it should return put for id2
+    // generate a delete for id1
+    IndexValue delValue1 =
+        IndexValueTest.getIndexValue(50, new Offset(logSegmentName, 0), IndexValue.FLAGS_DEFAULT_VALUE, Infinite_Time,
+            -1, time.milliseconds(), accountId, containerId, lifeVersion, formatVersion);
+    delValue1.setFlag(IndexValue.Flags.Delete_Index);
+    IndexValue value3 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 50), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, lifeVersion, formatVersion);
+    IndexValue value2 =
+        IndexValueTest.getIndexValue(1000, new Offset(logSegmentName, 1050), Utils.Infinite_Time, time.milliseconds(),
+            accountId, containerId, lifeVersion, formatVersion);
+    IndexValue delValue2 =
+        IndexValueTest.getIndexValue(value2.getSize(), value2.getOffset(), value2.getFlags(), value2.getExpiresAtMs(),
+            value2.getOffset().getOffset(), time.milliseconds(), value2.getAccountId(), value2.getContainerId(),
+            lifeVersion, formatVersion);
+    delValue2.setNewOffset(new Offset(logSegmentName, 2050));
+    delValue2.setNewSize(100);
+    delValue2.setFlag(IndexValue.Flags.Delete_Index);
+
+    IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), STORE_KEY_FACTORY);
+    // inserting in the opposite order by design to ensure that writes are based on offset ordering and not key ordering
+    indexSegment.addEntry(new IndexEntry(id1, delValue1), new Offset(logSegmentName, 0));
+    indexSegment.addEntry(new IndexEntry(id3, value3), new Offset(logSegmentName, 50));
+    indexSegment.addEntry(new IndexEntry(id2, value2), new Offset(logSegmentName, 1050));
+    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 2050));
+
+    IndexEntry obtained = indexSegment.getFirstPutEntry();
+    IndexEntry expected = new IndexEntry(id2, value2);
+    assertIndexEntryEquals(expected, obtained);
+
+    // seal this index segment
+    indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+    indexSegment.seal();
+
+    obtained = indexSegment.getFirstPutEntry();
+    assertIndexEntryEquals(expected, obtained);
+  }
+
+  /**
+   * Test {@link IndexSegment#getFirstPutEntry()}} when it returns null
+   * @throws Exception
+   */
+  @Test
+  public void testGetFirstPutEntryEmptyCase() throws Exception {
+    LogSegmentName logSegmentName = LogSegmentName.fromPositionAndGeneration(0, 0);
+    MockId id1 = new MockId("0" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id2 = new MockId("1" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    MockId id3 = new MockId("2" + TestUtils.getRandomString(CUSTOM_ID_SIZE - 1));
+    short accountId = Utils.getRandomShort(TestUtils.RANDOM);
+    short containerId = Utils.getRandomShort(TestUtils.RANDOM);
+    short lifeVersion = (short) 0;
+
+    // Index segment would have
+    // 1. delete for id1
+    // 2. ttl update for id2
+    // 3. delete for id2
+    // 4. undelete for id2
+    // 5. delete for id3
+
+    IndexValue delValue1 =
+        IndexValueTest.getIndexValue(50, new Offset(logSegmentName, 0), IndexValue.FLAGS_DEFAULT_VALUE, Infinite_Time,
+            -1, time.milliseconds(), accountId, containerId, lifeVersion, formatVersion);
+    delValue1.setFlag(IndexValue.Flags.Delete_Index);
+    IndexValue ttlUpdateValue2 =
+        IndexValueTest.getIndexValue(50, new Offset(logSegmentName, 50), IndexValue.FLAGS_DEFAULT_VALUE, Infinite_Time,
+            -1, time.milliseconds(), accountId, containerId, lifeVersion, formatVersion);
+    ttlUpdateValue2.setFlag(IndexValue.Flags.Ttl_Update_Index);
+    IndexValue delValue2 =
+        IndexValueTest.getIndexValue(50, new Offset(logSegmentName, 100), ttlUpdateValue2.getFlags(), Infinite_Time, -1,
+            time.milliseconds(), accountId, containerId, lifeVersion, formatVersion);
+    delValue2.setFlag(IndexValue.Flags.Delete_Index);
+    IndexValue undelValue2 =
+        IndexValueTest.getIndexValue(50, new Offset(logSegmentName, 150), delValue2.getFlags(), Infinite_Time, -1,
+            time.milliseconds(), accountId, containerId, lifeVersion, formatVersion);
+    undelValue2.setFlag(IndexValue.Flags.Undelete_Index);
+    IndexValue delValue3 =
+        IndexValueTest.getIndexValue(50, new Offset(logSegmentName, 200), IndexValue.FLAGS_DEFAULT_VALUE, Infinite_Time,
+            -1, time.milliseconds(), accountId, containerId, lifeVersion, formatVersion);
+    delValue3.setFlag(IndexValue.Flags.Delete_Index);
+
+    IndexSegment indexSegment = generateIndexSegment(new Offset(logSegmentName, 0), STORE_KEY_FACTORY);
+    // inserting in the opposite order by design to ensure that writes are based on offset ordering and not key ordering
+    indexSegment.addEntry(new IndexEntry(id1, delValue1), new Offset(logSegmentName, 0));
+    indexSegment.addEntry(new IndexEntry(id2, ttlUpdateValue2), new Offset(logSegmentName, 50));
+    indexSegment.addEntry(new IndexEntry(id2, delValue2), new Offset(logSegmentName, 100));
+    indexSegment.addEntry(new IndexEntry(id2, undelValue2), new Offset(logSegmentName, 150));
+    indexSegment.addEntry(new IndexEntry(id3, delValue3), new Offset(logSegmentName, 200));
+
+    assertNull(indexSegment.getFirstPutEntry());
+
+    indexSegment.writeIndexSegmentToFile(indexSegment.getEndOffset());
+    indexSegment.seal();
+
+    assertNull(indexSegment.getFirstPutEntry());
+  }
+
+  /**
    * @param state the value for {@link StoreConfig#storeIndexMemStateName}
    */
   private void setIndexMemState(IndexMemState state) {

@@ -35,4 +35,5 @@ ext {
     mockitoVersion = "2.+"
     powermockVersion = "2.+"
     caffeineVersion = "2.9.3"
+    hadoopCommonVersion = "3.4.0"
 }

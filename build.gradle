@@ -214,6 +214,7 @@ project(':ambry-test-utils') {
         compile project(":ambry-server")
         compile project(":ambry-store")
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
+        compile "org.apache.hadoop:hadoop-common:$hadoopCommonVersion"
     }
 }
 

@@ -633,6 +633,14 @@ public class StoreConfig {
   public static final String storeProactivelyTestStorageAvailabilityName =
       "store.proactively.test.storage.availability";
 
+  /**
+   * Only when {@link #storeProactivelyTestStorageAvailability} is true does this configuration works. We will set some
+   * delay to run the test logic so the replication or frontend requests would be able to shut down blob stores.
+   */
+  @Config(storeProactiveTestDelayInSecondsName)
+  public final int storeProactiveTestDelayInSeconds;
+  public static final String storeProactiveTestDelayInSecondsName = "store.proactive.test.delay.in.seconds";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
@@ -801,5 +809,7 @@ public class StoreConfig {
         verifiableProperties.getBoolean(storeRestoreUnavailableDiskInFullAutoName, false);
     storeProactivelyTestStorageAvailability =
         verifiableProperties.getBoolean(storeProactivelyTestStorageAvailabilityName, false);
+    storeProactiveTestDelayInSeconds =
+        verifiableProperties.getIntInRange(storeProactiveTestDelayInSecondsName, 60, 0, Integer.MAX_VALUE);
   }
 }

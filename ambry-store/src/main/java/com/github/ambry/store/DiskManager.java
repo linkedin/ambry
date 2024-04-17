@@ -748,7 +748,7 @@ public class DiskManager {
     if (storeConfig.storeProactivelyTestStorageAvailability && ioErrorCheckerScheduled.compareAndSet(false, true)) {
       // Schedule the ioError checker to go over all the blob stores on this disk
       logger.info("Submitting a task to test storage availability on disk {}", disk.getMountPath());
-      scheduler.submit(() -> {
+      scheduler.schedule(() -> {
         List<BlobStore> storesToCheck = new ArrayList<>(stores.values());
         for (BlobStore store : storesToCheck) {
           logger.info("Testing storage availability for blob store {} on disk {}", store.getDataDir(),
@@ -767,7 +767,7 @@ public class DiskManager {
           }
         }
         ioErrorCheckerScheduled.set(false);
-      });
+      }, storeConfig.storeProactiveTestDelayInSeconds, TimeUnit.SECONDS);
     }
   }
 

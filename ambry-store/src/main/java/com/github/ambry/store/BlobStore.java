@@ -1104,28 +1104,37 @@ public class BlobStore implements Store {
     BlobReadOptions readOptions = index.getRandomPutEntryReadOptions();
     if (readOptions == null) {
       // There is no put entry in this blob store, then we don't determine if this storage is still available,
-      // just return true in this case.
+      // just assume it's available and return true.
       logger.info("Failed to get a random put entry from store {}", dataDir);
       return true;
     }
     // Read the same chunk for several times, The first time would load data from disk to page cache, and if it does,
     // we can return true right away. If there is any error, the following reads would try again until the blob store
     // is shut down.
+    // It's possible that data is already in page cache. We should either invalidate the page cache before reading
+    // or read the data using direct io.
     for (int i = 0; i < config.storeIoErrorCountToTriggerShutdown; i++) {
       if (!isStarted()) {
-        return false;
+        break;
       }
       try {
+        // TODO: avoid page cache when testing storage availability
         readOptions.doPrefetch(0, readOptions.getMessageInfo().getSize());
         readOptions.getPrefetchedData().release();
         onSuccess("EXAMINE");
+        // close read option to release the reference to the log segment
+        readOptions.close();
         return true;
       } catch (Exception e) {
         if (e.getMessage().contains("Input/output error")) {
           tryOnError();
+        } else {
+          logger.error("Failed to prefetch PUT data from read options: {}", readOptions, e);
         }
       }
     }
+    // close read option to release the reference to the log segment
+    readOptions.close();
     return false;
   }
 
@@ -1192,6 +1201,14 @@ public class BlobStore implements Store {
   @Override
   public boolean isDisabled() {
     return isDisabled.get();
+  }
+
+  /**
+   * Return log object, only for testing.
+   * @return
+   */
+  Log getLog() {
+    return log;
   }
 
   /**
@@ -1447,6 +1464,10 @@ public class BlobStore implements Store {
     }
   }
 
+  /**
+   * Wrapping {@link #onError()} method is a try-catch statement to avoid dealing with
+   * exceptions.
+   */
   private void tryOnError() {
     try {
       onError();

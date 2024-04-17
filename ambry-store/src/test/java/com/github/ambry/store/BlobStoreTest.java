@@ -38,9 +38,12 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -66,6 +69,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import org.apache.hadoop.io.nativeio.NativeIO;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
@@ -79,6 +83,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.Mockito;
+import sun.nio.ch.FileChannelImpl;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.clustermap.ReplicaState.*;
@@ -97,15 +102,7 @@ public class BlobStoreTest {
   static final int PUT_RECORD_SIZE = 53;
   static final int MOCK_ID_STRING_LENGTH = 10;
 
-  private static final StoreKeyFactory STORE_KEY_FACTORY;
-
-  static {
-    try {
-      STORE_KEY_FACTORY = Utils.getObj("com.github.ambry.store.MockIdFactory");
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
+  private static final StoreKeyFactory STORE_KEY_FACTORY = new MockIdFactory();
 
   private static final MockId randomMockId =
       new MockId(TestUtils.getRandomString(MOCK_ID_STRING_LENGTH), (short) 0, (short) 0);
@@ -2691,12 +2688,53 @@ public class BlobStoreTest {
     }
   }
 
+  /**
+   * Test {@link BlobStore#testStorageAvailability()}
+   * @throws Exception
+   */
+  @Test
+  public void testTestStorageAvailability() throws Exception {
+    assumeTrue(isLogSegmented);
+    // When there is no error, the storage should be available
+    assertTrue(store.testStorageAvailability());
+    store.shutdown();
+    // When the store is shutdown, it should return false
+    assertFalse(store.testStorageAvailability());
+
+    properties.put("store.io.error.count.to.trigger.shutdown", "2");
+    BlobStore testStore =
+        createBlobStore(getMockReplicaId(tempDirStr), new StoreConfig(new VerifiableProperties(properties)), null);
+    testStore.start();
+    assertTrue(testStore.testStorageAvailability());
+    if (NativeIO.POSIX.fadvisePossible) {
+      LogSegment segment = testStore.getLog().getFirstSegment();
+      while (segment != null) {
+        Pair<File, FileChannel> view = segment.getView();
+        FileChannel fileChannel = view.getSecond();
+        FileDescriptor fd = getFileDescriptorFromFileChannel(fileChannel);
+        NativeIO.POSIX.getCacheManipulator()
+            .posixFadviseIfPossible("blobstoretest", fd, 0, view.getFirst().length(),
+                NativeIO.POSIX.POSIX_FADV_DONTNEED);
+        segment.closeView();
+      }
+      Utils.deleteFileOrDirectory(tempDir);
+      assertFalse(testStore.testStorageAvailability());
+      assertFalse(testStore.isStarted());
+    }
+  }
+
   // FORCE_DELETE_TODO: test the compaction when hits the forceDelete
   // FORCE_DELETE_TODO: test replication thread try to replicate PutBlob, DeleteBlob, Undelete blob when we have the forceDelete.
   // FORCE_DELETE_TODO: store.forceDelete call with a list of BlobIDs.
 
   // helpers
   // general
+
+  FileDescriptor getFileDescriptorFromFileChannel(FileChannel fileChannel) throws Exception {
+    Field field = FileChannelImpl.class.getDeclaredField("fd");
+    field.setAccessible(true);
+    return (FileDescriptor) field.get(fileChannel);
+  }
 
   /**
    * Verify that the seal state related metrics match the values specified in the arguments.
