@@ -234,7 +234,7 @@ public class AmbryServer {
       StoreKeyConverterFactory storeKeyConverterFactory =
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
 
-      if (false) {
+      if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_RECOVERY_MODE)) {
         logger.info("Server execution mode is DATA_RECOVERY_MODE");
         /**
          * Recovery from cloud. When the server is restoring a backup from cloud, it will not replicate from peers.
@@ -263,7 +263,7 @@ public class AmbryServer {
                 clusterMap, scheduler, nodeId, networkClientFactory, registry, notificationSystem,
                 storeKeyConverterFactory, serverConfig.serverMessageTransformer, null, null);
         recoveryManager.start();
-      } else if (true) {
+      } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_VERIFICATION_MODE)) {
         logger.info("Server execution mode is DATA_VERIFICATION_MODE");
         /**
          * We need composite cluster manager because it has both static and helix cluster manager.
@@ -308,8 +308,8 @@ public class AmbryServer {
                 null, null);
         backupIntegrityMonitor = new BackupIntegrityMonitor(recoveryManager, replicationManager,
             compositeClusterManager, storageManager, helixNode, properties);
-        // backupIntegrityMonitor.start();
-      } else if (false) {
+        backupIntegrityMonitor.start();
+      } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE)) {
         logger.info("Server execution mode is DATA_SERVING_MODE");
         scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);
         logger.info("checking if node exists in clustermap host {} port {}", networkConfig.hostName, networkConfig.port);
