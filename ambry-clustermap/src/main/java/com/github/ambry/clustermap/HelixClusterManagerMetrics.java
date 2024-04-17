@@ -58,6 +58,7 @@ class HelixClusterManagerMetrics {
   public Gauge<Long> helixClusterManagerCurrentXid;
   public final Timer routingTableQueryTime;
   public final Counter resourceNameMismatchCount;
+  public final Counter paranoidDurabilityIneligibleReplicaCount;
 
   /**
    * Metrics for the {@link HelixClusterManager}
@@ -102,6 +103,8 @@ class HelixClusterManagerMetrics {
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "instanceDeleteTriggerCount"));
     resourceNameMismatchCount =
         registry.counter(MetricRegistry.name(HelixClusterManager.class, "resourceNameMismatchCount"));
+    paranoidDurabilityIneligibleReplicaCount =
+        registry.counter(MetricRegistry.name(HelixClusterManager.class, "ineligibleReplicaCount"));
   }
 
   void initializeInstantiationMetric(final boolean instantiated, final long instantiationExceptionCount) {

@@ -39,6 +39,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.model.IdealState;
 import org.apache.helix.model.InstanceConfig;
@@ -694,6 +695,7 @@ public class ClusterMapUtils {
     private Collection<? extends PartitionId> allPartitions;
     private Map<String, SortedMap<Integer, List<PartitionId>>> partitionIdsByClassAndLocalReplicaCount;
     private Map<PartitionId, List<ReplicaId>> partitionIdToLocalReplicas;
+    private HelixClusterManagerMetrics clusterManagerMetrics;
 
     /**
      * @param clusterManagerQueryHelper the {@link ClusterManagerQueryHelper} to query current cluster info
@@ -702,11 +704,12 @@ public class ClusterMapUtils {
      * @param defaultPartitionClass the default partition class to use if a partition class is not found
      */
     PartitionSelectionHelper(ClusterManagerQueryHelper<?, ?, ?, ?> clusterManagerQueryHelper, String localDatacenterName,
-        int minimumLocalReplicaCount, String defaultPartitionClass) {
+        int minimumLocalReplicaCount, String defaultPartitionClass, HelixClusterManagerMetrics clusterManagerMetrics) {
       this.localDatacenterName = localDatacenterName;
       this.minimumLocalReplicaCount = minimumLocalReplicaCount;
       this.clusterManagerQueryHelper = clusterManagerQueryHelper;
       this.defaultPartitionClass = defaultPartitionClass;
+      this.clusterManagerMetrics = clusterManagerMetrics;
       updatePartitions(clusterManagerQueryHelper.getPartitions(), localDatacenterName);
       logger.debug("Number of partitions in data center {} {}", localDatacenterName, allPartitions.size());
       for (Map.Entry<String, SortedMap<Integer, List<PartitionId>>> entry : partitionIdsByClassAndLocalReplicaCount.entrySet()) {
@@ -943,7 +946,34 @@ public class ClusterMapUtils {
           return false;
         }
       }
+
+      // Generate a metric to track how often we choose a replica that is not globally available for writes.
+      if (!isPartitionEligibleForParanoidDurability(partitionId)) {
+        if (clusterManagerMetrics != null)
+          clusterManagerMetrics.paranoidDurabilityIneligibleReplicaCount.inc();
+      }
       return true;
+    }
+
+    /**
+     * Checks whether there is at least one replica in every remote data center that is eligible for puts.
+     * @param partitionId the {@link PartitionId} to check.
+     * @return true if the given partition has at least one replica in every remote data center that is both up and
+     * in the right Helix state.
+     */
+    private boolean isPartitionEligibleForParanoidDurability(PartitionId partitionId) {
+      // Create a map (validRemoteReplicasPerDc) where the keys are names of remote data centers and the values are the number of replicas in that
+      // data center that are both up and in the right Helix state (LEADER or STANDBY).
+      Map<ReplicaState, ? extends List<? extends ReplicaId>> replicasByState = partitionId.getReplicaIdsByStates(EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER), null);
+      List<? extends ReplicaId> replicas = replicasByState.values().stream().flatMap(List::stream).collect(Collectors.toList());
+
+      Map<String, Integer> validRemoteReplicasPerDc = replicas.stream()
+          .filter(replica -> !replica.getDataNodeId().getDatacenterName().equals(this.localDatacenterName))
+          .filter(replica -> !replica.isDown())
+          .collect(Collectors.groupingBy(replica -> replica.getDataNodeId().getDatacenterName(),
+              Collectors.reducing(0, replica -> 1, Integer::sum)));
+
+      return !validRemoteReplicasPerDc.isEmpty() && validRemoteReplicasPerDc.values().stream().allMatch(count -> count > 0);
     }
 
     /**
