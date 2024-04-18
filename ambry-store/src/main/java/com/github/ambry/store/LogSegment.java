@@ -17,6 +17,7 @@ import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Utils;
+import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.File;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.CRC32;
 import net.smacke.jaydio.DirectRandomAccessFile;
+import net.smacke.jaydio.align.DirectIoByteChannelAligner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +68,8 @@ class LogSegment implements Read, Write {
   static final AtomicInteger byteBufferForAppendTotalCount = new AtomicInteger(0);
   private static final Logger logger = LoggerFactory.getLogger(LogSegment.class);
 
+  private final DirectIOExecutor directIOExecutor;
+
   /**
    * Creates a LogSegment abstraction with the given capacity.
    * @param name the desired name of the segment. The name signifies the handle/ID of the LogSegment and may be
@@ -87,6 +91,7 @@ class LogSegment implements Read, Write {
     this.name = name;
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
+    this.directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
     try {
       fileChannel = Utils.openChannel(file, true);
       segmentView = new Pair<>(file, fileChannel);
@@ -146,6 +151,7 @@ class LogSegment implements Read, Write {
       this.name = name;
       this.metrics = metrics;
       fileChannel = Utils.openChannel(file, true);
+      directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
       segmentView = new Pair<>(file, fileChannel);
       // externals will set the correct value of end offset.
       endOffset = new AtomicLong(startOffset);
@@ -184,6 +190,7 @@ class LogSegment implements Read, Write {
     this.capacityInBytes = capacityInBytes;
     this.metrics = metrics;
     this.fileChannel = fileChannel;
+    this.directIOExecutor = createDirectIOExecutor(config.storeCompactionDirectIOBufferSize);
     try {
       segmentView = new Pair<>(file, fileChannel);
       // externals will set the correct value of end offset.
@@ -198,6 +205,13 @@ class LogSegment implements Read, Write {
       // the IOException comes from Files.setPosixFilePermissions which happens when file not found
       throw new StoreException("File not found while creating log segment", e, StoreErrorCodes.File_Not_Found);
     }
+  }
+
+  private DirectIOExecutor createDirectIOExecutor(int bufferSize) {
+    if (bufferSize == 0) {
+      return new DirectIOOneTimeExecutor();
+    }
+    return new DirectIOBufferedExecutor(bufferSize);
   }
 
   /**
@@ -291,9 +305,13 @@ class LogSegment implements Read, Write {
           StoreErrorCodes.Channel_Closed);
     }
     validateAppendSize(length);
-    try (DirectRandomAccessFile directFile = new DirectRandomAccessFile(file, "rw", 2 * 1024 * 1024)) {
-      directFile.seek(endOffset.get());
-      directFile.write(byteArray, offset, length);
+
+    try {
+      directIOExecutor.execute(directIo -> {
+        directIo.position(endOffset.get());
+        directIo.writeBytes(byteArray, offset, length);
+        return null;
+      });
       endOffset.addAndGet(length);
     } catch (IOException e) {
       StoreErrorCodes errorCode = StoreException.resolveErrorCode(e);
@@ -525,6 +543,7 @@ class LogSegment implements Read, Write {
    */
   void flush() throws IOException {
     fileChannel.force(true);
+    directIOExecutor.flush();
   }
 
   /**
@@ -540,6 +559,7 @@ class LogSegment implements Read, Write {
       try {
         // attempt to close file descriptors even when there is a disk I/O error.
         fileChannel.close();
+        directIOExecutor.close();
       } catch (IOException e) {
         if (!skipDiskFlush) {
           throw e;
@@ -582,5 +602,101 @@ class LogSegment implements Read, Write {
 
   public StoreMetrics getMetrics() {
     return metrics;
+  }
+
+  /**
+   * Interface to run some direct io operations.
+   * @param <T> The return type of the operation.
+   */
+  private interface DirectIOOp<T> {
+    /**
+     * Run the direct io operations, like read, write etc with the provided {@link DirectIoByteChannelAligner}.
+     * @param directIo The direct io file to run the operations.
+     * @return
+     * @throws IOException
+     */
+    T run(DirectIoByteChannelAligner directIo) throws IOException;
+  }
+
+  /**
+   * Direct IO executor interface.
+   */
+  private interface DirectIOExecutor extends Closeable {
+    /**
+     * Execute the {@link DirectIOOp}.
+     * @param op The direct io op to execute.
+     * @param <T> The return type of this operation.
+     * @return
+     * @throws IOException
+     */
+    <T> T execute(DirectIOOp<T> op) throws IOException;
+
+    /**
+     * Flush if there is any buffer.
+     * @throws IOException
+     */
+    void flush() throws IOException;
+
+    @Override
+    void close() throws IOException;
+  }
+
+  /**
+   * A buffered implementation of {@link DirectIOExecutor}.
+   */
+  private class DirectIOBufferedExecutor implements DirectIOExecutor {
+    private DirectIoByteChannelAligner directIo = null;
+    private final int bufferSize;
+
+    public DirectIOBufferedExecutor(int bufferSize) {
+      this.bufferSize = bufferSize;
+    }
+
+    @Override
+    public <T> T execute(DirectIOOp<T> op) throws IOException {
+      // The direct io executes all the operation in the same thread, we don't need
+      // to care about the thread safety.
+      if (directIo == null) {
+        directIo = DirectIoByteChannelAligner.open(file, bufferSize, false);
+      }
+      return op.run(directIo);
+    }
+
+    @Override
+    public void flush() throws IOException {
+      if (directIo != null) {
+        directIo.flush();
+      }
+    }
+
+    @Override
+    public void close() throws IOException {
+      if (directIo != null) {
+        directIo.close();
+      }
+    }
+  }
+
+  /**
+   * A non-buffered implementation of {@link DirectIOExecutor}. It will open a direct io file every time an operation
+   * is executed.
+   */
+  private class DirectIOOneTimeExecutor implements DirectIOExecutor {
+    @Override
+    public <T> T execute(DirectIOOp<T> op) throws IOException {
+      try (DirectIoByteChannelAligner directIo = DirectIoByteChannelAligner.open(file, 2 * 1024 * 1024, false)) {
+        return op.run(directIo);
+      }
+    }
+
+    @Override
+    public void flush() throws IOException {
+      // no op
+    }
+
+    @Override
+    public void close() throws IOException {
+      // no op
+    }
   }
 }

@@ -206,7 +206,7 @@ public class MockClusterMap implements ClusterMap {
     doReturn(partitions.values()).when(mockClusterManagerQueryHelper).getPartitions();
     partitionSelectionHelper =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, localDatacenterName,
-            Math.min(defaultPartition.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS);
+            Math.min(defaultPartition.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS, null);
   }
 
   /**
@@ -228,7 +228,7 @@ public class MockClusterMap implements ClusterMap {
     doReturn(partitions.values()).when(mockClusterManagerQueryHelper).getPartitions();
     partitionSelectionHelper =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, localDatacenterName,
-            Math.min(partitionIdList.get(0).getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS);
+            Math.min(partitionIdList.get(0).getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS, null);
     Set<String> dcNames = new HashSet<>();
     datanodes.forEach(node -> dcNames.add(node.getDatacenterName()));
     dataCentersInClusterMap.addAll(dcNames);
@@ -270,7 +270,7 @@ public class MockClusterMap implements ClusterMap {
     doReturn(partitions.values()).when(mockClusterManagerQueryHelper).getPartitions();
     partitionSelectionHelper =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, localDatacenterName,
-            Math.min(mockPartitionId.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS);
+            Math.min(mockPartitionId.getReplicaIds().size(), 3), DEFAULT_PARTITION_CLASS, null);
     specialPartition = null;
   }
 

@@ -38,6 +38,26 @@ public class CompactionDetailsTest {
    */
   @Test
   public void serDeTest() throws IOException {
+    for (short version : new short[]{CompactionDetails.VERSION_0, CompactionDetails.VERSION_1}) {
+      CompactionDetails.CURRENT_VERSION = version;
+      int segmentCount = TestUtils.RANDOM.nextInt(10) + 1;
+      List<LogSegmentName> segmentsUnderCompaction = new ArrayList<>();
+      for (int i = 0; i < segmentCount; i++) {
+        LogSegmentName segmentName = StoreTestUtils.getRandomLogSegmentName(segmentsUnderCompaction);
+        segmentsUnderCompaction.add(segmentName);
+      }
+      long referenceTime = SystemTime.getInstance().milliseconds();
+      for (boolean isFullRange : new boolean[]{false, true}) {
+        CompactionDetails details = new CompactionDetails(referenceTime, segmentsUnderCompaction, null, isFullRange);
+        DataInputStream stream = new DataInputStream(new ByteArrayInputStream(details.toBytes()));
+        verifyEquality(details, CompactionDetails.fromBytes(stream));
+      }
+    }
+  }
+
+  @Test
+  public void serDeBackwardCompatibilityTest() throws IOException {
+    CompactionDetails.CURRENT_VERSION = CompactionDetails.VERSION_0;
     int segmentCount = TestUtils.RANDOM.nextInt(10) + 1;
     List<LogSegmentName> segmentsUnderCompaction = new ArrayList<>();
     for (int i = 0; i < segmentCount; i++) {
@@ -47,6 +67,8 @@ public class CompactionDetailsTest {
     long referenceTime = SystemTime.getInstance().milliseconds();
     CompactionDetails details = new CompactionDetails(referenceTime, segmentsUnderCompaction, null);
     DataInputStream stream = new DataInputStream(new ByteArrayInputStream(details.toBytes()));
+
+    CompactionDetails.CURRENT_VERSION = CompactionDetails.VERSION_1;
     verifyEquality(details, CompactionDetails.fromBytes(stream));
   }
 
@@ -88,5 +110,10 @@ public class CompactionDetailsTest {
     assertEquals("Reference time does not match", original.getReferenceTimeMs(), toCheck.getReferenceTimeMs());
     assertEquals("Segments under compaction don't match", original.getLogSegmentsUnderCompaction(),
         toCheck.getLogSegmentsUnderCompaction());
+    if (CompactionDetails.CURRENT_VERSION == CompactionDetails.VERSION_1) {
+      assertEquals("IsFullRange does not match", original.isFullRange(), toCheck.isFullRange());
+    } else {
+      assertFalse("IsFullRange does not match", toCheck.isFullRange());
+    }
   }
 }

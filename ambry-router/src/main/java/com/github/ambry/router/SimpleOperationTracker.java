@@ -399,18 +399,17 @@ class SimpleOperationTracker implements OperationTracker {
     maybeDeprioritizeLocalBootstrapReplicas(numLocalAndLiveReplicas);
     maybeShuffleWithRemoteReplicas(numLocalAndLiveReplicas, numRemoteOriginatingDcAndLiveReplicas);
     int replicaPoolSize = replicaPool.size();
-    // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
-    // Please report the test failure if you run into this exception.
-    Supplier<IllegalArgumentException> notEnoughReplicasException = () -> new IllegalArgumentException(
-        generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck,
-            routerOperation));
     possibleRunOfflineRepair = possibleRunOfflineRepair(replicaPoolSize);
     if (replicaPoolSize < getSuccessTarget()) {
       if (possibleRunOfflineRepair) {
         logger.info("RepairRequest: Not enough quorum for delete but give it a try since offline repair is enabled {}",
             blobId);
       } else {
-        throw notEnoughReplicasException.get();
+        // MockPartitionId.getReplicaIds() is returning a shared reference which may cause race condition.
+        // Please report the test failure if you run into this exception.
+        throw new IllegalArgumentException(
+            generateErrorMessage(partitionId, examinedReplicas, replicaPool, backupReplicasToCheck, downReplicasToCheck,
+                routerOperation));
       }
     }
   }

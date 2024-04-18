@@ -254,15 +254,21 @@ class CompactionManager {
           logger.trace("{} being checked for resume", store);
           if (store.isStarted()) {
             logger.trace("{} is started and eligible for resume check", store);
-            metrics.markCompactionStart(false);
+            CompactionDetails details = null;
+            boolean isFullRange = false;
             try {
+              details = store.getCompactionDetailsInProgress();
+              if (details != null) {
+                isFullRange = details.isFullRange();
+              }
+              metrics.markCompactionStart(false, isFullRange);
               store.maybeResumeCompaction(bundleReadBuffer);
             } catch (Exception e) {
               metrics.compactionErrorCount.inc();
               logger.error("Compaction of store {} failed on resume. Continuing with the next store", store, e);
               storesToSkip.add(store);
             } finally {
-              metrics.markCompactionStop();
+              metrics.markCompactionStop(isFullRange);
             }
           }
         }
@@ -280,13 +286,14 @@ class CompactionManager {
               BlobStore store = storesToCheck.poll();
               logger.trace("{} being checked for compaction", store);
               boolean compactionStarted = false;
+              CompactionDetails details = null;
               try {
                 if (store.isStarted() && !storesToSkip.contains(store) && !storesDisabledCompaction.contains(store)) {
                   logger.info("[CAPACITY] {} is started and is being checked for compaction eligibility", store);
-                  CompactionDetails details = getCompactionDetails(store);
+                  details = getCompactionDetails(store);
                   if (details != null) {
                     logger.trace("Generated {} as details for {}", details, store);
-                    metrics.markCompactionStart(true);
+                    metrics.markCompactionStart(true, details.isFullRange());
                     compactionStarted = true;
                     store.compact(details, bundleReadBuffer);
                   } else {
@@ -303,7 +310,7 @@ class CompactionManager {
                 storesToSkip.add(store);
               } finally {
                 if (compactionStarted) {
-                  metrics.markCompactionStop();
+                  metrics.markCompactionStop(details.isFullRange());
                 }
               }
             }

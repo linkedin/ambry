@@ -98,6 +98,7 @@ public class BlobStoreCompactorTest {
   private final File tempDir;
   private final String tempDirStr;
   private final boolean doDirectIO;
+  private final boolean directIOWithBuffer;
   private final boolean withUndelete;
   private final boolean purgeDeleteTombstone;
   private final StoreConfig config;
@@ -129,15 +130,23 @@ public class BlobStoreCompactorTest {
    */
   @Parameterized.Parameters
   public static List<Object[]> data() {
-    return Arrays.asList(new Object[][]{{true, true, true}, {false, false, true}, {false, true, false}});
+    //@formatter:off
+    return Arrays.asList(
+        new Object[][]{
+              {true, true, true, false},
+              {false, false, true, false},
+              {false, true, false, false},
+              {true, true, true, true}
+        });
+    //@formatter:on
   }
 
   /**
    * Creates a temporary directory for the store.
    * @throws Exception
    */
-  public BlobStoreCompactorTest(boolean doDirectIO, boolean withUndelete, boolean purgeDeleteTombstone)
-      throws Exception {
+  public BlobStoreCompactorTest(boolean doDirectIO, boolean withUndelete, boolean purgeDeleteTombstone,
+      boolean directIOWithBuffer) throws Exception {
     tempDir = StoreTestUtils.createTempDirectory("compactorDir-" + TestUtils.getRandomString(10));
     tempDirStr = tempDir.getAbsolutePath();
     config = new StoreConfig(new VerifiableProperties(new Properties()));
@@ -147,6 +156,7 @@ public class BlobStoreCompactorTest {
     if (doDirectIO) {
       assumeTrue(Utils.isLinux());
     }
+    this.directIOWithBuffer = directIOWithBuffer;
     accountService = Mockito.mock(AccountService.class);
   }
 
@@ -3306,6 +3316,9 @@ public class BlobStoreCompactorTest {
       boolean enableAutoCloseLastLogSegment) throws IOException, StoreException {
     closeOrExceptionInduced = false;
     state.properties.put("store.compaction.enable.direct.io", Boolean.toString(doDirectIO));
+    if (directIOWithBuffer) {
+      state.properties.put(StoreConfig.storeCompactionDirectIOBufferSizeName, String.valueOf(4 * 1024 * 1024));
+    }
     if (withUndelete) {
       state.properties.put("store.compaction.filter", "IndexSegmentValidEntryWithUndelete");
     }

@@ -37,6 +37,9 @@ import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestMethod;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.ReadableStreamChannel;
@@ -131,6 +134,28 @@ public class S3ListHandlerTest {
     assertEquals("Mismatch in delimiter", "/", listBucketResult.getDelimiter());
     assertEquals("Mismatch in max key count", 1, listBucketResult.getMaxKeys());
     assertEquals("Mismatch in encoding type", "url", listBucketResult.getEncodingType());
+  }
+
+  @Test
+  public void getObjectLockConfigurationTest() throws Exception {
+    // Send GetLockObjectConfiguration request
+    String request_uri = S3_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + "?object-lock=";
+    RestRequest request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, request_uri, new JSONObject(), null);
+    request.setArg(RestUtils.InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    s3ListHandler.handle(request, restResponseChannel, futureResult::done);
+
+    // Verity it returns NOT_FOUND
+    try {
+      futureResult.get();
+    } catch (Exception e) {
+      assertTrue(e.getCause() instanceof RestServiceException);
+      RestServiceException exp = (RestServiceException) e.getCause();
+      assertEquals(exp.getErrorCode(), RestServiceErrorCode.NotFound);
+    }
   }
 
   /**

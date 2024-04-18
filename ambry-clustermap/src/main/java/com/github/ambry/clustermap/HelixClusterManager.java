@@ -239,7 +239,7 @@ public class HelixClusterManager implements ClusterMap {
     partitionSelectionHelper =
         new PartitionSelectionHelper(helixClusterManagerQueryHelper, clusterMapConfig.clusterMapDatacenterName,
             clusterMapConfig.clustermapWritablePartitionMinReplicaCount,
-            clusterMapConfig.clusterMapDefaultPartitionClass);
+            clusterMapConfig.clusterMapDefaultPartitionClass, helixClusterManagerMetrics);
     // register partition selection helper as a listener of cluster map changes.
     registerClusterMapListener(partitionSelectionHelper);
   }

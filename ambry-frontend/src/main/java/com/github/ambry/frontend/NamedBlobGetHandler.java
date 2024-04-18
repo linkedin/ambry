@@ -64,7 +64,7 @@ class NamedBlobGetHandler {
    * @param callback the {@link Callback} to invoke when the response is ready (or if there is an exception).
    * @throws RestServiceException
    */
-  void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
+  public void handle(RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
     RequestPath requestPath = getRequestPath(restRequest);
     accountAndContainerInjector.injectAccountContainerForNamedBlob(restRequest,

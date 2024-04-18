@@ -88,7 +88,7 @@ public class GetBlobHandler {
     this.accountService = accountService;
   }
 
-  void handle(RequestPath requestPath, RestRequest restRequest, RestResponseChannel restResponseChannel,
+  public void handle(RequestPath requestPath, RestRequest restRequest, RestResponseChannel restResponseChannel,
       Callback<ReadableStreamChannel> callback) throws RestServiceException {
     SubResource subResource = requestPath.getSubResource();
     GetBlobOptions options = buildGetBlobOptions(restRequest.getArgs(), subResource,

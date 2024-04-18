@@ -102,7 +102,7 @@ public class ClusterMapUtilsTest {
     doReturn(allPartitionIdsMain).when(mockClusterManagerQueryHelper).getPartitions();
     ClusterMapUtils.PartitionSelectionHelper psh =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, null, minimumLocalReplicaCount,
-            maxReplicasAllSites);
+            maxReplicasAllSites, null);
 
     String[] dcsToTry = {null, "", dc1, dc2};
     for (String dc : dcsToTry) {
@@ -157,7 +157,7 @@ public class ClusterMapUtilsTest {
     }
     // additional test: ensure getRandomWritablePartition now honors replica state for PUT request
     psh = new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, dc1, minimumLocalReplicaCount,
-        maxReplicasAllSites);
+        maxReplicasAllSites, null);
     ReplicaId replicaId = everywhere1.getReplicaIds()
         .stream()
         .filter(r -> r.getDataNodeId().getDatacenterName().equals(dc1))
@@ -192,7 +192,7 @@ public class ClusterMapUtilsTest {
     int minimumLocalReplicaCount = 3;
     ClusterMapUtils.PartitionSelectionHelper psh =
         new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, dc1, minimumLocalReplicaCount,
-            partitionClass);
+            partitionClass, null);
     // verify get all partitions return correct result
     assertEquals("Returned partitions are not expected", allPartitions, psh.getPartitions(null));
     // verify get writable partitions return partition2 and partition3 only
@@ -204,7 +204,7 @@ public class ClusterMapUtilsTest {
     // create another partition selection helper with minimumLocalReplicaCount = 4
     minimumLocalReplicaCount = 4;
     psh = new ClusterMapUtils.PartitionSelectionHelper(mockClusterManagerQueryHelper, dc1, minimumLocalReplicaCount,
-        partitionClass);
+        partitionClass, null);
     assertEquals("Returned writable partitions are not expected", Arrays.asList(partition3),
         psh.getWritablePartitions(partitionClass));
     assertEquals("Get random writable partition should return partition3 only", partition3,

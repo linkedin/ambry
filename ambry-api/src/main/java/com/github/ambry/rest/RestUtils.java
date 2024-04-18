@@ -66,6 +66,7 @@ public class RestUtils {
   public static final String UPLOADS_QUERY_PARAM = "uploads";
   public static final String UPLOAD_ID_QUERY_PARAM = "uploadId";
   public static final String CONTINUE = "100-continue";
+  public static final String OBJECT_LOCK_PARAM = "object-lock";
 
   /**
    * prefix for all Ambry specific heaeders
@@ -938,6 +939,15 @@ public class RestUtils {
    */
   public static boolean isS3Request(RestRequest restRequest) {
     return restRequest != null && restRequest.getArgs().containsKey(S3_REQUEST);
+  }
+
+  /**
+   * Determines if the input is a S3 API request
+   * @param args map of the arguments
+   * @return {@code true} if the request is a S3 API request.
+   */
+  public static boolean isS3Request(Map<String, Object> args) {
+    return args.containsKey(S3_REQUEST);
   }
 
   /**

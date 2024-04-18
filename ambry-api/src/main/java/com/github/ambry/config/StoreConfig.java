@@ -159,6 +159,15 @@ public class StoreConfig {
   public final boolean storeCompactionEnableDirectIO;
 
   /**
+   * The buffer size when using direct io in compaction to write to the target log segments.
+   * 0 means no buffer for direct io. And buffer size has to be a multiple of file system blob size.
+   */
+  @Config(storeCompactionDirectIOBufferSizeName)
+  @Default("0")
+  public final int storeCompactionDirectIOBufferSize;
+  public static final String storeCompactionDirectIOBufferSizeName = "store.compaction.direct.io.buffer.size";
+
+  /**
    * Whether to purge expired delete tombstone in compaction.
    */
   @Config("store.compaction.purge.delete.tombstone")
@@ -647,6 +656,8 @@ public class StoreConfig {
     storeCompactionThrottlerCheckIntervalMs =
         verifiableProperties.getIntInRange("store.compaction.throttler.check.interval.ms", -1, -1, Integer.MAX_VALUE);
     storeCompactionEnableDirectIO = verifiableProperties.getBoolean("store.compaction.enable.direct.io", false);
+    storeCompactionDirectIOBufferSize =
+        verifiableProperties.getIntInRange(storeCompactionDirectIOBufferSizeName, 0, 0, 100 * 1024 * 1024);
     storeCompactionPurgeDeleteTombstone =
         verifiableProperties.getBoolean("store.compaction.purge.delete.tombstone", false);
     storeCompactionMinBufferSize =
