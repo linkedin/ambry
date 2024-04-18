@@ -34,6 +34,7 @@ import com.github.ambry.quota.QuotaManager;
 import com.github.ambry.quota.QuotaUtils;
 import com.github.ambry.rest.NoOpResponseChannel;
 import com.github.ambry.rest.RequestPath;
+import com.github.ambry.rest.ResponseStatus;
 import com.github.ambry.rest.RestRequest;
 import com.github.ambry.rest.RestResponseChannel;
 import com.github.ambry.rest.RestServiceErrorCode;
@@ -64,6 +65,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
 import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 import static com.github.ambry.router.RouterErrorCode.*;
 
@@ -194,9 +196,14 @@ public class NamedBlobPutHandler {
      */
     private Callback<Void> securityProcessRequestCallback() {
       return buildCallback(frontendMetrics.putSecurityProcessRequestMetrics, securityCheckResult -> {
-        //make sure this has been called after processRequest(permission check) since it needs to query dataset db.
-        BlobInfo blobInfo = getBlobInfoFromRequest();
-        securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobInfo));
+        if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
+          restResponseChannel.setStatus(ResponseStatus.Continue);
+          finalCallback.onCompletion(null, null);
+        } else {
+          //make sure this has been called after processRequest(permission check) since it needs to query dataset db.
+          BlobInfo blobInfo = getBlobInfoFromRequest();
+          securityService.postProcessRequest(restRequest, securityPostProcessRequestCallback(blobInfo));
+        }
       }, uri, LOGGER, finalCallback);
     }
 
@@ -593,7 +600,7 @@ public class NamedBlobPutHandler {
         accountName = dataset.getAccountName();
         containerName = dataset.getContainerName();
         datasetName = dataset.getDatasetName();
-        version = (String) restRequest.getArgs().get(TARGET_DATASET_VERSION);
+        version = (String) restRequest.getArgs().get(RestUtils.InternalKeys.TARGET_DATASET_VERSION);
         boolean datasetVersionTtlEnabled =
             RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.DATASET_VERSION_TTL_ENABLED, false);
         long expirationTimeMs =

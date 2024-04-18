@@ -33,6 +33,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
+
 
 /**
  * Inbound request handler for Netty.
@@ -372,7 +375,12 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       }
       if (success && (
           (!request.getRestMethod().equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT)) || (
-              request.isMultipart() && requestContentFullyReceived))) {
+              request.isMultipart() && requestContentFullyReceived)) || CONTINUE.equals(
+          request.getArgs().get(EXPECT))) {
+        if (CONTINUE.equals(request.getArgs().get(EXPECT))) {
+          request.setArg(EXPECT, "");
+          responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
+        }
         requestHandler.handleRequest(request, responseChannel);
       }
     } else {

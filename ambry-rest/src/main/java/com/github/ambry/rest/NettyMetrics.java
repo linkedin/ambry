@@ -118,6 +118,7 @@ public class NettyMetrics {
   public final Counter acceptedCount;
   public final Counter createdCount;
   public final Counter okCount;
+  public final Counter continueCount;
   public final Counter noContentCount;
   public final Counter partialContentCount;
   public final Counter notModifiedCount;
@@ -298,6 +299,7 @@ public class NettyMetrics {
     acceptedCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "AcceptedCount"));
     createdCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "CreatedCount"));
     okCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "OkCount"));
+    continueCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "ContinueCount"));
     noContentCount = metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "NoContentCount"));
     partialContentCount =
         metricRegistry.counter(MetricRegistry.name(NettyResponseChannel.class, "PartialContentCount"));

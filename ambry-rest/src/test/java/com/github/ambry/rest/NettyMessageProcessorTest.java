@@ -35,9 +35,11 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
@@ -66,6 +68,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Test;
 
+import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static org.junit.Assert.*;
 
 
@@ -175,6 +179,36 @@ public class NettyMessageProcessorTest {
       contents.add(encoder.readChunk(PooledByteBufAllocator.DEFAULT).content().nioBuffer());
     }
     ByteBuffer receivedContent = doPostTest(postRequest, contents);
+    compareContent(receivedContent, Collections.singletonList(content));
+  }
+
+  /**
+   * Test the case where Except == 100-continue.
+   * @throws Exception
+   */
+  @Test
+  public void continueHeaderTest() throws Exception {
+    notificationSystem.reset();
+    EmbeddedChannel channel = createChannel();
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.set(EXPECT, CONTINUE);
+    HttpRequest httpRequest = RestTestUtils.createRequest(HttpMethod.PUT, "/", headers);
+    httpRequest.headers().set(RestUtils.Headers.SERVICE_ID, "rawBytesPostTest");
+    httpRequest.headers().set(RestUtils.Headers.AMBRY_CONTENT_TYPE, "application/octet-stream");
+    channel.writeInbound(httpRequest);
+
+    Random random = new Random();
+    HttpResponse response = channel.readOutbound();
+    assertEquals("Unexpected response status", HttpResponseStatus.CONTINUE, response.status());
+
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(random.nextInt(128) + 128));
+    channel.writeInbound(new DefaultHttpContent(Unpooled.wrappedBuffer(content)));
+    channel.writeInbound(LastHttpContent.EMPTY_LAST_CONTENT);
+
+    if (!notificationSystem.operationCompleted.await(1000, TimeUnit.MILLISECONDS)) {
+      fail("Put did not succeed after 1000ms. There is an error or timeout needs to increase");
+    }
+    ByteBuffer receivedContent = router.getActiveBlobs().get(notificationSystem.blobIdOperatedOn).getBlob();
     compareContent(receivedContent, Collections.singletonList(content));
   }
 

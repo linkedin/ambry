@@ -34,6 +34,9 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.concurrent.CountDownLatch;
 
+import static com.github.ambry.rest.RestUtils.*;
+import static com.github.ambry.rest.RestUtils.Headers.*;
+
 
 /**
  * Implementation of the {@link RestRequestService} that can be used in tests.
@@ -135,8 +138,23 @@ public class MockRestRequestService implements RestRequestService {
    */
   @Override
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
-    Exception exception = new RestServiceException("PUT is not supported", RestServiceErrorCode.UnsupportedHttpMethod);
-    handleResponse(restRequest, restResponseChannel, null, exception);
+    if (shouldProceed(restRequest, restResponseChannel)) {
+      try {
+        if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
+          restResponseChannel.setStatus(ResponseStatus.Continue);
+          handleResponse(restRequest, restResponseChannel, null, null);
+          return;
+        }
+        restRequest.setArg(RestUtils.InternalKeys.TARGET_ACCOUNT_KEY, InMemAccountService.UNKNOWN_ACCOUNT);
+        restRequest.setArg(RestUtils.InternalKeys.TARGET_CONTAINER_KEY, Container.UNKNOWN_CONTAINER);
+        BlobProperties blobProperties = RestUtils.buildBlobProperties(restRequest.getArgs());
+        byte[] usermetadata = RestUtils.buildUserMetadata(restRequest.getArgs());
+        router.putBlob(blobProperties, usermetadata, restRequest, new PutBlobOptionsBuilder().build(),
+            new MockPostCallback(this, restRequest, restResponseChannel, blobProperties), null);
+      } catch (RestServiceException e) {
+        handleResponse(restRequest, restResponseChannel, null, e);
+      }
+    }
   }
 
   @Override

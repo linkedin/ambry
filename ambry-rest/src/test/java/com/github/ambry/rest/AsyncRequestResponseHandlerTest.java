@@ -650,7 +650,7 @@ public class AsyncRequestResponseHandlerTest {
     } else {
       // it's ok if this conversion fails - the test should fail anyway.
       RestServiceException e = (RestServiceException) restResponseChannel.getException();
-      assertEquals("Did not get expected RestServiceErrorCode", RestServiceErrorCode.UnsupportedHttpMethod,
+      assertEquals("Did not get expected RestServiceErrorCode", RestServiceErrorCode.MissingArgs,
           e.getErrorCode());
       assertTrue("AsyncRequestResponseHandler is dead", requestResponseHandler.isRunning());
     }
