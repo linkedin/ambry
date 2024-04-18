@@ -43,12 +43,12 @@ public class BackupCheckerFileManager {
   // 2024/04/11 00:00:05.481
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy/MMM/dd HH:mm:ss.SSS");
   protected final ReplicationConfig replicationConfig;
-  protected final AmbryCache fileDescriptorCache;
+  protected final AmbryCache fileChannelCache;
   public static final String COLUMN_SEPARATOR = " | ";
 
-  protected class FileDescriptor implements AmbryCacheEntry {
+  protected static class FileChannel implements AmbryCacheEntry {
     SeekableByteChannel _seekableByteChannel;
-    public FileDescriptor(SeekableByteChannel seekableByteChannel) {
+    public FileChannel(SeekableByteChannel seekableByteChannel) {
       this._seekableByteChannel = seekableByteChannel;
     }
     public SeekableByteChannel getSeekableByteChannel() {
@@ -58,7 +58,7 @@ public class BackupCheckerFileManager {
 
   public BackupCheckerFileManager(ReplicationConfig replicationConfig, MetricRegistry metricRegistry) {
     this.replicationConfig = replicationConfig;
-    this.fileDescriptorCache = new AmbryCache("BackupCheckerFileManagerCache", true,
+    this.fileChannelCache = new AmbryCache("BackupCheckerFileManagerCache", true,
         replicationConfig.maxBackupCheckerReportFd, metricRegistry);
   }
 
@@ -69,8 +69,8 @@ public class BackupCheckerFileManager {
    * @return File descriptor
    */
   protected SeekableByteChannel getFd(String filePath, EnumSet<StandardOpenOption> options) {
-    FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(filePath);
-    if (fileDescriptor == null) {
+    FileChannel fchannel = (FileChannel) fileChannelCache.getObject(filePath);
+    if (fchannel == null) {
       // Create parent folders
       Path directories = Paths.get(filePath.substring(0, filePath.lastIndexOf(File.separator)));
       try {
@@ -81,32 +81,15 @@ public class BackupCheckerFileManager {
       }
       // Create file
       try {
-        fileDescriptor = new FileDescriptor(Files.newByteChannel(Paths.get(filePath), options));
+        fchannel = new FileChannel(Files.newByteChannel(Paths.get(filePath), options));
       } catch (IOException e) {
         logger.error("Path = {}, Options = {}, Error creating file = {}", filePath, options, e.toString());
         return null;
       }
       // insert into cache
-      fileDescriptorCache.putObject(filePath, fileDescriptor);
+      fileChannelCache.putObject(filePath, fchannel);
     }
-    return fileDescriptor.getSeekableByteChannel();
-  }
-
-  /**
-   * Write to a given file
-   * @param seekableByteChannel File descriptor
-   * @param text Text to append
-   * @return True if write was successful, false otherwise
-   */
-  protected boolean writeToFile(SeekableByteChannel seekableByteChannel, String text) {
-    try {
-      seekableByteChannel.write(ByteBuffer.wrap(
-          String.join(COLUMN_SEPARATOR, DATE_FORMAT.format(System.currentTimeMillis()), text).getBytes(StandardCharsets.UTF_8)));
-      return true;
-    } catch (IOException e) {
-      logger.error(e.toString());
-      return false;
-    }
+    return fchannel.getSeekableByteChannel();
   }
 
   /**
@@ -122,27 +105,14 @@ public class BackupCheckerFileManager {
       options.add(StandardOpenOption.CREATE);
     }
     SeekableByteChannel seekableByteChannel = getFd(filePath, options);
-    return writeToFile(seekableByteChannel, text);
-  }
-
-
-  /**
-   * Append these information to the give file.
-   * @param filePath The file path to append
-   * @param remoteReplicaInfo The {@link RemoteReplicaInfo}.
-   * @param acceptableLocalBlobStates The set of acceptable local blob states
-   * @param storeKey The {@link StoreKey}.
-   * @param operationTime The operation time in ms
-   * @param remoteBlobState The blob state from remote
-   * @param localBlobState The blob state from local, could also be error codes
-   * @return True if append was successful, false otherwise
-   */
-  protected boolean appendToFile(String filePath, RemoteReplicaInfo remoteReplicaInfo,
-      EnumSet<MessageInfoType> acceptableLocalBlobStates, StoreKey storeKey, long operationTime,
-      EnumSet<MessageInfoType> remoteBlobState, Object localBlobState) {
-    String messageFormat = "%s | Missing %s | %s | Optime = %s | RemoteBlobState = %s | LocalBlobState = %s \n";
-    return appendToFile(filePath, String.format(messageFormat, remoteReplicaInfo, acceptableLocalBlobStates, storeKey,
-        DATE_FORMAT.format(operationTime), remoteBlobState, localBlobState));
+    try {
+      seekableByteChannel.write(ByteBuffer.wrap(
+          String.join(COLUMN_SEPARATOR, DATE_FORMAT.format(System.currentTimeMillis()), text).getBytes(StandardCharsets.UTF_8)));
+      return true;
+    } catch (IOException e) {
+      logger.error(e.toString());
+      return false;
+    }
   }
 
   /**
@@ -153,8 +123,7 @@ public class BackupCheckerFileManager {
    * @return True if append was successful, false otherwise
    */
   protected boolean truncateAndWriteToFile(String filePath, String text) {
-    EnumSet<StandardOpenOption> options = EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-        StandardOpenOption.TRUNCATE_EXISTING);
+    EnumSet<StandardOpenOption> options = EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE);
     SeekableByteChannel seekableByteChannel = getFd(filePath, options);
     try {
       seekableByteChannel.truncate(0);
@@ -164,21 +133,5 @@ public class BackupCheckerFileManager {
       logger.error("Failed to write token {} to file {} due to {}", text, filePath, e.toString());
     }
     return false;
-  }
-
-  /**
-   * Truncates a fie and then writes these information to it.
-   * @param filePath The file to truncate
-   * @param remoteReplicaInfo The {@link RemoteReplicaInfo}.
-   * @param localLagFromRemoteInBytes The lag from remote in bytes
-   * @return True if write was successful, false otherwise
-   */
-  protected boolean truncateAndWriteToFile(String filePath, RemoteReplicaInfo remoteReplicaInfo,
-      long localLagFromRemoteInBytes) {
-    String text =
-        String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n", remoteReplicaInfo,
-            remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
-            localLagFromRemoteInBytes);
-    return truncateAndWriteToFile(filePath, text);
   }
 }

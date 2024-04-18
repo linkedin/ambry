@@ -185,7 +185,7 @@ public class BackupCheckerThread extends ReplicaThread {
           String output = getFilePath(replica, BLOB_STATE_MISMATCHES_FILE);
           metadata.getMessageInfoList().stream()
               .map(serverBlob -> {
-                replica.setReplicatedUntilUTC(Math.max(replica.getReplicatedUntilUTC(),
+                replica.setReplicatedUntilTime(Math.max(replica.getReplicatedUntilTime(),
                     serverBlob.getOperationTimeMs()));
                 return mapBlob(serverBlob);
               })
@@ -282,7 +282,7 @@ public class BackupCheckerThread extends ReplicaThread {
     }
     // Maintain alphabetical order of fields for string match
     json.put("replica_token", rinfo.getToken().toString());
-    json.put("replicated_until", rinfo.getReplicatedUntilUTC());
+    json.put("replicated_until", rinfo.getReplicatedUntilTime());
     // Pretty print with indent for easy viewing
     fileManager.truncateAndWriteToFile(getFilePath(rinfo, REPLICA_STATUS_FILE), json.toString(4));
   }

@@ -264,7 +264,13 @@ public class BackupIntegrityMonitor implements Runnable {
       serverScanner.setAzureBlobMap(azureBlobs);
 
       /** Replicate from server and compare */
-      List<AmbryReplica> replicas = partition.getReplicaIds();
+      List<AmbryReplica> replicas = partition.getReplicaIds().stream()
+          .filter(r -> !r.isDown())
+          .collect(Collectors.toList());
+      if (replicas.isEmpty()) {
+        throw new RuntimeException(String.format("[BackupIntegrityMonitor] No server replicas available for partition-%s",
+            partition.getId()));
+      }
       AmbryReplica replica = replicas.get(random.nextInt(replicas.size()));
       logger.info("[BackupIntegrityMonitor] Selected peer server replica [{}]", replica);
       serverReplica = serverReplicationManager.createRemoteReplicaInfos(
@@ -272,14 +278,14 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.info("[BackupIntegrityMonitor] Created peer server replica info [{}]", serverReplica);
       serverScanner.addRemoteReplicaInfo(serverReplica);
       logger.info("[BackupIntegrityMonitor] Queued peer server replica info [{}]", serverReplica);
-      long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilUTC();
+      long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilTime();
       long currentTime = System.currentTimeMillis();
       logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}]",
           partition.getId(), replica);
       while (scanEndTime < (currentTime - SCAN_STOP_RELTIME)) {
-        scanStartTime = serverReplica.getReplicatedUntilUTC();
+        scanStartTime = serverReplica.getReplicatedUntilTime();
         serverScanner.replicate();
-        scanEndTime = serverReplica.getReplicatedUntilUTC();
+        scanEndTime = serverReplica.getReplicatedUntilTime();
         if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
           // Print progress, if a SCAN_MILESTONE's worth of data has been received from server
           DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);

@@ -30,7 +30,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockPartitionId;
-import com.github.ambry.clustermap.MockVcrClusterSpectator;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.VcrClusterParticipant;
@@ -42,24 +41,18 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
-import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.FindTokenType;
-import com.github.ambry.replication.MockNetworkClientFactory;
 import com.github.ambry.replication.PartitionInfo;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
 import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationMetrics;
-import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.LogSegmentName;
-import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Offset;
 import com.github.ambry.store.PersistentIndex;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreFindTokenFactory;
-import com.github.ambry.store.StoreKeyConverterFactory;
-import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
@@ -77,9 +70,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -172,7 +163,7 @@ public class CloudTokenPersistorTest {
             verifiableProperties);
 
     long lastOpTime = System.currentTimeMillis();
-    replica.setReplicatedUntilUTC(lastOpTime);
+    replica.setReplicatedUntilTime(lastOpTime);
 
     // test 1: uninitialized token
     token =  new StoreFindToken(FindTokenType.Uninitialized, null, null, null, null,
@@ -316,7 +307,7 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilUTC());
+    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilTime());
 
     // test 2: journal-based token w/o reset key
     lastOpTime = Utils.Infinite_Time;
@@ -326,7 +317,7 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilUTC());
+    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilTime());
 
     // test 3: journal-based token w/ reset key
     lastOpTime = System.currentTimeMillis();
@@ -337,7 +328,7 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilUTC());
+    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilTime());
 
     // test 4: index-based token
     lastOpTime = System.currentTimeMillis();
@@ -348,7 +339,7 @@ public class CloudTokenPersistorTest {
     vcrReplicationManager.reloadReplicationTokenIfExists(
         mockPartitionId.getReplicaIds().get(0), Collections.singletonList(replica));
     assertEquals(token, replica.getToken());
-    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilUTC());
+    assertEquals(Utils.getTimeInMsToTheNearestSec(lastOpTime), replica.getReplicatedUntilTime());
   }
 
   @Test
