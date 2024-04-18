@@ -18,8 +18,8 @@ import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.config.FrontendConfig;
-import com.github.ambry.frontend.s3.S3BaseHandler;
 import com.github.ambry.frontend.s3.S3DeleteHandler;
+import com.github.ambry.frontend.s3.S3GetHandler;
 import com.github.ambry.frontend.s3.S3HeadHandler;
 import com.github.ambry.frontend.s3.S3ListHandler;
 import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
@@ -115,6 +115,7 @@ class FrontendRestRequestService implements RestRequestService {
   private S3HeadHandler s3HeadHandler;
   private S3PostHandler s3PostHandler;
   private S3MultipartUploadHandler s3MultipartUploadHandler;
+  private S3GetHandler s3GetHandler;
   private QuotaManager quotaManager;
   private boolean isUp = false;
   private final Random random = new Random();
@@ -234,6 +235,9 @@ class FrontendRestRequestService implements RestRequestService {
     s3MultipartUploadHandler =
         new S3MultipartUploadHandler(securityService, frontendMetrics, accountAndContainerInjector, frontendConfig,
             namedBlobDb, idConverter, router, quotaManager);
+    s3GetHandler =
+        new S3GetHandler(s3ListHandler, s3MultipartUploadHandler, getBlobHandler, securityService, frontendMetrics,
+            accountAndContainerInjector);
     s3PostHandler = new S3PostHandler(s3MultipartUploadHandler);
     s3PutHandler = new S3PutHandler(namedBlobPutHandler, s3MultipartUploadHandler, frontendMetrics);
     s3ListHandler = new S3ListHandler(namedBlobListHandler, frontendMetrics);
@@ -317,16 +321,8 @@ class FrontendRestRequestService implements RestRequestService {
         getStatsReportHandler.handle(restRequest, restResponseChannel,
             (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (isS3Request(restRequest)) {
-        if (S3BaseHandler.isListBucketRequest(restRequest)) {
-          s3ListHandler.handle(restRequest, restResponseChannel,
-              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-        } else if (S3BaseHandler.isMultipartListPartRequest(restRequest)) {
-          s3MultipartUploadHandler.handle(restRequest, restResponseChannel,
-              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-        } else {
-          getBlobHandler.handle(requestPath, restRequest, restResponseChannel,
-              (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
-        }
+        s3GetHandler.handle(restRequest, restResponseChannel,
+            (result, exception) -> submitResponse(restRequest, restResponseChannel, result, exception));
       } else if (requestPath.matchesOperation(Operations.NAMED_BLOB)
           && NamedBlobPath.parse(requestPath, restRequest.getArgs()).getBlobName() == null) {
         namedBlobListHandler.handle(restRequest, restResponseChannel,

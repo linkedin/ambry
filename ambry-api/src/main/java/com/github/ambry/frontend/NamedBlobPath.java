@@ -21,6 +21,7 @@ import com.github.ambry.rest.RestUtils;
 import java.util.Map;
 import java.util.Objects;
 
+import static com.github.ambry.rest.RestUtils.*;
 
 /**
  * Represents the blob url parsing results for named blob.
@@ -47,6 +48,9 @@ public class NamedBlobPath {
   public static NamedBlobPath parse(String path, Map<String, Object> args) throws RestServiceException {
     Objects.requireNonNull(path, "path should not be null");
     Objects.requireNonNull(args, "args should not be null");
+    if (RestUtils.isS3Request(args)) {
+      return parseS3(path, args);
+    }
     path = path.startsWith("/") ? path.substring(1) : path;
     String[] splitPath = path.split("/", 4);
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
@@ -73,6 +77,44 @@ public class NamedBlobPath {
     }
   }
 
+  /**
+   * Parse the input path for S3 request.
+   * @param path the URI path that needs to be parsed. This path should already be URL decoded and have query paramaters
+   *             removed. In the request handling path, this would be done by the {@link RestRequest} implementation.
+   * @param args a map containing any query parameters from the request.
+   * @return the {@link NamedBlobPath} that indicates the parsing result from blobUrl.
+   * @throws RestServiceException on parsing errors.
+   */
+  public static NamedBlobPath parseS3(String path, Map<String, Object> args) throws RestServiceException {
+    path = path.startsWith("/") ? path.substring(1) : path;
+    String[] splitPath = path.split("/", 4);
+    String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
+    boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
+    boolean isListRequest = blobNamePrefix != null;
+    int expectedSegments = (isListRequest || isGetObjectLockRequest) ? 3 : 4;
+    if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
+      throw new RestServiceException(String.format(
+          "Path must have format '/named/<account_name>/<container_name>%s.  Received path='%s', arg='%s'",
+          isListRequest || isGetObjectLockRequest ? "" : "/<blob_name>'", path, args), RestServiceErrorCode.BadRequest);
+    }
+    String accountName = splitPath[1];
+    String containerName = splitPath[2];
+    if (isListRequest) {
+      String pageToken = RestUtils.getHeader(args, PAGE_PARAM, false);
+      return new NamedBlobPath(accountName, containerName, null, blobNamePrefix, pageToken);
+    }
+    if (isGetObjectLockRequest) {
+      return new NamedBlobPath(accountName, containerName, null, null, null);
+    } else {
+      String blobName = splitPath[3];
+      if (blobName.length() > MAX_BLOB_NAME_LENGTH) {
+        throw new RestServiceException(
+            String.format("Blob name maximum length should be less than %s", MAX_BLOB_NAME_LENGTH),
+            RestServiceErrorCode.BadRequest);
+      }
+      return new NamedBlobPath(accountName, containerName, blobName, null, null);
+    }
+  }
   /**
    * Parse the input path if it's a named blob request.
    * @param requestPath the {@link RequestPath} to be parsed.
