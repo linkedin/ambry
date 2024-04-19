@@ -253,10 +253,14 @@ public class BackupIntegrityMonitor implements Runnable {
           partition.getId(), store, token.getNumBlobs(), token.getBytesRead());
 
       /** Create a temporary map of all keys recovered from cloud */
-      // Get all entries in one call, so keep the ceil buffer size high 1GB, all of it will not be used
-      FindInfo finfo = store.findEntriesSince(new StoreFindToken(), 1000 * (2 << 20),
-          null, null);
-      finfo.getMessageEntries().forEach(msg -> azureBlobs.put(msg.getStoreKey().getID(), msg));
+      StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
+      while (!newDiskToken.equals(oldDiskToken)) {
+        FindInfo finfo = store.findEntriesSince(newDiskToken, 1000 * (2 << 20),
+            null, null);
+        finfo.getMessageEntries().forEach(msg -> azureBlobs.put(msg.getStoreKey().getID(), msg));
+        oldDiskToken = newDiskToken;
+        newDiskToken = (StoreFindToken) finfo.getFindToken();
+      }
       if (token.getNumBlobs() != azureBlobs.size()) {
         metrics.backupCheckerRuntimeError.inc();
         logger.error("[BackupIntegrityMonitor] Mismatch, num_blobs from cloud = {}, num_blobs from disk = {}",
