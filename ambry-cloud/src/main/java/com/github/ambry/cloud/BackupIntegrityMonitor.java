@@ -223,6 +223,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
       partitions = partitions.stream()
           .filter(p -> !seen.contains(p.getId()))
+          .filter(p -> p.getId() <= 2000) // pick an old partition, likely has less updates
           .collect(Collectors.toList());
       partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       seen.add(partition.getId());
@@ -266,6 +267,7 @@ public class BackupIntegrityMonitor implements Runnable {
       /** Replicate from server and compare */
       List<AmbryReplica> replicas = partition.getReplicaIds().stream()
           .filter(r -> !r.isDown())
+          .filter(r -> r.isSealed())
           .collect(Collectors.toList());
       if (replicas.isEmpty()) {
         throw new RuntimeException(String.format("[BackupIntegrityMonitor] No server replicas available for partition-%s",
