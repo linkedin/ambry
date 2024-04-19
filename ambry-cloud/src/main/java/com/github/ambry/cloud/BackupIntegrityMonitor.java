@@ -271,7 +271,6 @@ public class BackupIntegrityMonitor implements Runnable {
       /** Replicate from server and compare */
       List<AmbryReplica> replicas = partition.getReplicaIds().stream()
           .filter(r -> !r.isDown())
-          .filter(r -> r.isSealed())
           .collect(Collectors.toList());
       if (replicas.isEmpty()) {
         throw new RuntimeException(String.format("[BackupIntegrityMonitor] No server replicas available for partition-%s",
