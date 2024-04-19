@@ -2689,7 +2689,9 @@ public class BlobStoreTest {
   }
 
   /**
-   * Test {@link BlobStore#testStorageAvailability()}
+   * Test {@link BlobStore#testStorageAvailability()}. Create a blob store with the existing log segment files, it should
+   * return true from the method. After deleting the log segment files and invalidate the page cache for log segment files,
+   * it should return false.
    * @throws Exception
    */
   @Test
@@ -2707,6 +2709,8 @@ public class BlobStoreTest {
     testStore.start();
     assertTrue(testStore.testStorageAvailability());
     if (NativeIO.POSIX.fadvisePossible) {
+      // Invalidate page cache for this file and remove all the log segment files, this would trigger testStorageAvailability
+      // method to read data from disk, which is deleted already.
       LogSegment segment = testStore.getLog().getFirstSegment();
       while (segment != null) {
         Pair<File, FileChannel> view = segment.getView();
@@ -2716,11 +2720,13 @@ public class BlobStoreTest {
             .posixFadviseIfPossible("blobstoretest", fd, 0, view.getFirst().length(),
                 NativeIO.POSIX.POSIX_FADV_DONTNEED);
         segment.closeView();
+        segment = testStore.getLog().getNextSegment(segment);
       }
       Utils.deleteFileOrDirectory(tempDir);
       assertFalse(testStore.testStorageAvailability());
       assertFalse(testStore.isStarted());
     }
+    testStore.shutdown();
   }
 
   // FORCE_DELETE_TODO: test the compaction when hits the forceDelete
