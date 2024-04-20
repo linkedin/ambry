@@ -46,6 +46,7 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -1383,10 +1384,7 @@ public class PersistentIndex {
         if (getBlobReadInfoTestCallback != null) {
           getBlobReadInfoTestCallback.run();
         }
-        readOptions = new BlobReadOptions(log, value.getOffset(),
-            new MessageInfo(id, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isUndelete(),
-                value.getExpiresAtMs(), journal.getCrcOfKey(id), value.getAccountId(), value.getContainerId(),
-                value.getOperationTimeInMs(), value.getLifeVersion()));
+        readOptions = fromIndexValue(id, value);
       }
       return readOptions;
     } finally {
@@ -1448,6 +1446,13 @@ public class PersistentIndex {
       throw new StoreException("Did not find PUT index entry for key [" + key + "] when there is an undelete entry",
           StoreErrorCodes.ID_Not_Found);
     }
+  }
+
+  BlobReadOptions fromIndexValue(StoreKey id, IndexValue value) {
+    return new BlobReadOptions(log, value.getOffset(),
+        new MessageInfo(id, value.getSize(), value.isDelete(), value.isTtlUpdate(), value.isDelete(),
+            value.getExpiresAtMs(), journal.getCrcOfKey(id), value.getAccountId(), value.getContainerId(),
+            value.getOperationTimeInMs(), value.getLifeVersion()));
   }
 
   boolean isExpired(IndexValue value) {
@@ -1750,6 +1755,49 @@ public class PersistentIndex {
     }
     return getAbsolutePositionInLogForOffset(indexValueOfLastPut.getOffset(), indexSegments)
         + indexValueOfLastPut.getSize();
+  }
+
+  /**
+   * Get a random PUT entry and its {@link BlobReadOptions}. Return null if there is no PUT entry found
+   * in this index.
+   * @return
+   */
+  BlobReadOptions getRandomPutEntryReadOptions() {
+    rwLock.readLock().lock();
+    try {
+      ConcurrentSkipListMap<Offset, IndexSegment> indexSegments = validIndexSegments;
+      if (indexSegments.isEmpty()) {
+        return null;
+      }
+      long start = System.currentTimeMillis();
+      ArrayList<Offset> indexSegmentOffsets = new ArrayList<>(indexSegments.keySet());
+      while (!indexSegmentOffsets.isEmpty()) {
+        int idx = ThreadLocalRandom.current().nextInt(indexSegmentOffsets.size());
+        Offset offset = indexSegmentOffsets.get(idx);
+        IndexSegment segment = indexSegments.get(offset);
+        if (segment != null) {
+          try {
+            IndexEntry indexEntry = segment.getFirstPutEntry();
+            if (indexEntry != null) {
+              metrics.getRandomPutEntryReadOptionsInMs.update(System.currentTimeMillis() - start);
+              return fromIndexValue(indexEntry.getKey(), indexEntry.getValue());
+            } else {
+              logger.trace("Store {}, offset {} index segment doesn't have any put entry, move on", dataDir, offset);
+            }
+          } catch (Exception e) {
+            logger.error("Store {}, offset {} failed to get the first put entry, move on", dataDir, offset, e);
+          }
+        } else {
+          logger.trace("Store {}, offset {} doesn't exist when getting a random put entry", dataDir, offset);
+        }
+        // Remove the offset at the idx by swapping it with last element and pop the last element
+        indexSegmentOffsets.set(idx, indexSegmentOffsets.get(indexSegmentOffsets.size() - 1));
+        indexSegmentOffsets.remove(indexSegmentOffsets.size() - 1);
+      }
+      return null;
+    } finally {
+      rwLock.readLock().unlock();
+    }
   }
 
   /**

@@ -308,9 +308,10 @@ public class DiskReformatter {
   private void ensureNotInUse(File srcDir, long storeCapacity) throws StoreException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     StoreMetrics metrics = new StoreMetrics(new MetricRegistry());
-    Store store = new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, diskIOScheduler,
-        diskSpaceAllocator, metrics, metrics, srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery, null,
-        time, null);
+    Store store =
+        new BlobStore("move_check_" + UUID.randomUUID().toString(), storeConfig, null, null, null, diskIOScheduler,
+            diskSpaceAllocator, metrics, metrics, srcDir.getAbsolutePath(), storeCapacity, storeKeyFactory, recovery,
+            null, time, null);
     store.start();
     store.shutdown();
   }

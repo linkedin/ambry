@@ -128,10 +128,9 @@ public class StoreCopierTest {
     StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
     Files.copy(new File(srcDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(),
         new File(tgtDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
-    BlobStore tgt =
-        new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-            storeMetrics, storeMetrics, tgtDir.getAbsolutePath(), STORE_CAPACITY, STORE_KEY_FACTORY, null, null, time,
-            null);
+    BlobStore tgt = new BlobStore(STORE_ID, storeConfig, null, null, null, DISK_IO_SCHEDULER,
+        StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, storeMetrics, storeMetrics, tgtDir.getAbsolutePath(),
+        STORE_CAPACITY, STORE_KEY_FACTORY, null, null, time, null);
     tgt.start();
     try {
       // should not be able to get expired or deleted ids
@@ -179,9 +178,9 @@ public class StoreCopierTest {
     long expiryTimeMs = time.milliseconds() + TimeUnit.SECONDS.toMillis(TestUtils.TTL_SECS);
     temporaryPutExpiryTimeMs =
         Utils.getTimeInMsToTheNearestSec(SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(1));
-    BlobStore src =
-        new BlobStore(STORE_ID, storeConfig, null, null, DISK_IO_SCHEDULER, StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
-            metrics, metrics, srcDir.getAbsolutePath(), STORE_CAPACITY, STORE_KEY_FACTORY, null, null, time, null);
+    BlobStore src = new BlobStore(STORE_ID, storeConfig, null, null, null, DISK_IO_SCHEDULER,
+        StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, metrics, metrics, srcDir.getAbsolutePath(), STORE_CAPACITY,
+        STORE_KEY_FACTORY, null, null, time, null);
     src.start();
     try {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);

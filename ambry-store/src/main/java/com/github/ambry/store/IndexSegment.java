@@ -1019,6 +1019,32 @@ class IndexSegment implements Iterable<IndexEntry> {
   }
 
   /**
+   * Return the first put entry in this segment. Return null if there is no put entry.
+   * @return
+   * @throws StoreException
+   */
+  IndexEntry getFirstPutEntry() throws StoreException {
+    rwLock.readLock().lock();
+    try {
+      if (sealed.get()) {
+        return sealedIndex.getFirstPutEntry();
+      }
+      for (Map.Entry<StoreKey, ConcurrentSkipListSet<IndexValue>> entry : index.entrySet()) {
+        Set<IndexValue> values = entry.getValue();
+        for (IndexValue value : values) {
+          if (value.isPut()) {
+            return new IndexEntry(entry.getKey(), new IndexValue(value));
+          }
+        }
+      }
+      // There is no put in this index segment
+      return null;
+    } finally {
+      rwLock.readLock().unlock();
+    }
+  }
+
+  /**
    * @return the first key (in lexicographical order) of sealed index segment
    */
   StoreKey getFirstKeyInSealedSegment() throws StoreException {
@@ -1356,6 +1382,21 @@ class IndexSegment implements Iterable<IndexEntry> {
     StoreKey getFirstKeyInSealedSegment() throws StoreException {
       ByteBuffer readBuf = serEntries.duplicate();
       return getKeyAt(readBuf, 0);
+    }
+
+    IndexEntry getFirstPutEntry() throws StoreException {
+      ByteBuffer mmap = serEntries.duplicate();
+      for (int i = 0; i < numberOfEntries(mmap); i++) {
+        StoreKey key = getKeyAt(mmap, i);
+        byte[] buf = new byte[persistedValueSize];
+        mmap.get(buf);
+        IndexValue value = new IndexValue(startOffset.getName(), ByteBuffer.wrap(buf), getVersion());
+        if (value.isPut()) {
+          return new IndexEntry(key, value);
+        }
+      }
+      // There is no Put in this segment
+      return null;
     }
 
     /**

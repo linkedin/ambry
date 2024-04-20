@@ -92,6 +92,11 @@ class BlobReadOptions implements Comparable<BlobReadOptions>, Closeable {
   }
 
   @Override
+  public String toString() {
+    return "BlobReadOption: LogSegment[" + segment.getName() + "] Offset[" + offset + "]";
+  }
+
+  @Override
   public int compareTo(BlobReadOptions o) {
     return offset.compareTo(o.offset);
   }

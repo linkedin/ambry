@@ -1794,6 +1794,88 @@ public class IndexTest {
   }
 
   /**
+   * Test {@link PersistentIndex#getRandomPutEntryReadOptions()}
+   * @throws Exception
+   */
+  @Test
+  public void testGetRandomPutEntryReadOptions() throws Exception {
+    assumeTrue(isLogSegmented);
+    File testDir = StoreTestUtils.createTempDirectory("indexDirTest-" + TestUtils.getRandomString(10));
+    CuratedLogIndexState indexState =
+        new CuratedLogIndexState(isLogSegmented, testDir, false, false, true, true, false, false);
+    // Test case 1. Before adding any index entry, calling getRandomPutEntryReadOptions should return null value.
+    assertNull(indexState.index.getRandomPutEntryReadOptions());
+
+    // Test case 2. If there is no Put entry in entire index, the result should be null
+    // DEFAULT_MAX_IN_MEM_ELEMENTS = 5, here we put 5 entries into the log
+    for (int i = 0; i < DEFAULT_MAX_IN_MEM_ELEMENTS; i++) {
+      MockId id = indexState.getUniqueId();
+      indexState.addDeleteEntry(id,
+          new MessageInfo(id, DELETE_RECORD_SIZE, true, false, Utils.getRandomShort(TestUtils.RANDOM),
+              Utils.getRandomShort(TestUtils.RANDOM), System.currentTimeMillis()));
+    }
+    assertNull(indexState.index.getRandomPutEntryReadOptions());
+
+    // Test case 3. When only one index segment has put entry, the result would be the first put entry in this segment
+    long expiresAtMs = indexState.time.milliseconds() + TimeUnit.HOURS.toMillis(1);
+    List<IndexEntry> indexEntries = indexState.addPutEntries(5, PUT_RECORD_SIZE, expiresAtMs);
+    assertEquals("Number of index segments should be 2", 2, indexState.index.getIndexSegments().size());
+    // update ttl for above 5 entries and the ttl entries fall in second index segment.
+    for (IndexEntry entry : indexEntries) {
+      indexState.makePermanent((MockId) entry.getKey(), false);
+    }
+    assertEquals("Number of index segments (after ttl update) should be 3", 3,
+        indexState.index.getIndexSegments().size());
+    // delete above 5 entries, these delete entries should fall in third index segment
+    for (IndexEntry entry : indexEntries) {
+      indexState.addDeleteEntry((MockId) entry.getKey());
+    }
+    assertEquals("Number of index segments (after ttl update) should be 4", 4,
+        indexState.index.getIndexSegments().size());
+    for (IndexEntry entry : indexEntries) {
+      indexState.addUndeleteEntry((MockId) entry.getKey());
+    }
+    assertEquals("Number of index segments (after ttl update) should be 5", 5,
+        indexState.index.getIndexSegments().size());
+
+    // We have only 5 index segments
+    // 1. index segment's full of delete entries
+    // 2. index segment's full of put entries
+    // 3. index segment is full of ttl update entries
+    // 4. index segment is full of delete entries
+    // 5. index segment is full of undelete entries
+    // In this case, we should always get the first put entry in the second index segment
+    // The put entry is order by key
+    Offset firstOffset = indexState.referenceIndex.firstKey();
+    StoreKey firstPutKey = indexState.referenceIndex.higherEntry(firstOffset).getValue().firstKey();
+    IndexEntry firstPutEntry = indexEntries.stream().filter(ent -> ent.getKey().equals(firstPutKey)).findFirst().get();
+    IndexValue firstPutValue = firstPutEntry.getValue();
+    Runnable blobReadOptionsChecker = () -> {
+      BlobReadOptions readOptions = indexState.index.getRandomPutEntryReadOptions();
+      assertNotNull(readOptions);
+      assertEquals("StoreKey not as expected", firstPutKey, readOptions.getMessageInfo().getStoreKey());
+      assertEquals("Log Segment Name not as expected", firstPutValue.getOffset().getName(),
+          readOptions.getLogSegmentName());
+      assertEquals("Offset not as expected for entry " + firstPutValue, firstPutValue.getOffset().getOffset(),
+          readOptions.getOffset());
+      assertEquals("Size not as expected", firstPutValue.getSize(), readOptions.getMessageInfo().getSize());
+      readOptions.close();
+    };
+    for (int i = 0; i < 10; i++) {
+      // There is randomness in the code, but we should always get the same value.
+      // Run this comparison for 10 times, it should always work.
+      blobReadOptionsChecker.run();
+    }
+    // Now close the index segment so we can write all the index segment files to disk
+    indexState.reloadIndex(true, false);
+
+    // After reload, the first segment became sealed segment, it should still work
+    for (int i = 0; i < 10; i++) {
+      blobReadOptionsChecker.run();
+    }
+  }
+
+  /**
    * Auto close last log segment and clean up journal.
    * @throws StoreException
    */

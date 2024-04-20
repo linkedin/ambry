@@ -61,6 +61,7 @@ import static com.github.ambry.clustermap.VcrClusterParticipant.*;
  * The blob store that controls the log and index
  */
 public class BlobStore implements Store {
+  private static final Logger logger = LoggerFactory.getLogger(BlobStore.class);
   static final String SEPARATOR = "_";
   static final String BOOTSTRAP_FILE_NAME = "bootstrap_in_progress";
   static final String DECOMMISSION_FILE_NAME = "decommission_in_progress";
@@ -71,9 +72,9 @@ public class BlobStore implements Store {
   private final DiskMetrics diskMetrics;
   private final ScheduledExecutorService taskScheduler;
   private final ScheduledExecutorService longLivedTaskScheduler;
+  private final DiskManager diskManager;
   private final DiskIOScheduler diskIOScheduler;
   private final DiskSpaceAllocator diskSpaceAllocator;
-  private static final Logger logger = LoggerFactory.getLogger(BlobStore.class);
   private final Object storeWriteLock = new Object();
   private final StoreConfig config;
   private final long capacityInBytes;
@@ -104,8 +105,7 @@ public class BlobStore implements Store {
   private volatile ReplicaState previousState;
   private volatile boolean recoverFromDecommission;
   // TODO remove this once ZK migration is complete
-  private AtomicReference<ReplicaSealStatus> replicaSealStatus =
-      new AtomicReference<>(ReplicaSealStatus.NOT_SEALED);
+  private AtomicReference<ReplicaSealStatus> replicaSealStatus = new AtomicReference<>(ReplicaSealStatus.NOT_SEALED);
   private AtomicBoolean isDisabled = new AtomicBoolean(false);
   protected PersistentIndex index;
 
@@ -133,6 +133,7 @@ public class BlobStore implements Store {
    *                                    tasks.
    * @param longLivedTaskScheduler      the {@link ScheduledExecutorService} for executing long period background
    *                                    tasks.
+   * @param diskManager                 the {@link DiskManager} object
    * @param diskIOScheduler             schedules disk IO operations
    * @param diskSpaceAllocator          allocates log segment files.
    * @param metrics                     the {@link StorageManagerMetrics} instance to use.
@@ -148,12 +149,12 @@ public class BlobStore implements Store {
    * @param indexPersistScheduler       a dedicated {@link ScheduledExecutorService} for persisting index segments.
    */
   public BlobStore(ReplicaId replicaId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskManager diskManager, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       List<ReplicaStatusDelegate> replicaStatusDelegates, Time time, AccountService accountService,
       DiskMetrics diskMetrics, ScheduledExecutorService indexPersistScheduler) {
-    this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler,
+    this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskManager,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
         replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegates, time, accountService,
         null, diskMetrics, indexPersistScheduler);
@@ -167,6 +168,7 @@ public class BlobStore implements Store {
    * @param taskScheduler               the {@link ScheduledExecutorService} for executing background tasks.
    * @param longLivedTaskScheduler      the {@link ScheduledExecutorService} for executing long period background
    *                                    tasks.
+   * @param diskManager                 the {@link DiskManager} object
    * @param diskIOScheduler             schedules disk IO operations.
    * @param diskSpaceAllocator          allocates log segment files.
    * @param metrics                     the {@link StorageManagerMetrics} instance to use.
@@ -180,17 +182,17 @@ public class BlobStore implements Store {
    * @param indexPersistScheduler       a dedicated {@link ScheduledExecutorService} for persisting index segments.
    */
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskManager diskManager, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService indexPersistScheduler) {
-    this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskIOScheduler, diskSpaceAllocator, metrics,
-        storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null, null,
-        null, indexPersistScheduler);
+    this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskManager, diskIOScheduler, diskSpaceAllocator,
+        metrics, storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null,
+        null, null, indexPersistScheduler);
   }
 
   BlobStore(ReplicaId replicaId, String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
-      ScheduledExecutorService longLivedTaskScheduler, DiskIOScheduler diskIOScheduler,
+      ScheduledExecutorService longLivedTaskScheduler, DiskManager diskManager, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates, Time time,
@@ -202,6 +204,7 @@ public class BlobStore implements Store {
     this.diskMetrics = diskMetrics;
     this.taskScheduler = taskScheduler;
     this.longLivedTaskScheduler = longLivedTaskScheduler;
+    this.diskManager = diskManager;
     this.diskIOScheduler = diskIOScheduler;
     this.diskSpaceAllocator = diskSpaceAllocator;
     this.metrics = metrics;
@@ -217,9 +220,8 @@ public class BlobStore implements Store {
     this.time = time;
     this.sealThresholdBytesHigh =
         (long) (capacityInBytes * (config.storeReadOnlyEnableSizeThresholdPercentage / 100.0));
-    this.sealThresholdBytesLow = (long) (capacityInBytes * (
-        (config.storeReadOnlyEnableSizeThresholdPercentage
-            - config.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta) / 100.0));
+    this.sealThresholdBytesLow = (long) (capacityInBytes * ((config.storeReadOnlyEnableSizeThresholdPercentage
+        - config.storeReadOnlyToPartialWriteEnableSizeThresholdPercentageDelta) / 100.0));
     this.partialSealThresholdBytesHigh =
         (long) (capacityInBytes * (config.storePartialWriteEnableSizeThresholdPercentage / 100.0));
     this.partialSealThresholdBytesLow = (long) (capacityInBytes * (
@@ -314,7 +316,7 @@ public class BlobStore implements Store {
           }
         }
         metrics.storeStartFailure.inc();
-        String err = String.format("Error while starting store for dir %s due to %s",  dataDir, e.getMessage());
+        String err = String.format("Error while starting store for dir %s due to %s", dataDir, e.getMessage());
         throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
       } finally {
         context.stop();
@@ -454,7 +456,7 @@ public class BlobStore implements Store {
       logger.debug("The current used capacity is {} bytes on store {}", index.getLogUsedCapacity(),
           replicaId.getPartitionId());
       updateSealedStatus();
-      if(!started && replicaStatusDelegates.size() > 1) {
+      if (!started && replicaStatusDelegates.size() > 1) {
         reconcileSealedStatus();
       }
       //else: maintain current replicaId status if percentFilled between threshold - delta and threshold
@@ -1086,6 +1088,57 @@ public class BlobStore implements Store {
   }
 
   /**
+   * Test if the storage for this blob is still available or not. This test would be triggered after a blob store
+   * on the same disk, encounters an io error. If this io error is indeed caused by disk error, we would want to
+   * shut down all the blob stores on this disk as soon as possible, so we can move all the replicas on this disk
+   * to a different place.
+   *
+   * In order to test underlying storage's availability, this method would try read one chunk of data from disk
+   * to memory for several times. If any of those read works, this method would return true.
+   * @return
+   */
+  boolean testStorageAvailability() {
+    if (!isStarted()) {
+      return false;
+    }
+    BlobReadOptions readOptions = index.getRandomPutEntryReadOptions();
+    if (readOptions == null) {
+      // There is no put entry in this blob store, then we don't determine if this storage is still available,
+      // just assume it's available and return true.
+      logger.info("Failed to get a random put entry from store {}", dataDir);
+      return true;
+    }
+    // Read the same chunk for several times, The first time would load data from disk to page cache, and if it does,
+    // we can return true right away. If there is any error, the following reads would try again until the blob store
+    // is shut down.
+    // It's possible that data is already in page cache. We should either invalidate the page cache before reading
+    // or read the data using direct io.
+    for (int i = 0; i < config.storeIoErrorCountToTriggerShutdown; i++) {
+      if (!isStarted()) {
+        break;
+      }
+      try {
+        // TODO: avoid page cache when testing storage availability
+        readOptions.doPrefetch(0, readOptions.getMessageInfo().getSize());
+        readOptions.getPrefetchedData().release();
+        onSuccess("EXAMINE");
+        // close read option to release the reference to the log segment
+        readOptions.close();
+        return true;
+      } catch (Exception e) {
+        if (e.getMessage().contains("Input/output error")) {
+          tryOnError();
+        } else {
+          logger.error("Failed to prefetch PUT data from read options: {}", readOptions, e);
+        }
+      }
+    }
+    // close read option to release the reference to the log segment
+    readOptions.close();
+    return false;
+  }
+
+  /**
    * @return The number of byte been written to log
    */
   public long getLogEndOffsetInBytes() {
@@ -1124,7 +1177,7 @@ public class BlobStore implements Store {
 
   @Override
   public void setCurrentState(ReplicaState state) {
-    if(currentState != state){
+    if (currentState != state) {
       logger.info("storeId = {}, State change from {} to {}", storeId, currentState, state);
       previousState = currentState;
       currentState = state;
@@ -1148,6 +1201,14 @@ public class BlobStore implements Store {
   @Override
   public boolean isDisabled() {
     return isDisabled.get();
+  }
+
+  /**
+   * Return log object, only for testing.
+   * @return
+   */
+  Log getLog() {
+    return log;
   }
 
   /**
@@ -1251,10 +1312,9 @@ public class BlobStore implements Store {
               replicaId.getPartitionId(), index.getLogUsedCapacity(), sealThresholdBytesLow, sealThresholdBytesHigh);
         }
       }
-    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED && (
-        (replicaStatusDelegates.size() > 1
-            && replicaSealStatus.getAndSet(ReplicaSealStatus.PARTIALLY_SEALED) != ReplicaSealStatus.PARTIALLY_SEALED)
-            || !replicaId.isPartiallySealed())) {
+    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.PARTIALLY_SEALED && ((replicaStatusDelegates.size() > 1
+        && replicaSealStatus.getAndSet(ReplicaSealStatus.PARTIALLY_SEALED) != ReplicaSealStatus.PARTIALLY_SEALED)
+        || !replicaId.isPartiallySealed())) {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         if (!replicaStatusDelegate.partialSeal(replicaId)) {
           metrics.partialSealSetError.inc();
@@ -1268,10 +1328,9 @@ public class BlobStore implements Store {
               partialSealThresholdBytesHigh);
         }
       }
-    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.NOT_SEALED && (
-        (replicaStatusDelegates.size() > 1
-            && replicaSealStatus.getAndSet(ReplicaSealStatus.NOT_SEALED) != ReplicaSealStatus.NOT_SEALED)
-            || !replicaId.isUnsealed())) {
+    } else if (resolvedReplicaSealStatus == ReplicaSealStatus.NOT_SEALED && ((replicaStatusDelegates.size() > 1
+        && replicaSealStatus.getAndSet(ReplicaSealStatus.NOT_SEALED) != ReplicaSealStatus.NOT_SEALED)
+        || !replicaId.isUnsealed())) {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         if (!replicaStatusDelegate.unseal(replicaId)) {
           metrics.unsealSetError.inc();
@@ -1325,7 +1384,6 @@ public class BlobStore implements Store {
     }
   }
 
-
   /**
    * Resolve the {@link ReplicaSealStatus} of this store's replica based on the current {@link ReplicaSealStatus} and
    * current log used capacity.
@@ -1335,15 +1393,15 @@ public class BlobStore implements Store {
     // If the size of log exceeds seal high threshold then the log should be marked as sealed.
     // If the log is already sealed, but the size exceeds low threshold, then we will wait for size to go below low
     // threshold before changing the replica state to partially_sealed.
-    if (index.getLogUsedCapacity() > sealThresholdBytesHigh ||
-        (replicaId.isSealed() && index.getLogUsedCapacity() >= sealThresholdBytesLow)) {
+    if (index.getLogUsedCapacity() > sealThresholdBytesHigh || (replicaId.isSealed()
+        && index.getLogUsedCapacity() >= sealThresholdBytesLow)) {
       return ReplicaSealStatus.SEALED;
     }
     // If the size of log exceeds partial seal high threshold then the log should be marked as partially sealed.
     // If the log is already partially sealed, but the size exceeds low threshold, then we will wait for size to go
     // below low threshold before changing the replica state to partially_sealed.
-    if (index.getLogUsedCapacity() > partialSealThresholdBytesHigh ||
-        (replicaId.isPartiallySealed() && index.getLogUsedCapacity() >= partialSealThresholdBytesLow)) {
+    if (index.getLogUsedCapacity() > partialSealThresholdBytesHigh || (replicaId.isPartiallySealed()
+        && index.getLogUsedCapacity() >= partialSealThresholdBytesLow)) {
       return ReplicaSealStatus.PARTIALLY_SEALED;
     }
     return ReplicaSealStatus.NOT_SEALED;
@@ -1400,6 +1458,20 @@ public class BlobStore implements Store {
         }
       }
       metrics.storeIoErrorTriggeredShutdownCount.inc();
+      if (diskManager != null) {
+        diskManager.onBlobStoreIOError();
+      }
+    }
+  }
+
+  /**
+   * Wrapping {@link #onError()} method is a try-catch statement to avoid dealing with
+   * exceptions.
+   */
+  private void tryOnError() {
+    try {
+      onError();
+    } catch (Exception e) {
     }
   }
 
