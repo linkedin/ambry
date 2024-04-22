@@ -171,12 +171,11 @@ public class ReplicationMetrics {
   // This metric tracks cross colo get requests bytes rate for Standby replicas.
   public final Map<String, Meter> interColoReplicationFetchBytesRateForStandbyReplicas = new ConcurrentHashMap<>();
 
-  public static final String BACKUP_INTEGRITY_ERROR = "BackupIntegrityError";
   public final Counter backupIntegrityError;
 
   public ReplicationMetrics(MetricRegistry registry, List<? extends ReplicaId> replicaIds) {
     backupIntegrityError =
-        registry.counter(MetricRegistry.name(ReplicationMetrics.class, BACKUP_INTEGRITY_ERROR));
+        registry.counter(MetricRegistry.name(ReplicationMetrics.class, "BackupIntegrityError"));
     intraColoReplicationBytesRate =
         registry.meter(MetricRegistry.name(ReplicaThread.class, "IntraColoReplicationBytesRate"));
     plainTextIntraColoReplicationBytesRate =

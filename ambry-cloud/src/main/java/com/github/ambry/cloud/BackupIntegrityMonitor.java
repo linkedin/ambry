@@ -238,19 +238,19 @@ public class BackupIntegrityMonitor implements Runnable {
       cloudReplica = azureReplicationManager.getCloudReplica(store.getReplicaId());
       // No need to reload tokens, since we clear off disks before each run
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
-      RecoveryToken token = (RecoveryToken) cloudReplica.getToken();
-      while (!token.isEndOfPartition()) {
+      RecoveryToken azureToken = (RecoveryToken) cloudReplica.getToken();
+      while (!azureToken.isEndOfPartition()) {
         azureReplicator.replicate();
-        token = (RecoveryToken) cloudReplica.getToken();
-        long numBlobs = token.getNumBlobs();
+        azureToken = (RecoveryToken) cloudReplica.getToken();
+        long numBlobs = azureToken.getNumBlobs();
         if (numBlobs > 0 && (numBlobs % azureConfig.azureBlobStorageMaxResultsPerPage == 0)) {
           // Print progress, if N blobs have been restored from Azure
           logger.info("[BackupIntegrityMonitor] Recovered {} blobs {} bytes of partition-{} from Azure Storage",
-              numBlobs, token.getBytesRead(), partition.getId());
+              numBlobs, azureToken.getBytesRead(), partition.getId());
         }
       }
       logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}], num_blobs = {}, num_bytes = {}",
-          partition.getId(), store, token.getNumBlobs(), token.getBytesRead());
+          partition.getId(), store, azureToken.getNumBlobs(), azureToken.getBytesRead());
 
       /** Create a temporary map of all keys recovered from cloud */
       StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
@@ -260,11 +260,12 @@ public class BackupIntegrityMonitor implements Runnable {
         finfo.getMessageEntries().forEach(msg -> azureBlobs.put(msg.getStoreKey().getID(), msg));
         oldDiskToken = newDiskToken;
         newDiskToken = (StoreFindToken) finfo.getFindToken();
+        logger.info("[BackupIntegrityMonitor] Disk-token = {}", newDiskToken.toString());
       }
-      if (token.getNumBlobs() != azureBlobs.size()) {
+      if (azureToken.getNumBlobs() != azureBlobs.size()) {
         metrics.backupCheckerRuntimeError.inc();
         logger.error("[BackupIntegrityMonitor] Mismatch, num_blobs from cloud = {}, num_blobs from disk = {}",
-            token.getNumBlobs(), azureBlobs.size());
+            azureToken.getNumBlobs(), azureBlobs.size());
       }
       serverScanner.setAzureBlobMap(azureBlobs);
 

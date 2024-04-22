@@ -45,7 +45,6 @@ public class RecoveryMetrics {
         registry.counter(MetricRegistry.name(RecoveryMetrics.class, "AddCloudPartitionErrorCount"));
     cloudTokenReloadWarnCount =
         registry.counter(MetricRegistry.name(RecoveryMetrics.class, "CloudTokenReloadWarnCount"));
-
     backupCheckerRuntimeError =
         registry.counter(MetricRegistry.name(RecoveryMetrics.class, BACKUP_CHECKER_RUNTIME_ERROR));
   }
