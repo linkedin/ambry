@@ -956,35 +956,35 @@ public class HelixParticipantTest {
         helixParticipant2.enterMaintenanceMode("ForTesting2"));
 
     HelixParticipant.MaintenanceRecord record = helixParticipant.getLastMaintenanceRecord();
-    assertEquals(HelixParticipant.MaintenanceRecord.OPERATION_TYPE_ENTER, record.operationType);
+    assertEquals("ENTER", record.operationType);
     assertEquals("ForTesting", record.reason);
 
     assertTrue("First participant should exit maintenance mode", helixParticipant.exitMaintenanceMode());
     record = helixParticipant.getLastMaintenanceRecord();
-    assertEquals(HelixParticipant.MaintenanceRecord.OPERATION_TYPE_EXIT, record.operationType);
+    assertEquals("EXIT", record.operationType);
     assertEquals("ForTesting", record.reason);
 
     assertTrue("Second participant should enter maintenance mode",
         helixParticipant2.enterMaintenanceMode("ForTesting2"));
     record = helixParticipant.getLastMaintenanceRecord();
-    assertEquals(HelixParticipant.MaintenanceRecord.OPERATION_TYPE_ENTER, record.operationType);
+    assertEquals("ENTER", record.operationType);
     assertEquals("ForTesting2", record.reason);
 
     assertTrue("Second participant should exit maintenance mode", helixParticipant2.exitMaintenanceMode());
     record = helixParticipant.getLastMaintenanceRecord();
-    assertEquals(HelixParticipant.MaintenanceRecord.OPERATION_TYPE_EXIT, record.operationType);
+    assertEquals("EXIT", record.operationType);
     assertEquals("ForTesting2", record.reason);
 
     // Enter MM again, but this time, other application might enter MM as well
     assertTrue("First participant should enter maintenance mode", helixParticipant.enterMaintenanceMode("ForTesting"));
     helixParticipant2.getHelixAdmin().manuallyEnableMaintenanceMode(clusterName, true, "OVERRIDE", null);
     record = helixParticipant.getLastMaintenanceRecord();
-    assertEquals(HelixParticipant.MaintenanceRecord.OPERATION_TYPE_ENTER, record.operationType);
+    assertEquals("ENTER", record.operationType);
     assertEquals("OVERRIDE", record.reason);
     assertTrue("First participant should exit maintenance mode without calling helix participant",
         helixParticipant.exitMaintenanceMode());
     record = helixParticipant.getLastMaintenanceRecord();
-    assertEquals(HelixParticipant.MaintenanceRecord.OPERATION_TYPE_ENTER, record.operationType);
+    assertEquals("ENTER", record.operationType);
     assertEquals("OVERRIDE", record.reason);
     helixParticipant2.getHelixAdmin().manuallyEnableMaintenanceMode(clusterName, false, "OVERRIDE", null);
 
@@ -993,7 +993,7 @@ public class HelixParticipantTest {
     helixParticipant2.getHelixAdmin().manuallyEnableMaintenanceMode(clusterName, true, "OVERRIDE", null);
     helixParticipant2.getHelixAdmin().manuallyEnableMaintenanceMode(clusterName, false, "OVERRIDE", null);
     record = helixParticipant.getLastMaintenanceRecord();
-    assertEquals(HelixParticipant.MaintenanceRecord.OPERATION_TYPE_EXIT, record.operationType);
+    assertEquals("EXIT", record.operationType);
     assertEquals("OVERRIDE", record.reason);
     assertTrue("First participant should exit maintenance mode without calling helix participant",
         helixParticipant.exitMaintenanceMode());

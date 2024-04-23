@@ -487,8 +487,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
       try {
         MaintenanceRecord record = getLastMaintenanceRecord();
-        if (record.operationType.equals(MaintenanceRecord.OPERATION_TYPE_ENTER) && record.reason.equals(
-            maintenanceModeReason)) {
+        if (record.reason.equals(maintenanceModeReason)) {
           helixAdmin.manuallyEnableMaintenanceMode(clusterName, false, maintenanceModeReason, null);
           logger.info("Cluster {} exits maintenance mode: {}", clusterName, maintenanceModeReason);
         } else {
@@ -521,9 +520,6 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
     public String triggeredBy;
     @JsonProperty("USER")
     public String user;
-
-    public static final String OPERATION_TYPE_EXIT = "EXIT";
-    public static final String OPERATION_TYPE_ENTER = "ENTER";
   }
 
   /**
