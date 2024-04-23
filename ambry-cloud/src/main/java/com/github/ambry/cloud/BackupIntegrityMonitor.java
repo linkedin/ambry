@@ -298,12 +298,14 @@ public class BackupIntegrityMonitor implements Runnable {
         if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
           // Print progress, if a SCAN_MILESTONE's worth of data has been received from server
           DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
-          logger.info("[BackupIntegrityMonitor] Scanned peer server replica {} until {}, stop at {}",
-              replica, formatter.format(scanEndTime), formatter.format(currentTime - SCAN_STOP_RELTIME));
+          logger.info("[BackupIntegrityMonitor] Scanned {} blobs from peer server replica {} until {}, stop at {}",
+              serverScanner.getNumBlobScanned(), replica, formatter.format(scanEndTime),
+              formatter.format(currentTime - SCAN_STOP_RELTIME));
         }
       }
-      logger.info("[BackupIntegrityMonitor] Scanned partition-{} from peer server replica [{}]", partition.getId(),
-          replica);
+      logger.info("[BackupIntegrityMonitor] Scanned {} blobs from peer server replica [{}]",
+          serverScanner.getNumBlobScanned(), replica);
+
       serverScanner.printKeysAbsentInServer(serverReplica);
 
       ReplicationMetrics rmetrics = new ReplicationMetrics(cluster.getMetricRegistry(), Collections.emptyList());
