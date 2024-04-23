@@ -247,11 +247,11 @@ public class BackupIntegrityMonitor implements Runnable {
         long numBlobs = azureToken.getNumBlobs();
         if (numBlobs > 0 && (numBlobs % azureConfig.azureBlobStorageMaxResultsPerPage == 0)) {
           // Print progress, if N blobs have been restored from Azure
-          logger.info("[BackupIntegrityMonitor] Recovered {} blobs {} bytes of partition-{} from Azure Storage",
+          logger.info("[BackupIntegrityMonitor] Recovered {} num_azure_blobs {} bytes of partition-{} from Azure Storage",
               numBlobs, azureToken.getBytesRead(), partition.getId());
         }
       }
-      logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}], num_blobs = {}, num_bytes = {}",
+      logger.info("[BackupIntegrityMonitor] Restored backup partition-{} to disk [{}], num_azure_blobs = {}, num_bytes = {}",
           partition.getId(), store, azureToken.getNumBlobs(), azureToken.getBytesRead());
 
       /** Create a temporary map of all keys recovered from cloud */
@@ -266,7 +266,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
       if (azureToken.getNumBlobs() != azureBlobs.size()) {
         metrics.backupCheckerRuntimeError.inc();
-        logger.error("[BackupIntegrityMonitor] Mismatch, num_blobs from cloud = {}, num_blobs from disk = {}",
+        logger.error("[BackupIntegrityMonitor] Mismatch, num_azure_blobs = {}, num_azure_blobs on-disk = {}",
             azureToken.getNumBlobs(), azureBlobs.size());
       }
       serverScanner.setAzureBlobMap(azureBlobs);
@@ -298,12 +298,12 @@ public class BackupIntegrityMonitor implements Runnable {
         if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
           // Print progress, if a SCAN_MILESTONE's worth of data has been received from server
           DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
-          logger.info("[BackupIntegrityMonitor] Scanned {} blobs from peer server replica {} until {}, stop at {}",
+          logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {} until {}, stop at {}",
               serverScanner.getNumBlobScanned(), replica, formatter.format(scanEndTime),
               formatter.format(currentTime - SCAN_STOP_RELTIME));
         }
       }
-      logger.info("[BackupIntegrityMonitor] Scanned {} blobs from peer server replica [{}]",
+      logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica [{}]",
           serverScanner.getNumBlobScanned(), replica);
 
       serverScanner.printKeysAbsentInServer(serverReplica);
