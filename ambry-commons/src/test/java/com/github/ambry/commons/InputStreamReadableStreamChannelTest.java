@@ -61,7 +61,7 @@ public class InputStreamReadableStreamChannelTest {
   public void commonCasesTest() throws Exception {
     int bufSize = InputStreamReadableStreamChannel.BUFFER_SIZE;
     int randSizeLessThanBuffer = TestUtils.RANDOM.nextInt(bufSize - 2) + 2;
-    int randMultiplier = TestUtils.RANDOM.nextInt(10);
+    int randMultiplier = TestUtils.RANDOM.nextInt(10) + 1;
     int[] testStreamSizes =
         {0, 1, randSizeLessThanBuffer, bufSize, bufSize + 1, bufSize * randMultiplier, bufSize * randMultiplier + 1};
     for (int size : testStreamSizes) {
@@ -90,7 +90,7 @@ public class InputStreamReadableStreamChannelTest {
   public void commonCasesTestWithByteBufferAsyncWritableChannel() throws Exception {
     int bufSize = InputStreamReadableStreamChannel.BUFFER_SIZE;
     int randSizeLessThanBuffer = TestUtils.RANDOM.nextInt(bufSize - 2) + 2;
-    int randMultiplier = TestUtils.RANDOM.nextInt(10);
+    int randMultiplier = TestUtils.RANDOM.nextInt(10) + 1;
     int[] testStreamSizes =
         {1, randSizeLessThanBuffer, bufSize, bufSize + 1, bufSize * randMultiplier, bufSize * randMultiplier + 1};
     for (int size : testStreamSizes) {
