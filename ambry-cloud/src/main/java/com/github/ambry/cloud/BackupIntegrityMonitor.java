@@ -225,6 +225,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
       partitions = partitions.stream()
           .filter(p -> !seen.contains(p.getId()))
+          .filter(p -> p.getId() <= 2000) // pick an older partition, likely backed up completely and is sealed
           .collect(Collectors.toList());
       partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       seen.add(partition.getId());
