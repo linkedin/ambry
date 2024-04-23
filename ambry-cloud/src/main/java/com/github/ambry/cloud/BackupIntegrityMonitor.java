@@ -249,7 +249,6 @@ public class BackupIntegrityMonitor implements Runnable {
           // Print progress, if N blobs have been restored from Azure
           logger.info("[BackupIntegrityMonitor] Recovered {} num_azure_blobs {} bytes of partition-{} from Azure Storage",
               numBlobs, azureToken.getBytesRead(), partition.getId());
-          break;
         }
       }
       logger.info("[BackupIntegrityMonitor] Recovered {} num_azure_blobs {} bytes of partition-{} from Azure Storage",
