@@ -305,7 +305,7 @@ public class BackupIntegrityMonitor implements Runnable {
               formatter.format(currentTime - SCAN_STOP_RELTIME));
         }
       }
-      logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica [{}]",
+      logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {}",
           serverScanner.getNumBlobScanned(), replica);
 
       serverScanner.printKeysAbsentInServer(serverReplica);
