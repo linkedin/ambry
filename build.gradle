@@ -216,7 +216,6 @@ project(':ambry-test-utils') {
         compile "org.bouncycastle:bcpkix-jdk15on:$bouncycastleVersion"
         compile("org.apache.hadoop:hadoop-common:$hadoopCommonVersion") {
             exclude group: "org.bouncycastle"
-            exclude group: "org.jboss", module: "xnio"
         }
     }
 }
