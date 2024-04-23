@@ -70,8 +70,8 @@ public class BackupCheckerThread extends ReplicaThread {
   protected HashMap<String, MessageInfo> azureBlobMap;
   public static final String DR_Verifier_Keyword = "dr";
   public static final String BLOB_STATE_MISMATCHES_FILE = "blob_state_mismatches";
-
   public static final String REPLICA_STATUS_FILE = "server_replica_token";
+  protected AtomicInteger numBlobScanned;
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -87,6 +87,8 @@ public class BackupCheckerThread extends ReplicaThread {
     this.replicationConfig = replicationConfig;
     azureBlobMap = new HashMap<>();
     metrics = new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList());
+    // Reset these counters if re-using the same thread object
+    numBlobScanned = new AtomicInteger(0);
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -185,6 +187,7 @@ public class BackupCheckerThread extends ReplicaThread {
           String output = getFilePath(replica, BLOB_STATE_MISMATCHES_FILE);
           metadata.getMessageInfoList().stream()
               .map(serverBlob -> {
+                numBlobScanned.incrementAndGet();
                 replica.setReplicatedUntilTime(Math.max(replica.getReplicatedUntilTime(),
                     serverBlob.getOperationTimeMs()));
                 return mapBlob(serverBlob);
@@ -257,8 +260,13 @@ public class BackupCheckerThread extends ReplicaThread {
           MessageInfo.toText(null), MessageInfo.toText(azureBlob),
           "\n");
       fileManager.appendToFile(output, msg);
+      metrics.backupIntegrityError.inc();
     });
     azureBlobMap.clear();
+  }
+
+  public int getNumBlobScanned() {
+    return numBlobScanned.get();
   }
 
   /**
