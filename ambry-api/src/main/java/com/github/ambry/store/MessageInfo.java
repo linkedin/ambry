@@ -18,7 +18,10 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import com.github.ambry.utils.Utils;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 
 /**
@@ -182,6 +185,13 @@ public class MessageInfo {
     this.lifeVersion = lifeVersion;
   }
 
+  public MessageInfo(StoreKey key, MessageInfo other) {
+    this(key, other.getSize(), other.isDeleted(), other.isTtlUpdated(), other.isUndeleted(),
+        other.getExpirationTimeInMs(), other.getCrc(), other.getAccountId(), other.getContainerId(),
+        other.getOperationTimeMs(), other.getLifeVersion());
+  }
+
+
   public StoreKey getStoreKey() {
     return key;
   }
@@ -267,6 +277,68 @@ public class MessageInfo {
   public int hashCode() {
     return Objects.hash(key, size, expirationTimeInMs, isDeleted, isTtlUpdated, isUndeleted, crc, accountId,
         containerId, operationTimeMs, lifeVersion);
+  }
+
+  /**
+   * Print a concise readable text about blob-state
+   * ctime = create time or time in ms when blob was inserted in ambry
+   * expiry = time in ms when the blob will expire and eligible for garbage-collection
+   * obsolete = user has requested blob-delete and the blob is in DELETE state but not garbage-collected
+   * crc = blob data digest
+   * version = blob version, applicable when blob encounters UN-DELETE.
+   * @return
+   */
+  public static String toText(MessageInfo m) {
+    if (m == null) {
+      return "absent";
+    }
+    return new StringBuilder()
+        .append(m.key).append(",")
+        .append(m.size).append(" bytes").append(",")
+        .append("ctime=").append(m.operationTimeMs).append(" ms").append(",")
+        .append("expiry=").append(m.expirationTimeInMs).append(" ms").append(",")
+        .append("obsolete=").append(m.isDeleted).append(",")
+        .append("crc=").append(m.crc).append(",")
+        .append("version=").append(m.lifeVersion)
+        .toString();
+  }
+
+  /**
+   * Compares blob state from server-blob and cloud blob
+   * @param o
+   * @return
+   */
+  public Set<BlobMatchStatus> isEqual(Object o) {
+    if (o == null) {
+      return Collections.singleton(BlobMatchStatus.BLOB_ABSENT);
+    }
+    if (getClass() != o.getClass()) {
+      return Collections.singleton(BlobMatchStatus.BLOB_STATE_CLASS_MISMATCH);
+    }
+    Set<BlobMatchStatus> status = new HashSet<>();
+    MessageInfo that = (MessageInfo) o;
+    if (!Objects.equals(key, that.key)) {
+      status.add(BlobMatchStatus.BLOB_STATE_KEY_MISMATCH);
+    }
+    if (size != that.size) {
+      status.add(BlobMatchStatus.BLOB_STATE_SIZE_MISMATCH);
+    }
+    if (expirationTimeInMs != that.expirationTimeInMs) {
+      status.add(BlobMatchStatus.BLOB_STATE_EXPIRY_MISMATCH);
+    }
+    if (isDeleted != that.isDeleted) {
+      status.add(BlobMatchStatus.BLOB_STATE_OBSOLETE_MISMATCH);
+    }
+    if (!Objects.equals(crc, that.crc)) {
+      status.add(BlobMatchStatus.BLOB_STATE_CRC_MISMATCH);
+    }
+    if (lifeVersion != that.lifeVersion) {
+      status.add(BlobMatchStatus.BLOB_STATE_VERSION_MISMATCH);
+    }
+    if (status.isEmpty()) {
+      return Collections.singleton(BlobMatchStatus.BLOB_STATE_MATCH);
+    }
+    return status;
   }
 
   @Override

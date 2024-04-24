@@ -253,14 +253,14 @@ public class VcrReplicationManager extends ReplicationEngine {
         String replUntil = (String) row.getProperty(REPLICATED_UNITL_UTC);
         DateFormat formatter = new SimpleDateFormat(DATE_FORMAT);
         long time = replUntil.equals(String.valueOf(Utils.Infinite_Time)) ? -1 : formatter.parse(replUntil).getTime();
-        replicaInfo.setReplicatedUntilUTC(time);
+        replicaInfo.setReplicatedUntilTime(time);
       } catch (Throwable t) {
         // log and metric
         azureMetrics.replicaTokenReadErrorCount.inc();
         logger.error("Failed to deserialize token for peer replica {} due to {}", replicaInfo, t.toString());
         t.printStackTrace();
         replicaInfo.setToken(findTokenFactory.getNewFindToken());
-        replicaInfo.setReplicatedUntilUTC(-1);
+        replicaInfo.setReplicatedUntilTime(-1);
       } // try-catch
     } // for-loop
     return (int) azureMetrics.replicaTokenReadErrorCount.getCount();

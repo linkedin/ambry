@@ -119,7 +119,7 @@ public class ReplicationManager extends ReplicationEngine {
    * @param threadName
    * @return
    */
-  public ReplicaThread getBackupCheckerThread(String threadName) {
+  public BackupCheckerThread getBackupCheckerThread(String threadName) {
     try {
       String dc = dataNodeId.getDatacenterName();
       StoreKeyConverter storeKeyConverter = storeKeyConverterFactory.getStoreKeyConverter();
@@ -277,7 +277,7 @@ public class ReplicationManager extends ReplicationEngine {
    * @param replicaId the local replica
    * @return list of {@link RemoteReplicaInfo} associated with local replica.
    */
-  private List<RemoteReplicaInfo> createRemoteReplicaInfos(List<? extends ReplicaId> peerReplicas,
+  public List<RemoteReplicaInfo> createRemoteReplicaInfos(List<? extends ReplicaId> peerReplicas,
       ReplicaId replicaId) {
     List<RemoteReplicaInfo> remoteReplicaInfos = new ArrayList<>();
     PartitionId partition = replicaId.getPartitionId();

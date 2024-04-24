@@ -21,23 +21,32 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.BlobMatchStatus;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageInfoType;
-import com.github.ambry.store.StoreErrorCodes;
-import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.File;
+import java.lang.reflect.Field;
 import java.util.Collections;
-import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import org.apache.commons.lang3.tuple.ImmutableTriple;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.github.ambry.store.BlobMatchStatus.*;
 
 
 /**
@@ -51,17 +60,18 @@ import org.slf4j.LoggerFactory;
  * 2> The backup may be ahead of the replica. This can happen if the replica is lagging behind its peers. If we recover
  * from such a backup, we'd still be consistent from the user's point of view. The lagging replica must catch up with
  * its peers and this checker will detect such lagging replicas as well.
- * TODO: Redirect to a different file
- * TODO: Testing on sample partitions
  */
 public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   protected final BackupCheckerFileManager fileManager;
   protected final ReplicationConfig replicationConfig;
+  private final ReplicationMetrics metrics;
+  protected HashMap<String, MessageInfo> azureBlobMap;
   public static final String DR_Verifier_Keyword = "dr";
-  public static final String MISSING_KEYS_FILE = "missingKeys";
-  public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
+  public static final String BLOB_STATE_MISMATCHES_FILE = "blob_state_mismatches";
+  public static final String REPLICA_STATUS_FILE = "server_replica_token";
+  protected AtomicInteger numBlobScanned;
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -73,13 +83,12 @@ public class BackupCheckerThread extends ReplicaThread {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
         replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-    try {
-      fileManager = Utils.getObj(replicationConfig.backupCheckerFileManagerType, replicationConfig, metricRegistry);
-    } catch (ReflectiveOperationException e) {
-      logger.error("Failed to create file manager. ", e.toString());
-      throw new RuntimeException(e);
-    }
+    fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
     this.replicationConfig = replicationConfig;
+    azureBlobMap = new HashMap<>();
+    metrics = new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList());
+    // Reset these counters if re-using the same thread object
+    numBlobScanned = new AtomicInteger(0);
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -91,6 +100,14 @@ public class BackupCheckerThread extends ReplicaThread {
     return this.fileManager;
   }
 
+  public void setAzureBlobMap(HashMap<String, MessageInfo> azureBlobMap) {
+    if (azureBlobMap == null) {
+      logger.error("Azure blob map cannot be null");
+      return;
+    }
+    this.azureBlobMap = azureBlobMap;
+  }
+
   /**
    *  This checks for GDPR compliance.
    *  If a blob has been deleted from remote on-prem servers, it must be absent in local-store
@@ -99,11 +116,7 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   @Override
   protected void applyDelete(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo) {
-    // If we are here, then the blob exists locally and is not deleted.
-    EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.DELETE);
-    EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
-    // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    throw new UnsupportedOperationException("applyDelete is unsupported");
   }
 
   /**
@@ -113,11 +126,7 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   @Override
   protected void applyTtlUpdate(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo) {
-    // If we are here, then the blob exists locally and is not ttl-updated.
-    EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.TTL_UPDATE);
-    EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
-    // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    throw new UnsupportedOperationException("applyTtlUpdate is unsupported");
   }
 
   /**
@@ -127,11 +136,7 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   @Override
   protected void applyUndelete(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo) {
-    // If we are here, then the blob exists locally and is not un-deleted.
-    EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.UNDELETE);
-    EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
-    // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    throw new UnsupportedOperationException("applyUndelete is unsupported");
   }
 
   /**
@@ -143,29 +148,73 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   @Override
   protected void afterHandleReplicaMetadataResponse(RemoteReplicaGroup group) {
-    List<ExchangeMetadataResponse> exchangeMetadataResponseList = group.getExchangeMetadataResponseList();
-    List<RemoteReplicaInfo> replicasToReplicatePerNode = group.getRemoteReplicaInfos();
+    group.setState(ReplicaGroupReplicationState.DONE);
+  }
+
+  protected MessageInfo mapBlob(MessageInfo blob) {
+    StoreKey keyConvert = null;
     try {
-      EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.PUT);
-      EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
-      for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
-        ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
-        RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
-        if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
-          for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
-            // Check local store once before logging an error
-            checkLocalStore(messageInfo, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
-          }
-          // Advance token so that we make progress in spite of missing keys,
-          // else the replication code will be stuck waiting for missing keys to appear in local store.
-          advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
-        }
-      }
-    } catch (Exception e) {
-      logger.error("Fail to check Local store", e);
-    } finally {
-      group.setState(ReplicaGroupReplicationState.DONE);
+      // Don't do batch-convert, if one replica in batch fails, then it affects handling others
+      keyConvert = storeKeyConverter.convert(Collections.singleton(blob.getStoreKey()))
+          .get(blob.getStoreKey());
+    } catch (Throwable e) {
+      metrics.backupIntegrityError.inc();
+      logger.error("Failed to convert blobID {} due to ", blob.getStoreKey().getID(), e.toString());
     }
+    return new MessageInfo(keyConvert, blob);
+  }
+
+  /**
+   * Checks each blob from server with its counterpart in cloud backup.
+   * There are 4 cases.
+   * server-blob : cloud-blob
+   * absent : absent  => nothing to do
+   * absent : present => print to file, blob may be compacted or missing on server
+   * present: absent  => print to file, blob may not have been backed up or somehow missing in cloud backup
+   * present: present => check blob-state matches, if not then print to file
+   * @param response The {@link ReplicaMetadataResponse}.
+   * @param replicas
+   * @param server The remote {@link DataNodeId}.
+   * @return
+   */
+  List<ExchangeMetadataResponse> handleReplicaMetadataResponse(ReplicaMetadataResponse response,
+      List<RemoteReplicaInfo> replicas, DataNodeId server) {
+    IntStream.range(0, response.getReplicaMetadataResponseInfoList().size())
+        .filter(i -> response.getReplicaMetadataResponseInfoList().get(i).getError() == ServerErrorCode.No_Error)
+        .forEach(i -> {
+          ReplicaMetadataResponseInfo metadata = response.getReplicaMetadataResponseInfoList().get(i);
+          RemoteReplicaInfo replica = replicas.get(i);
+          String output = getFilePath(replica, BLOB_STATE_MISMATCHES_FILE);
+          metadata.getMessageInfoList().stream()
+              .map(serverBlob -> {
+                numBlobScanned.incrementAndGet();
+                replica.setReplicatedUntilTime(Math.max(replica.getReplicatedUntilTime(),
+                    serverBlob.getOperationTimeMs()));
+                return mapBlob(serverBlob);
+              })
+              .filter(serverBlob -> serverBlob.getStoreKey() != null)
+              .map(serverBlob -> {
+                MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey());
+                // azureBlob can be null, but serverBlob will never be null,
+                // hence serverBlob.isEqual() and _not_ azureBlob.isEqual()
+                return new ImmutableTriple(serverBlob, azureBlob, serverBlob.isEqual(azureBlob));
+              })
+              .filter(tuple -> !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
+              .forEach(tuple -> {
+                MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
+                MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+                    status.stream().map(s -> s.name()).collect(Collectors.joining(",")),
+                    MessageInfo.toText(serverBlob), MessageInfo.toText(azureBlob), "\n");
+                fileManager.appendToFile(output, msg);
+                metrics.backupIntegrityError.inc();
+              }); // For each message from replica
+          // TODO: To compare data, treat all keys as missing, do not mark rgroup as "done" and compare blob-crc.
+          advanceToken(replica, new ExchangeMetadataResponse(Collections.emptySet(), metadata.getFindToken(),
+              metadata.getRemoteReplicaLagInBytes(), Collections.emptyMap(), time));
+    }); // For each replica-response
+    return Collections.emptyList();
   }
 
   /**
@@ -182,72 +231,68 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
-   * This method checks if the blob is in local store in an acceptable state or encounters an acceptable error code
-   * @param remoteBlob the {@link MessageInfo} that will be checked for in the local-store
-   * @param remoteReplicaInfo The remote replica that is being replicated from
-   * @param acceptableLocalBlobStates Acceptable states in which the blob must be present in the local-store
-   * @param acceptableStoreErrorCodes Acceptable error codes when retrieving the blob from local-store
+   * Add a replica to be copied from server.
+   * Additionally, clears some local files to store results and calls parent method.
+   * @param rinfo {@link RemoteReplicaInfo} to add.
    */
-  protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
-      EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
-    try {
-      EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
-      // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
-      // However, get() can also do this with additional and appropriate StoreGetOptions.
-      MessageInfo localBlob = remoteReplicaInfo.getLocalStore().findKey(remoteBlob.getStoreKey());
-      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-      messageInfoTypes.retainAll(getBlobStates(localBlob));
-      if (messageInfoTypes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), remoteReplicaInfo,
-            acceptableLocalBlobStates, remoteBlob.getStoreKey(), remoteBlob.getOperationTimeMs(),
-            getBlobStates(remoteBlob), getBlobStates(localBlob));
-      }
-    } catch (StoreException e) {
-      EnumSet<StoreErrorCodes> storeErrorCodes = EnumSet.copyOf(acceptableStoreErrorCodes);
-      // retainAll is set intersection. If the result is empty, then the result of intersection is a null set
-      storeErrorCodes.retainAll(Collections.singleton(e.getErrorCode()));
-      if (storeErrorCodes.isEmpty()) {
-        fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE), remoteReplicaInfo,
-            acceptableLocalBlobStates, remoteBlob.getStoreKey(), remoteBlob.getOperationTimeMs(),
-            getBlobStates(remoteBlob), e.getErrorCode());
-      }
-    }
+  @Override
+  public void addRemoteReplicaInfo(RemoteReplicaInfo rinfo) {
+    String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+        "datetime",
+        "blob_state_match_status",
+        "server_blob_state",
+        "azure_blob_state",
+        "\n");
+    fileManager.truncateAndWriteToFile(getFilePath(rinfo, BLOB_STATE_MISMATCHES_FILE), msg);
+    super.addRemoteReplicaInfo(rinfo);
   }
 
   /**
-   * Returns an enum corresponding to blob state
-   * @param messageInfo Blob state as message info object
-   * @return Blob state as enum
+   * Prints keys absent in server, but present in cloud. This may happen if the blob is compacted or somehow went
+   * missing from the server but is still present in azure backups.
+   * @param rinfo
    */
-  protected EnumSet<MessageInfoType> getBlobStates(MessageInfo messageInfo) {
-    // Blob must be PUT to begin with
-    EnumSet<MessageInfoType> messageInfoTypes = EnumSet.of(MessageInfoType.PUT);
-    if (messageInfo.isDeleted()) {
-      messageInfoTypes.add(MessageInfoType.DELETE);
-    }
-    if (messageInfo.isExpired()) {
-      messageInfoTypes.add(MessageInfoType.EXPIRED);
-    }
-    if (messageInfo.isTtlUpdated()) {
-      messageInfoTypes.add(MessageInfoType.TTL_UPDATE);
-    }
-    if (messageInfo.isUndeleted()) {
-      messageInfoTypes.add(MessageInfoType.UNDELETE);
-    }
-    return messageInfoTypes;
+  public void printKeysAbsentInServer(RemoteReplicaInfo rinfo) {
+    String output = getFilePath(rinfo, BLOB_STATE_MISMATCHES_FILE);
+    azureBlobMap.values().forEach(azureBlob -> {
+      String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+          azureBlob.isEqual(null).stream().map(s -> s.name()).collect(Collectors.joining(",")),
+          MessageInfo.toText(null), MessageInfo.toText(azureBlob),
+          "\n");
+      fileManager.appendToFile(output, msg);
+      metrics.backupIntegrityError.inc();
+    });
+    azureBlobMap.clear();
+  }
+
+  public int getNumBlobScanned() {
+    return numBlobScanned.get();
   }
 
   /**
    * Prints a log if local store has caught up with remote store
-   * @param remoteReplicaInfo Info about remote replica
-   * @param exchangeMetadataResponse Metadata response object
+   * @param rinfo Info about remote replica
+   * @param mdResponse Metadata response object
    */
   @Override
-  protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse) {
-    // This will help us know when to stop DR process for sealed partitions
-    fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), remoteReplicaInfo,
-        exchangeMetadataResponse.localLagFromRemoteInBytes);
+  protected void logReplicationStatus(RemoteReplicaInfo rinfo,
+      ExchangeMetadataResponse mdResponse) {
+    JSONObject json = new JSONObject();
+    try {
+      // Ensures json fields are printed exactly in the order they are inserted
+      Field changeMap = json.getClass().getDeclaredField("map");
+      changeMap.setAccessible(true);
+      changeMap.set(json, new LinkedHashMap<>());
+      changeMap.setAccessible(false);
+    } catch (IllegalAccessException | NoSuchFieldException e) {
+      logger.error(e.getMessage());
+      json = new JSONObject();
+    }
+    // Maintain alphabetical order of fields for string match
+    json.put("replica_token", rinfo.getToken().toString());
+    json.put("replicated_until", rinfo.getReplicatedUntilTime());
+    // Pretty print with indent for easy viewing
+    fileManager.truncateAndWriteToFile(getFilePath(rinfo, REPLICA_STATUS_FILE), json.toString(4));
   }
 
   /**

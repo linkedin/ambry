@@ -1200,33 +1200,6 @@ public class ReplicationTestHelper {
     public MockBackupCheckerFileManager(ReplicationConfig replicationConfig, MetricRegistry metricRegistry) {
       super(replicationConfig, metricRegistry);
     }
-
-    @Override
-    protected boolean appendToFile(String filePath, RemoteReplicaInfo remoteReplicaInfo,
-        EnumSet<MessageInfoType> acceptableLocalBlobStates, StoreKey storeKey, long operationTime,
-        EnumSet<MessageInfoType> remoteBlobState, Object localBlobState) {
-      PartitionId partitionId = remoteReplicaInfo.getReplicaId().getPartitionId();
-      BackupCheckerAppendRecord record = new BackupCheckerAppendRecord();
-      record.filePath = filePath;
-      record.remoteReplicaInfo = remoteReplicaInfo;
-      record.acceptableLocalBlobStates = acceptableLocalBlobStates;
-      record.storeKey = storeKey;
-      record.operationTime = operationTime;
-      record.remoteBlobState = remoteBlobState;
-      if (localBlobState instanceof StoreErrorCodes) {
-        record.storeErrorCodes = (StoreErrorCodes) localBlobState;
-      } else {
-        record.localBlobState = (EnumSet<MessageInfoType>) localBlobState;
-      }
-      appendRecordsForPartitions.computeIfAbsent(partitionId, k -> new HashMap<>()).put(storeKey, record);
-      return true;
-    }
-
-    @Override
-    protected boolean truncateAndWriteToFile(String filePath, RemoteReplicaInfo remoteReplicaInfo,
-        long localLagFromRemoteInBytes) {
-      return false;
-    }
   }
 
   public static class BackupCheckerAppendRecord {

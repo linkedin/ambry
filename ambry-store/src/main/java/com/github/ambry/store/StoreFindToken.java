@@ -82,7 +82,7 @@ public class StoreFindToken implements FindToken {
   /**
    * Uninitialized token. Refers to the starting of the log.
    */
-  StoreFindToken() {
+  public StoreFindToken() {
     this(FindTokenType.Uninitialized, null, null, null, null, true, CURRENT_VERSION, null, null,
         UNINITIALIZED_RESET_KEY_VERSION);
   }

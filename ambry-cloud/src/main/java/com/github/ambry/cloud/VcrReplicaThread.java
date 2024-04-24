@@ -171,7 +171,7 @@ public class VcrReplicaThread extends ReplicaThread {
     // | partition     | host1   | Journal   | 3_14       | 12     | none     | 2024_Feb_11_14_21_00 | AAASLKJDFX  |
     // | partition     | host2   | Index     | 2_12       | 32     | AAEWsXZ  | 2024_Jan_02_13_01_00 | AAAEWODSDS  |
     // =============================================================================================================
-    long lastOpTime = remoteReplicaInfo.getReplicatedUntilUTC();
+    long lastOpTime = remoteReplicaInfo.getReplicatedUntilTime();
     String partitionKey = String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId());
     String rowKey = remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname();
     DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
