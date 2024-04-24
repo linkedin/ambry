@@ -244,6 +244,89 @@ public class S3IntegrationTest extends FrontendIntegrationTestBase {
     }
   }
 
+  @Test
+  public void s3HttpGetTest() throws Exception {
+    Container CONTAINER = ACCOUNT.getAllContainers().iterator().next();
+    String account = ACCOUNT.getName();
+    String container = CONTAINER.getName();
+    // test getObjectLockConfiguration
+    doGetObjectLockConfigurationTest(account, container);
+
+    String key = "abcdef";
+    int contentSize = 2048;
+    byte[] content = TestUtils.getRandomBytes(contentSize);
+
+    // put blob
+    doPutBlob(account, container, key, contentSize, content);
+
+    // test getBlob
+    doGetAndVerifyBlob(account, container, key, contentSize, content);
+
+    // test listBlob
+    doListBlob(account, container, key);
+  }
+
+  private void doGetObjectLockConfigurationTest(String account, String container) throws Exception {
+    String uri = String.format("/s3/%s/%s?object-lock=", account, container);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, uri, headers, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected status", HttpResponseStatus.NOT_FOUND, response.status());
+  }
+
+  private void doPutBlob(String account, String container, String key, int contentSize, byte[] content)
+      throws Exception {
+    String uri = String.format("/s3/%s/%s/%s", account, container, key);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    headers.add(CONTENT_TYPE, OCTET_STREAM_CONTENT_TYPE);
+    headers.add(CONTENT_LENGTH, contentSize);
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.PUT, uri, headers, ByteBuffer.wrap(content));
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected status", HttpResponseStatus.OK, response.status());
+  }
+
+  private void doGetAndVerifyBlob(String account, String container, String key, long expectedContentLength,
+      byte[] expectedContent) throws Exception {
+    // Get the blob and verify content
+    String uri = String.format("/s3/%s/%s/%s", account, container, key);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, uri, headers, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected status", HttpResponseStatus.OK, response.status());
+    assertEquals("Unexpected content type", OCTET_STREAM_CONTENT_TYPE, response.headers().get(CONTENT_TYPE));
+    int contentLength = response.headers().getInt(CONTENT_LENGTH);
+    assertEquals("Unexpected content length", expectedContentLength, contentLength);
+    byte[] content = getContent(responseParts.queue, expectedContentLength).array();
+    assertArrayEquals("Unexpected content", expectedContent, content);
+  }
+
+  private void doListBlob(String account, String container, String key) throws Exception {
+    // List the blob
+    String uri =
+        String.format("/s3/%s/%s/?prefix=%s&delimiter=/&max-keys=1&encoding-type=url", account, container, key);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, uri, headers, null);
+    NettyClient.ResponseParts responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
+    HttpResponse response = getHttpResponse(responseParts);
+    assertEquals("Unexpected status", HttpResponseStatus.OK, response.status());
+    assertEquals("Unexpected content type", XML_CONTENT_TYPE, response.headers().get(CONTENT_TYPE));
+    int length = response.headers().getInt(CONTENT_LENGTH);
+    byte[] content = getContent(responseParts.queue, length).array();
+
+    // Verify results
+    ListBucketResult listBucketResult = xmlMapper.readValue(content, ListBucketResult.class);
+    Contents contents = listBucketResult.getContents().get(0);
+    assertEquals("Mismatch in key name", key, contents.getKey());
+    assertEquals("Mismatch in key count", 1, listBucketResult.getKeyCount());
+    assertEquals("Mismatch in prefix", key, listBucketResult.getPrefix());
+    assertEquals("Mismatch in delimiter", "/", listBucketResult.getDelimiter());
+    assertEquals("Mismatch in max key count", 1, listBucketResult.getMaxKeys());
+    assertEquals("Mismatch in encoding type", "url", listBucketResult.getEncodingType());
+  }
+
   /**
    * Builds properties required to start a {@link RestServer} as an Ambry frontend server.
    * @param trustStoreFile the trust store file to add certificates to for SSL testing.
