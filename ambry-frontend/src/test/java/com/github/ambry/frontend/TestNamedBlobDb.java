@@ -119,7 +119,8 @@ public class TestNamedBlobDb implements NamedBlobDb {
       }
       if (deleteTs != 0 && deleteTs < time.milliseconds()) {
         // ignore
-      } else if (record.getExpirationTimeMs() != 0 && record.getExpirationTimeMs() < time.milliseconds()) {
+      } else if (record.getExpirationTimeMs() != Utils.Infinite_Time
+          && record.getExpirationTimeMs() < time.milliseconds()) {
         // ignore
       } else {
         entries.add(record);
