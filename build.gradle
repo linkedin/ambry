@@ -292,6 +292,9 @@ project(':ambry-clustermap') {
                 project(':ambry-utils')
         compile "org.apache.helix:helix-core:$helixVersion"
         compile "org.apache.helix:helix-lock:$helixVersion"
+        compile "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
+        compile "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
+        compile "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
         compile "io.dropwizard.metrics:metrics-core:$metricsVersion"
         compile "org.json:json:$jsonVersion"
         testCompile project(':ambry-commons')

@@ -14,6 +14,8 @@
 package com.github.ambry.clustermap;
 
 import com.codahale.metrics.MetricRegistry;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.ambry.accountstats.AccountStatsStore;
 import com.github.ambry.commons.Callback;
 import com.github.ambry.commons.CommonUtils;
@@ -39,9 +41,11 @@ import org.apache.helix.AccessOption;
 import org.apache.helix.HelixAdmin;
 import org.apache.helix.HelixManager;
 import org.apache.helix.InstanceType;
+import org.apache.helix.PropertyKey;
 import org.apache.helix.lock.LockScope;
 import org.apache.helix.lock.helix.HelixLockScope;
 import org.apache.helix.lock.helix.ZKDistributedNonblockingLock;
+import org.apache.helix.model.ControllerHistory;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.participant.StateMachineEngine;
 import org.apache.helix.store.HelixPropertyStore;
@@ -78,6 +82,7 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
   private volatile boolean inMaintenanceMode = false;
   private volatile String maintenanceModeReason = null;
   final Map<StateModelListenerType, PartitionStateChangeListener> partitionStateChangeListeners;
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   private static final Logger logger = LoggerFactory.getLogger(HelixParticipant.class);
 
@@ -481,9 +486,15 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
         throw new IllegalStateException("Cluster is not in maintenance mode");
       }
       try {
-        helixAdmin.manuallyEnableMaintenanceMode(clusterName, false, maintenanceModeReason, null);
+        MaintenanceRecord record = getLastMaintenanceRecord();
+        if (record.reason.equals(maintenanceModeReason)) {
+          helixAdmin.manuallyEnableMaintenanceMode(clusterName, false, maintenanceModeReason, null);
+          logger.info("Cluster {} exits maintenance mode: {}", clusterName, maintenanceModeReason);
+        } else {
+          logger.error("Maintenance record is not expected, operation type: {}, reason: {}", record.operationType,
+              record.reason);
+        }
         inMaintenanceMode = false;
-        logger.info("Cluster {} exits maintenance mode: {}", clusterName, maintenanceModeReason);
         maintenanceModeReason = null;
         exitMaintenanceMode = true;
       } catch (Exception e) {
@@ -491,6 +502,43 @@ public class HelixParticipant implements ClusterParticipant, PartitionStateChang
       }
     }
     return exitMaintenanceMode;
+  }
+
+  /**
+   * Maintenance record. This is an internal structure in helix. It might be changed with new version of helix controller.
+   */
+  static class MaintenanceRecord {
+    @JsonProperty("DATE")
+    public String date;
+    @JsonProperty("TIMESTAMP")
+    public String timestamp;
+    @JsonProperty("OPERATION_TYPE")
+    public String operationType;
+    @JsonProperty("REASON")
+    public String reason;
+    @JsonProperty("TRIGGERED_BY")
+    public String triggeredBy;
+    @JsonProperty("USER")
+    public String user;
+  }
+
+  /**
+   * Get the latest maintenance record. We are assuming this will only be called after cluster enters maintenance mode
+   * so the maintanance record should not be empty. It will throw an exception if there is no maintenance record present
+   * in helix.
+   * @return The latest {@link MaintenanceRecord}.
+   * @throws Exception
+   */
+  MaintenanceRecord getLastMaintenanceRecord() throws Exception {
+    PropertyKey.Builder keyBuilder = new PropertyKey.Builder(clusterName);
+    PropertyKey key = keyBuilder.controllerLeaderHistory();
+    ControllerHistory controllerHistory = manager.getHelixDataAccessor().getProperty(key);
+    List<String> maintenanceHistory = controllerHistory.getMaintenanceHistoryList();
+    if (maintenanceHistory == null || maintenanceHistory.isEmpty()) {
+      throw new IllegalStateException("Missing maintenance history");
+    }
+    String serializedRecord = maintenanceHistory.get(maintenanceHistory.size() - 1);
+    return objectMapper.readValue(serializedRecord, MaintenanceRecord.class);
   }
 
   @Override

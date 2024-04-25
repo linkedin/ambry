@@ -923,9 +923,28 @@ public class HelixParticipantTest {
     HelixParticipant helixParticipant =
         new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
             getDefaultZkConnectStr(clusterMapConfig), true);
+    String newPort = null;
+    while (newPort == null || props.getProperty("clustermap.port").equals(newPort)) {
+      newPort = String.valueOf(testHardwareLayout.getRandomDataNodeFromDc(dcName).getPort());
+    }
+    Properties props2 = new Properties();
+    props2.setProperty("clustermap.host.name", props.getProperty("clustermap.host.name"));
+    props2.setProperty("clustermap.port", newPort);
+    props2.setProperty("clustermap.cluster.name", clusterName);
+    props2.setProperty("clustermap.datacenter.name", dcName);
+    props2.setProperty("clustermap.dcs.zk.connect.strings", zkJson.toString(2));
+    props2.setProperty("clustermap.state.model.definition", stateModelDef);
+    props2.setProperty("clustermap.data.node.config.source.type", dataNodeConfigSourceType.name());
+    props2.setProperty("clustermap.enable.state.model.listener", "true");
+    props2.setProperty(ClusterMapConfig.DISTRIBUTED_LOCK_LEASE_TIMEOUT_IN_MS,
+        String.valueOf(distributedLockLeaseTimeout));
+    ClusterMapConfig clusterMapConfig2 = new ClusterMapConfig(new VerifiableProperties(props2));
     HelixParticipant helixParticipant2 =
-        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig, new HelixFactory(), metricRegistry,
-            getDefaultZkConnectStr(clusterMapConfig), true);
+        new HelixParticipant(mock(HelixClusterManager.class), clusterMapConfig2, new HelixFactory(), metricRegistry,
+            getDefaultZkConnectStr(clusterMapConfig2), true);
+    // Calling participate so manager can connect to zookeeper
+    helixParticipant.participate(Collections.emptyList(), null, null);
+    helixParticipant2.participate(Collections.emptyList(), null, null);
 
     try {
       helixParticipant.exitMaintenanceMode();
@@ -934,12 +953,50 @@ public class HelixParticipantTest {
     }
     assertTrue("First participant should enter maintenance mode", helixParticipant.enterMaintenanceMode("ForTesting"));
     assertFalse("Second participant should fail at entering maintenance mode",
-        helixParticipant2.enterMaintenanceMode("ForTesting"));
+        helixParticipant2.enterMaintenanceMode("ForTesting2"));
+
+    HelixParticipant.MaintenanceRecord record = helixParticipant.getLastMaintenanceRecord();
+    assertEquals("ENTER", record.operationType);
+    assertEquals("ForTesting", record.reason);
 
     assertTrue("First participant should exit maintenance mode", helixParticipant.exitMaintenanceMode());
+    record = helixParticipant.getLastMaintenanceRecord();
+    assertEquals("EXIT", record.operationType);
+    assertEquals("ForTesting", record.reason);
+
     assertTrue("Second participant should enter maintenance mode",
-        helixParticipant2.enterMaintenanceMode("ForTesting"));
+        helixParticipant2.enterMaintenanceMode("ForTesting2"));
+    record = helixParticipant.getLastMaintenanceRecord();
+    assertEquals("ENTER", record.operationType);
+    assertEquals("ForTesting2", record.reason);
+
     assertTrue("Second participant should exit maintenance mode", helixParticipant2.exitMaintenanceMode());
+    record = helixParticipant.getLastMaintenanceRecord();
+    assertEquals("EXIT", record.operationType);
+    assertEquals("ForTesting2", record.reason);
+
+    // Enter MM again, but this time, other application might enter MM as well
+    assertTrue("First participant should enter maintenance mode", helixParticipant.enterMaintenanceMode("ForTesting"));
+    helixParticipant2.getHelixAdmin().manuallyEnableMaintenanceMode(clusterName, true, "OVERRIDE", null);
+    record = helixParticipant.getLastMaintenanceRecord();
+    assertEquals("ENTER", record.operationType);
+    assertEquals("OVERRIDE", record.reason);
+    assertTrue("First participant should exit maintenance mode without calling helix participant",
+        helixParticipant.exitMaintenanceMode());
+    record = helixParticipant.getLastMaintenanceRecord();
+    assertEquals("ENTER", record.operationType);
+    assertEquals("OVERRIDE", record.reason);
+    helixParticipant2.getHelixAdmin().manuallyEnableMaintenanceMode(clusterName, false, "OVERRIDE", null);
+
+    // Enter MM again, but this time, other application would exit
+    assertTrue("First participant should enter maintenance mode", helixParticipant.enterMaintenanceMode("ForTesting"));
+    helixParticipant2.getHelixAdmin().manuallyEnableMaintenanceMode(clusterName, true, "OVERRIDE", null);
+    helixParticipant2.getHelixAdmin().manuallyEnableMaintenanceMode(clusterName, false, "OVERRIDE", null);
+    record = helixParticipant.getLastMaintenanceRecord();
+    assertEquals("EXIT", record.operationType);
+    assertEquals("OVERRIDE", record.reason);
+    assertTrue("First participant should exit maintenance mode without calling helix participant",
+        helixParticipant.exitMaintenanceMode());
 
     helixParticipant.close();
     helixParticipant2.close();
