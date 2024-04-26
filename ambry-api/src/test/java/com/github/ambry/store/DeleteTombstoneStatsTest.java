@@ -56,5 +56,19 @@ public class DeleteTombstoneStatsTest {
     Assert.assertEquals(133 * 7, stats.permanentSizeSevenDays);
     Assert.assertEquals(133 * 10, stats.permanentSizeTenDays);
     Assert.assertEquals(133 * 14, stats.permanentSizeFourteenDays);
+
+    DeleteTombstoneStats another = builder.build();
+    stats = stats.merge(another);
+    Assert.assertEquals(11 * 2, stats.expiredCount);
+    Assert.assertEquals(3000 * 2, stats.expiredSize);
+    Assert.assertEquals(21 * 2, stats.permanentCount);
+    Assert.assertEquals(expectedPermanentSize * 2, stats.permanentSize);
+    Assert.assertEquals(133 * 1 * 2, stats.permanentSizeOneDay);
+    Assert.assertEquals(133 * 2 * 2, stats.permanentSizeTwoDays);
+    Assert.assertEquals(133 * 3 * 2, stats.permanentSizeThreeDays);
+    Assert.assertEquals(133 * 5 * 2, stats.permanentSizeFiveDays);
+    Assert.assertEquals(133 * 7 * 2, stats.permanentSizeSevenDays);
+    Assert.assertEquals(133 * 10 * 2, stats.permanentSizeTenDays);
+    Assert.assertEquals(133 * 14 * 2, stats.permanentSizeFourteenDays);
   }
 }
