@@ -1622,7 +1622,7 @@ class CuratedLogIndexState {
                   if (currentValue.getExpiresAtMs() == Utils.Infinite_Time || currentValue.isTtlUpdate()) {
                     // TODO check validity of permanent delete tombstone
                     builder.permanentCountInc()
-                        .permanentSizeInc(currentValue.getSize(), currentValue.getOperationTimeInMs());
+                        .permanentSizeInc(currentValue.getSize(), latestValue.getOperationTimeInMs());
                   } else {
                     builder.expiredCountInc().expiredSizeInc(currentValue.getSize());
                     if (invalidateExpiredDelete && currentValue.getExpiresAtMs() < expiryReferenceTimeMs) {
