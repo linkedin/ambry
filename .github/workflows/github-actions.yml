@@ -56,7 +56,8 @@ jobs:
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v4
+        timeout-minutes: 2
 
   store-test:
 
@@ -82,7 +83,8 @@ jobs:
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v4
+        timeout-minutes: 2
 
   int-test:
 
@@ -127,7 +129,8 @@ jobs:
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v4
+        timeout-minutes: 2
 
   server-int-test:
 
@@ -172,7 +175,8 @@ jobs:
           gradle-version: wrapper
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v4
+        timeout-minutes: 2
 
   publish:
 
