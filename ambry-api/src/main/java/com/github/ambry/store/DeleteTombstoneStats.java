@@ -219,7 +219,6 @@ public class DeleteTombstoneStats {
         for (Pair<Long, AtomicLong> p : deltas) {
           if (p.getFirst() >= d) {
             p.getSecond().addAndGet(size);
-            break;
           }
         }
       }

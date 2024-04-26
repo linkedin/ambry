@@ -50,12 +50,12 @@ public class DeleteTombstoneStatsTest {
     Assert.assertEquals(21, stats.permanentCount);
     Assert.assertEquals(expectedPermanentSize, stats.permanentSize);
     Assert.assertEquals(133 * 1, stats.permanentSizeOneDay);
-    Assert.assertEquals(133 * 2, stats.permanentSizeTwoDays);
-    Assert.assertEquals(133 * 3, stats.permanentSizeThreeDays);
-    Assert.assertEquals(133 * 5, stats.permanentSizeFiveDays);
-    Assert.assertEquals(133 * 7, stats.permanentSizeSevenDays);
-    Assert.assertEquals(133 * 10, stats.permanentSizeTenDays);
-    Assert.assertEquals(133 * 14, stats.permanentSizeFourteenDays);
+    Assert.assertEquals(133 * 3, stats.permanentSizeTwoDays);
+    Assert.assertEquals(133 * 6, stats.permanentSizeThreeDays);
+    Assert.assertEquals(133 * 11, stats.permanentSizeFiveDays);
+    Assert.assertEquals(133 * 18, stats.permanentSizeSevenDays);
+    Assert.assertEquals(133 * 28, stats.permanentSizeTenDays);
+    Assert.assertEquals(133 * 42, stats.permanentSizeFourteenDays);
 
     DeleteTombstoneStats another = builder.build();
     stats = stats.merge(another);
@@ -64,11 +64,11 @@ public class DeleteTombstoneStatsTest {
     Assert.assertEquals(21 * 2, stats.permanentCount);
     Assert.assertEquals(expectedPermanentSize * 2, stats.permanentSize);
     Assert.assertEquals(133 * 1 * 2, stats.permanentSizeOneDay);
-    Assert.assertEquals(133 * 2 * 2, stats.permanentSizeTwoDays);
-    Assert.assertEquals(133 * 3 * 2, stats.permanentSizeThreeDays);
-    Assert.assertEquals(133 * 5 * 2, stats.permanentSizeFiveDays);
-    Assert.assertEquals(133 * 7 * 2, stats.permanentSizeSevenDays);
-    Assert.assertEquals(133 * 10 * 2, stats.permanentSizeTenDays);
-    Assert.assertEquals(133 * 14 * 2, stats.permanentSizeFourteenDays);
+    Assert.assertEquals(133 * 3 * 2, stats.permanentSizeTwoDays);
+    Assert.assertEquals(133 * 6 * 2, stats.permanentSizeThreeDays);
+    Assert.assertEquals(133 * 11 * 2, stats.permanentSizeFiveDays);
+    Assert.assertEquals(133 * 18 * 2, stats.permanentSizeSevenDays);
+    Assert.assertEquals(133 * 28 * 2, stats.permanentSizeTenDays);
+    Assert.assertEquals(133 * 42 * 2, stats.permanentSizeFourteenDays);
   }
 }
