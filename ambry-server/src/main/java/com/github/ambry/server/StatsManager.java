@@ -32,11 +32,11 @@ import com.github.ambry.config.StatsManagerConfig;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
 import com.github.ambry.server.storagestats.HostPartitionClassStorageStats;
+import com.github.ambry.store.DeleteTombstoneStats;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreStats;
-import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
@@ -59,7 +59,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
-import static com.github.ambry.store.StoreStats.*;
 import static com.github.ambry.utils.Utils.*;
 
 
@@ -82,12 +81,8 @@ class StatsManager {
   private final StatsManagerConfig config;
   private final ClusterParticipant clusterParticipant;
   private final DataNodeId currentNode;
-  private long expiredDeleteTombstoneCount = 0;
-  private long expiredDeleteTombstoneTotalSize = 0;
-  private long permanentDeleteTombstoneCount = 0;
-  private long permanentDeleteTombstoneTotalSize = 0;
-  private final AtomicReference<AggregatedDeleteTombstoneStats> aggregatedDeleteTombstoneStats =
-      new AtomicReference<>(new AggregatedDeleteTombstoneStats());
+  private final AtomicReference<DeleteTombstoneStats> aggregatedDeleteTombstoneStats =
+      new AtomicReference<>(DeleteTombstoneStats.BASE);
   final ConcurrentMap<PartitionId, ReplicaId> partitionToReplicaMap;
 
   /**
@@ -264,7 +259,7 @@ class StatsManager {
    * Exposed for testing.
    * @return aggregated delete tombstone stats.
    */
-  AggregatedDeleteTombstoneStats getAggregatedDeleteTombstoneStats() {
+  DeleteTombstoneStats getAggregatedDeleteTombstoneStats() {
     return aggregatedDeleteTombstoneStats.get();
   }
 
@@ -273,66 +268,17 @@ class StatsManager {
    * @param storeStats the {@link StoreStats} that contains delete tombstone stats of single store.
    */
   private void updateDeleteTombstoneStats(StoreStats storeStats) {
-    Map<String, Pair<Long, Long>> storeDeleteStats = storeStats.getDeleteTombstoneStats();
-    Pair<Long, Long> expiredDeleteTombstoneStats = storeDeleteStats.get(EXPIRED_DELETE_TOMBSTONE);
-    Pair<Long, Long> permanentDeleteTombstoneStats = storeDeleteStats.get(PERMANENT_DELETE_TOMBSTONE);
-    expiredDeleteTombstoneCount += expiredDeleteTombstoneStats.getFirst();
-    expiredDeleteTombstoneTotalSize += expiredDeleteTombstoneStats.getSecond();
-    permanentDeleteTombstoneCount += permanentDeleteTombstoneStats.getFirst();
-    permanentDeleteTombstoneTotalSize += permanentDeleteTombstoneStats.getSecond();
-  }
-
-  /**
-   * Update the aggregated delete tombstone stats by atomic switch.
-   */
-  void updateAggregatedDeleteTombstoneStats() {
-    aggregatedDeleteTombstoneStats.set(
-        new AggregatedDeleteTombstoneStats(expiredDeleteTombstoneCount, expiredDeleteTombstoneTotalSize,
-            permanentDeleteTombstoneCount, permanentDeleteTombstoneTotalSize));
+    DeleteTombstoneStats currentDeleteStats = aggregatedDeleteTombstoneStats.get();
+    DeleteTombstoneStats anotherDeleteStats = storeStats.getDeleteTombstoneStats();
+    DeleteTombstoneStats newDeleteStats = currentDeleteStats.merge(anotherDeleteStats);
+    aggregatedDeleteTombstoneStats.set(newDeleteStats);
   }
 
   /**
    * Reset delete tombstone related stats.
    */
   private void resetDeleteTombstoneStats() {
-    expiredDeleteTombstoneCount = 0;
-    expiredDeleteTombstoneTotalSize = 0;
-    permanentDeleteTombstoneCount = 0;
-    permanentDeleteTombstoneTotalSize = 0;
-  }
-
-  /**
-   * A class to hold aggregated delete tombstone stats result. This is used by {@link StatsManagerMetrics}.
-   */
-  static class AggregatedDeleteTombstoneStats {
-    Pair<Long, Long> aggregatedExpiredDeleteTombstoneStats;
-    Pair<Long, Long> aggregatedPermanentDeleteTombstoneStats;
-
-    AggregatedDeleteTombstoneStats() {
-      this(0, 0, 0, 0);
-    }
-
-    AggregatedDeleteTombstoneStats(long expiredDeleteCount, long expiredDeleteSize, long permanentDeleteCount,
-        long permanentDeleteSize) {
-      aggregatedExpiredDeleteTombstoneStats = new Pair<>(expiredDeleteCount, expiredDeleteSize);
-      aggregatedPermanentDeleteTombstoneStats = new Pair<>(permanentDeleteCount, permanentDeleteSize);
-    }
-
-    long getExpiredDeleteTombstoneCount() {
-      return aggregatedExpiredDeleteTombstoneStats.getFirst();
-    }
-
-    long getExpiredDeleteTombstoneSize() {
-      return aggregatedExpiredDeleteTombstoneStats.getSecond();
-    }
-
-    long getPermanentDeleteTombstoneCount() {
-      return aggregatedPermanentDeleteTombstoneStats.getFirst();
-    }
-
-    long getPermanentDeleteTombstoneSize() {
-      return aggregatedPermanentDeleteTombstoneStats.getSecond();
-    }
+    aggregatedDeleteTombstoneStats.set(DeleteTombstoneStats.BASE);
   }
 
   /**
@@ -370,7 +316,6 @@ class StatsManager {
         List<String> unreachableStores = examineUnreachablePartitions(unreachablePartitions);
 
         // 3. Update the delete tombstone related stats.
-        updateAggregatedDeleteTombstoneStats();
         metrics.initDeleteStatsGaugesIfNeeded();
         if (!cancelled) {
           metrics.totalFetchAndAggregateTimeMs.update(time.milliseconds() - totalFetchAndAggregateStartTimeMs);

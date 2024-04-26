@@ -26,7 +26,6 @@ import java.util.Map;
 public interface StoreStats {
   String EXPIRED_DELETE_TOMBSTONE = "ExpiredDeleteTombstone";
   String PERMANENT_DELETE_TOMBSTONE = "PermanentDeleteTombstone";
-
   /**
    * Gets the size of valid data at a particular point in time. The caller specifies a reference time and acceptable
    * resolution for the stats in the form of a {@link TimeRange}. The store will return valid data size for a point
@@ -55,10 +54,8 @@ public interface StoreStats {
       List<Short> accountIdToExclude) throws StoreException;
 
   /**
-   * Fetches delete tombstone stats grouped by different types, i.e. {@link StoreStats#EXPIRED_DELETE_TOMBSTONE},
-   * {@link StoreStats#PERMANENT_DELETE_TOMBSTONE}.
-   * @return a map whose key specifies delete tombstone type and value is a {@link Pair} representing the delete
-   * tombstone count and total size
+   * Fetches delete tombstone stats.
+   * @return A {@link DeleteTombstoneStats} object.
    */
-  Map<String, Pair<Long, Long>> getDeleteTombstoneStats();
+  DeleteTombstoneStats getDeleteTombstoneStats();
 }

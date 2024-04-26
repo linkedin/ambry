@@ -941,8 +941,7 @@ public class BlobStoreStatsTest {
       long deleteAndExpirationRefTimeInMs = state.time.milliseconds();
       Map<Short, Map<Short, ContainerStorageStats>> statsMap =
           blobStoreStats.getContainerStorageStats(deleteAndExpirationRefTimeInMs);
-      Optional.ofNullable(accountIdToExclude).orElse(Collections.EMPTY_LIST).
-          forEach(id -> statsMap.remove(id));
+      Optional.ofNullable(accountIdToExclude).orElse(Collections.EMPTY_LIST).forEach(id -> statsMap.remove(id));
 
       // Verify account stats snapshot
       Map<Short, Map<Short, ContainerStorageStats>> obtainedStatsMap =
@@ -1087,8 +1086,7 @@ public class BlobStoreStatsTest {
         getContainerStorageStats(referenceTimeInMs, state.time.milliseconds(), deleteTombstoneStats);
     long totalValidSize = 0L;
 
-    for (Map.Entry<Short, Map<Short, ContainerStorageStats>> expectedContainerStorageStatsEntry : expectedContainerStorageStatsMap
-        .entrySet()) {
+    for (Map.Entry<Short, Map<Short, ContainerStorageStats>> expectedContainerStorageStatsEntry : expectedContainerStorageStatsMap.entrySet()) {
       short accountId = expectedContainerStorageStatsEntry.getKey();
       assertTrue("Expected accountId: " + accountId + " not found",
           actualContainerStorageStatsMap.containsKey(accountId));
@@ -1117,8 +1115,7 @@ public class BlobStoreStatsTest {
       }
       actualContainerStorageStatsMap.remove(accountId);
     }
-    for (Map.Entry<Short, Map<Short, ContainerStorageStats>> actualContainerValidSizeEntry : actualContainerStorageStatsMap
-        .entrySet()) {
+    for (Map.Entry<Short, Map<Short, ContainerStorageStats>> actualContainerValidSizeEntry : actualContainerStorageStatsMap.entrySet()) {
       if (actualContainerValidSizeEntry.getValue().size() != 0) {
         for (Map.Entry<Short, ContainerStorageStats> mapEntry : actualContainerValidSizeEntry.getValue().entrySet()) {
           assertEquals("Additional values found in actual container valid size map for service "
@@ -1225,17 +1222,17 @@ public class BlobStoreStatsTest {
 
   private void verifyDeleteTombstoneStats(BlobStoreStats blobStoreStats,
       Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
-    Map<String, Pair<Long, Long>> storeDeleteStats = blobStoreStats.getDeleteTombstoneStats();
-    Pair<Long, Long> expiredDeletes = storeDeleteStats.get(EXPIRED_DELETE_TOMBSTONE);
-    Pair<Long, Long> permanentDeletes = storeDeleteStats.get(PERMANENT_DELETE_TOMBSTONE);
+    DeleteTombstoneStats storeDeleteTombstoneStats = blobStoreStats.getDeleteTombstoneStats();
     assertEquals("Mismatch in permanent delete count",
-        deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().get(), (long) permanentDeletes.getFirst());
+        deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().get(),
+        storeDeleteTombstoneStats.permanentCount);
     assertEquals("Mismatch in permanent delete total size",
-        deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getSecond().get(), (long) permanentDeletes.getSecond());
+        deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getSecond().get(),
+        storeDeleteTombstoneStats.permanentSize);
     assertEquals("Mismatch in expired delete count",
-        deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().get(), (long) expiredDeletes.getFirst());
+        deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().get(), storeDeleteTombstoneStats.expiredCount);
     assertEquals("Mismatch in expired delete total size",
-        deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().get(), (long) expiredDeletes.getSecond());
+        deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().get(), storeDeleteTombstoneStats.expiredSize);
   }
 
   /**

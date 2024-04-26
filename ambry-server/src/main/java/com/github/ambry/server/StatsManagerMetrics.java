@@ -18,6 +18,7 @@ import com.codahale.metrics.Counter;
 import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.store.DeleteTombstoneStats;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -30,11 +31,10 @@ class StatsManagerMetrics {
   final Histogram totalFetchAndAggregateTimeMs;
   final Histogram fetchAndAggregateTimePerStoreMs;
   private final AtomicBoolean deleteStatsGaugeInitialized = new AtomicBoolean(false);
-  private final AtomicReference<StatsManager.AggregatedDeleteTombstoneStats> aggregatedDeleteTombstoneStats;
+  private final AtomicReference<DeleteTombstoneStats> aggregatedDeleteTombstoneStats;
   private final MetricRegistry registry;
 
-  StatsManagerMetrics(MetricRegistry registry,
-      AtomicReference<StatsManager.AggregatedDeleteTombstoneStats> aggregatedDeleteTombstoneStats) {
+  StatsManagerMetrics(MetricRegistry registry, AtomicReference<DeleteTombstoneStats> aggregatedDeleteTombstoneStats) {
     this.registry = registry;
     this.aggregatedDeleteTombstoneStats = aggregatedDeleteTombstoneStats;
     statsAggregationFailureCount =
@@ -47,22 +47,43 @@ class StatsManagerMetrics {
 
   void initDeleteStatsGaugesIfNeeded() {
     if (deleteStatsGaugeInitialized.compareAndSet(false, true)) {
-      Gauge<Long> expiredDeleteTombstoneCount =
-          () -> aggregatedDeleteTombstoneStats.get().getExpiredDeleteTombstoneCount();
-      registry.register(MetricRegistry.name(StatsManager.class, "ExpiredDeleteTombstoneCount"),
-          expiredDeleteTombstoneCount);
-      Gauge<Long> expiredDeleteTombstoneSize =
-          () -> aggregatedDeleteTombstoneStats.get().getExpiredDeleteTombstoneSize();
-      registry.register(MetricRegistry.name(StatsManager.class, "ExpiredDeleteTombstoneSize"),
-          expiredDeleteTombstoneSize);
-      Gauge<Long> permanentDeleteTombstoneCount =
-          () -> aggregatedDeleteTombstoneStats.get().getPermanentDeleteTombstoneCount();
-      registry.register(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneCount"),
-          permanentDeleteTombstoneCount);
-      Gauge<Long> permanentDeleteTombstoneSize =
-          () -> aggregatedDeleteTombstoneStats.get().getPermanentDeleteTombstoneSize();
-      registry.register(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSize"),
-          permanentDeleteTombstoneSize);
+      Gauge<Long> expiredDeleteTombstoneCount = () -> aggregatedDeleteTombstoneStats.get().expiredCount;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "ExpiredDeleteTombstoneCount"),
+          () -> expiredDeleteTombstoneCount);
+      Gauge<Long> expiredDeleteTombstoneSize = () -> aggregatedDeleteTombstoneStats.get().expiredSize;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "ExpiredDeleteTombstoneSize"),
+          () -> expiredDeleteTombstoneSize);
+      Gauge<Long> permanentDeleteTombstoneCount = () -> aggregatedDeleteTombstoneStats.get().permanentCount;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneCount"),
+          () -> permanentDeleteTombstoneCount);
+      Gauge<Long> permanentDeleteTombstoneSize = () -> aggregatedDeleteTombstoneStats.get().permanentSize;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSize"),
+          () -> permanentDeleteTombstoneSize);
+      Gauge<Long> permanentDeleteTombstoneSizeOneDay = () -> aggregatedDeleteTombstoneStats.get().permanentSizeOneDay;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSizeOneDay"),
+          () -> permanentDeleteTombstoneSizeOneDay);
+      Gauge<Long> permanentDeleteTombstoneSizeTwoDays = () -> aggregatedDeleteTombstoneStats.get().permanentSizeTwoDays;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSizeTwoDays"),
+          () -> permanentDeleteTombstoneSizeTwoDays);
+      Gauge<Long> permanentDeleteTombstoneSizeThreeDays =
+          () -> aggregatedDeleteTombstoneStats.get().permanentSizeThreeDays;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSizeThreeDays"),
+          () -> permanentDeleteTombstoneSizeThreeDays);
+      Gauge<Long> permanentDeleteTombstoneSizeFiveDays =
+          () -> aggregatedDeleteTombstoneStats.get().permanentSizeFiveDays;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSizeFiveDays"),
+          () -> permanentDeleteTombstoneSizeFiveDays);
+      Gauge<Long> permanentDeleteTombstoneSizeSevenDays =
+          () -> aggregatedDeleteTombstoneStats.get().permanentSizeSevenDays;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSizeSevenDays"),
+          () -> permanentDeleteTombstoneSizeSevenDays);
+      Gauge<Long> permanentDeleteTombstoneSizeTenDays = () -> aggregatedDeleteTombstoneStats.get().permanentSizeTenDays;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSizeTenDays"),
+          () -> permanentDeleteTombstoneSizeTenDays);
+      Gauge<Long> permanentDeleteTombstoneSizeFourteenDays =
+          () -> aggregatedDeleteTombstoneStats.get().permanentSizeFourteenDays;
+      registry.gauge(MetricRegistry.name(StatsManager.class, "PermanentDeleteTombstoneSizeFourteenDays"),
+          () -> permanentDeleteTombstoneSizeFourteenDays);
     }
   }
 }
