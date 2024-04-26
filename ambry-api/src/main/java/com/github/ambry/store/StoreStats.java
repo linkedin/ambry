@@ -24,8 +24,6 @@ import java.util.Map;
  * Exposes important stats related to a {@link Store}.
  */
 public interface StoreStats {
-  String EXPIRED_DELETE_TOMBSTONE = "ExpiredDeleteTombstone";
-  String PERMANENT_DELETE_TOMBSTONE = "PermanentDeleteTombstone";
   /**
    * Gets the size of valid data at a particular point in time. The caller specifies a reference time and acceptable
    * resolution for the stats in the form of a {@link TimeRange}. The store will return valid data size for a point

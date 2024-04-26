@@ -44,7 +44,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.junit.After;
 import org.junit.Test;
@@ -52,7 +51,6 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import static com.github.ambry.store.CuratedLogIndexState.*;
-import static com.github.ambry.store.StoreStats.*;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
@@ -1079,11 +1077,11 @@ public class BlobStoreStatsTest {
    */
   private long verifyContainerStorageStatsAndGetTotalValidSize(BlobStoreStats blobStoreStats, long referenceTimeInMs)
       throws StoreException {
-    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
+    DeleteTombstoneStats.Builder builder = new DeleteTombstoneStats.Builder(state.time);
     Map<Short, Map<Short, ContainerStorageStats>> actualContainerStorageStatsMap =
         blobStoreStats.getContainerStorageStats(referenceTimeInMs);
     Map<Short, Map<Short, ContainerStorageStats>> expectedContainerStorageStatsMap =
-        getContainerStorageStats(referenceTimeInMs, state.time.milliseconds(), deleteTombstoneStats);
+        getContainerStorageStats(referenceTimeInMs, state.time.milliseconds(), builder);
     long totalValidSize = 0L;
 
     for (Map.Entry<Short, Map<Short, ContainerStorageStats>> expectedContainerStorageStatsEntry : expectedContainerStorageStatsMap.entrySet()) {
@@ -1124,7 +1122,7 @@ public class BlobStoreStatsTest {
       }
     }
     // verify delete tombstone stats
-    verifyDeleteTombstoneStats(blobStoreStats, deleteTombstoneStats);
+    verifyDeleteTombstoneStats(blobStoreStats, builder.build());
     return totalValidSize;
   }
 
@@ -1149,7 +1147,7 @@ public class BlobStoreStatsTest {
     long expectedTotalLogSegmentValidSize = 0L;
     LogSegment logSegment = state.log.getFirstSegment();
     Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
-    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
+    DeleteTombstoneStats.Builder builder = new DeleteTombstoneStats.Builder(state.time);
     while (logSegment != null) {
       LogSegmentName logSegmentName = logSegment.getName();
       assertTrue("Log segment: " + logSegmentName + " not found in TimeRange " + timeRange,
@@ -1157,7 +1155,7 @@ public class BlobStoreStatsTest {
 
       long expectedLogSegmentValidSize =
           state.getValidDataSizeForLogSegment(logSegment, timeRange.getEndTimeInMs(), expiryReferenceTime, null,
-              deleteTombstoneStats, expiredDeletes, true);
+              builder, expiredDeletes, true);
       long actualLogSegmentValidSize = actualLogSegmentValidSizeMap.getSecond().get(logSegmentName);
       assertEquals("Valid data size mismatch for log segment: " + logSegmentName + " in TimeRange " + timeRange,
           expectedLogSegmentValidSize, actualLogSegmentValidSize);
@@ -1176,7 +1174,7 @@ public class BlobStoreStatsTest {
             && timeRange.getEndTimeInMs() >= actualLogSegmentValidSizeMap.getFirst());
     assertEquals("Total valid data size of all log segments mismatch", expectedTotalLogSegmentValidSize,
         actualTotalValidSize.getSecond().longValue());
-    verifyDeleteTombstoneStats(blobStoreStats, deleteTombstoneStats);
+    verifyDeleteTombstoneStats(blobStoreStats, builder.build());
     return actualTotalValidSize.getSecond();
   }
 
@@ -1185,11 +1183,11 @@ public class BlobStoreStatsTest {
    * verification purposes.
    * @param deleteReferenceTimeInMs the reference time in ms until which deletes are relevant
    * @param expiryReferenceTimeInMs the reference time in ms until which expirations are relevant
-   * @param deleteTombstoneStats a hashmap that tracks stats related delete tombstones in log segments.
+   * @param builder a builder that tracks stats related delete tombstones in log segments.
    * @return a nested {@link Map} of serviceId to containerId to valid data size
    */
   private Map<Short, Map<Short, ContainerStorageStats>> getContainerStorageStats(long deleteReferenceTimeInMs,
-      long expiryReferenceTimeInMs, Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
+      long expiryReferenceTimeInMs, DeleteTombstoneStats.Builder builder) {
     Map<Short, Map<Short, ContainerStorageStats>> containerStorageStats = new HashMap<>();
     Map<Short, Map<Short, Long>> validSizeMap = new HashMap<>();
     Map<Short, Map<Short, Long>> physicalSizeMap = new HashMap<>();
@@ -1197,7 +1195,7 @@ public class BlobStoreStatsTest {
     Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
     for (Offset indSegStartOffset : state.referenceIndex.keySet()) {
       state.getValidIndexEntriesForIndexSegment(indSegStartOffset, deleteReferenceTimeInMs, expiryReferenceTimeInMs,
-          null, deleteTombstoneStats, expiredDeletes, true, (entry, isValid) -> {
+          null, builder, expiredDeletes, true, (entry, isValid) -> {
             IndexValue indexValue = entry.getValue();
             if (indexValue.isPut() && isValid) {
               StatsUtils.updateNestedMapHelper(validSizeMap, indexValue.getAccountId(), indexValue.getContainerId(),
@@ -1220,19 +1218,16 @@ public class BlobStoreStatsTest {
     return containerStorageStats;
   }
 
-  private void verifyDeleteTombstoneStats(BlobStoreStats blobStoreStats,
-      Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats) {
+  private void verifyDeleteTombstoneStats(BlobStoreStats blobStoreStats, DeleteTombstoneStats deleteTombstoneStats) {
     DeleteTombstoneStats storeDeleteTombstoneStats = blobStoreStats.getDeleteTombstoneStats();
-    assertEquals("Mismatch in permanent delete count",
-        deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getFirst().get(),
+    assertEquals("Mismatch in permanent delete count", deleteTombstoneStats.permanentCount,
         storeDeleteTombstoneStats.permanentCount);
-    assertEquals("Mismatch in permanent delete total size",
-        deleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE).getSecond().get(),
+    assertEquals("Mismatch in permanent delete total size", deleteTombstoneStats.permanentSize,
         storeDeleteTombstoneStats.permanentSize);
-    assertEquals("Mismatch in expired delete count",
-        deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getFirst().get(), storeDeleteTombstoneStats.expiredCount);
-    assertEquals("Mismatch in expired delete total size",
-        deleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE).getSecond().get(), storeDeleteTombstoneStats.expiredSize);
+    assertEquals("Mismatch in expired delete count", deleteTombstoneStats.expiredCount,
+        storeDeleteTombstoneStats.expiredCount);
+    assertEquals("Mismatch in expired delete total size", deleteTombstoneStats.expiredSize,
+        storeDeleteTombstoneStats.expiredSize);
   }
 
   /**
