@@ -1807,6 +1807,11 @@ public class PersistentIndex {
     return getLogSegmentToIndexSegmentMapping(validIndexSegments).size();
   }
 
+  long getLogSegmentSize(LogSegmentName logSegmentName) {
+    LogSegment segment = log.getSegment(logSegmentName);
+    return segment.getEndOffset() - segment.getStartOffset();
+  }
+
   /**
    * @return the absolute position represented by {@code offset} in the {@link Log}.
    */

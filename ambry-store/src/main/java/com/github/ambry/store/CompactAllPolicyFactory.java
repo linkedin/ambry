@@ -16,9 +16,11 @@ package com.github.ambry.store;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,9 +68,6 @@ class CompactAllPolicy implements CompactionPolicy {
     logger.trace("UsedCapacity {} vs TotalCapacity {}", usedCapacity, totalCapacity);
     if (usedCapacity >= (storeConfig.storeMinUsedCapacityToTriggerCompactionInPercentage / 100.0) * totalCapacity) {
       if (logSegmentsNotInJournal != null) {
-        details =
-            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentsNotInJournal, null, true);
-
         Pair<Long, NavigableMap<LogSegmentName, Long>> validDataSizeByLogSegment =
             blobStoreStats.getValidDataSizeByLogSegment(
                 new TimeRange(time.milliseconds() - messageRetentionTimeInMs - ERROR_MARGIN_MS, ERROR_MARGIN_MS));
@@ -76,6 +75,41 @@ class CompactAllPolicy implements CompactionPolicy {
         if (validDataSizeByLogSegment != null) {
           sizeLog = blobStoreStats.dumpLogSegmentSize(validDataSizeByLogSegment.getSecond(), segmentCapacity, dataDir);
         }
+        PersistentIndex index = blobStoreStats.getIndex();
+        List<LogSegmentName> allValidLogSegments = new ArrayList<>();
+
+        Predicate<LogSegmentName> isLogSegmentDataAllValid = segmentName -> {
+          long segmentTotalSize = index.getLogSegmentSize(segmentName);
+          long segmentValidSize = validDataSizeByLogSegment.getSecond().getOrDefault(segmentName, 0L);
+          if (segmentValidSize == segmentTotalSize) {
+            logger.info("All LogSegment {}'s data is valid, total size is {}, skip this log segment in compaction",
+                segmentName, segmentTotalSize);
+            allValidLogSegments.add(segmentName);
+            return true;
+          }
+          return false;
+        };
+        for (LogSegmentName segmentName : logSegmentsNotInJournal) {
+          if (!isLogSegmentDataAllValid.test(segmentName)) {
+            break;
+          }
+        }
+        if (allValidLogSegments.size() == logSegmentsNotInJournal.size()) {
+          logger.info("All LogSegments have 100% of valid data, skip compaction");
+          return null;
+        }
+
+        for (int i = logSegmentsNotInJournal.size() - 1; i >= 0; i--) {
+          if (!isLogSegmentDataAllValid.test(logSegmentsNotInJournal.get(i))) {
+            break;
+          }
+        }
+
+        List<LogSegmentName> finalLogSegmentNames = new ArrayList<>(logSegmentsNotInJournal);
+        finalLogSegmentNames.removeAll(allValidLogSegments);
+        details =
+            new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, finalLogSegmentNames, null, true);
+
         logger.info("[CAPACITY] Generating CompactionDetails {} using CompactAllPolicy for {}. Stats {}", details,
             dataDir, sizeLog);
       }
