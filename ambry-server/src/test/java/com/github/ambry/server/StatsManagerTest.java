@@ -42,6 +42,7 @@ import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.MockReplicationManager;
 import com.github.ambry.server.storagestats.ContainerStorageStats;
 import com.github.ambry.server.storagestats.HostAccountStorageStats;
+import com.github.ambry.store.DeleteTombstoneStats;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageWriteSet;
@@ -80,7 +81,6 @@ import org.mockito.Mockito;
 
 import static com.github.ambry.clustermap.StateTransitionException.TransitionErrorCode.*;
 import static com.github.ambry.clustermap.TestUtils.*;
-import static com.github.ambry.store.StoreStats.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
@@ -98,7 +98,8 @@ public class StatsManagerTest {
   private final Map<PartitionId, Store> storeMap;
   private final List<ReplicaId> replicas;
   private final Random random = new Random();
-  private final Map<String, Pair<Long, Long>> storeDeleteTombstoneStats = new HashMap<>();
+  private final DeleteTombstoneStats storeDeleteTombstoneStats =
+      new DeleteTombstoneStats.Builder().random(random, 100, 1000).build();
   private final StatsManagerConfig statsManagerConfig;
   private final AccountService inMemoryAccountService = new InMemAccountService(false, false);
   private final InmemoryAccountStatsStore accountStatsStore;
@@ -137,10 +138,6 @@ public class StatsManagerTest {
     storeMap = new HashMap<>();
     hostAccountStorageStats =
         new HostAccountStorageStats(StorageStatsUtilTest.generateRandomHostAccountStorageStats(3, 10, 6, 1000L, 2, 10));
-    storeDeleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE,
-        new Pair<>((long) random.nextInt(100), (long) random.nextInt(1000)));
-    storeDeleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE,
-        new Pair<>((long) random.nextInt(100), (long) random.nextInt(1000)));
     replicas = new ArrayList<>();
     PartitionId partitionId;
     dataNodeId = new MockDataNodeId(Collections.singletonList(new Port(6667, PortType.PLAINTEXT)),
@@ -199,20 +196,17 @@ public class StatsManagerTest {
       statsManager.collectAndAggregateAccountStorageStats(hostAccountStorageStatsMap, partitionId,
           unreachablePartitions);
     }
-    statsManager.updateAggregatedDeleteTombstoneStats();
 
     // verify aggregated delete tombstone stats
-    StatsManager.AggregatedDeleteTombstoneStats deleteTombstoneStats = statsManager.getAggregatedDeleteTombstoneStats();
-    Pair<Long, Long> expectedExpiredDeleteStats = storeDeleteTombstoneStats.get(EXPIRED_DELETE_TOMBSTONE);
-    Pair<Long, Long> expectedPermanentDeleteStats = storeDeleteTombstoneStats.get(PERMANENT_DELETE_TOMBSTONE);
-    assertEquals("Mismatch in expired delete count", storeMap.size() * expectedExpiredDeleteStats.getFirst(),
-        deleteTombstoneStats.getExpiredDeleteTombstoneCount());
-    assertEquals("Mismatch in expired delete size", storeMap.size() * expectedExpiredDeleteStats.getSecond(),
-        deleteTombstoneStats.getExpiredDeleteTombstoneSize());
-    assertEquals("Mismatch in permanent delete count", storeMap.size() * expectedPermanentDeleteStats.getFirst(),
-        deleteTombstoneStats.getPermanentDeleteTombstoneCount());
-    assertEquals("Mismatch in permanent delete size", storeMap.size() * expectedPermanentDeleteStats.getSecond(),
-        deleteTombstoneStats.getPermanentDeleteTombstoneSize());
+    DeleteTombstoneStats deleteTombstoneStats = statsManager.getAggregatedDeleteTombstoneStats();
+    assertEquals("Mismatch in expired delete count", storeMap.size() * storeDeleteTombstoneStats.expiredCount,
+        deleteTombstoneStats.expiredCount);
+    assertEquals("Mismatch in expired delete size", storeMap.size() * storeDeleteTombstoneStats.expiredSize,
+        deleteTombstoneStats.expiredSize);
+    assertEquals("Mismatch in permanent delete count", storeMap.size() * storeDeleteTombstoneStats.permanentCount,
+        deleteTombstoneStats.permanentCount);
+    assertEquals("Mismatch in permanent delete size", storeMap.size() * storeDeleteTombstoneStats.permanentSize,
+        deleteTombstoneStats.permanentSize);
   }
 
   /**
@@ -721,20 +715,18 @@ public class StatsManagerTest {
   static class MockStoreStats implements StoreStats {
     private final Map<Short, Map<Short, ContainerStorageStats>> containerStatsMap;
     private final boolean throwStoreException;
-    private final Map<String, Pair<Long, Long>> deleteTombstoneStats;
+    private final DeleteTombstoneStats deleteTombstoneStats;
 
     MockStoreStats(Map<Short, Map<Short, ContainerStorageStats>> containerStatsMap, boolean throwStoreException) {
       this(containerStatsMap, throwStoreException, null);
     }
 
     MockStoreStats(Map<Short, Map<Short, ContainerStorageStats>> containerStatsMap, boolean throwStoreException,
-        Map<String, Pair<Long, Long>> deleteTombstoneStats) {
+        DeleteTombstoneStats deleteTombstoneStats) {
       this.containerStatsMap = containerStatsMap;
       this.throwStoreException = throwStoreException;
       if (deleteTombstoneStats == null) {
-        this.deleteTombstoneStats = new HashMap<>();
-        this.deleteTombstoneStats.put(EXPIRED_DELETE_TOMBSTONE, new Pair<>(0L, 0L));
-        this.deleteTombstoneStats.put(PERMANENT_DELETE_TOMBSTONE, new Pair<>(0L, 0L));
+        this.deleteTombstoneStats = DeleteTombstoneStats.BASE;
       } else {
         this.deleteTombstoneStats = deleteTombstoneStats;
       }
@@ -755,7 +747,7 @@ public class StatsManagerTest {
     }
 
     @Override
-    public Map<String, Pair<Long, Long>> getDeleteTombstoneStats() {
+    public DeleteTombstoneStats getDeleteTombstoneStats() {
       return deleteTombstoneStats;
     }
   }

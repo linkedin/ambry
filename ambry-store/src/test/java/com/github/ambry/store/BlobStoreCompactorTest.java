@@ -3384,13 +3384,12 @@ public class BlobStoreCompactorTest {
   private long getValidDataSize(List<LogSegmentName> logSegments, long deleteReferenceTimeMs,
       boolean invalidateExpiredDelete) {
     long size = 0;
-    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     Pair<Set<MockId>, Set<MockId>> expiredDeletes = new Pair<>(new HashSet<>(), new HashSet<>());
     for (LogSegmentName segment : logSegments) {
       long logSegmentValidSize =
           state.getValidDataSizeForLogSegment(state.log.getSegment(segment), deleteReferenceTimeMs,
-              state.time.milliseconds(), getFileSpanForLogSegments(logSegments), deleteTombstoneStats, expiredDeletes,
-              invalidateExpiredDelete);
+              state.time.milliseconds(), getFileSpanForLogSegments(logSegments),
+              new DeleteTombstoneStats.Builder(state.time), expiredDeletes, invalidateExpiredDelete);
       size += logSegmentValidSize;
     }
     return size;
@@ -4049,12 +4048,11 @@ public class BlobStoreCompactorTest {
   private List<LogEntry> getValidLogEntriesInOrder(List<LogSegmentName> logSegmentsUnderConsideration,
       long deleteReferenceTimeMs, Pair<Set<MockId>, Set<MockId>> expiredDeletes, boolean invalidateExpiredDelete) {
     List<LogEntry> validLogEntriesInOrder = new ArrayList<>();
-    Map<String, Pair<AtomicLong, AtomicLong>> deleteTombstoneStats = generateDeleteTombstoneStats();
     for (LogSegmentName logSegment : logSegmentsUnderConsideration) {
       List<IndexEntry> validIndexEntries =
           state.getValidIndexEntriesForLogSegment(state.log.getSegment(logSegment), deleteReferenceTimeMs,
-              state.time.milliseconds(), getFileSpanForLogSegments(logSegmentsUnderConsideration), deleteTombstoneStats,
-              expiredDeletes, invalidateExpiredDelete);
+              state.time.milliseconds(), getFileSpanForLogSegments(logSegmentsUnderConsideration),
+              new DeleteTombstoneStats.Builder(state.time), expiredDeletes, invalidateExpiredDelete);
       addToLogEntriesInOrder(validIndexEntries, validLogEntriesInOrder);
     }
     return validLogEntriesInOrder;

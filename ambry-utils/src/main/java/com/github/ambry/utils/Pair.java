@@ -26,6 +26,10 @@ public class Pair<A, B> {
   private final A first;
   private final B second;
 
+  public static <A, B> Pair<A, B> of(A first, B second) {
+    return new Pair<A, B>(first, second);
+  }
+
   /**
    * Construct a pair from two objects.
    * @param first the first object in the pair.
