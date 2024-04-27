@@ -16,6 +16,8 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.MockReplicaId;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
@@ -49,8 +51,6 @@ import static org.junit.Assert.*;
  * Tests functionality of {@link StoreCopier}
  */
 public class StoreCopierTest {
-
-  private static final String STORE_ID = "copier_test";
   private static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
   private static final StoreKeyFactory STORE_KEY_FACTORY;
 
@@ -82,6 +82,9 @@ public class StoreCopierTest {
   private StoreKey expiredId;
   private StoreKey deletedId;
   private StoreKey putTtlUpdatedAndDeletedId;
+  private final MockClusterMap mockClusterMap;
+  private final MockPartitionId mockPartitionId;
+  private final MockReplicaId replicaId;
 
   /**
    * Creates temporary directories and sets up some test state.
@@ -97,6 +100,12 @@ public class StoreCopierTest {
     properties.setProperty("store.capacity", Long.toString(STORE_CAPACITY));
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     storeConfig = new StoreConfig(verifiableProperties);
+    // Create test cluster
+    mockClusterMap = new MockClusterMap(false, true, 1, 1, 1, true, false, "localhost");
+    mockPartitionId =
+        (MockPartitionId) mockClusterMap.getAllPartitionIds(MockClusterMap.DEFAULT_PARTITION_CLASS).get(0);
+    replicaId = (MockReplicaId) mockPartitionId.getReplicaIds().get(0);
+
     setupTestState();
     time.sleep(TimeUnit.SECONDS.toMillis(TestUtils.TTL_SECS + 1));
     StoreMetrics metrics = new StoreMetrics(clusterMap.getMetricRegistry());
@@ -128,9 +137,10 @@ public class StoreCopierTest {
     StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
     Files.copy(new File(srcDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(),
         new File(tgtDir, StoreDescriptor.STORE_DESCRIPTOR_FILENAME).toPath(), StandardCopyOption.REPLACE_EXISTING);
-    BlobStore tgt = new BlobStore(STORE_ID, storeConfig, null, null, null, DISK_IO_SCHEDULER,
+    BlobStore tgt = new BlobStore(replicaId, replicaId.getPartitionId().toString(), storeConfig, null, null, null,
+        DISK_IO_SCHEDULER,
         StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, storeMetrics, storeMetrics, tgtDir.getAbsolutePath(),
-        STORE_CAPACITY, STORE_KEY_FACTORY, null, null, time, null);
+        STORE_CAPACITY, STORE_KEY_FACTORY, null, null, null, time, null, null, null, null);
     tgt.start();
     try {
       // should not be able to get expired or deleted ids
@@ -178,9 +188,10 @@ public class StoreCopierTest {
     long expiryTimeMs = time.milliseconds() + TimeUnit.SECONDS.toMillis(TestUtils.TTL_SECS);
     temporaryPutExpiryTimeMs =
         Utils.getTimeInMsToTheNearestSec(SystemTime.getInstance().milliseconds() + TimeUnit.DAYS.toMillis(1));
-    BlobStore src = new BlobStore(STORE_ID, storeConfig, null, null, null, DISK_IO_SCHEDULER,
+    BlobStore src = new BlobStore(replicaId, replicaId.getPartitionId().toString(), storeConfig, null, null, null,
+        DISK_IO_SCHEDULER,
         StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, metrics, metrics, srcDir.getAbsolutePath(), STORE_CAPACITY,
-        STORE_KEY_FACTORY, null, null, time, null);
+        STORE_KEY_FACTORY, null, null, null, time, null, null, null, null);
     src.start();
     try {
       short accountId = Utils.getRandomShort(TestUtils.RANDOM);

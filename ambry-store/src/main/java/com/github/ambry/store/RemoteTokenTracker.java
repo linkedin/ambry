@@ -65,6 +65,10 @@ public class RemoteTokenTracker implements Closeable {
 
   public RemoteTokenTracker(ReplicaId localReplica, ScheduledExecutorService scheduler,
       StoreKeyFactory storeKeyFactory) {
+    if (scheduler == null || localReplica == null) {
+      // TODO: throw exception
+      logger.error("localReplica and schedule CANNOT BE NULL.");
+    }
     this.localReplica = localReplica;
     this.scheduler = scheduler;
     this.tokenSerde = new RemoteReplicaTokenSerde(storeKeyFactory);
@@ -145,14 +149,15 @@ public class RemoteTokenTracker implements Closeable {
    * Start the background persistor.
    */
   public void start(int persistIntervalInSeconds) {
-    if (persistIntervalInSeconds > 0) {
-      if (this.scheduler != null) {
-        persistorFuture = this.scheduler.scheduleAtFixedRate(persistor, new Random().nextInt(Time.SecsPerMin),
-            persistIntervalInSeconds, TimeUnit.SECONDS);
-        logger.info("flush peer's remote token every {} seconds", persistIntervalInSeconds);
-      } else {
-        logger.error("scheduler is null, couldn't persist peer's remote token.");
-      }
+    if (this.scheduler != null) {
+      persistorFuture =
+          this.scheduler.scheduleAtFixedRate(persistor, new Random().nextInt(Time.SecsPerMin), persistIntervalInSeconds,
+              TimeUnit.SECONDS);
+      logger.info("flush peer's remote token every {} seconds", persistIntervalInSeconds);
+    } else {
+      logger.error("scheduler is null, couldn't persist peer's remote token.");
+      // at least write once
+      persistor.run();
     }
   }
 
