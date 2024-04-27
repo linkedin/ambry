@@ -66,7 +66,7 @@ public class RemoteTokenTracker implements Closeable {
   public RemoteTokenTracker(ReplicaId localReplica, ScheduledExecutorService scheduler,
       StoreKeyFactory storeKeyFactory) {
     if (scheduler == null || localReplica == null) {
-      // TODO: throw exception
+      // TODO [TOMBSTONE]: throw exception
       logger.error("localReplica and schedule CANNOT BE NULL.");
     }
     this.localReplica = localReplica;

@@ -181,7 +181,7 @@ public class BlobStore implements Store {
    * @param time                        the {@link Time} instance to use.
    * @param indexPersistScheduler       a dedicated {@link ScheduledExecutorService} for persisting index segments.
    */
-  // TODO: deprecate this constructor. ReplicaId cannot be null. Do we still need the StoreCopier.class
+  // TODO [TOMBSTONE]: deprecate this constructor. ReplicaId cannot be null. Do we still need the StoreCopier.class
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskManager diskManager, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
