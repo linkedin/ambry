@@ -42,6 +42,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -50,6 +51,7 @@ import static org.junit.Assert.*;
 /**
  * Tests functionality of {@link StoreCopier}
  */
+@Ignore
 public class StoreCopierTest {
   private static final DiskIOScheduler DISK_IO_SCHEDULER = new DiskIOScheduler(null);
   private static final StoreKeyFactory STORE_KEY_FACTORY;

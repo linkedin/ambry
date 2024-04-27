@@ -71,6 +71,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -875,6 +876,8 @@ public class BlobStoreCompactorTest {
    * Test the remote token persistor is disabled by default
    * @throws Exception
    */
+  // Right now we always enable remote token persistor.
+  @Ignore
   @Test
   public void testRemoteTokenPersistIsDisabled() throws Exception {
     assumeTrue(purgeDeleteTombstone);
@@ -932,7 +935,9 @@ public class BlobStoreCompactorTest {
     MockIdFactory keyFactory = new MockIdFactory();
     RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     Properties properties = new Properties();
-    properties.setProperty(StoreConfig.storePersistRemoteTokenIntervalInSecondsName, "1");
+    int intervalInSeconds = 5;
+    properties.setProperty(StoreConfig.storePersistRemoteTokenIntervalInSecondsName,
+        Integer.toString(intervalInSeconds));
     StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
 
     // Starting the persistor with the storeConfig
@@ -947,6 +952,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.updateTokenFromPeerReplica(tombstoneToken, localAndPeerReplicas.get(2).getDataNodeId().getHostname(),
         localAndPeerReplicas.get(2).getReplicaPath());
     Map<String, Pair<Long, FindToken>> validTokens = tokenTracker.getPeerReplicaAndToken();
+    Thread.sleep(intervalInSeconds * 1000);
     tokenTracker.close();
 
     // start a new RemoteTokenTracker. It'll pick up the persisted remote tokens.
