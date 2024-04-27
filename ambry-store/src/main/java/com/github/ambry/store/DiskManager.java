@@ -123,7 +123,7 @@ public class DiskManager {
       ScheduledExecutorService scheduler, StorageManagerMetrics metrics, StoreMetrics storeMainMetrics,
       StoreMetrics storeUnderCompactionMetrics, StoreKeyFactory keyFactory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates,
-      Set<String> stoppedReplicas, Time time, AccountService accountService) {
+      Set<String> stoppedReplicas, Time time, AccountService accountService) throws StoreException {
     this.disk = disk;
     this.storeConfig = storeConfig;
     this.diskManagerConfig = diskManagerConfig;

@@ -452,19 +452,19 @@ public class StorageManager implements StoreManager {
 
   DiskManager addDisk(DiskId diskId) {
     return diskToDiskManager.computeIfAbsent(diskId, disk -> {
-      DiskManager newDiskManager =
-          new DiskManager(disk, Collections.emptyList(), storeConfig, diskManagerConfig, scheduler, metrics,
-              storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
-              stoppedReplicas, time, accountService);
-      logger.info("Creating new DiskManager on {} for new added store", diskId.getMountPath());
       try {
+        DiskManager newDiskManager =
+            new DiskManager(disk, Collections.emptyList(), storeConfig, diskManagerConfig, scheduler, metrics,
+                storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete, replicaStatusDelegates,
+                stoppedReplicas, time, accountService);
+        logger.info("Creating new DiskManager on {} for new added store", diskId.getMountPath());
         newDiskManager.start(
             storeConfig.storeRemoveUnexpectedDirsInFullAuto && clusterMap.isDataNodeInFullAutoMode(currentNode));
+        return newDiskManager;
       } catch (Exception e) {
         logger.error("Error while starting the new DiskManager for {}", disk.getMountPath(), e);
         return null;
       }
-      return newDiskManager;
     });
   }
 

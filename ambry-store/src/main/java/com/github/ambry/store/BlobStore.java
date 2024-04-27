@@ -153,7 +153,7 @@ public class BlobStore implements Store {
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       List<ReplicaStatusDelegate> replicaStatusDelegates, Time time, AccountService accountService,
-      DiskMetrics diskMetrics, ScheduledExecutorService indexPersistScheduler) {
+      DiskMetrics diskMetrics, ScheduledExecutorService indexPersistScheduler) throws StoreException {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskManager,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
         replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegates, time, accountService,
@@ -186,7 +186,8 @@ public class BlobStore implements Store {
       ScheduledExecutorService longLivedTaskScheduler, DiskManager diskManager, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService indexPersistScheduler) {
+      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService indexPersistScheduler)
+      throws StoreException {
     this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskManager, diskIOScheduler, diskSpaceAllocator,
         metrics, storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null,
         null, null, indexPersistScheduler);
@@ -198,7 +199,7 @@ public class BlobStore implements Store {
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates, Time time,
       AccountService accountService, BlobStoreStats blobStoreStats, DiskMetrics diskMetrics,
-      ScheduledExecutorService indexPersistScheduler) {
+      ScheduledExecutorService indexPersistScheduler) throws StoreException {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
