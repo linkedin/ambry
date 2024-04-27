@@ -3870,7 +3870,7 @@ public class BlobStoreTest {
    * @param replicaId The {@link ReplicaId} object.
    * @return BlobStore object.
    */
-  private BlobStore createBlobStore(ReplicaId replicaId) {
+  private BlobStore createBlobStore(ReplicaId replicaId) throws StoreException {
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     return createBlobStore(replicaId, config, null);
   }
@@ -3883,7 +3883,7 @@ public class BlobStoreTest {
    * @return BlobStore object.
    */
   private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
-      List<ReplicaStatusDelegate> replicaStatusDelegates) {
+      List<ReplicaStatusDelegate> replicaStatusDelegates) throws StoreException {
     storeMetrics = new StoreMetrics(new MetricRegistry());
     return createBlobStore(replicaId, config, replicaStatusDelegates, storeMetrics);
   }
@@ -3898,7 +3898,7 @@ public class BlobStoreTest {
    * @return BlobStore object.
    */
   private BlobStore createBlobStore(ReplicaId replicaId, StoreConfig config,
-      List<ReplicaStatusDelegate> replicaStatusDelegates, StoreMetrics metrics) {
+      List<ReplicaStatusDelegate> replicaStatusDelegates, StoreMetrics metrics) throws StoreException {
     return new MockBlobStore(replicaId, config, replicaStatusDelegates, metrics);
   }
 
@@ -3961,14 +3961,14 @@ public class BlobStoreTest {
   private class MockBlobStore extends BlobStore {
 
     MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
-        StoreMetrics metrics) {
+        StoreMetrics metrics) throws StoreException {
       super(replicaId, config, scheduler, storeStatsScheduler, null, diskIOScheduler, diskSpaceAllocator, metrics,
           metrics, STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time,
           new InMemAccountService(false, false), null, scheduler);
     }
 
     MockBlobStore(ReplicaId replicaId, StoreConfig config, List<ReplicaStatusDelegate> replicaStatusDelegates,
-        StoreMetrics metrics, BlobStoreStats blobStoreStats) {
+        StoreMetrics metrics, BlobStoreStats blobStoreStats) throws StoreException {
       super(replicaId, replicaId.getPartitionId().toString(), config, scheduler, storeStatsScheduler, null,
           diskIOScheduler, diskSpaceAllocator, metrics, metrics, replicaId.getReplicaPath(),
           replicaId.getCapacityInBytes(), STORE_KEY_FACTORY, recovery, hardDelete, replicaStatusDelegates, time,
