@@ -43,7 +43,7 @@ public class CompactAllPolicyTest {
    * Instantiates {@link CompactionPolicyTest} with the required cast
    * @throws InterruptedException
    */
-  public CompactAllPolicyTest() throws InterruptedException {
+  public CompactAllPolicyTest() throws Exception {
     CompactionPolicyTest.StoreConfigWrapper wrapper = new CompactionPolicyTest.StoreConfigWrapper();
     wrapper.compactAllFilterAllValidSegment = true;
     Pair<MockBlobStore, StoreConfig> initState = CompactionPolicyTest.initializeBlobStore(properties, time, wrapper);
