@@ -61,7 +61,7 @@ import org.slf4j.LoggerFactory;
  * recovering an index from the log and commit and recover index to disk . This class
  * is not thread safe and expects the caller to do appropriate synchronization.
  **/
-public class PersistentIndex {
+public class PersistentIndex implements LogSegmentSizeProvider {
 
   /**
    * Represents the different types of index entries.
@@ -1807,8 +1807,12 @@ public class PersistentIndex {
     return getLogSegmentToIndexSegmentMapping(validIndexSegments).size();
   }
 
-  long getLogSegmentSize(LogSegmentName logSegmentName) {
+  @Override
+  public long getLogSegmentSize(LogSegmentName logSegmentName) {
     LogSegment segment = log.getSegment(logSegmentName);
+    if (segment == null) {
+      throw new IllegalArgumentException("LogSegment " + logSegmentName + " doesn't exist");
+    }
     return segment.getEndOffset() - segment.getStartOffset();
   }
 

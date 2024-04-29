@@ -18,7 +18,13 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Properties;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 
@@ -37,8 +43,10 @@ public class CompactAllPolicyTest {
    * Instantiates {@link CompactionPolicyTest} with the required cast
    * @throws InterruptedException
    */
-  public CompactAllPolicyTest() throws InterruptedException, StoreException {
-    Pair<MockBlobStore, StoreConfig> initState = CompactionPolicyTest.initializeBlobStore(properties, time, -1, -1, -1);
+  public CompactAllPolicyTest() throws InterruptedException {
+    CompactionPolicyTest.StoreConfigWrapper wrapper = new CompactionPolicyTest.StoreConfigWrapper();
+    wrapper.compactAllFilterAllValidSegment = true;
+    Pair<MockBlobStore, StoreConfig> initState = CompactionPolicyTest.initializeBlobStore(properties, time, wrapper);
     config = initState.getSecond();
     messageRetentionTimeInMs = TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes);
     blobStore = initState.getFirst();
@@ -51,7 +59,7 @@ public class CompactAllPolicyTest {
    * @throws InterruptedException
    */
   @Test
-  public void testGetCompactionDetailsTest() throws StoreException, InterruptedException {
+  public void testGetCompactionDetailsTest() throws StoreException {
     blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName(1);
     CompactionPolicyTest.verifyCompactionDetails(
         new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.logSegmentsNotInJournal, null),
@@ -62,8 +70,85 @@ public class CompactAllPolicyTest {
       int logSegmentCount = TestUtils.RANDOM.nextInt(10) + 1;
       blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName(logSegmentCount);
       CompactionPolicyTest.verifyCompactionDetails(
-          new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.logSegmentsNotInJournal, null),
-          blobStore, compactionPolicy);
+          new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, blobStore.logSegmentsNotInJournal,
+              null), blobStore, compactionPolicy);
     }
+  }
+
+  /**
+   * Test compact all policy when there are log segments who has 100% valid data.
+   * @throws Exception
+   */
+  @Test
+  public void testFilter() throws Exception {
+    // case 1. all log segments have 100% valid data
+    blobStore.logSegmentsNotInJournal = CompactionPolicyTest.generateRandomLogSegmentName(5);
+    MockBlobStoreStats blobStoreStats = blobStore.getBlobStoreStats();
+    NavigableMap<LogSegmentName, Long> validDataSize = new TreeMap<>();
+    Map<LogSegmentName, Long> allDataSize = new HashMap<>();
+    long maxDataSize = blobStore.segmentCapacity - blobStore.segmentHeaderSize;
+    for (LogSegmentName segmentName : blobStore.logSegmentsNotInJournal) {
+      validDataSize.put(segmentName, maxDataSize);
+      allDataSize.put(segmentName, maxDataSize);
+    }
+    blobStoreStats.validDataSizeByLogSegments = validDataSize;
+    blobStoreStats.setLogSegmentSizeProvider(new MapLogSegmentSizeProvider(allDataSize));
+    CompactionPolicyTest.verifyCompactionDetails(null, blobStore, compactionPolicy);
+
+    // case 2, only leading segments have 100% valid data
+    List<LogSegmentName> logSegmentToCompact = new ArrayList<>();
+    for (int i = 0; i < blobStore.logSegmentsNotInJournal.size(); i++) {
+      LogSegmentName segmentName = blobStore.logSegmentsNotInJournal.get(i);
+      if (i < 2) {
+        validDataSize.put(segmentName, allDataSize.get(segmentName));
+      } else {
+        validDataSize.put(segmentName, allDataSize.get(segmentName) / 2);
+        logSegmentToCompact.add(segmentName);
+      }
+    }
+    CompactionPolicyTest.verifyCompactionDetails(
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentToCompact, null), blobStore,
+        compactionPolicy);
+
+    // case 3. only trailing segments have 100% valid data
+    logSegmentToCompact = new ArrayList<>();
+    for (int i = 0; i < blobStore.logSegmentsNotInJournal.size(); i++) {
+      LogSegmentName segmentName = blobStore.logSegmentsNotInJournal.get(i);
+      if (i > 2) {
+        validDataSize.put(segmentName, allDataSize.get(segmentName));
+      } else {
+        validDataSize.put(segmentName, allDataSize.get(segmentName) / 2);
+        logSegmentToCompact.add(segmentName);
+      }
+    }
+    CompactionPolicyTest.verifyCompactionDetails(
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentToCompact, null), blobStore,
+        compactionPolicy);
+
+    // case 4: leading and trailing segments both have 100% valid data
+    logSegmentToCompact = new ArrayList<>();
+    for (int i = 0; i < blobStore.logSegmentsNotInJournal.size(); i++) {
+      LogSegmentName segmentName = blobStore.logSegmentsNotInJournal.get(i);
+      if (i == 2) {
+        validDataSize.put(segmentName, allDataSize.get(segmentName) / 2);
+        logSegmentToCompact.add(segmentName);
+      } else {
+        validDataSize.put(segmentName, allDataSize.get(segmentName));
+      }
+    }
+    CompactionPolicyTest.verifyCompactionDetails(
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentToCompact, null), blobStore,
+        compactionPolicy);
+
+    // case 5: none of the log segment has 100% valid data
+    logSegmentToCompact = new ArrayList<>();
+    for (int i = 0; i < blobStore.logSegmentsNotInJournal.size(); i++) {
+      LogSegmentName segmentName = blobStore.logSegmentsNotInJournal.get(i);
+      validDataSize.put(segmentName, allDataSize.get(segmentName) / 2);
+      logSegmentToCompact.add(segmentName);
+    }
+    CompactionPolicyTest.verifyCompactionDetails(
+        new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, logSegmentToCompact, null), blobStore,
+        compactionPolicy);
   }
 }

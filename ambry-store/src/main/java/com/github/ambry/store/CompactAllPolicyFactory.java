@@ -75,38 +75,15 @@ class CompactAllPolicy implements CompactionPolicy {
         if (validDataSizeByLogSegment != null) {
           sizeLog = blobStoreStats.dumpLogSegmentSize(validDataSizeByLogSegment.getSecond(), segmentCapacity, dataDir);
         }
-        PersistentIndex index = blobStoreStats.getIndex();
-        List<LogSegmentName> allValidLogSegments = new ArrayList<>();
-
-        Predicate<LogSegmentName> isLogSegmentDataAllValid = segmentName -> {
-          long segmentTotalSize = index.getLogSegmentSize(segmentName);
-          long segmentValidSize = validDataSizeByLogSegment.getSecond().getOrDefault(segmentName, 0L);
-          if (segmentValidSize == segmentTotalSize) {
-            logger.info("All LogSegment {}'s data is valid, total size is {}, skip this log segment in compaction",
-                segmentName, segmentTotalSize);
-            allValidLogSegments.add(segmentName);
-            return true;
-          }
-          return false;
-        };
-        for (LogSegmentName segmentName : logSegmentsNotInJournal) {
-          if (!isLogSegmentDataAllValid.test(segmentName)) {
-            break;
-          }
-        }
-        if (allValidLogSegments.size() == logSegmentsNotInJournal.size()) {
-          logger.info("All LogSegments have 100% of valid data, skip compaction");
+        //@formatter:off
+        List<LogSegmentName> finalLogSegmentNames =
+            storeConfig.storeCompactAllPolicyFilterOutAllValidSegment
+            ?filterOutAllValidLogSegment(logSegmentsNotInJournal, blobStoreStats.getLogSegmentSizeProvider(), validDataSizeByLogSegment.getSecond())
+            :logSegmentsNotInJournal;
+        //@formatter:on
+        if (finalLogSegmentNames == null || finalLogSegmentNames.isEmpty()) {
           return null;
         }
-
-        for (int i = logSegmentsNotInJournal.size() - 1; i >= 0; i--) {
-          if (!isLogSegmentDataAllValid.test(logSegmentsNotInJournal.get(i))) {
-            break;
-          }
-        }
-
-        List<LogSegmentName> finalLogSegmentNames = new ArrayList<>(logSegmentsNotInJournal);
-        finalLogSegmentNames.removeAll(allValidLogSegments);
         details =
             new CompactionDetails(time.milliseconds() - messageRetentionTimeInMs, finalLogSegmentNames, null, true);
 
@@ -115,5 +92,50 @@ class CompactAllPolicy implements CompactionPolicy {
       }
     }
     return details;
+  }
+
+  /**
+   * Filter out all the leading and trailing log segments whose data is 100% valid.
+   * For instance, if segment_1, segment_2, segment_3 all have 100% valid data, this method would return a null.
+   * I segment_1, segment_3 has 100% valid data, this method would return segment_2.
+   * @param logSegmentsNotInJournal The list of {@link LogSegmentName}s that are not in journal.
+   * @param index The {@link PersistentIndex}.
+   * @param validDataSizeByLogSegment The map from {@link LogSegmentName} to valid data size.
+   * @return A list of {@link LogSegmentName}s.
+   */
+  List<LogSegmentName> filterOutAllValidLogSegment(List<LogSegmentName> logSegmentsNotInJournal,
+      LogSegmentSizeProvider sizeProvider, NavigableMap<LogSegmentName, Long> validDataSizeByLogSegment) {
+    List<LogSegmentName> allValidLogSegments = new ArrayList<>();
+
+    Predicate<LogSegmentName> isLogSegmentDataAllValid = segmentName -> {
+      long segmentTotalSize = sizeProvider.getLogSegmentSize(segmentName);
+      long segmentValidSize = validDataSizeByLogSegment.getOrDefault(segmentName, 0L);
+      if (segmentValidSize == segmentTotalSize) {
+        logger.info("All LogSegment {}'s data is valid, total size is {}, skip this log segment in compaction",
+            segmentName, segmentTotalSize);
+        allValidLogSegments.add(segmentName);
+        return true;
+      }
+      return false;
+    };
+    for (LogSegmentName segmentName : logSegmentsNotInJournal) {
+      if (!isLogSegmentDataAllValid.test(segmentName)) {
+        break;
+      }
+    }
+    if (allValidLogSegments.size() == logSegmentsNotInJournal.size()) {
+      logger.info("All LogSegments have 100% of valid data, skip compaction");
+      return null;
+    }
+
+    for (int i = logSegmentsNotInJournal.size() - 1; i >= 0; i--) {
+      if (!isLogSegmentDataAllValid.test(logSegmentsNotInJournal.get(i))) {
+        break;
+      }
+    }
+
+    List<LogSegmentName> finalLogSegmentNames = new ArrayList<>(logSegmentsNotInJournal);
+    finalLogSegmentNames.removeAll(allValidLogSegments);
+    return finalLogSegmentNames;
   }
 }

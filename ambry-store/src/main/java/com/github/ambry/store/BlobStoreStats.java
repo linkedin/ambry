@@ -243,10 +243,10 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
-   * Return {@link PersistentIndex}.
+   * Return {@link LogSegmentSizeProvider}.
    * @return
    */
-  PersistentIndex getIndex() {
+  LogSegmentSizeProvider getLogSegmentSizeProvider() {
     return index;
   }
 
