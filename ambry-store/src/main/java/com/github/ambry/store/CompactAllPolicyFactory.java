@@ -77,7 +77,7 @@ class CompactAllPolicy implements CompactionPolicy {
         }
         //@formatter:off
         List<LogSegmentName> finalLogSegmentNames =
-            storeConfig.storeCompactAllPolicyFilterOutAllValidSegment
+            storeConfig.storeCompactAllPolicyFilterOutAllValidSegment && validDataSizeByLogSegment != null
             ?filterOutAllValidLogSegment(logSegmentsNotInJournal, blobStoreStats.getLogSegmentSizeProvider(), validDataSizeByLogSegment.getSecond())
             :logSegmentsNotInJournal;
         //@formatter:on
@@ -99,7 +99,7 @@ class CompactAllPolicy implements CompactionPolicy {
    * For instance, if segment_1, segment_2, segment_3 all have 100% valid data, this method would return a null.
    * I segment_1, segment_3 has 100% valid data, this method would return segment_2.
    * @param logSegmentsNotInJournal The list of {@link LogSegmentName}s that are not in journal.
-   * @param index The {@link PersistentIndex}.
+   * @param sizeProvider The {@link LogSegmentSizeProvider}.
    * @param validDataSizeByLogSegment The map from {@link LogSegmentName} to valid data size.
    * @return A list of {@link LogSegmentName}s.
    */
