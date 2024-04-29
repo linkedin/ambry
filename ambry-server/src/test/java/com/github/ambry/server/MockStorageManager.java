@@ -90,9 +90,9 @@ class MockStorageManager extends StorageManager {
     boolean started;
     ReplicaState currentState = ReplicaState.STANDBY;
 
-    TestStore(ReplicaId replicaId, ClusterParticipant clusterParticipant) {
-      super(replicaId, new StoreConfig(VPROPS), null, null, null, null, null, null, null, null, null, null,
-          Collections.singletonList(new ReplicaStatusDelegate(clusterParticipant)), new MockTime(),
+    TestStore(ReplicaId replicaId, ClusterParticipant clusterParticipant) throws StoreException {
+      super(replicaId, new StoreConfig(VPROPS), Utils.newScheduler(1, true), null, null, null, null, null, null, null,
+          null, null, Collections.singletonList(new ReplicaStatusDelegate(clusterParticipant)), new MockTime(),
           new InMemAccountService(false, false), null, null);
       if (clusterParticipant instanceof HelixParticipant) {
         currentState = ReplicaState.OFFLINE;
@@ -518,8 +518,8 @@ class MockStorageManager extends StorageManager {
   }
 
   MockStorageManager(Map<PartitionId, Store> map, DataNodeId dataNodeId) throws Exception {
-    super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), null, new MetricRegistry(), null,
-        new MockClusterMap(), dataNodeId, null, null, SystemTime.getInstance(), null,
+    super(new StoreConfig(VPROPS), new DiskManagerConfig(VPROPS), Utils.newScheduler(1, true), new MetricRegistry(),
+        null, new MockClusterMap(), dataNodeId, null, null, SystemTime.getInstance(), null,
         new InMemAccountService(false, false));
     storeMap = map;
   }

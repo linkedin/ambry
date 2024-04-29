@@ -46,11 +46,11 @@ public class StatsBasedCompactionPolicyTest {
    * Instantiates {@link CompactionPolicyTest} with the required cast
    * @throws InterruptedException
    */
-  public StatsBasedCompactionPolicyTest() throws InterruptedException {
+  public StatsBasedCompactionPolicyTest() throws InterruptedException, StoreException {
     setupBlobStore(properties);
   }
 
-  public void setupBlobStore(Properties prop) throws InterruptedException {
+  public void setupBlobStore(Properties prop) throws InterruptedException, StoreException {
     Pair<MockBlobStore, StoreConfig> initState =
         CompactionPolicyTest.initializeBlobStore(prop, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
     config = initState.getSecond();

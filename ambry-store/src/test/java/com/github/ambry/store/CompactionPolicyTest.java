@@ -210,7 +210,7 @@ public class CompactionPolicyTest {
    */
   static Pair<MockBlobStore, StoreConfig> initializeBlobStore(Properties properties, Time time,
       int minLogSizeToTriggerCompactionInPercentage, int messageRetentionInHours, long maxBlobSize)
-      throws InterruptedException {
+      throws InterruptedException, StoreException {
 
     if (minLogSizeToTriggerCompactionInPercentage != -1) {
       properties.setProperty("store.min.log.size.to.trigger.compaction.in.percent",
@@ -444,9 +444,10 @@ class MockBlobStore extends BlobStore {
   MockBlobStoreStats mockBlobStoreStats;
 
   MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, long capacityInBytes, long segmentCapacity,
-      long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) {
+      long segmentHeaderSize, long usedCapacity, MockBlobStoreStats mockBlobStoreStats) throws StoreException {
     super(StoreTestUtils.createMockReplicaId(mockBlobStoreStats.getStoreId(), 0,
-            "/tmp/" + mockBlobStoreStats.getStoreId() + "/"), config, null, null, null, null, null, metrics, metrics, null,
+            "/tmp/" + mockBlobStoreStats.getStoreId() + "/"), config, Utils.newScheduler(1, true), null, null, null, null,
+        metrics, metrics, null,
         null, null, null, time, new InMemAccountService(false, false), null, null);
     this.capacityInBytes = capacityInBytes;
     this.segmentCapacity = segmentCapacity;

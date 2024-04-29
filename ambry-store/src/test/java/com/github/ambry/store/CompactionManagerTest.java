@@ -21,6 +21,7 @@ import com.github.ambry.utils.MockTime;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -51,7 +52,7 @@ public class CompactionManagerTest {
   /**
    * Instantiates {@link CompactionManagerTest} with the required cast
    */
-  public CompactionManagerTest() {
+  public CompactionManagerTest() throws StoreException {
     config = new StoreConfig(new VerifiableProperties(properties));
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
@@ -429,7 +430,7 @@ public class CompactionManagerTest {
    * Tests for adding new BlobStore with/without compaction enabled.
    */
   @Test
-  public void testAddBlobStore() {
+  public void testAddBlobStore() throws StoreException {
     StoreMetrics storeMetrics = new StoreMetrics(new MetricRegistry());
     BlobStore newAddedStore = new MockBlobStore(config, storeMetrics, time, null);
     // without compaction enabled.
@@ -514,13 +515,15 @@ public class CompactionManagerTest {
     RuntimeException exceptionToThrowOnCompact = null;
     boolean started = true;
 
-    MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, CompactionDetails details) {
+    MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, CompactionDetails details)
+        throws StoreException {
       this(config, metrics, time, new CountDownLatch(0), details);
     }
 
     MockBlobStore(StoreConfig config, StoreMetrics metrics, Time time, CountDownLatch compactCallsCountdown,
-        CompactionDetails details) {
-      super(StoreTestUtils.createMockReplicaId("", 0, null), config, null, null, null, null, null, metrics, metrics,
+        CompactionDetails details) throws StoreException {
+      super(StoreTestUtils.createMockReplicaId("", 0, null), config, Utils.newScheduler(1, true), null, null, null,
+          null, metrics, metrics,
           null, null, null, null, time, new InMemAccountService(false, false), null, null);
       this.compactCallsCountdown = compactCallsCountdown;
       this.details = details;

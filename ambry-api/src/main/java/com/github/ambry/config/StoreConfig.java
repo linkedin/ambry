@@ -772,8 +772,9 @@ public class StoreConfig {
     storeCompactionHistoryInDay = verifiableProperties.getIntInRange(storeCompactionHistoryInDayName, 21, 1, 365);
     storeRebuildTokenBasedOnCompactionHistory =
         verifiableProperties.getBoolean(storeRebuildTokenBasedOnCompactionHistoryName, false);
+    // persistRemoteToken has to be on all the time. It's a signal that the blobStore is alive.
     storePersistRemoteTokenIntervalInSeconds =
-        verifiableProperties.getIntInRange(storePersistRemoteTokenIntervalInSecondsName, 0, 0, 60 * 60 * 24);
+        verifiableProperties.getIntInRange(storePersistRemoteTokenIntervalInSecondsName, 600, 5, 60 * 60 * 24);
 
     // While making transition from StoreConfig#storeDeletedMessageRetentionHours to StoreConfig#storeDeletedMessageRetentionMinutes
     // we need to make sure that the storeDeletedMessageRetentionHours isn't set by any hidden config that's missed.

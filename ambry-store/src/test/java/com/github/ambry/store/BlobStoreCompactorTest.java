@@ -71,6 +71,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -652,6 +653,7 @@ public class BlobStoreCompactorTest {
     refreshState(false, true, false);
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
     MockIdFactory keyFactory = new MockIdFactory();
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, true);
 
     // Prepare for the token to update
     // Generate tokens for peer replicas and make sure they are both past position of 1st delete tombstone and haven't
@@ -675,7 +677,7 @@ public class BlobStoreCompactorTest {
     MockReplicaId peerReplica2 = localAndPeerReplicas.get(2);
 
     // Case 1: Test token persist file doesn't exist
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     Map<String, Pair<Long, FindToken>> notPersistedToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, notPersistedToken.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : notPersistedToken.entrySet()) {
@@ -684,7 +686,7 @@ public class BlobStoreCompactorTest {
     assertEquals(true, tokenTracker.persistToken());    // persist the token
 
     // Case 2: Although the file exist, no meaningful token content. The token timestamp should be the same as before
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     Map<String, Pair<Long, FindToken>> persistedEmptyToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, persistedEmptyToken.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : persistedEmptyToken.entrySet()) {
@@ -699,7 +701,7 @@ public class BlobStoreCompactorTest {
     assertEquals(true, tokenTracker.persistToken());
 
     // Case 3: peerReplica1 should have the valid token
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     Map<String, Pair<Long, FindToken>> oneValidToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, oneValidToken.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : oneValidToken.entrySet()) {
@@ -719,7 +721,7 @@ public class BlobStoreCompactorTest {
     assertEquals(true, tokenTracker.persistToken());
 
     // Case 4: both tokens are updated
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     Map<String, Pair<Long, FindToken>> twoValidTokens = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, twoValidTokens.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : twoValidTokens.entrySet()) {
@@ -745,7 +747,7 @@ public class BlobStoreCompactorTest {
 
     // Case 5: Corrupted the file
     long currentTime = System.currentTimeMillis();
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     Map<String, Pair<Long, FindToken>> corrupted = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, corrupted.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : corrupted.entrySet()) {
@@ -755,7 +757,7 @@ public class BlobStoreCompactorTest {
     assertEquals(true, tokenTracker.persistToken());    // persist the token
 
     // Case 6: The file is back to normal.
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), null, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     Map<String, Pair<Long, FindToken>> newToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, newToken.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : newToken.entrySet()) {
@@ -768,7 +770,7 @@ public class BlobStoreCompactorTest {
     // Case 7: Remove one replica
     MockReplicaId modifiedLocalReplica = localAndPeerReplicas.get(0);
     modifiedLocalReplica.setPeerReplicas(Collections.singletonList(peerReplica1));
-    tokenTracker = new RemoteTokenTracker(modifiedLocalReplica, null, keyFactory);
+    tokenTracker = new RemoteTokenTracker(modifiedLocalReplica, scheduler, keyFactory);
     Map<String, Pair<Long, FindToken>> onePeerOnlyToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(1, onePeerOnlyToken.size()); // only have one entry
     for (Map.Entry<String, Pair<Long, FindToken>> entry : onePeerOnlyToken.entrySet()) {
@@ -875,6 +877,8 @@ public class BlobStoreCompactorTest {
    * Test the remote token persistor is disabled by default
    * @throws Exception
    */
+  // Right now we always enable remote token persistor.
+  @Ignore
   @Test
   public void testRemoteTokenPersistIsDisabled() throws Exception {
     assumeTrue(purgeDeleteTombstone);
@@ -932,7 +936,9 @@ public class BlobStoreCompactorTest {
     MockIdFactory keyFactory = new MockIdFactory();
     RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
     Properties properties = new Properties();
-    properties.setProperty(StoreConfig.storePersistRemoteTokenIntervalInSecondsName, "1");
+    int intervalInSeconds = 5;
+    properties.setProperty(StoreConfig.storePersistRemoteTokenIntervalInSecondsName,
+        Integer.toString(intervalInSeconds));
     StoreConfig storeConfig = new StoreConfig(new VerifiableProperties(properties));
 
     // Starting the persistor with the storeConfig
@@ -947,6 +953,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.updateTokenFromPeerReplica(tombstoneToken, localAndPeerReplicas.get(2).getDataNodeId().getHostname(),
         localAndPeerReplicas.get(2).getReplicaPath());
     Map<String, Pair<Long, FindToken>> validTokens = tokenTracker.getPeerReplicaAndToken();
+    Thread.sleep(intervalInSeconds * 1000);
     tokenTracker.close();
 
     // start a new RemoteTokenTracker. It'll pick up the persisted remote tokens.

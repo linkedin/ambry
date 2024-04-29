@@ -153,7 +153,7 @@ public class BlobStore implements Store {
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
       List<ReplicaStatusDelegate> replicaStatusDelegates, Time time, AccountService accountService,
-      DiskMetrics diskMetrics, ScheduledExecutorService indexPersistScheduler) {
+      DiskMetrics diskMetrics, ScheduledExecutorService indexPersistScheduler) throws StoreException {
     this(replicaId, replicaId.getPartitionId().toString(), config, taskScheduler, longLivedTaskScheduler, diskManager,
         diskIOScheduler, diskSpaceAllocator, metrics, storeUnderCompactionMetrics, replicaId.getReplicaPath(),
         replicaId.getCapacityInBytes(), factory, recovery, hardDelete, replicaStatusDelegates, time, accountService,
@@ -181,11 +181,13 @@ public class BlobStore implements Store {
    * @param time                        the {@link Time} instance to use.
    * @param indexPersistScheduler       a dedicated {@link ScheduledExecutorService} for persisting index segments.
    */
+  // TODO [TOMBSTONE]: deprecate this constructor. ReplicaId cannot be null. Do we still need the StoreCopier.class
   BlobStore(String storeId, StoreConfig config, ScheduledExecutorService taskScheduler,
       ScheduledExecutorService longLivedTaskScheduler, DiskManager diskManager, DiskIOScheduler diskIOScheduler,
       DiskSpaceAllocator diskSpaceAllocator, StoreMetrics metrics, StoreMetrics storeUnderCompactionMetrics,
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
-      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService indexPersistScheduler) {
+      MessageStoreHardDelete hardDelete, Time time, ScheduledExecutorService indexPersistScheduler)
+      throws StoreException {
     this(null, storeId, config, taskScheduler, longLivedTaskScheduler, diskManager, diskIOScheduler, diskSpaceAllocator,
         metrics, storeUnderCompactionMetrics, dataDir, capacityInBytes, factory, recovery, hardDelete, null, time, null,
         null, null, indexPersistScheduler);
@@ -197,7 +199,7 @@ public class BlobStore implements Store {
       String dataDir, long capacityInBytes, StoreKeyFactory factory, MessageStoreRecovery recovery,
       MessageStoreHardDelete hardDelete, List<ReplicaStatusDelegate> replicaStatusDelegates, Time time,
       AccountService accountService, BlobStoreStats blobStoreStats, DiskMetrics diskMetrics,
-      ScheduledExecutorService indexPersistScheduler) {
+      ScheduledExecutorService indexPersistScheduler) throws StoreException {
     this.replicaId = replicaId;
     this.storeId = storeId;
     this.dataDir = dataDir;
@@ -232,7 +234,7 @@ public class BlobStore implements Store {
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
     previousState = ReplicaState.OFFLINE;
-    remoteTokenTracker = replicaId == null ? null : new RemoteTokenTracker(replicaId, taskScheduler, factory);
+    remoteTokenTracker = new RemoteTokenTracker(replicaId, taskScheduler, factory);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold for seal is {} bytes and the"
             + "low threshold for seal is {} bytes. The high threshold for partial seal is {} bytes and low threshold of"
@@ -294,9 +296,7 @@ public class BlobStore implements Store {
         metrics.initializeIndexGauges(storeId, index, capacityInBytes, blobStoreStats,
             config.storeEnableCurrentInvalidSizeMetric, config.storeEnableIndexDirectMemoryUsageMetric);
         checkCapacityAndUpdateReplicaStatusDelegate();
-        if (remoteTokenTracker != null) {
-          remoteTokenTracker.start(config.storePersistRemoteTokenIntervalInSeconds);
-        }
+        remoteTokenTracker.start(config.storePersistRemoteTokenIntervalInSeconds);
         logger.trace("The store {} is successfully started", storeId);
         onSuccess("START");
         isDisabled.set(false);
@@ -979,7 +979,7 @@ public class BlobStore implements Store {
     checkStarted();
     final Timer.Context context = metrics.findEntriesSinceResponse.time();
     try {
-      if (hostname != null && !hostname.startsWith(Cloud_Replica_Keyword) && remoteTokenTracker != null) {
+      if (hostname != null && !hostname.startsWith(Cloud_Replica_Keyword)) {
         // only tokens from disk-backed replicas are tracked
         remoteTokenTracker.updateTokenFromPeerReplica(token, hostname, remoteReplicaPath);
       }
@@ -1422,9 +1422,7 @@ public class BlobStore implements Store {
         compactor.close(30);
         index.close(skipDiskFlush);
         log.close(skipDiskFlush);
-        if (remoteTokenTracker != null) {
-          remoteTokenTracker.close();
-        }
+        remoteTokenTracker.close();
         metrics.deregisterMetrics(storeId);
         setCurrentState(ReplicaState.OFFLINE);
         started = false;
@@ -1534,9 +1532,7 @@ public class BlobStore implements Store {
    */
   void compact(CompactionDetails details, byte[] bundleReadBuffer) throws IOException, StoreException {
     checkStarted();
-    if (remoteTokenTracker != null) {
-      remoteTokenTracker.refreshPeerReplicaTokens();
-    }
+    remoteTokenTracker.refreshPeerReplicaTokens();
     compactor.compact(details, bundleReadBuffer);
     checkCapacityAndUpdateReplicaStatusDelegate();
     blobStoreStats.onCompactionFinished();
@@ -1570,9 +1566,7 @@ public class BlobStore implements Store {
     checkStarted();
     if (CompactionLog.isCompactionInProgress(dataDir, storeId)) {
       logger.info("Resuming compaction of {}", this);
-      if (remoteTokenTracker != null) {
-        remoteTokenTracker.refreshPeerReplicaTokens();
-      }
+      remoteTokenTracker.refreshPeerReplicaTokens();
       compactor.resumeCompaction(bundleReadBuffer);
       checkCapacityAndUpdateReplicaStatusDelegate();
       blobStoreStats.onCompactionFinished();
