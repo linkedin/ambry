@@ -128,7 +128,7 @@ class CompactAllPolicy implements CompactionPolicy {
       return null;
     }
 
-    for (int i = logSegmentsNotInJournal.size() - 1; i >= 0; i--) {
+    for (int i = logSegmentsNotInJournal.size() - 1; i >= allValidLogSegments.size(); i--) {
       if (!isLogSegmentDataAllValid.test(logSegmentsNotInJournal.get(i))) {
         break;
       }
