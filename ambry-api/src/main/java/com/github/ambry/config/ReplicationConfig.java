@@ -45,9 +45,9 @@ public class ReplicationConfig {
   /**
    * The factory class the replication uses to create cloud token
    */
-  public static final String DEFAULT_TOKEN_FACTORY = "com.github.ambry.cloud.RecoveryTokenFactory";
+  public static final String DEFAULT_RECOVERY_TOKEN_FACTORY = "com.github.ambry.cloud.RecoveryTokenFactory";
   @Config(REPLICATION_CLOUD_TOKEN_FACTORY)
-  @Default(DEFAULT_TOKEN_FACTORY)
+  @Default(DEFAULT_RECOVERY_TOKEN_FACTORY)
   public final String replicationCloudTokenFactory;
 
   /**
@@ -325,7 +325,8 @@ public class ReplicationConfig {
     replicationThreadType = verifiableProperties.getString(REPLICATION_THREAD_TYPE, DEFAULT_REPLICATION_THREAD);
     replicationStoreTokenFactory =
         verifiableProperties.getString("replication.token.factory", "com.github.ambry.store.StoreFindTokenFactory");
-    replicationCloudTokenFactory = verifiableProperties.getString(REPLICATION_CLOUD_TOKEN_FACTORY, DEFAULT_TOKEN_FACTORY);
+    replicationCloudTokenFactory = verifiableProperties.getString(REPLICATION_CLOUD_TOKEN_FACTORY,
+        DEFAULT_RECOVERY_TOKEN_FACTORY);
     replicationNumOfIntraDCReplicaThreads =
         verifiableProperties.getInt("replication.no.of.intra.dc.replica.threads", 1);
     replicationNumOfInterDCReplicaThreads =
