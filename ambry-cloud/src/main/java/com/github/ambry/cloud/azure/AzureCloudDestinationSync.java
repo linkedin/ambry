@@ -764,7 +764,8 @@ public class AzureCloudDestinationSync implements CloudDestination {
   public boolean doesBlobExist(BlobId blobId) {
     AzureBlobLayoutStrategy.BlobLayout blobLayout = azureBlobLayoutStrategy.getDataBlobLayout(blobId);
     try {
-      return createOrGetBlobStore(blobLayout.containerName).getBlobClient(blobLayout.blobFilePath).exists();
+      getBlobProperties(blobLayout);
+      return true;
     } catch (Throwable t) {
       azureMetrics.blobCheckError.inc();
       logger.error("Failed to check if blob {} exists in Azure blob storage due to {}", blobLayout, t.getMessage());
