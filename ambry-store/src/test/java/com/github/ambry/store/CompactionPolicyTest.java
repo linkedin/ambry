@@ -33,7 +33,9 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
 import java.util.TreeMap;
@@ -148,7 +150,7 @@ public class CompactionPolicyTest {
    * {@link StoreConfig#storeMinUsedCapacityToTriggerCompactionInPercentage}
    */
   @Test
-  public void testDifferentThresholdsForMinLogSizeToCompact() throws StoreException, InterruptedException {
+  public void testDifferentThresholdsForMinLogSizeToCompact() throws Exception {
 
     int[] minLogSizeToTriggerCompactionInPercentages = new int[]{10, 20, 35, 40, 50, 59, 60, 61, 65, 70, 80, 95};
     // when used capacity(60%) is <= (minLogSize) % of total capacity, compactionDetails is expected to be null.
@@ -178,7 +180,7 @@ public class CompactionPolicyTest {
    * {@link StoreConfig#storeDeletedMessageRetentionMinutes}
    */
   @Test
-  public void testDifferentMessageRetentionDays() throws StoreException, InterruptedException {
+  public void testDifferentMessageRetentionDays() throws Exception {
     List<LogSegmentName> bestCandidates = null;
     int[] messageRetentionHoursValues = new int[]{1, 2, 3, 6, 9};
     for (int messageRetentionHours : messageRetentionHoursValues) {
@@ -200,6 +202,12 @@ public class CompactionPolicyTest {
   }
 
   // helper methods
+  public static class StoreConfigWrapper {
+    public int minLogSizeToTriggerCompactionInPercentage = -1;
+    public int messageRetentionInHours = -1;
+    public long maxBlobSize = -1;
+    public boolean compactAllFilterAllValidSegment = false;
+  }
 
   /**
    * Initializes {@link BlobStore}
@@ -209,21 +217,31 @@ public class CompactionPolicyTest {
    * @throws InterruptedException
    */
   static Pair<MockBlobStore, StoreConfig> initializeBlobStore(Properties properties, Time time,
-      int minLogSizeToTriggerCompactionInPercentage, int messageRetentionInHours, long maxBlobSize)
-      throws InterruptedException, StoreException {
+      int minLogSizeToTriggerCompactionInPercentage, int messageRetentionInHours, long maxBlobSize) throws Exception {
+    StoreConfigWrapper wrapper = new StoreConfigWrapper();
+    wrapper.minLogSizeToTriggerCompactionInPercentage = minLogSizeToTriggerCompactionInPercentage;
+    wrapper.messageRetentionInHours = messageRetentionInHours;
+    wrapper.maxBlobSize = maxBlobSize;
+    return initializeBlobStore(properties, time, wrapper);
+  }
 
-    if (minLogSizeToTriggerCompactionInPercentage != -1) {
+  static Pair<MockBlobStore, StoreConfig> initializeBlobStore(Properties properties, Time time,
+      StoreConfigWrapper wrapper) throws Exception {
+    if (wrapper.minLogSizeToTriggerCompactionInPercentage != -1) {
       properties.setProperty("store.min.log.size.to.trigger.compaction.in.percent",
-          String.valueOf(minLogSizeToTriggerCompactionInPercentage));
+          String.valueOf(wrapper.minLogSizeToTriggerCompactionInPercentage));
     }
-    if (messageRetentionInHours != -1) {
-      properties.setProperty("store.deleted.message.retention.minutes", String.valueOf(messageRetentionInHours * 60));
+    if (wrapper.messageRetentionInHours != -1) {
+      properties.setProperty("store.deleted.message.retention.minutes",
+          String.valueOf(wrapper.messageRetentionInHours * 60));
     }
+    properties.setProperty(StoreConfig.storeCompactAllPolicyFilterOutAllValidSegmentName,
+        String.valueOf(wrapper.compactAllFilterAllValidSegment));
     StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
     time.sleep(10 * TimeUnit.MINUTES.toMillis(config.storeDeletedMessageRetentionMinutes));
     MetricRegistry metricRegistry = new MetricRegistry();
     StoreMetrics metrics = new StoreMetrics(metricRegistry);
-    MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(maxBlobSize);
+    MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(wrapper.maxBlobSize);
     MockBlobStore blobStore =
         new MockBlobStore(config, metrics, time, CAPACITY_IN_BYTES, SEGMENT_CAPACITY_IN_BYTES, SEGMENT_HEADER_SIZE,
             DEFAULT_USED_CAPACITY_IN_BYTES, mockBlobStoreStats);
@@ -475,6 +493,7 @@ class MockBlobStoreStats extends BlobStoreStats {
 
   NavigableMap<LogSegmentName, Long> validDataSizeByLogSegments;
   private String storeId = "";
+  private LogSegmentSizeProvider provider = null;
 
   MockBlobStoreStats(long maxBlobSize) {
     super("", null, 0, 0, 0, 0, 0, true, true, null, null, null, null, null, 1, false);
@@ -505,4 +524,35 @@ class MockBlobStoreStats extends BlobStoreStats {
   String getStoreId() {
     return this.storeId;
   }
+
+  @Override
+  LogSegmentSizeProvider getLogSegmentSizeProvider() {
+    if (provider == null) {
+      return new MapLogSegmentSizeProvider(new HashMap<>());
+    }
+    return provider;
+  }
+
+  void setLogSegmentSizeProvider(LogSegmentSizeProvider provider) {
+    this.provider = provider;
+  }
 }
+
+class MapLogSegmentSizeProvider implements LogSegmentSizeProvider {
+
+  private final Map<LogSegmentName, Long> logSegmentSizes;
+
+  public MapLogSegmentSizeProvider(Map<LogSegmentName, Long> sizes) {
+    this.logSegmentSizes = sizes;
+  }
+
+  @Override
+  public long getLogSegmentSize(LogSegmentName name) {
+    if (logSegmentSizes.containsKey(name)) {
+      return logSegmentSizes.get(name);
+    } else {
+      return 0;
+    }
+  }
+}
+

@@ -109,6 +109,15 @@ public class StoreConfig {
   public final int storeHybridCompactionFullCompactionStaggerLimitInHours;
 
   /**
+   * True to filter out all leading and trailing log segments whose data is 100% valid in compact all policy.
+   */
+  @Config(storeCompactAllPolicyFilterOutAllValidSegmentName)
+  @Default("false")
+  public final boolean storeCompactAllPolicyFilterOutAllValidSegment;
+  public static final String storeCompactAllPolicyFilterOutAllValidSegmentName =
+      "store.compact.all.policy.filter.out.all.valid.segment";
+
+  /**
    * How long (in days) a container must be in DELETE_IN_PROGRESS state before it's been deleted during compaction.
    */
   @Config("store.container.deletion.retention.days")
@@ -658,6 +667,8 @@ public class StoreConfig {
     storeHybridCompactionFullCompactionStaggerLimitInHours =
         verifiableProperties.getIntInRange("store.hybrid.compaction.full.compaction.stagger.limit.in.hours", 0, 0,
             Integer.MAX_VALUE);
+    storeCompactAllPolicyFilterOutAllValidSegment =
+        verifiableProperties.getBoolean(storeCompactAllPolicyFilterOutAllValidSegmentName, false);
     storeContainerDeletionRetentionDays = verifiableProperties.getInt("store.container.deletion.retention.days", 14);
     storeHardDeleteOperationsBytesPerSec =
         verifiableProperties.getIntInRange("store.hard.delete.operations.bytes.per.sec", 100 * 1024, 1,

@@ -46,11 +46,11 @@ public class StatsBasedCompactionPolicyTest {
    * Instantiates {@link CompactionPolicyTest} with the required cast
    * @throws InterruptedException
    */
-  public StatsBasedCompactionPolicyTest() throws InterruptedException, StoreException {
+  public StatsBasedCompactionPolicyTest() throws Exception {
     setupBlobStore(properties);
   }
 
-  public void setupBlobStore(Properties prop) throws InterruptedException, StoreException {
+  public void setupBlobStore(Properties prop) throws Exception {
     Pair<MockBlobStore, StoreConfig> initState =
         CompactionPolicyTest.initializeBlobStore(prop, time, -1, -1, DEFAULT_MAX_BLOB_SIZE);
     config = initState.getSecond();
@@ -161,7 +161,7 @@ public class StatsBasedCompactionPolicyTest {
    * @throws StoreException, InterruptedException
    */
   @Test
-  public void testMiddleRangeCompactionGetCompactionDetails() throws StoreException, InterruptedException {
+  public void testMiddleRangeCompactionGetCompactionDetails() throws Exception {
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
     // the test is designed to use for 10 log segments.
     assertEquals(logSegmentCount, 10);
@@ -209,8 +209,7 @@ public class StatsBasedCompactionPolicyTest {
    * @throws StoreException, InterruptedException
    */
   @Test
-  public void testWeightOnBenefitStatsBasedCompactionGetCompactionDetails()
-      throws StoreException, InterruptedException {
+  public void testWeightOnBenefitStatsBasedCompactionGetCompactionDetails() throws Exception {
     long logSegmentCount = blobStore.capacityInBytes / blobStore.segmentCapacity;
     // the test is designed to use for 10 log segments.
     assertEquals(logSegmentCount, 10);

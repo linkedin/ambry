@@ -243,6 +243,14 @@ class BlobStoreStats implements StoreStats, Closeable {
   }
 
   /**
+   * Return {@link LogSegmentSizeProvider}.
+   * @return
+   */
+  LogSegmentSizeProvider getLogSegmentSizeProvider() {
+    return index;
+  }
+
+  /**
    * Gets the size of valid data at a particular point in time for all log segments. The caller specifies a delete reference
    * time and acceptable resolution for the stats in the form of a {@link TimeRange}. The store will return data
    * for a point in time within the specified range.
