@@ -183,6 +183,12 @@ public class StoreConfig {
   @Default("false")
   public final boolean storeCompactionPurgeDeleteTombstone;
 
+  @Config(storeCompactionIgnorePeersUnavailableForDaysName)
+  @Default("0")
+  public final int storeCompactionIgnorePeersUnavailableForDays;
+  public final static String storeCompactionIgnorePeersUnavailableForDaysName =
+      "store.compaction.ignore.peers.unavailable.for.days";
+
   /**
    * The minimum buffer size for compaction copy phase.
    */
@@ -688,6 +694,8 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeCompactionDirectIOBufferSizeName, 0, 0, 100 * 1024 * 1024);
     storeCompactionPurgeDeleteTombstone =
         verifiableProperties.getBoolean("store.compaction.purge.delete.tombstone", false);
+    storeCompactionIgnorePeersUnavailableForDays =
+        verifiableProperties.getIntInRange(storeCompactionIgnorePeersUnavailableForDaysName, 0, 0, Integer.MAX_VALUE);
     storeCompactionMinBufferSize =
         verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0, Integer.MAX_VALUE);
     storeCompactionFilter =

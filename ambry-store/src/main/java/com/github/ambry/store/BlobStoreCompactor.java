@@ -1393,6 +1393,17 @@ class BlobStoreCompactor {
     }
     for (Map.Entry<String, Pair<Long, FindToken>> entry : remoteTokenTracker.getPeerReplicaAndToken().entrySet()) {
       Pair<Long, FindToken> pair = entry.getValue();
+      // Ignore this peer if the last active replication's timestamp of this peer is longer than the pre-configured days.
+      if (config.storeCompactionIgnorePeersUnavailableForDays != 0
+          && pair.getFirst() + TimeUnit.DAYS.toMillis(config.storeCompactionIgnorePeersUnavailableForDays)
+          < time.milliseconds()) {
+        if (logger.isTraceEnabled()) {
+          logger.trace(
+              "Store {}: dealing with delete index entry: key {}, offset {}, peer {}'s last active time is {}, ignore it",
+              dataDir, deleteIndexEntry.getKey(), deleteIndexEntry.getValue().getOffset(), pair.getFirst());
+        }
+        continue;
+      }
       FindToken token = srcIndex.resetTokenIfRequired((StoreFindToken) pair.getSecond());
       if (!token.equals(pair.getSecond())) {
         // incarnation id has changed or there is unclean shutdown
