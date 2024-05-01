@@ -36,6 +36,7 @@ public class NamedBlobPath {
   static final String PREFIX_PARAM = "prefix";
   static final String PAGE_PARAM = "page";
   static final int MAX_BLOB_NAME_LENGTH = 350;
+  static final String LIST_TYPE = "list-type";
 
   /**
    * Parse the input path if it's a named blob request.
@@ -90,7 +91,7 @@ public class NamedBlobPath {
     String[] splitPath = path.split("/", 4);
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
-    boolean isListRequest = blobNamePrefix != null;
+    boolean isListRequest = blobNamePrefix != null || "2".equals(RestUtils.getHeader(args, LIST_TYPE, false));
     int expectedSegments = (isListRequest || isGetObjectLockRequest) ? 3 : 4;
     if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
       throw new RestServiceException(String.format(

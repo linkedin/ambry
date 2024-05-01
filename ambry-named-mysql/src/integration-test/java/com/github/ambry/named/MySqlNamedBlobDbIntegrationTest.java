@@ -128,6 +128,20 @@ public class MySqlNamedBlobDbIntegrationTest {
       }
     }
 
+    // list all records in each container.
+    time.setCurrentMilliseconds(System.currentTimeMillis());
+    for (Account account : accountService.getAllAccounts()) {
+      for (Container container : account.getAllContainers()) {
+        //page with no token
+        Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), null, null).get();
+        assertNull("No continuation token expected", page.getNextPageToken());
+        assertEquals("Unexpected number of blobs in container", blobsPerContainer, page.getEntries().size());
+        //page with token
+        Page<NamedBlobRecord> pageWithToken = namedBlobDb.list(account.getName(), container.getName(), null, "name/4").get();
+        assertEquals("Unexpected number of blobs in container", blobsPerContainer / 5, pageWithToken.getEntries().size());
+      }
+    }
+
     // check that puts to the same keys fail.
     time.setCurrentMilliseconds(System.currentTimeMillis());
     for (Account account : accountService.getAllAccounts()) {

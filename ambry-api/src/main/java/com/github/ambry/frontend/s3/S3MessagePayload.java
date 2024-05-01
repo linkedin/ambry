@@ -222,22 +222,27 @@ public class S3MessagePayload {
     private String key;
     @JacksonXmlProperty(localName = "LastModified")
     private String lastModified;
+    @JacksonXmlProperty(localName = "Size")
+    private long size;
 
     private Contents() {
     }
 
-    public Contents(String key, String lastModified) {
+    public Contents(String key, String lastModified, long size) {
       this.key = key;
       this.lastModified = lastModified;
+      this.size = size;
     }
 
     public String getKey() {
       return key;
     }
 
+    public long getSize() { return size; }
+
     @Override
     public String toString() {
-      return "Key=" + key + ", " + "LastModified=" + lastModified;
+      return "Key=" + key + ", " + "LastModified=" + lastModified + ", " + "Size=" + size;
     }
   }
 
