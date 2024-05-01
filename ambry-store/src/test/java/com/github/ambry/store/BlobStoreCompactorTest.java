@@ -698,6 +698,8 @@ public class BlobStoreCompactorTest {
       assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
     }
     assertEquals(notPersistedToken, persistedEmptyToken);
+    // advance time
+    state.time.sleep(10);
     // update peerReplica1's token
     tokenTracker.updateTokenFromPeerReplica(peerToken1, peerReplica1.getDataNodeId().getHostname(),
         peerReplica1.getReplicaPath());
@@ -718,6 +720,7 @@ public class BlobStoreCompactorTest {
         assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
       }
     }
+    state.time.sleep(10);
     // update peerReplica2's token as well
     tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
         peerReplica2.getReplicaPath());
@@ -749,7 +752,7 @@ public class BlobStoreCompactorTest {
     writer.close();
 
     // Case 5: Corrupted the file
-    long currentTime = System.currentTimeMillis();
+    long currentTime = state.time.milliseconds();
     tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> corrupted = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, corrupted.size());
