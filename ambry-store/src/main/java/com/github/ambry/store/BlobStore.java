@@ -34,10 +34,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.SequenceInputStream;
+import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -267,6 +269,9 @@ public class BlobStore implements Store {
               StoreErrorCodes.Initialization_Error);
         }
 
+        // check the file system before we do any file write.
+        checkIfStoreIsStale();
+
         // lock the directory
         fileLock = new FileLock(new File(dataDir, LockFile));
         if (!fileLock.tryLock()) {
@@ -320,6 +325,52 @@ public class BlobStore implements Store {
         throw new StoreException(err, e, StoreErrorCodes.Initialization_Error);
       } finally {
         context.stop();
+      }
+    }
+  }
+
+  /**
+   * Find the last modified file in the folder
+   */
+  private File getLatestFilefromDir(String dirPath) {
+    File dir = new File(dirPath);
+    File[] files = dir.listFiles();
+    if (files == null || files.length == 0) {
+      return null;
+    }
+
+    File lastModifiedFile = files[0];
+    for (int i = 1; i < files.length; i++) {
+      if (lastModifiedFile.lastModified() < files[i].lastModified()) {
+        lastModifiedFile = files[i];
+      }
+    }
+    return lastModifiedFile;
+  }
+
+  /**
+   * Check if the store is stale.
+   * If yes, throw exception
+   */
+  private void checkIfStoreIsStale() throws StoreException {
+    File lastModifiedFile = getLatestFilefromDir(replicaId.getReplicaPath());
+
+    long lastModifiedTimeInMilliseconds = time.milliseconds();
+    if (lastModifiedFile != null) {
+      lastModifiedTimeInMilliseconds = lastModifiedFile.lastModified();
+    }
+    Date date = new Date(lastModifiedTimeInMilliseconds);
+    SimpleDateFormat formatter = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+    String lastAliveTime = formatter.format(date);
+    logger.info(
+        "checkIfStoreIsStale " + replicaId.getReplicaPath() + " last modified file " + ((lastModifiedFile != null)
+            ? lastModifiedFile.getAbsolutePath() : "") + " last alive time " + lastAliveTime);
+
+    if (config.storeStaleTimeInDays != 0
+        && lastModifiedTimeInMilliseconds + TimeUnit.DAYS.toMillis(config.storeStaleTimeInDays) < time.milliseconds()) {
+      logger.error("checkIfStoreIsStale " + replicaId.getReplicaPath() + " is stale. ");
+      if (config.storeStaleBlockBootup) {
+        throw new StoreException("BlobStore is stale ", StoreErrorCodes.Initialization_Error);
       }
     }
   }

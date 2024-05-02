@@ -650,6 +650,20 @@ public class StoreConfig {
   public final int storeProactiveTestDelayInSeconds;
   public static final String storeProactiveTestDelayInSecondsName = "store.proactive.test.delay.in.seconds";
 
+  /**
+   * If the store hasn't been up for X days, the store is stale.
+   */
+  @Config(storeStaleTimeInDaysName)
+  public final int storeStaleTimeInDays;
+  public final static String storeStaleTimeInDaysName = "store.stale.time.in.days";
+
+  /**
+   * If the store is stale and storeStaleBlockBootup is true, don't start the blob.
+   */
+  @Config(storeStaleBlockBootupName)
+  public final boolean storeStaleBlockBootup;
+  public final static String storeStaleBlockBootupName = "store.stale.block.bootup";
+
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
     storeDataFlushIntervalSeconds = verifiableProperties.getLong("store.data.flush.interval.seconds", 60);
@@ -823,5 +837,7 @@ public class StoreConfig {
         verifiableProperties.getBoolean(storeProactivelyTestStorageAvailabilityName, false);
     storeProactiveTestDelayInSeconds =
         verifiableProperties.getIntInRange(storeProactiveTestDelayInSecondsName, 60, 0, Integer.MAX_VALUE);
+    storeStaleTimeInDays = verifiableProperties.getIntInRange(storeStaleTimeInDaysName, 7, 0, Integer.MAX_VALUE);
+    storeStaleBlockBootup = verifiableProperties.getBoolean(storeStaleBlockBootupName, false);
   }
 }
