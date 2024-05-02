@@ -91,6 +91,9 @@ public class NamedBlobPath {
     String[] splitPath = path.split("/", 4);
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
+    //There are two cases for S3 listing
+    //1.has prefix (Ex:GET /?prefix=prefixName&delimiter=&encoding-type=url)
+    //2.no prefix but listObjectV2 (Ex:GET /?list-type=2&prefix=&delimiter=&encoding-type=url)
     boolean isListRequest = blobNamePrefix != null || "2".equals(RestUtils.getHeader(args, LIST_TYPE, false));
     int expectedSegments = (isListRequest || isGetObjectLockRequest) ? 3 : 4;
     if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
