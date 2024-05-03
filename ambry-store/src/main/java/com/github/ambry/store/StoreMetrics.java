@@ -233,7 +233,7 @@ public class StoreMetrics {
     storeIoErrorTriggeredShutdownCount =
         registry.counter(MetricRegistry.name(BlobStore.class, name + "StoreIoErrorTriggeredShutdownCount"));
     Gauge<Integer> staleBlobStoreCount = BlobStore.staleBlobCount::get;
-    registry.register(MetricRegistry.name(BlobStore.class, name + "StaleBlobStoreCount"), staleBlobStoreCount);
+    registry.gauge(MetricRegistry.name(BlobStore.class, name + "StaleBlobStoreCount"), () -> staleBlobStoreCount);
     compactionFixStateCount = registry.counter(MetricRegistry.name(BlobStoreCompactor.class, name + "FixStateCount"));
     compactionCopyRateInBytes = registry.meter(MetricRegistry.name(BlobStoreCompactor.class, name + "CopyRateInBytes"));
     compactionBytesReclaimedCount =
