@@ -658,11 +658,11 @@ public class StoreConfig {
   public final static String storeStaleTimeInDaysName = "store.stale.time.in.days";
 
   /**
-   * If the store is stale and storeStaleBlockBootup is true, don't start the blob.
+   * If the store is stale and storeBlockStaleBlobStoreToStart is true, don't start the blob.
    */
-  @Config(storeStaleBlockBootupName)
-  public final boolean storeStaleBlockBootup;
-  public final static String storeStaleBlockBootupName = "store.stale.block.bootup";
+  @Config(storeBlockStaleBlobStoreToStartName)
+  public final boolean storeBlockStaleBlobStoreToStart;
+  public final static String storeBlockStaleBlobStoreToStartName = "store.stale.block.bootup";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
@@ -838,6 +838,6 @@ public class StoreConfig {
     storeProactiveTestDelayInSeconds =
         verifiableProperties.getIntInRange(storeProactiveTestDelayInSecondsName, 60, 0, Integer.MAX_VALUE);
     storeStaleTimeInDays = verifiableProperties.getIntInRange(storeStaleTimeInDaysName, 7, 0, Integer.MAX_VALUE);
-    storeStaleBlockBootup = verifiableProperties.getBoolean(storeStaleBlockBootupName, false);
+    storeBlockStaleBlobStoreToStart = verifiableProperties.getBoolean(storeBlockStaleBlobStoreToStartName, false);
   }
 }

@@ -369,8 +369,8 @@ public class BlobStore implements Store {
     if (config.storeStaleTimeInDays != 0
         && lastModifiedTimeInMilliseconds + TimeUnit.DAYS.toMillis(config.storeStaleTimeInDays) < time.milliseconds()) {
       logger.error("checkIfStoreIsStale " + replicaId.getReplicaPath() + " is stale. ");
-      if (config.storeStaleBlockBootup) {
-        throw new StoreException("BlobStore is stale ", StoreErrorCodes.Initialization_Error);
+      if (config.storeBlockStaleBlobStoreToStart) {
+        throw new StoreException("BlobStore " + dataDir + " is stale ", StoreErrorCodes.Initialization_Error);
       }
     }
   }
