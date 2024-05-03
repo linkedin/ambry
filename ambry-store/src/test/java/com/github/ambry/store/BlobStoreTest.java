@@ -299,7 +299,7 @@ public class BlobStoreTest {
   private final File tempDir;
   private final String tempDirStr;
   // the time instance that will be used in the index
-  private final Time time = new MockTime();
+  private final Time time = new MockTime(System.currentTimeMillis());
 
   private final String storeId = TestUtils.getRandomString(10);
   private final DiskIOScheduler diskIOScheduler = new DiskIOScheduler(null);
@@ -1108,6 +1108,44 @@ public class BlobStoreTest {
     assertTrue(mockBlobStoreStats.currentValue.isTtlUpdate());
     assertTrue(mockBlobStoreStats.previousValue.isTtlUpdate());
     assertTrue(mockBlobStoreStats.originalPutValue.isTtlUpdate());
+  }
+
+  @Test
+  public void testBlobStoreStale() throws Exception {
+    store.shutdown();
+    ReplicaId replicaId = getMockReplicaId(tempDirStr);
+    StoreConfig config = new StoreConfig(new VerifiableProperties(properties));
+    MetricRegistry registry = new MetricRegistry();
+    storeMetrics = new StoreMetrics(registry);
+
+    // restart, it starts normally
+    MockBlobStoreStats mockBlobStoreStats = new MockBlobStoreStats(time);
+    store = new MockBlobStore(replicaId, config, null, storeMetrics, mockBlobStoreStats);
+    store.start();
+    store.shutdown();
+
+    // config.storeStaleBlockBootup is true
+    properties.put("store.stale.time.in.days", Integer.toString(1));
+    properties.put("store.block.stale.blob.store.to.start", "true");
+    // sleep for 2 days.
+    time.sleep(TimeUnit.DAYS.toMillis(config.storeStaleTimeInDays * 2));
+    config = new StoreConfig(new VerifiableProperties(properties));
+    mockBlobStoreStats = new MockBlobStoreStats(time);
+    store = new MockBlobStore(replicaId, config, null, storeMetrics, mockBlobStoreStats);
+    try {
+      store.start();
+      Assert.fail("Shouldn't be successful.");
+    } catch (StoreException e) {
+      Assert.assertEquals(StoreErrorCodes.Initialization_Error, e.getErrorCode());
+      Assert.assertTrue(e.getMessage().contains("stale"));
+    }
+
+    // config.storeStaleBlockBootup is false
+    properties.put("store.block.stale.blob.store.to.start", "false");
+    config = new StoreConfig(new VerifiableProperties(properties));
+    mockBlobStoreStats = new MockBlobStoreStats(time);
+    store = new MockBlobStore(replicaId, config, null, storeMetrics, mockBlobStoreStats);
+    store.start();
   }
 
   /**
@@ -3935,10 +3973,11 @@ public class BlobStoreTest {
   private void inNoTtlUpdatePeriodTest() throws Exception {
     long bufferTimeSecs = new StoreConfig(new VerifiableProperties(properties)).storeTtlUpdateBufferTimeSeconds;
     long cutOffTimeMs = time.milliseconds() + TimeUnit.SECONDS.toMillis(bufferTimeSecs);
-    MockId id = put(1, PUT_RECORD_SIZE, cutOffTimeMs - 1).get(0);
+    // round up to 1s.
+    MockId id = put(1, PUT_RECORD_SIZE, cutOffTimeMs - 1000).get(0);
     verifyTtlUpdateFailure(id, Utils.Infinite_Time, StoreErrorCodes.Update_Not_Allowed);
-    // something that is AT cutoff time succeeds
-    id = put(1, PUT_RECORD_SIZE, cutOffTimeMs).get(0);
+    // something that is AT cutoff time succeeds, round up to 1s.
+    id = put(1, PUT_RECORD_SIZE, cutOffTimeMs + 1000).get(0);
     updateTtl(id);
     verifyTtlUpdate(id);
   }
