@@ -59,20 +59,20 @@ public class RemoteTokenTracker implements Closeable {
   private final ScheduledExecutorService scheduler;
   private final RemoteTokenPersistor persistor;
   private ScheduledFuture<?> persistorFuture = null;
-  private final RemoteReplicaTokenSerde tokenSerde;
+  private final Time time;
 
   private static final Logger logger = LoggerFactory.getLogger(RemoteTokenTracker.class);
 
-  public RemoteTokenTracker(ReplicaId localReplica, ScheduledExecutorService scheduler, StoreKeyFactory storeKeyFactory)
-      throws StoreException {
+  public RemoteTokenTracker(ReplicaId localReplica, ScheduledExecutorService scheduler, StoreKeyFactory storeKeyFactory,
+      Time time) throws StoreException {
     if (scheduler == null || localReplica == null) {
       logger.error("localReplica and schedule CANNOT BE NULL.");
       throw new StoreException("localReplica and schedule CANNOT BE NULL.", StoreErrorCodes.Initialization_Error);
     }
     this.localReplica = localReplica;
     this.scheduler = scheduler;
-    this.tokenSerde = new RemoteReplicaTokenSerde(storeKeyFactory);
-    this.persistor = new RemoteTokenTracker.RemoteTokenPersistor();
+    this.time = time;
+    this.persistor = new RemoteTokenPersistor(storeKeyFactory);
     // get the remote token from the persistent file.
     this.peerReplicaAndToken = persistor.retrieve();
     // then update with the latest peers.
@@ -87,7 +87,7 @@ public class RemoteTokenTracker implements Closeable {
    */
   void updateTokenFromPeerReplica(FindToken token, String remoteHostName, String remoteReplicaPath) {
     // this already handles newly added peer replica (i.e. move replica)
-    Pair<Long, FindToken> pair = new Pair<>(System.currentTimeMillis(), token);
+    Pair<Long, FindToken> pair = new Pair<>(time.milliseconds(), token);
     peerReplicaAndToken.put(remoteHostName + DELIMITER + remoteReplicaPath, pair);
   }
 
@@ -99,8 +99,8 @@ public class RemoteTokenTracker implements Closeable {
     // this should remove peer replica that no longer exists (i.e original replica is moved to other node)
     localReplica.getPeerReplicaIds().forEach(r -> {
       String hostnameAndPath = r.getDataNodeId().getHostname() + DELIMITER + r.getReplicaPath();
-      newPeerReplicaAndToken.put(hostnameAndPath, peerReplicaAndToken.getOrDefault(hostnameAndPath,
-          new Pair<>(System.currentTimeMillis(), new StoreFindToken())));
+      newPeerReplicaAndToken.put(hostnameAndPath,
+          peerReplicaAndToken.getOrDefault(hostnameAndPath, new Pair<>(time.milliseconds(), new StoreFindToken())));
     });
     // atomic switch
     peerReplicaAndToken = newPeerReplicaAndToken;
@@ -159,6 +159,11 @@ public class RemoteTokenTracker implements Closeable {
    * Runner that persist the remote peers and their tokens.
    */
   private class RemoteTokenPersistor implements Runnable {
+    private final RemoteReplicaTokenSerde tokenSerde;
+
+    RemoteTokenPersistor(StoreKeyFactory storeKeyFactory) {
+      tokenSerde = new RemoteReplicaTokenSerde(storeKeyFactory);
+    }
 
     @Override
     public void run() {

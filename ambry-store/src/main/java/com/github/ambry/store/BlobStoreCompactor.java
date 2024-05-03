@@ -109,6 +109,7 @@ class BlobStoreCompactor {
   private final AtomicInteger compactedLogCount = new AtomicInteger(0);
   private final AtomicInteger logSegmentCount = new AtomicInteger(0);
   private volatile boolean shouldPersistIndexSegmentOffsets = false;
+  private final Set<String> ignoredOfflinePeers = new HashSet<>();
 
   /**
    * Constructs the compactor component.
@@ -550,6 +551,21 @@ class BlobStoreCompactor {
    * @throws StoreException if there were exceptions reading to writing to store components.
    */
   private void setupState() throws IOException, StoreException {
+    if (remoteTokenTracker != null) {
+      // Fresh ignoredOfflinePeers set
+      ignoredOfflinePeers.clear();
+      for (Map.Entry<String, Pair<Long, FindToken>> entry : remoteTokenTracker.getPeerReplicaAndToken().entrySet()) {
+        Pair<Long, FindToken> pair = entry.getValue();
+        // Ignore this peer if the last active replication's timestamp of this peer is longer than the pre-configured days.
+        if (config.storeCompactionIgnorePeersUnavailableForDays != 0
+            && pair.getFirst() + TimeUnit.DAYS.toMillis(config.storeCompactionIgnorePeersUnavailableForDays)
+            < time.milliseconds()) {
+          ignoredOfflinePeers.add(entry.getKey());
+          logger.info("Store {}: peer {}'s last active time is {}, ignore this peer from checking delete tombstones",
+              dataDir, entry.getKey(), pair.getFirst());
+        }
+      }
+    }
     CompactionDetails details = compactionLog.getCompactionDetails();
     long highestGeneration = 0;
     for (LogSegmentName segmentName : details.getLogSegmentsUnderCompaction()) {
@@ -1393,6 +1409,16 @@ class BlobStoreCompactor {
     }
     for (Map.Entry<String, Pair<Long, FindToken>> entry : remoteTokenTracker.getPeerReplicaAndToken().entrySet()) {
       Pair<Long, FindToken> pair = entry.getValue();
+      // Ignore this peer if the last active replication's timestamp of this peer is longer than the pre-configured days.
+      if (ignoredOfflinePeers.contains(entry.getKey())) {
+        if (logger.isTraceEnabled()) {
+          logger.trace(
+              "Store {}: dealing with delete index entry: key {}, offset {}, peer {}'s last active time is {}, ignore it",
+              dataDir, deleteIndexEntry.getKey(), deleteIndexEntry.getValue().getOffset(), entry.getKey(),
+              pair.getFirst());
+        }
+        continue;
+      }
       FindToken token = srcIndex.resetTokenIfRequired((StoreFindToken) pair.getSecond());
       if (!token.equals(pair.getSecond())) {
         // incarnation id has changed or there is unclean shutdown

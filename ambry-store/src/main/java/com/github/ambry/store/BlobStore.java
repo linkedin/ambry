@@ -234,7 +234,7 @@ public class BlobStore implements Store {
     errorCount = new AtomicInteger(0);
     currentState = ReplicaState.OFFLINE;
     previousState = ReplicaState.OFFLINE;
-    remoteTokenTracker = new RemoteTokenTracker(replicaId, taskScheduler, factory);
+    remoteTokenTracker = new RemoteTokenTracker(replicaId, taskScheduler, factory, time);
     logger.debug(
         "The enable state of replicaStatusDelegate is {} on store {}. The high threshold for seal is {} bytes and the"
             + "low threshold for seal is {} bytes. The high threshold for partial seal is {} bytes and low threshold of"

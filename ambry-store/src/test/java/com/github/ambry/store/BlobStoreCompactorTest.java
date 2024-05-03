@@ -499,7 +499,8 @@ public class BlobStoreCompactorTest {
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
     ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
     MockIdFactory keyFactory = new MockIdFactory();
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    RemoteTokenTracker tokenTracker =
+        new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     // Generate tokens for peer replicas and make sure they are both past position of 1st delete tombstone and haven't
     // reached position of 2nd tombstone.
     MockId tombstone1 = state.permanentDeleteTombstones.get(0);
@@ -582,7 +583,8 @@ public class BlobStoreCompactorTest {
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
     ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
     MockIdFactory keyFactory = new MockIdFactory();
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    RemoteTokenTracker tokenTracker =
+        new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     MockId tombstone1 = state.permanentDeleteTombstones.get(0);
     MockId tombstone2 = state.permanentDeleteTombstones.get(1);
     IndexValue deleteIndexValue2 = state.index.findKey(tombstone2);
@@ -677,7 +679,8 @@ public class BlobStoreCompactorTest {
     MockReplicaId peerReplica2 = localAndPeerReplicas.get(2);
 
     // Case 1: Test token persist file doesn't exist
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    RemoteTokenTracker tokenTracker =
+        new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> notPersistedToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, notPersistedToken.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : notPersistedToken.entrySet()) {
@@ -686,7 +689,7 @@ public class BlobStoreCompactorTest {
     assertEquals(true, tokenTracker.persistToken());    // persist the token
 
     // Case 2: Although the file exist, no meaningful token content. The token timestamp should be the same as before
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> persistedEmptyToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, persistedEmptyToken.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : persistedEmptyToken.entrySet()) {
@@ -695,13 +698,15 @@ public class BlobStoreCompactorTest {
       assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
     }
     assertEquals(notPersistedToken, persistedEmptyToken);
+    // advance time
+    state.time.sleep(10);
     // update peerReplica1's token
     tokenTracker.updateTokenFromPeerReplica(peerToken1, peerReplica1.getDataNodeId().getHostname(),
         peerReplica1.getReplicaPath());
     assertEquals(true, tokenTracker.persistToken());
 
     // Case 3: peerReplica1 should have the valid token
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> oneValidToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, oneValidToken.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : oneValidToken.entrySet()) {
@@ -715,13 +720,14 @@ public class BlobStoreCompactorTest {
         assertEquals(FindTokenType.Uninitialized, entry.getValue().getSecond().getType());
       }
     }
+    state.time.sleep(10);
     // update peerReplica2's token as well
     tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
         peerReplica2.getReplicaPath());
     assertEquals(true, tokenTracker.persistToken());
 
     // Case 4: both tokens are updated
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> twoValidTokens = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, twoValidTokens.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : twoValidTokens.entrySet()) {
@@ -746,8 +752,8 @@ public class BlobStoreCompactorTest {
     writer.close();
 
     // Case 5: Corrupted the file
-    long currentTime = System.currentTimeMillis();
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    long currentTime = state.time.milliseconds();
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> corrupted = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, corrupted.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : corrupted.entrySet()) {
@@ -757,7 +763,7 @@ public class BlobStoreCompactorTest {
     assertEquals(true, tokenTracker.persistToken());    // persist the token
 
     // Case 6: The file is back to normal.
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> newToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(2, newToken.size());
     for (Map.Entry<String, Pair<Long, FindToken>> entry : newToken.entrySet()) {
@@ -770,7 +776,7 @@ public class BlobStoreCompactorTest {
     // Case 7: Remove one replica
     MockReplicaId modifiedLocalReplica = localAndPeerReplicas.get(0);
     modifiedLocalReplica.setPeerReplicas(Collections.singletonList(peerReplica1));
-    tokenTracker = new RemoteTokenTracker(modifiedLocalReplica, scheduler, keyFactory);
+    tokenTracker = new RemoteTokenTracker(modifiedLocalReplica, scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> onePeerOnlyToken = tokenTracker.getPeerReplicaAndToken();
     assertEquals(1, onePeerOnlyToken.size()); // only have one entry
     for (Map.Entry<String, Pair<Long, FindToken>> entry : onePeerOnlyToken.entrySet()) {
@@ -796,7 +802,8 @@ public class BlobStoreCompactorTest {
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
     ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
     MockIdFactory keyFactory = new MockIdFactory();
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    RemoteTokenTracker tokenTracker =
+        new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     tokenTracker.close(); // stop the background persist. will explicitly call persistToken later.
     // Generate tokens for peer replicas and make sure they are both past position of 1st delete tombstone and haven't
     // reached position of 2nd tombstone.
@@ -829,7 +836,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.persistToken();
 
     // start a new RemoteTokenTracker. It'll pick up the persisted remote tokens.
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> tokenAfter = tokenTracker.getPeerReplicaAndToken();
 
     // test if the file is not there.
@@ -848,6 +855,127 @@ public class BlobStoreCompactorTest {
     // the second delete tombstone should exist
     assertNotNull("Delete tombstone should be present as at least one token hasn't reached its position",
         state.index.findKey(tombstone2));
+  }
+
+  /**
+   * Test the case where peers went offline for a long time and they should be ignored when checking if a delete tombstone
+   * is still valid
+   * @throws Exception
+   */
+  @Test
+  public void deleteTombstoneIgnoreOfflinePeers() throws Exception {
+    assumeTrue(purgeDeleteTombstone);
+    refreshState(false, true, false);
+    List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
+    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
+    ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
+    MockIdFactory keyFactory = new MockIdFactory();
+    RemoteTokenTracker tokenTracker =
+        new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
+    tokenTracker.close(); // stop the background persist. will explicitly call persistToken later.
+    // Generate token that is past position of 1st delete tombstone and haven't reached position of 2nd tombstone.
+    MockId tombstone1 = state.permanentDeleteTombstones.get(0);
+    MockId tombstone2 = state.permanentDeleteTombstones.get(1);
+    IndexValue deleteIndexValue1 = state.index.findKey(tombstone1);
+    IndexSegment indexSegment1 = state.index.getIndexSegments().floorEntry(deleteIndexValue1.getOffset()).getValue();
+    IndexSegment segmentBehindSegment1 =
+        state.index.getIndexSegments().higherEntry(indexSegment1.getStartOffset()).getValue();
+    MockId keyInToken = (MockId) segmentBehindSegment1.iterator().next().getKey();
+    // We have two tokens now, first token is an uninitialized token, second token is the one point to somewhere between
+    // first tombstone and second tombstone.
+    StoreFindToken peerToken1 = new StoreFindToken();
+    StoreFindToken peerToken2 =
+        new StoreFindToken(keyInToken, segmentBehindSegment1.getStartOffset(), state.sessionId, state.incarnationId,
+            segmentBehindSegment1.getResetKey(), segmentBehindSegment1.getResetKeyType(),
+            segmentBehindSegment1.getResetKeyLifeVersion());
+    // update token associated with peer replica
+    MockReplicaId peerReplica1 = localAndPeerReplicas.get(1);
+    MockReplicaId peerReplica2 = localAndPeerReplicas.get(2);
+    tokenTracker.updateTokenFromPeerReplica(peerToken1, peerReplica1.getDataNodeId().getHostname(),
+        peerReplica1.getReplicaPath());
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath());
+    tokenTracker.persistToken();
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+
+    // both delete tombstones should be not compacted
+    assertNotNull(state.index.findKey(tombstone1));
+    assertNotNull(state.index.findKey(tombstone2));
+
+    // Now move the timestamp forward for 7+1 days.
+    final int offlineReplicasDays = 7;
+    state.time.sleep(TimeUnit.DAYS.toMillis(offlineReplicasDays + 1));
+    // Update the timestamp for second peer
+    deleteIndexValue1 = state.index.findKey(tombstone1);
+    indexSegment1 = state.index.getIndexSegments().floorEntry(deleteIndexValue1.getOffset()).getValue();
+    segmentBehindSegment1 = state.index.getIndexSegments().higherEntry(indexSegment1.getStartOffset()).getValue();
+    keyInToken = (MockId) segmentBehindSegment1.iterator().next().getKey();
+    peerToken2 =
+        new StoreFindToken(keyInToken, segmentBehindSegment1.getStartOffset(), state.sessionId, state.incarnationId,
+            segmentBehindSegment1.getResetKey(), segmentBehindSegment1.getResetKeyType(),
+            segmentBehindSegment1.getResetKeyLifeVersion());
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath());
+    segmentsUnderCompaction = getLogSegments(0, 2);
+    details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    // both delete tombstones should be not compacted since the configuration to ignore offline replicas is not turned on
+    assertNotNull(state.index.findKey(tombstone1));
+    assertNotNull(state.index.findKey(tombstone2));
+
+    // Now turn on the configuration
+    deleteIndexValue1 = state.index.findKey(tombstone1);
+    indexSegment1 = state.index.getIndexSegments().floorEntry(deleteIndexValue1.getOffset()).getValue();
+    segmentBehindSegment1 = state.index.getIndexSegments().higherEntry(indexSegment1.getStartOffset()).getValue();
+    keyInToken = (MockId) segmentBehindSegment1.iterator().next().getKey();
+    peerToken2 =
+        new StoreFindToken(keyInToken, segmentBehindSegment1.getStartOffset(), state.sessionId, state.incarnationId,
+            segmentBehindSegment1.getResetKey(), segmentBehindSegment1.getResetKeyType(),
+            segmentBehindSegment1.getResetKeyLifeVersion());
+    tokenTracker.updateTokenFromPeerReplica(peerToken2, peerReplica2.getDataNodeId().getHostname(),
+        peerReplica2.getReplicaPath());
+    state.properties.setProperty(StoreConfig.storeCompactionIgnorePeersUnavailableForDaysName,
+        String.valueOf(offlineReplicasDays));
+    segmentsUnderCompaction = getLogSegments(0, 2);
+    details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    // first replica should be compacted
+    assertNull("First delete tombstone " + tombstone1 + " should be compacted", state.index.findKey(tombstone1));
+    assertNotNull(state.index.findKey(tombstone2));
+
+    // Sleep for another 7 days so peer2 would become offline as well
+    state.time.sleep(TimeUnit.DAYS.toMillis(offlineReplicasDays + 1));
+    segmentsUnderCompaction = getLogSegments(0, 2);
+    details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
+    compactor = getCompactor(state.log, DISK_IO_SCHEDULER, tokenTracker, false);
+    compactor.initialize(state.index);
+    try {
+      compactor.compact(details, bundleReadBuffer);
+    } finally {
+      compactor.close(0);
+    }
+    // first replica should be compacted
+    assertNull("First delete tombstone " + tombstone1 + " should be compacted", state.index.findKey(tombstone1));
+    assertNull(state.index.findKey(tombstone2));
   }
 
   /**
@@ -888,7 +1016,8 @@ public class BlobStoreCompactorTest {
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
     ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
     MockIdFactory keyFactory = new MockIdFactory();
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    RemoteTokenTracker tokenTracker =
+        new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     // Try to start the persistor. But by default, storePersistRemoteTokenIntervalInSeconds is zero and won't start it.
     tokenTracker.start(config.storePersistRemoteTokenIntervalInSeconds);
     Map<String, Pair<Long, FindToken>> emptyTokens = tokenTracker.getPeerReplicaAndToken();
@@ -904,7 +1033,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.close();
 
     // start a new RemoteTokenTracker. It'll be empty tokens since we didn't persist it in the last run.
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> tokenAfter = tokenTracker.getPeerReplicaAndToken();
 
     // check the tokens
@@ -930,11 +1059,11 @@ public class BlobStoreCompactorTest {
     assumeTrue(purgeDeleteTombstone);
     refreshState(false, true, false);
     List<LogSegmentName> segmentsUnderCompaction = getLogSegments(0, 2);
-    CompactionDetails details = new CompactionDetails(state.time.milliseconds(), segmentsUnderCompaction, null);
     List<MockReplicaId> localAndPeerReplicas = generateLocalAndPeerReplicas();
     ScheduledExecutorService scheduler = Utils.newScheduler(1, false);
     MockIdFactory keyFactory = new MockIdFactory();
-    RemoteTokenTracker tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    RemoteTokenTracker tokenTracker =
+        new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Properties properties = new Properties();
     int intervalInSeconds = 5;
     properties.setProperty(StoreConfig.storePersistRemoteTokenIntervalInSecondsName,
@@ -957,7 +1086,7 @@ public class BlobStoreCompactorTest {
     tokenTracker.close();
 
     // start a new RemoteTokenTracker. It'll pick up the persisted remote tokens.
-    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory);
+    tokenTracker = new RemoteTokenTracker(localAndPeerReplicas.get(0), scheduler, keyFactory, state.time);
     Map<String, Pair<Long, FindToken>> tokenAfter = tokenTracker.getPeerReplicaAndToken();
 
     // check the tokens

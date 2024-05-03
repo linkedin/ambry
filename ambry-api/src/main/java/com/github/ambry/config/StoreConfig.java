@@ -184,6 +184,16 @@ public class StoreConfig {
   public final boolean storeCompactionPurgeDeleteTombstone;
 
   /**
+   * When a peer went offline for more than this amount of days, we would ignore this peer's remote token when checking
+   * if a delete tombstone is valid or not. If the value for this configuration is 0, then this feature is disabled.
+   */
+  @Config(storeCompactionIgnorePeersUnavailableForDaysName)
+  @Default("0")
+  public final int storeCompactionIgnorePeersUnavailableForDays;
+  public final static String storeCompactionIgnorePeersUnavailableForDaysName =
+      "store.compaction.ignore.peers.unavailable.for.days";
+
+  /**
    * The minimum buffer size for compaction copy phase.
    */
   @Config("store.compaction.min.buffer.size")
@@ -688,6 +698,7 @@ public class StoreConfig {
         verifiableProperties.getIntInRange(storeCompactionDirectIOBufferSizeName, 0, 0, 100 * 1024 * 1024);
     storeCompactionPurgeDeleteTombstone =
         verifiableProperties.getBoolean("store.compaction.purge.delete.tombstone", false);
+
     storeCompactionMinBufferSize =
         verifiableProperties.getIntInRange("store.compaction.min.buffer.size", 10 * 1024 * 1024, 0, Integer.MAX_VALUE);
     storeCompactionFilter =
@@ -786,7 +797,9 @@ public class StoreConfig {
     // persistRemoteToken has to be on all the time. It's a signal that the blobStore is alive.
     storePersistRemoteTokenIntervalInSeconds =
         verifiableProperties.getIntInRange(storePersistRemoteTokenIntervalInSecondsName, 600, 5, 60 * 60 * 24);
-
+    // storePersistentRemoteTokenInterval has to be valid value (enabled) before enabling this feature.
+    storeCompactionIgnorePeersUnavailableForDays =
+        verifiableProperties.getIntInRange(storeCompactionIgnorePeersUnavailableForDaysName, 0, 0, Integer.MAX_VALUE);
     // While making transition from StoreConfig#storeDeletedMessageRetentionHours to StoreConfig#storeDeletedMessageRetentionMinutes
     // we need to make sure that the storeDeletedMessageRetentionHours isn't set by any hidden config that's missed.
     int deletedMessageRetentionMinutes =
