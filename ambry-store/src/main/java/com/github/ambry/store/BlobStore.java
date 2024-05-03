@@ -109,6 +109,8 @@ public class BlobStore implements Store {
   // TODO remove this once ZK migration is complete
   private AtomicReference<ReplicaSealStatus> replicaSealStatus = new AtomicReference<>(ReplicaSealStatus.NOT_SEALED);
   private AtomicBoolean isDisabled = new AtomicBoolean(false);
+  // how many BlobStores are stale
+  static final AtomicInteger staleBlobCount = new AtomicInteger(0);
   protected PersistentIndex index;
 
   /**
@@ -369,6 +371,7 @@ public class BlobStore implements Store {
     if (config.storeStaleTimeInDays != 0
         && lastModifiedTimeInMilliseconds + TimeUnit.DAYS.toMillis(config.storeStaleTimeInDays) < time.milliseconds()) {
       logger.error("checkIfStoreIsStale " + replicaId.getReplicaPath() + " is stale. ");
+      BlobStore.staleBlobCount.getAndIncrement();
       if (config.storeBlockStaleBlobStoreToStart) {
         throw new StoreException("BlobStore " + dataDir + " is stale ", StoreErrorCodes.Initialization_Error);
       }

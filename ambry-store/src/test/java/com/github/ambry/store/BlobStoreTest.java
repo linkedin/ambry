@@ -1126,7 +1126,7 @@ public class BlobStoreTest {
 
     // config.storeStaleBlockBootup is true
     properties.put("store.stale.time.in.days", Integer.toString(1));
-    properties.put("store.stale.block.bootup", "true");
+    properties.put("store.block.stale.blob.store.to.start", "true");
     // sleep for 2 days.
     time.sleep(TimeUnit.DAYS.toMillis(config.storeStaleTimeInDays * 2));
     config = new StoreConfig(new VerifiableProperties(properties));
@@ -1141,7 +1141,7 @@ public class BlobStoreTest {
     }
 
     // config.storeStaleBlockBootup is false
-    properties.put("store.stale.block.bootup", "false");
+    properties.put("store.block.stale.blob.store.to.start", "false");
     config = new StoreConfig(new VerifiableProperties(properties));
     mockBlobStoreStats = new MockBlobStoreStats(time);
     store = new MockBlobStore(replicaId, config, null, storeMetrics, mockBlobStoreStats);

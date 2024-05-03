@@ -658,11 +658,11 @@ public class StoreConfig {
   public final static String storeStaleTimeInDaysName = "store.stale.time.in.days";
 
   /**
-   * If the store is stale and storeBlockStaleBlobStoreToStart is true, don't start the blob.
+   * If the store is stale and storeBlockStaleBlobStoreToStart is true, don't start the BlobStore.
    */
   @Config(storeBlockStaleBlobStoreToStartName)
   public final boolean storeBlockStaleBlobStoreToStart;
-  public final static String storeBlockStaleBlobStoreToStartName = "store.stale.block.bootup";
+  public final static String storeBlockStaleBlobStoreToStartName = "store.block.stale.blob.store.to.start";
 
   public StoreConfig(VerifiableProperties verifiableProperties) {
     storeKeyFactory = verifiableProperties.getString("store.key.factory", "com.github.ambry.commons.BlobIdFactory");
