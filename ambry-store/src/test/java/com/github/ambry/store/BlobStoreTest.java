@@ -3973,10 +3973,11 @@ public class BlobStoreTest {
   private void inNoTtlUpdatePeriodTest() throws Exception {
     long bufferTimeSecs = new StoreConfig(new VerifiableProperties(properties)).storeTtlUpdateBufferTimeSeconds;
     long cutOffTimeMs = time.milliseconds() + TimeUnit.SECONDS.toMillis(bufferTimeSecs);
-    MockId id = put(1, PUT_RECORD_SIZE, cutOffTimeMs - 1).get(0);
+    // round up to 1s.
+    MockId id = put(1, PUT_RECORD_SIZE, cutOffTimeMs - 1000).get(0);
     verifyTtlUpdateFailure(id, Utils.Infinite_Time, StoreErrorCodes.Update_Not_Allowed);
-    // something that is AT cutoff time succeeds
-    id = put(1, PUT_RECORD_SIZE, cutOffTimeMs).get(0);
+    // something that is AT cutoff time succeeds, round up to 1s.
+    id = put(1, PUT_RECORD_SIZE, cutOffTimeMs + 1000).get(0);
     updateTtl(id);
     verifyTtlUpdate(id);
   }
