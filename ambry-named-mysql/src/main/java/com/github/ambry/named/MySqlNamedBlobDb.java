@@ -128,14 +128,22 @@ class MySqlNamedBlobDb implements NamedBlobDb {
    * Similar like LIST_QUERY_V2, but this query is used when user don't provide the prefix and want to list all records.
    */
   // @formatter:off
-  private static final String LIST_ALL_QUERY_V2 = String.format(
-      "" + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts " + "FROM named_blobs_v2 t1 " + "INNER JOIN "
-          + "(SELECT account_id, container_id, blob_name, max(version) as version " + "FROM named_blobs_v2 "
-          + "WHERE (account_id, container_id) = (?, ?) AND %1$s " + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
-          + "        GROUP BY account_id, container_id, blob_name) t2 "
-          + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
-          + "WHERE CASE WHEN ? IS NOT NULL THEN t1.blob_name >= ? ELSE 1 END ORDER BY t1.blob_name ASC LIMIT ?",
-      STATE_MATCH, CURRENT_TIME);
+  private static final String LIST_ALL_QUERY_V2 = String.format(""
+      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
+      + "FROM named_blobs_v2 t1 "
+      + "INNER JOIN "
+      + "(SELECT account_id, container_id, blob_name, max(version) as version "
+      + "FROM named_blobs_v2 "
+      + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+      + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
+      + "        GROUP BY account_id, container_id, blob_name) t2 "
+      + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+      + "WHERE "
+      + "  CASE "
+      + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
+      + "     ELSE 1 "
+      + "   END "
+      + "ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
   // @formatter:on
 
   /**
@@ -617,8 +625,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection) throws Exception {
     String query = "";
-    try (PreparedStatement statement = blobNamePrefix == null ? connection.prepareStatement(LIST_ALL_QUERY_V2)
-        : connection.prepareStatement(LIST_QUERY_V2)) {
+    String queryStatement = blobNamePrefix == null? LIST_ALL_QUERY_V2: LIST_QUERY_V2;
+    try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
       if (blobNamePrefix == null) {

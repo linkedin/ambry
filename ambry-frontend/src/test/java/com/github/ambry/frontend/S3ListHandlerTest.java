@@ -107,7 +107,7 @@ public class S3ListHandlerTest {
     // 2. Get list of blobs by sending matching s3 request
     String s3_list_request_uri =
         S3_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + "?prefix=" + PREFIX
-            + "&delimiter=/" + "&max-keys=1" + "&encoding-type=url";
+            + "&delimiter=/" + "&Marker=/" + "&max-keys=1" + "&encoding-type=url";
     request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(InternalKeys.REQUEST_PATH,
@@ -156,7 +156,7 @@ public class S3ListHandlerTest {
     // 2. Get list of blobs by sending matching s3 list object v2 request
     String s3_list_request_uri =
         S3_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + "?list-type=2" + "&prefix="
-            + "&delimiter=/" + "&encoding-type=url";
+            + "&delimiter=/" + "&ContinuationToken=/" + "&encoding-type=url";
     request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(InternalKeys.REQUEST_PATH,
