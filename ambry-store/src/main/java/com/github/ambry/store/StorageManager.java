@@ -1048,7 +1048,10 @@ public class StorageManager implements StoreManager {
         return;
       }
       logger.info("Current Node is in FULL_AUTO, try to detect disk failure.");
-      // First check how many disks are already unavailable
+      // First check if there are too many disks are already unavailable. Terminate JVM if so.
+      // The purpose of doing this check here instead of the end of this method is to make sure
+      // that this JVM would be albe to emit unavailable disk metric for at least a couple of minutes
+      // before next round of disk failure handler execution.
       int unavailableDiskCount = currentNode.getDiskIds()
           .stream()
           .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
