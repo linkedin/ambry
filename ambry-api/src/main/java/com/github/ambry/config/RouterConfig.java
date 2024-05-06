@@ -62,7 +62,7 @@ public class RouterConfig {
   public static final String ROUTER_PUT_REQUEST_PARALLELISM = "router.put.request.parallelism";
   public static final String ROUTER_PUT_LOCAL_REQUEST_PARALLELISM = "router.put.local.request.parallelism";
   public static final String ROUTER_PUT_REMOTE_REQUEST_PARALLELISM = "router.put.remote.request.parallelism";
-  public static final String ROUTER_PUT_SUCCESS_TARGET = "router.put.success.target"; // Tommy: Rename to ROUTER_PUT_LOCAL_SUCCESS_TARGET?
+  public static final String ROUTER_PUT_SUCCESS_TARGET = "router.put.success.target";
   public static final String ROUTER_PUT_REMOTE_SUCCESS_TARGET = "router.put.remote.success.target";
   public static final String ROUTER_REPLICATE_BLOB_REQUEST_PARALLELISM = "router.replicate.blob.request.parallelism";
   public static final String ROUTER_REPLICATE_BLOB_SUCCESS_TARGET = "router.replicate.blob.success.target";
