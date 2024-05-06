@@ -35,7 +35,11 @@ public class NamedBlobPath {
 
   static final String PREFIX_PARAM = "prefix";
   static final String PAGE_PARAM = "page";
+  static final String MARKER = "Marker";
+  static final String CONTINUATION_TOKEN = "ContinuationToken";
   static final int MAX_BLOB_NAME_LENGTH = 350;
+  static final String LIST_TYPE = "list-type";
+  static final String LIST_TYPE_VERSION_2 = "2";
 
   /**
    * Parse the input path if it's a named blob request.
@@ -90,7 +94,11 @@ public class NamedBlobPath {
     String[] splitPath = path.split("/", 4);
     String blobNamePrefix = RestUtils.getHeader(args, PREFIX_PARAM, false);
     boolean isGetObjectLockRequest = args.containsKey(OBJECT_LOCK_PARAM);
-    boolean isListRequest = blobNamePrefix != null;
+    //There are two cases for S3 listing
+    //1.has prefix (Ex:GET /?prefix=prefixName&delimiter=&encoding-type=url)
+    //2.no prefix but listObjectV2 (Ex:GET /?list-type=2&prefix=&delimiter=&encoding-type=url)
+    boolean isListObjectV2Request = LIST_TYPE_VERSION_2.equals(RestUtils.getHeader(args, LIST_TYPE, false));
+    boolean isListRequest = blobNamePrefix != null || isListObjectV2Request;
     int expectedSegments = (isListRequest || isGetObjectLockRequest) ? 3 : 4;
     if (splitPath.length != expectedSegments || !Operations.NAMED_BLOB.equalsIgnoreCase(splitPath[0])) {
       throw new RestServiceException(String.format(
@@ -99,8 +107,15 @@ public class NamedBlobPath {
     }
     String accountName = splitPath[1];
     String containerName = splitPath[2];
+    String pageToken;
+    //S3 listObject use Marker as page token.
+    //S3 listObjectV2 use ContinuationToken as page token.
     if (isListRequest) {
-      String pageToken = RestUtils.getHeader(args, PAGE_PARAM, false);
+      if (isListObjectV2Request) {
+        pageToken = RestUtils.getHeader(args, CONTINUATION_TOKEN, false);
+      } else {
+        pageToken = RestUtils.getHeader(args, MARKER, false);
+      }
       return new NamedBlobPath(accountName, containerName, null, blobNamePrefix, pageToken);
     }
     if (isGetObjectLockRequest) {
@@ -115,6 +130,7 @@ public class NamedBlobPath {
       return new NamedBlobPath(accountName, containerName, blobName, null, null);
     }
   }
+
   /**
    * Parse the input path if it's a named blob request.
    * @param requestPath the {@link RequestPath} to be parsed.

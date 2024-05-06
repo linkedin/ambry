@@ -54,6 +54,7 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
   private static final ObjectMapper xmlMapper = new XmlMapper();
   public static final String PREFIX_PARAM_NAME = "prefix";
   public static final String MAXKEYS_PARAM_NAME = "max-keys";
+  public static final int DEFAULT_MAX_KEY_VALUE = 1000;
   public static final String DELIMITER_PARAM_NAME = "delimiter";
   public static final String ENCODING_TYPE_PARAM_NAME = "encoding-type";
   private final NamedBlobListHandler namedBlobListHandler;
@@ -99,14 +100,16 @@ public class S3ListHandler extends S3BaseHandler<ReadableStreamChannel> {
     String delimiter = getHeader(restRequest.getArgs(), DELIMITER_PARAM_NAME, false);
     String encodingType = getHeader(restRequest.getArgs(), ENCODING_TYPE_PARAM_NAME, false);
     String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
-    int maxKeysValue = maxKeys == null ? Integer.MAX_VALUE : Integer.parseInt(maxKeys);
+    //By default S3 list returns up to 1000 key names.
+    int maxKeysValue = maxKeys == null ? DEFAULT_MAX_KEY_VALUE : Integer.parseInt(maxKeys);
     // Iterate through list of blob names.
     List<Contents> contentsList = new ArrayList<>();
     int keyCount = 0;
     for (NamedBlobListEntry namedBlobRecord : namedBlobRecordPage.getEntries()) {
       String blobName = namedBlobRecord.getBlobName();
       String todayDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").format(Calendar.getInstance().getTime());
-      contentsList.add(new Contents(blobName, todayDate));
+      //Set size to -1 due to current use case don't need this value.
+      contentsList.add(new Contents(blobName, todayDate, -1));
       if (++keyCount == maxKeysValue) {
         break;
       }

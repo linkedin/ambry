@@ -107,7 +107,7 @@ public class S3ListHandlerTest {
     // 2. Get list of blobs by sending matching s3 request
     String s3_list_request_uri =
         S3_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + "?prefix=" + PREFIX
-            + "&delimiter=/" + "&max-keys=1" + "&encoding-type=url";
+            + "&delimiter=/" + "&Marker=/" + "&max-keys=1" + "&encoding-type=url";
     request =
         FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
     request.setArg(InternalKeys.REQUEST_PATH,
@@ -133,6 +133,51 @@ public class S3ListHandlerTest {
     assertEquals("Mismatch in encoding type", "url", listBucketResult.getEncodingType());
   }
 
+  @Test
+  public void listObjectV2S3BlobsTest() throws Exception {
+    // 1. Put a named blob
+    String PREFIX = "directory-name";
+    String KEY_NAME = PREFIX + SLASH + "key_name";
+    String request_path =
+        NAMED_BLOB_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + KEY_NAME;
+    JSONObject headers = new JSONObject();
+    FrontendRestRequestServiceTest.setAmbryHeadersForPut(headers, TestUtils.TTL_SECS, container.isCacheable(),
+        SERVICE_ID, CONTENT_TYPE, OWNER_ID, null, null, null);
+    byte[] content = TestUtils.getRandomBytes(1024);
+    RestRequest request = FrontendRestRequestServiceTest.createRestRequest(RestMethod.PUT, request_path, headers,
+        new LinkedList<>(Arrays.asList(ByteBuffer.wrap(content), null)));
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    FutureResult<Void> putResult = new FutureResult<>();
+    namedBlobPutHandler.handle(request, restResponseChannel, putResult::done);
+    putResult.get();
+
+    // 2. Get list of blobs by sending matching s3 list object v2 request
+    String s3_list_request_uri =
+        S3_PREFIX + SLASH + account.getName() + SLASH + container.getName() + SLASH + "?list-type=2" + "&prefix="
+            + "&delimiter=/" + "&ContinuationToken=/" + "&encoding-type=url";
+    request =
+        FrontendRestRequestServiceTest.createRestRequest(RestMethod.GET, s3_list_request_uri, new JSONObject(), null);
+    request.setArg(InternalKeys.REQUEST_PATH,
+        RequestPath.parse(request, frontendConfig.pathPrefixesToRemove, CLUSTER_NAME));
+    restResponseChannel = new MockRestResponseChannel();
+    FutureResult<ReadableStreamChannel> futureResult = new FutureResult<>();
+    s3ListHandler.handle(request, restResponseChannel, futureResult::done);
+
+    // 3. Verify results
+    ReadableStreamChannel readableStreamChannel = futureResult.get();
+    ByteBuffer byteBuffer = ((ByteBufferReadableStreamChannel) readableStreamChannel).getContent();
+    ListBucketResult listBucketResult = xmlMapper.readValue(byteBuffer.array(), ListBucketResult.class);
+    assertEquals("Mismatch on status", ResponseStatus.Ok, restResponseChannel.getStatus());
+    assertEquals("Mismatch in content type", XML_CONTENT_TYPE, restResponseChannel.getHeader(Headers.CONTENT_TYPE));
+    Contents contents = listBucketResult.getContents().get(0);
+    assertEquals("Mismatch in key name", KEY_NAME, contents.getKey());
+    assertEquals("Mismatch in key count", 1, listBucketResult.getKeyCount());
+    assertEquals("Mismatch in delimiter", "/", listBucketResult.getDelimiter());
+    assertEquals("Mismatch in encoding type", "url", listBucketResult.getEncodingType());
+    assertEquals("Mismatch in size", -1, contents.getSize());
+  }
 
   /**
    * Initates a {@link NamedBlobPutHandler} and a {@link S3ListHandler}

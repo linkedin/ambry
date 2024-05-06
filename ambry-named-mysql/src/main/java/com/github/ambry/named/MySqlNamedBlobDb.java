@@ -87,18 +87,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private static final String CURRENT_TIME = "UTC_TIMESTAMP(6)";
   private static final String STATE_MATCH = String.format("%s = %s", BLOB_STATE, NamedBlobState.READY.ordinal());
   private static final String PK_MATCH = String.format("(%s, %s, %s) = (?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME);
-  private static final String PK_MATCH_VERSION = String.format("(%s, %s, %s, %s) = (?, ?, ?, ?)", ACCOUNT_ID,
-      CONTAINER_ID, BLOB_NAME, VERSION);
+  private static final String PK_MATCH_VERSION =
+      String.format("(%s, %s, %s, %s) = (?, ?, ?, ?)", ACCOUNT_ID, CONTAINER_ID, BLOB_NAME, VERSION);
 
-  private static final Set<GetOption> includeDeletedOrExpiredOptions =
-      new HashSet<>(Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs, GetOption.Include_Expired_Blobs));
+  private static final Set<GetOption> includeDeletedOrExpiredOptions = new HashSet<>(
+      Arrays.asList(GetOption.Include_All, GetOption.Include_Deleted_Blobs, GetOption.Include_Expired_Blobs));
 
   /**
    * Select a record that matches a blob name (lookup by primary key).
    */
   private static final String GET_QUERY_V2 =
-      String.format("SELECT %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1", BLOB_ID, VERSION,
-          DELETED_TS, NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
+      String.format("SELECT %s, %s, %s FROM %s WHERE %s AND %s ORDER BY %s DESC LIMIT 1", BLOB_ID, VERSION, DELETED_TS,
+          NAMED_BLOBS_V2, PK_MATCH, STATE_MATCH, VERSION);
 
   /**
    * Below is the query for named blob list api
@@ -122,6 +122,28 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           + "        GROUP BY account_id, container_id, blob_name) t2 "
           + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
           + "WHERE t1.blob_name LIKE ? AND t1.blob_name >= ? ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
+  // @formatter:on
+
+  /**
+   * Similar like LIST_QUERY_V2, but this query is used when user don't provide the prefix and want to list all records.
+   */
+  // @formatter:off
+  private static final String LIST_ALL_QUERY_V2 = String.format(""
+      + "SELECT t1.blob_name, t1.blob_id, t1.version, t1.deleted_ts "
+      + "FROM named_blobs_v2 t1 "
+      + "INNER JOIN "
+      + "(SELECT account_id, container_id, blob_name, max(version) as version "
+      + "FROM named_blobs_v2 "
+      + "WHERE (account_id, container_id) = (?, ?) AND %1$s "
+      + "  AND (deleted_ts IS NULL OR deleted_ts>%2$S) "
+      + "        GROUP BY account_id, container_id, blob_name) t2 "
+      + "ON (t1.account_id,t1.container_id,t1.blob_name,t1.version) = (t2.account_id,t2.container_id,t2.blob_name,t2.version) "
+      + "WHERE "
+      + "  CASE "
+      + "     WHEN ? IS NOT NULL THEN t1.blob_name >= ? "
+      + "     ELSE 1 "
+      + "   END "
+      + "ORDER BY t1.blob_name ASC LIMIT ?",STATE_MATCH, CURRENT_TIME);
   // @formatter:on
 
   /**
@@ -262,45 +284,45 @@ class MySqlNamedBlobDb implements NamedBlobDb {
      * @param metricRegistry The {@link MetricRegistry}.
      */
     public Metrics(MetricRegistry metricRegistry) {
-      namedDataNotFoundGetCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataNotFoundGetCount"));
-      namedDataErrorGetCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorGetCount"));
-      namedDataInconsistentGetCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentGetCount"));
+      namedDataNotFoundGetCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataNotFoundGetCount"));
+      namedDataErrorGetCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorGetCount"));
+      namedDataInconsistentGetCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentGetCount"));
 
-      namedDataInconsistentListCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentListCount"));
+      namedDataInconsistentListCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentListCount"));
 
-      namedDataNotFoundDeleteCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataNotFoundDeleteCount"));
-      namedDataErrorDeleteCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorDeleteCount"));
-      namedDataInconsistentDeleteCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentDeleteCount"));
+      namedDataNotFoundDeleteCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataNotFoundDeleteCount"));
+      namedDataErrorDeleteCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorDeleteCount"));
+      namedDataInconsistentDeleteCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataInconsistentDeleteCount"));
 
-      namedDataErrorPutCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorPutCount"));
+      namedDataErrorPutCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedDataErrorPutCount"));
 
-      namedTtlupdateErrorCount = metricRegistry.counter(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateErrorCount"));
+      namedTtlupdateErrorCount =
+          metricRegistry.counter(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateErrorCount"));
 
-      namedBlobGetTimeInMs = metricRegistry.histogram(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobGetTimeInMs"));
-      namedBlobListTimeInMs = metricRegistry.histogram(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobListTimeInMs"));
-      namedBlobPutTimeInMs = metricRegistry.histogram(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPutTimeInMs"));
-      namedBlobDeleteTimeInMs = metricRegistry.histogram(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobDeleteTimeInMs"));
+      namedBlobGetTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobGetTimeInMs"));
+      namedBlobListTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobListTimeInMs"));
+      namedBlobPutTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPutTimeInMs"));
+      namedBlobDeleteTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobDeleteTimeInMs"));
 
-      namedBlobPullStaleTimeInMs = metricRegistry.histogram(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPullStaleTimeInMs"));
-      namedBlobCleanupTimeInMs = metricRegistry.histogram(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobCleanupTimeInMs"));
+      namedBlobPullStaleTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobPullStaleTimeInMs"));
+      namedBlobCleanupTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedBlobCleanupTimeInMs"));
 
-      namedTtlupdateTimeInMs = metricRegistry.histogram(
-          MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateTimeInMs"));
+      namedTtlupdateTimeInMs =
+          metricRegistry.histogram(MetricRegistry.name(MySqlNamedBlobDb.class, "NamedTtlupdateTimeInMs"));
     }
   }
 
@@ -311,7 +333,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
-      NamedBlobRecord record = run_get_v2(accountName, containerName, blobName, option, accountId, containerId, connection);
+      NamedBlobRecord record =
+          run_get_v2(accountName, containerName, blobName, option, accountId, containerId, connection);
       metricsRecoder.namedBlobGetTimeInMs.update(this.time.milliseconds() - startTime);
       return record;
     }, transactionStateTracker);
@@ -322,7 +345,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
       String pageToken) {
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
-      Page<NamedBlobRecord> recordPage = run_list_v2(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
+      Page<NamedBlobRecord> recordPage =
+          run_list_v2(accountName, containerName, blobNamePrefix, pageToken, accountId, containerId, connection);
       metricsRecoder.namedBlobListTimeInMs.update(this.time.milliseconds() - startTime);
       return recordPage;
     }, null);
@@ -334,15 +358,18 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         (accountId, containerId, connection) -> {
           long startTime = this.time.milliseconds();
           // Do upsert when it's using new table and 'x-ambry-named-upsert' header is not set to false (default is true)
-          logger.trace("NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}', dbRelyOnNewTable='{}', isUpsert='{}'",
+          logger.trace(
+              "NamedBlobPutInfo: accountId='{}', containerId='{}', blobName='{}', dbRelyOnNewTable='{}', isUpsert='{}'",
               accountId, containerId, record.getBlobName(), config.dbRelyOnNewTable, isUpsert);
           if (!(config.dbRelyOnNewTable && isUpsert)) {
             NamedBlobRecord recordCurrent = null;
             try {
-              recordCurrent = run_get_v2(record.getAccountName(), record.getContainerName(), record.getBlobName(),
-                  GetOption.None, accountId, containerId, connection);
+              recordCurrent =
+                  run_get_v2(record.getAccountName(), record.getContainerName(), record.getBlobName(), GetOption.None,
+                      accountId, containerId, connection);
             } catch (RestServiceException e) {
-              logger.trace("Skip exception in pulling data from db: accountId='{}', containerId='{}', blobName='{}': {}",
+              logger.trace(
+                  "Skip exception in pulling data from db: accountId='{}', containerId='{}', blobName='{}': {}",
                   accountId, containerId, record.getBlobName(), e);
             }
             if (recordCurrent != null && !isUpsert) {
@@ -375,7 +402,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   public CompletableFuture<DeleteResult> delete(String accountName, String containerName, String blobName) {
     return executeTransactionAsync(accountName, containerName, false, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
-      DeleteResult deleteResult = run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
+      DeleteResult deleteResult =
+          run_delete_v2(accountName, containerName, blobName, accountId, containerId, connection);
       metricsRecoder.namedBlobDeleteTimeInMs.update(this.time.milliseconds() - startTime);
       return deleteResult;
     }, null);
@@ -387,7 +415,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         new GetTransactionStateTracker(remoteDatacenters, localDatacenter);
     return executeGenericTransactionAsync(true, (connection) -> {
       long startTime = this.time.milliseconds();
-      List<StaleNamedBlob> staleNamedBlobResults= runPullStaleBlobs(connection);
+      List<StaleNamedBlob> staleNamedBlobResults = runPullStaleBlobs(connection);
       metricsRecoder.namedBlobPullStaleTimeInMs.update(this.time.milliseconds() - startTime);
       return staleNamedBlobResults;
     }, transactionStateTracker);
@@ -562,8 +590,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
         .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getDataSource()));
   }
 
-  private NamedBlobRecord run_get_v2(String accountName, String containerName, String blobName, GetOption option, short accountId,
-      short containerId, Connection connection) throws Exception {
+  private NamedBlobRecord run_get_v2(String accountName, String containerName, String blobName, GetOption option,
+      short accountId, short containerId, Connection connection) throws Exception {
     String query = "";
     try (PreparedStatement statement = connection.prepareStatement(GET_QUERY_V2)) {
       statement.setInt(1, accountId);
@@ -597,11 +625,17 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
       String pageToken, short accountId, short containerId, Connection connection) throws Exception {
     String query = "";
-    try (PreparedStatement statement = connection.prepareStatement(LIST_QUERY_V2)) {
+    String queryStatement = blobNamePrefix == null? LIST_ALL_QUERY_V2: LIST_QUERY_V2;
+    try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);
-      statement.setString(3, blobNamePrefix + "%");
-      statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+      if (blobNamePrefix == null) {
+        statement.setString(3, pageToken);
+        statement.setString(4, pageToken);
+      } else {
+        statement.setString(3, blobNamePrefix + "%");
+        statement.setString(4, pageToken != null ? pageToken : blobNamePrefix);
+      }
       statement.setInt(5, config.listMaxResults + 1);
       query = statement.toString();
       logger.debug("Getting list of blobs matching prefix {} from MySql. Query {}", blobNamePrefix, query);
@@ -619,8 +653,8 @@ class MySqlNamedBlobDb implements NamedBlobDb {
           long version = resultSet.getLong(3);
           Timestamp deletionTime = resultSet.getTimestamp(4);
 
-          entries.add(new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime),
-              version));
+          entries.add(
+              new NamedBlobRecord(accountName, containerName, blobName, blobId, timestampToMs(deletionTime), version));
         }
         return new Page<>(entries, nextContinuationToken);
       }
