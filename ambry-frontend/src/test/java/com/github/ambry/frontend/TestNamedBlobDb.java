@@ -83,7 +83,7 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
-      String pageToken) {
+      String pageToken, String maxKey) {
     if (exception != null) {
       return FutureUtils.completedExceptionally(exception);
     }
@@ -113,7 +113,8 @@ public class TestNamedBlobDb implements NamedBlobDb {
 
       NamedBlobRecord record = recordList.get(recordList.size() - 1).getFirst();
       long deleteTs = recordList.get(recordList.size() - 1).getSecond().getSecond();
-      if (numRecords++ == listMaxResults) {
+      int maxKeysValue = maxKey == null ? listMaxResults : Integer.parseInt(maxKey);
+      if (numRecords++ == maxKeysValue) {
         nextContinuationToken = record.getBlobName();
         break;
       }

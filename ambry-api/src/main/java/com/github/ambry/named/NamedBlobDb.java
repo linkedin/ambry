@@ -53,17 +53,20 @@ public interface NamedBlobDb extends Closeable {
   /**
    * List blobs that start with a provided prefix in a container. This returns paginated results. If there are
    * additional pages to read, {@link Page#getNextPageToken()} will be non null.
-   * @param accountName the name of the account.
-   * @param containerName the name of the container.
+   *
+   * @param accountName    the name of the account.
+   * @param containerName  the name of the container.
    * @param blobNamePrefix the name prefix to search for.
-   * @param pageToken if {@code null}, return the first page of {@link NamedBlobRecord}s that start with
-   *                  {@code blobNamePrefix}. If set, use this as a token to resume reading additional pages
-   *                  of records that start with the prefix.
+   * @param pageToken      if {@code null}, return the first page of {@link NamedBlobRecord}s that start with
+   *                       {@code blobNamePrefix}. If set, use this as a token to resume reading additional pages of
+   *                       records that start with the prefix.
+   * @param maxKey the maximum number of keys returned in the response. By default, the action returns up to listMaxResults
+   *               which can be tuned by config.
    * @return a {@link CompletableFuture} that will eventually contain a {@link Page} of {@link NamedBlobRecord}s
-   *         starting with the specified prefix or an exception if an error occurred.
+   * starting with the specified prefix or an exception if an error occurred.
    */
   CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
-      String pageToken);
+      String pageToken, String maxKey);
 
   /**
    * Persist a {@link NamedBlobRecord} in the database.

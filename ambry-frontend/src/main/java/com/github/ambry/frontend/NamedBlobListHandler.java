@@ -31,6 +31,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.frontend.FrontendUtils.*;
+import static com.github.ambry.frontend.s3.S3ListHandler.*;
+import static com.github.ambry.rest.RestUtils.*;
 
 
 /**
@@ -129,9 +131,10 @@ public class NamedBlobListHandler {
     private Callback<Void> securityPostProcessRequestCallback() {
       return buildCallback(frontendMetrics.listSecurityPostProcessRequestMetrics, securityCheckResult -> {
         NamedBlobPath namedBlobPath = NamedBlobPath.parse(RestUtils.getRequestPath(restRequest), restRequest.getArgs());
+        String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
         CallbackUtils.callCallbackAfter(
             namedBlobDb.list(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken()), listBlobsCallback());
+                namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken(), maxKeys), listBlobsCallback());
       }, uri, LOGGER, finalCallback);
     }
 
