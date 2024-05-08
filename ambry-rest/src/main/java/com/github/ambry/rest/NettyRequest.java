@@ -258,6 +258,9 @@ public class NettyRequest implements RestRequest {
   }
 
   @Override
+  public void removeArg(String key) { allArgs.remove(key); }
+
+  @Override
   public SSLSession getSSLSession() {
     return sslSession;
   }

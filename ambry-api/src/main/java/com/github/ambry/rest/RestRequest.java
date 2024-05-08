@@ -79,6 +79,12 @@ public interface RestRequest extends ReadableStreamChannel {
   Object setArg(String key, Object value);
 
   /**
+   * Remove one argument from the key-value map.
+   * @param key The key of the argument.
+   */
+  void removeArg(String key);
+
+  /**
    * If this request was over HTTPS, gets the {@link SSLSession} associated with the request.
    * @return The {@link SSLSession} for the request and response, or {@code null} if SSL was not used.
    */

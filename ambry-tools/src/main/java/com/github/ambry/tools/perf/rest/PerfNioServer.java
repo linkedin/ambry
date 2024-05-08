@@ -268,6 +268,9 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
+    public void removeArg(String key) { args.remove(key); }
+
+    @Override
     public SSLSession getSSLSession() {
       return null;
     }

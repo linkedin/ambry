@@ -29,12 +29,16 @@ import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.github.ambry.rest.RestUtils.*;
 import static com.github.ambry.rest.RestUtils.Headers.*;
+import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
 /**
@@ -379,6 +383,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           request.getArgs().get(EXPECT))) {
         if (CONTINUE.equals(request.getArgs().get(EXPECT))) {
           request.setArg(EXPECT, "");
+          removeInternalKeyFromRequest();
           responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
         }
         requestHandler.handleRequest(request, responseChannel);
@@ -392,6 +397,22 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           new RestServiceException("Received content without a request", RestServiceErrorCode.InvalidRequestState));
     }
     return success;
+  }
+
+  /**
+   * Remove the internal key after we send back 100-continue back to customer.
+   */
+  private void removeInternalKeyFromRequest() {
+    Set<String> internalKeysNeedToBeRemoved = new HashSet<>();
+    for (Map.Entry<String, Object> requestArg : request.getArgs().entrySet()) {
+      String requestKey = requestArg.getKey();
+      if (requestKey.startsWith(KEY_PREFIX)) {
+        internalKeysNeedToBeRemoved.add(requestKey);
+      }
+    }
+    for (String internalKeyNeedToBeRemoved : internalKeysNeedToBeRemoved) {
+      request.removeArg(internalKeyNeedToBeRemoved);
+    }
   }
 
   /**

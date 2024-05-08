@@ -43,6 +43,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -63,6 +64,10 @@ class AmbrySecurityService implements SecurityService {
   static final Set<String> OPERATIONS = Collections.unmodifiableSet(
       Utils.getStaticFieldValuesAsStrings(Operations.class)
           .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER))));
+
+  static final List<String> INTERNAL_KEYS = Collections.unmodifiableList(
+      Utils.getStaticFieldValuesAsStrings(InternalKeys.class).collect(Collectors.toList()));
+
   private final FrontendConfig frontendConfig;
   private final FrontendMetrics frontendMetrics;
   private final UrlSigningService urlSigningService;
@@ -93,6 +98,10 @@ class AmbrySecurityService implements SecurityService {
       throw new IllegalArgumentException("RestRequest is null");
     } else if (restRequest.getArgs().containsKey(InternalKeys.KEEP_ALIVE_ON_ERROR_HINT)) {
       exception = new RestServiceException(InternalKeys.KEEP_ALIVE_ON_ERROR_HINT + " is not allowed in the request",
+          RestServiceErrorCode.BadRequest);
+      //we can't check all internal keys due to we have test in processRequestTest to test preProcessRequest without handler.
+    } else if (restRequest.getArgs().containsKey(InternalKeys.SEND_TRACKING_INFO)) {
+      exception = new RestServiceException(InternalKeys.SEND_TRACKING_INFO + " is not allowed in the request",
           RestServiceErrorCode.BadRequest);
     }
     restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, frontendConfig.attachTrackingInfo);
