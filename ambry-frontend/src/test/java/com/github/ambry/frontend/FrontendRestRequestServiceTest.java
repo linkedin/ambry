@@ -4229,6 +4229,9 @@ class BadRestRequest extends BadRSC implements RestRequest {
   }
 
   @Override
+  public void removeArg(String key) { throw new IllegalStateException("Not implemented"); }
+
+  @Override
   public SSLSession getSSLSession() {
     return null;
   }

@@ -140,6 +140,8 @@ public class MockRestRequestService implements RestRequestService {
   public void handlePut(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       try {
+        //set the internal key during preProcessRequest.
+        restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, "true");
         if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
           restResponseChannel.setStatus(ResponseStatus.Continue);
           handleResponse(restRequest, restResponseChannel, null, null);

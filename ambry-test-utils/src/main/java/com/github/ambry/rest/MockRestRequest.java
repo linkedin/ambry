@@ -60,7 +60,7 @@ public class MockRestRequest implements RestRequest {
    * List of "events" (function calls) that can occur inside MockRestRequest.
    */
   public enum Event {
-    GetRestMethod, GetPath, GetUri, GetArgs, SetArgs, GetSize, ReadInto, IsOpen, Close, GetMetricsTracker
+    GetRestMethod, GetPath, GetUri, GetArgs, SetArgs, RemoveArgs, GetSize, ReadInto, IsOpen, Close, GetMetricsTracker
   }
 
   /**
@@ -181,6 +181,12 @@ public class MockRestRequest implements RestRequest {
   public Object setArg(String key, Object value) {
     onEventComplete(Event.SetArgs);
     return args.put(key, value);
+  }
+
+  @Override
+  public void removeArg(String key) {
+    onEventComplete(Event.RemoveArgs);
+    args.remove(key);
   }
 
   @Override
