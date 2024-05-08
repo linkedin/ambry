@@ -373,13 +373,15 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
         nettyMetrics.requestChunkProcessingTimeInMs.update(chunkProcessingTime);
         request.getMetricsTracker().nioMetricsTracker.addToRequestProcessingTime(chunkProcessingTime);
       }
-      if (success && (
-          (!request.getRestMethod().equals(RestMethod.POST) && !request.getRestMethod().equals(RestMethod.PUT)) || (
-              request.isMultipart() && requestContentFullyReceived)) || CONTINUE.equals(
-          request.getArgs().get(EXPECT))) {
-        if (CONTINUE.equals(request.getArgs().get(EXPECT))) {
+      boolean isPutOrPost = request.getRestMethod().equals(RestMethod.POST) || request.getRestMethod().equals(RestMethod.PUT);
+      boolean isMultipart = request.isMultipart() && requestContentFullyReceived;
+      boolean hasContinue = CONTINUE.equals(request.getArgs().get(EXPECT));
+      if (success && (!isPutOrPost || isMultipart || hasContinue)) {
+        if (hasContinue) {
           request.setArg(EXPECT, "");
           responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);
+          // FIXME: The request could be accepted as ctor arg to NettyResponseChannel to avoid null pointers
+          responseChannel.setRequest(request);
         }
         requestHandler.handleRequest(request, responseChannel);
       }
