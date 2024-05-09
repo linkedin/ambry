@@ -342,7 +342,7 @@ class MySqlNamedBlobDb implements NamedBlobDb {
 
   @Override
   public CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
-      String pageToken, String maxKeys) {
+      String pageToken, Integer maxKeys) {
     return executeTransactionAsync(accountName, containerName, true, (accountId, containerId, connection) -> {
       long startTime = this.time.milliseconds();
       Page<NamedBlobRecord> recordPage =
@@ -624,10 +624,10 @@ class MySqlNamedBlobDb implements NamedBlobDb {
   }
 
   private Page<NamedBlobRecord> run_list_v2(String accountName, String containerName, String blobNamePrefix,
-      String pageToken, short accountId, short containerId, Connection connection, String maxKeys) throws Exception {
+      String pageToken, short accountId, short containerId, Connection connection, Integer maxKeys) throws Exception {
     String query = "";
     String queryStatement = blobNamePrefix == null ? LIST_ALL_QUERY_V2 : LIST_QUERY_V2;
-    int maxKeysValue = maxKeys == null ? config.listMaxResults : Integer.parseInt(maxKeys);
+    int maxKeysValue = maxKeys == null ? config.listMaxResults : maxKeys;
     try (PreparedStatement statement = connection.prepareStatement(queryStatement)) {
       statement.setInt(1, accountId);
       statement.setInt(2, containerId);

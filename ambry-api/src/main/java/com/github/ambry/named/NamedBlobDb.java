@@ -66,7 +66,7 @@ public interface NamedBlobDb extends Closeable {
    * starting with the specified prefix or an exception if an error occurred.
    */
   CompletableFuture<Page<NamedBlobRecord>> list(String accountName, String containerName, String blobNamePrefix,
-      String pageToken, String maxKey);
+      String pageToken, Integer maxKey);
 
   /**
    * Persist a {@link NamedBlobRecord} in the database.

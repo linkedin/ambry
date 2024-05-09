@@ -134,7 +134,8 @@ public class NamedBlobListHandler {
         String maxKeys = getHeader(restRequest.getArgs(), MAXKEYS_PARAM_NAME, false);
         CallbackUtils.callCallbackAfter(
             namedBlobDb.list(namedBlobPath.getAccountName(), namedBlobPath.getContainerName(),
-                namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken(), maxKeys), listBlobsCallback());
+                namedBlobPath.getBlobNamePrefix(), namedBlobPath.getPageToken(),
+                maxKeys == null ? null : Integer.parseInt(maxKeys)), listBlobsCallback());
       }, uri, LOGGER, finalCallback);
     }
 

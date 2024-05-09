@@ -143,7 +143,7 @@ public class MySqlNamedBlobDbIntegrationTest {
             pageWithToken.getEntries().size());
         //page with maxKeys
         Page<NamedBlobRecord> pageWithMaxKey =
-            namedBlobDb.list(account.getName(), container.getName(), null, null, "1").get();
+            namedBlobDb.list(account.getName(), container.getName(), null, null, 1).get();
         assertEquals("Unexpected number of blobs in container", blobsPerContainer / 5,
             pageWithMaxKey.getEntries().size());
       }
