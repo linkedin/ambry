@@ -19,7 +19,15 @@ import com.codahale.metrics.MetricRegistry;
 
 
 public class RecoveryMetrics {
+  public static final String ADD_CLOUD_PARTITION_ERROR_COUNT = "AddCloudPartitionErrorCount";
+  public static final String BACKUP_CHECKER_RUNTIME_ERROR = "BackupCheckerRuntimeError";
   public static final String BLOB_DOWNLOAD_BYTE_RATE = "BlobDownloadByteRate";
+  public static final String CLOUD_TOKEN_RELOAD_WARN_COUNT = "CloudTokenReloadWarnCount";
+  public static final String LIST_BLOBS_ERROR = "ListBlobsError";
+  public static final String LIST_BLOBS_SUCCESS_RATE = "ListBlobsSuccessRate";
+  public static final String METADATA_ERROR = "MetadataError";
+  public static final String RECOVERY_REQUEST_ERROR = "RecoveryRequestError";
+  public static final String RECOVERY_TOKEN_ERROR = "RecoveryTokenError";
 
   public final Counter recoveryTokenError;
   public final Counter listBlobsError;
@@ -31,20 +39,19 @@ public class RecoveryMetrics {
   public final Counter cloudTokenReloadWarnCount;
   public final Meter blobDownloadByteRate;
 
-  public static final String BACKUP_CHECKER_RUNTIME_ERROR = "BackupCheckerRuntimeError";
   public final Counter backupCheckerRuntimeError;
 
   public RecoveryMetrics(MetricRegistry registry) {
     blobDownloadByteRate = registry.meter(MetricRegistry.name(RecoveryMetrics.class, BLOB_DOWNLOAD_BYTE_RATE));
-    recoveryTokenError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, "RecoveryTokenError"));
-    listBlobsError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, "ListBlobsError"));
-    metadataError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, "MetadataError"));
-    recoveryRequestError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, "RecoveryRequestError"));
-    listBlobsSuccessRate = registry.meter(MetricRegistry.name(RecoveryMetrics.class, "ListBlobsSuccessRate"));
+    recoveryTokenError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, RECOVERY_TOKEN_ERROR));
+    listBlobsError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, LIST_BLOBS_ERROR));
+    metadataError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, METADATA_ERROR));
+    recoveryRequestError = registry.counter(MetricRegistry.name(RecoveryMetrics.class, RECOVERY_REQUEST_ERROR));
+    listBlobsSuccessRate = registry.meter(MetricRegistry.name(RecoveryMetrics.class, LIST_BLOBS_SUCCESS_RATE));
     addCloudPartitionErrorCount =
-        registry.counter(MetricRegistry.name(RecoveryMetrics.class, "AddCloudPartitionErrorCount"));
+        registry.counter(MetricRegistry.name(RecoveryMetrics.class, ADD_CLOUD_PARTITION_ERROR_COUNT));
     cloudTokenReloadWarnCount =
-        registry.counter(MetricRegistry.name(RecoveryMetrics.class, "CloudTokenReloadWarnCount"));
+        registry.counter(MetricRegistry.name(RecoveryMetrics.class, CLOUD_TOKEN_RELOAD_WARN_COUNT));
     backupCheckerRuntimeError =
         registry.counter(MetricRegistry.name(RecoveryMetrics.class, BACKUP_CHECKER_RUNTIME_ERROR));
   }
