@@ -12,6 +12,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -47,6 +48,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   private Map<String, Integer> replicaInPoolOrFlightCountByDc;
   private Map<String, Integer> totalReplicaCountByDc;
   private Set<String> allDatacenters;
+  private List<String> remoteDatacenters;
 
   ParanoidDurabilityOperationTracker(RouterConfig routerConfig, PartitionId partitionId, String originatingDcName,
       NonBlockingRouterMetrics routerMetrics) {
@@ -137,6 +139,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     inflightCountByDc = new HashMap<String, Integer>();
     replicaSuccessCountByDc = new HashMap<String, Integer>();
     replicaInPoolOrFlightCountByDc = new HashMap<String, Integer>();
+    remoteDatacenters = new ArrayList<String.()
 
     replicaPoolByDc.forEach((dcName, v) -> {
       inflightCountByDc.put(dcName, 0);
@@ -146,6 +149,9 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       disabledCountByDc.put(dcName, 0);
       totalReplicaCountByDc.put(dcName, v.size());
       allDatacenters.add(dcName);
+      if(!dcName.equals(datacenterName)) {
+        remoteDatacenters.add(dcName);
+      }
     });
   }
 
@@ -297,14 +303,19 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     replicaInPoolOrFlightCountByDc.put(dcName, replicaInPoolOrFlightCountByDc.get(dcName) + delta);
   }
 
-  private void modifyInFlightCount(ReplicaId replica, int delta) {
-    String dcName = replica.getDataNodeId().getDatacenterName();
-    inflightCountByDc.put(dcName, replicaInPoolOrFlightCountByDc.get(dcName) + delta);
+  // Is it OK to use this method instead of the getCurrentParallelism() method in SimpleOperationTracker?
+  // The name is different but not the contents.
+  int getCurrentLocalParallelism() {
+    return replicaParallelism;
+  }
+
+  int getCurrentRemoteParallelism() {
+    return remoteReplicaParallelism;
   }
 
   @Override
   public Iterator<ReplicaId> getReplicaIterator() {
-    replicaIterator = replicaPool.iterator();
+    replicaIterator = replicaPool.iterator();                  //Iterator<ReplicaId>, since replicaPool is a List<ReplicaId>
     // replicaByDcIterator will be a new iterator for the map
     return otIterator;
   }
@@ -318,38 +329,62 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
 
     @Override
     public void remove() {
-      if(lastReturnedByIterator.getDataNodeId().getDatacenterName().equals(datacenterName)) {
+      if(isLocalReplica(lastReturnedByIterator)){
         localInflightCount++;
-        localReplicaIterator.remove();
       } else {
         remoteInflightCount++;
-        remoteReplicaIterator.remove();
       }
+      replicaPoolByDc.get(lastReturnedByIterator.getDataNodeId().getDatacenterName()).remove(lastReturnedByIterator);
     }
 
     @Override
     public ReplicaId next() {
       if (!hasNext()) {
-        throw new NoSuchElementException();
+        throw new NoSuchElementException(); // Tommy: Double check we're doing the same thing as SimpleOperationTracker so callers can handle  this exception
       }
 
       if(hasNextLocal()) {
-        lastReturnedByIterator = localReplicaIterator.next();
+        lastReturnedByIterator = replicaPoolByDc.get(datacenterName).removeFirst();
         return lastReturnedByIterator;
       }
 
       if(hasNextRemote() {
-        lastReturnedByIterator = remoteReplicaIterator.next();
+
+        lastReturnedByIterator =
         return lastReturnedByIterator;
       }
     }
 
     private boolean hasNextLocal() {
-      return localInflightCount < getCurrentLocalParallelism() && localReplicaIterator.hasNext();
+      return localInflightCount < getCurrentLocalParallelism() && replicaPoolByDc.get(datacenterName).size() > 0;
     }
 
     private boolean hasNextRemote() {
-      return remoteInflightCount < getCurrentRemoteParallelism() && remoteReplicaIterator.hasNext()
+      // need to keep track of EACH remote data center's inflight count
+      // so we can send requests to each remote data center in parallel
+      // may need to track lastReturnedByIterator by data center also
+
+      // also need to keep track of the remote success target for each colo
+      // double check how this will work!
+
+      // If we set the remote success target to be just 1, then after we receive the first success we can say that
+      // we have succeeded remotely. If we require all remote colos to return success, then we effectively rely on all
+      // colos to function correctly all the time. We should set the remote parallelism to be 2, so that we can send out
+      // two remote calls at once - i.e. one to each DC.
+      return remoteInflightCount < getCurrentRemoteParallelism() && remoteReplicasLeft();
+    }
+
+    private boolean remoteReplicasLeft() {
+      for(String dcName : remoteDatacenters) {
+        if(replicaPoolByDc.get(dcName).size() > 0) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    private boolean isLocalReplica(ReplicaId replica) {
+      return replica.getDataNodeId().getDatacenterName().equals(datacenterName);
     }
   }
 }
