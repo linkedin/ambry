@@ -244,16 +244,29 @@ public class StorageManager implements StoreManager {
         failedDiskIds.add(entry.getKey());
       }
     }
-    int totalDisks = currentNode.getDiskIds().size();
     int failedDisks = failedDiskIds.size();
-    // The failed disks has to larger than the threshold. If the threshold is 1, then even if all disks failed, it won't
-    // throw an exception.
-    if (totalDisks != 0 && failedDisks / (1.0f * totalDisks) > storeConfig.storeThresholdOfDiskFailuresToTerminate) {
-      logger.error("There are {} failed disks, and total disk is {}, surpassed the threshold {}", failedDisks,
-          totalDisks, storeConfig.storeThresholdOfDiskFailuresToTerminate);
+    if (tooManyFailedDisks(failedDisks)) {
       logger.error("Failed disks are {}", failedDisks);
       throw new StoreException("More than enough disks failed", StoreErrorCodes.Initialization_Error);
     }
+  }
+
+  /**
+   * Return true is too many disks failed.
+   * @param failedDiskCount The number of failed disks.
+   * @return
+   */
+  boolean tooManyFailedDisks(int failedDiskCount) {
+    int totalDisks = currentNode.getDiskIds().size();
+    // The failed disks has to larger than the threshold. If the threshold is 1, then even if all disks failed, it won't
+    // throw an exception.
+    if (totalDisks != 0
+        && failedDiskCount / (1.0f * totalDisks) > storeConfig.storeThresholdOfDiskFailuresToTerminate) {
+      logger.error("There are {} failed disks, and total disk is {}, surpassed the threshold {}", failedDiskCount,
+          totalDisks, storeConfig.storeThresholdOfDiskFailuresToTerminate);
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1012,7 +1025,6 @@ public class StorageManager implements StoreManager {
         .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
         .collect(Collectors.toList());
     private final long acquireLockBackoffTime = storeConfig.storeDiskFailureHandlerRetryLockBackoffTimeInSeconds * 1000;
-    private final int capacityReportingPercentage = storeConfig.storeDiskCapacityReportingPercentage;
 
     /**
      * Expose for testing
@@ -1036,6 +1048,19 @@ public class StorageManager implements StoreManager {
         return;
       }
       logger.info("Current Node is in FULL_AUTO, try to detect disk failure.");
+      // First check if there are too many disks that are already unavailable. Terminate JVM if so.
+      // The purpose of doing this check here instead of the end of this method is to make sure
+      // that this JVM would be able to emit unavailable disk metric for at least a couple of minutes
+      // before next round of disk failure handler execution.
+      int unavailableDiskCount = currentNode.getDiskIds()
+          .stream()
+          .filter(diskId -> diskId.getState() == HardwareState.UNAVAILABLE)
+          .collect(Collectors.toList())
+          .size();
+      if (tooManyFailedDisks(unavailableDiskCount)) {
+        System.exit(1);
+      }
+
       // First, we have to detect if there is a new disk failure
       List<DiskId> newFailedDisks = diskToDiskManager.keySet()
           .stream()
