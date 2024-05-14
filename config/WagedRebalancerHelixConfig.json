@@ -8,7 +8,7 @@
     "lessMovement": 4,
     "partitionDiskWeightInGB": 386,
     "maxPartitionInTransition": 1500,
-    "delayRebalanceTimeInMs": 86400000,
+    "delayRebalanceTimeInMs": 21600000,
     "errorThresholdForLoadBalance": 2000,
     "maxThreadsForStateTransition": 300
   }

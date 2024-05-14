@@ -190,10 +190,8 @@ class HelixClusterManagerMetrics {
           }
         }
         if (downReplicaCount > replicaCount / 2) {
-          if (logger.isTraceEnabled()) {
-            logger.trace("There are more than more of the replicas are down for partition {}, the down replicas are {}",
+            logger.info("There are more than more of the replicas are down for partition {}, the down replicas are {}",
                 partition.toPathString(), downReplicas);
-          }
           return 1L;
         }
       }
