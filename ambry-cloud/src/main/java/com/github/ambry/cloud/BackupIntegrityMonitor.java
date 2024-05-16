@@ -271,7 +271,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
       logger.info("[BackupIntegrityMonitor] Recovered {} num_azure_blobs {} bytes of partition-{} from Azure Storage",
           azureToken.getNumBlobs(), azureToken.getBytesRead(), partition.getId());
-      
+
       /** Create a temporary map of all keys recovered from cloud */
       StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
       while (!newDiskToken.equals(oldDiskToken)) {
@@ -308,10 +308,10 @@ public class BackupIntegrityMonitor implements Runnable {
       logger.info("[BackupIntegrityMonitor] Queued peer server replica info [{}]", serverReplica);
       long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilTime();
       long scanStopTime = System.currentTimeMillis() - SCAN_STOP_RELTIME;
+      DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
       String replUntil = (String) replicaBackupProgressTokens.get(serverReplica.getReplicaId().getDataNodeId().getHostname())
           .getProperties().get(VcrReplicationManager.REPLICATED_UNITL_UTC);
       if (!replUntil.equals(String.valueOf(Utils.Infinite_Time))) {
-        DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
         scanStopTime = formatter.parse(replUntil).getTime();
       }
       logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}] until {} ({} ms)",
@@ -322,7 +322,6 @@ public class BackupIntegrityMonitor implements Runnable {
         scanEndTime = serverReplica.getReplicatedUntilTime();
         if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
           // Print progress, if a SCAN_MILESTONE's worth of data has been received from server
-          DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
           logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {} until {}, stop at {}",
               serverScanner.getNumBlobScanned(), replica, formatter.format(scanEndTime),
               formatter.format(scanStopTime));
