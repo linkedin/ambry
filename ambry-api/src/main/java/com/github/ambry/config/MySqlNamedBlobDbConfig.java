@@ -55,7 +55,7 @@ public class MySqlNamedBlobDbConfig {
    * The maximum number of entries to return per response page when listing blobs.
    */
   @Config(LIST_MAX_RESULTS)
-  @Default("100")
+  @Default("1000")
   public final int listMaxResults;
 
   /**

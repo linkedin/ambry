@@ -41,7 +41,6 @@ import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.config.QuotaConfig;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.frontend.s3.S3MultipartUploadHandler;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.named.DeleteResult;
@@ -2525,17 +2524,17 @@ public class FrontendRestRequestServiceTest {
     RestRequest restRequest = createRestRequest(RestMethod.GET, path, null, null);
     MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
     if (pageToReturn != null) {
-      when(namedBlobDb.list(any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(pageToReturn));
+      when(namedBlobDb.list(any(), any(), any(), any(), any())).thenReturn(CompletableFuture.completedFuture(pageToReturn));
     } else {
       CompletableFuture<Page<NamedBlobRecord>> future = new CompletableFuture<>();
       future.completeExceptionally(new RestServiceException("NamedBlobDb error", expectedErrorCode));
-      when(namedBlobDb.list(any(), any(), any(), any())).thenReturn(future);
+      when(namedBlobDb.list(any(), any(), any(), any(), any())).thenReturn(future);
     }
 
     if (expectedErrorCode == null) {
       assertNotNull("pageToReturn should be set", pageToReturn);
       doOperation(restRequest, restResponseChannel);
-      verify(namedBlobDb).list(refAccount.getName(), refContainer.getName(), prefix, pageToken);
+      verify(namedBlobDb).list(refAccount.getName(), refContainer.getName(), prefix, pageToken, null);
       Page<NamedBlobListEntry> response =
           Page.fromJson(new JSONObject(new String(restResponseChannel.getResponseBody())), NamedBlobListEntry::new);
       assertEquals("Unexpected blobs returned",

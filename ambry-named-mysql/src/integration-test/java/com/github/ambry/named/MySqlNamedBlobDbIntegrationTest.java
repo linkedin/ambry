@@ -122,7 +122,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     time.setCurrentMilliseconds(System.currentTimeMillis());
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
-        Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), "name", null).get();
+        Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), "name", null, null).get();
         assertNull("No continuation token expected", page.getNextPageToken());
         assertEquals("Unexpected number of blobs in container", blobsPerContainer, page.getEntries().size());
       }
@@ -133,12 +133,19 @@ public class MySqlNamedBlobDbIntegrationTest {
     for (Account account : accountService.getAllAccounts()) {
       for (Container container : account.getAllContainers()) {
         //page with no token
-        Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), null, null).get();
+        Page<NamedBlobRecord> page = namedBlobDb.list(account.getName(), container.getName(), null, null, null).get();
         assertNull("No continuation token expected", page.getNextPageToken());
         assertEquals("Unexpected number of blobs in container", blobsPerContainer, page.getEntries().size());
         //page with token
-        Page<NamedBlobRecord> pageWithToken = namedBlobDb.list(account.getName(), container.getName(), null, "name/4").get();
-        assertEquals("Unexpected number of blobs in container", blobsPerContainer / 5, pageWithToken.getEntries().size());
+        Page<NamedBlobRecord> pageWithToken =
+            namedBlobDb.list(account.getName(), container.getName(), null, "name/4", null).get();
+        assertEquals("Unexpected number of blobs in container", blobsPerContainer / 5,
+            pageWithToken.getEntries().size());
+        //page with maxKeys
+        Page<NamedBlobRecord> pageWithMaxKey =
+            namedBlobDb.list(account.getName(), container.getName(), null, null, 1).get();
+        assertEquals("Unexpected number of blobs in container", blobsPerContainer / 5,
+            pageWithMaxKey.getEntries().size());
       }
     }
 
@@ -293,7 +300,7 @@ public class MySqlNamedBlobDbIntegrationTest {
     );
 
     // List named blob should only put out valid ones without empty entries.
-    Page<NamedBlobRecord> page =  namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null).get();
+    Page<NamedBlobRecord> page =  namedBlobDb.list(account.getName(), container.getName(), blobNamePrefix, null, null).get();
     assertEquals("List named blob entries should match the valid records", validRecords, new HashSet<>(page.getEntries()));
     assertNull("Next page token should be null", page.getNextPageToken());
   }
