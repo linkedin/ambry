@@ -199,9 +199,9 @@ public class BackupCheckerThread extends ReplicaThread {
               .filter(serverBlob -> serverBlob.getStoreKey() != null)
               .map(serverBlob -> {
                 MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey().getID());
-                // azureBlob can be null, but serverBlob will never be null,
-                // hence serverBlob.isEqual() and _not_ azureBlob.isEqual()
-                return new ImmutableTriple(serverBlob, azureBlob, serverBlob.isEqual(azureBlob));
+                Set<BlobMatchStatus> status = azureBlob == null ? Collections.singleton(BLOB_ABSENT_IN_AZURE)
+                    : serverBlob.isEqual(azureBlob);
+                return new ImmutableTriple(serverBlob, azureBlob, status);
               })
               .filter(tuple -> !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
               .forEach(tuple -> {
@@ -260,7 +260,7 @@ public class BackupCheckerThread extends ReplicaThread {
     String output = getFilePath(rinfo, BLOB_STATE_MISMATCHES_FILE);
     azureBlobMap.values().forEach(azureBlob -> {
       String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
-          azureBlob.isEqual(null).stream().map(s -> s.name()).collect(Collectors.joining(",")),
+          BLOB_ABSENT_IN_SERVER.name(),
           MessageInfo.toText(null), MessageInfo.toText(azureBlob),
           "\n");
       fileManager.appendToFile(output, msg);
