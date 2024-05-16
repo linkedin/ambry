@@ -13,7 +13,9 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.data.tables.models.TableEntity;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.clustermap.AmbryDisk;
 import com.github.ambry.clustermap.AmbryPartition;
 import com.github.ambry.clustermap.AmbryReplica;
@@ -27,6 +29,7 @@ import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
 import com.github.ambry.clustermap.StaticClusterManager;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -39,6 +42,7 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.utils.Utils;
 import java.io.File;
@@ -87,19 +91,20 @@ public class BackupIntegrityMonitor implements Runnable {
   private final RecoveryManager azureReplicationManager;
   private final RecoveryThread azureReplicator;
   private final CompositeClusterManager cluster;
+  private final AzureCloudDestinationSync azureSyncClient;
   private BackupCheckerThread serverScanner;
   private final ReplicationManager serverReplicationManager;
   private final ScheduledExecutorService executor;
   private final StorageManager storageManager;
   private final AzureCloudConfig azureConfig;
-  public final long SCAN_STOP_RELTIME = TimeUnit.DAYS.toMillis(7);
+  public final long SCAN_STOP_RELTIME = TimeUnit.HOURS.toMillis(1);
   public final long SCAN_MILESTONE = TimeUnit.DAYS.toMillis(1);
   private final RecoveryMetrics metrics;
   private final HashSet<Long> seen;
 
   public BackupIntegrityMonitor(RecoveryManager azure, ReplicationManager server,
       CompositeClusterManager cluster, StorageManager storage, DataNodeId node,
-      VerifiableProperties properties) {
+      VerifiableProperties properties) throws ReflectiveOperationException {
     azureReplicationManager = azure;
     azureReplicator = azure.getRecoveryThread("ambry_backup_integrity_monitor");
     azureConfig = new AzureCloudConfig(properties);
@@ -113,6 +118,8 @@ public class BackupIntegrityMonitor implements Runnable {
     metrics = new RecoveryMetrics(cluster.getMetricRegistry());
     serverReplicationManager = server;
     storageManager = storage;
+    azureSyncClient = new AzureCloudDestinationSync(properties, helixClusterManager.getMetricRegistry(),
+        helixClusterManager, null);
     seen = new HashSet<>();
     // log disk state
     staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
@@ -229,6 +236,18 @@ public class BackupIntegrityMonitor implements Runnable {
       partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       seen.add(partition.getId());
 
+      /**
+       * Find out how far each replica of the partition has been backed-up in Azure.
+       * We will use this information to scan the replica until when it has been backed-up.
+       * And then compare data in the replica until that point with the backup in Azure.
+       */
+      HashMap<String, TableEntity> replicaBackupProgressTokens = new HashMap<>();
+      for (AmbryReplica replica : partition.getReplicaIds()) {
+        TableEntity entity = azureSyncClient.getTableEntity(azureConfig.azureTableNameReplicaTokens,
+            String.valueOf(partition.getId()), replica.getDataNodeId().getHostname());
+        replicaBackupProgressTokens.put(replica.getDataNodeId().getHostname(), entity);
+      }
+
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
 
       /** Create local Store S */
@@ -252,8 +271,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
       logger.info("[BackupIntegrityMonitor] Recovered {} num_azure_blobs {} bytes of partition-{} from Azure Storage",
           azureToken.getNumBlobs(), azureToken.getBytesRead(), partition.getId());
-
-
+      
       /** Create a temporary map of all keys recovered from cloud */
       StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
       while (!newDiskToken.equals(oldDiskToken)) {
@@ -275,6 +293,7 @@ public class BackupIntegrityMonitor implements Runnable {
       // If we filter for SEALED replicas, then we may return empty as there may be no sealed replicas
       List<AmbryReplica> replicas = partition.getReplicaIds().stream()
           .filter(r -> !r.isDown())
+          .filter(r -> replicaBackupProgressTokens.get(r.getDataNodeId().getHostname()) != null)
           .collect(Collectors.toList());
       if (replicas.isEmpty()) {
         throw new RuntimeException(String.format("[BackupIntegrityMonitor] No server replicas available for partition-%s",
@@ -288,10 +307,16 @@ public class BackupIntegrityMonitor implements Runnable {
       serverScanner.addRemoteReplicaInfo(serverReplica);
       logger.info("[BackupIntegrityMonitor] Queued peer server replica info [{}]", serverReplica);
       long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilTime();
-      long currentTime = System.currentTimeMillis();
-      logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}]",
-          partition.getId(), replica);
-      while (scanEndTime < (currentTime - SCAN_STOP_RELTIME)) {
+      long scanStopTime = System.currentTimeMillis() - SCAN_STOP_RELTIME;
+      String replUntil = (String) replicaBackupProgressTokens.get(serverReplica.getReplicaId().getDataNodeId().getHostname())
+          .getProperties().get(VcrReplicationManager.REPLICATED_UNITL_UTC);
+      if (!replUntil.equals(String.valueOf(Utils.Infinite_Time))) {
+        DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
+        scanStopTime = formatter.parse(replUntil).getTime();
+      }
+      logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}] until {} ({} ms)",
+          partition.getId(), replica, replUntil, scanStopTime);
+      while (scanEndTime < scanStopTime) {
         scanStartTime = serverReplica.getReplicatedUntilTime();
         serverScanner.replicate();
         scanEndTime = serverReplica.getReplicatedUntilTime();
@@ -300,7 +325,7 @@ public class BackupIntegrityMonitor implements Runnable {
           DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
           logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {} until {}, stop at {}",
               serverScanner.getNumBlobScanned(), replica, formatter.format(scanEndTime),
-              formatter.format(currentTime - SCAN_STOP_RELTIME));
+              formatter.format(scanStopTime));
         }
       }
       logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {}",
