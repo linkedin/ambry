@@ -295,21 +295,15 @@ public class RecoveryNetworkClient implements NetworkClient {
       // MessageInfo for the given store key is put in the cache in ReplicaMetadataRequest.
       // All store keys in GetRequest should already have MessageInfos in the cache.
       // If replication thread retries, it would send the ReplicaMetadataRequest again before the GetRequest.
-      MessageInfo info = messageInfoCache.remove(storeKey);
+      MessageInfo info = messageInfoCache.get(storeKey);
       if (info == null) {
         logger.error("Failed to find MessageInfo for store key {} at partition {}", storeKey, request.getPartition());
         return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.Blob_Not_Found);
       }
 
-      try {
-        azureSyncClient.downloadBlob((BlobId) storeKey, downloadToStream);
-        messageInfoList.add(info);
-        recoveryMetrics.blobDownloadByteRate.mark(info.getSize());
-      } catch (CloudStorageException e) {
-        logger.error("Failed to download blob {} due to {}", storeKey.getID(), e.getMessage());
-        e.printStackTrace();
-        return new PartitionResponseInfo(request.getPartition(), ServerErrorCode.IO_Error);
-      }
+      // azureSyncClient.downloadBlob((BlobId) storeKey, downloadToStream);
+      messageInfoList.add(info);
+      recoveryMetrics.blobDownloadByteRate.mark(info.getSize());
     }
     List<MessageMetadata> messageMetadataList = new ArrayList<>();
     messageInfoList.forEach(info -> messageMetadataList.add(null)); // unused
@@ -329,8 +323,16 @@ public class RecoveryNetworkClient implements NetworkClient {
     ByteArrayOutputStream downloadToStream = new ByteArrayOutputStream();
     request.getPartitionInfoList().forEach(partitionRequestInfo ->
         partitionResponseInfoList.add(downloadBlobs(partitionRequestInfo, downloadToStream)));
-    List<Send> blobsToSend = Collections.singletonList(
-        new AllSend(downloadToStream.size(), downloadToStream.toByteArray()));
+    long size = 0;
+    for (PartitionRequestInfo prequest : request.getPartitionInfoList()) {
+      for (StoreKey storeKey: prequest.getBlobIds()) {
+        MessageInfo info = messageInfoCache.remove(storeKey);
+        if (info != null) {
+          size += info.getSize();
+        }
+      }
+    }
+    List<Send> blobsToSend = Collections.singletonList(new AllZeroSend(size));
     return new GetResponse(request.getCorrelationId(), request.getClientId(), partitionResponseInfoList,
         new CompositeSend(blobsToSend), ServerErrorCode.No_Error);
   }
@@ -386,6 +388,44 @@ public class RecoveryNetworkClient implements NetworkClient {
 
     @Override
     public AllSend replace(ByteBuf content) {
+      return null;
+    }
+  }
+
+  /**
+   * A helper implementation of {@link Send} to return all bytes.
+   */
+  public static class AllZeroSend extends AbstractByteBufHolder<AllZeroSend> implements Send {
+    private final long size;
+    private final ByteBuf content;
+
+    public AllZeroSend(long size) {
+      this.size = size;
+      this.content = Unpooled.wrappedBuffer(new byte[(int) size]);
+    }
+
+    @Override
+    public long writeTo(WritableByteChannel channel) throws IOException {
+      return 0;
+    }
+
+    @Override
+    public boolean isSendComplete() {
+      return false;
+    }
+
+    @Override
+    public long sizeInBytes() {
+      return size;
+    }
+
+    @Override
+    public ByteBuf content() {
+      return content;
+    }
+
+    @Override
+    public AllZeroSend replace(ByteBuf content) {
       return null;
     }
   }

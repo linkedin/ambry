@@ -308,7 +308,7 @@ public class AmbryServer {
                 null, null);
         backupIntegrityMonitor = new BackupIntegrityMonitor(recoveryManager, replicationManager,
             compositeClusterManager, storageManager, helixNode, properties);
-        backupIntegrityMonitor.start();
+        // backupIntegrityMonitor.start();
       } else if (serverConfig.serverExecutionMode.equals(ServerExecutionMode.DATA_SERVING_MODE)) {
         logger.info("Server execution mode is DATA_SERVING_MODE");
         scheduler = Utils.newScheduler(serverConfig.serverSchedulerNumOfthreads, false);

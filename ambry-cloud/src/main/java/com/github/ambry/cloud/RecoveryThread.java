@@ -76,7 +76,7 @@ public class RecoveryThread extends ReplicaThread {
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin, RecoveryManager recoveryManager) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient, replicationConfig,
-        replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry, replicatingOverSsl,
+        replicationMetrics, notification, storeKeyConverter, null, metricRegistry, replicatingOverSsl,
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     this.fileDescriptorCache = new AmbryCache(String.format("%s-FDCache", threadName), true,
         replicationConfig.maxBackupCheckerReportFd, metricRegistry);

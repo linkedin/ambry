@@ -155,8 +155,7 @@ public class BackupCheckerThread extends ReplicaThread {
     StoreKey keyConvert = null;
     try {
       // Don't do batch-convert, if one replica in batch fails, then it affects handling others
-      keyConvert = storeKeyConverter.convert(Collections.singleton(blob.getStoreKey()))
-          .get(blob.getStoreKey());
+      keyConvert = storeKeyConverter.convert(Collections.singleton(blob.getStoreKey())).get(blob.getStoreKey());
     } catch (Throwable e) {
       metrics.backupIntegrityError.inc();
       logger.error("Failed to convert blobID {} due to ", blob.getStoreKey().getID(), e.toString());
@@ -190,11 +189,16 @@ public class BackupCheckerThread extends ReplicaThread {
                 numBlobScanned.incrementAndGet();
                 replica.setReplicatedUntilTime(Math.max(replica.getReplicatedUntilTime(),
                     serverBlob.getOperationTimeMs()));
-                return mapBlob(serverBlob);
+                MessageInfo converted = mapBlob(serverBlob);
+                String blob = "AAYAAQQqAAgAAQAAAAAAAAJKNuEKYmM2SZeRJqdUtq_rgw";
+                if (serverBlob.getStoreKey().getID().equals(blob)) {
+                  logger.info("[BackupIntegrityMonitor] peer server has {}, converted_id = {}", blob, converted.getStoreKey().getID());
+                }
+                return converted;
               })
               .filter(serverBlob -> serverBlob.getStoreKey() != null)
               .map(serverBlob -> {
-                MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey());
+                MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey().getID());
                 // azureBlob can be null, but serverBlob will never be null,
                 // hence serverBlob.isEqual() and _not_ azureBlob.isEqual()
                 return new ImmutableTriple(serverBlob, azureBlob, serverBlob.isEqual(azureBlob));

@@ -431,19 +431,6 @@ public class DiskManager {
       if (!running) {
         logger.error("Failed to add {} because disk manager is not running", replica.getPartitionId());
       } else {
-        // Clean up existing dir associated with this replica to add. Here we re-create a new store because we don't
-        // know the state of files in old directory. (The old directory was created last time when adding this replica
-        // but failed at some point before updating InstanceConfig)
-        File storeDir = new File(replica.getReplicaPath());
-        if (storeDir.exists()) {
-          logger.info("Deleting previous store directory associated with {}", replica);
-          try {
-            Utils.deleteFileOrDirectory(storeDir);
-          } catch (Exception e) {
-            throw new IOException("Couldn't delete store directory " + replica.getReplicaPath(), e);
-          }
-          logger.info("Old store directory is deleted for {}", replica);
-        }
         BlobStore store = new BlobStore(replica, storeConfig, scheduler, longLivedTaskScheduler, this, diskIOScheduler,
             diskSpaceAllocator, storeMainMetrics, storeUnderCompactionMetrics, keyFactory, recovery, hardDelete,
             replicaStatusDelegates, time, accountService, null, indexPersistScheduler);
