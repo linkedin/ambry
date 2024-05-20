@@ -695,7 +695,7 @@ public class AmbryRequests implements RequestAPI {
             logger.trace("{} Time used to find entry since: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
-            // Compute CRC of backup recovery and verification
+            // Compute CRC for backup recovery and verification
             if (false) { // TODO: Replace with some flag
               Store storeToGet = storeManager.getStore(partitionId);
               EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
