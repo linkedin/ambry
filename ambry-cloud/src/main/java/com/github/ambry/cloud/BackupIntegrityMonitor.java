@@ -28,6 +28,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
+import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
@@ -47,13 +48,16 @@ import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.text.DateFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -210,6 +214,63 @@ public class BackupIntegrityMonitor implements Runnable {
     }
   }
 
+  void compareMetadata(RemoteReplicaInfo serverReplica, TableEntity serverToAzureReplToken, RecoveryToken azureToServerReplToken) {
+    long partitionId = serverReplica.getReplicaId().getPartitionId().getId();
+    try {
+      serverScanner.addRemoteReplicaInfo(serverReplica);
+      logger.info("[BackupIntegrityMonitor] Queued peer server replica info [{}]", serverReplica);
+
+      long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilTime();
+      long scanStopTime = System.currentTimeMillis() - SCAN_STOP_RELTIME;
+      DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
+      String replUntil = (String) serverToAzureReplToken.getProperties().get(VcrReplicationManager.REPLICATED_UNITL_UTC);
+      if (!replUntil.equals(String.valueOf(Utils.Infinite_Time))) {
+        scanStopTime = formatter.parse(replUntil).getTime();
+      }
+      logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}] until {} ({} ms)",
+          partitionId, serverReplica, replUntil, scanStopTime);
+
+      while (scanEndTime < scanStopTime) {
+        scanStartTime = serverReplica.getReplicatedUntilTime();
+        serverScanner.replicate();
+        scanEndTime = serverReplica.getReplicatedUntilTime();
+        if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
+          // Print progress, if a SCAN_MILESTONE's worth of data has been received from server
+          logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {} until {}, stop at {}",
+              serverScanner.getNumBlobScanned(), serverReplica, formatter.format(scanEndTime),
+              formatter.format(scanStopTime));
+        }
+      }
+      logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {}",
+          serverScanner.getNumBlobScanned(), serverReplica);
+
+      serverScanner.printKeysAbsentInServer(serverReplica);
+      ReplicationMetrics rmetrics = new ReplicationMetrics(cluster.getMetricRegistry(), Collections.emptyList());
+      logger.info("[BackupIntegrityMonitor] Verified cloud backup partition-{} against peer server replica {}"
+              + ", num_azure_blobs = {}, num_server_blobs = {}, num_mismatches = {}",
+          partitionId, serverReplica, azureToServerReplToken.getNumBlobs(), serverScanner.getNumBlobScanned(),
+          rmetrics.backupIntegrityError.getCount());
+    } catch (Throwable e) {
+      metrics.backupCheckerRuntimeError.inc();
+      logger.error("[BackupIntegrityMonitor] Failed to verify server replica {} due to {}",
+          serverReplica, e.getMessage());
+      // Swallow all exceptions and print a trace for inspection, but do not kill the job
+      e.printStackTrace();
+    }
+
+    try {
+      if (serverReplica != null) {
+        serverScanner.removeRemoteReplicaInfo(serverReplica);
+      }
+    } catch (Throwable e) {
+      metrics.backupCheckerRuntimeError.inc();
+      logger.error("[BackupIntegrityMonitor] Failed to dequeue server replica {} due to {}",
+          partitionId, serverReplica, e.getMessage());
+      // Swallow all exceptions and print a trace for inspection, but do not kill the job
+      e.printStackTrace();
+    }
+  }
+
   /**
    * This method randomly picks a partition in a cluster and locates its replica in the cluster and the cloud.
    * Then it downloads and compares data from both replicas.
@@ -218,7 +279,6 @@ public class BackupIntegrityMonitor implements Runnable {
   public void run() {
     RemoteReplicaInfo cloudReplica = null;
     AmbryPartition partition = null;
-    RemoteReplicaInfo serverReplica = null;
     HashMap<String, MessageInfo> azureBlobs = new HashMap<>();
     serverScanner = serverReplicationManager.getBackupCheckerThread("ambry_backup_integrity_monitor");
     Random random = new Random();
@@ -292,6 +352,7 @@ public class BackupIntegrityMonitor implements Runnable {
       /** Replicate from server and compare */
       // If we filter for SEALED replicas, then we may return empty as there may be no sealed replicas
       List<AmbryReplica> replicas = partition.getReplicaIds().stream()
+          .filter(r -> r.getDataNodeId().getDatacenterName().equals(clusterMapConfig.clustermapVcrDatacenterName))
           .filter(r -> !r.isDown())
           .filter(r -> replicaBackupProgressTokens.get(r.getDataNodeId().getHostname()) != null)
           .collect(Collectors.toList());
@@ -299,44 +360,12 @@ public class BackupIntegrityMonitor implements Runnable {
         throw new RuntimeException(String.format("[BackupIntegrityMonitor] No server replicas available for partition-%s",
             partition.getId()));
       }
-      AmbryReplica replica = replicas.get(random.nextInt(replicas.size()));
-      logger.info("[BackupIntegrityMonitor] Selected peer server replica [{}]", replica);
-      serverReplica = serverReplicationManager.createRemoteReplicaInfos(
-          Collections.singletonList(replica), store.getReplicaId()).get(0);
-      logger.info("[BackupIntegrityMonitor] Created peer server replica info [{}]", serverReplica);
-      serverScanner.addRemoteReplicaInfo(serverReplica);
-      logger.info("[BackupIntegrityMonitor] Queued peer server replica info [{}]", serverReplica);
-      long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilTime();
-      long scanStopTime = System.currentTimeMillis() - SCAN_STOP_RELTIME;
-      DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
-      String replUntil = (String) replicaBackupProgressTokens.get(serverReplica.getReplicaId().getDataNodeId().getHostname())
-          .getProperties().get(VcrReplicationManager.REPLICATED_UNITL_UTC);
-      if (!replUntil.equals(String.valueOf(Utils.Infinite_Time))) {
-        scanStopTime = formatter.parse(replUntil).getTime();
-      }
-      logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}] until {} ({} ms)",
-          partition.getId(), replica, replUntil, scanStopTime);
-      while (scanEndTime < scanStopTime) {
-        scanStartTime = serverReplica.getReplicatedUntilTime();
-        serverScanner.replicate();
-        scanEndTime = serverReplica.getReplicatedUntilTime();
-        if (scanEndTime - scanStartTime > SCAN_MILESTONE) {
-          // Print progress, if a SCAN_MILESTONE's worth of data has been received from server
-          logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {} until {}, stop at {}",
-              serverScanner.getNumBlobScanned(), replica, formatter.format(scanEndTime),
-              formatter.format(scanStopTime));
-        }
-      }
-      logger.info("[BackupIntegrityMonitor] Scanned {} num_server_blobs from peer server replica {}",
-          serverScanner.getNumBlobScanned(), replica);
 
-      serverScanner.printKeysAbsentInServer(serverReplica);
-
-      ReplicationMetrics rmetrics = new ReplicationMetrics(cluster.getMetricRegistry(), Collections.emptyList());
-      logger.info("[BackupIntegrityMonitor] Verified cloud backup partition-{} against peer server replica {}"
-              + ", num_azure_blobs = {}, num_server_blobs = {}, num_mismatches = {}",
-          partition.getId(), replica, azureToken.getNumBlobs(), serverScanner.getNumBlobScanned(),
-          rmetrics.backupIntegrityError.getCount());
+      List<RemoteReplicaInfo> serverReplicas =
+          serverReplicationManager.createRemoteReplicaInfos(replicas, store.getReplicaId());
+      for (RemoteReplicaInfo s : serverReplicas) {
+        compareMetadata(s, replicaBackupProgressTokens.get(s.getReplicaId().getDataNodeId().getHostname()), azureToken);
+      }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
       logger.error("[BackupIntegrityMonitor] Failed to verify cloud backup partition-{} due to {}", partition.getId(),
@@ -350,9 +379,6 @@ public class BackupIntegrityMonitor implements Runnable {
       azureBlobs.clear();
       if (cloudReplica != null) {
         azureReplicator.removeRemoteReplicaInfo(cloudReplica);
-      }
-      if (serverReplica != null) {
-        serverScanner.removeRemoteReplicaInfo(serverReplica);
       }
       if (partition != null) {
         stopLocalStore(partition);
