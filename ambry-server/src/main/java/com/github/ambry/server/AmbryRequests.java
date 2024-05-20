@@ -96,10 +96,12 @@ import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.StoreKeyJacksonConfig;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -692,6 +694,29 @@ public class AmbryRequests implements RequestAPI {
                     replicaPath);
             logger.trace("{} Time used to find entry since: {}", partitionId,
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
+
+            // Compute CRC of backup recovery and verification
+            if (false) { // TODO: Replace with some flag
+              Store storeToGet = storeManager.getStore(partitionId);
+              EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
+                  StoreGetOptions.Store_Include_Expired);
+              List<MessageInfo> newMessageInfos = new ArrayList<>();
+              // For each key
+              for (MessageInfo minfo : findInfo.getMessageEntries()) {
+                // Get StoreInfo
+                List<StoreKey> key = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()))
+                    .stream().distinct().collect(Collectors.toList());
+                StoreInfo stinfo = storeToGet.get(key, storeGetOptions);
+                stinfo.getMessageReadSet().doPrefetch(0, 0, stinfo.getMessageReadSet().sizeInBytes(0));
+                ByteBuf buf = stinfo.getMessageReadSet().getPrefetchedData(0);
+                // Compute CRC
+                long crc = new CrcInputStream(new NettyByteBufDataInputStream(buf)).getValue();
+                newMessageInfos.add(new MessageInfo(crc, minfo));
+              }
+              // Create new list of responses
+              findInfo = new FindInfo(newMessageInfos, findInfo.getFindToken());
+            }
+
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             long totalBytesRead = findInfo.getFindToken().getBytesRead();
