@@ -91,6 +91,10 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
     }
   }
 
+  public MessageFormatSend() {
+    // default ctor
+  }
+
   public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag, MessageFormatMetrics metrics,
       StoreKeyFactory storeKeyFactory) throws IOException, MessageFormatException {
     this.readSet = readSet;
@@ -239,6 +243,13 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
         throw (MessageFormatException) e;
       }
     }
+  }
+
+  public long getBlobCRCOffset(MessageReadSet messages, int idx) throws MessageFormatException, IOException {
+    BufferedInputStream bis = new BufferedInputStream(new MessageReadSetIndexInputStream(messages, idx, 0),
+            BUFFERED_INPUT_STREAM_BUFFER_SIZE);
+    MessageHeader_Format header = parseHeaderAndVerifyStoreKey(bis, idx);
+    return header.getBlobRecordRelativeOffset() + header.getBlobRecordSize();
   }
 
   /**

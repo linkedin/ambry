@@ -78,6 +78,7 @@ import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.TtlUpdateResponse;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.protocol.UndeleteResponse;
+import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationAPI;
@@ -85,6 +86,7 @@ import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.Message;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
@@ -696,24 +698,28 @@ public class AmbryRequests implements RequestAPI {
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             // Compute CRC for backup recovery and verification
-            if (replicaMetadataRequestInfo.isComputeCRC()) {
+            if (replicaMetadataRequestInfo.getReplicaPath().startsWith(BackupCheckerThread.DR_Verifier_Keyword)) {
               Store storeToGet = storeManager.getStore(partitionId);
               EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
                   StoreGetOptions.Store_Include_Expired);
               List<MessageInfo> newMessageInfos = new ArrayList<>();
-              // For each key
-              for (MessageInfo minfo : findInfo.getMessageEntries()) {
-                // Get StoreInfo
-                List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()))
-                    .stream().distinct().collect(Collectors.toList());
-                StoreInfo stinfo = storeToGet.get(keys, storeGetOptions);
-                // index = 0 since we have one key
-                stinfo.getMessageReadSet().doPrefetch(0, 0, stinfo.getMessageReadSet().sizeInBytes(0));
-                ByteBuf buf = stinfo.getMessageReadSet().getPrefetchedData(0);
-                // Compute CRC
-                long crc = new CrcInputStream(new NettyByteBufDataInputStream(buf)).getValue();
-                newMessageInfos.add(new MessageInfo(crc, minfo));
-              }
+              MessageFormatSend msgFmt = new MessageFormatSend();
+              // for-each blob
+              findInfo.getMessageEntries().forEach(minfo -> {
+                MessageInfo newMsgInfo = minfo;
+                try {
+                  List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()))
+                      .stream().distinct().collect(Collectors.toList());
+                  MessageReadSet rdset = storeToGet.get(keys, storeGetOptions).getMessageReadSet();
+                  long crcOffset = msgFmt.getBlobCRCOffset(rdset, 0); // index = 0 as we have 1 msg,
+                  rdset.doPrefetch(0, crcOffset, 8); // crc is 8 bytes
+                  long crc = rdset.getPrefetchedData(0).getLong(0);
+                  newMsgInfo = new MessageInfo(crc, minfo);
+                } catch (Throwable e) {
+                  logger.error("Failed to get CRC for blob {} due to {}", minfo.getStoreKey().getID(), e);
+                }
+                newMessageInfos.add(newMsgInfo);
+              });
               // Create new list of responses
               findInfo = new FindInfo(newMessageInfos, findInfo.getFindToken());
             }
