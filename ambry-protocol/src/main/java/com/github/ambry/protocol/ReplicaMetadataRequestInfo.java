@@ -62,6 +62,10 @@ public class ReplicaMetadataRequestInfo {
     ReplicaMetadataRequest.validateVersion(this.requestVersion);
   }
 
+  public void setComputeCRC(boolean computeCRC) {
+    this.computeCRC = computeCRC;
+  }
+
   public boolean isComputeCRC() {
     return computeCRC;
   }

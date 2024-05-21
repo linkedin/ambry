@@ -704,9 +704,10 @@ public class AmbryRequests implements RequestAPI {
               // For each key
               for (MessageInfo minfo : findInfo.getMessageEntries()) {
                 // Get StoreInfo
-                List<StoreKey> key = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()))
+                List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()))
                     .stream().distinct().collect(Collectors.toList());
-                StoreInfo stinfo = storeToGet.get(key, storeGetOptions);
+                StoreInfo stinfo = storeToGet.get(keys, storeGetOptions);
+                // index = 0 since we have one key
                 stinfo.getMessageReadSet().doPrefetch(0, 0, stinfo.getMessageReadSet().sizeInBytes(0));
                 ByteBuf buf = stinfo.getMessageReadSet().getPrefetchedData(0);
                 // Compute CRC
