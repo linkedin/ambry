@@ -696,7 +696,7 @@ public class AmbryRequests implements RequestAPI {
                 (SystemTime.getInstance().milliseconds() - partitionStartTimeInMs));
 
             // Compute CRC for backup recovery and verification
-            if (false) { // TODO: Replace with some flag
+            if (replicaMetadataRequestInfo.isComputeCRC()) {
               Store storeToGet = storeManager.getStore(partitionId);
               EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
                   StoreGetOptions.Store_Include_Expired);
