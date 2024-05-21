@@ -711,7 +711,7 @@ public class AmbryRequests implements RequestAPI {
                   List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()))
                       .stream().distinct().collect(Collectors.toList());
                   MessageReadSet rdset = storeToGet.get(keys, storeGetOptions).getMessageReadSet();
-                  long crcOffset = msgFmt.getBlobCRCOffset(rdset, 0); // index = 0 as we have 1 msg,
+                  long crcOffset = msgFmt.getBlobCRCOffset(rdset, 0); // index = 0, as we have 1 msg
                   rdset.doPrefetch(0, crcOffset, 8); // crc is 8 bytes
                   long crc = rdset.getPrefetchedData(0).getLong(0);
                   newMsgInfo = new MessageInfo(crc, minfo);
