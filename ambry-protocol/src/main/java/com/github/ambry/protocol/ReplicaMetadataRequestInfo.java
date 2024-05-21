@@ -40,7 +40,7 @@ public class ReplicaMetadataRequestInfo {
   private ReplicaType replicaType;
   private PartitionId partitionId;
   private short requestVersion;
-  private boolean computeCRC;
+
   private static final int ReplicaPath_Field_Size_In_Bytes = 4;
   private static final int HostName_Field_Size_In_Bytes = 4;
   private static final int ReplicaType_Size_In_Bytes = Short.BYTES;
@@ -58,16 +58,7 @@ public class ReplicaMetadataRequestInfo {
     this.replicaPath = replicaPath;
     this.replicaType = replicaType;
     this.requestVersion = requestVersion;
-    this.computeCRC = false;
     ReplicaMetadataRequest.validateVersion(this.requestVersion);
-  }
-
-  public void setComputeCRC(boolean computeCRC) {
-    this.computeCRC = computeCRC;
-  }
-
-  public boolean isComputeCRC() {
-    return computeCRC;
   }
 
   public static ReplicaMetadataRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap,
