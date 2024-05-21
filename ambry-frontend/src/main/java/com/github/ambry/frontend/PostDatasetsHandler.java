@@ -192,7 +192,7 @@ public class PostDatasetsHandler {
       } catch (AccountServiceException ex) {
         logger.error(
             "Dataset update failed for accountName " + accountName + " containerName " + containerName + " datasetName "
-                + datasetName, ex);
+                + datasetName);
         throw new RestServiceException(ex.getMessage(),
             RestServiceErrorCode.getRestServiceErrorCode(ex.getErrorCode()));
       }
