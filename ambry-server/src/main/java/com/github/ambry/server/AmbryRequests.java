@@ -706,6 +706,7 @@ public class AmbryRequests implements RequestAPI {
               findInfo.getMessageEntries().forEach(minfo -> {
                 MessageInfo newMsgInfo = minfo;
                 MessageReadSet rdset = null;
+                // get crc of entire blob including blob-properties, user-md, content etc.
                 try {
                   List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()));
                   rdset = store.get(keys, storeGetOptions).getMessageReadSet();
