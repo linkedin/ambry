@@ -33,6 +33,7 @@ import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.MessageFormatMetrics;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.messageformat.MessageFormatSend;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -697,7 +698,6 @@ public class AmbryRequests implements RequestAPI {
 
             // Compute CRC for backup recovery and verification
             if (replicaMetadataRequestInfo.getReplicaPath().startsWith(BackupCheckerThread.DR_Verifier_Keyword)) {
-              Store storeToGet = storeManager.getStore(partitionId);
               EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
                   StoreGetOptions.Store_Include_Expired);
               List<MessageInfo> newMessageInfos = new ArrayList<>();
@@ -705,16 +705,20 @@ public class AmbryRequests implements RequestAPI {
               // for-each blob
               findInfo.getMessageEntries().forEach(minfo -> {
                 MessageInfo newMsgInfo = minfo;
+                MessageReadSet rdset = null;
                 try {
-                  List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()))
-                      .stream().distinct().collect(Collectors.toList());
-                  MessageReadSet rdset = storeToGet.get(keys, storeGetOptions).getMessageReadSet();
-                  long crcOffset = msgFmt.getBlobCRCOffset(rdset, 0); // index = 0, as we have 1 msg
-                  rdset.doPrefetch(0, crcOffset, 8); // crc is 8 bytes
+                  List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()));
+                  rdset = store.get(keys, storeGetOptions).getMessageReadSet();
+                  rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,
+                      MessageFormatRecord.Crc_Size);
                   long crc = rdset.getPrefetchedData(0).getLong(0);
-                  newMsgInfo = new MessageInfo(crc, minfo);
+                  newMsgInfo = new MessageInfo(minfo, crc);
                 } catch (Throwable e) {
                   logger.error("Failed to get CRC for blob {} due to {}", minfo.getStoreKey().getID(), e);
+                } finally {
+                  if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
+                    rdset.getPrefetchedData(0).release();
+                  }
                 }
                 newMessageInfos.add(newMsgInfo);
               });

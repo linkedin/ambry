@@ -245,13 +245,6 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
     }
   }
 
-  public long getBlobCRCOffset(MessageReadSet messages, int idx) throws MessageFormatException, IOException {
-    BufferedInputStream bis = new BufferedInputStream(new MessageReadSetIndexInputStream(messages, idx, 0),
-            BUFFERED_INPUT_STREAM_BUFFER_SIZE);
-    MessageHeader_Format header = parseHeaderAndVerifyStoreKey(bis, idx);
-    return header.getBlobRecordRelativeOffset() + header.getBlobRecordSize();
-  }
-
   /**
    * Parse and verify header + storeKey from given inputStream.
    */
