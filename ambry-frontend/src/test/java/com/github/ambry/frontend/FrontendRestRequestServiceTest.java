@@ -2395,9 +2395,9 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void defaultGetExpiredTest() throws Exception {
     PostResults postResults =
-        prepareAndPostBlob(1024, "defaultGetOptionsTest", 0, "application/octet-stream", "defaultGetOptionsTest",
+        prepareAndPostBlob(1024, "defaultGetOptionsTest", 1, "application/octet-stream", "defaultGetOptionsTest",
             refAccount, refContainer, null);
-    Thread.sleep(5);
+    Thread.sleep(1005);
     RestRequest restRequest = createRestRequest(RestMethod.GET, postResults.blobId, null, null);
     verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
     // now reload FrontendRestRequestService with a new default get option (Include_Expired and Include_All) and the blob
