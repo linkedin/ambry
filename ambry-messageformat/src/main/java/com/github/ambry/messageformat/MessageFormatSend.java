@@ -91,10 +91,6 @@ public class MessageFormatSend extends AbstractByteBufHolder<MessageFormatSend> 
     }
   }
 
-  public MessageFormatSend() {
-    // default ctor
-  }
-
   public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag, MessageFormatMetrics metrics,
       StoreKeyFactory storeKeyFactory) throws IOException, MessageFormatException {
     this.readSet = readSet;

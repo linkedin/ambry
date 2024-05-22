@@ -701,7 +701,6 @@ public class AmbryRequests implements RequestAPI {
               EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
                   StoreGetOptions.Store_Include_Expired);
               List<MessageInfo> newMessageInfos = new ArrayList<>();
-              MessageFormatSend msgFmt = new MessageFormatSend();
               // for-each blob
               findInfo.getMessageEntries().forEach(minfo -> {
                 MessageInfo newMsgInfo = minfo;
