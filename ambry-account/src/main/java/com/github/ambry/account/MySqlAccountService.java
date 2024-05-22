@@ -77,7 +77,7 @@ public class MySqlAccountService extends AbstractAccountService {
     }
     cachedAccountService = new CachedAccountService(mySqlAccountStore,
         callSupplierWithException(mySqlAccountStoreFactory::getMySqlAccountStore),
-        accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDirNew, scheduler);
+        accountServiceMetricsWrapper.getAccountServiceMetrics(), config, notifier, config.backupDir, scheduler);
   }
 
   /**

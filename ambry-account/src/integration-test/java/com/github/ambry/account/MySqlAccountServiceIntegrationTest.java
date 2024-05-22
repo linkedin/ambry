@@ -122,7 +122,6 @@ public class MySqlAccountServiceIntegrationTest {
   public void testInitCacheFromDisk() throws Exception {
     Path accountBackupDir = Paths.get(TestUtils.getTempDir("account-backup")).toAbsolutePath();
     mySqlConfigProps.setProperty(BACKUP_DIRECTORY_KEY, accountBackupDir.toString());
-    mySqlConfigProps.setProperty(BACKUP_DIRECTORY_KEY_NEW, accountBackupDir.toString());
 
     // write test account to backup file
     long lastModifiedTime = 100;
@@ -206,8 +205,7 @@ public class MySqlAccountServiceIntegrationTest {
 
   @Test
   public void testFailover() throws Exception {
-    String dbInfoJsonString = mySqlConfigProps.getProperty(DB_INFO_NEW);
-    String dbInfoJsonStringOld = mySqlConfigProps.getProperty(DB_INFO);
+    String dbInfoJsonString = mySqlConfigProps.getProperty(DB_INFO);
     JSONArray dbInfo = new JSONArray(dbInfoJsonString);
     JSONObject entry = dbInfo.getJSONObject(0);
     DbEndpoint origEndpoint = DbEndpoint.fromJson(entry);
@@ -220,7 +218,6 @@ public class MySqlAccountServiceIntegrationTest {
         new DbEndpoint(badUrl, remoteDc, true, origEndpoint.getUsername(), origEndpoint.getPassword());
     JSONArray endpointsJson = new JSONArray().put(localGoodEndpoint.toJson()).put(remoteBadEndpoint.toJson());
     mySqlConfigProps.setProperty(DB_INFO, endpointsJson.toString());
-    mySqlConfigProps.setProperty(DB_INFO_NEW, endpointsJson.toString());
     mySqlConfigProps.setProperty(ClusterMapConfig.CLUSTERMAP_DATACENTER_NAME, localDc);
     mySqlAccountStore = spy(new MySqlAccountStoreFactory(new VerifiableProperties(mySqlConfigProps),
         new MetricRegistry()).getMySqlAccountStore());
