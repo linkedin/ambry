@@ -1424,8 +1424,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     String clientId = "replication-metadata-" + datanode.getHostname() + "[" + datanode.getDatacenterName() + "]";
     RequestOrResponse put_request = new PutRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, properties, content_buf,
         content_bytebuf, testContent.length(), BlobType.DataBlob, null);
-    Response response = sendRequestGetResponse(put_request, ServerErrorCode.No_Error);
-    response.release();
+    sendRequestGetResponse(put_request, ServerErrorCode.No_Error);
 
     // Get CRC from in-mem store
     EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
@@ -1435,7 +1434,9 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     MessageInfo minfo2 = stinfo.getMessageReadSetInfo().get(0);
     rdset.doPrefetch(0, minfo2.getSize() - MessageFormatRecord.Crc_Size,
         MessageFormatRecord.Crc_Size);
-    long crc = rdset.getPrefetchedData(0).getLong(0);
+    ByteBuf crcbuf = rdset.getPrefetchedData(0);
+    long crc = crcbuf.getLong(0);
+    crcbuf.release();
 
     // Send metadata request from regular server app
     String replicaPath = id.toPathString();
@@ -1454,7 +1455,6 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), null, minfo.getCrc());
       }
     }
-    response.release();
 
     // Send metadata request from backup-verification app
     replicaPath = BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString();
@@ -1473,7 +1473,6 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), new Long(crc), minfo.getCrc());
       }
     }
-    response.release();
 
     // Delete blob and get metadata again
     RequestOrResponse del_request = new DeleteRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, SystemTime.getInstance().milliseconds());
@@ -1488,7 +1487,6 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), null, minfo.getCrc());
       }
     }
-    response.release();
 
     content_bytebuf.release();
   }
