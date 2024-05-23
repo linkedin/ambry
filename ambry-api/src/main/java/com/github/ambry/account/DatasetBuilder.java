@@ -17,7 +17,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
 import static com.github.ambry.account.Dataset.*;
-import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -137,7 +136,7 @@ public class DatasetBuilder {
    * @return the builder.
    */
   @JsonProperty(JSON_RETENTION_COUNT_KEY)
-  public DatasetBuilder setRetentionCount(int retentionCount) {
+  public DatasetBuilder setRetentionCount(Integer retentionCount) {
     this.retentionCount = retentionCount;
     return this;
   }
@@ -148,7 +147,7 @@ public class DatasetBuilder {
    * @return the builder.
    */
   @JsonProperty(JSON_RETENTION_TIME_KEY)
-  public DatasetBuilder setRetentionTimeInSeconds(long retentionTimeInSeconds) {
+  public DatasetBuilder setRetentionTimeInSeconds(Long retentionTimeInSeconds) {
     this.retentionTimeInSeconds = retentionTimeInSeconds;
     return this;
   }

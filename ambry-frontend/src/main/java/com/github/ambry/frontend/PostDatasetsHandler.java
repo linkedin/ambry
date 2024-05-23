@@ -126,11 +126,11 @@ public class PostDatasetsHandler {
                 RestServiceErrorCode.BadRequest);
           }
           if (Objects.equals(datasetToUpdate.getRetentionCount(), 0) || Objects.equals(
-              datasetToUpdate.getRetentionTimeInSeconds(), 0)) {
+              datasetToUpdate.getRetentionTimeInSeconds(), 0L)) {
             throw new RestServiceException("The dataset" + datasetToUpdate.getDatasetName()
                 + "'s retentionCount or retentionTimeInSeconds should not be 0, " + "retentionCount: "
-                + datasetToUpdate.getRetentionCount() + "retentionTime: " + datasetToUpdate.getRetentionTimeInSeconds(),
-                RestServiceErrorCode.BadRequest);
+                + datasetToUpdate.getRetentionCount() + " retentionTime: "
+                + datasetToUpdate.getRetentionTimeInSeconds(), RestServiceErrorCode.BadRequest);
           }
           accountAndContainerInjector.injectAccountAndContainerUsingDatasetBody(restRequest, datasetToUpdate);
           // Start the callback chain by performing request security processing.

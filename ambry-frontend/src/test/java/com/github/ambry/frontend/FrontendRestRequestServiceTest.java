@@ -129,6 +129,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.utils.TestUtils.*;
@@ -520,6 +521,79 @@ public class FrontendRestRequestServiceTest {
         Container.DEFAULT_PUBLIC_CONTAINER);
     doPostGetHeadUpdateDeleteUndeleteTest(null, null, "unknown_service_id", true, InMemAccountService.UNKNOWN_ACCOUNT,
         Container.DEFAULT_PRIVATE_CONTAINER);
+  }
+
+  @Test
+  public void testDatasetTtl() throws Exception {
+    //Add dataset with ttl 0, should return bad request
+    Account testAccount = new ArrayList<>(accountService.getAllAccounts()).get(1);
+    Container testContainer = new ArrayList<>(testAccount.getAllContainers()).get(1);
+    Dataset.VersionSchema versionSchema = Dataset.VersionSchema.TIMESTAMP;
+    Dataset dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
+            .setRetentionTimeInSeconds(0L)
+            .build();
+
+    byte[] datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, Object> map =
+        mapper.readValue(new String(datasetsUpdateJson), new TypeReference<Map<String, Object>>() {
+        });
+    assertFalse("Should not contain null(default) value after serialization", map.containsKey("retentionCount"));
+    assertEquals("Serialized value mismatch", 0, map.get("retentionTimeInSeconds"));
+
+    List<ByteBuffer> body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    JSONObject headers = new JSONObject().put(RestUtils.Headers.TARGET_ACCOUNT_NAME, testAccount.getName())
+        .put(RestUtils.Headers.TARGET_CONTAINER_NAME, testContainer.getName());
+    RestRequest restRequest =
+        createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    //verify status.
+    verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
+
+    //Add dataset with retention count equals 0, should return bad request
+    dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
+            .setRetentionCount(0)
+            .build();
+    datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    map =
+        mapper.readValue(new String(datasetsUpdateJson), new TypeReference<Map<String, Object>>() {
+        });
+    assertFalse("Should not contain null(default) value after serialization", map.containsKey("retentionTimeInSeconds"));
+    assertEquals("Serialized value mismatch", 0, map.get("retentionCount"));
+
+    body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
+
+    //add valid dataset
+    dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
+            .build();
+    datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    RestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+
+    //update dataset with ttl 0
+    dataset =
+        new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(versionSchema)
+            .setRetentionTimeInSeconds(0L)
+            .build();
+    datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
+    body = new LinkedList<>();
+    body.add(ByteBuffer.wrap(datasetsUpdateJson));
+    body.add(null);
+    headers.put(DATASET_UPDATE, "true");
+    restRequest = createRestRequest(RestMethod.POST, Operations.ACCOUNTS_CONTAINERS_DATASETS, headers, body);
+    verifyOperationFailure(restRequest, RestServiceErrorCode.BadRequest);
   }
 
   @Test
@@ -1392,7 +1466,7 @@ public class FrontendRestRequestServiceTest {
     versionSchema = Dataset.VersionSchema.MONOTONIC;
 
     dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(),
-        DATASET_NAME_WITHOUT_USER_TAGS).setVersionSchema(versionSchema).setRetentionTimeInSeconds(-1).build();
+        DATASET_NAME_WITHOUT_USER_TAGS).setVersionSchema(versionSchema).setRetentionTimeInSeconds((long) -1).build();
     datasetsUpdateJson = AccountCollectionSerde.serializeDatasetsInJson(dataset);
     body = new LinkedList<>();
     body.add(ByteBuffer.wrap(datasetsUpdateJson));
@@ -2395,9 +2469,9 @@ public class FrontendRestRequestServiceTest {
   @Test
   public void defaultGetExpiredTest() throws Exception {
     PostResults postResults =
-        prepareAndPostBlob(1024, "defaultGetOptionsTest", 1, "application/octet-stream", "defaultGetOptionsTest",
+        prepareAndPostBlob(1024, "defaultGetOptionsTest", 0, "application/octet-stream", "defaultGetOptionsTest",
             refAccount, refContainer, null);
-    Thread.sleep(1005);
+    Thread.sleep(5);
     RestRequest restRequest = createRestRequest(RestMethod.GET, postResults.blobId, null, null);
     verifyOperationFailure(restRequest, RestServiceErrorCode.Deleted);
     // now reload FrontendRestRequestService with a new default get option (Include_Expired and Include_All) and the blob

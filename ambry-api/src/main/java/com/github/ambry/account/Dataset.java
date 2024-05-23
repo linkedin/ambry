@@ -13,9 +13,14 @@
  */
 package com.github.ambry.account;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -48,6 +53,7 @@ import java.util.regex.Pattern;
  *  } * </code></pre>
  */
 @JsonDeserialize(builder = DatasetBuilder.class)
+@JsonSerialize(using = DatasetSerializer.class)
 public class Dataset {
   //constant
 
@@ -79,10 +85,8 @@ public class Dataset {
   @JsonProperty(JSON_RETENTION_POLICY)
   private final String retentionPolicy;
   @JsonProperty(JSON_RETENTION_COUNT_KEY)
-  @JsonInclude(JsonInclude.Include.NON_DEFAULT)
   private final Integer retentionCount;
   @JsonProperty(JSON_RETENTION_TIME_KEY)
-  @JsonInclude(JsonInclude.Include.NON_DEFAULT)
   private final Long retentionTimeInSeconds;
   @JsonProperty(JSON_USER_TAGS_KEY)
   private final Map<String, String> userTags;
@@ -226,5 +230,32 @@ public class Dataset {
   public String toString() {
     return "Dataset[" + getAccountName() + ":" + getContainerName() + ":" + getDatasetName() + ":" + getVersionSchema()
         + "]";
+  }
+}
+
+/*
+Customize the serializer to fileter out all the null(default) value.
+ */
+class DatasetSerializer extends JsonSerializer<Dataset> {
+  @Override
+  public void serialize(Dataset dataset, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+    gen.writeStartObject();
+
+    // Use reflection to get all fields of the Dataset class
+    Field[] fields = Dataset.class.getDeclaredFields();
+    for (Field field : fields) {
+      if (field.isAnnotationPresent(JsonProperty.class)) {
+        try {
+          field.setAccessible(true);
+          Object value = field.get(dataset);
+          if (value != null) {
+            gen.writeObjectField(field.getName(), value);
+          }
+        } catch (IllegalAccessException e) {
+          throw new IOException("Error accessing field: " + field.getName(), e);
+        }
+      }
+    }
+    gen.writeEndObject();
   }
 }

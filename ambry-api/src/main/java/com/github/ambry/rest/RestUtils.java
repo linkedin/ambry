@@ -595,10 +595,6 @@ public class RestUtils {
         throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] is not valid (has to be >= -1)",
             RestServiceErrorCode.InvalidArgs);
       }
-      if (ttlFromHeader == 0) {
-        throw new RestServiceException(Headers.TTL + "[" + ttlFromHeader + "] should not be 0",
-            RestServiceErrorCode.InvalidArgs);
-      }
       ttl = ttlFromHeader;
     }
     return ttl;

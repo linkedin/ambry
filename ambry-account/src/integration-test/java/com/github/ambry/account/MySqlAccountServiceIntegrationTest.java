@@ -829,7 +829,7 @@ public class MySqlAccountServiceIntegrationTest {
     int retentionCount = 5;
     dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
             Dataset.VersionSchema.TIMESTAMP)
-        .setRetentionTimeInSeconds(-1)
+        .setRetentionTimeInSeconds((long) -1)
         .setUserTags(userTags)
         .setRetentionCount(retentionCount)
         .build();
@@ -945,7 +945,7 @@ public class MySqlAccountServiceIntegrationTest {
 
     //add new dataset with same primary key after it has been deleted.
     dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME).setVersionSchema(
-        Dataset.VersionSchema.TIMESTAMP).setRetentionTimeInSeconds(-1).setRetentionCount(retentionCount).build();
+        Dataset.VersionSchema.TIMESTAMP).setRetentionTimeInSeconds((long) -1).setRetentionCount(retentionCount).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     datasetFromMysql = mySqlAccountStore.getDataset(testAccount.getId(), testContainer.getId(), testAccount.getName(),
         testContainer.getName(), DATASET_NAME);
@@ -991,7 +991,7 @@ public class MySqlAccountServiceIntegrationTest {
     int retentionCount = 5;
     // add new dataset with same primary key after it has been deleted.
     dataset = new DatasetBuilder(testAccount.getName(), testContainer.getName(), testDataset).setVersionSchema(
-        Dataset.VersionSchema.TIMESTAMP).setRetentionTimeInSeconds(-1).setRetentionCount(retentionCount).build();
+        Dataset.VersionSchema.TIMESTAMP).setRetentionTimeInSeconds((long) -1).setRetentionCount(retentionCount).build();
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
 
     // delete a dataset
@@ -1269,7 +1269,7 @@ public class MySqlAccountServiceIntegrationTest {
     //Test semantic version.
     dataset =
         new DatasetBuilder(testAccount.getName(), testContainer.getName(), DATASET_NAME_WITH_SEMANTIC).setVersionSchema(
-            Dataset.VersionSchema.SEMANTIC).setRetentionTimeInSeconds(-1).setUserTags(userTags).build();
+            Dataset.VersionSchema.SEMANTIC).setRetentionTimeInSeconds((long) -1).setUserTags(userTags).build();
     // Add a dataset to db
     mySqlAccountStore.addDataset(testAccount.getId(), testContainer.getId(), dataset);
     version = "1.2.4";
