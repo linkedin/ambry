@@ -1424,7 +1424,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     String clientId = "replication-metadata-" + datanode.getHostname() + "[" + datanode.getDatacenterName() + "]";
     RequestOrResponse put_request = new PutRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, properties, content_buf,
         content_bytebuf, testContent.length(), BlobType.DataBlob, null);
-    sendRequestGetResponse(put_request, ServerErrorCode.No_Error);
+    Response response = sendRequestGetResponse(put_request, ServerErrorCode.No_Error);
 
     // Get CRC from in-mem store
     EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
