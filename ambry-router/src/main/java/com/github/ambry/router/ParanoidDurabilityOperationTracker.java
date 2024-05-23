@@ -138,7 +138,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     inflightCountByDc = new HashMap<String, Integer>();
     replicaSuccessCountByDc = new HashMap<String, Integer>();
     replicaInPoolOrFlightCountByDc = new HashMap<String, Integer>();
-    remoteDatacenters = new ArrayList<String.()
+    remoteDatacenters = new ArrayList<String>();
 
     replicaPoolByDc.forEach((dcName, v) -> {
       inflightCountByDc.put(dcName, 0);
@@ -260,13 +260,13 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
 
   public boolean hasFailed() {
     if (routerConfig.routerPutUseDynamicSuccessTarget) {
-      allDatacenters.stream().forEach(dcName -> {
-        if (dcName.equals(datacenterName)) {
-          if (hasFailedDynamically(dcName, routerConfig.PutSuccessTarget)) return true;
+      for(String dcName : allDatacenters) {
+        if (dcName.equals(datacenterName)) {  // Local colo
+          if (hasFailedDynamically(dcName, routerConfig.routerPutSuccessTarget)) return true;
         } else {
-          if (hasFailedDynamically(dcName, routerConfig.PutRemoteSuccessTarget)) return true;
+          if (hasFailedDynamically(dcName, routerConfig.routerPutRemoteSuccessTarget)) return true;
         }
-      });
+      }
       return false;
     } else {
       return hasFailedLocally() || hasFailedRemotely();
@@ -278,15 +278,15 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   }
 
   private boolean hasFailedRemotely() {
-    allDatacenters.stream().forEach(dcName -> {
+    for(String dcName : allDatacenters) {
       if(!dcName.equals(datacenterName)) {
         if (replicaSuccessCountByDc.get(dcName) < Math.max(totalReplicaCountByDc.get(dcName) - 1,
-            routerConfig.routerPutSuccessTargetRemote + disabledCountRemote)) {
+            routerConfig.routerPutRemoteSuccessTarget + disabledCountByDc.get(dcName))) {
           return true;
         }
       }
-      return false;
-    });
+    }
+    return false;
   }
 
   private boolean hasFailedLocally() {
@@ -343,16 +343,13 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
         throw new NoSuchElementException(); // Tommy: Double check we're doing the same thing as SimpleOperationTracker so callers can handle  this exception
       }
 
-      if(hasNextLocal()) {
+      if (hasNextLocal()) {
         lastReturnedByIterator = replicaPoolByDc.get(datacenterName).removeFirst();
-        return lastReturnedByIterator;
-      }
-
-¯     if(hasNextRemote() {
+      } else { // hasNextRemote() must be true
         String nextColo = getNextRemoteDatacenter();
         lastReturnedByIterator = replicaPoolByDc.get(nextColo).removeFirst();
-        return lastReturnedByIterator;
       }
+      return lastReturnedByIterator;
     }
 
     private boolean hasNextLocal() {

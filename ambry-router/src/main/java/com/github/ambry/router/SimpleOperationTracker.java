@@ -80,7 +80,7 @@ class SimpleOperationTracker implements OperationTracker {
   protected final int totalReplicaCount;
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
   protected final NonBlockingRouterMetrics routerMetrics;
-  private final OpTrackerIterator otIterator;
+  protected final OpTrackerIterator otIterator;
   protected final RouterOperation routerOperation; // Tommy: Change to protected so we can access it in ParanoidDurabilityOperationTracker
   protected final PartitionId partitionId; // Tommy: Change to protected so we can access it in ParanoidDurabilityOperationTracker for error logging.
   protected final RouterConfig routerConfig; // Tommy: Change to protected so we can access it in ParanoidDurabilityOperationTracker
@@ -93,8 +93,8 @@ class SimpleOperationTracker implements OperationTracker {
   protected int originatingDcNotFoundCount = 0;
   protected int totalNotFoundCount = 0;
   protected ReplicaId lastReturnedByIterator = null;
-  private Iterator<ReplicaId> replicaIterator;
-  private final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
+  protected Iterator<ReplicaId> replicaIterator;
+  protected final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
   private final int originatingDcTotalReplicaCount;
   private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
   private final BlobId blobId;
