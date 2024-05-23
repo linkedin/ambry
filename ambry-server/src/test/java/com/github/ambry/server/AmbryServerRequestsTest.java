@@ -80,6 +80,7 @@ import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.UndeleteRequest;
 import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.InMemoryStore;
 import com.github.ambry.replication.MockConnectionPool;
 import com.github.ambry.replication.MockFindTokenHelper;
 import com.github.ambry.replication.MockHost;
@@ -91,21 +92,27 @@ import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.IdUndeletedStoreException;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoTest;
+import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.MessageWriteSet;
 import com.github.ambry.store.MockStoreKeyConverterFactory;
 import com.github.ambry.store.MockWrite;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferDataInputStream;
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.NettyByteBufLeakHelper;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import java.io.File;
 import java.io.IOException;
@@ -120,6 +127,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -137,6 +145,7 @@ import org.mockito.Mockito;
 import static com.github.ambry.clustermap.MockClusterMap.*;
 import static com.github.ambry.clustermap.TestUtils.*;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 
@@ -1366,22 +1375,46 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     responseList.forEach(Response::release);
   }
 
-  public void testFetchCRC() throws IOException, InterruptedException, MessageFormatException {
+  @Test
+  public void testFetchCRC() throws IOException, InterruptedException, StoreException {
+    assumeFalse(this.validateRequestOnStoreState);
     DataNodeId datanode = clusterMap.getDataNodeIds().stream()
         .filter(node -> node.getDatacenterName().equals(localDc))
         .findFirst().get();
     ReplicaId replica = clusterMap.getReplicaIds(datanode).get(0);
     PartitionId id = replica.getPartitionId();
-    MockHost sourceHost = new MockHost(replica.getDataNodeId(), clusterMap);
-    BlobId blobId = (BlobId) addPutMessagesToReplicasOfPartition(id, Arrays.asList(sourceHost), 1).get(0);
-    validKeysInStore.add(blobId);
-    BlobProperties properties =
-        new BlobProperties(100, "serviceId", blobId.getAccountId(), blobId.getAccountId(), false);
-    String clientId = "replication-metadata-" + datanode.getHostname() + "[" + datanode.getDatacenterName() + "]";
 
-    PutRequest put = new PutRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, properties, ByteBuffer.allocate(100),
-        Unpooled.wrappedBuffer(ByteBuffer.allocate(100)), 100, BlobType.DataBlob, null);
-    sendAndVerifyOperationRequest(put, ServerErrorCode.No_Error, true);
+    // Create in-mem store
+    InMemoryStore memstore = new InMemoryStore(id, new ArrayList<>(), new ArrayList<>(), null);
+    storageManager.overrideStoreToReturn = memstore;
+
+    // Create a blob
+    BlobId blobId = generateRandomBlobId(id);
+    String testContent = "test_content";
+    BlobProperties properties = new BlobProperties(testContent.length(), "serviceId", blobId.getAccountId(),
+        blobId.getAccountId(), false);
+    ByteBuffer content_buf = ByteBuffer.allocate(testContent.length());
+    content_buf.put(testContent.getBytes());
+    content_buf.flip(); // Most important line !
+    ByteBuf content_bytebuf = Unpooled.wrappedBuffer(content_buf);
+
+    // Put blob
+    String clientId = "replication-metadata-" + datanode.getHostname() + "[" + datanode.getDatacenterName() + "]";
+    PutRequest put = new PutRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, properties, content_buf,
+        content_bytebuf, testContent.length(), BlobType.DataBlob, null);
+    sendRequestGetResponse(put, ServerErrorCode.No_Error);
+    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
+        StoreGetOptions.Store_Include_Expired);
+
+    // Get CRC from in-mem store
+    StoreInfo stinfo = memstore.get(Collections.singletonList(blobId), storeGetOptions);
+    MessageReadSet rdset = stinfo.getMessageReadSet();
+    MessageInfo minfo2 = stinfo.getMessageReadSetInfo().get(0);
+    rdset.doPrefetch(0, minfo2.getSize() - MessageFormatRecord.Crc_Size,
+        MessageFormatRecord.Crc_Size);
+    long crc = rdset.getPrefetchedData(0).getLong(0);
+
+    // Send metadata request
     String replicaPath = BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString();
     ReplicaMetadataRequestInfo rinfo = new ReplicaMetadataRequestInfo(id,
         findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken(),
@@ -1389,13 +1422,15 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     ReplicaMetadataRequest request = new ReplicaMetadataRequest(TestUtils.RANDOM.nextInt(), clientId,
         Collections.singletonList(rinfo), Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
     ReplicaMetadataResponse response =
-        (ReplicaMetadataResponse) sendAndVerifyOperationRequest(request, ServerErrorCode.No_Error, true);
+        (ReplicaMetadataResponse) sendRequestGetResponse(request, ServerErrorCode.No_Error);
     assertTrue("response from replica must not be empty",
         response.getReplicaMetadataResponseInfoList().size() > 0);
+
+    // Compare CRC from in-mem store and metadata request
     for (ReplicaMetadataResponseInfo respinfo : response.getReplicaMetadataResponseInfoList()) {
       assertTrue("messages from replica must not be empty",respinfo.getMessageInfoList().size() > 0);
       for (MessageInfo minfo : respinfo.getMessageInfoList()) {
-        assertNotNull(String.format("CRC is null for %s", minfo.getStoreKey().getID()), minfo.getCrc());
+        assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), new Long(crc), minfo.getCrc());
       }
     }
   }
