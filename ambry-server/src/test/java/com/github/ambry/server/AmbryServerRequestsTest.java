@@ -78,6 +78,7 @@ import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.protocol.Response;
 import com.github.ambry.protocol.TtlUpdateRequest;
 import com.github.ambry.protocol.UndeleteRequest;
+import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.MockConnectionPool;
 import com.github.ambry.replication.MockFindTokenHelper;
@@ -106,6 +107,7 @@ import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.Unpooled;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -1362,6 +1364,40 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     assertEquals("cross-colo fetch bytes are not expected", responseList.get(0).sizeInBytes(),
         serverMetrics.crossColoFetchBytesRate.get(remoteNode.getDatacenterName()).getCount());
     responseList.forEach(Response::release);
+  }
+
+  public void testFetchCRC() throws IOException, InterruptedException, MessageFormatException {
+    DataNodeId datanode = clusterMap.getDataNodeIds().stream()
+        .filter(node -> node.getDatacenterName().equals(localDc))
+        .findFirst().get();
+    ReplicaId replica = clusterMap.getReplicaIds(datanode).get(0);
+    PartitionId id = replica.getPartitionId();
+    MockHost sourceHost = new MockHost(replica.getDataNodeId(), clusterMap);
+    BlobId blobId = (BlobId) addPutMessagesToReplicasOfPartition(id, Arrays.asList(sourceHost), 1).get(0);
+    validKeysInStore.add(blobId);
+    BlobProperties properties =
+        new BlobProperties(100, "serviceId", blobId.getAccountId(), blobId.getAccountId(), false);
+    String clientId = "replication-metadata-" + datanode.getHostname() + "[" + datanode.getDatacenterName() + "]";
+
+    PutRequest put = new PutRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, properties, ByteBuffer.allocate(100),
+        Unpooled.wrappedBuffer(ByteBuffer.allocate(100)), 100, BlobType.DataBlob, null);
+    sendAndVerifyOperationRequest(put, ServerErrorCode.No_Error, true);
+    String replicaPath = BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString();
+    ReplicaMetadataRequestInfo rinfo = new ReplicaMetadataRequestInfo(id,
+        findTokenHelper.getFindTokenFactoryFromReplicaType(ReplicaType.DISK_BACKED).getNewFindToken(),
+        datanode.getHostname(), replicaPath, ReplicaType.DISK_BACKED, replicationConfig.replicaMetadataRequestVersion);
+    ReplicaMetadataRequest request = new ReplicaMetadataRequest(TestUtils.RANDOM.nextInt(), clientId,
+        Collections.singletonList(rinfo), Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
+    ReplicaMetadataResponse response =
+        (ReplicaMetadataResponse) sendAndVerifyOperationRequest(request, ServerErrorCode.No_Error, true);
+    assertTrue("response from replica must not be empty",
+        response.getReplicaMetadataResponseInfoList().size() > 0);
+    for (ReplicaMetadataResponseInfo respinfo : response.getReplicaMetadataResponseInfoList()) {
+      assertTrue("messages from replica must not be empty",respinfo.getMessageInfoList().size() > 0);
+      for (MessageInfo minfo : respinfo.getMessageInfoList()) {
+        assertNotNull(String.format("CRC is null for %s", minfo.getStoreKey().getID()), minfo.getCrc());
+      }
+    }
   }
 
   /**

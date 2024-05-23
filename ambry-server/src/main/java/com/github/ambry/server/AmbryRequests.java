@@ -702,22 +702,24 @@ public class AmbryRequests implements RequestAPI {
                   StoreGetOptions.Store_Include_Expired);
               List<MessageInfo> newMessageInfos = new ArrayList<>();
               // for-each blob
-              findInfo.getMessageEntries().forEach(minfo -> {
+              findInfo.getMessageEntries().stream().forEach(minfo -> {
                 MessageInfo newMsgInfo = minfo;
                 MessageReadSet rdset = null;
-                // get crc of entire blob including blob-properties, user-md, content etc.
-                try {
-                  List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()));
-                  rdset = store.get(keys, storeGetOptions).getMessageReadSet();
-                  rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,
-                      MessageFormatRecord.Crc_Size);
-                  long crc = rdset.getPrefetchedData(0).getLong(0);
-                  newMsgInfo = new MessageInfo(minfo, crc);
-                } catch (Throwable e) {
-                  logger.error("Failed to get CRC for blob {} due to {}", minfo.getStoreKey().getID(), e);
-                } finally {
-                  if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
-                    rdset.getPrefetchedData(0).release();
+                if (!(minfo.isDeleted() || minfo.isExpired())) {
+                  // get crc of a live blob including blob-properties, user-md, content etc.
+                  try {
+                    List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()));
+                    rdset = store.get(keys, storeGetOptions).getMessageReadSet();
+                    rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,
+                        MessageFormatRecord.Crc_Size);
+                    long crc = rdset.getPrefetchedData(0).getLong(0);
+                    newMsgInfo = new MessageInfo(minfo, crc);
+                  } catch (Throwable e) {
+                    logger.error("Failed to get CRC for blob {} due to {}", minfo.getStoreKey().getID(), e);
+                  } finally {
+                    if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
+                      rdset.getPrefetchedData(0).release();
+                    }
                   }
                 }
                 newMessageInfos.add(newMsgInfo);
