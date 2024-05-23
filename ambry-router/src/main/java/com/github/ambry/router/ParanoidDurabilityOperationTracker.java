@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -321,6 +320,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   }
 
   private class ParanoidDurabilityTrackerIterator implements Iterator<ReplicaId> {
+    private int currentDatacenterIndex = 0;
 
     @Override
     public boolean hasNext() {
@@ -348,15 +348,15 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
         return lastReturnedByIterator;
       }
 
-      if(hasNextRemote() {
-
-        lastReturnedByIterator =
+¯     if(hasNextRemote() {
+        String nextColo = getNextRemoteDatacenter();
+        lastReturnedByIterator = replicaPoolByDc.get(nextColo).removeFirst();
         return lastReturnedByIterator;
       }
     }
 
     private boolean hasNextLocal() {
-      return localInflightCount < getCurrentLocalParallelism() && replicaPoolByDc.get(datacenterName).size() > 0;
+      return localInflightCount < getCurrentLocalParallelism() && !replicaPoolByDc.get(datacenterName).isEmpty();
     }
 
     private boolean hasNextRemote() {
@@ -376,7 +376,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
 
     private boolean remoteReplicasLeft() {
       for(String dcName : remoteDatacenters) {
-        if(replicaPoolByDc.get(dcName).size() > 0) {
+        if(!replicaPoolByDc.get(dcName).isEmpty()) {
           return true;
         }
       }
@@ -386,5 +386,23 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     private boolean isLocalReplica(ReplicaId replica) {
       return replica.getDataNodeId().getDatacenterName().equals(datacenterName);
     }
+
+    // getNextRemoteDatacenter() should only get called if we have remote replicas left to send requests to. So there MUST be a
+    // remote data center that has at least one replica left. But we don't know which one, so we have to loop through
+    // all of them to find the next one that has a replica left. We should throw an exception or similar if we ever
+    // end up looping through all of them without finding a replica.
+    private String getNextRemoteDatacenter()  {
+      int i = 0;
+      int remoteDatacenterCount = remoteDatacenters.size();
+      String nextDatacenter;
+      do {
+        nextDatacenter = remoteDatacenters.get(currentDatacenterIndex);
+        currentDatacenterIndex = (currentDatacenterIndex + 1) % remoteDatacenterCount;
+        i++;
+      } while (replicaPoolByDc.get(nextDatacenter).isEmpty() &&
+               i <= remoteDatacenterCount);                     // Guard against infinite loop
+      return nextDatacenter;
+    }
   }
 }
+
