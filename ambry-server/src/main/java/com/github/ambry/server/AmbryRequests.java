@@ -709,8 +709,10 @@ public class AmbryRequests implements RequestAPI {
                   // get crc of a live blob including blob-properties, user-md, content etc.
                   try {
                     List<StoreKey> keys = getConvertedStoreKeys(Collections.singletonList(minfo.getStoreKey()));
-                    rdset = store.get(keys, storeGetOptions).getMessageReadSet();
-                    rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,
+                    StoreInfo stinfo = store.get(keys, storeGetOptions);
+                    rdset = stinfo.getMessageReadSet();
+                    MessageInfo minfo2 = stinfo.getMessageReadSetInfo().get(0);
+                    rdset.doPrefetch(0, minfo2.getSize() - MessageFormatRecord.Crc_Size,
                         MessageFormatRecord.Crc_Size);
                     long crc = rdset.getPrefetchedData(0).getLong(0);
                     newMsgInfo = new MessageInfo(minfo, crc);
