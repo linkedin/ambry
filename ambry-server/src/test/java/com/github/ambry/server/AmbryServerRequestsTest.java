@@ -1424,11 +1424,12 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     String clientId = "replication-metadata-" + datanode.getHostname() + "[" + datanode.getDatacenterName() + "]";
     RequestOrResponse put_request = new PutRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, properties, content_buf,
         content_bytebuf, testContent.length(), BlobType.DataBlob, null);
-    sendRequestGetResponse(put_request, ServerErrorCode.No_Error);
-    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
-        StoreGetOptions.Store_Include_Expired);
+    Response response = sendRequestGetResponse(put_request, ServerErrorCode.No_Error);
+    response.release();
 
     // Get CRC from in-mem store
+    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
+        StoreGetOptions.Store_Include_Expired);
     StoreInfo stinfo = localStore.get(Collections.singletonList(blobId), storeGetOptions);
     MessageReadSet rdset = stinfo.getMessageReadSet();
     MessageInfo minfo2 = stinfo.getMessageReadSetInfo().get(0);
@@ -1443,7 +1444,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         datanode.getHostname(), replicaPath, ReplicaType.DISK_BACKED, replicationConfig.replicaMetadataRequestVersion);
     RequestOrResponse md_request = new ReplicaMetadataRequest(TestUtils.RANDOM.nextInt(), clientId,
         Collections.singletonList(rinfo), Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
-    Response response = sendRequestGetResponse(md_request, ServerErrorCode.No_Error);
+    response = sendRequestGetResponse(md_request, ServerErrorCode.No_Error);
     assertTrue("response from replica must not be empty",
         ((ReplicaMetadataResponse) response).getReplicaMetadataResponseInfoList().size() > 0);
     // Compare CRC from in-mem store and metadata request
@@ -1453,6 +1454,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), null, minfo.getCrc());
       }
     }
+    response.release();
 
     // Send metadata request from backup-verification app
     replicaPath = BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString();
@@ -1471,6 +1473,7 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), new Long(crc), minfo.getCrc());
       }
     }
+    response.release();
 
     // Delete blob and get metadata again
     RequestOrResponse del_request = new DeleteRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, SystemTime.getInstance().milliseconds());
@@ -1485,7 +1488,8 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), null, minfo.getCrc());
       }
     }
-    
+    response.release();
+
     content_bytebuf.release();
   }
 
