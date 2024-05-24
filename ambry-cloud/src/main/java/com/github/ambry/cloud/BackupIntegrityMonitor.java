@@ -352,13 +352,17 @@ public class BackupIntegrityMonitor implements Runnable {
             null, null);
         // Get CRC of blob recovered from Azure and stored on local-disk
         for (MessageInfo msg: finfo.getMessageEntries()) {
-          StoreInfo stinfo = store.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
-          rdset = stinfo.getMessageReadSet();
-          MessageInfo minfo2 = stinfo.getMessageReadSetInfo().get(0);
-          rdset.doPrefetch(0, minfo2.getSize() - MessageFormatRecord.Crc_Size,
-              MessageFormatRecord.Crc_Size);
-          long crc = rdset.getPrefetchedData(0).getLong(0);
-          rdset.getPrefetchedData(0).release();
+          Long crc = null;
+          if (!(msg.isDeleted() || msg.isExpired())) {
+            // Don't bother about obsolete or expired blobs. Just verify integrity of live blobs.
+            StoreInfo stinfo = store.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
+            rdset = stinfo.getMessageReadSet();
+            MessageInfo minfo2 = stinfo.getMessageReadSetInfo().get(0);
+            rdset.doPrefetch(0, minfo2.getSize() - MessageFormatRecord.Crc_Size,
+                MessageFormatRecord.Crc_Size);
+            crc = rdset.getPrefetchedData(0).getLong(0);
+            rdset.getPrefetchedData(0).release();
+          }
           azureBlobs.put(msg.getStoreKey().getID(), new MessageInfo(msg, crc));
         }
         oldDiskToken = newDiskToken;
