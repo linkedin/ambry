@@ -249,7 +249,7 @@ class DatasetSerializer extends JsonSerializer<Dataset> {
           field.setAccessible(true);
           Object value = field.get(dataset);
           if (value != null) {
-            gen.writeObjectField(field.getName(), value);
+            gen.writeObjectField(field.getAnnotation(JsonProperty.class).value(), value);
           }
         } catch (IllegalAccessException e) {
           throw new IOException("Error accessing field: " + field.getName(), e);
