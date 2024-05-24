@@ -1487,8 +1487,6 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
         assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), null, minfo.getCrc());
       }
     }
-
-    content_bytebuf.release();
   }
 
   /**
