@@ -34,6 +34,7 @@ import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationManager;
@@ -41,10 +42,13 @@ import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFindToken;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.text.DateFormat;
@@ -282,6 +286,7 @@ public class BackupIntegrityMonitor implements Runnable {
     HashMap<String, MessageInfo> azureBlobs = new HashMap<>();
     serverScanner = serverReplicationManager.getBackupCheckerThread("ambry_backup_integrity_monitor");
     Random random = new Random();
+    MessageReadSet rdset = null;
     try {
       /** Select partition P */
       List<PartitionId> partitions = helixClusterManager.getAllPartitionIds(null);
@@ -334,10 +339,21 @@ public class BackupIntegrityMonitor implements Runnable {
 
       /** Create a temporary map of all keys recovered from cloud */
       StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
+      EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
+          StoreGetOptions.Store_Include_Expired);
       while (!newDiskToken.equals(oldDiskToken)) {
         FindInfo finfo = store.findEntriesSince(newDiskToken, 1000 * (2 << 20),
             null, null);
-        finfo.getMessageEntries().forEach(msg -> azureBlobs.put(msg.getStoreKey().getID(), msg));
+        for (MessageInfo msg: finfo.getMessageEntries()) {
+          StoreInfo stinfo = store.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
+          rdset = stinfo.getMessageReadSet();
+          MessageInfo minfo2 = stinfo.getMessageReadSetInfo().get(0);
+          rdset.doPrefetch(0, minfo2.getSize() - MessageFormatRecord.Crc_Size,
+              MessageFormatRecord.Crc_Size);
+          long crc = rdset.getPrefetchedData(0).getLong(0);
+          rdset.getPrefetchedData(0).release();
+          azureBlobs.put(msg.getStoreKey().getID(), new MessageInfo(msg, crc));
+        }
         oldDiskToken = newDiskToken;
         newDiskToken = (StoreFindToken) finfo.getFindToken();
         logger.info("[BackupIntegrityMonitor] Disk-token = {}", newDiskToken.toString());
@@ -376,10 +392,27 @@ public class BackupIntegrityMonitor implements Runnable {
 
     // Separate try-catch to swallow exceptions during shutdown
     try {
+      if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
+        rdset.getPrefetchedData(0).release();
+      }
+    } catch (Throwable e) {
+      metrics.backupCheckerRuntimeError.inc();
+      logger.error("[BackupIntegrityMonitor] Failed to stop due to {}", e.getMessage());
+      e.printStackTrace();
+    }
+
+    try {
       azureBlobs.clear();
       if (cloudReplica != null) {
         azureReplicator.removeRemoteReplicaInfo(cloudReplica);
       }
+    } catch (Throwable e) {
+      metrics.backupCheckerRuntimeError.inc();
+      logger.error("[BackupIntegrityMonitor] Failed to stop due to {}", e.getMessage());
+      e.printStackTrace();
+    }
+
+    try {
       if (partition != null) {
         stopLocalStore(partition);
       }
