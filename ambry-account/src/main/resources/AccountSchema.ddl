@@ -58,7 +58,6 @@ CREATE TABLE IF NOT EXISTS Datasets (
     userTags JSON DEFAULT NULL,
     lastModifiedTime DATETIME(3) NOT NULL,
     deleted_ts DATETIME(6) DEFAULT NULL,
-    delete_ts DATETIME(6) DEFAULT NULL,
     PRIMARY KEY (accountId, containerId, datasetName)
 )
 CHARACTER SET utf8 COLLATE utf8_bin;
@@ -71,7 +70,6 @@ CREATE TABLE IF NOT EXISTS DatasetVersions (
     datasetVersionState SMALLINT NOT NULL,
     creationTime DATETIME(3) NOT NULL,
     lastModifiedTime DATETIME(3) NOT NULL,
-    delete_ts DATETIME(6) DEFAULT NULL,
     deleted_ts DATETIME(6) DEFAULT NULL,
     PRIMARY KEY (accountId, containerId, datasetName, version)
 )
