@@ -218,6 +218,12 @@ public class BackupIntegrityMonitor implements Runnable {
     }
   }
 
+  /**
+   * Compares metadata received from servers with metadata received from Azure cloud
+   * @param serverReplica
+   * @param serverToAzureReplToken
+   * @param azureToServerReplToken
+   */
   void compareMetadata(RemoteReplicaInfo serverReplica, TableEntity serverToAzureReplToken, RecoveryToken azureToServerReplToken) {
     long partitionId = serverReplica.getReplicaId().getPartitionId().getId();
     try {
@@ -344,6 +350,7 @@ public class BackupIntegrityMonitor implements Runnable {
       while (!newDiskToken.equals(oldDiskToken)) {
         FindInfo finfo = store.findEntriesSince(newDiskToken, 1000 * (2 << 20),
             null, null);
+        // Get CRC of blob recovered from Azure and stored on local-disk
         for (MessageInfo msg: finfo.getMessageEntries()) {
           StoreInfo stinfo = store.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
           rdset = stinfo.getMessageReadSet();
@@ -377,6 +384,7 @@ public class BackupIntegrityMonitor implements Runnable {
             partition.getId()));
       }
 
+      /** Compare metadata from server replicas with metadata from Azure */
       List<RemoteReplicaInfo> serverReplicas =
           serverReplicationManager.createRemoteReplicaInfos(replicas, store.getReplicaId());
       for (RemoteReplicaInfo s : serverReplicas) {
