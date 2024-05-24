@@ -1384,15 +1384,38 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     responseList.forEach(Response::release);
   }
 
+  void verifyCRCInMetadata(PartitionId id, String replicaPath, DataNodeId datanode, Long crc)
+      throws IOException, InterruptedException {
+    String clientId = "replication-metadata-" + datanode.getHostname() + "[" + datanode.getDatacenterName() + "]";
+    ReplicaMetadataRequestInfo rinfo = new ReplicaMetadataRequestInfo(id,
+        new StoreFindToken(), datanode.getHostname(), replicaPath, ReplicaType.DISK_BACKED,
+        replicationConfig.replicaMetadataRequestVersion);
+    RequestOrResponse md_request = new ReplicaMetadataRequest(TestUtils.RANDOM.nextInt(), clientId,
+        Collections.singletonList(rinfo), Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
+    ReplicaMetadataResponse response =
+        (ReplicaMetadataResponse) sendRequestGetResponse(md_request, ServerErrorCode.No_Error);
+    assertTrue("response from replica must not be empty",
+        ((ReplicaMetadataResponse) response).getReplicaMetadataResponseInfoList().size() > 0);
+    // Compare CRC from in-mem store and metadata request
+    for (ReplicaMetadataResponseInfo respinfo : response.getReplicaMetadataResponseInfoList()) {
+      assertTrue("messages from replica must not be empty",respinfo.getMessageInfoList().size() > 0);
+      for (MessageInfo minfo : respinfo.getMessageInfoList()) {
+        assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), crc, minfo.getCrc());
+      }
+    }
+  }
+
   @Test
   public void testFetchCRC() throws IOException, InterruptedException, StoreException, ReflectiveOperationException {
+    // This works for TestStore, not real store
+    assumeFalse(this.validateRequestOnStoreState);
 
+    // Get rid of  the mock helper, we need the real token-helper to issue real store requests
     FindTokenHelper findTokenHelper1 = new FindTokenHelper(storeKeyFactory, replicationConfig);
     ambryRequests = new AmbryServerRequests(storageManager, requestResponseChannel, clusterMap, dataNodeId,
-        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper1, null, replicationManager, storeKeyFactory,
-        serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
+        clusterMap.getMetricRegistry(), serverMetrics, findTokenHelper1, null, replicationManager,
+        storeKeyFactory, serverConfig, diskManagerConfig, storeKeyConverterFactory, statsManager, helixParticipant);
 
-    assumeFalse(this.validateRequestOnStoreState);
     DataNodeId datanode = clusterMap.getDataNodeIds().stream()
         .filter(node -> node.getDatacenterName().equals(localDc))
         .findFirst().get();
@@ -1402,11 +1425,13 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     // Create local store
     BlobStore localStore =
         new BlobStore(id.getReplicaIds().get(0), new StoreConfig(verifiableProperties),
-            Utils.newScheduler(1, false), Utils.newScheduler(1, false), null, new DiskIOScheduler(null),
-            StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR, new StoreMetrics(clusterMap.getMetricRegistry()),
-            new StoreMetrics("UnderCompaction", clusterMap.getMetricRegistry()), null, null, null,
+            Utils.newScheduler(1, false), Utils.newScheduler(1, false),
+            null, new DiskIOScheduler(null), StoreTestUtils.DEFAULT_DISK_SPACE_ALLOCATOR,
+            new StoreMetrics(clusterMap.getMetricRegistry()), new StoreMetrics("UnderCompaction",
+            clusterMap.getMetricRegistry()), null, null, null,
             Collections.singletonList(mock(ReplicaStatusDelegate.class)), new MockTime(),
-            new InMemAccountService(false, false), null, Utils.newScheduler(1, false));
+            new InMemAccountService(false, false), null,
+            Utils.newScheduler(1, false));
     localStore.start();
     storageManager.overrideStoreToReturn = localStore;
 
@@ -1422,9 +1447,12 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
 
     // Put blob
     String clientId = "replication-metadata-" + datanode.getHostname() + "[" + datanode.getDatacenterName() + "]";
-    RequestOrResponse put_request = new PutRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, properties, content_buf,
-        content_bytebuf, testContent.length(), BlobType.DataBlob, null);
+    RequestOrResponse put_request = new PutRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, properties,
+        content_buf, content_bytebuf, testContent.length(), BlobType.DataBlob, null);
     Response response = sendRequestGetResponse(put_request, ServerErrorCode.No_Error);
+
+    // Send metadata request from regular server app
+    verifyCRCInMetadata(id, id.toPathString(), datanode, null);
 
     // Get CRC from in-mem store
     EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
@@ -1437,56 +1465,15 @@ public class AmbryServerRequestsTest extends ReplicationTestHelper {
     ByteBuf crcbuf = rdset.getPrefetchedData(0);
     long crc = crcbuf.getLong(0);
     crcbuf.release();
-
-    // Send metadata request from regular server app
-    String replicaPath = id.toPathString();
-    ReplicaMetadataRequestInfo rinfo = new ReplicaMetadataRequestInfo(id,
-        new StoreFindToken(),
-        datanode.getHostname(), replicaPath, ReplicaType.DISK_BACKED, replicationConfig.replicaMetadataRequestVersion);
-    RequestOrResponse md_request = new ReplicaMetadataRequest(TestUtils.RANDOM.nextInt(), clientId,
-        Collections.singletonList(rinfo), Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
-    response = sendRequestGetResponse(md_request, ServerErrorCode.No_Error);
-    assertTrue("response from replica must not be empty",
-        ((ReplicaMetadataResponse) response).getReplicaMetadataResponseInfoList().size() > 0);
-    // Compare CRC from in-mem store and metadata request
-    for (ReplicaMetadataResponseInfo respinfo : ((ReplicaMetadataResponse) response).getReplicaMetadataResponseInfoList()) {
-      assertTrue("messages from replica must not be empty",respinfo.getMessageInfoList().size() > 0);
-      for (MessageInfo minfo : respinfo.getMessageInfoList()) {
-        assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), null, minfo.getCrc());
-      }
-    }
-
-    // Send metadata request from backup-verification app
-    replicaPath = BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString();
-    rinfo = new ReplicaMetadataRequestInfo(id,
-        new StoreFindToken(),
-        datanode.getHostname(), replicaPath, ReplicaType.DISK_BACKED, replicationConfig.replicaMetadataRequestVersion);
-    md_request = new ReplicaMetadataRequest(TestUtils.RANDOM.nextInt(), clientId,
-        Collections.singletonList(rinfo), Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
-    response = sendRequestGetResponse(md_request, ServerErrorCode.No_Error);
-    assertTrue("response from replica must not be empty",
-        ((ReplicaMetadataResponse) response).getReplicaMetadataResponseInfoList().size() > 0);
-    // Compare CRC from in-mem store and metadata request
-    for (ReplicaMetadataResponseInfo respinfo : ((ReplicaMetadataResponse) response).getReplicaMetadataResponseInfoList()) {
-      assertTrue("messages from replica must not be empty",respinfo.getMessageInfoList().size() > 0);
-      for (MessageInfo minfo : respinfo.getMessageInfoList()) {
-        assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), new Long(crc), minfo.getCrc());
-      }
-    }
-
+    verifyCRCInMetadata(id, BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString(),
+        datanode, new Long(crc));
+    
     // Delete blob and get metadata again
-    RequestOrResponse del_request = new DeleteRequest(TestUtils.RANDOM.nextInt(), clientId, blobId, SystemTime.getInstance().milliseconds());
-    response = sendRequestGetResponse(del_request, ServerErrorCode.No_Error);
-    md_request = new ReplicaMetadataRequest(TestUtils.RANDOM.nextInt(), clientId,
-        Collections.singletonList(rinfo), Long.MAX_VALUE, replicationConfig.replicaMetadataRequestVersion);
-    response = sendRequestGetResponse(md_request, ServerErrorCode.No_Error);
-    // Compare CRC from in-mem store and metadata request
-    for (ReplicaMetadataResponseInfo respinfo : ((ReplicaMetadataResponse) response).getReplicaMetadataResponseInfoList()) {
-      assertTrue("messages from replica must not be empty",respinfo.getMessageInfoList().size() > 0);
-      for (MessageInfo minfo : respinfo.getMessageInfoList()) {
-        assertEquals(String.format("Expected CRC = %s, Received CRC = %s", crc, minfo.getCrc()), null, minfo.getCrc());
-      }
-    }
+    RequestOrResponse del_request = new DeleteRequest(TestUtils.RANDOM.nextInt(), clientId, blobId,
+        SystemTime.getInstance().milliseconds());
+    sendRequestGetResponse(del_request, ServerErrorCode.No_Error);
+    verifyCRCInMetadata(id, BackupCheckerThread.DR_Verifier_Keyword + File.separator + id.toPathString(),
+        datanode, null);
   }
 
   /**
