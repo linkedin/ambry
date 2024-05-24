@@ -191,6 +191,11 @@ public class MessageInfo {
         other.getOperationTimeMs(), other.getLifeVersion());
   }
 
+  public MessageInfo(MessageInfo other, long crc) {
+    this(other.getStoreKey(), other.getSize(), other.isDeleted(), other.isTtlUpdated(), other.isUndeleted(),
+        other.getExpirationTimeInMs(), crc, other.getAccountId(), other.getContainerId(),
+        other.getOperationTimeMs(), other.getLifeVersion());
+  }
 
   public StoreKey getStoreKey() {
     return key;

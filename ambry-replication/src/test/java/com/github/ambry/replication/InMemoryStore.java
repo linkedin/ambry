@@ -56,7 +56,7 @@ import static com.github.ambry.replication.ReplicationTest.*;
 /**
  * A mock implementation of {@link Store} that store all details in memory.
  */
-class InMemoryStore implements Store {
+public class InMemoryStore implements Store {
   ReplicaState currentState = ReplicaState.OFFLINE;
 
   class MockMessageReadSet implements MessageReadSet {
@@ -171,7 +171,7 @@ class InMemoryStore implements Store {
   final PartitionId id;
   private boolean started;
 
-  InMemoryStore(PartitionId id, List<MessageInfo> messageInfos, List<ByteBuffer> buffers,
+  public InMemoryStore(PartitionId id, List<MessageInfo> messageInfos, List<ByteBuffer> buffers,
       ReplicationTest.StoreEventListener listener) {
     if (messageInfos.size() != buffers.size()) {
       throw new IllegalArgumentException("message info size and buffer size does not match");
