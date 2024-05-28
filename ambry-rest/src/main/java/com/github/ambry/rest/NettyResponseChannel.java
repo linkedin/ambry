@@ -275,7 +275,7 @@ class NettyResponseChannel implements RestResponseChannel {
             writeFuture.setFailure(exception);
           }
           if (!maybeSendErrorResponse(exception)) {
-            completeRequest(true, true);
+            completeRequest(true, true, true);
           }
         }
       } else if (exception != null) {
@@ -284,7 +284,7 @@ class NettyResponseChannel implements RestResponseChannel {
         if (!writeFuture.isDone()) {
           writeFuture.setFailure(exception);
         }
-        completeRequest(true, true);
+        completeRequest(true, true, true);
       }
       long responseFinishProcessingTime = System.currentTimeMillis() - responseCompleteStartTime;
       nettyMetrics.responseFinishProcessingTimeInMs.update(responseFinishProcessingTime);
@@ -297,7 +297,7 @@ class NettyResponseChannel implements RestResponseChannel {
       if (!writeFuture.isDone()) {
         writeFuture.setFailure(exception);
       }
-      completeRequest(true, true);
+      completeRequest(true, true, true);
     }
   }
 
@@ -404,12 +404,9 @@ class NettyResponseChannel implements RestResponseChannel {
   /**
    * Closes the request associated with this NettyResponseChannel.
    */
-  private void closeRequest() {
-    if (request != null && request.isOpen()) {
-      //Don't close the request when we see 100-continue in EXPECT header.
-      if (!CONTINUE.equals(request.getArgs().get(EXPECT))) {
-        request.close();
-      }
+  private void closeRequest(boolean shouldCloseRequest) {
+    if (request != null && request.isOpen() && shouldCloseRequest) {
+      request.close();
       evaluatePerformanceAndUpdateMetrics();
     }
   }
@@ -768,10 +765,12 @@ class NettyResponseChannel implements RestResponseChannel {
    * Completes the request by closing the request and network channel (if {@code closeNetworkChannel} is {@code true}).
    * </p>
    * May also close the channel if the class internally is forcing a close (i.e. if {@link #close()} is called.
+   *
    * @param closeNetworkChannel network channel is closed if {@code true}.
-   * @param shouldDelay network channel may be closed after certain delay if {@code true}.
+   * @param shouldDelay         network channel may be closed after certain delay if {@code true}.
+   * @param shouldCloseRequest used to determine if we want to close the request or not.
    */
-  private void completeRequest(boolean closeNetworkChannel, boolean shouldDelay) {
+  private void completeRequest(boolean closeNetworkChannel, boolean shouldDelay, boolean shouldCloseRequest) {
     if ((closeNetworkChannel || forceClose) && ctx.channel().isOpen()) {
       if (shouldDelay && (request != null && request.getRestMethod().equals(RestMethod.POST))
           && this.nettyConfig.nettyServerCloseDelayTimeoutMs > 0) {
@@ -782,7 +781,7 @@ class NettyResponseChannel implements RestResponseChannel {
       }
       logger.trace("Requested closing of channel {}", ctx.channel());
     }
-    closeRequest();
+    closeRequest(shouldCloseRequest);
   }
 
   /**
@@ -1084,7 +1083,7 @@ class NettyResponseChannel implements RestResponseChannel {
     public void operationComplete(ChannelProgressiveFuture future) {
       if (future.isSuccess()) {
         logger.trace("Response sending complete on channel {}", ctx.channel());
-        completeRequest(request == null || !request.isKeepAlive(), false);
+        completeRequest(request == null || !request.isKeepAlive(), false, true);
       } else {
         handleChannelWriteFailure(future.cause(), true);
       }
@@ -1111,7 +1110,12 @@ class NettyResponseChannel implements RestResponseChannel {
           // in this case there is nothing more to write.
           if (!writeFuture.isDone()) {
             writeFuture.setSuccess();
-            completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false);
+            //Don't close the request when we see 100-continue in EXPECT header.
+            if (CONTINUE.equals(request.getArgs().get(EXPECT)) && request.getRestMethod().equals(RestMethod.PUT)) {
+              completeRequest(request == null || !request.isKeepAlive(), false, false);
+            } else {
+              completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false, true);
+            }
           }
         } else {
           // otherwise there is some content to write.
@@ -1144,7 +1148,7 @@ class NettyResponseChannel implements RestResponseChannel {
       long writeFinishTime = System.currentTimeMillis();
       long channelWriteTime = writeFinishTime - responseWriteStartTime;
       if (future.isSuccess()) {
-        completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), true);
+        completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), true, true);
       } else {
         handleChannelWriteFailure(future.cause(), true);
       }
