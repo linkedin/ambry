@@ -175,10 +175,9 @@ public class BackupIntegrityMonitor implements Runnable {
     List<DiskId> disks = staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
         .getDiskIds().stream()
         .filter(d -> d.getState() == HardwareState.AVAILABLE)
-        .filter(d -> d.getAvailableSpaceInBytes() >= maxReplicaSize)
         .collect(Collectors.toList());
     logger.info("[BackupIntegrityMonitor] {} disks can accommodate partition-{}", disks.size(), partition.getId());
-    // Pick disk randomly
+    // Pick disk randomly; any disk is ok as we will wipe it out after this
     DiskId disk = disks.get(new Random().nextInt(disks.size()));
     logger.info("[BackupIntegrityMonitor] Selected disk at mount path {}", disk.getMountPath());
     // Clear disk to make space, this is simpler instead of deciding which partition to delete.
@@ -208,7 +207,8 @@ public class BackupIntegrityMonitor implements Runnable {
   private boolean stopLocalStore(AmbryPartition partition) {
     Store store = storageManager.getStore(partition, true);
     try {
-      boolean ret = storageManager.shutdownBlobStore(partition) && storageManager.removeBlobStore(partition);
+      // Don't remove the partition from disk, leave it behind for debugging
+      boolean ret = storageManager.shutdownBlobStore(partition);
       logger.info("[BackupIntegrityMonitor] Stopped Store [{}]", store);
       return ret;
     } catch (Throwable e) {
