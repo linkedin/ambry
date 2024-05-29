@@ -199,7 +199,17 @@ public class BackupCheckerThread extends ReplicaThread {
                     : serverBlob.isEqual(azureBlob);
                 return new ImmutableTriple(serverBlob, azureBlob, status);
               })
-              .filter(tuple -> !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
+              .filter(tuple -> {
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that match between server and azure
+                return !status.contains(BLOB_STATE_MATCH);
+              })
+              .filter(tuple -> {
+                MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that are deleted or expired on server and absent in azure
+                return !((serverBlob.isDeleted() || serverBlob.isExpired()) && status.contains(BLOB_ABSENT_IN_AZURE));
+              })
               .forEach(tuple -> {
                 MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
                 MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
