@@ -221,24 +221,19 @@ public class BackupIntegrityMonitor implements Runnable {
   /**
    * Compares metadata received from servers with metadata received from Azure cloud
    * @param serverReplica
-   * @param serverToAzureReplToken
+   * @param scanStopTime
    * @param azureToServerReplToken
    */
-  void compareMetadata(RemoteReplicaInfo serverReplica, TableEntity serverToAzureReplToken, RecoveryToken azureToServerReplToken) {
+  void compareMetadata(RemoteReplicaInfo serverReplica, long scanStopTime, RecoveryToken azureToServerReplToken) {
     long partitionId = serverReplica.getReplicaId().getPartitionId().getId();
     try {
       serverScanner.addRemoteReplicaInfo(serverReplica);
       logger.info("[BackupIntegrityMonitor] Queued peer server replica info [{}]", serverReplica);
 
       long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilTime();
-      long scanStopTime = System.currentTimeMillis() - SCAN_STOP_RELTIME;
       DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
-      String replUntil = (String) serverToAzureReplToken.getProperties().get(VcrReplicationManager.REPLICATED_UNITL_UTC);
-      if (!replUntil.equals(String.valueOf(Utils.Infinite_Time))) {
-        scanStopTime = formatter.parse(replUntil).getTime();
-      }
       logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}] until {} ({} ms)",
-          partitionId, serverReplica, replUntil, scanStopTime);
+          partitionId, serverReplica, formatter.format(scanStopTime), scanStopTime);
 
       while (scanEndTime < scanStopTime) {
         scanStartTime = serverReplica.getReplicatedUntilTime();
@@ -306,19 +301,6 @@ public class BackupIntegrityMonitor implements Runnable {
           .collect(Collectors.toList());
       partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       seen.add(partition.getId());
-
-      /**
-       * Find out how far each replica of the partition has been backed-up in Azure.
-       * We will use this information to scan the replica until when it has been backed-up.
-       * And then compare data in the replica until that point with the backup in Azure.
-       */
-      HashMap<String, TableEntity> replicaBackupProgressTokens = new HashMap<>();
-      for (AmbryReplica replica : partition.getReplicaIds()) {
-        TableEntity entity = azureSyncClient.getTableEntity(azureConfig.azureTableNameReplicaTokens,
-            String.valueOf(partition.getId()), replica.getDataNodeId().getHostname());
-        replicaBackupProgressTokens.put(replica.getDataNodeId().getHostname(), entity);
-      }
-
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
 
       /** Create local Store S */
@@ -381,18 +363,38 @@ public class BackupIntegrityMonitor implements Runnable {
       List<AmbryReplica> replicas = partition.getReplicaIds().stream()
           .filter(r -> r.getDataNodeId().getDatacenterName().equals(clusterMapConfig.clustermapVcrDatacenterName))
           .filter(r -> !r.isDown())
-          .filter(r -> replicaBackupProgressTokens.get(r.getDataNodeId().getHostname()) != null)
           .collect(Collectors.toList());
       if (replicas.isEmpty()) {
         throw new RuntimeException(String.format("[BackupIntegrityMonitor] No server replicas available for partition-%s",
             partition.getId()));
       }
 
+      /**
+       * Find out how far each replica of the partition has been backed-up in Azure.
+       * We will use this information to scan the replica until when it has been backed-up.
+       * And then compare data in the replica until that point with the backup in Azure.
+       */
+      DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
+      long scanStopTime = Utils.Infinite_Time;
+      for (AmbryReplica replica : partition.getReplicaIds()) {
+        TableEntity entity = azureSyncClient.getTableEntity(azureConfig.azureTableNameReplicaTokens,
+            String.valueOf(partition.getId()), replica.getDataNodeId().getHostname());
+        if (entity != null) {
+          String replUntil = (String) entity.getProperties().get(VcrReplicationManager.REPLICATED_UNITL_UTC);
+          if (!replUntil.equals(String.valueOf(Utils.Infinite_Time))) {
+            scanStopTime = Math.max(scanStopTime, formatter.parse(replUntil).getTime());
+          }
+        }
+      }
+      if (scanStopTime == Utils.Infinite_Time) {
+        scanStopTime = System.currentTimeMillis() - SCAN_STOP_RELTIME;
+      }
+
       /** Compare metadata from server replicas with metadata from Azure */
       List<RemoteReplicaInfo> serverReplicas =
           serverReplicationManager.createRemoteReplicaInfos(replicas, store.getReplicaId());
       for (RemoteReplicaInfo s : serverReplicas) {
-        compareMetadata(s, replicaBackupProgressTokens.get(s.getReplicaId().getDataNodeId().getHostname()), azureToken);
+        compareMetadata(s, scanStopTime, azureToken);
       }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
