@@ -32,7 +32,6 @@ import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationManager;
@@ -40,13 +39,11 @@ import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreGetOptions;
-import com.github.ambry.store.StoreInfo;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -102,7 +99,6 @@ public class BackupIntegrityMonitor implements Runnable {
   private final ScheduledExecutorService executor;
   private final StorageManager storageManager;
   private final AzureCloudConfig azureConfig;
-  public final long SCAN_STOP_RELTIME = TimeUnit.HOURS.toMillis(1);
   public final long SCAN_MILESTONE = TimeUnit.DAYS.toMillis(1);
   private final RecoveryMetrics metrics;
   private final HashSet<Long> seen;
@@ -255,10 +251,9 @@ public class BackupIntegrityMonitor implements Runnable {
           rmetrics.backupIntegrityError.getCount());
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
-      logger.error("[BackupIntegrityMonitor] Failed to verify server replica {} due to {}",
-          serverReplica, e.getMessage());
+      logger.error(String.format("[BackupIntegrityMonitor] Failed to verify server replica %s due to",
+          serverReplica), e);
       // Swallow all exceptions and print a trace for inspection, but do not kill the job
-      e.printStackTrace();
     }
 
     try {
@@ -267,10 +262,9 @@ public class BackupIntegrityMonitor implements Runnable {
       }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
-      logger.error("[BackupIntegrityMonitor] Failed to dequeue server replica {} due to {}",
-          partitionId, serverReplica, e.getMessage());
+      logger.error(String.format("[BackupIntegrityMonitor] Failed to dequeue server replica %s due to",
+          serverReplica), e);
       // Swallow all exceptions and print a trace for inspection, but do not kill the job
-      e.printStackTrace();
     }
   }
 
@@ -282,7 +276,6 @@ public class BackupIntegrityMonitor implements Runnable {
    * @throws IOException
    */
   HashMap<String, MessageInfo> getAzureBlobsFromLocalStore(BlobStore store) throws StoreException, IOException {
-    MessageReadSet rdset;
     HashMap<String, MessageInfo> azureBlobs = new HashMap<>();
     StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
     EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
@@ -290,25 +283,8 @@ public class BackupIntegrityMonitor implements Runnable {
     while (!newDiskToken.equals(oldDiskToken)) {
       FindInfo finfo = store.findEntriesSince(newDiskToken, 1000 * (2 << 20),
           null, null);
-      // Get CRC of blob recovered from Azure and stored on local-disk
       for (MessageInfo msg: finfo.getMessageEntries()) {
-        Long crc = null;
-        if (!(msg.isDeleted() || msg.isExpired())) {
-          // Don't bother about obsolete or expired blobs. Just verify integrity of live blobs.
-          StoreInfo stinfo = store.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
-          rdset = stinfo.getMessageReadSet();
-          MessageInfo minfo2 = stinfo.getMessageReadSetInfo().get(0);
-          try {
-            rdset.doPrefetch(0, minfo2.getSize() - MessageFormatRecord.Crc_Size,
-                MessageFormatRecord.Crc_Size);
-            crc = rdset.getPrefetchedData(0).getLong(0);
-          } finally {
-            if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
-              rdset.getPrefetchedData(0).release();
-            }
-          }
-        }
-        azureBlobs.put(msg.getStoreKey().getID(), new MessageInfo(msg, crc));
+        azureBlobs.put(msg.getStoreKey().getID(), msg);
       }
       oldDiskToken = newDiskToken;
       newDiskToken = (StoreFindToken) finfo.getFindToken();
@@ -361,7 +337,7 @@ public class BackupIntegrityMonitor implements Runnable {
         }
       }
       if (partitionBackedUpUntil == Utils.Infinite_Time) {
-        partitionBackedUpUntil = System.currentTimeMillis() - SCAN_STOP_RELTIME;
+        partitionBackedUpUntil = System.currentTimeMillis();
       }
 
       /** Create local Store S */
@@ -397,7 +373,6 @@ public class BackupIntegrityMonitor implements Runnable {
             partition.getId()));
       }
 
-
       /** Compare metadata from server replicas with metadata from Azure */
       List<RemoteReplicaInfo> serverReplicas =
           serverReplicationManager.createRemoteReplicaInfos(replicas, store.getReplicaId());
@@ -415,10 +390,9 @@ public class BackupIntegrityMonitor implements Runnable {
       }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
-      logger.error("[BackupIntegrityMonitor] Failed to verify cloud backup partition-{} due to {}", partition.getId(),
-          e.getMessage());
+      logger.error(String.format("[BackupIntegrityMonitor] Failed to verify cloud backup partition-%s due to",
+          partition.getId()), e);
       // Swallow all exceptions and print a trace for inspection, but do not kill the job
-      e.printStackTrace();
     }
 
     try {
@@ -427,8 +401,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
-      logger.error("[BackupIntegrityMonitor] Failed to stop due to {}", e.getMessage());
-      e.printStackTrace();
+      logger.error("[BackupIntegrityMonitor] Failed to stop due to", e);
     }
 
     try {
@@ -437,8 +410,7 @@ public class BackupIntegrityMonitor implements Runnable {
       }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
-      logger.error("[BackupIntegrityMonitor] Failed to stop due to {}", e.getMessage());
-      e.printStackTrace();
+      logger.error("[BackupIntegrityMonitor] Failed to stop due to", e);
     }
   }
 }
