@@ -28,9 +28,7 @@ import com.github.ambry.clustermap.HardwareState;
 import com.github.ambry.clustermap.HelixClusterManager;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaSealStatus;
-import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.clustermap.StaticClusterManager;
-import com.github.ambry.commons.BlobId;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -52,9 +50,7 @@ import com.github.ambry.store.StoreInfo;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
-import java.sql.Blob;
 import java.text.DateFormat;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Collections;
@@ -63,7 +59,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -233,7 +228,7 @@ public class BackupIntegrityMonitor implements Runnable {
     long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilTime();
     DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
     try {
-      serverScanner.setAzureBlobMap(azureBlobs);
+      serverScanner.setAzureBlobInfo(azureBlobs, partitionBackedUpUntil);
       serverScanner.addRemoteReplicaInfo(serverReplica);
       logger.info("[BackupIntegrityMonitor] Queued peer server replica for scan [{}]", serverReplica);
 
