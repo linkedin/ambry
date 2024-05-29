@@ -137,15 +137,14 @@ public class BackupIntegrityMonitor implements Runnable {
         .forEach(d -> logger.info("[BackupIntegrityMonitor] Disk = {} {} {} bytes",
             d.getMountPath(), d.getState(), d.getRawCapacityInBytes()));
     logger.info("[BackupIntegrityMonitor] Created BackupIntegrityMonitor");
-    this.run();
   }
 
   /**
    * Starts and schedules monitor
    */
   public void start() {
-    // executor.scheduleWithFixedDelay(this::run, 0, 1, TimeUnit.HOURS);
-    // logger.info("[BackupIntegrityMonitor] Started BackupIntegrityMonitor");
+    executor.scheduleWithFixedDelay(this::run, 0, 1, TimeUnit.HOURS);
+    logger.info("[BackupIntegrityMonitor] Started BackupIntegrityMonitor");
   }
 
   /**
