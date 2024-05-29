@@ -288,7 +288,7 @@ public class BackupIntegrityMonitor implements Runnable {
    * @throws IOException
    */
   HashMap<String, MessageInfo> getAzureBlobsFromLocalStore(BlobStore store) throws StoreException, IOException {
-    MessageReadSet rdset = null;
+    MessageReadSet rdset;
     HashMap<String, MessageInfo> azureBlobs = new HashMap<>();
     StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
     EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
@@ -314,7 +314,7 @@ public class BackupIntegrityMonitor implements Runnable {
             }
           }
         }
-        azureBlobs.put(msg.getStoreKey().getID(), msg);
+        azureBlobs.put(msg.getStoreKey().getID(), new MessageInfo(msg, crc));
       }
       oldDiskToken = newDiskToken;
       newDiskToken = (StoreFindToken) finfo.getFindToken();
@@ -369,7 +369,7 @@ public class BackupIntegrityMonitor implements Runnable {
       if (partitionBackedUpUntil == Utils.Infinite_Time) {
         partitionBackedUpUntil = System.currentTimeMillis() - SCAN_STOP_RELTIME;
       }
-      
+
       /** Create local Store S */
       BlobStore store = startLocalStore(partition);
 
@@ -402,7 +402,7 @@ public class BackupIntegrityMonitor implements Runnable {
         throw new RuntimeException(String.format("[BackupIntegrityMonitor] No server replicas available for partition-%s",
             partition.getId()));
       }
-      
+
 
       /** Compare metadata from server replicas with metadata from Azure */
       List<RemoteReplicaInfo> serverReplicas =
