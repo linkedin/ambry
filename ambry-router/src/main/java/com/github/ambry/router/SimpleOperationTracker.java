@@ -81,9 +81,9 @@ class SimpleOperationTracker implements OperationTracker {
   protected final LinkedList<ReplicaId> replicaPool = new LinkedList<>();
   protected final NonBlockingRouterMetrics routerMetrics;
   private final OpTrackerIterator otIterator;
-  private final RouterOperation routerOperation;
-  private final PartitionId partitionId;
-  private final RouterConfig routerConfig;
+  protected final RouterOperation routerOperation;
+  protected final PartitionId partitionId;
+  protected final RouterConfig routerConfig;
   protected int inflightCount = 0;
   protected int replicaSuccessCount = 0;
   protected List<ReplicaId> successReplica = new ArrayList<>();
@@ -93,8 +93,8 @@ class SimpleOperationTracker implements OperationTracker {
   protected int originatingDcNotFoundCount = 0;
   protected int totalNotFoundCount = 0;
   protected ReplicaId lastReturnedByIterator = null;
-  private Iterator<ReplicaId> replicaIterator;
-  private final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
+  protected Iterator<ReplicaId> replicaIterator;
+  protected final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
   private final int originatingDcTotalReplicaCount;
   private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
   private final BlobId blobId;
@@ -775,7 +775,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param downReplicas Replicas added to downReplicas.
    * @param routerOperation The operation type associated with current operation tracker.
    */
-  private static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
+  protected static String generateErrorMessage(PartitionId partitionId, List<ReplicaId> examinedReplicas,
       List<ReplicaId> replicaPool, List<ReplicaId> backupReplicas, List<ReplicaId> downReplicas,
       RouterOperation routerOperation) {
     StringBuilder errMsg = new StringBuilder("Total Replica count ").append(replicaPool.size())
