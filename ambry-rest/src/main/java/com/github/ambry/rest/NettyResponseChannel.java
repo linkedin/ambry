@@ -1111,11 +1111,8 @@ class NettyResponseChannel implements RestResponseChannel {
           if (!writeFuture.isDone()) {
             writeFuture.setSuccess();
             //Don't close the request when we see 100-continue in EXPECT header.
-            if (CONTINUE.equals(request.getArgs().get(EXPECT)) && request.getRestMethod().equals(RestMethod.PUT)) {
-              completeRequest(request == null || !request.isKeepAlive(), false, false);
-            } else {
-              completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false, true);
-            }
+            completeRequest(!HttpUtil.isKeepAlive(finalResponseMetadata), false,
+                !RestUtils.isPutRequestAndExpectContinue(request));
           }
         } else {
           // otherwise there is some content to write.

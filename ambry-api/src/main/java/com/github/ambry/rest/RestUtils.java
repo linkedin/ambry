@@ -49,6 +49,7 @@ import java.util.zip.CRC32;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.github.ambry.rest.RestUtils.Headers.*;
 import static com.github.ambry.rest.RestUtils.InternalKeys.*;
 
 
@@ -817,6 +818,15 @@ public class RestUtils {
   public static RequestPath getRequestPath(RestRequest restRequest) {
     return (RequestPath) Objects.requireNonNull(restRequest.getArgs().get(InternalKeys.REQUEST_PATH),
         InternalKeys.REQUEST_PATH + " not set in " + restRequest);
+  }
+
+  /**
+   * Return true if the request set 100-continue in Except header and it's a named blob base put request.
+   * @param restRequest the {@link RestRequest}.
+   * @return
+   */
+  public static boolean isPutRequestAndExpectContinue(RestRequest restRequest) {
+    return CONTINUE.equals(restRequest.getArgs().get(EXPECT)) && restRequest.getRestMethod().equals(RestMethod.PUT);
   }
 
   /**
