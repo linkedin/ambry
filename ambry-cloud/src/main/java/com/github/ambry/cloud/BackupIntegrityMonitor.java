@@ -13,7 +13,6 @@
  */
 package com.github.ambry.cloud;
 
-import com.azure.data.tables.models.TableEntity;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureCloudDestinationSync;
 import com.github.ambry.clustermap.AmbryDisk;
