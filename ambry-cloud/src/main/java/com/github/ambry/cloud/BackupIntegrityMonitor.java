@@ -43,7 +43,6 @@ import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFindToken;
-import com.github.ambry.store.StoreGetOptions;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
@@ -51,7 +50,6 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -102,6 +100,15 @@ public class BackupIntegrityMonitor implements Runnable {
   public final long SCAN_MILESTONE = TimeUnit.DAYS.toMillis(1);
   private final RecoveryMetrics metrics;
   private final HashSet<Long> seen;
+
+  class AzureBlobInfo {
+    public HashMap<String, MessageInfo> azureBlobs;
+    public long partitionBackedUpUntil;
+    public AzureBlobInfo(HashMap<String, MessageInfo> map, long t) {
+      azureBlobs = map;
+      partitionBackedUpUntil = t;
+    }
+  }
 
   public BackupIntegrityMonitor(RecoveryManager azure, ReplicationManager server,
       CompositeClusterManager cluster, StorageManager storage, DataNodeId node,
@@ -215,16 +222,13 @@ public class BackupIntegrityMonitor implements Runnable {
    * Compares metadata received from servers with metadata received from Azure cloud
    * @param serverReplica
    * @param cloudReplica
-   * @param azureBlobs
    * @param partitionBackedUpUntil
    */
-  void compareMetadata(RemoteReplicaInfo serverReplica, RemoteReplicaInfo cloudReplica,
-      HashMap<String, MessageInfo> azureBlobs, long partitionBackedUpUntil) {
+  void compareMetadata(RemoteReplicaInfo serverReplica, RemoteReplicaInfo cloudReplica, long partitionBackedUpUntil) {
     long partitionId = serverReplica.getReplicaId().getPartitionId().getId();
     long scanStartTime, scanEndTime = serverReplica.getReplicatedUntilTime();
     DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
     try {
-      serverScanner.setAzureBlobInfo(azureBlobs, partitionBackedUpUntil);
       serverScanner.addRemoteReplicaInfo(serverReplica);
       logger.info("[BackupIntegrityMonitor] Queued peer server replica for scan [{}]", serverReplica);
 
@@ -275,22 +279,22 @@ public class BackupIntegrityMonitor implements Runnable {
    * @throws StoreException
    * @throws IOException
    */
-  HashMap<String, MessageInfo> getAzureBlobsFromLocalStore(BlobStore store) throws StoreException, IOException {
+  AzureBlobInfo getAzureBlobInfoFromLocalStore(BlobStore store) throws StoreException, IOException {
     HashMap<String, MessageInfo> azureBlobs = new HashMap<>();
     StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
-    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
-        StoreGetOptions.Store_Include_Expired);
+    long partitionBackedUpUntil = Utils.Infinite_Time;
     while (!newDiskToken.equals(oldDiskToken)) {
       FindInfo finfo = store.findEntriesSince(newDiskToken, 1000 * (2 << 20),
           null, null);
       for (MessageInfo msg: finfo.getMessageEntries()) {
         azureBlobs.put(msg.getStoreKey().getID(), msg);
+        partitionBackedUpUntil = Math.max(partitionBackedUpUntil, msg.getOperationTimeMs());
       }
       oldDiskToken = newDiskToken;
       newDiskToken = (StoreFindToken) finfo.getFindToken();
       logger.info("[BackupIntegrityMonitor] Disk-token = {}", newDiskToken.toString());
     }
-    return azureBlobs;
+    return new AzureBlobInfo(azureBlobs, partitionBackedUpUntil);
   }
 
 
@@ -318,27 +322,6 @@ public class BackupIntegrityMonitor implements Runnable {
       partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       seen.add(partition.getId());
       logger.info("[BackupIntegrityMonitor] Verifying backup partition-{}", partition.getId());
-
-      /**
-       * Find out how far each replica of the partition has been backed-up in Azure.
-       * We will use this information to scan the replica until when it has been backed-up.
-       * And then compare data in the replica until that point with the backup in Azure.
-       */
-      DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
-      long partitionBackedUpUntil = Utils.Infinite_Time;
-      for (AmbryReplica replica : partition.getReplicaIds()) {
-        TableEntity entity = azureSyncClient.getTableEntity(azureConfig.azureTableNameReplicaTokens,
-            String.valueOf(partition.getId()), replica.getDataNodeId().getHostname());
-        if (entity != null) {
-          String replUntil = (String) entity.getProperties().get(VcrReplicationManager.REPLICATED_UNITL_UTC);
-          if (!replUntil.equals(String.valueOf(Utils.Infinite_Time))) {
-            partitionBackedUpUntil = Math.max(partitionBackedUpUntil, formatter.parse(replUntil).getTime());
-          }
-        }
-      }
-      if (partitionBackedUpUntil == Utils.Infinite_Time) {
-        partitionBackedUpUntil = System.currentTimeMillis();
-      }
 
       /** Create local Store S */
       BlobStore store = startLocalStore(partition);
@@ -376,17 +359,24 @@ public class BackupIntegrityMonitor implements Runnable {
       /** Compare metadata from server replicas with metadata from Azure */
       List<RemoteReplicaInfo> serverReplicas =
           serverReplicationManager.createRemoteReplicaInfos(replicas, store.getReplicaId());
+      DateFormat formatter = new SimpleDateFormat(VcrReplicationManager.DATE_FORMAT);
       for (RemoteReplicaInfo serverReplica : serverReplicas) {
-        /** Create a temporary map of all keys recovered from cloud */
-        HashMap<String, MessageInfo> azureBlobs = getAzureBlobsFromLocalStore(store);
-        if (azureToken.getNumBlobs() != azureBlobs.size()) {
+        /**
+         * Find out how far each replica of the partition has been backed-up in Azure.
+         * We will use this information to scan the replica until when it has been backed-up.
+         * And then compare data in the replica until that point with the backup in Azure.
+         */
+        AzureBlobInfo azureBlobInfo = getAzureBlobInfoFromLocalStore(store);
+        if (azureToken.getNumBlobs() != azureBlobInfo.azureBlobs.size()) {
           metrics.backupCheckerRuntimeError.inc();
           logger.error("[BackupIntegrityMonitor] Mismatch, num_azure_blobs = {}, num_azure_blobs on-disk = {}",
-              azureToken.getNumBlobs(), azureBlobs.size());
+              azureToken.getNumBlobs(), azureBlobInfo.azureBlobs.size());
         }
         logger.info("[BackupIntegrityMonitor] Scanning partition-{} from peer server replica [{}] until {} ({} ms)",
-            partition.getId(), serverReplica, formatter.format(partitionBackedUpUntil), partitionBackedUpUntil);
-        compareMetadata(serverReplica, cloudReplica, azureBlobs, partitionBackedUpUntil);
+            partition.getId(), serverReplica, formatter.format(azureBlobInfo.partitionBackedUpUntil),
+            azureBlobInfo.partitionBackedUpUntil);
+        serverScanner.setAzureBlobInfo(azureBlobInfo.azureBlobs, azureBlobInfo.partitionBackedUpUntil);
+        compareMetadata(serverReplica, cloudReplica, azureBlobInfo.partitionBackedUpUntil);
       }
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
