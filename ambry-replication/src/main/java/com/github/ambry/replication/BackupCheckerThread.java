@@ -72,6 +72,7 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String BLOB_STATE_MISMATCHES_FILE = "blob_state_mismatches";
   public static final String REPLICA_STATUS_FILE = "server_replica_token";
   protected AtomicInteger numBlobScanned;
+  protected long partitionBackedUpUntil = -1;
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
@@ -100,12 +101,13 @@ public class BackupCheckerThread extends ReplicaThread {
     return this.fileManager;
   }
 
-  public void setAzureBlobMap(HashMap<String, MessageInfo> azureBlobMap) {
+  public void setAzureBlobInfo(HashMap<String, MessageInfo> azureBlobMap, long partitionBackedUpUntil) {
     if (azureBlobMap == null) {
       logger.error("Azure blob map cannot be null");
       return;
     }
     this.azureBlobMap = azureBlobMap;
+    this.partitionBackedUpUntil = partitionBackedUpUntil;
   }
 
   /**
@@ -199,7 +201,27 @@ public class BackupCheckerThread extends ReplicaThread {
                     : serverBlob.isEqual(azureBlob);
                 return new ImmutableTriple(serverBlob, azureBlob, status);
               })
-              .filter(tuple -> !((Set<BlobMatchStatus>) tuple.getRight()).contains(BLOB_STATE_MATCH))
+              .filter(tuple -> {
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that match between server and azure
+                return !status.contains(BLOB_STATE_MATCH);
+              })
+              .filter(tuple -> {
+                MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that are deleted or expired on server and absent in azure
+                // Blob can be absent in azure for 3 reasons:
+                // 1. backups haven't caught up
+                // 2. cloud compaction executed before server compaction
+                // 3. replication ignored such blobs and did not upload them to azure
+                return !((serverBlob.isDeleted() || serverBlob.isExpired()) && status.contains(BLOB_ABSENT_IN_AZURE));
+              })
+              .filter(tuple -> {
+                MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that are yet to be backed up
+                return !(serverBlob.getOperationTimeMs() > partitionBackedUpUntil && status.contains(BLOB_ABSENT_IN_AZURE));
+              })
               .forEach(tuple -> {
                 MessageInfo serverBlob = (MessageInfo) tuple.getLeft();
                 MessageInfo azureBlob = (MessageInfo) tuple.getMiddle();
@@ -254,13 +276,18 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   public void printKeysAbsentInServer(RemoteReplicaInfo rinfo) {
     String output = getFilePath(rinfo, BLOB_STATE_MISMATCHES_FILE);
-    azureBlobMap.values().forEach(azureBlob -> {
-      String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
+    azureBlobMap.values().stream()
+        .filter(azureBlob -> {
+          // ignore blobs absent in server and have expired/obsolete in azure
+          return !(azureBlob.isExpired() || azureBlob.isDeleted());
+        })
+        .forEach(azureBlob -> {
+          String msg = String.join(BackupCheckerFileManager.COLUMN_SEPARATOR,
           BLOB_ABSENT_IN_SERVER.name(),
           MessageInfo.toText(null), MessageInfo.toText(azureBlob),
           "\n");
-      fileManager.appendToFile(output, msg);
-      metrics.backupIntegrityError.inc();
+          fileManager.appendToFile(output, msg);
+          metrics.backupIntegrityError.inc();
     });
     azureBlobMap.clear();
   }
