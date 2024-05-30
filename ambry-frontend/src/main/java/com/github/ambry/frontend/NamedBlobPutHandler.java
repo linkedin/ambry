@@ -198,6 +198,8 @@ public class NamedBlobPutHandler {
       return buildCallback(frontendMetrics.putSecurityProcessRequestMetrics, securityCheckResult -> {
         if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
           restResponseChannel.setStatus(ResponseStatus.Continue);
+          //We need to set the content length in order to be a full http response in NettyResponseChannel::maybeWriteResponseMetadata.
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
           finalCallback.onCompletion(null, null);
         } else {
           //make sure this has been called after processRequest(permission check) since it needs to query dataset db.

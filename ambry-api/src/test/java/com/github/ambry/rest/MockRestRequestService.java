@@ -144,6 +144,7 @@ public class MockRestRequestService implements RestRequestService {
         restRequest.setArg(InternalKeys.SEND_TRACKING_INFO, "true");
         if (CONTINUE.equals(restRequest.getArgs().get(EXPECT))) {
           restResponseChannel.setStatus(ResponseStatus.Continue);
+          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
           handleResponse(restRequest, restResponseChannel, null, null);
           return;
         }

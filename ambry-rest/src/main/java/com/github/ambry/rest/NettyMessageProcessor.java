@@ -379,9 +379,9 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
       }
       boolean isPutOrPost = request.getRestMethod().equals(RestMethod.POST) || request.getRestMethod().equals(RestMethod.PUT);
       boolean isMultipart = request.isMultipart() && requestContentFullyReceived;
-      boolean hasContinue = CONTINUE.equals(request.getArgs().get(EXPECT));
-      if (success && (!isPutOrPost || isMultipart || hasContinue)) {
-        if (hasContinue) {
+      boolean hasContinueAndIsPut = RestUtils.isPutRequestAndExpectContinue(request);
+      if (success && (!isPutOrPost || isMultipart || hasContinueAndIsPut)) {
+        if (hasContinueAndIsPut) {
           request.setArg(EXPECT, "");
           removeInternalKeyFromRequest();
           responseChannel = new NettyResponseChannel(ctx, nettyMetrics, performanceConfig, nettyConfig);

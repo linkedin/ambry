@@ -101,6 +101,7 @@ class RequestResponseHandlerMetrics {
   // Errors
   // AsyncRequestWorker
   public final Counter requestProcessingError;
+  public final Counter requestProcessingThrowableError;
   public final Counter requestQueueAddError;
   public final Counter unknownRestMethodError;
   // AsyncResponseHandler
@@ -159,6 +160,9 @@ class RequestResponseHandlerMetrics {
     // AsyncRequestWorker
     requestProcessingError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "RequestProcessingError"));
+    //this record the throwable count which is not exception.
+    requestProcessingThrowableError =
+        metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "RequestProcessingThrowableError"));
     requestQueueAddError =
         metricRegistry.counter(MetricRegistry.name(AsyncRequestWorker.class, "RequestQueueAddError"));
     unknownRestMethodError =
