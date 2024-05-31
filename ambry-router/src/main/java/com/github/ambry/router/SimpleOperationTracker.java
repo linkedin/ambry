@@ -96,7 +96,7 @@ class SimpleOperationTracker implements OperationTracker {
   protected Iterator<ReplicaId> replicaIterator;
   protected final Set<ReplicaId> originatingDcLeaderOrStandbyReplicas;
   private final int originatingDcTotalReplicaCount;
-  private final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
+  protected final Map<ReplicaState, List<ReplicaId>> allDcReplicasByState;
   private final BlobId blobId;
   // is that possible to run the offline repair?
   private boolean possibleRunOfflineRepair;
@@ -575,7 +575,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param states a set of {@link ReplicaState}(s) that replicas should match.
    * @return a list of eligible replicas that are in specified states.
    */
-  private List<ReplicaId> getEligibleReplicas(String dcName, EnumSet<ReplicaState> states) {
+  protected List<ReplicaId> getEligibleReplicas(String dcName, EnumSet<ReplicaState> states) {
     Map<ReplicaState, List<ReplicaId>> replicasByState = getReplicasByState(dcName, states);
     List<ReplicaId> eligibleReplicas = new ArrayList<>();
     for (List<ReplicaId> replicas : replicasByState.values()) {
