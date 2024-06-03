@@ -31,6 +31,7 @@ import com.github.ambry.clustermap.StaticClusterManager;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.VerifiableProperties;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.replication.BackupCheckerThread;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicationManager;
@@ -38,17 +39,20 @@ import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
 import com.github.ambry.store.StorageManager;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreFindToken;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -272,13 +276,43 @@ public class BackupIntegrityMonitor implements Runnable {
   }
 
   /**
+   * Returns CRC of blob-content
+   * @param msg
+   * @param store
+   * @return CRC
+   */
+  Long getBlobContentCRC(MessageInfo msg, BlobStore store) {
+    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
+        StoreGetOptions.Store_Include_Expired);
+    MessageReadSet rdset = null;
+    Long crc = null;
+    try {
+      StoreInfo stinfo = store.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
+      rdset = stinfo.getMessageReadSet();
+      MessageInfo minfo = stinfo.getMessageReadSetInfo().get(0);
+      rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,
+          MessageFormatRecord.Crc_Size);
+      crc = rdset.getPrefetchedData(0).getLong(0);
+    } catch (Throwable e) {
+      String err = String.format("[BackupIntegrityMonitor] Failed to get CRC for blob %s due to",
+          msg.getStoreKey().getID());
+      logger.error(err, e);
+    } finally {
+      if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
+        rdset.getPrefetchedData(0).release();
+      }
+    }
+    return crc;
+  }
+
+
+  /**
    * Create a temporary map of all keys recovered from cloud
    * @param store
    * @return
    * @throws StoreException
-   * @throws IOException
    */
-  AzureBlobInfo getAzureBlobInfoFromLocalStore(BlobStore store) throws StoreException, IOException {
+  AzureBlobInfo getAzureBlobInfoFromLocalStore(BlobStore store) throws StoreException {
     HashMap<String, MessageInfo> azureBlobs = new HashMap<>();
     StoreFindToken newDiskToken = new StoreFindToken(), oldDiskToken = null;
     long partitionBackedUpUntil = Utils.Infinite_Time;
@@ -286,7 +320,7 @@ public class BackupIntegrityMonitor implements Runnable {
       FindInfo finfo = store.findEntriesSince(newDiskToken, 1000 * (2 << 20),
           null, null);
       for (MessageInfo msg: finfo.getMessageEntries()) {
-        azureBlobs.put(msg.getStoreKey().getID(), msg);
+        azureBlobs.put(msg.getStoreKey().getID(), new MessageInfo(msg, getBlobContentCRC(msg, store)));
         partitionBackedUpUntil = Math.max(partitionBackedUpUntil, msg.getOperationTimeMs());
       }
       oldDiskToken = newDiskToken;
