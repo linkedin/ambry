@@ -294,6 +294,7 @@ public class BackupIntegrityMonitor implements Runnable {
           MessageFormatRecord.Crc_Size);
       crc = rdset.getPrefetchedData(0).getLong(0);
     } catch (Throwable e) {
+      metrics.backupCheckerRuntimeError.inc();
       String err = String.format("[BackupIntegrityMonitor] Failed to get CRC for blob %s due to",
           msg.getStoreKey().getID());
       logger.error(err, e);
