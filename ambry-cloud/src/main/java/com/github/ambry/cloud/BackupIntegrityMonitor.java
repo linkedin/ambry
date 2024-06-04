@@ -134,14 +134,15 @@ public class BackupIntegrityMonitor implements Runnable {
         .forEach(d -> logger.info("[BackupIntegrityMonitor] Disk = {} {} {} bytes",
             d.getMountPath(), d.getState(), d.getRawCapacityInBytes()));
     logger.info("[BackupIntegrityMonitor] Created BackupIntegrityMonitor");
+    this.run(); // run once for debugging and testing
   }
 
   /**
    * Starts and schedules monitor
    */
   public void start() {
-    executor.scheduleWithFixedDelay(this::run, 0, 1, TimeUnit.HOURS);
-    logger.info("[BackupIntegrityMonitor] Started BackupIntegrityMonitor");
+    // executor.scheduleWithFixedDelay(this::run, 0, 1, TimeUnit.HOURS);
+    // logger.info("[BackupIntegrityMonitor] Started BackupIntegrityMonitor");
   }
 
   /**
@@ -171,24 +172,21 @@ public class BackupIntegrityMonitor implements Runnable {
         .get();
     logger.info("[BackupIntegrityMonitor] Largest replica for partition {} is {} bytes",
         partition.getId(), maxReplicaSize);
+    // Edit u00X to location where partition is stored.
+    // If one has already been selected for recovery, then plug that mount path below.
+    // You can find this in the server logs.
+    // grep "BackupIntegrityMonitor" ambry-server.log
+    // [BackupIntegrityMonitor] Selected disk at mount path /mnt/u003/ambrydata
+    // TODO: Select the disk where the partition to verify resides
     List<DiskId> disks = staticClusterManager.getDataNodeId(nodeId.getHostname(), nodeId.getPort())
         .getDiskIds().stream()
         .filter(d -> d.getState() == HardwareState.AVAILABLE)
+        .filter(d -> d.getMountPath().equals(<mountpath>))
         .collect(Collectors.toList());
     logger.info("[BackupIntegrityMonitor] {} disks can accommodate partition-{}", disks.size(), partition.getId());
     // Pick disk randomly; any disk is ok as we will wipe it out after this
     DiskId disk = disks.get(new Random().nextInt(disks.size()));
     logger.info("[BackupIntegrityMonitor] Selected disk at mount path {}", disk.getMountPath());
-    // Clear disk to make space, this is simpler instead of deciding which partition to delete.
-    // This is why this is thread-unsafe.
-    Arrays.stream(new File(disk.getMountPath()).listFiles()).forEach(f -> {
-      try {
-        Utils.deleteFileOrDirectory(f);
-      } catch (Throwable e) {
-        metrics.backupCheckerRuntimeError.inc();
-        throw new RuntimeException(String.format("[BackupIntegrityMonitor] Failed to delete %s due to %s", f, e));
-      }
-    });
     // Convert Disk object to AmbryDisk object, static-map object -> helix-map object
     AmbryDisk ambryDisk = new AmbryDisk((Disk) disk, clusterMapConfig);
     AmbryServerReplica localReplica = new AmbryServerReplica(clusterMapConfig, partition, ambryDisk,
@@ -314,9 +312,15 @@ public class BackupIntegrityMonitor implements Runnable {
         // If we have seen 90% of the partitions, then just clear the seen-set
         seen.clear();
       }
+      // Select the partition you wish to debug.
+      // If one has already been selected and recovered, then plug that partition id below.
+      // You can find it in the server logs.
+      // grep "BackupIntegrityMonitor" ambry-server.log
+      // [BackupIntegrityMonitor] Verifying backup partition-10
+      // TODO: Select a partition to verify
       partitions = partitions.stream()
           .filter(p -> !seen.contains(p.getId()))
-          .filter(p -> p.getId() <= 2000) // pick an older partition, likely backed up completely and is sealed
+          .filter(p -> p.getId() == <pid>)
           .collect(Collectors.toList());
       partition = (AmbryPartition) partitions.get(random.nextInt(partitions.size()));
       seen.add(partition.getId());
@@ -331,7 +335,8 @@ public class BackupIntegrityMonitor implements Runnable {
       // No need to reload tokens, since we clear off disks before each run
       azureReplicator.addRemoteReplicaInfo(cloudReplica);
       RecoveryToken azureToken = (RecoveryToken) cloudReplica.getToken();
-      while (!azureToken.isEndOfPartition()) {
+      // TODO: If partition is already present on local-disk, then do not recover it from cloud again
+      while (false && !azureToken.isEndOfPartition()) {
         azureReplicator.replicate();
         azureToken = (RecoveryToken) cloudReplica.getToken();
         long numBlobs = azureToken.getNumBlobs();
@@ -346,9 +351,11 @@ public class BackupIntegrityMonitor implements Runnable {
 
       /** Replicate from server and compare */
       // If we filter for SEALED replicas, then we may return empty as there may be no sealed replicas
+      // TODO: Select a replica to verify OR cut it out if you want to verify all replicas
       List<AmbryReplica> replicas = partition.getReplicaIds().stream()
           .filter(r -> r.getDataNodeId().getDatacenterName().equals(clusterMapConfig.clustermapVcrDatacenterName))
           .filter(r -> !r.isDown())
+          .filter(r -> r.getDataNodeId().getHostname().equals(<hostname>))
           .collect(Collectors.toList());
       if (replicas.isEmpty()) {
         throw new RuntimeException(String.format("[BackupIntegrityMonitor] No server replicas available for partition-%s",
