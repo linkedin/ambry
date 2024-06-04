@@ -277,33 +277,20 @@ public class BackupIntegrityMonitor implements Runnable {
 
   /**
    * Returns CRC of blob-content
-   * @param msg
-   * @param store
-   * @return CRC
+   * @param msg Metadata of blob
+   * @param store Local blob store
+   * @return CRC of blob-content
    */
   Long getBlobContentCRC(MessageInfo msg, BlobStore store) {
-    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
-        StoreGetOptions.Store_Include_Expired);
-    MessageReadSet rdset = null;
-    Long crc = null;
     try {
-      StoreInfo stinfo = store.get(Collections.singletonList(msg.getStoreKey()), storeGetOptions);
-      rdset = stinfo.getMessageReadSet();
-      MessageInfo minfo = stinfo.getMessageReadSetInfo().get(0);
-      rdset.doPrefetch(0, minfo.getSize() - MessageFormatRecord.Crc_Size,
-          MessageFormatRecord.Crc_Size);
-      crc = rdset.getPrefetchedData(0).getLong(0);
+      return store.getBlobContentCRC(msg);
     } catch (Throwable e) {
       metrics.backupCheckerRuntimeError.inc();
       String err = String.format("[BackupIntegrityMonitor] Failed to get CRC for blob %s due to",
           msg.getStoreKey().getID());
       logger.error(err, e);
-    } finally {
-      if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
-        rdset.getPrefetchedData(0).release();
-      }
     }
-    return crc;
+    return null;
   }
 
 
