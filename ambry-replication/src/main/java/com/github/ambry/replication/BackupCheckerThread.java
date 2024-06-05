@@ -19,20 +19,36 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
+import com.github.ambry.messageformat.BlobAll;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.BlobMatchStatus;
+import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.store.Transformer;
+import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Time;
+import io.netty.buffer.ByteBuf;
 import java.io.File;
+import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,6 +83,7 @@ public class BackupCheckerThread extends ReplicaThread {
   protected final BackupCheckerFileManager fileManager;
   protected final ReplicationConfig replicationConfig;
   private final ReplicationMetrics metrics;
+  private final StoreKeyFactory storeKeyFactory;
   protected HashMap<String, MessageInfo> azureBlobMap;
   public static final String DR_Verifier_Keyword = "dr";
   public static final String BLOB_STATE_MISMATCHES_FILE = "blob_state_mismatches";
@@ -77,7 +94,7 @@ public class BackupCheckerThread extends ReplicaThread {
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, NetworkClient networkClient,
       ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
+      StoreKeyConverter storeKeyConverter, StoreKeyFactory storeKeyFactory, Transformer transformer, MetricRegistry metricRegistry,
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
@@ -86,6 +103,7 @@ public class BackupCheckerThread extends ReplicaThread {
         datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     fileManager = new BackupCheckerFileManager(replicationConfig, metricRegistry);
     this.replicationConfig = replicationConfig;
+    this.storeKeyFactory = storeKeyFactory;
     azureBlobMap = new HashMap<>();
     metrics = new ReplicationMetrics(clusterMap.getMetricRegistry(), Collections.emptyList());
     // Reset these counters if re-using the same thread object
@@ -167,6 +185,51 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
+   * Helper method to create a stream with encryption key record. This will be the standard once all nodes in a cluster
+   * understand reading messages with encryption key record.
+   *
+   * @return
+   */
+  long getCRC(BlobAll blob) throws MessageFormatException {
+    StoreKey key = blob.getStoreKey();
+    ByteBuffer blobEncryptionKey = blob.getBlobEncryptionKey();
+    BlobProperties blobProperties = blob.getBlobInfo().getBlobProperties();
+    blobProperties = new BlobProperties(blobProperties, null); // Exclude reservedMetadataBlobId
+    ByteBuffer userMetadata = ByteBuffer.wrap(blob.getBlobInfo().getUserMetadata());
+    InputStream blobStream = new NettyByteBufDataInputStream(blob.getBlobData().content());
+    long streamSize = blob.getBlobData().getSize();
+    BlobType blobType = blob.getBlobData().getBlobType();
+    short lifeVersion = blob.getBlobInfo().getLifeVersion();
+    boolean isCompressed = blob.getBlobData().isCompressed();
+    PutMessageFormatInputStream transformedStream =
+        new PutMessageFormatInputStream(key, blobEncryptionKey, blobProperties, userMetadata,
+            blobStream, streamSize, blobType,
+            lifeVersion, isCompressed);
+    return transformedStream.getCRC();
+  }
+
+  Set<BlobMatchStatus> recheck(RemoteReplicaInfo replica, MessageInfo serverBlob, MessageInfo azureBlob) {
+    BlobStore store = (BlobStore) replica.getLocalStore();
+    EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
+        StoreGetOptions.Store_Include_Expired);
+    MessageReadSet rdset = null;
+    try {
+      StoreInfo stinfo = store.get(Collections.singletonList(azureBlob.getStoreKey()), storeGetOptions);
+      rdset = stinfo.getMessageReadSet();
+      rdset.doPrefetch(0, 0, rdset.sizeInBytes(0));
+      ByteBuf bytebuf = rdset.getPrefetchedData(0);
+      BlobAll blob = MessageFormatRecord.deserializeBlobAll(new NettyByteBufDataInputStream(bytebuf), storeKeyFactory);
+      return serverBlob.isEqual(new MessageInfo(azureBlob, getCRC(blob)));
+    } catch (Throwable e) {
+    } finally {
+      if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
+        rdset.getPrefetchedData(0).release();
+      }
+    }
+    return null;
+  }
+
+  /**
    * Checks each blob from server with its counterpart in cloud backup.
    * There are 4 cases.
    * server-blob : cloud-blob
@@ -199,6 +262,10 @@ public class BackupCheckerThread extends ReplicaThread {
                 MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey().getID());
                 Set<BlobMatchStatus> status = azureBlob == null ? Collections.singleton(BLOB_ABSENT_IN_AZURE)
                     : serverBlob.isEqual(azureBlob);
+                // if crc mismatch, then re-check
+                if (status.contains(BLOB_STATE_CRC_MISMATCH) || status.contains(BLOB_STATE_SIZE_MISMATCH)) {
+                  status = recheck(replica, serverBlob, azureBlob);
+                }
                 return new ImmutableTriple(serverBlob, azureBlob, status);
               })
               .filter(tuple -> {

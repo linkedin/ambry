@@ -161,4 +161,8 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     messageLength = buffer.capacity() + streamLength + MessageFormatRecord.Crc_Size;
     buffer.flip();
   }
+
+  public long getCRC() {
+    return stream.getValue();
+  }
 }

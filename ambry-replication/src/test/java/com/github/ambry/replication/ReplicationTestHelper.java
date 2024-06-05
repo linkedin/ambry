@@ -361,7 +361,8 @@ public class ReplicationTestHelper {
     if (createBackupCheckerThread) {
       replicaThread =
           new BackupCheckerThread("threadtest", findTokenHelper, clusterMap, new AtomicInteger(0), localHost.dataNodeId,
-              networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, transformer,
+              networkClient, replicationConfig, replicationMetrics, null, storeKeyConverter, storeKeyFactory,
+              transformer,
               clusterMap.getMetricRegistry(), false, localHost.dataNodeId.getDatacenterName(),
               new ResponseHandler(clusterMap), time, replicaSyncUpManager, null, null);
     } else {
