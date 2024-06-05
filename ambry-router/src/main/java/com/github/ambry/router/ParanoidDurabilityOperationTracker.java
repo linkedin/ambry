@@ -50,12 +50,12 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       NonBlockingRouterMetrics routerMetrics) {
     super(routerConfig, RouterOperation.PutOperation, partitionId, originatingDcName, true, routerMetrics);
 
-    localReplicaParallelism = routerConfig.routerPutLocalRequestParallelism;
+    localReplicaParallelism = routerConfig.routerPutRequestParallelism;
     remoteReplicaParallelism = routerConfig.routerPutRemoteRequestParallelism;
-    localReplicaSuccessTarget = routerConfig.routerPutLocalSuccessTarget;
+    localReplicaSuccessTarget = routerConfig.routerPutSuccessTarget;
     remoteReplicaSuccessTarget = routerConfig.routerPutRemoteSuccessTarget;
 
-    List<ReplicaId> allEligibleReplicas = getEligibleReplicas(datacenterName, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
+    List<ReplicaId> allEligibleReplicas = getEligibleReplicas(null, EnumSet.of(ReplicaState.STANDBY, ReplicaState.LEADER));
     addReplicasToPool(allEligibleReplicas);
     this.otIterator = new ParanoidDurabilityTrackerIterator();
   }
@@ -65,7 +65,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
 
     for (ReplicaId replicaId : replicas) {
       if (!replicaId.isDown()) {
-          addToBeginningOfPool(replicaId);
+        addToBeginningOfPool(replicaId);
       } else {
         addToEndOfPool(replicaId); // As a last ditch attempt, we may still try to write to a down replica.
       }
