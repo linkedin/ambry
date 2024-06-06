@@ -19,6 +19,7 @@ import com.github.ambry.clustermap.ReplicaState;
 import com.github.ambry.config.RouterConfig;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -48,6 +49,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   protected int remoteInflightCount = 0;
   protected int localReplicaSuccessCount = 0;
   protected int remoteReplicaSuccessCount = 0;
+  private int currentDatacenterIndex = 0;
   private final Map<String, LinkedList<ReplicaId>> replicaPoolByDc = new HashMap<>();
   private final ParanoidDurabilityTrackerIterator otIterator;
   private Iterator<ReplicaId> replicaByDcIterator;
@@ -58,6 +60,8 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   private Map<String, Integer> totalReplicaCountByDc;
   private Set<String> allDatacenters;
   private List<String> remoteDatacenters;
+  private final LinkedList<ReplicaId> localReplicas = new LinkedList<>();
+  private final LinkedList<ReplicaId> remoteReplicas = new LinkedList<>();
 
   ParanoidDurabilityOperationTracker(RouterConfig routerConfig, PartitionId partitionId, String originatingDcName,
       NonBlockingRouterMetrics routerMetrics) {
@@ -77,17 +81,80 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     Collections.shuffle(replicas);
 
     for (ReplicaId replicaId : replicas) {
-      if (!replicaId.isDown()) {
-        addToBeginningOfPool(replicaId);
-      } else {
-        addToEndOfPool(replicaId); // As a last ditch attempt, we may still try to write to a down replica.
-      }
+      addToPool(replicaId);
     }
 
     if(!enoughReplicas()) {
       throw new IllegalArgumentException(generateErrorMessage(partitionId));
     }
     initializeTracking();
+    listRemoteReplicas();
+  }
+
+  /**
+   * Generate the list of remote replicas to send requests to. The list is ordered by Helix state as follows:
+   * 1. ReplicaIds in Helix LEADER state. Since Ambry replication happens between leaders in data centers, we prefer to
+   *    prioritize sending requests to leaders first, in order to reduce replication traffic (if a blob is already
+   *    present on a leader, we do not need to request it from another data center).
+   * 2. ReplicaIds in Helix STANDBY state.
+   * 3. All other ReplicaIds.
+   * Note that the list of remote replicas is also ordered by alternating remote data centers. The intuition is that if
+   * the first request to a remote data center fails, we attempt reaching a replica in a different data center instead
+   * of retrying the same data center. A hypothetical example of such an ordered list, assuming that the remote colos
+   * are prod-ltx1 and prod-lva1:
+   * [prod-ltx1-LEADER, prod-lva1-LEADER, prod-ltx1-STANDBY, prod-lva1-STANDBY, prod-ltx1-STANDBY, prod-lva1-STANDBY]
+   */
+  private void listRemoteReplicas() {
+    // Custom comparator to sort ReplicaId instances, such that those that are in Helix LEADER state appear first,
+    // followed by STANDBY, followed by anything else.
+    Comparator<ReplicaId> replicaIdComparator = (r1, r2) -> {
+      if (getReplicaState(r1) == ReplicaState.LEADER && getReplicaState(r2) != ReplicaState.LEADER) {
+        return -1;
+      } else if (getReplicaState(r1) != ReplicaState.LEADER && getReplicaState(r2) == ReplicaState.LEADER) {
+        return 1;
+      } else if (getReplicaState(r1) == ReplicaState.STANDBY && getReplicaState(r2) != ReplicaState.STANDBY) {
+        return -1;
+      } else if (getReplicaState(r1) != ReplicaState.STANDBY && getReplicaState(r2) == ReplicaState.STANDBY) {
+        return 1;
+      }
+      return 0;
+    };
+
+    for(String dcName : remoteDatacenters) {
+      Collections.sort(replicaPoolByDc.get(dcName), replicaIdComparator);
+    }
+
+    // While there are still replicas left in any remote colo, append remote replicas to the list in alternating colo
+    // order.
+    while(remoteReplicasLeft())
+    {
+      String nextDc = getNextRemoteDatacenter();
+      if(!replicaPoolByDc.get(nextDc).isEmpty())
+        remoteReplicas.addLast(replicaPoolByDc.get(nextDc).removeFirst());
+    }
+  }
+
+  // Returns true if there are still remote replicas that have not been added to the final list, false otherwise.
+  private boolean remoteReplicasLeft() {
+    for(String dcName : remoteDatacenters) {
+      if(!replicaPoolByDc.get(dcName).isEmpty()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private String getNextRemoteDatacenter()  {
+    int i = 0;
+    int remoteDatacenterCount = remoteDatacenters.size();
+    String nextDatacenter;
+    do {
+      nextDatacenter = remoteDatacenters.get(currentDatacenterIndex);
+      currentDatacenterIndex = (currentDatacenterIndex + 1) % remoteDatacenterCount;
+      i++;
+    } while (replicaPoolByDc.get(nextDatacenter).isEmpty() &&
+        i <= remoteDatacenterCount);                           // Guard against infinite loop
+    return nextDatacenter;
   }
 
   private void initializeTracking() {
@@ -117,24 +184,15 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   }
 
   private boolean enoughReplicas() {
-    int remoteReplicaCount = 0;
-    for (String currentDc : replicaPoolByDc.keySet()) {
-      if(currentDc.equals(datacenterName)) {
-        if (replicaPoolByDc.get(currentDc).size() < localReplicaSuccessTarget) {
-          logger.error("Not enough replicas in local data center for partition " + partitionId +
-              " to satisfy paranoid durability requirements " +
-              "(wanted " + localReplicaSuccessTarget + ", but found " + replicaPoolByDc.get(currentDc).size() + ")");
-          return false;
-        }
-      } else {
-        remoteReplicaCount += replicaPoolByDc.get(currentDc).size();
-      }
+    if (localReplicas.size() < localReplicaSuccessTarget) {
+      logger.error("Not enough replicas in local data center for partition " + partitionId
+          + " to satisfy paranoid durability requirements " + "(wanted " + localReplicaSuccessTarget + ", but found " + localReplicas.size() + ")");
+      return false;
     }
 
-    if (remoteReplicaCount < remoteReplicaSuccessTarget) {
-      logger.error("Not enough replicas in remote data centers  for partition " + partitionId
-          + " to satisfy paranoid durability requirements " +
-          "(wanted " + remoteReplicaSuccessTarget + ", but found " + remoteReplicaCount + ")");
+    if (remoteReplicas.size() < remoteReplicaSuccessTarget) {
+      logger.error("Not enough replicas in remote data centers for partition " + partitionId
+          + " to satisfy paranoid durability requirements " + "(wanted " + remoteReplicaSuccessTarget + ", but found " + remoteReplicas.size() + ")");
       return false;
     }
     return true;
@@ -153,24 +211,21 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   }
 
   /**
-   * Add a replica to the beginning of the replica pool linked list for the given data center.
+   * Add a replica to the to the list for its data center.
    * @param replicaId the replica to add.
    */
-  private void addToBeginningOfPool(ReplicaId replicaId) {
+  private void addToPool(ReplicaId replicaId) {
+    String replicaDatacenterName = replicaId.getDataNodeId().getDatacenterName();
     modifyReplicasInPoolOrInFlightCount(replicaId, 1);
-    replicaPoolByDc.computeIfAbsent(replicaId.getDataNodeId().getDatacenterName(), k -> new LinkedList<>())
-        .addFirst(replicaId);
-  }
+    if(replicaDatacenterName.equals(datacenterName)) {
+      if(!replicaId.isDown())
+        localReplicas.addFirst(replicaId);
+    } else {
+      localReplicas.addLast(replicaId);
+    }
 
-
-  /**
-   * Add a replica to the end of the replica pool linked list for the given data center.
-   * @param replicaId the replica to add.
-   */
-  private void addToEndOfPool(ReplicaId replicaId) {
-    modifyReplicasInPoolOrInFlightCount(replicaId, 1);
-    replicaPoolByDc.computeIfAbsent(replicaId.getDataNodeId().getDatacenterName(), k -> new LinkedList<>())
-        .addLast(replicaId);
+    // Remote replicas will be sorted later so just add them in any order.
+    replicaPoolByDc.computeIfAbsent(replicaDatacenterName, k -> new LinkedList<>()).add(replicaId);
   }
 
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
@@ -254,9 +309,23 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     return otIterator;
   }
 
+  // This class is used to iterate over the replicas that have been chosen for this PUT operation.
+  // Traditionally, ambry-frontend has used the Java Iterator abstraction for this purpose, even though the underlying
+  // implementation here and in the other OperationTracker classes is not a traditional Iterator. This is because we
+  // keep track of in-flight requests, successful and failed responses, and the configured parallelism and success targets.
+  // Sometimes hasNext() will return false, even though there are more replicas we could send requests to, because we
+  // need to wait for more responses to come back before we can send more requests. Thus, the caller needs to "poll"
+  // hasNext() until it returns true before calling next().
+  //
+  // Bear in mind the following about how ParanoidDurabilityTrackerIterator behaves:
+  // 1. We send requests to local replicas until we have fulfilled local replica parallelism. CONCURRENTLY, we also
+  //    allow sending requests to remote replicas until we have fulfilled remote replica parallelism. We do not want to
+  //    wait for PUT requests to succeed locally before attempting the remote writes. PUT requests are usually very
+  //    reliable in Ambry anyway, since we filter out only the healthiest replicas to send requests to, so we would
+  //    expect very few failed requests.
+  // 2. The order in which we send requests to remote replicas is determined by the order in which the remote replicas
+  //    are listed in the remoteReplicas list, which is generated by the listRemoteReplicas() method.
   private class ParanoidDurabilityTrackerIterator implements Iterator<ReplicaId> {
-    private int currentDatacenterIndex = 0;
-
     @Override
     public boolean hasNext() {
       return hasNextLocal() || hasNextRemote();
@@ -266,10 +335,11 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
     public void remove() {
       if(isLocalReplica(lastReturnedByIterator)){
         localInflightCount++;
+        localReplicas.remove(lastReturnedByIterator);
       } else {
         remoteInflightCount++;
+        remoteReplicas.remove(lastReturnedByIterator);
       }
-      replicaPoolByDc.get(lastReturnedByIterator.getDataNodeId().getDatacenterName()).remove(lastReturnedByIterator);
     }
 
     @Override
@@ -279,52 +349,24 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       }
 
       if (hasNextLocal()) {
-        lastReturnedByIterator = replicaPoolByDc.get(datacenterName).removeFirst();
+        lastReturnedByIterator = localReplicas.removeFirst();
       } else {
         // hasNextRemote() must be true
-        String nextColo = getNextRemoteDatacenter();
-        lastReturnedByIterator = replicaPoolByDc.get(nextColo).removeFirst();
+        lastReturnedByIterator = remoteReplicas.removeFirst();
       }
       return lastReturnedByIterator;
     }
 
     private boolean hasNextLocal() {
-      return localInflightCount < getCurrentLocalParallelism() && !replicaPoolByDc.get(datacenterName).isEmpty();
+      return localInflightCount < getCurrentLocalParallelism() && !localReplicas.isEmpty();
     }
 
     private boolean hasNextRemote() {
-      return remoteInflightCount < getCurrentRemoteParallelism() && remoteReplicasLeft();
-    }
-
-    private boolean remoteReplicasLeft() {
-      for(String dcName : remoteDatacenters) {
-        if(!replicaPoolByDc.get(dcName).isEmpty()) {
-          return true;
-        }
-      }
-      return false;
+      return remoteInflightCount < getCurrentRemoteParallelism() && !remoteReplicas.isEmpty();
     }
 
     private boolean isLocalReplica(ReplicaId replica) {
       return replica.getDataNodeId().getDatacenterName().equals(datacenterName);
-    }
-
-    /**
-     * Get the next remote DC to send a request to. This method should only get called if there are remote
-     * replicas left to send requests to, so there must be at least one remote DC that has at least one replica left.
-     * @return the name of the next remote data center to send a request to.
-     */
-    private String getNextRemoteDatacenter()  {
-      int i = 0;
-      int remoteDatacenterCount = remoteDatacenters.size();
-      String nextDatacenter;
-      do {
-        nextDatacenter = remoteDatacenters.get(currentDatacenterIndex);
-        currentDatacenterIndex = (currentDatacenterIndex + 1) % remoteDatacenterCount;
-        i++;
-      } while (replicaPoolByDc.get(nextDatacenter).isEmpty() &&
-          i <= remoteDatacenterCount);                           // Guard against infinite loop
-      return nextDatacenter;
     }
   }
 }

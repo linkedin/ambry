@@ -820,7 +820,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param replicaId The replica id
    * @return Replica state for replica id.
    */
-  private ReplicaState getReplicaState(ReplicaId replicaId) {
+  protected ReplicaState getReplicaState(ReplicaId replicaId) {
     for (Map.Entry<ReplicaState, List<ReplicaId>> entry : allDcReplicasByState.entrySet()) {
       if (entry.getValue().contains(replicaId)) {
         return entry.getKey();
