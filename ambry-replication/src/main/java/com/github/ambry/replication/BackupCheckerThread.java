@@ -206,6 +206,14 @@ public class BackupCheckerThread extends ReplicaThread {
     return transformedStream.getCRC();
   }
 
+  /**
+   * Re-check blob crc by fetching the local blob and re-computing CRC by omitting desired fields
+   * @param replica
+   * @param serverBlob
+   * @param azureBlob
+   * @param status
+   * @return
+   */
   Set<BlobMatchStatus> recheck(RemoteReplicaInfo replica, MessageInfo serverBlob, MessageInfo azureBlob,
       Set<BlobMatchStatus> status) {
     BlobStore store = (BlobStore) replica.getLocalStore();
