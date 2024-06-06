@@ -185,9 +185,7 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
-   * Helper method to create a stream with encryption key record. This will be the standard once all nodes in a cluster
-   * understand reading messages with encryption key record.
-   *
+   * Re-serialize blob and return CRC
    * @return
    */
   long getCRC(BlobAll blob) throws MessageFormatException {
@@ -208,7 +206,8 @@ public class BackupCheckerThread extends ReplicaThread {
     return transformedStream.getCRC();
   }
 
-  Set<BlobMatchStatus> recheck(RemoteReplicaInfo replica, MessageInfo serverBlob, MessageInfo azureBlob) {
+  Set<BlobMatchStatus> recheck(RemoteReplicaInfo replica, MessageInfo serverBlob, MessageInfo azureBlob,
+      Set<BlobMatchStatus> status) {
     BlobStore store = (BlobStore) replica.getLocalStore();
     EnumSet<StoreGetOptions> storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted,
         StoreGetOptions.Store_Include_Expired);
@@ -221,12 +220,13 @@ public class BackupCheckerThread extends ReplicaThread {
       BlobAll blob = MessageFormatRecord.deserializeBlobAll(new NettyByteBufDataInputStream(bytebuf), storeKeyFactory);
       return serverBlob.isEqual(new MessageInfo(azureBlob, getCRC(blob)));
     } catch (Throwable e) {
+      logger.error("Failed to recompute crc due to ", e);
     } finally {
       if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
         rdset.getPrefetchedData(0).release();
       }
     }
-    return null;
+    return status;
   }
 
   /**
@@ -264,7 +264,7 @@ public class BackupCheckerThread extends ReplicaThread {
                     : serverBlob.isEqual(azureBlob);
                 // if crc mismatch, then re-check
                 if (status.contains(BLOB_STATE_CRC_MISMATCH) || status.contains(BLOB_STATE_SIZE_MISMATCH)) {
-                  status = recheck(replica, serverBlob, azureBlob);
+                  status = recheck(replica, serverBlob, azureBlob, status);
                 }
                 return new ImmutableTriple(serverBlob, azureBlob, status);
               })
