@@ -50,16 +50,12 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   protected int localReplicaSuccessCount = 0;
   protected int remoteReplicaSuccessCount = 0;
   private int currentDatacenterIndex = 0;
+  int totalLocalReplicaCount;
+  int failedLocalReplicas = 0;
+  int disabledLocalReplicas = 0;
   private final Map<String, LinkedList<ReplicaId>> replicaPoolByDc = new HashMap<>();
   private final ParanoidDurabilityTrackerIterator otIterator;
-  private Iterator<ReplicaId> replicaByDcIterator;
-  private Map<String, Integer> failedCountByDc;
-  private Map<String, Integer> replicaSuccessCountByDc;
-  private Map<String, Integer> disabledCountByDc;
-  private Map<String, Integer> replicaInPoolOrFlightCountByDc;
-  private Map<String, Integer> totalReplicaCountByDc;
-  private Set<String> allDatacenters;
-  private List<String> remoteDatacenters;
+  private final List<String> remoteDatacenters = new ArrayList<>();
   private final LinkedList<ReplicaId> localReplicas = new LinkedList<>();
   private final LinkedList<ReplicaId> remoteReplicas = new LinkedList<>();
 
@@ -120,6 +116,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
       return 0;
     };
 
+    // Sort the replicas in each remote data center such that LEADER replicas appear first, then STANDBY replicas.
     for(String dcName : remoteDatacenters) {
       Collections.sort(replicaPoolByDc.get(dcName), replicaIdComparator);
     }
@@ -158,17 +155,11 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   }
 
   private void initializeTracking() {
-    replicaSuccessCountByDc = new HashMap<String, Integer>();
-    replicaInPoolOrFlightCountByDc = new HashMap<String, Integer>();
-    remoteDatacenters = new ArrayList<String>();
+    totalLocalReplicaCount = localReplicas.size();
+    failedLocalReplicas = 0;
+    disabledLocalReplicas = 0;
 
     replicaPoolByDc.forEach((dcName, v) -> {
-      failedCountByDc.put(dcName, 0);
-      replicaSuccessCountByDc.put(dcName, 0);
-      replicaInPoolOrFlightCountByDc.put(dcName, 0);
-      disabledCountByDc.put(dcName, 0);
-      totalReplicaCountByDc.put(dcName, v.size());
-      allDatacenters.add(dcName);
       if(!dcName.equals(datacenterName)) {
         remoteDatacenters.add(dcName);
       }
@@ -203,6 +194,11 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   }
 
   private boolean hasSucceededLocally() {
+    // This logic only applies locally, to replicas where the quorum can change during replica movement.
+    if(routerConfig.routerPutUseDynamicSuccessTarget) {
+      int dynamicSuccessTarget = Math.max(totalLocalReplicaCount - disabledLocalReplicas - 1, routerConfig.routerPutSuccessTarget);
+      return localReplicaSuccessCount >= dynamicSuccessTarget;
+    }
     return localReplicaSuccessCount >= localReplicaSuccessTarget;
   }
 
@@ -231,12 +227,10 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   public void onResponse(ReplicaId replicaId, TrackedRequestFinalState trackedRequestFinalState) {
     super.onResponse(replicaId, trackedRequestFinalState);
     modifyReplicasInPoolOrInFlightCount(replicaId, -1);
-
     String dcName = replicaId.getDataNodeId().getDatacenterName();
 
     switch (trackedRequestFinalState) {
       case SUCCESS:
-        replicaSuccessCountByDc.put(dcName, replicaSuccessCountByDc.get(dcName) + 1);
         if (dcName.equals(datacenterName)) {
           localReplicaSuccessCount++;
         } else {
@@ -244,46 +238,35 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
         }
         break;
       case REQUEST_DISABLED:
-        disabledCountByDc.put(dcName, disabledCountByDc.get(dcName) + 1);
+        if (dcName.equals(datacenterName)) { // Only track this locally, for dynamic success/failure purposes
+          disabledLocalReplicas++;
+        }
         break;
       default:
-        failedCountByDc.put(dcName, failedCountByDc.get(dcName) + 1);
+        if (dcName.equals(datacenterName)) { // Only track this locally, for dynamic success/failure purposes
+          failedLocalReplicas++;
+        }
     }
   }
 
   public boolean hasFailed() {
-    if (routerConfig.routerPutUseDynamicSuccessTarget) {
-      for(String dcName : allDatacenters) {
-        if (dcName.equals(datacenterName)) {  // Local colo
-          if (hasFailedDynamically(dcName, routerConfig.routerPutSuccessTarget)) return true;
-        } else {
-          if (hasFailedDynamically(dcName, routerConfig.routerPutRemoteSuccessTarget)) return true;
-        }
-      }
-      return false;
-    } else {
       return hasFailedLocally() || hasFailedRemotely();
-    }
   }
 
-  private boolean hasFailedDynamically(String dc, int successTarget)  {
-    return (totalReplicaCountByDc.get(dc) - failedCountByDc.get(dc)) < Math.max(totalReplicaCountByDc.get(dc) - 1, successTarget + disabledCountByDc.get(dc));
-  }
-
-  private boolean hasFailedRemotely() {
-    for(String dcName : allDatacenters) {
-      if(!dcName.equals(datacenterName)) {
-        if (replicaSuccessCountByDc.get(dcName) < Math.max(totalReplicaCountByDc.get(dcName) - 1,
-            routerConfig.routerPutRemoteSuccessTarget + disabledCountByDc.get(dcName))) {
-          return true;
-        }
-      }
+  private boolean hasFailedDynamically()  {
+    if (routerConfig.routerPutUseDynamicSuccessTarget) {
+      return (totalLocalReplicaCount - failedLocalReplicas) < Math.max(totalLocalReplicaCount - 1, localReplicaSuccessTarget + disabledLocalReplicas);
     }
     return false;
   }
 
+  private boolean hasFailedRemotely() {
+    return (remoteReplicaSuccessCount + remoteInflightCount + remoteReplicas.size()) < remoteReplicaSuccessTarget;
+  }
+
   private boolean hasFailedLocally() {
-    return replicaInPoolOrFlightCountByDc.get(datacenterName) + replicaSuccessCountByDc.get(datacenterName) < localReplicaSuccessTarget;
+    return hasFailedDynamically() || // The dynamic failure mode only applies in the local colo.
+           ((localReplicaSuccessCount + localInflightCount + localReplicas.size()) < localReplicaSuccessTarget);
   }
 
   /**
@@ -292,7 +275,11 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
    */
   private void modifyReplicasInPoolOrInFlightCount(ReplicaId replica, int delta) {
     String dcName = replica.getDataNodeId().getDatacenterName();
-    replicaInPoolOrFlightCountByDc.put(dcName, replicaInPoolOrFlightCountByDc.get(dcName) + delta);
+    if(dcName.equals(datacenterName)) {
+      localInflightCount += delta;
+    } else {
+      remoteInflightCount += delta;
+    }
   }
 
 
