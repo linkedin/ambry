@@ -1,3 +1,16 @@
+/**
+ * Copyright 2024 LinkedIn Corp. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ */
 package com.github.ambry.router;
 
 import com.github.ambry.clustermap.PartitionId;
@@ -104,6 +117,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   }
 
   private boolean enoughReplicas() {
+    int remoteReplicaCount = 0;
     for (String currentDc : replicaPoolByDc.keySet()) {
       if(currentDc.equals(datacenterName)) {
         if (replicaPoolByDc.get(currentDc).size() < localReplicaSuccessTarget) {
@@ -113,13 +127,15 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
           return false;
         }
       } else {
-        if (replicaPoolByDc.get(currentDc).size() < remoteReplicaSuccessTarget) {
-          logger.error("Not enough replicas in remote data center " + currentDc + " for partition " + partitionId
-              + " to satisfy paranoid durability requirements " +
-              "(wanted " + remoteReplicaSuccessTarget + ", but found " + replicaPoolByDc.get(currentDc).size() + ")");
-          return false;
-        }
+        remoteReplicaCount += replicaPoolByDc.get(currentDc).size();
       }
+    }
+
+    if (remoteReplicaCount < remoteReplicaSuccessTarget) {
+      logger.error("Not enough replicas in remote data centers  for partition " + partitionId
+          + " to satisfy paranoid durability requirements " +
+          "(wanted " + remoteReplicaSuccessTarget + ", but found " + remoteReplicaCount + ")");
+      return false;
     }
     return true;
   }
@@ -212,7 +228,7 @@ public class ParanoidDurabilityOperationTracker extends SimpleOperationTracker {
   }
 
   private boolean hasFailedLocally() {
-    return replicaInPoolOrFlightCountByDc.get(datacenterName) + replicaSuccessCountByDc.get(datacenterName) < replicaSuccessTarget;
+    return replicaInPoolOrFlightCountByDc.get(datacenterName) + replicaSuccessCountByDc.get(datacenterName) < localReplicaSuccessTarget;
   }
 
   /**
