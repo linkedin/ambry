@@ -185,28 +185,6 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
-   * Re-serialize blob and return CRC
-   * @return
-   */
-  long getCRC(BlobAll blob) throws MessageFormatException {
-    StoreKey key = blob.getStoreKey();
-    ByteBuffer blobEncryptionKey = blob.getBlobEncryptionKey();
-    BlobProperties blobProperties = blob.getBlobInfo().getBlobProperties();
-    blobProperties = new BlobProperties(blobProperties, null); // Exclude reservedMetadataBlobId
-    ByteBuffer userMetadata = ByteBuffer.wrap(blob.getBlobInfo().getUserMetadata());
-    InputStream blobStream = new NettyByteBufDataInputStream(blob.getBlobData().content());
-    long streamSize = blob.getBlobData().getSize();
-    BlobType blobType = blob.getBlobData().getBlobType();
-    short lifeVersion = blob.getBlobInfo().getLifeVersion();
-    boolean isCompressed = blob.getBlobData().isCompressed();
-    PutMessageFormatInputStream transformedStream =
-        new PutMessageFormatInputStream(key, blobEncryptionKey, blobProperties, userMetadata,
-            blobStream, streamSize, blobType,
-            lifeVersion, isCompressed);
-    return transformedStream.getCRC();
-  }
-
-  /**
    * Re-check blob crc by fetching the local blob and re-computing CRC by omitting desired fields
    * @param replica
    * @param serverBlob
@@ -226,7 +204,8 @@ public class BackupCheckerThread extends ReplicaThread {
       rdset.doPrefetch(0, 0, rdset.sizeInBytes(0));
       ByteBuf bytebuf = rdset.getPrefetchedData(0);
       BlobAll blob = MessageFormatRecord.deserializeBlobAll(new NettyByteBufDataInputStream(bytebuf), storeKeyFactory);
-      return serverBlob.isEqual(new MessageInfo(azureBlob, getCRC(blob)));
+      long crc = new PutMessageFormatInputStream(blob).getCRC();
+      return serverBlob.isEqual(new MessageInfo(azureBlob, crc));
     } catch (Throwable e) {
       logger.error("Failed to recompute crc due to ", e);
     } finally {

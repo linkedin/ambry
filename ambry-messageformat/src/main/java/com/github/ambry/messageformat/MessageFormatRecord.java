@@ -1167,6 +1167,19 @@ public class MessageFormatRecord {
       return Version_Field_Size_In_Bytes + BlobPropertiesSerDe.getBlobPropertiesSerDeSize(properties) + Crc_Size;
     }
 
+    public static int getBlobPropertiesRecordSizeV4(BlobProperties properties) {
+      return Version_Field_Size_In_Bytes + BlobPropertiesSerDe.getBlobPropertiesSerDeSizeV4(properties) + Crc_Size;
+    }
+
+    public static void serializeBlobPropertiesRecordV4(ByteBuffer outputBuffer, BlobProperties properties) {
+      int startOffset = outputBuffer.position();
+      outputBuffer.putShort(BlobProperties_Version_V1);
+      BlobPropertiesSerDe.serializeBlobPropertiesV4(outputBuffer, properties);
+      CRC32 crc = new CRC32();
+      crc.update(outputBuffer.array(), startOffset, getBlobPropertiesRecordSize(properties) - Crc_Size);
+      outputBuffer.putLong(crc.getValue());
+    }
+
     public static void serializeBlobPropertiesRecord(ByteBuffer outputBuffer, BlobProperties properties) {
       int startOffset = outputBuffer.position();
       outputBuffer.putShort(BlobProperties_Version_V1);

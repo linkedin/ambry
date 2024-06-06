@@ -40,6 +40,16 @@ public class BlobPropertiesSerDe {
   private static final int ENCRYPTED_FIELD_SIZE_IN_BYTES = Byte.BYTES;
   public static short CURRENT_VERSION = VERSION_5;
 
+  public static int getBlobPropertiesSerDeSizeV4(BlobProperties properties) {
+    int size = VERSION_FIELD_SIZE_IN_BYTES + TTL_FIELD_SIZE_IN_BYTES + PRIVATE_FIELD_SIZE_IN_BYTES
+        + CREATION_TIME_FIELD_SIZE_IN_BYTES + BLOB_SIZE_FIELD_SIZE_IN_BYTES + Utils.getIntStringLength(
+        properties.getContentType()) + Utils.getIntStringLength(properties.getOwnerId()) + Utils.getIntStringLength(
+        properties.getServiceId()) + Short.BYTES + Short.BYTES + ENCRYPTED_FIELD_SIZE_IN_BYTES
+        + Utils.getIntStringLength(properties.getContentEncoding()) + Utils.getIntStringLength(
+        properties.getFilename());
+    return size;
+  }
+
   public static int getBlobPropertiesSerDeSize(BlobProperties properties) {
     int size = VERSION_FIELD_SIZE_IN_BYTES + TTL_FIELD_SIZE_IN_BYTES + PRIVATE_FIELD_SIZE_IN_BYTES
         + CREATION_TIME_FIELD_SIZE_IN_BYTES + BLOB_SIZE_FIELD_SIZE_IN_BYTES + Utils.getIntStringLength(
@@ -73,6 +83,30 @@ public class BlobPropertiesSerDe {
     String reservedMetadataBlobId = version > VERSION_4 ? Utils.readNullableIntString(stream) : null;
     return new BlobProperties(blobSize, serviceId, ownerId, contentType, isPrivate, ttl, creationTime, accountId,
         containerId, isEncrypted, null, contentEncoding, filename, reservedMetadataBlobId);
+  }
+
+  /**
+   * Serialize {@link BlobProperties} to buffer in the {@link #CURRENT_VERSION}
+   * @param outputBuffer the {@link ByteBuffer} to which {@link BlobProperties} needs to be serialized
+   * @param properties the {@link BlobProperties} that needs to be serialized
+   */
+  public static void serializeBlobPropertiesV4(ByteBuffer outputBuffer, BlobProperties properties) {
+    if (outputBuffer.remaining() < getBlobPropertiesSerDeSize(properties)) {
+      throw new IllegalArgumentException("Output buffer does not have sufficient space to serialize blob properties");
+    }
+    outputBuffer.putShort(VERSION_4);
+    outputBuffer.putLong(properties.getTimeToLiveInSeconds());
+    outputBuffer.put(properties.isPrivate() ? (byte) 1 : (byte) 0);
+    outputBuffer.putLong(properties.getCreationTimeInMs());
+    outputBuffer.putLong(properties.getBlobSize());
+    Utils.serializeNullableString(outputBuffer, properties.getContentType());
+    Utils.serializeNullableString(outputBuffer, properties.getOwnerId());
+    Utils.serializeNullableString(outputBuffer, properties.getServiceId());
+    outputBuffer.putShort(properties.getAccountId());
+    outputBuffer.putShort(properties.getContainerId());
+    outputBuffer.put(properties.isEncrypted() ? (byte) 1 : (byte) 0);
+    Utils.serializeNullableString(outputBuffer, properties.getContentEncoding());
+    Utils.serializeNullableString(outputBuffer, properties.getFilename());
   }
 
   /**
