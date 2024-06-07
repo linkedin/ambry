@@ -259,7 +259,7 @@ public class RouterConfig {
    * Paranoid durability: Max parallel requests issued at a time in remote data centers for a chunk.
    */
   @Config(ROUTER_PUT_REMOTE_REQUEST_PARALLELISM)
-  @Default("0")
+  @Default("1")
   public final int routerPutRemoteRequestParallelism;
 
   /**
