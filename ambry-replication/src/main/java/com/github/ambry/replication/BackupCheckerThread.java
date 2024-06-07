@@ -185,11 +185,10 @@ public class BackupCheckerThread extends ReplicaThread {
   }
 
   /**
-   * Re-check blob crc by fetching the local blob and re-computing CRC by omitting desired fields
+   * Re-check by fetching the local blob
    * @param replica
    * @param serverBlob
    * @param azureBlob
-   * @param status
    * @return
    */
   Set<BlobMatchStatus> recheck(RemoteReplicaInfo replica, MessageInfo serverBlob, MessageInfo azureBlob,
@@ -203,11 +202,11 @@ public class BackupCheckerThread extends ReplicaThread {
       rdset = stinfo.getMessageReadSet();
       rdset.doPrefetch(0, 0, rdset.sizeInBytes(0));
       ByteBuf bytebuf = rdset.getPrefetchedData(0);
-      BlobAll blob = MessageFormatRecord.deserializeBlobAll(new NettyByteBufDataInputStream(bytebuf), storeKeyFactory);
-      long crc = new PutMessageFormatInputStream(blob).getCRC();
-      return serverBlob.isEqual(new MessageInfo(azureBlob, crc));
+      MessageFormatRecord.deserializeBlobAll(new NettyByteBufDataInputStream(bytebuf), storeKeyFactory);
+      return Collections.singleton(BLOB_INTACT_IN_AZURE);
     } catch (Throwable e) {
-      logger.error("Failed to recompute crc due to ", e);
+      logger.error("Failed to deserialize blob due to ", e);
+      status.add(BLOB_CORRUPT_IN_AZURE);
     } finally {
       if (rdset != null && rdset.count() > 0 && rdset.getPrefetchedData(0) != null) {
         rdset.getPrefetchedData(0).release();
@@ -249,11 +248,17 @@ public class BackupCheckerThread extends ReplicaThread {
                 MessageInfo azureBlob = azureBlobMap.remove(serverBlob.getStoreKey().getID());
                 Set<BlobMatchStatus> status = azureBlob == null ? Collections.singleton(BLOB_ABSENT_IN_AZURE)
                     : serverBlob.isEqual(azureBlob);
-                // if crc mismatch, then re-check
-                if (status.contains(BLOB_STATE_CRC_MISMATCH) || status.contains(BLOB_STATE_SIZE_MISMATCH)) {
+                // if size mismatch, then re-check
+                // this is the only workaround due to a field reservedMetadataBlobId
+                if (status.contains(BLOB_STATE_SIZE_MISMATCH)) {
                   status = recheck(replica, serverBlob, azureBlob, status);
                 }
                 return new ImmutableTriple(serverBlob, azureBlob, status);
+              })
+              .filter(tuple -> {
+                Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
+                // ignore blobs that are intact in Azure, despite a state mismatch between server and cloud
+                return !status.contains(BLOB_INTACT_IN_AZURE);
               })
               .filter(tuple -> {
                 Set<BlobMatchStatus> status = (Set<BlobMatchStatus>) tuple.getRight();
