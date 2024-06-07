@@ -273,7 +273,7 @@ public class RouterConfig {
    * Paranoid durability: The min number of successful responses in remote data centers required for a put operation.
    */
   @Config(ROUTER_PUT_REMOTE_SUCCESS_TARGET)
-  @Default("0")
+  @Default("1")
   public final int routerPutRemoteSuccessTarget;
 
   /**
