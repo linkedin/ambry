@@ -126,7 +126,7 @@ public class ReplicationManager extends ReplicationEngine {
       Transformer transformer = Utils.getObj(transformerClassName, storeKeyFactory, storeKeyConverter);
       return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
           networkClientFactory.getNetworkClient(), replicationConfig, replicationMetrics, notification,
-          storeKeyConverter, storeKeyFactory, transformer, metricRegistry, sslEnabledDatacenters.contains(dc), dc,
+          storeKeyConverter, transformer, metricRegistry, sslEnabledDatacenters.contains(dc), dc,
           new ResponseHandler(clusterMap), time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
     } catch (IOException | ReflectiveOperationException e) {
       throw new RuntimeException(e);
@@ -144,10 +144,19 @@ public class ReplicationManager extends ReplicationEngine {
       boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
       ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
-        replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
-        replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-        leaderBasedReplicationAdmin);
+    switch (replicationConfig.replicationThreadType) {
+      case ReplicationConfig.BACKUP_CHECKER_THREAD:
+        return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
+            networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
+            metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager,
+            skipPredicate, leaderBasedReplicationAdmin);
+      case ReplicationConfig.DEFAULT_REPLICATION_THREAD:
+      default:
+        return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, networkClient,
+            replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
+            replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+            leaderBasedReplicationAdmin);
+    }
   }
 
   @Override

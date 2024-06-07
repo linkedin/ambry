@@ -17,6 +17,8 @@ package com.github.ambry.store;
  * Status code blob-state match operation
  */
 public enum BlobMatchStatus {
+  BLOB_INTACT_IN_AZURE,
+  BLOB_CORRUPT_IN_AZURE,
   BLOB_STATE_MATCH,
   BLOB_ABSENT,
   BLOB_ABSENT_IN_AZURE,
@@ -27,5 +29,5 @@ public enum BlobMatchStatus {
   BLOB_STATE_EXPIRY_MISMATCH,
   BLOB_STATE_OBSOLETE_MISMATCH,
   BLOB_STATE_CRC_MISMATCH,
-  BLOB_STATE_VERSION_MISMATCH
+  BLOB_STATE_VERSION_MISMATCH,
 }

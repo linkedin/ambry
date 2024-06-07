@@ -15,7 +15,6 @@ package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.CrcInputStream;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.zip.CRC32;
@@ -68,58 +67,6 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
       createStreamWithMessageHeader(key, blobEncryptionKey, blobProperties, userMetadata, blobStream, streamSize,
           blobType, lifeVersion, isCompressed);
     }
-  }
-
-  public PutMessageFormatInputStream(BlobAll blob) throws MessageFormatException {
-    StoreKey key = blob.getStoreKey();
-    ByteBuffer blobEncryptionKey = blob.getBlobEncryptionKey();
-    BlobProperties blobProperties = blob.getBlobInfo().getBlobProperties();
-    blobProperties = new BlobProperties(blobProperties, null); // Exclude reservedMetadataBlobId
-    ByteBuffer userMetadata = ByteBuffer.wrap(blob.getBlobInfo().getUserMetadata());
-    InputStream blobStream = new NettyByteBufDataInputStream(blob.getBlobData().content());
-    long streamSize = blob.getBlobData().getSize();
-    BlobType blobType = blob.getBlobData().getBlobType();
-    short lifeVersion = blob.getBlobInfo().getLifeVersion();
-    boolean isCompressed = blob.getBlobData().isCompressed();
-
-    int headerSize = MessageFormatRecord.getHeaderSizeForVersion(MessageFormatRecord.headerVersionToUse);
-    int blobEncryptionKeySize = blobEncryptionKey == null ? 0
-        : MessageFormatRecord.BlobEncryptionKey_Format_V1.getBlobEncryptionKeyRecordSize(blobEncryptionKey);
-    int blobPropertiesRecordSize =
-        MessageFormatRecord.BlobProperties_Format_V1.getBlobPropertiesRecordSizeV4(blobProperties);
-    int userMetadataSize = MessageFormatRecord.UserMetadata_Format_V1.getUserMetadataSize(userMetadata);
-    long blobSize = MessageFormatRecord.Blob_Format_V3.getBlobRecordSize(streamSize);
-
-    buffer = ByteBuffer.allocate(
-        headerSize + key.sizeInBytes() + blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize + (int) (
-            blobSize - streamSize - MessageFormatRecord.Crc_Size));
-
-    long totalSize = blobEncryptionKeySize + blobPropertiesRecordSize + userMetadataSize + blobSize;
-    int blobEncryptionKeyRecordRelativeOffset =
-        blobEncryptionKey == null ? MessageFormatRecord.Message_Header_Invalid_Relative_Offset
-            : headerSize + key.sizeInBytes();
-    int blobPropertiesRecordRelativeOffset = blobEncryptionKey == null ? headerSize + key.sizeInBytes()
-        : blobEncryptionKeyRecordRelativeOffset + blobEncryptionKeySize;
-    int updateRecordRelativeOffset = MessageFormatRecord.Message_Header_Invalid_Relative_Offset;
-    int userMetadataRecordRelativeOffset = blobPropertiesRecordRelativeOffset + blobPropertiesRecordSize;
-    int blobRecordRelativeOffset = userMetadataRecordRelativeOffset + userMetadataSize;
-    MessageFormatRecord.MessageHeader_Format_V3.serializeHeader(buffer, lifeVersion, totalSize,
-        blobEncryptionKeyRecordRelativeOffset, blobPropertiesRecordRelativeOffset, updateRecordRelativeOffset,
-        userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
-    buffer.put(key.toBytes());
-    if (blobEncryptionKey != null) {
-      MessageFormatRecord.BlobEncryptionKey_Format_V1.serializeBlobEncryptionKeyRecord(buffer, blobEncryptionKey);
-    }
-    MessageFormatRecord.BlobProperties_Format_V1.serializeBlobPropertiesRecordV4(buffer, blobProperties);
-    MessageFormatRecord.UserMetadata_Format_V1.serializeUserMetadataRecord(buffer, userMetadata);
-    int bufferBlobStart = buffer.position();
-    MessageFormatRecord.Blob_Format_V3.serializePartialBlobRecord(buffer, streamSize, blobType, isCompressed);
-    CRC32 crc = new CRC32();
-    crc.update(buffer.array(), bufferBlobStart, buffer.position() - bufferBlobStart);
-    stream = new CrcInputStream(crc, blobStream);
-    streamLength = streamSize;
-    messageLength = buffer.capacity() + streamLength + MessageFormatRecord.Crc_Size;
-    buffer.flip();
   }
 
   /**
@@ -213,9 +160,5 @@ public class PutMessageFormatInputStream extends MessageFormatInputStream {
     streamLength = streamSize;
     messageLength = buffer.capacity() + streamLength + MessageFormatRecord.Crc_Size;
     buffer.flip();
-  }
-
-  public long getCRC() {
-    return stream.getValue();
   }
 }
